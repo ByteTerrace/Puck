@@ -145,8 +145,8 @@ the package and external-producer reads in `RenderGraphRuntime.BindReads`,
 and reads through a standing output in `RenderGraphRuntime.Resolve`. A HUD
 frame showing a named camera now reads it through the overlay's graph edge.
 `RenderGraphFrameSamples.TrySample` checks the latch and passes the acquired
-image lease to the overlay's frame slot. Captures, exports and the display observe only a publication
-whose submission succeeded. A paused node can also submit a newly selected
+image lease to the overlay's frame slot. Captures, exports and the display
+must observe only a publication whose submission succeeded. A paused node can also submit a newly selected
 output. An external producer that submits inside its own `Produce` call must
 accept the same ordering constraint before it receives any reserved read.
 
@@ -158,8 +158,9 @@ Only the submitter can establish whether a producer reached the queue.
 against its own fence, including when a batch splits. The runtime's output
 records and scheduling history withdraw a rolled-back node's write through
 `RenderGraphRuntime.ForgetAbandonedOutput`. A paused selection hands its
-submission to the queue before it publishes the selected image. Keep the existing slot leases for images and the device's
-`GpuRetirementQueue` for replaced allocations.
+submission to the queue before it publishes the selected image. Keep the
+existing slot leases for images and the device's `GpuRetirementQueue` for
+replaced allocations.
 
 Residency uploads precede view recording. `SdfMeshRegionStore.RecordOwed`
 puts compaction moves in the next upload. `SdfWorldResidency.EndStage`
@@ -169,7 +170,8 @@ GPU completion can follow later.
 
 The reservation must also carry the lighting producer's delivery provenance.
 `SdfSkyEnvironmentRecorder.Submitted` publishes the sky and screen emission
-sequences. A view calls `SdfWorldPasses.SourceTaintOf` during recording to
+sequences. Its slot's abandonment withdraws an unproven sequence. A view
+calls `SdfWorldPasses.SourceTaintOf` during recording to
 decide whether its lighting contains an external image. Reading yesterday's
 label while recording a consumer of today's buffer would let capture make
 that decision on different data from the shader. Resolve the prospective
