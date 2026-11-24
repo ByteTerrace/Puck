@@ -1035,8 +1035,9 @@ Registry administrators can still change those protection settings; retention
 must remain part of the operator's storage policy.
 
 How a deploy treats the hosted world follows the policy the deployment declares,
-`worldSiloHostedData` in `main.bicepparam`, which reaches the deploy as a deployment
-output ([the decision](../decisions/runtime-and-delivery.md#releases)). While it is
+`worldSiloHostedData` in `main.bicepparam`, which the deploy reads from the live
+deployment under the controller lease
+([the decision](../decisions/runtime-and-delivery.md#releases)). While it is
 `scratch` (AGENTS.md rule 5), `puck world release deploy` replaces the hosted world
 (`AzureCommand.ReplaceWorldReleaseAsync`): it qualifies the candidate alone from a
 fresh bootstrap fixture while the serving world still runs, then deletes the group's

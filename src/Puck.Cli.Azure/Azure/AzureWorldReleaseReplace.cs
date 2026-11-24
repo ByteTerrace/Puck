@@ -5,13 +5,59 @@ using Puck.World.Server;
 namespace Puck.Cli.Azure;
 
 public static partial class AzureCommand {
-    /// <summary>The deployment output that declares the world group's hosted-data policy
-    /// (<see cref="WorldHostedData.ParsePolicy"/>), from <c>worldSiloHostedData</c> in <c>main.bicepparam</c>. An absent
-    /// output is durable, so a deployment discards hosted data only when its configuration says scratch.</summary>
-    private const string WorldHostedDataOutput = "worldSiloHostedData";
+    /// <summary>Reads the world group's hosted-data policy (<see cref="WorldHostedData.ParsePolicy"/>) from the live
+    /// deployment: the <c>worldSiloHostedData</c> output (from <c>main.bicepparam</c>) of the latest successful
+    /// composition that deploys the world platform, never the local outputs file, which another deployment may have
+    /// superseded. No such output is durable, so hosted data is discarded only on a live scratch declaration.</summary>
+    private static async Task<WorldHostedDataPolicy> ReadWorldHostedDataPolicyAsync(string resourceGroup) {
+        var declared = await AzJsonAsync(
+            "deployment",
+            "group",
+            "list",
+            "-g",
+            resourceGroup,
+            "--query",
+            "[?(name=='puck-production-platform' || name=='puck-world-platform') && properties.provisioningState=='Succeeded'] | sort_by(@, &properties.timestamp) | [-1].properties.outputs.worldSiloHostedData || `{}`",
+            "-o",
+            "json"
+        ).ConfigureAwait(continueOnCapturedContext: false);
 
-    private static WorldHostedDataPolicy WorldHostedDataPolicyOf(JsonNode outputs) =>
-        WorldHostedData.ParsePolicy(value: outputs[WorldHostedDataOutput]?["value"]?.GetValue<string>());
+        return WorldHostedData.ParsePolicy(value: declared["value"]?.GetValue<string>());
+    }
+    // Stops every writer of the owner's container: the group's own scale set, after proving that no other compute in the
+    // resource group runs under the silo identity, which is the only runtime identity granted that container. A scale set
+    // or VM of another name with that identity is another group's writer (a renamed scale set an incremental deployment
+    // left behind), and the discard refuses rather than delete it or discard under it.
+    private static async Task StopWorldSiloWritersAsync(WorldReleaseContext context) {
+        var identity = Text(value: Value(
+            context.Outputs,
+            "worldSiloIdentityResourceId"
+        ));
+        bool Holds(JsonNode? identities) => (identities is JsonObject assigned) &&
+            assigned.Any(predicate: pair => string.Equals(a: pair.Key, b: identity, comparisonType: StringComparison.OrdinalIgnoreCase));
+        var strangers = new List<string>();
+
+        foreach (var set in (await AzJsonAsync("vmss", "list", "-g", context.ResourceGroup, "--query", "[].{name:name, identities:identity.userAssignedIdentities}", "-o", "json").ConfigureAwait(continueOnCapturedContext: false)).AsArray()) {
+            if (Holds(identities: set!["identities"]) && !string.Equals(a: Text(value: set["name"]), b: context.Group, comparisonType: StringComparison.OrdinalIgnoreCase)) {
+                strangers.Add(item: $"scale set {Text(value: set["name"])}");
+            }
+        }
+        foreach (var vm in (await AzJsonAsync("vm", "list", "-g", context.ResourceGroup, "--query", "[].{name:name, identities:identity.userAssignedIdentities, set:virtualMachineScaleSet.id}", "-o", "json").ConfigureAwait(continueOnCapturedContext: false)).AsArray()) {
+            var set = vm!["set"]?.GetValue<string>();
+
+            if (Holds(identities: vm["identities"]) && ((set is null) || !set.EndsWith(value: ("/" + context.Group), comparisonType: StringComparison.OrdinalIgnoreCase))) {
+                strangers.Add(item: $"VM {Text(value: vm["name"])}");
+            }
+        }
+        if (strangers.Count != 0) {
+            throw new InvalidOperationException(message: $"other compute runs under the world silo identity ({string.Join(separator: ", ", values: strangers)}); it may write the hosted data, so nothing was stopped or discarded");
+        }
+        await DeleteWorldComputeAsync(
+            clock: context.Clock,
+            group: context.ResourceGroup,
+            scaleSet: context.Group
+        ).ConfigureAwait(continueOnCapturedContext: false);
+    }
 
     // Retains a release's exact package and its deployment inputs in the owner's release store, reusing inputs a
     // retry already retained: regenerating SSH material or reading today's template would turn a lost preflight
@@ -75,10 +121,11 @@ public static partial class AzureCommand {
     /// exercises. A qualification failure changes nothing that serves; a failure after the discard leaves the group
     /// without a world until a later deployment succeeds, since there is no source to recover.</summary>
     private static async Task<WorldReleaseRunResult> ReplaceWorldReleaseAsync(WorldReleaseContext context, WorldReleaseManifest manifest,
-        string packageDirectory, Guid? operationId, WorldHostedDataPolicy policy, CancellationToken token) {
+        string packageDirectory, Guid? operationId, CancellationToken token) {
         WorldReleaseGroupSnapshot? current = null;
 
-        // A record this build cannot read is scratch like the rest: the discard deletes it without reading it.
+        // A record this build cannot read, or one an unfinished discard still holds (LoadAsync refuses it), is scratch
+        // like the rest: the discard below deletes it without reading it.
         try {
             current = await context.Groups.LoadAsync(
                 context.Group,
@@ -87,7 +134,13 @@ public static partial class AzureCommand {
         } catch (InvalidDataException error) {
             Console.WriteLine(value: $"The group record cannot be read and is discarded with the hosted data: {error.Message}");
         }
-        if (current is { Record: { HasUnfinishedOperation: false, Admission: WorldReleaseAdmissionState.Open } serving } && (serving.ActiveRelease == manifest.Identity)) {
+        // The release already serves only while its record is readable, settled and open and its one worker exists; any
+        // other state (an interrupted discard stopped the worker) is replaced.
+        if (
+            (current is { Record: { HasUnfinishedOperation: false, Admission: WorldReleaseAdmissionState.Open } serving }) &&
+            (serving.ActiveRelease == manifest.Identity) &&
+            ((await WorkersAsync(group: context.ResourceGroup, scaleSet: context.Group).ConfigureAwait(continueOnCapturedContext: false)).Length == 1)
+        ) {
             return await TestActiveWorldReleaseAsync(
                 context: context,
                 current: current.Value,
@@ -136,12 +189,8 @@ public static partial class AzureCommand {
             cancellationToken: token,
             deploymentGroup: context.Group,
             owner: context.Owner,
-            policy: policy,
-            stopWriters: _ => DeleteWorldComputeAsync(
-                clock: context.Clock,
-                group: context.ResourceGroup,
-                scaleSet: context.Group
-            ),
+            readPolicy: _ => ReadWorldHostedDataPolicyAsync(resourceGroup: context.ResourceGroup),
+            stopWriters: _ => StopWorldSiloWritersAsync(context: context),
             store: context.Blobs,
             target: context.Target
         ).ConfigureAwait(continueOnCapturedContext: false);

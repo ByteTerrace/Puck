@@ -3961,17 +3961,13 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
-- [high, M1] **The first replace deploy, and a review of the discard.** A
-  deploy over scratch hosted data replaces the hosted world
+- [high, M1] **The first replace deploy.** A deploy over scratch hosted data
+  replaces the hosted world
   ([the decision](../decisions/runtime-and-delivery.md#releases)), and CI's
   container verification rehearses the image's managed start
   (`puck world release rehearse --image`). Next: the release from `main`
-  exercises the replace path; a findings-only review by another family of
-  `WorldHostedData.DiscardAsync` and its caller
-  (`AzureCommand.ReplaceWorldReleaseAsync`), the review-only class of deleting
-  persisted data: the policy door, the stop before deletion, the root-first
-  order, and the two conditions the code does not enforce (one deployment
-  group per owner container, the controller lease held).
+  exercises the replace path, including its live policy read, the identity
+  scope check of the worker stop, and the version-expiry lifecycle rule.
 - [medium] **Release time.** The failed release of run 45422220920 spent 92
   minutes: about 21 on the .NET artifacts, 8.5 on the infrastructure
   reconcile (it plans and applies on every push, changed or not), and 54 in

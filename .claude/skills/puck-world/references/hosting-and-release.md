@@ -263,9 +263,12 @@ verification does. When private health is not ready it says why (`WorldSiloHost.
 progress or refusal, a pump fault, or the mailbox work or held step a stalled pump is inside; `Live` is false until
 `Ready`, so "not progressing" alone never means a stalled pump before activation finished.
 
-A deploy reads the deployment's hosted-data policy (`WorldHostedData.ParsePolicy` over the `worldSiloHostedData`
-output). Under `scratch` it replaces the world (`AzureCommand.ReplaceWorldReleaseAsync`: qualify the candidate alone,
-then `WorldHostedData.DiscardAsync`, the one door that deletes hosted data, then the bootstrap). Everything from here to
+A deploy reads the deployment's hosted-data policy live (`AzureCommand.ReadWorldHostedDataPolicyAsync`, the latest
+world-platform deployment's `worldSiloHostedData` output). Under `scratch` it replaces the world
+(`AzureCommand.ReplaceWorldReleaseAsync`: qualify the candidate alone, then `WorldHostedData.DiscardAsync`, the one door
+that deletes reachable hosted data, then the bootstrap). An unfinished discard leaves `<group>.discarding` beside the
+group record, and `WorldReleaseGroupStore.LoadAsync` refuses the group until a discard finishes; an owner container
+holds one group (`WorldHostedData.RequireSoleGroupAsync`). Everything from here to
 the end of this section describes the `durable` path, which no deploy runs while the declaration is scratch.
 
 An installed extension resolves each assembly name to one copy
