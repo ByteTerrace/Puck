@@ -78,7 +78,7 @@ public sealed class SdfSkyEnvironmentPasses(SdfWorldPasses views) : IRenderGraph
     /// frame's other residencies (<see cref="SdfWorldPasses.ReadsPrepared"/>), once a frame whichever reader asks
     /// first.</remarks>
     public void PrepareRead(string instance, in FrameContext context) {
-        if (BegunResidencyOf(instance: instance) is { } residency) { views.CaptureForPack(residency: residency, context: in context); }
+        if (BegunResidencyOf(instance: instance) is { } residency) { views.CaptureForReader(residency: residency, context: in context); }
     }
     /// <inheritdoc/>
     public bool IsUnchanged(string instance, long unreadFrames, in FrameContext context, in RenderGraphReadStands reads) {

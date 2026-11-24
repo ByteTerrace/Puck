@@ -457,13 +457,11 @@ one says so:
   each admitted to the same remote authority under its own identity, and the
   four views together hold the 4070's frame bar.
 
-**The bounds on the bars.** The frame-thread trace on the head
-([verification debts](#verification-debts), item 2) orders items 1 to 3.
+**The bounds on the bars.** The route's frame-thread trace
+([verification debts](#verification-debts), item 2) orders the remaining CPU work.
 
 1. [high] [The CPU frame](#the-cpu-frame): the authority's step leaves the
    frame thread. A design memo first, since it touches determinism.
-3. [high] [The CPU frame](#the-cpu-frame): a draw record reads its slot's
-   transform, so a moving body writes one row.
 4. [high] [The CPU frame](#the-cpu-frame): presentation queries stop
    interpreting the field on the CPU. A design memo first.
 5. [high] [The CPU frame](#the-cpu-frame): background garbage leaves the
@@ -861,11 +859,12 @@ wait behind them.
    Built: a paced frame serves at most one residency minimum, readers request
    captures at their scheduled cadence, and the captured residencies pack and
    record their uploads as forks of the job pool with a residency a partition.
-   Mesh compaction marks only rows that reference moved meshes, using the same
-   index for every residency. Left, in [its order](frame-production.md#the-steps): routed scenes captured side
-   by side (the largest step left: every routed capture calls back into the
-   one binder), one fork for a frame's recordings, and a pump that visits what
-   completed. Check: `world.counters sdf.captures` across a benchmark chapter,
+   Routed compositions pack transforms and draw journals on the pool between
+   serial preparation and filming. Mesh compaction marks only rows that
+   reference moved meshes, using the same index for every residency.
+   Left, in [its order](frame-production.md#the-steps): one fork for a frame's
+   recordings and a pump that visits what completed. Check:
+   `world.counters sdf.captures` across a benchmark chapter,
    `run` a frame against `held`, with `packed-on-worker` and
    `uploaded-on-worker`, beside `host.frames`' capture and pack parts. At
    scale: a hub of a dozen worlds costs the frame the worlds on screen.

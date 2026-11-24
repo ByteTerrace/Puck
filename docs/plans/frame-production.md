@@ -56,6 +56,15 @@ residency a due reader names is captured for that reader on that frame whatever
 the minimum did. Reader discovery uses the scheduler's demand and cadence
 calculation, so a held view does not trigger a capture.
 
+**Routed scenes pack their capture inputs side by side.** The host captures
+first. Each reader round prepares the selected scene compositions, forks their
+transform and draw journals, and joins before any composition films its
+cameras or fits its sky on the frame thread. A round that shares a mirror
+packs in order. The package resolves the view indices again after filming and
+before scheduling. `sdf.captures.capture-packs-on-worker` counts the worker
+packs. Program adoption, filming, and mesh dressing still take the frame
+thread.
+
 **Residencies pack side by side.** A residency's preparation is three steps
 (`SdfWorldResidency.BeginPack`, `RunPack`, `EndPack`). The first asks the
 host for what the frame's screens show and changes what the device holds; the
@@ -110,11 +119,6 @@ It stays the step after the ones below: once a frame costs what it shows, the
 remaining serial chain is the host world's own, and that is the chain a
 pipeline would split.
 
-**Capturing residencies side by side** is the largest step left. A routed
-scene's capture (`WorldRoutedScene.Dress`) calls back into the binder to film
-the scene's cameras and fit its sky and windows, and the binder is shared by
-every scene, so two captures cannot run together yet.
-
 **Recording every scheduled render in one fork** would end the wait between
 waves. A consumer binds what its producer published, and a producer publishes
 when it commits, so the waves are serial by construction today.
@@ -124,22 +128,21 @@ when it commits, so the waves are serial by construction today.
 Each step names the count that shows it worked, read with `world.counters`
 across a benchmark chapter and divided by the frames.
 
-2. **Routed scenes capture side by side.** The binder's three callbacks
-   (filming a scene's cameras, fitting its sky, fitting its windows) move to a
-   serial step before the captures, or take one gate; the scenes' shared
-   inputs (the value-domain guard, the render levers, the host's dressed
-   frame) are read-only while the captures run. The host captures first, as
-   now. Check: a new `sdf.captures` count of captures run on a worker, and
-   the capture part of `host.frames` falling to the host's own.
 3. **One fork records a frame.** A node publishes the output it will commit as
    it is prepared, so every consumer binds before any recording runs, and a
-   failed recording abandons its consumers with it. Check: `render.record`'s
-   `waves` a frame falls to one.
+   failed recording abandons its consumers with it. `ShaderPipelineRenderNode.PrepareFrame`
+   reserves a slot, but `PublishBuffers` resolves the actual named outputs
+   after recording and `RenderGraphRuntime.RememberOutput` records their
+   delivery label and forwarded image. Move those decisions into preparation
+   and retain their exact images and buffers through commit. Check that
+   `render.record.waves` falls to one per recorded frame.
 4. **The pump follows what completed.** Each residency's background work polls
-   every frame (`SdfWorldResidency.Upkeep`); a completion wakes the frame
-   thread already (`IGpuSubmissionFence.SignalOnCompletion`), so a residency
-   with nothing completed and nothing to refill is not visited. Check: a
-   count of residencies pumped a frame against those held.
+   every frame (`SdfWorldResidency.Upkeep`). The fence wakes the thread's shared
+   `WaitService.Signal`, which cannot identify the ready residency. Give the
+   pump readiness from the fence, a client's new job, and budget credit. Keep
+   device retirement and memory trims progressing even when no background job
+   is ready. Compare the number of residencies pumped per frame with the
+   number held.
 5. **Then the pipeline**, if the host world's own chain still bounds a frame.
 
 ## Systems considered

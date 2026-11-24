@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Abstractions;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting.Jobs;
 
@@ -57,6 +58,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     // Each placed mesh's words in the region, as a draw record names them: the arena's placements, kept beside them.
     private readonly Dictionary<SdfMesh, SdfMeshRegionMesh> m_placements = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly Dictionary<SdfMesh, GpuBufferPages.Lease> m_pages = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly CodeDerivedTable<object, ProbeProof> m_probeProofs = new();
     private readonly Stack<int> m_freeLandingSlots = new();
     private readonly Stack<int> m_freeUploadSlots = new();
     private readonly HashSet<SdfMesh> m_standing = new(comparer: ReferenceEqualityComparer.Instance);
@@ -86,6 +88,14 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     private long m_forgotten;
     private long m_moveSlotMisses;
     private long m_wordsWritten;
+
+    // Only a successful check is kept. A landing can make a failed check succeed without changing placement.
+    private sealed class ProbeProof {
+        public IGpuBuffer? Buffer;
+        public long Bytes;
+        public ulong PageRevision;
+        public long PlacementVersion;
+    }
 
     // One named mesh's residencies, each with how many of its rows name the mesh and the landing priority it last
     // measured for it from its own rows (SdfWorldTables.MeasureLanding): negative infinity before its first measure.
@@ -536,8 +546,10 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     /// <param name="mesh">The mesh, a chunk of a chunked mesh being a mesh of its own.</param>
     /// <returns><see langword="true"/> when a draw may name the mesh without waiting out of the frame.</returns>
     internal bool Stands(SdfMesh mesh) {
-        lock (m_gate) { return (StandsOne(mesh: mesh) && ((mesh.GeometrySource is not { } source) || StandsOne(mesh: source))); }
+        lock (m_gate) { return StandsUnderGate(mesh: mesh); }
     }
+
+    private bool StandsUnderGate(SdfMesh mesh) => (StandsOne(mesh: mesh) && ((mesh.GeometrySource is not { } source) || StandsOne(mesh: source)));
     /// <summary>Returns whether the region still owes a named mesh's words: it is placed and has not landed, or a draw
     /// names it and the arena refuses it under its limit.</summary>
     /// <param name="mesh">The mesh.</param>
@@ -577,9 +589,29 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
             placements = m_placements;
             meshes = m_region.Buffer(slot: 0);
             version = m_version;
-            return (!m_region.OwesMoves && !m_region.OwesCarry && (m_unsubmitted == 0) && scene.HasGpuPlacements(placements, Stands));
+            if (m_region.OwesMoves || m_region.OwesCarry || (m_unsubmitted != 0)) { return false; }
+
+            // A successful check can become false only when placement changes or the destination loses backing.
+            // Placement changes and trims move the store version, and page revocation moves the page revision.
+            // A carried resize can change the accessible extent even if its covered pages keep their generations.
+            var proof = m_probeProofs.GetValue(key: scene.GpuPlacementIdentity, derive: static _ => new ProbeProof());
+            var pageRevision = m_region.PageRevision;
+            var bytes = m_region.ByteCount;
+
+            if (ReferenceEquals(objA: proof.Buffer, objB: meshes) && (proof.PlacementVersion == version) &&
+                (proof.PageRevision == pageRevision) && (proof.Bytes == bytes)) {
+                scene.Counters.Count(kind: SdfMeshIrradiance.PlacementChecksReused);
+                return true;
+            }
+
+            scene.Counters.Count(kind: SdfMeshIrradiance.PlacementChecks);
+            if (!scene.HasGpuPlacements(placements: placements, stands: (m_probeStands ??= StandsUnderGate))) { return false; }
+            (proof.Buffer, proof.PlacementVersion, proof.PageRevision, proof.Bytes) = (meshes, version, pageRevision, bytes);
+            return true;
         }
     }
+
+    private Func<SdfMesh, bool>? m_probeStands;
 
     /// <summary>Records the copies the region owes that no landing job carries (a grown region's carry and the moves of
     /// a compaction) into a residency's upload, ahead of its passes, so no pass reads a moved mesh at its new words, or
