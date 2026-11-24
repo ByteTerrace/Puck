@@ -6283,7 +6283,8 @@
         "AtMediumBand",
         "HoldingUnwalkable",
         "Unsupported",
-        "Resting"
+        "Resting",
+        "Weightless"
       ],
       "title": "ActionFact"
     },
@@ -13026,6 +13027,7 @@
         "HoldingUnwalkable",
         "Unsupported",
         "Resting",
+        "Weightless",
         null
       ],
       "title": "ActionFact"

@@ -641,9 +641,9 @@ export type ActionEffectTransformState = {
   transform: StateTransform;
 };
 
-export type ActionFact = "Grounded" | "Airborne" | "Rising" | "Falling" | "AffectedBy" | "InMedium" | "AtMediumBand" | "HoldingUnwalkable" | "Unsupported" | "Resting";
+export type ActionFact = "Grounded" | "Airborne" | "Rising" | "Falling" | "AffectedBy" | "InMedium" | "AtMediumBand" | "HoldingUnwalkable" | "Unsupported" | "Resting" | "Weightless";
 
-export type ActionFactNullable = "Grounded" | "Airborne" | "Rising" | "Falling" | "AffectedBy" | "InMedium" | "AtMediumBand" | "HoldingUnwalkable" | "Unsupported" | "Resting";
+export type ActionFactNullable = "Grounded" | "Airborne" | "Rising" | "Falling" | "AffectedBy" | "InMedium" | "AtMediumBand" | "HoldingUnwalkable" | "Unsupported" | "Resting" | "Weightless";
 
 export type ActionFactTrigger = {
   /**
