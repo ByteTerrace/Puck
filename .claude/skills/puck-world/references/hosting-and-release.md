@@ -253,6 +253,20 @@ the second runs the deployment's MCP shape (`WorldSiloImageLayout.McpArguments`:
 image's CLI composing the installed Azure extensions over the silo, with an
 Azure-shaped `mcp.json` whose inventory observation builds an ARM pipeline), so an
 extension that cannot load fails CI rather than the VM. Linux requires `libmsquic` and UDP ingress.
+`puck world release rehearse` (`WorldReleaseRehearsal`) runs the worker's managed start locally: a release
+package (or a `world prepare` output, packaged first) through `WorldReleaseCoordinator.ResumeAsync` from Drain over a
+directory store, with the release's own silo started as a child process on a managed silo document and reached through
+the release-control routes. Use it before any change to the silo's startup, the release transaction or the worker's
+silo document reaches a deploy: `--silo <Puck.World.Silo.dll> --extensions-dir <dir>` locally (publish the GB, AGB and
+HGD forge projects into that directory, as the Dockerfile does), `--image` inside a built image, as CI's container
+verification does. When private health is not ready it says why (`WorldSiloHost.DescribeLiveness`): activation's
+progress or refusal, a pump fault, or the mailbox work or held step a stalled pump is inside; `Live` is false until
+`Ready`, so "not progressing" alone never means a stalled pump before activation finished.
+
+A deploy reads the deployment's hosted-data policy (`WorldHostedData.ParsePolicy` over the `worldSiloHostedData`
+output). Under `scratch` it replaces the world (`AzureCommand.ReplaceWorldReleaseAsync`: qualify the candidate alone,
+then `WorldHostedData.DiscardAsync`, the one door that deletes hosted data, then the bootstrap). Everything from here to
+the end of this section describes the `durable` path, which no deploy runs while the declaration is scratch.
 
 An installed extension resolves each assembly name to one copy
 (`PuckExtensionLoadContext`): the host's when the host carries at least the
@@ -379,7 +393,7 @@ any roots it saved unrecorded); and recovers every other pre-commit operation's 
 first. So every failed release leaves a group the next deploy can follow without a hand-run resume or an Azure change,
 except a committed release that cannot be admitted. `WorldReleaseCoordinatorSafetyLawTests.ADeploymentFollowsWhateverItsPredecessorLeftPending`
 drives each phase against a host fake that makes the worker's durable writes. A deploy that cannot carry its source's
-state resets instead of refusing (hosted data is scratch). `WorldReleaseFixtureBuilder.BuildAsync` is the one decision:
+state resets instead of refusing, until preservation rules for definition edits exist; the reset root carries no rewind boundary. `WorldReleaseFixtureBuilder.BuildAsync` is the one decision:
 with the deploy's successor it first asks `WorldReleaseCoordinator.FindDefinitionResetAsync`, which resets when a world's
 package definition changes outside its metadata (`WorldReleaseMetadataTransition.ChangesOutsideMetadata`, the comparison
 the transition itself refuses on), then `WorldReleaseCoordinator.FindStateReset`, which resets a source export this

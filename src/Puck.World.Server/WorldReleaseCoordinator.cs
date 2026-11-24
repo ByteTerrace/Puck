@@ -66,6 +66,20 @@ public interface IWorldReleaseQualificationRunner {
 public interface IWorldReleaseBootstrapQualificationRunner {
     Task<WorldReleaseQualificationResult> RunAsync(WorldReleaseManifest target, CancellationToken cancellationToken = default);
 }
+/// <summary>A bootstrap qualification that already ran, answered for the release it qualified: a deployment that must
+/// qualify before it changes anything (a replace deployment qualifies before discarding the serving world) hands the
+/// coordinator this instead of running the legs twice.</summary>
+/// <param name="qualified">The release the qualification ran for.</param>
+/// <param name="result">The qualification's result.</param>
+public sealed class WorldReleaseBootstrapQualification(WorldReleaseManifest qualified, WorldReleaseQualificationResult result) : IWorldReleaseBootstrapQualificationRunner {
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException"><paramref name="target"/> is not the release this qualification ran
+    /// for.</exception>
+    public Task<WorldReleaseQualificationResult> RunAsync(WorldReleaseManifest target, CancellationToken cancellationToken = default) =>
+        string.Equals(a: target.Identity, b: qualified.Identity, comparisonType: StringComparison.Ordinal)
+            ? Task.FromResult(result: result)
+            : throw new InvalidOperationException(message: $"the qualification ran for release {qualified.Identity}, not {target.Identity}");
+}
 /// <summary>Result returned by a release runtime driver, local or a hosting provider's.</summary>
 public readonly record struct WorldReleaseRuntimeResult(
     bool Succeeded,

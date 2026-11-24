@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.DependencyInjection;
-using Puck.Cli.Azure;
+using Puck.Cli.Automation;
 using Puck.Storage;
 using Puck.State;
 using Puck.Testing;
@@ -97,7 +97,7 @@ public sealed class WorldReleaseBootstrapTests {
                 identity: plum
             );
 
-            await Assert.ThrowsAsync<InvalidDataException>(testCode: () => AzureCommand.InitializeWorldReleaseBootstrapAsync(
+            await Assert.ThrowsAsync<InvalidDataException>(testCode: () => WorldReleaseBootstrap.PublishAsync(
                 archive: archive,
                 authority: authority,
                 cancellationToken: token,
@@ -118,7 +118,7 @@ public sealed class WorldReleaseBootstrapTests {
                 )
             );
         } else {
-            await AzureCommand.InitializeWorldReleaseBootstrapAsync(
+            await WorldReleaseBootstrap.PublishAsync(
                 archive: archive,
                 authority: authority,
                 cancellationToken: token,
@@ -127,7 +127,7 @@ public sealed class WorldReleaseBootstrapTests {
                 manifest: manifest,
                 owner: owner
             );
-            await AzureCommand.InitializeWorldReleaseBootstrapAsync(
+            await WorldReleaseBootstrap.PublishAsync(
                 archive: archive,
                 authority: authority,
                 cancellationToken: token,
@@ -262,7 +262,7 @@ public sealed class WorldReleaseBootstrapTests {
             packageDirectory: package
         );
 
-        Task Bootstrap(IReadOnlyList<WorldReleaseGroupHistoryEntry> history) => AzureCommand.InitializeWorldReleaseBootstrapAsync(
+        Task Bootstrap(IReadOnlyList<WorldReleaseGroupHistoryEntry> history) => WorldReleaseBootstrap.PublishAsync(
             archive: archive,
             authority: authority,
             cancellationToken: token,

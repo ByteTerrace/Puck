@@ -25,6 +25,10 @@ param ephemeral = false
 param forcePrivateNetworking = false
 param gitHubApplicationPrivateKey = null
 param worldMcp = worldMcpSettings
+// Hosted data is scratch until the owner declares it durable (AGENTS.md rule 5): each release deployment discards the
+// world group's hosted data and starts the release as a first deployment. Durable keeps it through the release
+// transaction (docs/decisions/runtime-and-delivery.md, "Releases").
+param worldSiloHostedData = 'scratch'
 // Empty objectId = "the deploying principal" (pipeline default). For human-run deployments set
 // BICEPPARAM_OWNER_OBJECT_ID to your object id and BICEPPARAM_OWNER_PRINCIPAL_TYPE=User.
 param owner = {

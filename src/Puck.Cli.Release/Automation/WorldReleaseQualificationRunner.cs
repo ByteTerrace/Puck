@@ -429,7 +429,7 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
         using var provider = services.BuildServiceProvider();
 
         // A bootstrap fixture holds each world's published definition under an unowned epoch-zero root and no gameplay,
-        // as the bootstrap publishes it (WorldReleaseFixtureBuilder, AzureCommand.InitializeWorldReleaseBootstrapAsync).
+        // as the bootstrap publishes it (WorldReleaseFixtureBuilder, WorldReleaseBootstrap.PublishAsync).
         if (source is null) {
             var fixtureAuthority = new WorldAuthorityBlobStore(
                 documentDirectory: documentDirectory,

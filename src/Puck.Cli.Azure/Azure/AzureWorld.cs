@@ -543,7 +543,8 @@ public static partial class AzureCommand {
     /// <remarks>Callers reach this only when no release runs on the scale set: after its source drained, or in a group
     /// that has never committed a release. Azure refuses to delete a Flexible scale set that still holds a VM, and the
     /// scale set's autoscale floor can add one back between the two deletes, so a refused scale-set delete is retried
-    /// after its workers are deleted again.</remarks>
+    /// after its workers are deleted again. A worker is force-deleted: its guest holds nothing to shut down gracefully,
+    /// and a graceful delete spends minutes on a guest shutdown no caller needs.</remarks>
     private static async Task DeleteWorldComputeAsync(string group, string scaleSet, TimeProvider clock) {
         for (var attempt = 1; ; attempt++) {
             foreach (var worker in await StableWorkersAsync(
@@ -558,6 +559,8 @@ public static partial class AzureCommand {
                     group,
                     "--name",
                     Text(value: worker!["name"]),
+                    "--force-deletion",
+                    "true",
                     "--yes",
                     "-o",
                     "none"

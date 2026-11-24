@@ -1,6 +1,4 @@
-using System.Text.Json;
 using Puck.Cli.Automation;
-using Puck.Storage;
 using Puck.World.Server;
 
 namespace Puck.Cli.Azure;
@@ -16,22 +14,23 @@ public static partial class AzureCommand {
             );
         }
         packageDirectory = Path.GetFullPath(path: packageDirectory);
-        var manifest = (JsonSerializer.Deserialize<WorldReleaseManifest>(ConfinedFile.ReadAllBytes(
-            Path.Combine(
-                path1: packageDirectory,
-                path2: "release.json"
-            ),
-            (1024 * 1024)
-        ))
-            ?? throw new InvalidDataException(message: "release package contains no manifest"));
+        var manifest = WorldReleaseManifest.ReadVerified(packageDirectory: packageDirectory);
 
-        if (!WorldReleaseManifest.TryVerify(
-            manifest: manifest,
-            packageDirectory: packageDirectory,
-            reason: out var reason
-        )) { throw new InvalidDataException(message: reason); }
         return await WithManagedWorldReleaseAsync(
             action: async (context, token) => {
+                var policy = WorldHostedDataPolicyOf(outputs: context.Outputs);
+
+                Console.WriteLine(value: $"Hosted data policy: {policy}");
+                if (policy == WorldHostedDataPolicy.Scratch) {
+                    return await ReplaceWorldReleaseAsync(
+                        context: context,
+                        manifest: manifest,
+                        operationId: operationId,
+                        packageDirectory: packageDirectory,
+                        policy: policy,
+                        token: token
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                }
                 var current = await context.Groups.LoadAsync(
                     context.Group,
                     token
@@ -57,24 +56,11 @@ public static partial class AzureCommand {
                         break;
                 }
                 if (current?.Record.ActiveRelease == manifest.Identity) {
-                    var active = await LoadWorldReleaseDeploymentAsync(
+                    return await TestActiveWorldReleaseAsync(
                         context: context,
-                        identity: manifest.Identity,
-                        token: token
+                        current: current.Value,
+                        manifest: manifest
                     ).ConfigureAwait(continueOnCapturedContext: false);
-
-                    await TestWorldReleaseAsync(
-                        clock: context.Clock,
-                        group: context.ResourceGroup,
-                        image: active.Image,
-                        scaleSet: context.Group
-                    ).ConfigureAwait(continueOnCapturedContext: false);
-                    return new WorldReleaseRunResult(
-                        CandidatePrivate: false,
-                        Completed: true,
-                        Detail: "the exact release is already active and healthy",
-                        Snapshot: current
-                    );
                 }
                 if (current is null) {
                     if ((await WorkersAsync(
@@ -104,40 +90,14 @@ public static partial class AzureCommand {
                     // A pair that cannot carry state structurally is not refused here: hosted data is scratch, so the
                     // fixture's reset decision (WorldReleaseCoordinator.FindDefinitionResetAsync) starts it fresh.
                     if (
-                        !WorldReleaseManifest.TryValidate(manifest: source.Manifest, reason: out reason) ||
+                        !WorldReleaseManifest.TryValidate(manifest: source.Manifest, reason: out var reason) ||
                         !WorldReleaseManifest.TryValidate(manifest: manifest, reason: out reason)
                     ) { throw new InvalidDataException(message: reason); }
                 }
-                // Reuse already retained inputs on retry. Regenerating SSH material or reading today's template would
-                // otherwise turn a lost preflight response into a conflicting configuration for the same release.
-                await context.Archive.SaveAsync(
-                    cancellationToken: token,
-                    manifest: manifest,
-                    packageDirectory: packageDirectory
-                ).ConfigureAwait(continueOnCapturedContext: false);
-                var retained = await context.Deployments.LoadAsync(
-                    manifest,
-                    context.Group,
-                    token
-                ).ConfigureAwait(continueOnCapturedContext: false);
-
-                if (retained is null) {
-                    var prepared = await PrepareWorldReleaseDeploymentAsync(
-                        manifest,
-                        context.ResourceGroup,
-                        context.Clock
-                    ).ConfigureAwait(continueOnCapturedContext: false);
-
-                    await context.Deployments.SaveAsync(
-                        cancellationToken: token,
-                        configuration: prepared.Configuration,
-                        keys: prepared.Keys,
-                        manifest: manifest
-                    ).ConfigureAwait(continueOnCapturedContext: false);
-                }
-                var candidate = await LoadWorldReleaseDeploymentAsync(
+                var candidate = await RetainWorldReleaseDeploymentAsync(
                     context: context,
-                    identity: manifest.Identity,
+                    manifest: manifest,
+                    packageDirectory: packageDirectory,
                     token: token
                 ).ConfigureAwait(continueOnCapturedContext: false);
 

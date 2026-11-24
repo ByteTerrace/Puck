@@ -884,7 +884,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             return true;
         }
         if (worldRow.Owner != managed.Owner) {
-            Console.Error.WriteLine(value: $"[silo.activate: '{worldRow.World}' refused (managed release owner does not match the row)]");
+            RefuseActivation(row: worldRow.World.Value, reason: "managed release owner does not match the row");
             return false;
         }
         WorldReleaseGroupSnapshot? snapshot;
@@ -895,11 +895,11 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 ct
             ).ConfigureAwait(continueOnCapturedContext: false);
         } catch (Exception error) when ((error is InvalidDataException or ArgumentException)) {
-            Console.Error.WriteLine(value: $"[silo.activate: '{worldRow.World}' refused (release group: {error.Message})]");
+            RefuseActivation(row: worldRow.World.Value, reason: $"release group: {error.Message}");
             return false;
         }
         if (snapshot is not { } state) {
-            Console.Error.WriteLine(value: $"[silo.activate: '{worldRow.World}' refused (managed release group '{managed.Group}' is not initialized)]");
+            RefuseActivation(row: worldRow.World.Value, reason: $"managed release group '{managed.Group}' is not initialized");
             return false;
         }
         var record = state.Record;
@@ -916,7 +916,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         )));
 
         if (!candidate) {
-            Console.Error.WriteLine(value: $"[silo.activate: '{worldRow.World}' refused (expected release '{managed.ExpectedRelease}' is not the active or pending candidate)]");
+            RefuseActivation(row: worldRow.World.Value, reason: $"expected release '{managed.ExpectedRelease}' is not the active or pending candidate");
             return false;
         }
         return true;
@@ -1185,10 +1185,12 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
             Console.Error.WriteLine(value: $"[silo.activate.timing: '{RowKey(identity: identity)}' {stage} {(elapsed - stageStarted).TotalMilliseconds:F0} ms; total {elapsed.TotalMilliseconds:F0} ms]");
             stageStarted = elapsed;
+            NoteActivation(row: RowKey(identity: identity), finishedStage: stage);
         }
+        NoteActivation(row: RowKey(identity: identity), finishedStage: null);
         if (IsDraining) { return false; }
         if (FindWorldRow(identity: identity) is not { } worldRow) {
-            Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (not declared in this silo's document)]");
+            RefuseActivation(row: RowKey(identity: identity), reason: "not declared in this silo's document");
 
             return false;
         }
@@ -1197,7 +1199,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             refusal: out var extensionRefusal,
             worldRow: worldRow
         )) {
-            Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused ({extensionRefusal})]");
+            RefuseActivation(row: RowKey(identity: identity), reason: extensionRefusal);
 
             return false;
         }
@@ -1245,7 +1247,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             var definition = recovery.Definition;
 
             if (definition is null) {
-                Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (no published definition)]");
+                RefuseActivation(row: RowKey(identity: identity), reason: "no published definition");
 
                 return false;
             }
@@ -1262,7 +1264,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                     documentDirectory: m_documentDirectory,
                     reason: out var decodeReason
                 )) {
-                    Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (checkpoint decode: {decodeReason})]");
+                    RefuseActivation(row: RowKey(identity: identity), reason: $"checkpoint decode: {decodeReason}");
 
                     return false;
                 }
@@ -1351,7 +1353,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 reason: out var federationReason,
                 worldRow: worldRow
             )) {
-                Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused ({federationReason})]");
+                RefuseActivation(row: RowKey(identity: identity), reason: federationReason);
                 server.Addons?.Dispose();
                 adjacencies.Dispose();
                 machines.Dispose();
@@ -1445,7 +1447,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                         reason: out var recoveryReason,
                         row: row
                     )) {
-                        Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused (journal recovery: {recoveryReason})]");
+                        RefuseActivation(row: RowKey(identity: identity), reason: $"journal recovery: {recoveryReason}");
                         DiscardActivation(row: row);
                         tcs.TrySetResult(result: false);
                         return;
@@ -1533,7 +1535,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 await cleanup.Task;
                 admitted = false;
                 if (activationError is ExtensionsRefusedException refused) {
-                    Console.Error.WriteLine(value: $"[silo.activate: '{RowKey(identity: identity)}' refused ({refused.Message})]");
+                    RefuseActivation(row: RowKey(identity: identity), reason: refused.Message);
 
                     return false;
                 }
