@@ -62,79 +62,125 @@ lanes, [the release](#the-release), the
   The RTX 2060 machine then plays the release as a player does. No lane takes
   a timing reading on a shared machine, and a windowed check never holds a
   landing or a push back.
-- **Both bars fail on both machines, and nothing on the head is measured.**
-  - RTX 4070 at 2560 by 1440, authority in process, prewarmed, on a quiet
-    machine: about 16 to 17 FPS on each backend against 60. The frame is
-    CPU-bound: one thread steps the world and then produces the frame.
-  - RTX 2060 at 1920 by 1080, authority in process, a prerelease player
-    build: 9 to 14 FPS over the route against 60, and about twice its 6 GiB
-    host-memory bar. It also baked while it played, which a player build must
-    never do. The logs are on `origin/test/2060-local`, under
-    `test-results/2060-local/`.
-  - The lanes that answered those readings landed after them: `cpu-frame`,
-    `cpu-frame-2`, `memory-bar`, the three hunt 14 GPU lanes, `motion-scope`,
-    `standing-2` and `cache-complete`. Neither machine has a reading against
-    a hosted authority.
-- **In flight:** nothing. The last lane to land, `cache-complete`, makes a
-  shipped mesh cache whole and a player's build draw stored tiers alone; it
-  has run on Direct3D 12 on the RTX 4070 only
-  ([the player build never bakes](#the-player-build-never-bakes)).
-- **The RTX 2060 partner session is idle.** It waits for the lead to say the
-  release is on the player channel ([the release](#the-release), step 4).
-  Between releases it reads code for the lead; its hunts 12 to 14 are filed
-  in the packets below.
+- **The owner's direction for the next session: few agents, huge passes.**
+  The owner: "All of them need SERIOUS work and I'm tired of us taking
+  incremental steps to get there. We need to make huge leaps during the next
+  session... Collapse as much as you can into a single pass, as I want as few
+  agents as possible to get as much code written/implemented as we can." The
+  session runs four campaigns, one principal agent each, and the RTX 2060
+  partner session on the city. Each campaign is one long lane that carries
+  its whole list to its success line, merging into its own branch as it goes,
+  and hands back only at the line, at a named engine wall, or when its context
+  runs out (then a fresh lane takes the exact remainder at once). No
+  per-step hand-backs, no small lanes beside them unless a campaign names a
+  wall that blocks it. Fewer agents also means fewer collisions: the last
+  session lost three re-merges to lanes in the same files and hours to
+  windowed admission waits with eight lanes holding memory.
+- **Where things stand** (`lead/rendering` at the session's end; all readings
+  are attribution on a shared machine unless marked quiet):
+  - **Released:** `0335a67b44` is live on Azure (admission open). The player
+    channel is held: no mesh cache set exists for that build, and the player
+    build's device checks failed on the rtx2060 device budget and on Vulkan
+    tiers. The refusal half is fixed (`bd1cc960bb`); the Vulkan tier misses
+    are diagnosed only as far as the shedding tables' re-dealt groups
+    (`SdfMeshBakeReport.RungMissed` now names geometry and path).
+  - **GPU, RTX 4070, 2560 by 1440, D3D12:** 13.7 to 18 ms a frame over the
+    route (the main view 10 to 14 ms: views-probes 2.9 to 4.6, views 1.4 to
+    2.3, resolve 1.9 to 2.8, surface 1.3 to 1.9, views-filter 1.3 to 1.7,
+    mesh 0.5 to 1.1), 42 ms in the lift where device memory crossed the
+    process budget. The 8 ms budget and its architecture are in
+    [the frame budget](frame-budget.md). Device oversubscription is the
+    worst frame problem: a chapter over the budget slows every pass.
+  - **Memory:** the 4070 held its 8 GiB device bar on the route after the
+    tier ladder continued past the floor, then memory step 2 (the bias stops
+    at the floor, so near detail and the plaques hold) gave some of that
+    back. The rtx2060 bars fail (device 6.4 GB against 4.3, host 10 GB
+    against 6 GiB); the fixed class is 4.1 to 4.4 GB; the debug world is
+    resident twice (`routed$session$18$0$shared`, about 1 GiB) and every
+    sky-layer session is its own residency; host private is 16 to 20 GB.
+    The budgets by class and the ordered steps are in
+    [streaming and memory](streaming-and-memory.md).
+  - **CPU frame thread:** 8 to 12 ms an iteration (capture 4.2 to 4.5,
+    record 2.0 to 2.5, pump 1.3 to 2.2, pack 1.5 to 1.8). Eight residencies
+    are captured almost every frame whether or not a view renders them
+    (the frame-production plan on `origin/wip/frame-production`).
+  - **City simulation** (`worlds/debug/city.puck`, 1,920 citizens and 100
+    vehicles, quiet RTX 2060, headless): about 22.5 Hz against 30, up from
+    10. The step thread's largest costs now: the input runtime per body
+    (`RefreshPermissions`, `TryAdmit`, `TrySynchronize`, `TrySelect`, about
+    20%), copies and clears (`MemmoveNative` 11%, `ZeroMemoryNative` 4%),
+    fork and plan (`JobPool.Fork` plus `PlanKitStep`, about 16%),
+    `CaptureMotion` 8%. The source watch's polling costs a fifth of a core.
+    Rules are now evaluated by change (the city's sheet 3.25M → 0.5M of
+    4.25M), collision events only for listeners, kit bodies in partitions.
+  - **The moon:** a ship flies from the launch pad through the sky seam to a
+    landing on the moon and back, and the painting reaches the pole. The
+    look is not continuous: the moon in the valley's sky is unlit, the
+    pilot's view past the seam is broken (the debug world baked a second
+    time as the moon's neighbour), the sky snaps from blue to black at the
+    seam, and the pilot camera is the Moth's boom
+    ([the trip to the moon](valley-and-moons.md#the-trip-to-the-moon)).
+  - **Parked, unmerged, never run:** `origin/wip/gpu-architecture` (coarse
+    probe lookup with interpolation, resolve once per sample, the object key
+    in the visibility record; its last commit unbuilt) and
+    `origin/wip/frame-production` (one owed capture a frame, residencies
+    packed and their uploads recorded side by side). Each campaign below
+    decides whether to build on its branch or rewrite.
 
 ### The first lanes
 
-**The CPU frame is fixed first, as one structural campaign, at the start of
-the session** (the owner's ruling: "I expect it to be fixed ASAP when the next
-session starts. I'm tired of these incremental changes that barely seem to
-move the needle when my hardware is beast"). The RTX 4070 machine's CPU is a
-Ryzen 7 7800X3D (8 cores, 16 threads, 96 MB of L3); a world the debug world's
-size should cost it a few milliseconds a frame. The forcing function is that
-the debug world is GPU-bound on that machine: the frame thread does a few
-milliseconds of work and the rest spreads over the cores. Every item of
-[the CPU frame](#the-cpu-frame) is replaced in the same campaign, not
-shaved, and the lead runs its lanes in parallel by area from the first hour.
-The frame-thread trace in the first bulk window orders the work inside each
-lane; it does not gate starting them.
+Four campaigns, started together in the first hour, one principal each. The
+lead holds one quiet window at the start (both backends' route benchmark, the
+2060's city trace, a memory census) so every campaign starts from a quiet
+baseline, then runs a quiet window after each hand-back.
 
-1. **`tick-thread`** · high · a principal on the strongest model, design and
-   code in one lane, reviewed by another family before it lands.
-   [The CPU frame](#the-cpu-frame), item 1: the in-process authority steps
-   on its own thread and the frame presents the latest completed tick. The
-   register allows the pipelined tick with present-time look input
-   ([the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation));
-   the lane states the determinism invariant and what enforces it, and
-   measures input-to-display time before and after.
-3. **`slot-transforms`** · high · a specialist. Item 3: the GPU draw record
-   reads its slot's transform instead of storing a matrix, so a moving body
-   rewrites one transform row and pack stops restaging records.
-4. **`field-queries`** · high · a principal. Item 4: presentation queries
-   (effector probes, camera clearance) stop walking the whole static world.
-   Region tapes, the shared stream definitions and the wide gradient are built
-   ([the design](field-queries.md#build-order)).
-5. **`frame-garbage`** · high · a specialist. Item 5 and the memory tenants:
-   no collection pauses during play, the 26 MB appearance clone, the 80 MB
-   clearance evaluator.
+1. **`gpu-frame`: the GPU frame to 8 ms at 2560 by 1440 on the RTX 4070.**
+   Build [the frame budget](frame-budget.md)'s architecture end to end in one
+   lane: each lighting input resolved once into a compact record; the coarse
+   probe lookup (start from `wip/gpu-architecture`); light lists replacing
+   the 128-light masks; shadow classification before filtering; the
+   prefiltered environment; pass merges; windows allocated by octave; main
+   view storage under 1,000 MiB; ink's edge search inside its share. Success
+   line: the whole route at or under 10 ms in the quiet window, the look held
+   in motion on both backends; 8 ms is the budget it keeps going toward.
+2. **`memory`: every device inside its bars, and streaming where it pays.**
+   One mesh store per presentation, so a mesh any number of residencies name
+   is placed once (ends the duplicate debug world and the sky sessions'
+   copies); a residency's fixed tables given back when unobserved and woken
+   ahead of need; irradiance stored per measured level; the host heap's
+   program copies and unnamed tenants; draw rows shed on a refused growth;
+   far and unseen content streamed rather than held. Success line: a fresh
+   boot under `world.device-profile rtx2060` holds its 4.3 GB device and
+   6 GiB host bars on the route with the city painting; the 4070 sits under
+   6 GiB device; the player build's four device checks settle (with the
+   Vulkan tier misses fixed, which this lane owns since it owns the bake's
+   residency and tiers); the next release publishes the player channel.
+3. **`cpu`: the frame thread under 3 ms and the city's authority at 30 Hz
+   with headroom.** One lane over both, since both are the same discipline
+   (work proportional to change, off the one thread): capture only what a
+   view reads and capture routed scenes side by side (start from
+   `wip/frame-production`); recording in one fork; a pump that visits what
+   completed; the input runtime proportional to seated or possessed bodies
+   and grant changes; the step thread's copies and clears; fork and plan
+   cost; `CaptureMotion`; the source watch on OS change notification instead
+   of polling. Success line: the frame thread under 3 ms on the route at
+   2560 by 1440 and in the city through its painting; the city's headless
+   authority at 30 Hz on the quiet RTX 2060 with the step thread under 60%
+   busy.
+4. **`moon-trip`: the flight seamless from every perspective.** The moon lit
+   in the valley's sky; the pilot's view past the seam correct, with the
+   neighbour drawn from the shared mesh store, not a second bake (coordinate
+   with `memory`); altitude in the air, so sky, fog and exposure fade from
+   blue through the limb to black (the view clock in the plan's gap 5); a
+   pilot camera rig the seat takes while it drives a body; boost on a
+   scripted tape so a flight is one line; the boarding re-drive's divergence.
+   Success line: a recorded continuous round trip, pad to moon landing and
+   back, presented in motion on D3D12 and Vulkan with no visible seam.
 
-Beside them, from the same hour:
-
-- **`remote-content`** · high, M1 · a principal.
-  [A hosted world on a client](#a-hosted-world-on-a-client): boot a listening
-  World and a `--connect` client, read what the client shows of text,
-  machines and session screens, then build the answer.
-- **`windowed-admission`** · high · a specialist on a mid model.
-  [CLI and lease machinery](#cli-and-lease-machinery): windowed admission
-  judges a start by its own measured need and the GPU lease admits by
-  measured headroom, with an exclusive hold kept for timing. Five parallel
-  CPU lanes need it, so it lands first.
-
-Ready behind them: `multi-seat` ([a multi-seat client](#a-multi-seat-client),
-M2, its trust boundary reviewed by another family); `crowd-peers`, code on a
-mid model ([the debug world at MMO scale](#the-debug-world-at-mmo-scale));
-and `exhibits-dark`, a diagnosis with a granted window
-([lighting](#lighting-and-gi)).
+**The city stays with the RTX 2060 session** ([the city plan](city.md),
+stage 7 zoned districts, then stage 8 platform-generated sections, then the
+perspectives in stage 6). Its engine gaps go to the campaign that owns the
+area, not to new lanes.
 
 ### The release
 
