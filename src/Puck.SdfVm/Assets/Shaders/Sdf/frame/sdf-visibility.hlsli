@@ -6,10 +6,13 @@
 // A record is eight words:
 // 0: the ray parameter t (Euclidean distance along the normalized camera ray).
 // 1: the identity.
-// 2: the material.
+// 2: the material in the low SDF_VISIBILITY_MATERIAL_BITS, and above them the low bits of a mesh hit's draw's object key
+//    (SDF_MESH_OBJECT_KEY_SHIFT), which a view's edge search compares.
 // 3: a mesh hit's triangle.
-// 4: a mesh hit's draw's frame slot (SDF_TRANSFORM_SLOT_NONE for a static draw), which the material's layers are placed
-//    in and its lanes read from.
+// 4: in the low SDF_VISIBILITY_FRAME_SLOT_BITS a mesh hit's draw's frame slot plus one (zero for a static draw,
+//    SDF_TRANSFORM_SLOT_NONE), which the material's layers are placed in and its lanes read from; in the bit above them
+//    whether the hit lies beside its draw's clip plane, where the edge search seeds no edge; and above that the object
+//    key's remaining bits.
 // 5: the geometric normal as a 16-bit signed octahedral pair (a zero normal is its own sentinel).
 // 6: curvature and ambient occlusion as halves.
 // 7: K, four eight-bit stable-slot visibilities, 1 where no shadow was rendered. The surface pass writes it for every
@@ -71,9 +74,25 @@ uint sdfVisibilitySource(uint identity) {
 bool sdfVisibilityHit(SdfVisibility visibility) {
     return (sdfVisibilityKind(visibility.identity) != SDF_VISIBILITY_KIND_BACKGROUND);
 }
+// The material and frame slot words' fields.
+static const uint SdfVisibilityMaterialMask = ((1u << SDF_VISIBILITY_MATERIAL_BITS) - 1u);
+static const uint SdfVisibilityFrameSlotMask = ((1u << SDF_VISIBILITY_FRAME_SLOT_BITS) - 1u);
+static const uint SdfVisibilityCut = (1u << SDF_VISIBILITY_FRAME_SLOT_BITS);
 // A mesh hit's draw's frame slot, which the surface pass writes; SDF_TRANSFORM_SLOT_NONE for a miss.
 int sdfVisibilityFrameSlot(uint record, SdfVisibility visibility) {
-    return (sdfVisibilityHit(visibility) ? asint(sdfVisibilityRecordBuffer[record + SdfVisibilityFrameSlotWord]) : SDF_TRANSFORM_SLOT_NONE);
+    return (sdfVisibilityHit(visibility)
+        ? (asint(sdfVisibilityRecordBuffer[record + SdfVisibilityFrameSlotWord] & SdfVisibilityFrameSlotMask) - 1)
+        : SDF_TRANSFORM_SLOT_NONE);
+}
+// What a view's edge search compares of a record: its material in `x`, and in `y` its draw's object key with the top bit
+// set where the hit lies beside its draw's clip plane.
+uint2 sdfVisibilityEdgeKeys(uint record) {
+    uint material = sdfVisibilityRecordBuffer[record + SdfVisibilityMaterialWord];
+    uint slot = sdfVisibilityRecordBuffer[record + SdfVisibilityFrameSlotWord];
+
+    return uint2((material & SdfVisibilityMaterialMask),
+        (((material >> SDF_VISIBILITY_MATERIAL_BITS) | ((slot >> (SDF_VISIBILITY_FRAME_SLOT_BITS + 1u)) << (32u - SDF_VISIBILITY_MATERIAL_BITS)))
+            | (((slot & SdfVisibilityCut) != 0u) ? 0x80000000u : 0u)));
 }
 float4 sdfFrameLanes(int frameSlot) {
 #ifdef SDF_DYNAMIC_TRANSFORMS
@@ -106,7 +125,7 @@ SdfVisibility sdfLoadVisibility(uint record) {
     SdfVisibility visibility;
     visibility.t = asfloat(sdfVisibilityRecordBuffer[record + SdfVisibilityTWord]);
     visibility.identity = sdfVisibilityRecordBuffer[record + SdfVisibilityIdentityWord];
-    visibility.material = asint(sdfVisibilityRecordBuffer[record + SdfVisibilityMaterialWord]);
+    visibility.material = asint(sdfVisibilityRecordBuffer[record + SdfVisibilityMaterialWord] & SdfVisibilityMaterialMask);
     return visibility;
 }
 // Four stable-slot visibilities share the K word.
@@ -151,6 +170,9 @@ struct SdfVisibilityRecordValue {
     SdfVisibility visibility;
     uint triangleIndex;
     int frameSlot;
+    // The hit's draw's object key, and whether the hit lies beside its draw's clip plane.
+    uint objectKey;
+    bool cut;
     float3 normal;
     float curvature;
     float ambient;
@@ -159,9 +181,10 @@ struct SdfVisibilityRecordValue {
 void sdfStoreVisibilityRecord(uint record, SdfVisibilityRecordValue value) {
     sdfVisibilityRecordBuffer[record + SdfVisibilityTWord] = asuint(value.visibility.t);
     sdfVisibilityRecordBuffer[record + SdfVisibilityIdentityWord] = value.visibility.identity;
-    sdfVisibilityRecordBuffer[record + SdfVisibilityMaterialWord] = asuint(value.visibility.material);
+    sdfVisibilityRecordBuffer[record + SdfVisibilityMaterialWord] = ((asuint(value.visibility.material) & SdfVisibilityMaterialMask) | (value.objectKey << SDF_VISIBILITY_MATERIAL_BITS));
     sdfVisibilityRecordBuffer[record + SdfVisibilityTriangleWord] = value.triangleIndex;
-    sdfVisibilityRecordBuffer[record + SdfVisibilityFrameSlotWord] = asuint(value.frameSlot);
+    sdfVisibilityRecordBuffer[record + SdfVisibilityFrameSlotWord] = (((asuint(value.frameSlot + 1) & SdfVisibilityFrameSlotMask) | (value.cut ? SdfVisibilityCut : 0u))
+        | ((value.objectKey >> (32u - SDF_VISIBILITY_MATERIAL_BITS)) << (SDF_VISIBILITY_FRAME_SLOT_BITS + 1u)));
     sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord] = sdfVisibilityPackNormal(value.normal);
     sdfVisibilityRecordBuffer[record + SdfVisibilityShadingWord] =
         ((f32tof16(clamp(value.curvature, -SdfVisibilityHalfMax, SdfVisibilityHalfMax)) & 0xFFFFu) | ((f32tof16(value.ambient) & 0xFFFFu) << 16u));

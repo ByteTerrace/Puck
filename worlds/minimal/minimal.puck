@@ -1,22 +1,26 @@
 // The minimal world: the standard package (../standard/standard.puck: inputs, controls, skin, editor, camera feel)
 // through its plain walker (../standard/walker.puck, which imports and refines it), on a floor under the engine's
 // default sky. It is the worked example an author starts a world from: everything it seats, frames, binds and builds
-// with comes from the standard, and this document declares only its own ground, where a seat starts, and how many
-// seats it has.
+// with comes from the standard, and this document declares only its own ground, where a seat starts, how many
+// seats it has, and a benchmark route across its floor.
 //
 //   dotnet run --project src/Puck.World -c Release -- --world worlds/minimal
+//   puck benchmark --world worlds/minimal --route walk
 schema: "puck.world.definition.v1"
 documentId: "minimal"
 
 import "../standard/walker"
+import "../standard/benchmark"
 
 metadata {
   title: "Minimal"
   description: "The standard package and its plain walker on a floor: the smallest world an author builds from."
 }
 
+// The local seat's body, and a slot for one player arriving from another process (a benchmark's remote pair raises
+// networkPlayers to admit them).
 bodies {
-  capacity: 1
+  capacity: 2
   localSeats: 1
   networkPlayers: 0
   reconnectGraceSeconds: 0
@@ -75,3 +79,26 @@ prototypes {
     }
   }
 }
+
+// A benchmark route an author copies: one chapter the standard's `walker` seat program plays through seat 1's own
+// controls, across the floor at a walk and back at a run. Each step steers directly to its point, so the route needs no
+// navigation domain.
+routes [
+  {
+    name: "walk"
+    program: "walker"
+    chapters [
+      {
+        name: "across the floor"
+        steps [
+          { $type: "pose", spawn: start }
+          { $type: "rest", seconds: 1 }
+          { $type: "go", point [0, 0, -12], pace: "walk", direct: true, within: 0.5 }
+          { $type: "go", point [12, 0, -12], pace: "walk", direct: true, within: 0.5 }
+          { $type: "go", point [0, 0, 0], pace: "run", direct: true, within: 0.5 }
+          { $type: "rest", seconds: 1 }
+        ]
+      }
+    ]
+  }
+]

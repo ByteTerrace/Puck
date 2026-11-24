@@ -22,7 +22,24 @@ let moonGravity = 6
 let skySeamAltitude = 2400
 let skySeamSpan = 20000
 
-// The direction of the sun from the moon, low over the north pole so the craters there throw long shadows and two
-// thirds of the side the valley sees is lit, and how bright its stars are drawn.
-let moonSunDirection = [-0.75, 0.25, -0.6]
-let moonStarLuminance = 600
+// The launch field's pad on the valley floor (launch.puck), where the trip starts and ends: its centre over the ground,
+// the height of its top, and the heading the ship on it faces.
+let launchPad = [84, 86]
+let launchPadTop = 0.35
+let launchHeading = 220
+
+// One sun lights both worlds, since they share a frame: the day both run (day.puck's cycle and the moon's own light),
+// so the moon's lit side in the valley's sky is the side the valley's sun is on, its phase tells the hour, and a ship
+// crossing the seam keeps its light. Each authority advances its own `day` row from the same start at the same rate.
+let sharedDaySeconds = 1440
+let sharedDayStart = 10
+let sharedNoonElevation = 46
+let sharedSunHeading = 37
+
+// Space as both worlds draw it, so the sky is the same on either side of the seam: a near-black void and its stars.
+let spaceColor = "#02030A"
+let spaceLuminance = 1
+let spaceStarLuminance = 600
+let spaceStarDensity = 90
+let spaceStarBrightness = 1.3
+let spaceStarSeed = 7

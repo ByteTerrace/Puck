@@ -356,6 +356,8 @@ void sdfSurfaceStage(SdfPixel p) {
     value.visibility.material = (hit ? sdfMeshMaterial(resolved) : 0);
     value.triangleIndex = (hit ? meshHit.triangleIndex : 0u);
     value.frameSlot = (hit ? sdfMeshHitFrameSlot(resolved) : SDF_TRANSFORM_SLOT_NONE);
+    value.objectKey = 0u;
+    value.cut = false;
     value.normal = float3(0.0, 0.0, 0.0);
     value.curvature = 0.0;
     value.ambient = 1.0;
@@ -365,6 +367,12 @@ void sdfSurfaceStage(SdfPixel p) {
         float3 surfacePoint = (p.rayOrigin + (p.rayDirection * meshHit.t));
         float3 face;
         float3 normal = sdfMeshSurfaceNormal(resolved, surfacePoint, p.rayDirection, face, value.curvature, value.frameSlot);
+        // What the view's edge search compares of the hit: its object, and whether it lies within three pixels of its
+        // draw's clip plane, so a body cut by a portal's glass draws no line along the cut.
+        uint flags = sdfMeshRecordWord(resolved.record + SDF_MESH_FLAGS_WORD);
+
+        value.objectKey = (flags >> SDF_MESH_OBJECT_KEY_SHIFT);
+        value.cut = (((flags & SDF_MESH_CLIP_FLAG) != 0u) && (sdfMeshClipDistance(resolved.record, surfacePoint) < ((3.0 * p.pixelFootprint) * meshHit.t)));
 
         value.normal = normal;
         if (!worldAoDisabled()) {

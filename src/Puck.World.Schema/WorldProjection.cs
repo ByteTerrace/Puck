@@ -577,7 +577,9 @@ public static class WorldProjection {
                 continue;
             }
 
-            if (clock.IsTickClock) {
+            // A tick clock and a view clock carry no state of the world: each recipient reads its own tick and its own
+            // viewer.
+            if (clock.IsTickClock || clock.IsViewClock) {
                 clocks.Add(item: clock);
             } else if (clock.IsStateClock && keyed.ContainsKey(key: clock.Name)) {
                 clocks.Add(item: ((anchors is not null)
@@ -633,6 +635,17 @@ public static class WorldProjection {
                 }
             } else if (clock.StartSeconds is not null) {
                 return $"projection anchored clock '{clock.Name}' cannot carry a tick clock's start.";
+            }
+
+            if (clock.View is { } view) {
+                if ((clock.State is not null) || (clock.PeriodSeconds is not null) || (clock.Anchor is not null) ||
+                    !double.IsFinite(d: view.From) || !double.IsFinite(d: view.To) || (view.To <= view.From) ||
+                    ((view.Axis?.Value is { } axis) && !(float.IsFinite(f: axis.LengthSquared()) && (axis.LengthSquared() > 0f))) ||
+                    ((view.Origin?.Value is { } origin) && !float.IsFinite(f: origin.LengthSquared()))) {
+                    return $"projection view clock '{clock.Name}' must measure a finite, rising distance from a finite origin along a finite axis, and carry nothing else.";
+                }
+
+                continue;
             }
 
             if (clock.IsStateClock) {

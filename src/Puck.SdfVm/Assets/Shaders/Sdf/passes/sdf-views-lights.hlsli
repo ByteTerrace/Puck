@@ -19,8 +19,9 @@
 // it falls to zero.
 //
 // A tile also leaves out a light the irradiance volume traced (sdfLightTraces) that the probes about none of its shaded
-// pixels see: such a light's share of the probes is zero at every one of them (sdfViewsLightsSeen holds every light whose
-// share can be above zero at a pixel), and a traced point or spot light adds nothing where its share is zero
+// pixels see: such a light's share of the probes is zero at every one of them (sdfViewsCellLightsSeen over the cells the
+// tile's pixels blend and sdfViewsPixelLightsSeen hold every light whose share can be above zero at a pixel), and a
+// traced point or spot light adds nothing where its share is zero
 // (SdfLightInputs.unseen, which the light phase's door answers by before it runs a program). So in a room the walk visits
 // the fixtures that light it, never those whose range crosses its walls and floors from the rooms beside it.
 #ifndef PASSES_SDF_VIEWS_LIGHTS_HLSLI
@@ -222,11 +223,21 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
     GroupMemoryBarrierWithGroupSync();
 
     // The traced lights the tile kept, the same on every lane, so a tile that kept none (the open valley) reads no probe
-    // record here.
+    // record here. The tile's pixels blend the tile's own cells and the ring of cells about them, a cell a lane; a pixel
+    // that reads an extra or no slot adds its own.
     uint4 traced = uint4(sdfViewsLightTraced[0], sdfViewsLightTraced[1], sdfViewsLightTraced[2], sdfViewsLightTraced[3]);
 
-    if (lit && any(traced != 0u)) {
-        uint4 seen = (sdfViewsLightsSeen(p) & traced);
+    if (any(traced != 0u)) {
+        uint ringEdge = ((SDF_VISIBILITY_GROUP_EDGE / SDF_VIEWS_PROBE_RATE) + 2u);
+        uint4 seen = uint4(0u, 0u, 0u, 0u);
+
+        if (lane < (ringEdge * ringEdge)) {
+            seen = sdfViewsCellLightsSeen(((int2(p.pixel / SDF_VISIBILITY_GROUP_EDGE) * int(SDF_VISIBILITY_GROUP_EDGE / SDF_VIEWS_PROBE_RATE)) + (int2((lane % ringEdge), (lane / ringEdge)) - 1)), p.viewIndex);
+        }
+        if (lit) {
+            seen |= sdfViewsPixelLightsSeen(p);
+        }
+        seen &= traced;
 
         [unroll]
         for (uint word = 0u; (word < SDF_MESH_IRRADIANCE_LIGHT_WORDS); word++) {

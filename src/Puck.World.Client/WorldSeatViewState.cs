@@ -38,6 +38,49 @@ public sealed class WorldSeatViewState {
     // gone within a second of leaving the pole.
     private const float ReanchorFraction = 0.08f;
 
+    // The rider camera the seat frames through, and the views it was last substituted into and gave.
+    private string? m_riderCamera;
+    private WorldViewDefaults? m_riderSource;
+    private WorldViewDefaults? m_riderViews;
+
+    /// <summary>Returns the views this seat frames through: the routed world's own, or, while the seat rides or drives a
+    /// body whose kit authors a rider camera (<see cref="WorldMount.Camera"/>), the same section with that program in
+    /// the seat rig's place (<see cref="WorldCameraPrograms.RiderViews"/>). Taking or leaving a rider camera drops the
+    /// requested boom distance, which was a zoom of the other rig.</summary>
+    /// <param name="views">The routed world's views section.</param>
+    /// <param name="camera">The rider camera's program name, or <see langword="null"/> while the seat rides nothing
+    /// that authors one.</param>
+    /// <returns>The views every camera read of this seat's frame takes.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
+    public WorldViewDefaults Ride(WorldViewDefaults views, string? camera) {
+        ArgumentNullException.ThrowIfNull(argument: views);
+
+        lock (m_gate) {
+            if (!string.Equals(a: camera, b: m_riderCamera, comparisonType: StringComparison.Ordinal)) {
+                m_riderCamera = camera;
+                m_riderSource = null;
+                m_distance = null;
+            }
+
+            // The views this seat already frames through pass unchanged, so a reader may hand either.
+            if (ReferenceEquals(objA: m_riderViews, objB: views)) {
+                return views;
+            }
+
+            if (!ReferenceEquals(objA: m_riderSource, objB: views)) {
+                m_riderSource = views;
+                m_riderViews = WorldCameraPrograms.RiderViews(views: views, camera: camera);
+            }
+
+            return m_riderViews!;
+        }
+    }
+    /// <summary>Returns the views this seat frames through for the camera it last took (<see cref="Ride"/>): what a
+    /// reader outside the frame (its input, a read-back) hands this seat's view in place of the world's own.</summary>
+    /// <param name="views">The routed world's views section.</param>
+    /// <returns>The views with the seat's rider camera in the seat rig's place, if it has one.</returns>
+    public WorldViewDefaults Framing(WorldViewDefaults views) => Ride(views: views, camera: Volatile.Read(location: ref m_riderCamera));
+
     private float m_pitch;
     private float m_yaw;
     private float? m_distance;
@@ -48,6 +91,8 @@ public sealed class WorldSeatViewState {
 
     /// <summary>Returns the requested boom distance, or the authored orbit distance before the first input.</summary>
     public float BoomDistance(WorldViewDefaults views) {
+        views = Framing(views: views);
+
         lock (m_gate) {
             return (RequestedDistance(views: views) ?? AuthoredDistance(views: views));
         }
@@ -62,6 +107,8 @@ public sealed class WorldSeatViewState {
     /// <param name="units">Positive input moves closer.</param>
     /// <param name="views">The routed world's camera structure.</param>
     public void MoveBoom(float units, WorldViewDefaults views) {
+        views = Framing(views: views);
+
         if (!float.IsFinite(f: units) || (views.SeatControl.Boom is not { } boom)) { return; }
         lock (m_gate) {
             m_distance = Math.Clamp(((m_distance ?? AuthoredDistance(views: views)) - (units * boom.Step)), boom.Minimum, boom.Maximum);
@@ -405,6 +452,8 @@ public sealed class WorldSeatViewState {
     }
     /// <summary>The total orbit pitch — the authored rig pitch plus the live delta — in radians.</summary>
     public float LogicalPitch(WorldViewDefaults views) {
+        views = Framing(views: views);
+
         ArgumentNullException.ThrowIfNull(argument: views);
 
         lock (m_gate) {
@@ -426,6 +475,8 @@ public sealed class WorldSeatViewState {
         }
     }
     public void Nudge(Vector2 input, float yawScale, float pitchScale, WorldSeatCameraFeel preference, WorldViewDefaults views) {
+        views = Framing(views: views);
+
         ArgumentNullException.ThrowIfNull(argument: preference);
         ArgumentNullException.ThrowIfNull(argument: views);
 
@@ -476,6 +527,8 @@ public sealed class WorldSeatViewState {
     /// <param name="heading">The body's authoritative heading, in radians about world up.</param>
     /// <param name="views">The live seat view structure, whose yaw reference decides what the live yaw rides on.</param>
     public void Recenter(float heading, WorldViewDefaults views) {
+        views = Framing(views: views);
+
         ArgumentNullException.ThrowIfNull(argument: views);
 
         lock (m_gate) {
@@ -530,6 +583,8 @@ public sealed class WorldSeatViewState {
     /// <param name="views">The live seat view structure, whose yaw reference determines whether the body heading
     /// is already supplied by the rig's reference frame.</param>
     public void RecenterLook(float targetYaw, WorldViewDefaults views) {
+        views = Framing(views: views);
+
         ArgumentNullException.ThrowIfNull(argument: views);
 
         lock (m_gate) {
@@ -537,6 +592,8 @@ public sealed class WorldSeatViewState {
         }
     }
     public void Reclamp(WorldViewDefaults views) {
+        views = Framing(views: views);
+
         ArgumentNullException.ThrowIfNull(argument: views);
 
         var control = views.SeatControl;
@@ -562,6 +619,8 @@ public sealed class WorldSeatViewState {
     /// <remarks>The compiled rig is cached against the AUTHORED program instance, so a delivery that only advances
     /// the document retargets in place — the seat's live orbit is an evaluator input, never a recompile.</remarks>
     public IWorldCameraProgramRig ResolveChase(WorldViewDefaults views, Quaternion bodyOrientation, WorldDefinition definition, WorldStateMirror mirror, WorldValueDomainGuard domains, float interpolationAlpha = 1f) {
+        views = Framing(views: views);
+
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: domains);
         ArgumentNullException.ThrowIfNull(argument: views);

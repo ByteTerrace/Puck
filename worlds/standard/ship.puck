@@ -1,7 +1,7 @@
 // A ship: a body a seat boards and flies, drawn as a small skiff. A module library: it hands its importers templates
 // and lets and emits no document. A world expands `shipFlight` once for the `fly` motion program and the `ship` kit,
-// `shipLook` once for the skiff, and `shipCraft` for the body register a ship is known by, then places a ship with an
-// `inhabit` row naming the kit and the look.
+// `shipLook` once for the skiff, `shipCamera` once for the pilot's camera, and `shipCraft` for the body register a ship
+// is known by, then places a ship with an `inhabit` row naming the kit and the look.
 //
 // A seat that may drive the ship (a `grants` row giving it Drive over the ship's body) boards it with the context
 // button from within five metres and steps out with the same button.
@@ -21,6 +21,9 @@
 // radians a second (half the turn the kit authors), and where the pull is under a metre a second squared it keeps the
 // up it had. The touchdown hold takes ground a hold may take: a placement marked `grip { holdable: true }`, or any
 // surface of a world whose `collision.defaultHold` is on.
+//
+// The pilot's camera is the ship's own (`shipCamera`): the kit's `mount.camera` names it, and a seat takes it in place
+// of the world's seat rig for as long as it rides, on either side of a seam.
 //
 // A ship crosses a seam between two worlds as any body does, and its pilot crosses behind it. Both worlds declare the
 // `craft` register (`shipCraft`) and select the `ship` kit and look by it, so the body that arrives is the ship that
@@ -46,12 +49,12 @@ template shipCraft() {
 // The `fly` motion program and the `ship` kit. `cruise` is the flying speed in metres a second and `boost` what the
 // run channel multiplies it by; `taxi` is the speed on the ground, `approach` the speed inside the flare. `seat` is
 // where the pilot's own body is held and `exit` where it is set down, in the ship's own axes (+X right, +Y up, -Z
-// ahead).
+// ahead). `camera` is the camera program the pilot takes while aboard (`shipCamera`'s rig).
 template shipFlight(kit = "ship", cruise = 60, boost = 4, taxi = 4, approach = 22, flare = 14, settle = 3, turn = 1.4, roll = 0.35, seat = [
   0
   0.7
   0.2
-], exit = [3, 0.4, 0]) {
+], exit = [3, 0.4, 0], camera = "ship-camera") {
   // The collider's middle above the skids' line. A surface hold's reach is measured from there, so each reach below
   // is this plus the height over the ground the hold should take hold at.
   let middle = 1.5
@@ -93,6 +96,7 @@ template shipFlight(kit = "ship", cruise = 60, boost = 4, taxi = 4, approach = 2
         exit: exit
         // The context button boards the ship from beside it and steps out of it again.
         board { channel: "interact", radius: 5 }
+        camera: camera
       }
       // A body of this kit marks itself a craft the first tick it stands or flies, so the register that selects the
       // kit wherever it lands needs no rule of the world it starts in.
@@ -160,6 +164,73 @@ template shipFlight(kit = "ship", cruise = 60, boost = 4, taxi = 4, approach = 2
         turn { falloff: 1, maxPitch: 1.3, pitchRate: 0, rate: turn }
         upTurn { field: roll, contact: 6.283185307179586 }
       }
+    }
+  ]
+}
+
+// The pilot's camera: a chase rig sized to the hull, which a seat takes while it rides the ship (the kit's
+// `mount.camera`). The boom is `distance` metres at `pitch` radians about the hull's middle and looks over the hull
+// at `target`, so the ship sits low in the frame and where it is flying shows above it; it follows on its own, looser
+// response (`ship-boom`) than a walker's, since a ship moves fast and turns wide. Near ground the boom shortens to
+// `minimumBoom` before it rises, and the first-person eye is the cockpit's. Distances are full-size metres in the
+// ship's own axes, angles radians.
+template shipCamera(rig = "ship-camera", distance = 12, pitch = 0.2, pivot = [0, 1.6, 0], target = [0, 3.4, 0], fieldOfView = 1.05, minimumBoom = 5.5, maxRise = 0.5, eyePoint = [0, 2.0, -0.9], frequency = 2.6) {
+  export binding `ship-boom`
+
+  dynamics [
+    { name: "ship-boom", f: frequency, r: 0, zeta: 1 }
+  ]
+
+  views {
+    programs [
+      {
+        name: rig
+        version: "puck.camera.program.v1"
+        operations [
+          orbit(distance: distance, pitch: pitch, pivotOffset: pivot, yaw: 0)
+          lookAt(focusDistance: distance, subject: reference(), targetOffset: target, worldAxes: true)
+          clearance(
+            cutaway: 0,
+            eyeRadius: 0.4,
+            surfaceSkin: 0.15,
+            maxRise: maxRise,
+            minimumBoom: minimumBoom,
+            fadeStart: 0,
+            fadeEnd: 0,
+            closeTargetOffset: target,
+            closeTargetStartFraction: 0.6,
+            closeTargetFullFraction: 0.3,
+            nearMargin: 0.05,
+            retractionSkin: 0.05,
+            obstructedTargetSkin: 0
+          )
+          fieldOfView(fieldOfViewRadians: fieldOfView)
+          dynamics(row: `ship-boom`)
+          firstPerson(eyePoint: eyePoint, active: 0, transitionSeconds: 0.5, hideRadius: 3)
+        ]
+      }
+    ]
+  }
+}
+
+// The seat program a route flies a ship with (a `routes` row naming it, played by `world.benchmark run <route>`): a
+// pilot's hands on the standard controls. On foot the left stick walks and the context button boards and leaves. In
+// the air a route's `fly` step holds the left stick toward its point with the right stick turning the camera onto the
+// way, Space while the point stands more than `band` metres above the ship along its own up and C while it stands as
+// far below, each let go in time to coast to a stop at `brake` metres a second squared, and Left Shift, the boost,
+// through the `boost` pace. A landing flies at a point of the ground until the ship stands on it.
+template shipPilot(name = "pilot", brake = 10, band = 3) {
+  seatPrograms [
+    {
+      name: name
+      operations [
+        { $type: "move", source: "gamepad.leftStick", brake: brake, cornerSpeed: 4, cornerDegrees: 30, least: 0.1 }
+        { $type: "turn", source: "gamepad.rightStick", gain: 0.5, deadbandDegrees: 1 }
+        { $type: "hold", source: "keyboard.shiftLeft", paces ["boost"] }
+        { $type: "tap", action: "interact", source: "gamepad.rightShoulder" }
+        { $type: "rise", source: "keyboard.space", toward: Up, band: band, brake: brake }
+        { $type: "rise", source: "keyboard.c", toward: Down, band: band, brake: brake }
+      ]
     }
   ]
 }

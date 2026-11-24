@@ -1126,7 +1126,8 @@ public static class WorldBootComposition {
             server: sp.GetRequiredService<Puck.World.Server.WorldServer>(),
             seatRouter: sp.GetRequiredService<Puck.World.Client.WorldSeatAuthorityRouter>(),
             senses: sp.GetRequiredService<Puck.World.Client.WorldSeatSenses>(),
-            deviceProfile: sp.GetRequiredService<WorldDeviceProfileState>()
+            deviceProfile: sp.GetRequiredService<WorldDeviceProfileState>(),
+            host: sp.GetRequiredService<WorldHostSettings>()
         ));
         services.AddSingleton<WorldDiagnostics>();
         services.AddSingleton<WorldDiagnosticOverlay>();

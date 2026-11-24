@@ -57,6 +57,11 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         DefaultValueFactory = static _ => null,
         Description = "Override the window client height in pixels. Absent uses the world document's host.height.",
     };
+    var frameBarOption = new Option<string?>(name: "--frame-bar") {
+        Arity = ArgumentArity.ZeroOrOne,
+        DefaultValueFactory = static _ => null,
+        Description = "Open the window at a device profile's frame bar (render.devices' frameBar): the size that device's frame time is judged at. With no value, or auto, the profile the adapter selects, its name read before the device opens; with a name, that profile. Refuses the boot, naming the profiles that author a bar, when none applies, and refuses beside --width or --height.",
+    };
     var exitAfterSecondsOption = new Option<int?>(name: "--exit-after-seconds") {
         DefaultValueFactory = static _ => null,
         Description = "Override the auto-exit seconds; 0 or less runs until the window is closed. Absent uses the world document's host.exitAfterSeconds.",
@@ -246,6 +251,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         lockstepOption,
         budgetedLightingOption,
         exitAfterSecondsOption,
+        frameBarOption,
         headlessOption,
         stateDirOption,
         cacheDirOption,
@@ -506,12 +512,42 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         minor: 0,
         build: 10240
     );
+    // --frame-bar sizes the window from the device's own row, so the size a device is judged at is authored once.
+    var widthOverride = parseResult.GetValue(option: widthOption);
+    var heightOverride = parseResult.GetValue(option: heightOption);
+
+    if (parseResult.GetResult(option: frameBarOption) is not null) {
+        if ((widthOverride is not null) || (heightOverride is not null)) {
+            Console.Error.WriteLine(value: "--frame-bar sizes the window from the device profile; it refuses beside --width or --height.");
+
+            return 1;
+        }
+
+        var request = (parseResult.GetValue(option: frameBarOption) ?? "auto");
+        string? adapterName = null;
+
+        if (string.Equals(a: request, b: "auto", comparisonType: StringComparison.Ordinal)) {
+            using var telemetry = Puck.Hosting.Telemetry.AdapterTelemetry.Open();
+
+            adapterName = telemetry.Info.Adapter;
+        }
+        if (WorldDeviceProfiles.FrameBarOf(adapterName: adapterName, refusal: out var refusal, render: worldSource.Definition.Render, request: request) is not { FrameBar: { } bar } profile) {
+            Console.Error.WriteLine(value: $"--frame-bar {request}: {refusal}.");
+
+            return 1;
+        }
+
+        widthOverride = bar.Width;
+        heightOverride = bar.Height;
+        Console.Error.WriteLine(value: string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"[world.host] window {bar.Width}x{bar.Height}: the frame bar of the device profile '{profile.Name}'{((adapterName is null) ? string.Empty : $" (adapter '{adapterName}')")}, {bar.Hertz} Hz"));
+    }
+
     var hostSettings = WorldHostSettings.Resolve(
         defaults: worldSource.Definition.Host,
         directXAvailable: directXAvailable,
         backendOverride: backendOverride,
-        widthOverride: parseResult.GetValue(option: widthOption),
-        heightOverride: parseResult.GetValue(option: heightOption),
+        widthOverride: widthOverride,
+        heightOverride: heightOverride,
         exitAfterSecondsOverride: parseResult.GetValue(option: exitAfterSecondsOption),
         presentModeOverride: presentModeOverride,
         presentationOverride: presentationOverride,
@@ -622,6 +658,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     // headroom the player never offered. Anywhere else (a checkout, a player folder's own baking boots) authoring draws on
     // the machine's headroom.
     Puck.Hosting.Jobs.MemoryAccount.Shared.SetAuthoringOnPlayBar(onPlayBar: (runsAsPlayer || (caches.MeshPolicy == Puck.SdfVm.SdfMeshCachePolicy.Stored)));
+    // A reclaim returns the native allocator's unused pages with the collector's (MemoryAccount.Reclaims).
+    Puck.Hosting.Jobs.MemoryAccount.Shared.ReclaimRequested += static () => (Puck.Memory.Allocator.Current as Puck.Abstractions.Memory.IAllocatorStatistics)?.Collect();
     // Everything the boot resolved above becomes the one service collection its shape needs; the composition laws build
     // the same collection through the same method.
     services.AddWorldBoot(inputs: new WorldBootInputs(

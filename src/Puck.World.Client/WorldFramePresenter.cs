@@ -981,6 +981,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         var definition = route.Endpoint.Definition;
         var state = RouteState(route: route);
         var view = (m_roster.Seat(slot: slot)?.View ?? throw new InvalidOperationException(message: "joined view has no seat controller"));
+
+        // While the seat rides or drives a body whose kit authors a rider camera, that program stands in the seat rig's
+        // place for every read below and for the seat's own look input.
+        views = view.Ride(views: views, camera: RiderCamera(definition: definition, presentedHere: presentedHere, route: route, slot: slot));
         // The seat's look advances on the same fixed ticks as the body it steers, so the frame presents it at the
         // fraction the body above was interpolated at.
         var chase = view.ResolveChase(
@@ -1339,6 +1343,27 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         }
 
         return framing;
+    }
+    // The rider camera of the body the seat is framed through (WorldMount.Camera), or null when it rides and drives
+    // nothing, or a body whose kit authors none. In the boot world the perception anchor names the body the seat
+    // possesses; in a world presented from another authority the seat's own body is delivered with the body it rides
+    // (EntitySnapshot.Mount).
+    private string? RiderCamera(int slot, in WorldAuthorityRoute route, WorldDefinition definition, bool presentedHere) {
+        int kit;
+
+        if (presentedHere) {
+            if (m_anchor.Possessed(slot: slot) is not (var possessed and >= 0)) {
+                return null;
+            }
+
+            kit = m_client.Kit(index: possessed);
+        } else if (route.Endpoint.TryMount(rider: route.Entity, mount: out var mount)) {
+            kit = route.Endpoint.EntityKit(index: mount.Index);
+        } else {
+            return null;
+        }
+
+        return ((((uint)kit) < ((uint)definition.Kits.Count)) ? definition.Kits[kit].Mount?.Camera : null);
     }
     // The compiled collider of a local body's kit, or null for a body whose kit authors none.
     private FixedWorldCollider? SubjectCollider(int body) {
@@ -2440,6 +2465,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             seats: m_seatCameraPoses,
             transforms: transforms
         );
+
+        // A view clock measures the frame's first view: one environment resolves the frame, so seats sharing a split
+        // screen share it.
+        m_client.StateMirror.ViewPoint = ((m_frameViews.Count > 0) ? m_frameViews[0].Camera.Position : null);
 
         var lighting = m_environment.Resolve(
             definition: m_client.Definition,

@@ -1013,7 +1013,8 @@ public sealed partial class WorldDocument {
                 State: state.AsMemory(
                     length: stateSlots.Count,
                     start: stateStart
-                )
+                ),
+                Mount: (body.MountedOn ?? -1)
             );
         }
 

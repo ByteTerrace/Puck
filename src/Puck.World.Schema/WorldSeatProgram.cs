@@ -25,6 +25,7 @@ public sealed record WorldSeatProgram(
 [JsonDerivedType(typeof(WorldSeatProgramOp.Hold), typeDiscriminator: "hold")]
 [JsonDerivedType(typeof(WorldSeatProgramOp.Pulse), typeDiscriminator: "pulse")]
 [JsonDerivedType(typeof(WorldSeatProgramOp.Tap), typeDiscriminator: "tap")]
+[JsonDerivedType(typeof(WorldSeatProgramOp.Rise), typeDiscriminator: "rise")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldSeatProgramOp {
     private WorldSeatProgramOp() {
@@ -38,6 +39,7 @@ public abstract record WorldSeatProgramOp {
         Hold => "hold",
         Pulse => "pulse",
         Tap => "tap",
+        Rise => "rise",
         _ => "unknown",
     });
     /// <summary>Gets the input source this operation drives.</summary>
@@ -123,4 +125,32 @@ public abstract record WorldSeatProgramOp {
         /// <inheritdoc/>
         public override string Driven => Source;
     }
+    /// <summary>Holds a button while the point a flight flies to (<see cref="WorldRouteStep.Fly"/>) stands farther than
+    /// <paramref name="Band"/> above the body along the body's own up, or below it: a craft's climb and sink controls.
+    /// A program authors one for each direction it has a button for.</summary>
+    /// <param name="Source">The button source.</param>
+    /// <param name="Toward">Which way the button carries the body.</param>
+    /// <param name="Band">The height, in metres, inside which the button is let go.</param>
+    /// <param name="Brake">The deceleration, in metres per second squared, the body is taken to coast at once the
+    /// button is let go: the button is let go early enough to stop at the band's edge from the speed the body was
+    /// delivered at.</param>
+    public sealed record Rise(
+        [property: DocumentText("an input-source id, in the input vocabulary")]
+        [property: JsonPropertyName("source")] string Source,
+        [property: JsonPropertyName("toward")] WorldSeatRiseDirection Toward,
+        [property: JsonPropertyName("band")] float Band = 2f,
+        [property: JsonPropertyName("brake")] float Brake = 10f
+    ) : WorldSeatProgramOp {
+        /// <inheritdoc/>
+        public override string Driven => Source;
+    }
+}
+/// <summary>Which way a <see cref="WorldSeatProgramOp.Rise"/> button carries a body along its own up.</summary>
+[JsonConverter(typeof(StrictEnumConverter<WorldSeatRiseDirection>))]
+public enum WorldSeatRiseDirection {
+    /// <summary>Along the body's up: a climb.</summary>
+    Up = 0,
+
+    /// <summary>Against the body's up: a sink.</summary>
+    Down = 1,
 }
