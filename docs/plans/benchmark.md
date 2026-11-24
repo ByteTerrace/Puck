@@ -524,32 +524,24 @@ through the delivered-only driver: the Wonderland chapter at a quarter scale,
 the crossing into the garden's own instance and the lift included. That is the
 whole read path a remote run uses, on the debug world's geometry.
 
-Against an authority in a second process the route does not arrive yet, and
-the driver is not what stops it. On a small world built for the check (a
-floor, a doorway, two places, one navigation domain) the pair gets this far:
-the seat's body is handed to the remote authority, its deliveries arrive at
-the replica tier, the driver reads the body and its places from them, its pose
-step lands and is confirmed from the delivered pose, the navigation compiles
-and bakes from the delivered document, and a path is planned. Then the body
-does not move: a `--connect` traveller's seat input does not drive its body on
-the remote authority, with or without the driver (a held `player.signal` stick
-leaves `body.where` unchanged, and neither process names a refusal). The
-chapter fails naming exactly that, a stick held across twenty delivered ticks
-with the body in place.
-
-The debug world does not get that far: its document cannot be handed to a
-remote peer at either tier. Each defect was found by starting the pair and
-reading the refusal, and they are listed in
-[open items](open-items.md#the-benchmark) with the staging a pair of processes
-needs.
+Against an authority in a second process (`puck benchmark --route debug --remote
+local --headless`), the pair stages a `basis` delta that keeps the world's
+authored `authorityNamespace`, `networkPlayers` and `Presentation`-tier
+`Visitor` admission (adding only the pair's `SignsDirectly` key row), waits for
+the seat's body and opening document delivery on the routed mirror, prepares
+navigation over the delivered projection, pauses the client's idle boot world,
+and arrives in all seven chapters (`the stage into the hall`, `the east wing and
+the looping pair`, `Wonderland's machines`, `the valley's seam`, `the garden
+painting`, `the city painting` and `the lift`) with `topology.kind` equal to
+`remote` and `bodyDelivered` true.
 
 | Step | Check |
 |---|---|
 | The driver reads only the delivery | Built. `Puck.World.Client` holds the driver and builds under the architecture gate; a headless in-process `world.benchmark run debug` arrives in every chapter |
-| A remote traveller's input drives its body | Open, federation. A headless World started with `--connect` to a second headless World moves its seat's body with `player.signal gamepad.leftStick 0 1`, read back by `body.where` |
-| The driver against a second process | Open behind the step above. The same pair plays a route to arrival in each chapter, and `run.json`'s `topology.kind` is `remote` with `bodyDelivered` true |
-| The debug world against a second process | Open behind the federation defects in the open items. The same pair on the debug world arrives in every chapter |
-| `puck benchmark` starts the pair | Open. The verb stages the authority's document and key, starts the companion and waits for the seat's route to turn remote before it arms the route; the staging is in the open items |
+| A remote traveller's input drives its body | Built. A headless World started with `--connect` to a second headless World embodies the world's seat kit, drives its seat's body through `WorldSeatBindings`, and reads back through `body.where` |
+| The driver against a second process | Built. A headless pair on `worlds/minimal` (`--route walk`, one seat and `--seats 4`) arrives with `run.json`'s `topology.kind` `remote` and `bodyDelivered` true |
+| The debug world against a second process | Built. A headless pair on `worlds/debug` (`--route debug --remote local --headless`) arrives in all seven chapters at `Presentation` disclosure |
+| `puck benchmark` starts the pair | Built. `BenchmarkCommand.Remote.Stage` stages the delta and key, boots the companion, and waits until the seat's routed mirror holds both its body and its opening document before arming the route |
 | The Azure deployment | The lead's run, once the debug world can be delivered and the deployed document admits a remote player |
 
 ### Where a run starts

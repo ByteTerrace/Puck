@@ -12,6 +12,15 @@ namespace Puck.World.Transpiler.Decompiler;
 
 /// <summary>Decompiles canonical Puck JSON definitions back into declarative Puck authoring DSL (.puck).</summary>
 public static partial class WorldDecompiler {
+    /// <summary>Copies a JSON tree, dropping object members whose value is <see langword="null"/> so absent optional
+    /// fields print as omitted rather than explicit <c>null</c> overrides.</summary>
+    /// <param name="node">The JSON tree to strip nulls from.</param>
+    /// <returns>The copied tree without null-valued object properties.</returns>
+    public static JsonNode? WithoutNulls(JsonNode? node) => node switch {
+        JsonObject obj => new JsonObject(properties: obj.Where(predicate: static member => (member.Value is not null)).Select(selector: static member => KeyValuePair.Create(key: member.Key, value: WithoutNulls(node: member.Value)))),
+        JsonArray array => new JsonArray(items: [.. array.Select(selector: WithoutNulls)]),
+        _ => node?.DeepClone(),
+    };
     /// <summary>Prints one document value through the same expression printer used by full document decompilation.</summary>
     /// <param name="value">The replacement document value.</param>
     /// <param name="form">The vocabulary's spelling of the authored position.</param>

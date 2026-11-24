@@ -185,8 +185,18 @@ public sealed partial class WorldReleaseGroupStore {
             );
         }
     }
-    /// <summary>Loads and validates the guarded group root.</summary>
+    /// <summary>Loads and validates the guarded group root. A group whose hosted-data discard is unfinished
+    /// (<see cref="WorldHostedData.DiscardAsync"/>) is refused, so nothing follows a half-discarded record until a
+    /// discard finishes.</summary>
+    /// <exception cref="InvalidDataException">The record is malformed, or the group's discard is unfinished.</exception>
     public async Task<WorldReleaseGroupSnapshot?> LoadAsync(string deploymentGroup, CancellationToken cancellationToken = default) {
+        if (await m_store.ReadAsync(
+            m_target,
+            DiscardMarkerAddress(group: deploymentGroup, owner: m_owner),
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false) is not null) {
+            throw new InvalidDataException(message: $"deployment group '{deploymentGroup}' has an unfinished hosted-data discard; only a scratch deployment, which finishes it, may proceed");
+        }
         var content = await m_store.ReadAsync(
             m_target,
             Address(group: deploymentGroup),
@@ -218,6 +228,15 @@ public sealed partial class WorldReleaseGroupStore {
             paramName: nameof(activeRelease)
         );
         }
+        // One owner container holds one group: world authority keys carry no group, so a second group would share
+        // its hosted data and its discard.
+        await WorldHostedData.RequireSoleGroupAsync(
+            cancellationToken: cancellationToken,
+            group: deploymentGroup,
+            owner: m_owner,
+            store: m_store,
+            target: m_target
+        ).ConfigureAwait(continueOnCapturedContext: false);
         var record = new WorldReleaseGroupRecord {
             ActiveRelease = activeRelease,
             Admission = ((activeRelease is null)
@@ -880,11 +899,17 @@ public sealed partial class WorldReleaseGroupStore {
         group: group,
         owner: m_owner
     );
-    // The one key layout of a group record, which WorldHostedData discards beside the group's authorities.
-    internal static ObjectBlobAddress RecordAddress(Guid owner, string group) {
+    // The one key layout of a group's objects: its record, which WorldHostedData discards beside the group's
+    // authorities, and the marker an unfinished discard leaves (the controller lease, <group>.controller, sits beside).
+    internal const string GroupKeyPrefix = (WorldOwnedWorldSync.HostedPrivateNamespace + "/release-groups/");
+    internal const string RecordSuffix = ".json";
+    internal const string DiscardMarkerSuffix = ".discarding";
+    internal static ObjectBlobAddress RecordAddress(Guid owner, string group) => GroupAddress(owner: owner, group: group, suffix: RecordSuffix);
+    internal static ObjectBlobAddress DiscardMarkerAddress(Guid owner, string group) => GroupAddress(owner: owner, group: group, suffix: DiscardMarkerSuffix);
+    private static ObjectBlobAddress GroupAddress(Guid owner, string group, string suffix) {
         ValidateGroup(group: group);
         return new(
-            Key: $"{WorldOwnedWorldSync.HostedPrivateNamespace}/release-groups/{group}.json",
+            Key: (GroupKeyPrefix + group + suffix),
             ObjectId: owner
         );
     }

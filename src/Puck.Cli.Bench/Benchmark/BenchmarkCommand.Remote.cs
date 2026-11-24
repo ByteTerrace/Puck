@@ -1,10 +1,13 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Abstractions;
 using Puck.Cli.Canary;
 using Puck.Cli.Sweep;
 using Puck.World;
+using Puck.World.Protocol;
+using Puck.World.Transpiler.Decompiler;
 
 namespace Puck.Cli.Bench;
 
@@ -44,44 +47,93 @@ public static partial class BenchmarkCommand {
         public static RemotePair Stage(string directory, string world, int seats = 1, bool pair = true) {
             _ = Directory.CreateDirectory(path: directory);
 
-            var entry = world;
-
-            if (Directory.Exists(path: world) && !WorldPackageManifest.TryResolveEntry(entryPath: out entry, manifest: out _, path: world, reason: out var reason)) {
-                throw new InvalidOperationException(message: $"the remote pair stages over the world's entry, and the package {PuckPaths.Normalize(path: world)} names none: {reason}");
+            if (!CliWorldDocuments.TryLoad(path: world, definition: out var basisDefinition, fullPath: out var full, reason: out var reason)) {
+                throw new InvalidOperationException(message: $"the remote pair stages over the world's entry, and {PuckPaths.Normalize(path: world)} did not load: {reason}");
             }
 
             var identity = CanaryCommand.GenerateFederationIdentity();
             var endpoint = string.Create(provider: CultureInfo.InvariantCulture, handler: $"127.0.0.1:{CanaryCommand.GetFreeLoopbackPort()}");
             var key = Path.Combine(path1: directory, path2: "federation.key");
-            var full = Path.GetFullPath(path: entry);
-            var basis = Path.GetFileName(path: full);
-
-            if (basis.EndsWith(value: WorldDocumentName.SourceSuffix, comparisonType: StringComparison.OrdinalIgnoreCase)) {
-                basis = basis[..^WorldDocumentName.SourceSuffix.Length];
-            }
-
+            var basis = WorldDocumentName.OfCarrierFile(path: Path.GetFileName(path: full));
             var document = Path.Combine(path1: Path.GetDirectoryName(path: full)!, path2: $".benchmark-pair-{Guid.NewGuid():N}{WorldDocumentName.SourceSuffix}");
-            // A leg on several seats seats them all at boot: a World started with no devices joins none on demand.
-            var seated = ((seats > 1)
-                ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"localSeats: {seats}, seatActivation [{string.Join(separator: ", ", values: Enumerable.Repeat(element: "Eager", count: seats))}]")
-                : string.Empty);
-            var source = new StringBuilder()
-                .Append(provider: CultureInfo.InvariantCulture, handler: $"// The benchmark's staged world: {(pair ? "the world as its authority and a client on one machine" : "the world")}{((seats > 1) ? $", with {seats} seats" : string.Empty)}.\nbasis: {JsonValue.Create(value: basis).ToJsonString()}\n");
+            var localSeats = Math.Max(val1: basisDefinition.Population.LocalSeats, val2: seats);
+            var networkPlayers = (pair ? Math.Max(val1: basisDefinition.Population.NetworkPlayers, val2: seats) : basisDefinition.Population.NetworkPlayers);
+            var delta = new JsonObject {
+                ["basis"] = basis,
+            };
+            var bodies = new JsonObject();
+
+            if (networkPlayers > basisDefinition.Population.NetworkPlayers) {
+                bodies["networkPlayers"] = networkPlayers;
+                if (basisDefinition.Population.Capacity < (localSeats + networkPlayers)) {
+                    bodies["capacity"] = (localSeats + networkPlayers);
+                }
+            }
+            if (seats > 1) {
+                if (localSeats > basisDefinition.Population.LocalSeats) {
+                    bodies["localSeats"] = localSeats;
+                }
+
+                // A leg on several seats seats them all at boot: a World started with no devices joins none on demand.
+                bodies["seatActivation"] = new JsonArray(items: [.. Enumerable.Range(start: 0, count: localSeats)
+                    .Select(selector: index => (JsonNode?)JsonValue.Create(value: ((index < seats)
+                        ? "Eager"
+                        : ((basisDefinition.Population.SeatActivation is { Count: var existingCount } existing && (index < existingCount))
+                            ? existing[index].ToString()
+                            : "OnDemand"))))]);
+            }
 
             if (pair) {
-                _ = source
-                    .Append(provider: CultureInfo.InvariantCulture, handler: $"host {{ authorityNamespace: \"{PairNamespace}\" }}\n")
-                    .Append(provider: CultureInfo.InvariantCulture, handler: $"bodies {{ networkPlayers: {seats}{((seated.Length > 0) ? $", {seated}" : string.Empty)} }}\n")
-                    .Append(value: "admission [\n")
-                    .Append(value: "  { admits: Session, disclosure: Replica, domain: \"*\", grants [{ capability: Observe, subject: \"all\" }], mode: FederatedAuthority }\n")
-                    .Append(value: "  { admits: Visitor, disclosure: Replica, domain: \"*\", grants [{ budget: 8, capability: Drive, exclusive: true }, { budget: 64, capability: Observe }], mode: FederatedAuthority }\n")
-                    .Append(provider: CultureInfo.InvariantCulture, handler: $"  {{ domain: \"{identity.Domain}\", subject: \"{PairNamespace}\", mode: SignsDirectly, algorithm: \"ecdsa-p256-sha256\", publicKey: \"{identity.PublicKeyBase64}\", grants [] }}\n")
-                    .Append(value: "]\n");
+                var authoredNamespace = ((basisDefinition.Host.AuthorityNamespace is { Length: > 0 } declared) ? declared : null);
+                var subject = (authoredNamespace ?? PairNamespace);
+
+                if (authoredNamespace is null) {
+                    delta["host"] = new JsonObject { ["authorityNamespace"] = PairNamespace };
+                }
+                if (bodies.Count > 0) {
+                    delta["bodies"] = bodies;
+                }
+
+                var entries = new List<WorldAdmissionEntry>(collection: (basisDefinition.Admission ?? []));
+                var hasVisitorAdmission = entries.Any(predicate: static entry =>
+                    (entry.Mode == WorldAdmissionTrustMode.FederatedAuthority) &&
+                    entry.AdmitsArrival(kind: WorldAdmissionArrival.Visitor));
+
+                if (!hasVisitorAdmission) {
+                    entries.Add(item: new WorldAdmissionEntry(
+                        Domain: WorldAdmissionEntry.AnyAuthority,
+                        Mode: WorldAdmissionTrustMode.FederatedAuthority,
+                        Grants: [new WorldAdmissionGrant(Capability: WorldCapability.Observe, Subject: GrantSubject.All, Budget: 64)],
+                        Disclosure: WorldDisclosureTier.Replica,
+                        Admits: WorldAdmissionArrival.Session));
+                    entries.Add(item: new WorldAdmissionEntry(
+                        Domain: WorldAdmissionEntry.AnyAuthority,
+                        Mode: WorldAdmissionTrustMode.FederatedAuthority,
+                        Grants: [
+                            new WorldAdmissionGrant(Capability: WorldCapability.Drive, Exclusive: true, Budget: 8),
+                            new WorldAdmissionGrant(Capability: WorldCapability.Observe, Budget: 64),
+                        ],
+                        Disclosure: WorldDisclosureTier.Presentation,
+                        Admits: WorldAdmissionArrival.Visitor));
+                }
+                entries.Add(item: new WorldAdmissionEntry(
+                    Domain: identity.Domain,
+                    Mode: WorldAdmissionTrustMode.SignsDirectly,
+                    Grants: [],
+                    Subject: subject,
+                    Algorithm: "ecdsa-p256-sha256",
+                    PublicKey: identity.PublicKeyBase64));
+                delta["admission"] = JsonSerializer.SerializeToNode(
+                    value: (IReadOnlyList<WorldAdmissionEntry>)entries,
+                    jsonTypeInfo: WorldJsonContext.Default.For<IReadOnlyList<WorldAdmissionEntry>>());
                 File.WriteAllBytes(path: key, bytes: identity.Pkcs8);
-            } else {
-                _ = source.Append(provider: CultureInfo.InvariantCulture, handler: $"bodies {{ {seated} }}\n");
+            } else if (bodies.Count > 0) {
+                delta["bodies"] = bodies;
             }
-            File.WriteAllText(path: document, contents: source.ToString(), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            var comment = string.Create(provider: CultureInfo.InvariantCulture, handler: $"// The benchmark's staged world: {(pair ? "the world as its authority and a client on one machine" : "the world")}{((seats > 1) ? $", with {seats} seats" : string.Empty)}.\n");
+            var printed = WorldDecompiler.Decompile(root: (JsonObject)WorldDecompiler.WithoutNulls(node: delta)!);
+
+            File.WriteAllText(path: document, contents: (comment + printed), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
             return new RemotePair(Document: document, Endpoint: (pair ? endpoint : string.Empty), KeyFile: (pair ? key : string.Empty));
         }

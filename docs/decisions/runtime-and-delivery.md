@@ -216,8 +216,10 @@ owner's private hosted namespace, and its release record) outlives a deployment:
 `scratch` or `durable`, in its deployment's configuration. Azure's is
 `worldSiloHostedData` in `main.bicepparam`, a required parameter with no default,
 set to `scratch` until the owner declares hosted data durable (AGENTS.md rule 5);
-the deploy reads it from the deployment outputs, and an absent output is durable,
-so data is discarded only on a positive declaration. Under `scratch` a deployment
+the deploy reads it from the live deployment under the group's controller lease
+(the latest successful world-platform deployment's output, never the runner's local
+outputs file, which a later deployment may have superseded), and an absent output
+is durable, so data is discarded only on a positive declaration. Under `scratch` a deployment
 qualifies its candidate alone from a fresh bootstrap fixture while the serving world
 still runs, then stops the group's compute, discards its hosted data and starts the
 release as a first deployment's bootstrap, the path CI's qualification and the
@@ -233,20 +235,41 @@ discard leaves the group without a world until a later one succeeds, where the
 preservation path would recover the source. A qualification failure still leaves
 the serving world untouched, because qualification runs before the discard.
 
-The invariant is that hosted data is deleted only through one door,
-`WorldHostedData.DiscardAsync`. It refuses unless the policy it is handed is
-`Scratch`; it runs the caller's writer stop before deleting anything, so no live
-host writes over the discard; it deletes each world's root before the objects the
-root names, so an interrupted discard leaves unreferenced objects and never a root
-pointing at deleted ones; and it deletes the group record last, so a retry finds
-the record and repeats the whole discard. The key layouts it deletes by are
-internal to `Puck.World.Server`. Two conditions are not enforced by code: one
-owner's private container holds exactly one deployment group's worlds (the world
-platform names the container for the group's own silo identity), and the caller
-holds the group's release controller lease (the deploy acquires it before reading
-the policy). Release content, fixtures, the TLS state and the controller lease are
-outside the discarded keys. When the owner declares hosted data durable, the
-declaration changes to `durable` and nothing else does.
+The invariant is that reachable hosted data is deleted only through one door,
+`WorldHostedData.DiscardAsync`. Checkpoint retirement deletes journal segments and
+checkpoints a landed checkpoint superseded, which no root reaches any longer; that is
+garbage collection, not a discard. The door:
+- reads the live policy itself, through the caller's provider read, and refuses
+  unless it is `Scratch`;
+- refuses when the owner's container holds another group's record or discard marker,
+  and `WorldReleaseGroupStore.CreateAsync` refuses a second group's record the same
+  way, so one owner container holds one group, as it must while world authority keys
+  carry no group;
+- writes a discard marker before it changes anything and clears it last; while it
+  stands `WorldReleaseGroupStore.LoadAsync` refuses the group, so a resume, rollback,
+  finalize, durable deploy or silo activation cannot follow a half-discarded record,
+  and only another scratch deploy, which repeats the discard, proceeds;
+- runs the caller's writer stop before deleting anything; Azure's stop refuses when
+  any scale set or VM of another name in the resource group runs under the silo
+  identity, the only runtime identity granted the container, and otherwise deletes
+  the group's own compute;
+- deletes each world's root before the objects the root names, so an interrupted
+  discard leaves unreferenced objects and never a root pointing at deleted ones, then
+  the group record, then the marker.
+
+The key layouts it deletes by are internal to `Puck.World.Server`. One condition is
+the caller's: it holds the group's release controller lease (the deploy acquires it
+before reading the policy). A scratch deploy that finds its release already serving
+skips the discard only when the record is readable, settled and open and its one
+worker exists, so an interrupted discard is never stranded behind that shortcut.
+Release content, fixtures, the TLS state and the controller lease are outside the
+discarded keys. The storage account versions blobs, so a delete keeps a previous
+version: a lifecycle rule (`expire-superseded-hosted-world-versions` in `main.bicep`)
+deletes previous versions under the owner's hosted namespace a day after they are
+made, which also bounds the versions every root write leaves. The discard does not
+delete versions itself, because that needs a version-delete permission the publishing
+identity does not hold. When the owner declares hosted data durable, the declaration
+changes to `durable` and nothing else does.
 
 **Uncapturable machine state is not captured.** A pair carrying machines
 qualifies by boot-anchored reproduction, so addon guest state, applied screen

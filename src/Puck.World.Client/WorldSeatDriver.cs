@@ -96,6 +96,7 @@ public sealed class WorldSeatDriver {
     private string? m_tap;
     private ulong m_tapTick;
     private string? m_tapAuthority;
+    private bool m_poseSubmitted;
     private bool m_driving;
     // Where the body stood when it last moved under a deflected stick, and the authority tick whose delivery showed it.
     private FixedVector3 m_stallOrigin;
@@ -344,6 +345,7 @@ public sealed class WorldSeatDriver {
         m_tap = null;
         m_tapTick = 0UL;
         m_tapAuthority = null;
+        m_poseSubmitted = false;
         if (m_step >= m_chapter!.Steps.Count) {
             m_phase = Phase.Arrived;
             Release();
@@ -352,9 +354,9 @@ public sealed class WorldSeatDriver {
 
         switch (m_chapter.Steps[m_step]) {
             case WorldRouteStep.PoseBody pose:
-                Submit(text: (pose.Spawn is { } spawn)
-                    ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"body.pose spawn:{spawn} {Seat}")
-                    : string.Create(provider: CultureInfo.InvariantCulture, handler: $"body.pose {Number(pose.Point!.Value.X)} {Number(pose.Point.Value.Y)} {Number(pose.Point.Value.Z)} {Number(pose.YawDegrees)} 0 0 {Seat}"));
+                if ((pose.Spawn is null) || m_senses.TryRead(reading: out _, slot: m_slot)) {
+                    SubmitPose(pose: pose);
+                }
                 break;
             case WorldRouteStep.Line line:
                 Submit(text: line.Text);
@@ -369,9 +371,22 @@ public sealed class WorldSeatDriver {
         }
     }
 
+    private void SubmitPose(WorldRouteStep.PoseBody pose) {
+        m_poseSubmitted = true;
+        Submit(text: (pose.Spawn is { } spawn)
+            ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"body.pose spawn:{spawn} {Seat}")
+            : string.Create(provider: CultureInfo.InvariantCulture, handler: $"body.pose {Number(pose.Point!.Value.X)} {Number(pose.Point.Value.Y)} {Number(pose.Point.Value.Z)} {Number(pose.YawDegrees)} 0 0 {Seat}"));
+    }
+
     // Runs the current step from this tick's read and returns what it asks of the controls; a finished step hands on to
     // the next, which reads the world from the next tick.
     private Steer Step(in WorldSeatSenses.Reading read, ulong tick, int rateHz) {
+        if (!m_poseSubmitted && (m_chapter!.Steps[m_step] is WorldRouteStep.PoseBody deferredPose)) {
+            m_stepStart = tick;
+            SubmitPose(pose: deferredPose);
+            return new Steer(Moves: false, Dx: default, Dz: default, Stop: default, CornerDistance: default, CornerTurn: default, Faces: false, Facing: default, Pace: string.Empty);
+        }
+
         var elapsed = (tick - m_stepStart);
         var step = m_chapter!.Steps[m_step];
         var still = new Steer(Moves: false, Dx: default, Dz: default, Stop: default, CornerDistance: default, CornerTurn: default, Faces: false, Facing: default, Pace: string.Empty);
@@ -635,12 +650,21 @@ public sealed class WorldSeatDriver {
         }
 
         var length = FixedQ4816.Max(x: distance, y: FixedQ4816.FromDouble(value: 0.001));
+        var stop = FixedQ4816.MaxValue;
+
+        if (final && (go.Point is not null)) {
+            stop = FixedQ4816.Max(x: FixedQ4816.Zero, y: (distance - (FixedQ4816.FromDouble(value: go.Within) / FixedQ4816.FromInteger(value: 2))));
+        } else if (!read.Endpoint.ClockOwnedHere && (m_corner == 0) && (m_firstReach < reach)) {
+            // Stepping onto a tight start cell (m_firstReach = 0.1 m) against a remote clock eases into the cell rather
+            // than sprinting over its 20 cm diameter between 30 Hz readings.
+            stop = FixedQ4816.Max(x: FixedQ4816.Zero, y: (distance - (m_firstReach / FixedQ4816.FromInteger(value: 2))));
+        }
 
         return still with {
             Moves = true,
             Dx = (dx / length),
             Dz = (dz / length),
-            Stop = ((final && (go.Point is not null)) ? FixedQ4816.Max(x: FixedQ4816.Zero, y: (distance - (FixedQ4816.FromDouble(value: go.Within) / FixedQ4816.FromInteger(value: 2)))) : FixedQ4816.MaxValue),
+            Stop = stop,
             CornerDistance = (final ? FixedQ4816.MaxValue : distance),
             CornerTurn = turn,
             Faces = true,
@@ -678,6 +702,9 @@ public sealed class WorldSeatDriver {
         }
         // Where the body stands as the path is planned: a step that began on a place's edge may cross back over it.
         _ = m_corridor.Add(item: read.Place);
+        if ((m_step > 0) && (m_chapter?.Steps[(m_step - 1)] is WorldRouteStep.Go { Place: { } previousPlace })) {
+            _ = m_corridor.Add(item: previousPlace);
+        }
 
         var target = ((go.Point is { } point) ? Point(point) : default);
         var shape = default(FixedSpatialShape);
@@ -707,10 +734,47 @@ public sealed class WorldSeatDriver {
         if (plan.StartsOnCell) {
             m_firstReach = FixedQ4816.FromDouble(value: 0.1);
         }
-        foreach (var foot in m_routeFeet) {
-            var places = m_senses.PlacesAt(endpoint: read.Endpoint, point: foot);
+        var endpoint = read.Endpoint;
+
+        void AddPlacePoint(in FixedVector3 point) {
+            var places = m_senses.PlacesAt(endpoint: endpoint, point: point);
 
             _ = m_corridor.Add(item: ((places.Count == 0) ? "none" : places[0]));
+        }
+
+        void AddPlaceAt(in FixedVector3 sample) {
+            AddPlacePoint(point: in sample);
+            if (m_margin > FixedQ4816.Zero) {
+                AddPlacePoint(point: sample with { X = (sample.X - m_margin) });
+                AddPlacePoint(point: sample with { X = (sample.X + m_margin) });
+                AddPlacePoint(point: sample with { Z = (sample.Z - m_margin) });
+                AddPlacePoint(point: sample with { Z = (sample.Z + m_margin) });
+            }
+        }
+
+        foreach (var foot in m_routeFeet) {
+            AddPlaceAt(sample: in foot);
+        }
+
+        // Straightening shortcuts grid staircases diagonally across shared district corners, so every metre of the
+        // straightened segments the driver actually steers along belongs to the corridor too.
+        var segmentStart = read.Position;
+
+        foreach (var corner in m_corners) {
+            var span = (double)Planar(from: segmentStart, to: corner);
+            var steps = (int)Math.Ceiling(a: span);
+
+            for (var step = 1; (step <= steps); step++) {
+                var fraction = FixedQ4816.FromDouble(value: (step / (double)steps));
+                var sample = new FixedVector3(
+                    X: (segmentStart.X + ((corner.X - segmentStart.X) * fraction)),
+                    Y: (segmentStart.Y + ((corner.Y - segmentStart.Y) * fraction)),
+                    Z: (segmentStart.Z + ((corner.Z - segmentStart.Z) * fraction))
+                );
+
+                AddPlaceAt(sample: in sample);
+            }
+            segmentStart = corner;
         }
         m_checkCorridor = true;
         return true;
@@ -788,6 +852,15 @@ public sealed class WorldSeatDriver {
                 if ((allowed != FixedQ4816.MaxValue) && (speed > allowed)) {
                     magnitude = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: move.Least), y: (allowed / speed));
                 }
+                if (!read.Endpoint.ClockOwnedHere && (steer.Stop != FixedQ4816.MaxValue)) {
+                    var approach = FixedQ4816.Clamp(
+                        value: (allowed / FixedQ4816.FromInteger(value: 5)),
+                        minimum: FixedQ4816.FromDouble(value: move.Least),
+                        maximum: FixedQ4816.One
+                    );
+
+                    magnitude = FixedQ4816.Min(x: magnitude, y: approach);
+                }
 
                 // The stick that makes intent composition's rotation by the facing yield the world direction.
                 var (sin, cos) = FixedQ4816.SinCos(angle: facing);
@@ -802,11 +875,11 @@ public sealed class WorldSeatDriver {
                 return ((deflection == FixedQ4816.Zero) ? "0 0" : $"{Number(deflection)} 0");
             }
             case WorldSeatProgramOp.Hold hold:
-                return ((steer.Moves && hold.Paces.Contains(value: steer.Pace)) ? "press" : "release");
+                return ((steer.Moves && (read.Endpoint.ClockOwnedHere || (steer.Stop >= FixedQ4816.One)) && hold.Paces.Contains(value: steer.Pace)) ? "press" : "release");
             case WorldSeatProgramOp.Pulse pulse: {
                 var period = Math.Max(val1: 2UL, val2: (ulong)Math.Round(a: (pulse.PeriodSeconds * rateHz)));
 
-                return ((steer.Moves && pulse.Paces.Contains(value: steer.Pace) && (((tick - m_stepStart) % period) == 0UL)) ? "press" : "release");
+                return ((steer.Moves && (read.Endpoint.ClockOwnedHere || (steer.Stop >= FixedQ4816.One)) && pulse.Paces.Contains(value: steer.Pace) && (((tick - m_stepStart) % period) == 0UL)) ? "press" : "release");
             }
             case WorldSeatProgramOp.Tap tap:
                 return ((m_tap == tap.Action) ? "press" : "release");

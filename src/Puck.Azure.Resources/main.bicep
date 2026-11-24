@@ -2737,6 +2737,29 @@ resource publicStorageWebsite_lifecycle 'Microsoft.Storage/storageAccounts/manag
           name: 'expire-superseded-publication-versions'
           type: 'Lifecycle'
         }
+        // Every authority root write and every hosted-data discard leaves a previous version under the world owner's
+        // private hosted namespace. A discarded world's bytes go with them a day later, and a live world keeps a day
+        // of overwritten roots and retired checkpoints; current versions are never touched.
+        {
+          definition: {
+            actions: {
+              version: {
+                delete: {
+                  daysAfterCreationGreaterThan: 1
+                }
+              }
+            }
+            filters: {
+              blobTypes: ['blockBlob']
+              prefixMatch: [
+                '${worldSiloIdentity.outputs.principalId}/private/puck/hosted/'
+              ]
+            }
+          }
+          enabled: true
+          name: 'expire-superseded-hosted-world-versions'
+          type: 'Lifecycle'
+        }
       ]
     }
   }
