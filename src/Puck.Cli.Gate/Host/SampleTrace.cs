@@ -35,17 +35,10 @@ public static class SampleTrace {
         // The runtime's loader and JIT events name the code that loads or tiers up during the window; the rundown at its
         // end names the rest.
         var keywords = (long)(ClrTraceEventParser.Keywords.Loader | ClrTraceEventParser.Keywords.Jit);
-        var client = new DiagnosticsClient(processId: processId);
-        using var session = client.StartEventPipeSession(providers: [
+        await AllocationTrace.RecordAsync(cancellationToken: cancellationToken, duration: duration, path: path, processId: processId, providers: [
             new EventPipeProvider(eventLevel: EventLevel.Informational, keywords: 0, name: SampleProvider),
             new EventPipeProvider(eventLevel: EventLevel.Informational, keywords: keywords, name: RuntimeProvider),
-        ], requestRundown: true, circularBufferMB: 512);
-        await using var file = File.Create(path: path);
-        var copy = session.EventStream.CopyToAsync(destination: file, cancellationToken: CancellationToken.None);
-
-        try { await Task.Delay(delay: duration, cancellationToken: cancellationToken); } catch (OperationCanceledException) { }
-        await session.StopAsync(cancellationToken: CancellationToken.None);
-        await copy;
+        ]);
     }
 
     /// <summary>Reads a trace's thread samples beneath a focus frame.</summary>
