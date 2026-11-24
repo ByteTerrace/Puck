@@ -97,11 +97,11 @@ lanes, [the release](#the-release), the
     back. The rtx2060 bars fail (device 6.4 GB against 4.3, host 10 GB
     against 6 GiB); the fixed class is the largest holder (the lighting's
     hit cache, bottom levels, irradiance volume, feedback volume and trace
-    scene, and the programs, once per residency); every residency's meshes
-    now lie in one region (`SdfMeshRegionStore`), but the boot world's
-    second scene (`routed$session$18$0$shared`) still plans its own tiers,
-    so most of its meshes are placed beside the boot world's; every
-    sky-layer session is its own residency; host private is 16 to 20 GB.
+    scene, and the programs, once per residency); a world is now resident
+    once (one mesh region, `SdfMeshRegionStore`, and a second scene of the
+    boot world that follows its tiers and shares its meshes), so the fixed
+    class is what is left over the bars; every sky-layer session is its own
+    residency; host private is 13 to 20 GB.
     The budgets by class and the ordered steps are in
     [streaming and memory](streaming-and-memory.md).
   - **CPU frame thread:** 8 to 12 ms an iteration (capture 4.2 to 4.5,

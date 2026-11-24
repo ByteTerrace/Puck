@@ -143,11 +143,13 @@ public sealed partial class SdfMeshPathBake {
     // The floors queued for the trace judge, each with the finer product it is held to (both claimed until judged) and
     // its verdict; whether the judge's task runs; the verdicts given; and whether a declined floor waits for the dresser
     // to read it (the next prepared frame moves the product revision). The product revision the last scan read.
-    private readonly Queue<(SdfMesh Floor, SdfMesh Finer, TraceVerdict Verdict)> m_judging = new();
+    private readonly Queue<(SdfMesh Floor, SdfMesh Finer, TraceVerdict Verdict, (UInt128 Bake, SdfMeshGeometry Floor, SdfMeshGeometry Finer)? Key)> m_judging = new();
     private bool m_judgeRunning;
     private long m_admittedFloors;
     private long m_declinedFloors;
     private int m_declinedLanded;
+    // The verdicts the library or its store already held, which cost no judging.
+    private long m_keptVerdicts;
 
     // The groups that may newly owe the judge a verdict (Group.OwesVerdict), which JudgeFloors reads in place of every
     // group. Invariant: a group whose kept floor, done state or product changes is queued here, by Judgeable, which
@@ -170,7 +172,13 @@ public sealed partial class SdfMeshPathBake {
             group.ClearJudging();
             if (group.Retired || group.Glass || group.Dynamic || !group.OwesVerdict) { continue; }
             group.FloorVerdict!.State = TraceVerdict.Judging;
-            lock (m_judging) { m_judging.Enqueue(item: (group.CurrentFloor!.Acquire(), group.JudgedAgainst!.Acquire(), group.FloorVerdict)); }
+            // The pair's verdict is the library's to keep where both meshes are named by a geometry under one bake
+            // identity: the floor's, which a floor carried across a replan no longer has, and the group's own.
+            (UInt128 Bake, SdfMeshGeometry Floor, SdfMeshGeometry Finer)? key = (((group.FloorGeometry is { } floorGeometry) && (group.Identity == Identity.Value))
+                ? (Identity.Value, floorGeometry, group.Sealed)
+                : null);
+
+            lock (m_judging) { m_judging.Enqueue(item: (group.CurrentFloor!.Acquire(), group.JudgedAgainst!.Acquire(), group.FloorVerdict, key)); }
             queued = true;
         }
         if (!queued) { return; }
@@ -180,10 +188,12 @@ public sealed partial class SdfMeshPathBake {
         }
         _ = Task.Run(action: Judge);
     }
-    // The judge's task: one floor after another on one pool thread, so its work never takes more than a core.
+    // The judge's task: one floor after another on one pool thread, so its work never takes more than a core. A pair
+    // the library or its store holds a verdict on is not judged again (SdfMeshLibrary.TraceVerdict): the verdict is a
+    // function of the two meshes and the judge, so one run's judging serves every residency and every later run.
     private void Judge() {
         while (true) {
-            (SdfMesh Floor, SdfMesh Finer, TraceVerdict Verdict) next;
+            (SdfMesh Floor, SdfMesh Finer, TraceVerdict Verdict, (UInt128 Bake, SdfMeshGeometry Floor, SdfMeshGeometry Finer)? Key) next;
 
             lock (m_judging) {
                 if (!m_judging.TryDequeue(result: out next)) {
@@ -192,8 +202,14 @@ public sealed partial class SdfMeshPathBake {
                 }
             }
             try {
-                var admitted = SdfMeshTraceJudge.Admits(finer: next.Finer, floor: next.Floor);
+                var kept = ((next.Key is { } known) ? Library?.TraceVerdict(finer: known.Finer, floor: known.Floor, identity: known.Bake) : null);
+                var admitted = (kept ?? SdfMeshTraceJudge.Admits(finer: next.Finer, floor: next.Floor));
 
+                if (kept is not null) {
+                    Interlocked.Increment(location: ref m_keptVerdicts);
+                } else if (next.Key is { } judged) {
+                    Library?.KeepTraceVerdict(admitted: admitted, finer: judged.Finer, floor: judged.Floor, identity: judged.Bake);
+                }
                 next.Verdict.State = (admitted ? TraceVerdict.Admitted : TraceVerdict.Refused);
                 if (admitted) {
                     Interlocked.Increment(location: ref m_admittedFloors);
@@ -271,7 +287,7 @@ public sealed partial class SdfMeshPathBake {
             }
             lock (m_judging) { judging = m_judging.Count; }
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $"floor-shown={shown} floor-pending={pending} floor-empty={empty} floor-failed={failed} floor-kept={kept} floorless={none} first-details-owed={m_firstDetailsOwed} floors-raised={m_floorsRaised} evicted={m_evicted} evicted-bytes={m_evictedBytes}B holes={m_holes} hole-frames={m_holeFrames}");
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" trace-floor={traced} trace-drawn={drawn} trace-admitted={Interlocked.Read(location: ref m_admittedFloors)} trace-declined={Interlocked.Read(location: ref m_declinedFloors)} trace-judging={judging}");
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" trace-floor={traced} trace-drawn={drawn} trace-admitted={Interlocked.Read(location: ref m_admittedFloors)} trace-declined={Interlocked.Read(location: ref m_declinedFloors)} trace-kept={Interlocked.Read(location: ref m_keptVerdicts)} trace-judging={judging}");
             for (var kind = 0; (kind < bytes.Length); kind++) {
                 var name = ((FloorClass)kind).ToString().ToLowerInvariant();
 

@@ -825,6 +825,18 @@ public static class SdfMeshRegion {
 
         return checked(((((mesh.Positions.Length * SdfMeshRecord.VertexWords) + MaterialWordsOf(mesh: mesh)) + IndexWordsOf(mesh: mesh)) + SkinWordsOf(mesh: mesh)));
     }
+    /// <summary>The words the presentation's mesh region places for one mesh (<see cref="SdfMeshRegionStore"/>): every
+    /// word of a mesh that owns its geometry (<see cref="WordsOf"/>), and the triangle materials alone of one renumbered
+    /// from another (<see cref="SdfMesh.GeometrySource"/>), whose vertices, indices and members a draw reads from that
+    /// other mesh's words.</summary>
+    /// <param name="mesh">The mesh.</param>
+    /// <returns>The words placed for it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
+    public static int PlacedWordsOf(SdfMesh mesh) {
+        ArgumentNullException.ThrowIfNull(mesh);
+
+        return ((mesh.GeometrySource is null) ? WordsOf(mesh: mesh) : MaterialWordsOf(mesh: mesh));
+    }
     /// <summary>The bytes a baked mesh takes of a region whose arena places it (<see cref="SdfMeshRegionArena"/>): its
     /// own words, or each of its chunks' where it is chunked, since the chunks are what draws name.</summary>
     /// <param name="mesh">The mesh.</param>

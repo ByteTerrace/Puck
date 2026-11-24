@@ -214,10 +214,12 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
             if (m_disposed || !m_clients.Remove(item: client)) { return; }
             m_scratch.Clear();
             foreach (var (mesh, use) in m_uses) { if (use.IndexOf(client: client) >= 0) { m_scratch.Add(item: mesh); } }
+            // Each mesh's own count goes, one name at a time: a mesh a renumbered one draws its geometry from is listed
+            // itself, with the names those meshes' rows gave it, so nothing here follows a mesh to its source.
             foreach (var mesh in m_scratch) {
                 var use = m_uses[mesh];
 
-                for (var rows = use.Rows[use.IndexOf(client: client)]; (rows > 0); rows--) { Unname(client: client, mesh: mesh); }
+                for (var rows = use.Rows[use.IndexOf(client: client)]; (rows > 0); rows--) { UnnameOne(client: client, mesh: mesh); }
             }
             m_scratch.Clear();
             foreach (var (mesh, product) in ahead) { m_arena.UnnameAhead(mesh: mesh, product: product); }
@@ -238,12 +240,30 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     /// <param name="mesh">The mesh, a chunk of a chunked mesh being a mesh of its own.</param>
     internal void Name(SdfWorldTables client, SdfMesh mesh) {
         lock (m_gate) {
-            if (!m_uses.TryGetValue(key: mesh, value: out var use)) { m_uses.Add(key: mesh, value: use = new Use()); }
+            NameOne(client: client, mesh: mesh);
+            // A mesh renumbered from another draws that mesh's geometry, so a row naming it names both.
+            if (mesh.GeometrySource is { } source) { NameOne(client: client, mesh: source); }
+        }
+    }
+    // The meshes renumbered from each mesh that a row names (SdfMesh.GeometrySource): what a change to the mesh's place
+    // or standing reaches beside the mesh itself, since their draws read its words.
+    private readonly Dictionary<SdfMesh, List<SdfMesh>> m_variants = new(comparer: ReferenceEqualityComparer.Instance);
+
+    private void NameOne(SdfWorldTables client, SdfMesh mesh) {
+        {
+            if (!m_uses.TryGetValue(key: mesh, value: out var use)) {
+                m_uses.Add(key: mesh, value: use = new Use());
+                if (mesh.GeometrySource is { } source) {
+                    if (!m_variants.TryGetValue(key: source, value: out var variants)) { m_variants.Add(key: source, value: variants = []); }
+                    variants.Add(item: mesh);
+                }
+                Recompose(mesh: mesh);
+            }
 
             var index = use.IndexOf(client: client);
 
             if (index < 0) {
-                var words = SdfMeshRegion.WordsOf(mesh: mesh);
+                var words = SdfMeshRegion.PlacedWordsOf(mesh: mesh);
 
                 // The mesh's words are shared out among the residencies that name it, so the residencies' named bytes
                 // together are the bytes the names hold.
@@ -270,6 +290,12 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     /// <param name="mesh">The mesh.</param>
     internal void Unname(SdfWorldTables client, SdfMesh mesh) {
         lock (m_gate) {
+            UnnameOne(client: client, mesh: mesh);
+            if (mesh.GeometrySource is { } source) { UnnameOne(client: client, mesh: source); }
+        }
+    }
+    private void UnnameOne(SdfWorldTables client, SdfMesh mesh) {
+        {
             var use = m_uses[mesh];
             var index = use.IndexOf(client: client);
 
@@ -277,7 +303,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
             m_landingTouched.Add(item: mesh);
             if (--use.Rows[index] > 0) { return; }
 
-            var words = SdfMeshRegion.WordsOf(mesh: mesh);
+            var words = SdfMeshRegion.PlacedWordsOf(mesh: mesh);
 
             client.AttributeNamedWords(delta: -(((double)words) / use.Count));
             if (m_landingRanks.ContainsKey(key: mesh)) { client.AddOwedWords(delta: -words); }
@@ -287,7 +313,11 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
             use.Priority[index] = use.Priority[use.Count];
             use.First[index] = use.First[use.Count];
             use.Clients[use.Count] = null!;
-            if (use.Count == 0) { _ = m_uses.Remove(key: mesh); return; }
+            if (use.Count == 0) {
+                _ = m_uses.Remove(key: mesh);
+                if ((mesh.GeometrySource is { } source) && m_variants.TryGetValue(key: source, value: out var variants) && variants.Remove(item: mesh) && (variants.Count == 0)) { _ = m_variants.Remove(key: source); }
+                return;
+            }
             for (var other = 0; (other < use.Count); other++) { use.Clients[other].AttributeNamedWords(delta: ((((double)words) / use.Count) - (((double)words) / (use.Count + 1)))); }
         }
     }
@@ -305,11 +335,18 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
             m_standing.Clear();
             m_scratch.Clear();
             // A mesh listed as a floor too is named as a floor: it keeps its words whatever else names it.
-            for (var index = products; (index < meshes.Count); index++) { if (m_standing.Add(item: meshes[index])) { m_scratch.Add(item: meshes[index]); } }
+            // A mesh renumbered from another is named with the mesh whose geometry it draws.
+            for (var index = products; (index < meshes.Count); index++) {
+                if (m_standing.Add(item: meshes[index])) { m_scratch.Add(item: meshes[index]); }
+                if ((meshes[index].GeometrySource is { } source) && m_standing.Add(item: source)) { m_scratch.Add(item: source); }
+            }
 
             var floors = m_scratch.Count;
 
-            for (var index = 0; (index < products); index++) { if (m_standing.Add(item: meshes[index])) { m_scratch.Add(item: meshes[index]); } }
+            for (var index = 0; (index < products); index++) {
+                if (m_standing.Add(item: meshes[index])) { m_scratch.Add(item: meshes[index]); }
+                if ((meshes[index].GeometrySource is { } source) && m_standing.Add(item: source)) { m_scratch.Add(item: source); }
+            }
             // The new names are taken before the old ones go, so a mesh named both before and after keeps its name.
             for (var index = 0; (index < m_scratch.Count); index++) { m_arena.NameAhead(mesh: m_scratch[index], product: (index >= floors)); }
             foreach (var (mesh, product) in held) { m_arena.UnnameAhead(mesh: mesh, product: product); }
@@ -342,7 +379,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     /// planner under the gate, before any other plan.</summary>
     /// <param name="mesh">The mesh.</param>
     /// <returns><see langword="true"/> when the latest plan moved the mesh.</returns>
-    internal bool MovedInPlan(SdfMesh mesh) => m_arena.Moved.Contains(item: mesh);
+    internal bool MovedInPlan(SdfMesh mesh) => ((m_arena.Moved.Count > 0) && (m_arena.Moved.Contains(item: mesh) || ((mesh.GeometrySource is { } source) && m_arena.Moved.Contains(item: source))));
     /// <summary>Gets whether the latest plan moved any mesh.</summary>
     internal bool AnyMovedInPlan => (m_arena.Moved.Count > 0);
 
@@ -367,7 +404,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
             // A mesh placed again within one plan held another place until now: nothing of it stands at this one.
             ForgetLanding(mesh: mesh);
             _ = m_pages.Remove(key: mesh);
-            m_placements[mesh] = PlacementAt(mesh: mesh, vertexWord: word);
+            Recompose(mesh: mesh);
             m_owed.Add(mesh: mesh);
         }
         // Whether each moved mesh stood at the words it left is read before it is settled.
@@ -396,24 +433,51 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
 
         return new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord, SkinWord: skinWord);
     }
-    // Tells every residency whose rows name a mesh, but the planner, that its address (moved) or standing changed.
+    // Tells every residency whose rows name a mesh, or a mesh renumbered from it, that its address (moved) or standing
+    // changed. The planner is left out of both: it reads the plan's moves itself, a renumbered mesh's through the mesh
+    // it draws its geometry from (MovedInPlan).
     private void Notify(SdfMesh mesh, SdfWorldTables? except = null, bool moved = false) {
+        NotifyOne(except: except, mesh: mesh, moved: moved);
+        if (!m_variants.TryGetValue(key: mesh, value: out var variants)) { return; }
+        foreach (var variant in variants) { NotifyOne(except: except, mesh: variant, moved: moved); }
+    }
+    private void NotifyOne(SdfMesh mesh, SdfWorldTables? except, bool moved) {
         if (!m_uses.TryGetValue(key: mesh, value: out var use)) { return; }
         for (var index = 0; (index < use.Count); index++) {
             if (!ReferenceEquals(objA: use.Clients[index], objB: except)) { use.Clients[index].NoteStoreChange(mesh: mesh, moved: moved); }
         }
     }
+    // Brings a mesh's placement, and those of the meshes renumbered from it, to the arena's: a mesh that owns its
+    // geometry lies whole from its first word, and one renumbered from another holds its triangle materials at its own
+    // word and draws its vertices, indices and members from the other's.
+    private void Recompose(SdfMesh mesh) {
+        RecomposeOne(mesh: mesh);
+        if (!m_variants.TryGetValue(key: mesh, value: out var variants)) { return; }
+        foreach (var variant in variants) { RecomposeOne(mesh: variant); }
+    }
+    private void RecomposeOne(SdfMesh mesh) {
+        if (!m_arena.Placements.TryGetValue(key: mesh, value: out var word)) { _ = m_placements.Remove(key: mesh); return; }
+        if (mesh.GeometrySource is not { } source) { m_placements[mesh] = PlacementAt(mesh: mesh, vertexWord: word); return; }
+        if (!m_arena.Placements.TryGetValue(key: source, value: out var sourceWord)) { _ = m_placements.Remove(key: mesh); return; }
+
+        var body = PlacementAt(mesh: source, vertexWord: sourceWord);
+
+        m_placements[mesh] = new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: body.IndexWord, MaterialWord: word, VertexWord: body.VertexWord, SkinWord: body.SkinWord);
+    }
+    // Whether a mesh's own words stand at its place.
+    private bool StandsOne(SdfMesh mesh) => (m_arena.Placements.ContainsKey(key: mesh) && !m_owed.Contains(mesh: mesh) && m_pages.TryGetValue(key: mesh, value: out var pages) && pages.IsCurrent);
     // The arena took these meshes' placements back: their words are free for the next mesh they hold, so they owe none,
     // their landing starts again should a plan place them later, and a residency whose rows read one stages them absent.
     private void ForgetArenaMeshes(SdfWorldTables? planner) {
         foreach (var mesh in m_arena.Forgotten) {
             if (m_arena.Placements.ContainsKey(key: mesh)) { continue; }
-            if (!m_placements.Remove(key: mesh)) { continue; }
+            if (!m_pages.ContainsKey(key: mesh) && !m_owed.Contains(mesh: mesh) && !m_placements.ContainsKey(key: mesh)) { continue; }
             m_forgotten++;
             ForgetLanding(mesh: mesh);
             var stood = (m_pages.Remove(key: mesh) && !m_owed.Contains(mesh: mesh));
 
             _ = m_owed.Remove(mesh: mesh);
+            Recompose(mesh: mesh);
             if (stood) { Notify(mesh: mesh, except: planner); }
         }
     }
@@ -448,16 +512,14 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
         m_moved++;
         ForgetLanding(mesh: mesh);
         _ = m_pages.Remove(key: mesh);
+        Recompose(mesh: mesh);
         if (!m_arena.Placements.TryGetValue(key: mesh, value: out var word)) {
-            _ = m_placements.Remove(key: mesh);
             _ = m_owed.Remove(mesh: mesh);
             return;
         }
 
-        var placement = PlacementAt(mesh: mesh, vertexWord: word);
-        var words = SdfMeshRegion.WordsOf(mesh: mesh);
+        var words = SdfMeshRegion.PlacedWordsOf(mesh: mesh);
 
-        m_placements[mesh] = placement;
         if (stood && (m_region.TryLease((((long)word) * sizeof(uint)), (((long)words) * sizeof(uint))) is { } lease) &&
             m_arena.MovedFrom(mesh: mesh, word: out var from) && m_region.TryOweMove(
                 destinationOffset: (((long)word) * sizeof(uint)),
@@ -484,21 +546,22 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     /// <param name="mesh">The mesh, a chunk of a chunked mesh being a mesh of its own.</param>
     /// <returns><see langword="true"/> when a draw may name the mesh without waiting out of the frame.</returns>
     internal bool Stands(SdfMesh mesh) {
-        lock (m_gate) { return (m_placements.ContainsKey(key: mesh) && !m_owed.Contains(mesh: mesh) && m_pages.TryGetValue(key: mesh, value: out var pages) && pages.IsCurrent); }
+        lock (m_gate) { return (StandsOne(mesh: mesh) && ((mesh.GeometrySource is not { } source) || StandsOne(mesh: source))); }
     }
     /// <summary>Returns whether the region still owes a named mesh's words: it is placed and has not landed, or a draw
     /// names it and the arena refuses it under its limit.</summary>
     /// <param name="mesh">The mesh.</param>
     /// <returns><see langword="true"/> while the region owes it.</returns>
     internal bool Owes(SdfMesh mesh) {
-        lock (m_gate) { return (m_arena.Refused.Contains(item: mesh) || (m_placements.ContainsKey(key: mesh) && m_owed.Contains(mesh: mesh))); }
+        lock (m_gate) { return (OwesOne(mesh: mesh) || ((mesh.GeometrySource is { } source) && OwesOne(mesh: source))); }
     }
+    private bool OwesOne(SdfMesh mesh) => (m_arena.Refused.Contains(item: mesh) || (m_arena.Placements.ContainsKey(key: mesh) && m_owed.Contains(mesh: mesh)));
     /// <summary>Returns whether a draw names a mesh the arena refuses under its limit, so its draws wait out of the frame
     /// until a later plan fits it.</summary>
     /// <param name="mesh">The mesh.</param>
     /// <returns><see langword="true"/> while the arena refuses it.</returns>
     internal bool Refuses(SdfMesh mesh) {
-        lock (m_gate) { return m_arena.Refused.Contains(item: mesh); }
+        lock (m_gate) { return (m_arena.Refused.Contains(item: mesh) || ((mesh.GeometrySource is { } source) && m_arena.Refused.Contains(item: source))); }
     }
     /// <summary>Returns whether the region found no room for a mesh named ahead beside the meshes the draws read: the
     /// arena placed it nowhere, or the device refused to back the words it was placed in (a mapped region's chunk).
@@ -506,10 +569,11 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     /// <param name="mesh">The mesh.</param>
     /// <returns><see langword="true"/> when the mesh is named ahead and refused.</returns>
     internal bool RefusesAhead(SdfMesh mesh) {
-        lock (m_gate) {
-            return (m_arena.AheadRefused.Contains(item: mesh) || (m_backingRefused && m_placements.TryGetValue(key: mesh, value: out var placement) &&
-                !m_region.IsBacked(bytes: (((long)SdfMeshRegion.WordsOf(mesh: mesh)) * sizeof(uint)), offset: (((long)placement.VertexWord) * sizeof(uint)))));
-        }
+        lock (m_gate) { return (RefusesAheadOne(mesh: mesh) || ((mesh.GeometrySource is { } source) && RefusesAheadOne(mesh: source))); }
+    }
+    private bool RefusesAheadOne(SdfMesh mesh) {
+        return (m_arena.AheadRefused.Contains(item: mesh) || (m_backingRefused && m_arena.Placements.TryGetValue(key: mesh, value: out var word) &&
+            !m_region.IsBacked(bytes: (((long)SdfMeshRegion.PlacedWordsOf(mesh: mesh)) * sizeof(uint)), offset: (((long)word) * sizeof(uint)))));
     }
     /// <summary>Gets how many meshes draws name that the arena refuses under its limit.</summary>
     internal int RefusedCount { get { lock (m_gate) { return m_arena.Refused.Count; } } }
@@ -523,7 +587,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
             placements = m_placements;
             meshes = m_region.Buffer(slot: 0);
             version = m_version;
-            return (!m_region.OwesMoves && !m_region.OwesCarry && (m_unsubmitted == 0) && scene.HasGpuPlacements(placements, m_owed.Set));
+            return (!m_region.OwesMoves && !m_region.OwesCarry && (m_unsubmitted == 0) && scene.HasGpuPlacements(placements, Stands));
         }
     }
 
@@ -650,12 +714,16 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
         lock (m_gate) {
             var shared = 0;
             var sharedWords = 0L;
+            var variants = 0;
+            var variantWords = 0L;
 
             foreach (var (mesh, use) in m_uses) {
-                if (use.Count > 1) { shared++; sharedWords += (((long)SdfMeshRegion.WordsOf(mesh: mesh)) * (use.Count - 1)); }
+                if (use.Count > 1) { shared++; sharedWords += (((long)SdfMeshRegion.PlacedWordsOf(mesh: mesh)) * (use.Count - 1)); }
+                // A mesh renumbered from another is placed as its materials alone: the rest is the other's words.
+                if (mesh.GeometrySource is not null) { variants++; variantWords += (SdfMeshRegion.WordsOf(mesh: mesh) - SdfMeshRegion.PlacedWordsOf(mesh: mesh)); }
             }
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"mesh-store residencies={m_clients.Count} region-held={Bytes}B region-used={(m_arena.Words * sizeof(uint))}B meshes={m_placements.Count} named={m_uses.Count} region-named={(m_arena.NamedWords * sizeof(uint))}B shared={shared} shared-saved={(sharedWords * sizeof(uint))}B written={(m_wordsWritten * sizeof(uint))}B owed-meshes={m_owed.Count} moved={m_moved} compactions={m_arena.Compactions} compacted={m_arena.CompactionMoves}/{(m_arena.CompactionWords * sizeof(uint))}B gpu-moved={m_gpuMoves}/{(m_gpuMovedWords * sizeof(uint))}B move-sources={(m_arena.HoldsMoveSources ? "held" : "none")} move-slot-misses={m_moveSlotMisses} region-limit={(m_arena.LimitWords * sizeof(uint))}B region-held-limit={((m_arena.HeldLimitWords == long.MaxValue) ? "none" : $"{(m_arena.HeldLimitWords * sizeof(uint))}B")} arena-held={(m_arena.HeldWords * sizeof(uint))}B arena-placed={(m_arena.PlacedWords * sizeof(uint))}B shed={m_arena.Shed} staging-refused={m_region.StagingRefusals} refused={m_arena.Refused.Count} ahead={m_arena.AheadCount} ahead-refused={m_arena.AheadRefused.Count} refusals={m_refusals} forgotten={m_forgotten} {DescribeLandingJobs()}");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"mesh-store residencies={m_clients.Count} region-held={Bytes}B region-used={(m_arena.Words * sizeof(uint))}B meshes={m_placements.Count} named={m_uses.Count} region-named={(m_arena.NamedWords * sizeof(uint))}B shared={shared} shared-saved={(sharedWords * sizeof(uint))}B variants={variants} variants-saved={(variantWords * sizeof(uint))}B written={(m_wordsWritten * sizeof(uint))}B owed-meshes={m_owed.Count} moved={m_moved} compactions={m_arena.Compactions} compacted={m_arena.CompactionMoves}/{(m_arena.CompactionWords * sizeof(uint))}B gpu-moved={m_gpuMoves}/{(m_gpuMovedWords * sizeof(uint))}B move-sources={(m_arena.HoldsMoveSources ? "held" : "none")} move-slot-misses={m_moveSlotMisses} region-limit={(m_arena.LimitWords * sizeof(uint))}B region-held-limit={((m_arena.HeldLimitWords == long.MaxValue) ? "none" : $"{(m_arena.HeldLimitWords * sizeof(uint))}B")} arena-held={(m_arena.HeldWords * sizeof(uint))}B arena-placed={(m_arena.PlacedWords * sizeof(uint))}B shed={m_arena.Shed} staging-refused={m_region.StagingRefusals} refused={m_arena.Refused.Count} ahead={m_arena.AheadCount} ahead-refused={m_arena.AheadRefused.Count} refusals={m_refusals} forgotten={m_forgotten} {DescribeLandingJobs()}");
         }
     }
     /// <summary>Gets the bytes of the region's buffers, by the memory they live in.</summary>

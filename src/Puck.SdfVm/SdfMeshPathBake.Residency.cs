@@ -1011,7 +1011,7 @@ public sealed partial class SdfMeshPathBake {
             var (coarser, finer) = DemandStale();
 
             _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" demand-stale-coarser={coarser} demand-stale-finer={finer}");
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" region-budget={m_regionBudgetBytes}B region-named={m_regionNamedBytes}B region-refused={m_regionRefused} tiers-spare={m_tiersSpare} tiers-held-back={m_tiersHeldBack} coarsened={m_coarsened} detail-bias={m_bias} bias-raised={(m_detail?.Selector.BiasSteps.Raised ?? 0)} bias-lowered={(m_detail?.Selector.BiasSteps.Lowered ?? 0)}");
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" region-budget={m_regionBudgetBytes}B region-named={m_regionNamedBytes}B region-refused={m_regionRefused} tiers-spare={m_tiersSpare} tiers-held-back={m_tiersHeldBack} tiers-followed={m_tiersFollowed} coarsened={m_coarsened} detail-bias={m_bias} bias-raised={(m_detail?.Selector.BiasSteps.Raised ?? 0)} bias-lowered={(m_detail?.Selector.BiasSteps.Lowered ?? 0)}");
             for (var tier = 0; (tier < tierTriangles.Length); tier++) {
                 if (tierTriangles[tier] > 0) { _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $" tier{tier}={tierTriangles[tier]}tri@{(1000f * SdfMeshTier.Cell(tier: tier)):0.###}mm"); }
             }

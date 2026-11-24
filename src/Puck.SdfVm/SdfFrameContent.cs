@@ -37,6 +37,21 @@ public readonly record struct SdfFrameContent(SdfProgram Program, bool ProgramCh
     }
     /// <summary>Gets the moved-set endpoint captured with this frame's borrowed transform table.</summary>
     public long MovedTransformsSerial { get; private init; }
+    /// <summary>The views of this frame's world that another residency renders: the same world, in the same coordinates,
+    /// shown elsewhere in the presentation (the world a session screen's scene is a second scene of). They render
+    /// nothing here and are demand points alone (<see cref="SdfMeshDemand"/>), so this residency plans each group at
+    /// the tier the finest of both demands asks, which is the tier the other residency draws: the two then name the
+    /// same meshes, which the presentation's mesh region holds once (<see cref="SdfMeshRegionStore"/>). Each carries the
+    /// height its sizes are measured in (<see cref="SdfViewSnapshot.DemandHeight"/>), since its region places it in
+    /// the other residency's output. Empty, the default, for a frame whose world no other residency shows.</summary>
+    public IReadOnlyList<SdfViewSnapshot> DemandViews { get; init; } = [];
+    /// <summary>What names the world this frame draws among the presentation's residencies, compared by reference: the
+    /// residency that draws the world for the presentation (a frame with no <see cref="DemandViews"/>) and each that
+    /// draws a second scene of it (a frame that carries them) hold the same object. A second scene's bake draws each
+    /// group at the tier the first draws it at (<see cref="SdfMeshLibrary.TiersOf"/>), whatever its own budget would
+    /// choose, since the first's mesh is already placed and a tier of its own would be placed beside it.
+    /// <see langword="null"/>, the default, for a frame no other residency shares a world with.</summary>
+    public object? DemandWorld { get; init; }
     /// <summary>The frame's bounded flow and cloud volumes, at most
     /// <see cref="SdfWorldTables.MaxVolumes"/>; submission refuses a list beyond that capacity.
     /// Packed into its own structured buffer (never <c>sdfScreenLights</c>) and shaded by <c>shade-volumes.hlsli</c>'s

@@ -25,6 +25,18 @@ internal static class SdfMeshTraceJudge {
     /// cannot finish admits nothing.</summary>
     public const long MostWitnesses = 4_000_000L;
 
+    // The identity of the judge's own code in the running build: every member Admits reaches, walked as the bake's
+    // closure is. A verdict is kept under it, so a verdict an earlier judge gave is never read by a later one.
+    private static readonly Lazy<UInt128> Code = new(valueFactory: static () => SdfMeshBakeClosure.Of(
+        directory: AppContext.BaseDirectory,
+        roots: [("Puck.SdfVm", typeof(SdfMeshTraceJudge).FullName!, nameof(Admits))]).Hash);
+
+    /// <summary>Gets the identity of the judge's own code in the running build. A verdict is a function of the two
+    /// meshes and the judge alone, so the mesh store keeps it beside the meshes, under their bake's identity, keyed by
+    /// this and the two geometries (<see cref="SdfMeshLibrary.TraceVerdict"/>). The first read walks the running
+    /// build's modules, so it is made off the frame's thread.</summary>
+    public static UInt128 CodeIdentity => Code.Value;
+
     /// <summary>Returns whether a floor stands for a finer mesh of the same group within <see cref="Tolerance"/> both
     /// ways. Reads both meshes' positions and level-zero indices, piece by piece; the caller holds a claim on each.</summary>
     /// <param name="floor">The group's mesh at its coarsest tier.</param>
