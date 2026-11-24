@@ -127,12 +127,18 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// for.</param>
     /// <param name="meshLibrary">The library the residency's bake shares meshes through with every other residency
     /// holding it (<see cref="SdfMeshPathBake.Library"/>), or <see langword="null"/> for a library of its own.</param>
+    /// <param name="capturePackingDomain">Enables worker packing for a composition whose transform and draw packers
+    /// share presentation state only within this identity. Only one worker may pack a domain at a time.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">A dimension is zero.</exception>
-    public SdfWorldResidency(SdfWorldPipelineCatalog pipelines, ISdfFrameSource frameSource, SdfKernelSet kernels, string name, uint width, uint height, ISdfScreenSources? screenSources = null, Func<FrameContext, bool>? film = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, SdfMeshLibrary? meshLibrary = null) {
+    public SdfWorldResidency(SdfWorldPipelineCatalog pipelines, ISdfFrameSource frameSource, SdfKernelSet kernels, string name, uint width, uint height, ISdfScreenSources? screenSources = null, Func<FrameContext, bool>? film = null, int dynamicTransformCapacity = 0, int programWordCapacity = 0, int instanceCapacity = 0, SdfMeshLibrary? meshLibrary = null, object? capturePackingDomain = null) {
         ArgumentNullException.ThrowIfNull(pipelines);
         ArgumentNullException.ThrowIfNull(frameSource);
         ArgumentException.ThrowIfNullOrEmpty(name);
+        if ((capturePackingDomain is not null) && (frameSource is not SdfCompositionFrameSource)) {
+            throw new ArgumentException(message: "Worker packing requires a composition frame source.", paramName: nameof(frameSource));
+        }
+        CapturePackingDomain = capturePackingDomain;
 
         if (
             (0 == width) ||
@@ -513,6 +519,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_tables?.BeginShadowFrame();
         m_frameSeconds = Math.Max(val1: frameSeconds, val2: 0);
         m_captured = false;
+        m_capturePacking = default;
         m_pack = PackStage.None;
         m_packFrame = null;
         m_packDevice = null;
@@ -549,10 +556,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             instance: this
         );
 
-        if (!m_captured) {
-            m_captured = true;
-            Capture(context: in context);
-        }
+        if (!m_captured) { Capture(context: in context); }
 
         return m_frame;
     }
@@ -1194,19 +1198,72 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // Whether the frame's preparation left the tables holding a frame the views can render.
     private bool m_renders;
 
-    // Captures the frame from the frame source when it films one this frame.
-    private void Capture(in FrameContext context) {
+    internal object? CapturePackingDomain { get; }
+    private readonly record struct CapturePacking(float Delta, float Alpha, bool Rebuilt);
+    private CapturePacking m_capturePacking;
+
+    // Opens a capture on the frame thread, including the host's camera fitting callback. Holding a frame runs
+    // the ordinary capture path so convergence does not borrow composition state across a fork.
+    internal bool BeginCapturePacking(in FrameContext context) {
+        if (HoldsFrame) { _ = HostFrame(context: in context); return false; }
         using var work = HostFrameWork.Measure(HostFrameWorkPart.Capture);
+        if (!OpenCapture(context: in context)) { return false; }
+
+        m_frozenFrame = null;
+        var source = (SdfCompositionFrameSource)m_frameSource;
+        var delta = CaptureInterval(context: in context, converging: false);
+        var alpha = (float)context.InterpolationAlpha;
+        var ready = source.PrepareCapture(deltaSeconds: delta, interpolationAlpha: alpha, rebuilt: out var rebuilt);
+
+        SourceWaiting = source.Waiting;
+        m_capturePacking = new CapturePacking(Delta: delta, Alpha: alpha, Rebuilt: rebuilt);
+        return ready;
+    }
+
+    internal void RunCapturePacking() {
+        using var work = HostFrameWork.Measure(HostFrameWorkPart.Capture);
+        ((SdfCompositionFrameSource)m_frameSource).PackCapture(rebuilt: m_capturePacking.Rebuilt);
+    }
+
+    internal void EndCapturePacking() {
+        using var work = HostFrameWork.Measure(HostFrameWorkPart.Capture);
+        var job = m_capturePacking;
+        var frame = ((SdfCompositionFrameSource)m_frameSource).FinishCapture(width: m_width, height: m_height,
+            deltaSeconds: job.Delta, interpolationAlpha: job.Alpha);
+
+        PublishCaptured(frame: CaptureWriter().CopyFrom(source: frame));
+    }
+
+    private bool OpenCapture(in FrameContext context) {
+        if (m_captured) { return false; }
+        m_captured = true;
         if (!(m_film?.Invoke(arg: context) ?? true)) {
-            return;
+            return false;
         }
         // The source's capture may write what the frames these tables hold borrow.
         m_tables?.ForgetViewInputs();
+        return true;
+    }
+
+    private float CaptureInterval(in FrameContext context, bool converging) {
+        // A residency read again after frames nothing read advances by those frames too, so a time-keyed timeline
+        // shows the presented time rather than the phase it was last seen at.
+        var seconds = (converging ? 0f : ((float)(context.FrameDeltaSeconds + m_skippedSeconds)));
+
+        m_skippedSeconds = 0;
+        SdfCaptureWork.ProcessWork.Count(kind: SdfCaptureWork.Run);
+        return seconds;
+    }
+
+    // Write into the residency's own frame that the tables do not hold.
+    private SdfFrame.Writer CaptureWriter() => ReferenceEquals(objA: m_captures[0].Frame, objB: m_packedFrame) ? m_captures[1] : m_captures[0];
+
+    private void Capture(in FrameContext context) {
+        using var work = HostFrameWork.Measure(HostFrameWorkPart.Capture);
+        if (!OpenCapture(context: in context)) { return; }
 
         var converging = HoldsFrame;
-        // A capture is written into the residency's own frame that the tables do not hold, so the packed frame, which a
-        // frame waiting on a pipeline keeps rendering, is never written while it stands.
-        var capture = (ReferenceEquals(objA: m_captures[0].Frame, objB: m_packedFrame) ? m_captures[1] : m_captures[0]);
+        var capture = CaptureWriter();
         SdfFrame frame;
 
         if (converging && (m_frozenFrame is { } frozen)) {
@@ -1218,16 +1275,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 m_frozenFrame = null;
             }
 
-            // A residency read again after frames nothing read advances by those frames too, so a time-keyed timeline
-            // shows the presented time rather than the phase it was last seen at.
-            var deltaSeconds = (converging ? 0f : ((float)(context.FrameDeltaSeconds + m_skippedSeconds)));
-
-            m_skippedSeconds = 0;
-            SdfCaptureWork.ProcessWork.Count(kind: SdfCaptureWork.Run);
             var captured = m_frameSource.CaptureFrame(
                 width: m_width,
                 height: m_height,
-                deltaSeconds: deltaSeconds,
+                deltaSeconds: CaptureInterval(context: in context, converging: converging),
                 interpolationAlpha: ((float)context.InterpolationAlpha)
             );
 
@@ -1245,7 +1296,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 m_frozenFrame = m_frozen.CopyFrom(source: frame);
             }
         }
+        PublishCaptured(frame: frame);
+    }
 
+    private void PublishCaptured(SdfFrame frame) {
         // Every view draws the program's baked meshes, landed first where its views stand.
         MeshDemand.Observe(frame: frame, height: m_height);
         try { frame = m_meshDresser.Dress(frame: frame); } catch (SdfDressFaultException) {

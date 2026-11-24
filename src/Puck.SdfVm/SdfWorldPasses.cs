@@ -506,6 +506,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         SdfCaptureWork.ProcessWork.Add(kind: SdfCaptureWork.Held, amount: m_residencies.Count);
         // A frame that ended before its readers were all prepared leaves captures of its own behind.
         m_packsPending.Clear();
+        m_capturesPending.Clear();
+        m_captureReaders.Clear();
         if (m_host is { IsReleased: false } host) {
             CaptureForPack(residency: host, context: in context);
         }
@@ -546,20 +548,66 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // The residencies a reader or the minimum captured this frame whose frames are not packed yet (CaptureForPack),
     // packed together once the frame's readers are all known (ReadsPrepared).
     private readonly List<SdfWorldResidency> m_packsPending = [];
+    private readonly List<SdfWorldResidency> m_capturesPending = [];
+    private readonly List<Entry> m_captureReaders = [];
+    private readonly HashSet<object> m_captureDomains = new(comparer: ReferenceEqualityComparer.Instance);
 
     // Captures a residency's frame for a reader and leaves its packing to ReadsPrepared, so the frame's residencies pack
     // side by side. A caller that needs the packed frame before then prepares the residency itself
     // (SdfWorldResidency.Prepare), which ReadsPrepared then finds done.
-    internal void CaptureForPack(SdfWorldResidency residency, in FrameContext context) {
+    private void CaptureForPack(SdfWorldResidency residency, in FrameContext context) {
         _ = residency.HostFrame(context: in context);
         if (!m_packsPending.Contains(item: residency)) { m_packsPending.Add(item: residency); }
+    }
+
+    internal void CaptureForReader(SdfWorldResidency residency, in FrameContext context) {
+        if (m_packsPending.Contains(item: residency)) { return; }
+        if ((residency.CapturePackingDomain is null) || (m_host?.Frame is not { TickLocked: false, ConvergesLighting: false })) {
+            CaptureForPack(residency: residency, context: in context);
+        } else {
+            m_capturesPending.Add(item: residency);
+            m_packsPending.Add(item: residency);
+        }
     }
     /// <inheritdoc/>
     /// <remarks>Resolves the instance's view and captures its residency's frame (a routed residency its host's first),
     /// once a frame whichever reader asks first; the frame is packed with the frame's other residencies'
     /// (<see cref="ReadsPrepared"/>).</remarks>
     public void PrepareRead(string instance, in FrameContext context) {
-        if (BegunResidencyOf(instance: instance) is { } residency) { CaptureForPack(residency: residency, context: in context); }
+        var entry = Refresh(instance: instance);
+
+        if (entry.View is not { } view) { return; }
+        var residency = view.Residency;
+
+        Begin(residency: residency);
+        CaptureForReader(residency: residency, context: in context);
+        if (residency.CapturePackingDomain is not null) { m_captureReaders.Add(item: entry); }
+    }
+
+    /// <inheritdoc/>
+    public void ReadRoundPrepared(in FrameContext context, JobPool? jobs) {
+        var fork = m_captureFork;
+        var independent = true;
+
+        try {
+            foreach (var residency in m_capturesPending) {
+                if (residency.IsReleased || !residency.BeginCapturePacking(context: in context)) { continue; }
+                independent &= m_captureDomains.Add(item: residency.CapturePackingDomain!);
+                fork.Add(residency: residency);
+            }
+            // A shared mirror can have mutable presentation caches. A round with overlapping domains packs in
+            // request order on this thread. Independent packers read the presentation latched before the fork.
+            fork.Run(jobs: (independent ? jobs : null));
+            fork.Each(action: static residency => residency.EndCapturePacking());
+            // Camera filming can change the view index. The residency identity was sufficient to collect the
+            // capture, and the first schedule or recording lookup resolves the indices after cameras publish.
+            foreach (var entry in m_captureReaders) { entry.Frame = -1; }
+        } finally {
+            fork.Clear();
+            m_captureDomains.Clear();
+            m_capturesPending.Clear();
+            m_captureReaders.Clear();
+        }
     }
     /// <inheritdoc/>
     /// <remarks>Packs every residency a reader or the minimum captured this frame. Each one's preparation begins and
@@ -616,6 +664,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
     }
 
+    private readonly ResidencyFork m_captureFork = new(beside: SdfCaptureWork.CapturePacks, onWorker: SdfCaptureWork.CapturePacksOnWorker, run: static residency => residency.RunCapturePacking());
     private readonly ResidencyFork m_packFork = new(beside: SdfCaptureWork.PackedBeside, onWorker: SdfCaptureWork.PackedOnWorker, run: static residency => residency.RunPack());
     private readonly ResidencyFork m_stageFork = new(beside: SdfCaptureWork.UploadedBeside, onWorker: SdfCaptureWork.UploadedOnWorker, run: static residency => residency.RecordStage());
 

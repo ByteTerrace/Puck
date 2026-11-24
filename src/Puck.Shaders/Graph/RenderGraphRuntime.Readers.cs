@@ -41,6 +41,13 @@ public sealed partial class RenderGraphRuntime {
                 if (!m_readPrepared.Add(index: index)) { continue; }
                 preparing |= PrepareRead(context: in context, index: index);
             }
+            if (preparing) {
+                var factories = m_packages.Factories;
+
+                for (var position = 0; (position < factories.Count); position++) {
+                    factories[position].ReadRoundPrepared(context: in context, jobs: m_jobs);
+                }
+            }
         }
     }
     // Asks each distinct factory of an instance's package passes, once, to prepare what the instance reads; false for

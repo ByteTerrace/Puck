@@ -404,6 +404,10 @@ public interface IRenderGraphPackageFactory {
     /// <param name="instance">The instance something reads this frame.</param>
     /// <param name="context">The host's frame context of the frame being produced.</param>
     void PrepareRead(string instance, in FrameContext context) { }
+    /// <summary>Completes a round of reader preparation before the runtime seals any footprints those readers placed.</summary>
+    /// <param name="context">The host's frame context.</param>
+    /// <param name="jobs">The pool for any independent work left over from <see cref="PrepareRead"/>.</param>
+    void ReadRoundPrepared(in FrameContext context, Puck.Hosting.Jobs.JobPool? jobs) { }
     /// <summary>Finishes what <see cref="PrepareRead"/> began once the frame's readers are all prepared, before the
     /// runtime asks whether any instance is unchanged: work the factory left until it knew every reader, so it can run
     /// the readers' shares side by side (an SDF package packs each captured residency as a partition of one fork). The

@@ -23,6 +23,10 @@ public static class SdfCaptureWork {
     /// <summary>Counts the owed residencies a frame's start left for a later frame's minimum, one per residency per
     /// frame; a reader of the frame still prepares such a residency.</summary>
     public static readonly WorkKind MinimumHeld = new(name: "sdf.captures.minimum-held", unit: "residencies", workClass: WorkClass.Pacing);
+    /// <summary>Counts routed captures whose composition packed transforms and draw journals in a reader round.</summary>
+    public static readonly WorkKind CapturePacks = new(name: "sdf.captures.capture-packs", unit: "residencies", workClass: WorkClass.Pacing);
+    /// <summary>Counts those capture packs that ran on a job-pool worker.</summary>
+    public static readonly WorkKind CapturePacksOnWorker = new(name: "sdf.captures.capture-packs-on-worker", unit: "residencies", workClass: WorkClass.Pacing);
     /// <summary>Counts the residencies whose frames were packed as partitions of one fork of the job pool
     /// (<see cref="SdfWorldPasses.ReadsPrepared"/>), the forking thread's own share included.</summary>
     public static readonly WorkKind PackedBeside = new(name: "sdf.captures.packed-beside", unit: "residencies", workClass: WorkClass.Pacing);
@@ -36,5 +40,5 @@ public static class SdfCaptureWork {
     public static readonly WorkKind UploadedOnWorker = new(name: "sdf.captures.uploaded-on-worker", unit: "residencies", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the process's capture counts.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.captures", kinds: [Held, Run, Minimum, MinimumHeld, PackedBeside, PackedOnWorker, UploadedBeside, UploadedOnWorker]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.captures", kinds: [Held, Run, Minimum, MinimumHeld, CapturePacks, CapturePacksOnWorker, PackedBeside, PackedOnWorker, UploadedBeside, UploadedOnWorker]);
 }

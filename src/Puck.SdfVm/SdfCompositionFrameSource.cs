@@ -641,6 +641,13 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// current slot layout films nothing and packs nothing, so the frame a residency holds keeps its transforms and the
     /// moved set loses no row; <see cref="Waiting"/> names why.</remarks>
     public SdfFrame? CaptureFrame(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
+        if (!PrepareCapture(deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha, rebuilt: out var rebuilt)) { return null; }
+        PackCapture(rebuilt: rebuilt);
+        return FinishCapture(width: width, height: height, deltaSeconds: deltaSeconds, interpolationAlpha: interpolationAlpha);
+    }
+
+    // Program adoption and emitter preparation run before a fork. The host may latch shared presentation inputs here.
+    internal bool PrepareCapture(float deltaSeconds, float interpolationAlpha, out bool rebuilt) {
         m_time += MathF.Max(
             x: deltaSeconds,
             y: 0f
@@ -684,7 +691,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             m_transformsPacked = false;
         }
         var moved = CaptureRevisions();
-        var rebuilt = AdoptBuild(moved: ref moved);
+        rebuilt = AdoptBuild(moved: ref moved);
         var fits = ((m_program is not null) && (m_programLayout == m_layout));
 
         if ((m_building is null) && (!fits || moved)) {
@@ -731,13 +738,26 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         if (!fits) {
             Waiting = ((m_program is null) ? FirstProgramWaiting : LayoutWaiting);
 
-            return null;
+            return false;
         }
 
         Waiting = ((WaitsForBuild && (m_building is not null)) ? LockedWaiting : null);
-        PackTransforms(rebuilt: rebuilt);
-        ComposeMeshDraws();
+        return true;
+    }
 
+    // Only the source's transform and draw journals and its emitters' own packers run here.
+    internal void PackCapture(bool rebuilt) {
+        try {
+            PackTransforms(rebuilt: rebuilt);
+            ComposeMeshDraws();
+        } catch {
+            m_transformsPacked = false;
+            throw;
+        }
+    }
+
+    // Dresser callbacks can place cameras and windows in the host's graph, so finish on the frame thread.
+    internal SdfFrame FinishCapture(uint width, uint height, float deltaSeconds, float interpolationAlpha) {
         var dressed = m_dresser.Dress(
             deltaSeconds: deltaSeconds,
             height: height,
