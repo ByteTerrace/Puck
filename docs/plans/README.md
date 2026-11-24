@@ -80,6 +80,7 @@ Decisions: [rendering](../decisions/rendering.md), [residency](../decisions/resi
 - [Bake detail bounded by demand](bake-demand-tiers.md): the demand tiers' remaining steps and the region's budget.
 - [Blends between parts that move](moving-blends.md): a blended seam that holds under continuous motion, as a skinned seam.
 - [Arrival work proportional to change](arrival-proportional.md): draw rows that keep their place, the trace scene's top level, and what a hand-over rewrites.
+- [Mathematics in place of brute force](efficiency.md): the bake's gradients from one forward-mode walk and what it still answers by stencil, final-lattice blocks a bound can skip, the generators' jump-ahead and where pairing functions do not pay.
 - [Field programs](field-programs.md): the SDF programs the bake, CPU queries, contact and the editor still interpret, one definition per field op generating every reader, and the bake kernel's cost.
 - [Presentation field queries](field-queries.md): the camera's clearance and the effectors' probes weighed between a GPU batch answered late and the CPU; region tapes, which are built, the wide reader that answers a normal's taps as one walk, and the design review's findings answered one by one.
 - [Ink](ink.md): outlines as edge signals the engine computes per view and an ink phase authors write in the shade program.
