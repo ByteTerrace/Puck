@@ -14,10 +14,14 @@ namespace Puck.World;
 /// <param name="Exit">Where the rider's origin is set down when it stops driving, in the same axes.</param>
 /// <param name="Board">The press that boards the body and leaves it, or <see langword="null"/> for a body boarded only
 /// by a composed control set.</param>
+/// <param name="Camera">The camera program a seat takes in place of <c>views.seatRig</c> while it rides or drives a
+/// body of this kit: a program of the <c>views</c> section, framed about the ridden body. Its orbit is the one the
+/// seat's look steers, so it reaches an <c>orbit</c> op as the seat rig does. Absent keeps the seat rig.</param>
 public sealed record WorldMount(
     DocumentVector3 Seat,
     DocumentVector3 Exit,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMountBoard? Board = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMountBoard? Board = null,
+    [property: DocumentText("a camera program name")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Camera = null
 );
 /// <summary>How a seat boards a mount by its own press: standing within <paramref name="Radius"/> of the body, a seat
 /// that holds Drive over it and drives nothing else boards on the rising edge of <paramref name="Channel"/>, and a

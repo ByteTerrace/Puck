@@ -87,10 +87,16 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     private long m_moveSlotMisses;
     private long m_wordsWritten;
 
-    // One named mesh's residencies. A mesh few residencies name is the rule, so the lists stay arrays walked in order.
+    // One named mesh's residencies, each with how many of its rows name the mesh and the landing priority it last
+    // measured for it from its own rows (SdfWorldTables.MeasureLanding): negative infinity before its first measure.
+    // A residency's rows and draws are its own, packed on whichever thread packs it, so only that residency's staging
+    // measures them, and the store ranks a mesh by what each residency last told it. A mesh few residencies name is the
+    // rule, so the lists stay arrays walked in order.
     private sealed class Use {
         public SdfWorldTables[] Clients = new SdfWorldTables[2];
         public int[] Rows = new int[2];
+        public float[] Priority = new float[2];
+        public int[] First = new int[2];
         public int Count;
 
         public int IndexOf(SdfWorldTables client) {
@@ -242,10 +248,15 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
                 // The mesh's words are shared out among the residencies that name it, so the residencies' named bytes
                 // together are the bytes the names hold.
                 for (var other = 0; (other < use.Count); other++) { use.Clients[other].AttributeNamedWords(delta: ((((double)words) / (use.Count + 1)) - (((double)words) / use.Count))); }
-                if (use.Count == use.Clients.Length) { Array.Resize(array: ref use.Clients, newSize: (2 * use.Count)); Array.Resize(array: ref use.Rows, newSize: (2 * use.Count)); }
+                if (use.Count == use.Clients.Length) {
+                    Array.Resize(array: ref use.Clients, newSize: (2 * use.Count)); Array.Resize(array: ref use.Rows, newSize: (2 * use.Count));
+                    Array.Resize(array: ref use.Priority, newSize: (2 * use.Count)); Array.Resize(array: ref use.First, newSize: (2 * use.Count));
+                }
                 index = use.Count++;
                 use.Clients[index] = client;
                 use.Rows[index] = 0;
+                use.Priority[index] = float.NegativeInfinity;
+                use.First[index] = -1;
                 client.AttributeNamedWords(delta: (((double)words) / use.Count));
                 if (m_landingRanks.ContainsKey(key: mesh)) { client.AddOwedWords(delta: words); }
             }
@@ -273,6 +284,8 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
             use.Count--;
             use.Clients[index] = use.Clients[use.Count];
             use.Rows[index] = use.Rows[use.Count];
+            use.Priority[index] = use.Priority[use.Count];
+            use.First[index] = use.First[use.Count];
             use.Clients[use.Count] = null!;
             if (use.Count == 0) { _ = m_uses.Remove(key: mesh); return; }
             for (var other = 0; (other < use.Count); other++) { use.Clients[other].AttributeNamedWords(delta: ((((double)words) / use.Count) - (((double)words) / (use.Count + 1)))); }

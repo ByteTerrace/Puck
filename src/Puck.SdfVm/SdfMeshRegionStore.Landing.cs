@@ -80,10 +80,14 @@ public sealed partial class SdfMeshRegionStore {
 
     /// <summary>Settles the touched meshes into the landing order and measures the ranks it owes a measure: a mesh that
     /// joined or a row's name of which changed, and with <paramref name="sweep"/> (a residency's staging) the first the
-    /// order takes and in turn the stalest, under the sweep's budget.</summary>
+    /// order takes and in turn the stalest, under the sweep's budget. A measure reads the rows of
+    /// <paramref name="client"/> alone, on the thread that holds its tables, and ranks the mesh by that and by what every
+    /// other residency last measured.</summary>
     /// <param name="sweep">Whether a residency staged its draws, so the head of the order and the stalest ranks are
     /// measured again.</param>
-    internal void RankLanding(bool sweep) {
+    /// <param name="client">The residency whose staging or service asks, whose rows a measure may read; none ranks by
+    /// what the residencies last measured.</param>
+    internal void RankLanding(bool sweep, SdfWorldTables? client) {
         lock (m_gate) {
             var rows = 0;
             var visited = m_landingTouched.Count;
@@ -93,12 +97,12 @@ public sealed partial class SdfMeshRegionStore {
                 m_landingCursor = 0;
                 m_landingAheadCursor = 0;
             }
-            foreach (var mesh in m_landingTouched) { rows += SettleLanding(mesh: mesh); }
+            foreach (var mesh in m_landingTouched) { rows += SettleLanding(client: client, mesh: mesh); }
             m_landingTouched.Clear();
             if (sweep && (m_landingRanks.Count > 0)) {
                 for (var index = 0; ((index < m_landingRanked.Count) && (index < LandingHeadRanks)); index++) {
                     if ((m_landingRanked[index] is { Staged: true } head) && (head.Pass != m_landingPass)) {
-                        rows += MeasureLanding(rank: head);
+                        rows += MeasureLanding(client: client, rank: head);
                         visited++;
                     }
                 }
@@ -112,7 +116,7 @@ public sealed partial class SdfMeshRegionStore {
                     if (current && (stalest.Rank.Pass == m_landingPass)) { break; }
                     _ = m_landingStalest.Dequeue();
                     if (!current) { continue; }
-                    swept += Math.Max(val1: 1, val2: MeasureLanding(rank: stalest.Rank));
+                    swept += Math.Max(val1: 1, val2: MeasureLanding(client: client, rank: stalest.Rank));
                     visited++;
                 }
                 rows += swept;
@@ -127,7 +131,7 @@ public sealed partial class SdfMeshRegionStore {
     // Brings one touched mesh's place in the landing order to what the owed set and the rows say: an owed mesh a row
     // names joins and is measured, one measured already in this pass is not measured again, and one no row names or no
     // longer owed leaves. The rows it measured.
-    private int SettleLanding(SdfMesh mesh) {
+    private int SettleLanding(SdfMesh mesh, SdfWorldTables? client) {
         var staged = (m_owed.Contains(mesh: mesh) && m_uses.ContainsKey(key: mesh));
 
         if (!m_landingRanks.TryGetValue(key: mesh, value: out var rank)) {
@@ -141,7 +145,7 @@ public sealed partial class SdfMeshRegionStore {
             return 0;
         }
 
-        return ((rank.Pass == m_landingPass) ? 0 : MeasureLanding(rank: rank));
+        return ((rank.Pass == m_landingPass) ? 0 : MeasureLanding(client: client, rank: rank));
     }
     // Adds a ranked mesh's words to, or takes them from, the owed words of every residency whose rows name it.
     private void AddOwedWords(SdfMesh mesh, long words) {
@@ -158,17 +162,29 @@ public sealed partial class SdfMeshRegionStore {
         AddOwedWords(mesh: mesh, words: -rank.Words);
         return true;
     }
-    // Measures a rank from the rows naming its mesh in every residency: the highest priority among them and the first
-    // row at it. A rank that joined, or whose priority or row the measure changed, moves at the next merge; every one is
-    // queued to be measured again in turn. The rows it measured.
-    private int MeasureLanding(LandingRank rank) {
+    // Measures a rank: the asking residency measures its own rows naming the mesh (the highest priority among them and
+    // the first row at it), and the rank takes the highest priority any residency last measured, zero where none has.
+    // A rank that joined, or whose priority or row the measure changed, moves at the next merge; every one is queued to
+    // be measured again in turn. The rows it measured.
+    private int MeasureLanding(LandingRank rank, SdfWorldTables? client) {
         var best = float.NegativeInfinity;
         var first = -1;
         var rows = 0;
 
         if (m_uses.TryGetValue(key: rank.Mesh, value: out var use)) {
-            for (var index = 0; (index < use.Count); index++) { rows += use.Clients[index].MeasureLanding(mesh: rank.Mesh, best: ref best, first: ref first); }
+            if ((client is not null) && (use.IndexOf(client: client) is var own and >= 0)) {
+                var priority = float.NegativeInfinity;
+                var row = -1;
+
+                rows = client.MeasureLanding(best: ref priority, first: ref row, mesh: rank.Mesh);
+                use.Priority[own] = priority;
+                use.First[own] = row;
+            }
+            for (var index = 0; (index < use.Count); index++) {
+                if ((first < 0) || (use.Priority[index] > best)) { best = use.Priority[index]; first = use.First[index]; }
+            }
         }
+        if (float.IsNegativeInfinity(f: best)) { best = 0f; }
         if (((rank.Measures == 0) || (best != rank.Priority) || (first != rank.Row)) && !rank.Moved) {
             rank.Moved = true;
             m_landingMoved.Add(item: rank);
@@ -249,7 +265,7 @@ public sealed partial class SdfMeshRegionStore {
     // them, each slice one run of the region's copy; none when every ordered mesh's words are taken.
     private bool TryTakeLanding(int uploadBytes, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out LandingJob? job) {
         job = null;
-        if (m_landingTouched.Count > 0) { RankLanding(sweep: false); }
+        if (m_landingTouched.Count > 0) { RankLanding(client: null, sweep: false); }
         if (m_owed.Count == 0) { return false; }
         ListLandingAhead();
 

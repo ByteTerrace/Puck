@@ -919,8 +919,11 @@ public sealed partial class SdfMeshPathBake {
             Span<long> tierTriangles = stackalloc long[(SdfMeshTier.Last + 1)];
             var nearStamps = new List<long>();
             Group? lastNear = null;
+            // What the residency holds, whatever it is named: equal digests are the same groups resident twice.
+            var content = Puck.Maths.MultisetDigest.Empty;
 
             foreach (var group in m_groups) {
+                content = content.Add(element: unchecked((ulong)group.Identity ^ (ulong)(group.Identity >> 64)));
                 var isNear = (group.HasDemandBox && (Demand.Count > 0) && (MeasureDemand(group, priority: false) <= radius));
 
                 near += (isNear ? 1 : 0);
@@ -966,7 +969,7 @@ public sealed partial class SdfMeshPathBake {
             var line = new StringBuilder();
             var loadSpan = (((m_loadFirst != 0) && (m_loadLast != 0)) ? Stopwatch.GetElapsedTime(endingTimestamp: m_loadLast, startingTimestamp: m_loadFirst).TotalSeconds : 0d);
 
-            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $"residency={Residency} residency-id={ResidencyId} demand-points={Demand.Count} groups={groups} landed={landed} resident={resident} all-landed={Since(complete: (landed == groups), stamp: lastLanded)} all-resident={Since(complete: (resident == groups), stamp: lastResident)}");
+            _ = line.Append(provider: CultureInfo.InvariantCulture, handler: $"residency={Residency} residency-id={ResidencyId} content={content.Value:x16} demand-points={Demand.Count} groups={groups} landed={landed} resident={resident} all-landed={Since(complete: (landed == groups), stamp: lastLanded)} all-resident={Since(complete: (resident == groups), stamp: lastResident)}");
             // When half and nine tenths of the near groups had landed, and which landed last.
             nearStamps.Sort();
             string Share(float share) {

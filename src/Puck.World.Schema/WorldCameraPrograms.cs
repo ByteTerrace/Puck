@@ -103,8 +103,28 @@ public static class WorldCameraPrograms {
         return null;
     }
 
+    /// <summary>Returns the views a seat frames through while it rides or drives a body whose kit authors a rider
+    /// camera (<see cref="WorldMount.Camera"/>): the section with that program in the seat rig's place, so every
+    /// reader of the seat rig (its orbit, its authored pitch and distance, its compiled rig) reads the rider's.</summary>
+    /// <param name="views">The section.</param>
+    /// <param name="camera">The rider camera's program name, or <see langword="null"/> for none.</param>
+    /// <returns>The section with the program as its seat rig, or <paramref name="views"/> itself when the name is
+    /// absent, names no program of the section, or names the seat rig.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="views"/> is <see langword="null"/>.</exception>
+    public static WorldViewDefaults RiderViews(WorldViewDefaults views, string? camera) {
+        ArgumentNullException.ThrowIfNull(argument: views);
+
+        return (((Named(views: views, name: camera) is { } program) && !ReferenceEquals(objA: program, objB: views.SeatRigRaw))
+            ? (views with { SeatRigRaw = program })
+            : views);
+    }
+    /// <summary>Returns the program of the section a name declares: its seat rig, its camera rig or one of its
+    /// program library.</summary>
+    /// <param name="views">The section.</param>
+    /// <param name="name">The program's name, or <see langword="null"/> or empty for none.</param>
+    /// <returns>The program, or <see langword="null"/> when the section declares none by the name.</returns>
     // Walks the section's programs in Declared's order without an enumerator, since a seat asks every frame.
-    private static WorldCameraProgram? Named(WorldViewDefaults views, string? name) {
+    public static WorldCameraProgram? Named(WorldViewDefaults views, string? name) {
         if (string.IsNullOrEmpty(value: name)) {
             return null;
         }

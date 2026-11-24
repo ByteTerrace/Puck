@@ -59,7 +59,7 @@ Per-pixel storage of the main view at 2560 by 1440 (`host.memory families 0`):
 | Storage | Now, MiB | Budget, MiB | How |
 |---|---|---|---|
 | Stationary window (`historyWindow`) | 458 | 250 | A word of colour and a word of coverage, weight and packed transport a phase |
-| Probe records (`viewsProbes`) | 150 | 80 | A cell of four pixels a side with interpolation |
+| Probe records (`viewsProbes`) | 68 | 80 | A cell of four pixels a side with interpolation, as built |
 | Probe histories (`viewsProbeHistory`, `glassProbeHistory`) | 118 each | 60 | One world-space cache a residency in place of a history a view |
 | Glass sums, target, depth and lit image | 340 | 40 | Allocated for the tiles glass covers |
 | History surface and colour | 227 | 120 | Motion and identity in the sample record |
@@ -327,11 +327,12 @@ it to what the system budgets the process
 ([the benchmark](benchmark.md#it-plays-as-a-player-takes-it)), so a stall is not read as a
 pass's cost. Then the time:
 
-1. **A coarser lookup with interpolation.** A cell of four pixels a side; views
-   blends the four cells about a pixel, weighing each by the reuse test, and a
-   pixel no cell serves takes a pool slot. Check: `views-probes` under 0.8 ms
-   and the records under 80 MiB, with no cell visible in a presented burst
-   along the hall's floor.
+1. **The coarser lookup's time.** The lookup gathers a cell of four pixels a
+   side and each pixel blends the four cells about it
+   (`sdf-world-views-probes.comp.hlsl`, `sdfProbeBlend`); the records hold
+   about 68 MiB at 2560 by 1440 by a reading of 21 MiB at 1280 by 900, and no
+   cell shows in the hall or along the walk into it. Check, in the quiet
+   window: `views-probes` under 0.8 ms at the stage and moving.
 2. **Light lists.** As above. Check: the walk's visits a pixel are unchanged in
    the debug world; `SdfLights.MaxLights` is gone; a row of 512 point lights
    renders with each cluster's list holding only its own.

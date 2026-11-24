@@ -396,14 +396,33 @@ public interface IRenderGraphPackageFactory {
     /// <param name="context">The host's frame context of the frame being produced.</param>
     void BeginFrame(in FrameContext context) { }
     /// <summary>Prepares what an instance one of whose passes runs the factory's package reads this frame (an SDF view's
-    /// captured and packed frame), before the runtime asks whether the instance is unchanged and before the frame is
-    /// scheduled. The runtime calls it on the frame thread once a frame for each instance something reads this frame (a
+    /// captured frame, which <see cref="ReadsPrepared"/> packs), before the runtime asks whether the instance is
+    /// unchanged and before the frame is scheduled. The runtime calls it on the frame thread once a frame for each instance something reads this frame (a
     /// root, a same-frame footprint of a read consumer, a buffer or bound input of one), after
     /// <see cref="BeginFrame"/>, in turn until preparing finds no new reader; an instance nothing reads is neither
     /// prepared nor asked whether it is unchanged, since no schedule of the frame can render it.</summary>
     /// <param name="instance">The instance something reads this frame.</param>
     /// <param name="context">The host's frame context of the frame being produced.</param>
     void PrepareRead(string instance, in FrameContext context) { }
+    /// <summary>Finishes what <see cref="PrepareRead"/> began once the frame's readers are all prepared, before the
+    /// runtime asks whether any instance is unchanged: work the factory left until it knew every reader, so it can run
+    /// the readers' shares side by side (an SDF package packs each captured residency as a partition of one fork). The
+    /// runtime calls it on the frame thread once a frame, after the last <see cref="PrepareRead"/>.</summary>
+    /// <param name="context">The host's frame context of the frame being produced.</param>
+    /// <param name="jobs">The pool the frame's forks run on, or <see langword="null"/> for a host with none, whose
+    /// factories do the work on the frame thread.</param>
+    void ReadsPrepared(in FrameContext context, Puck.Hosting.Jobs.JobPool? jobs) { }
+    /// <summary>Tells the factory which instances that run its package the frame's schedule renders, once the frame is
+    /// scheduled and before the runtime prepares each of them (<see cref="PrepareRender"/>), so a factory can do the
+    /// renders' shared work side by side (an SDF package records each residency's upload as a partition of one fork)
+    /// and leave <see cref="PrepareRender"/> nothing to do for them. The runtime calls it on the frame thread once a
+    /// frame, inside the frame's submission batch; a factory that ignores it does the work in
+    /// <see cref="PrepareRender"/>.</summary>
+    /// <param name="instances">The scheduled instances one of whose passes runs the factory's package, in schedule
+    /// order; the list is the runtime's and is valid only during the call.</param>
+    /// <param name="context">The host's frame context of the frame being produced.</param>
+    /// <param name="jobs">The pool the frame's forks run on, or <see langword="null"/> for a host with none.</param>
+    void RendersScheduled(IReadOnlyList<string> instances, in FrameContext context, Puck.Hosting.Jobs.JobPool? jobs) { }
     /// <summary>Prepares a scheduled render of an instance one of whose passes runs the factory's package: the frame's
     /// shared work its recording reads (an upload, a background pump), done once here so that no node's recording pays
     /// for it. The runtime calls it on the frame thread once the frame is scheduled, for every render the schedule

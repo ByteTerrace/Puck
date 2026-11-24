@@ -99,10 +99,12 @@ float3 sdfFromYCoCg(float3 color) {
 float3 sdfClipToBox(float3 color, float3 boxMin, float3 boxMax) {
     return clamp(color, boxMin, boxMax);
 }
-// What the resolve reads of one render sample, at a render-grid position clamped to the grid: its lit color, its luma, its
-// reactivity, its surface (identity, ray distance and packed normal; `hit` false for a sample with no surface) and its
-// air: the atmosphere's in-scatter weights and the transport's scaled inverse distance along the sample's own jittered ray,
-// before the coverage scales them (sdfSampleTransport), which is the ray its color's transmittance was taken along.
+// What the resolve reads of one render sample, at a render-grid position clamped to the grid, each part formed once a
+// sample for every footprint that reads it: its lit color, its luma, its reactivity, its surface (the identity, zero for
+// a sample with no surface, the ray distance, and the tangent plane: the normal with the distance times the cosine its
+// own jittered ray meets it at, which carries the plane to any other ray, sdfResolveReceiverDistance) and its transport:
+// the atmosphere's in-scatter weights and the scaled inverse distance along the sample's own jittered ray, the ray its
+// color's transmittance was taken along, scaled by its coverage (sdfSampleTransport), zero with no coverage or surface.
 struct SdfResolveSample {
     float4 color;
     float luma;
@@ -110,8 +112,8 @@ struct SdfResolveSample {
     bool hit;
     uint identity;
     float t;
-    uint normal;
-    float4 air;
+    float4 plane;
+    float4 transport;
 };
 // The render samples an output group's footprints read, loaded once for the group (sdfResolveTileFill): the samples from
 // sdfResolveTileOrigin, SdfResolveTileEdge a side. The tile holds every sample any footprint of the group reads, each
@@ -122,8 +124,10 @@ struct SdfResolveSample {
 // resources, which keeps one copy of the sample load in the kernel rather than one a tap.
 static const int SdfResolveTileEdge = 13;
 groupshared uint2 sdfResolveTileColor[SdfResolveTileEdge * SdfResolveTileEdge];
-groupshared float4 sdfResolveTileAir[SdfResolveTileEdge * SdfResolveTileEdge];
-groupshared uint4 sdfResolveTileSurface[SdfResolveTileEdge * SdfResolveTileEdge];
+groupshared float4 sdfResolveTileTransport[SdfResolveTileEdge * SdfResolveTileEdge];
+groupshared float4 sdfResolveTilePlane[SdfResolveTileEdge * SdfResolveTileEdge];
+// A sample's identity, zero with no surface, and its ray distance's bits.
+groupshared uint2 sdfResolveTileSurface[SdfResolveTileEdge * SdfResolveTileEdge];
 groupshared float sdfResolveTileReactive[SdfResolveTileEdge * SdfResolveTileEdge];
 // Each tile sample's luma, and its sub-pixel feature contrast (sdfResolveFeature) where all eight of its neighbours lie in
 // the tile: the contrast for a feature, negative for a sample that is none. Computed once a sample for the group, so a
@@ -143,15 +147,20 @@ SdfResolveSample sdfResolveSampleLoad(int2 position, uint2 render) {
     sample.luma = sdfToYCoCg(sample.color.rgb).x;
     sample.reactive = reactivity[sdfReactivityIndex(pixel, 0u, render)];
     sample.hit = sdfVisibilityHit(visibility);
-    sample.identity = visibility.identity;
+    sample.identity = (sample.hit ? visibility.identity : 0u);
     sample.t = visibility.t;
-    sample.normal = sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord];
-    sample.air = float4(0.0, 0.0, 0.0, 0.0);
-    if (sample.hit && (sample.t > 0.0)) {
+    sample.plane = float4(0.0, 0.0, 0.0, 0.0);
+    sample.transport = float4(0.0, 0.0, 0.0, 0.0);
+    if (sample.hit) {
         float3 direction = cameraRayDirection(worldView(), ((float2(pixel) + 0.5) / float2(render)));
-        SdfAir air = sdfAirAlong(passGroup.viewPosition, direction, sample.t, true);
+        float3 normal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord]);
 
-        sample.air = float4(air.weights.x, (SDF_TRANSPORT_INVERSE_DISTANCE_SCALE / sample.t), air.weights.y, air.weights.z);
+        sample.plane = float4(normal, (sample.t * dot(normal, direction)));
+        if ((sample.t > 0.0) && (sample.color.a > 0.0)) {
+            SdfAir air = sdfAirAlong(passGroup.viewPosition, direction, sample.t, true);
+
+            sample.transport = (sample.color.a * float4(air.weights.x, (SDF_TRANSPORT_INVERSE_DISTANCE_SCALE / sample.t), air.weights.y, air.weights.z));
+        }
     }
     return sample;
 }
@@ -194,8 +203,9 @@ void sdfResolveTileFill(uint2 first, uint lane, uint2 extent, uint2 render) {
         SdfResolveSample sample = sdfResolveSampleLoad(at, render);
 
         sdfResolveTileColor[entry] = uint2((f32tof16(sample.color.r) | (f32tof16(sample.color.g) << 16u)), (f32tof16(sample.color.b) | (f32tof16(sample.color.a) << 16u)));
-        sdfResolveTileAir[entry] = sample.air;
-        sdfResolveTileSurface[entry] = uint4(sample.identity, asuint(sample.t), sample.normal, (sample.hit ? 1u : 0u));
+        sdfResolveTileTransport[entry] = sample.transport;
+        sdfResolveTilePlane[entry] = sample.plane;
+        sdfResolveTileSurface[entry] = uint2(sample.identity, asuint(sample.t));
         sdfResolveTileReactive[entry] = sample.reactive;
         sdfResolveTileLuma[entry] = sample.luma;
     }
@@ -225,7 +235,7 @@ uint sdfResolveTileEntry(int2 position) {
 SdfResolveSample sdfResolveSampleAt(int2 position) {
     uint entry = sdfResolveTileEntry(position);
     uint2 color = sdfResolveTileColor[entry];
-    uint4 surface = sdfResolveTileSurface[entry];
+    uint2 surface = sdfResolveTileSurface[entry];
     SdfResolveSample sample;
 
     sample.color = float4(f16tof32(color.x & 0xFFFFu), f16tof32(color.x >> 16u), f16tof32(color.y & 0xFFFFu), f16tof32(color.y >> 16u));
@@ -233,15 +243,23 @@ SdfResolveSample sdfResolveSampleAt(int2 position) {
     sample.reactive = sdfResolveTileReactive[entry];
     sample.identity = surface.x;
     sample.t = asfloat(surface.y);
-    sample.normal = surface.z;
-    sample.hit = (surface.w != 0u);
-    sample.air = sdfResolveTileAir[entry];
+    sample.hit = (surface.x != 0u);
+    sample.plane = sdfResolveTilePlane[entry];
+    sample.transport = sdfResolveTileTransport[entry];
     return sample;
 }
-// A sample's transport beside its color: its air scaled by the coverage, zero where the sample has no coverage or
-// surface, as sdfSampleTransport gives it along the sample's ray.
-float4 sdfResolveSampleTransport(SdfResolveSample sample, float coverage) {
-    return (((coverage > 0.0) && sample.hit && (sample.t > 0.0)) ? (coverage * sample.air) : float4(0.0, 0.0, 0.0, 0.0));
+// A sample's receiver distance along `receiverDirection` (sdfHistoryReceiverDistance): its tangent plane carried to that
+// ray, or its own ray distance where the ray has no finite, forward intersection within the view's reach.
+float sdfResolveReceiverDistance(SdfResolveSample sample, float3 receiverDirection) {
+    float facing = dot(sample.plane.xyz, receiverDirection);
+
+    if (abs(facing) <= 1.0e-6) {
+        return sample.t;
+    }
+
+    float t = (sample.plane.w / facing);
+
+    return ((isfinite(t) && (t > 0.0) && (t <= passGroup.farDistance)) ? t : sample.t);
 }
 // Whether the render sample at a position is a sub-pixel feature (SdfResolveFeatureContrast) against its eight
 // neighbours, and its contrast against their mean, as the tile computed it (sdfResolveTileFill): every tap the group
@@ -333,7 +351,7 @@ void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, f
             SdfResolveSample sample = sdfResolveSampleAt(at);
 
             tapColor = sample.color;
-            tapTransport = sdfResolveSampleTransport(sample, tapColor.a);
+            tapTransport = sample.transport;
         }
         puckReconstructionAdd(footprint, tap, tapColor, colors);
         puckReconstructionAdd(footprint, tap, tapTransport, transports);
@@ -347,7 +365,7 @@ void sdfResolveSpatial(uint2 pixel, float2 position, bool exact, uint2 render, f
 // `accepted` says the history survived, `total` is the weight the mean `accumulated` (and its transport) gathered, and
 // `reactive` is the reactivity of the tap nearest the pixel's center: the pixel's own, so a steady pixel beside a reactive
 // one keeps its history.
-void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, float3 airDirection, out bool accepted, out bool complete, out float total, out float reactive, out float4 accumulated, out float4 accumulatedTransport) {
+void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, float3 airDirection, out bool accepted, out bool complete, out float total, out float reactive, out float4 accumulated, out float4 accumulatedTransport, out bool gathered, out float4 current, out float4 currentTransport) {
     ViewportData view = worldView();
     float2 scale = (float2(extent) / float2(render));
     float2 center = ((float2(id.xy) + 0.5) / scale);
@@ -405,7 +423,7 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             float2 offset = (((float2(pixel) + 0.5 + jitter) - center) * scale);
             float weight = exp(-SdfResolveFilterFalloff * dot(offset, offset));
             float3 ycocg = sdfToYCoCg(color.rgb);
-            float4 transport = float4(0.0, 0.0, 0.0, 0.0);
+            float4 transport = sample.transport;
             float contrast;
             bool feature = sdfResolveFeature(position, contrast);
             if (passGroup.viewsRate.x > 1u) {
@@ -421,14 +439,10 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
             float receiverDistance = 0.0;
 
             if (surface) {
-                transport = sdfResolveSampleTransport(sample, color.a);
-                float3 direction = cameraRayDirection(view, ((float2(pixel) + 0.5) / float2(render)));
-                float3 normal = sdfVisibilityUnpackNormal(sample.normal);
-
-                receiverDistance = sdfHistoryReceiverDistance(sample.t, direction, normal, airDirection, passGroup.farDistance);
+                receiverDistance = sdfResolveReceiverDistance(sample, airDirection);
             }
 
-            identities[tap] = (surface ? sample.identity : 0u);
+            identities[tap] = sample.identity;
             distances[tap] = receiverDistance;
             if (weight > nearestWeight) {
                 nearestWeight = weight;
@@ -582,8 +596,15 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
         centerT = receiverT;
     }
     bool sampleValid = ((reactive <= 0.0) && (weightSum > 1.0e-6) && isfinite(weightSum) && all(isfinite(sum)) && all(isfinite(transportSum)));
-    uint mask = (stationary ? (historyWindowRW[sdfHistoryWindowWord(id, 0u, extent)] & fullMask) : 0u);
-    mask = (sampleValid ? (mask | (1u << phase)) : 0u);
+    // A pixel that is not stationary keeps no phase, this frame's included: its window starts from the first frame it
+    // stands still, so a pixel in motion reads the mask and writes nothing of the window.
+    uint storedMask = historyWindowRW[sdfHistoryWindowWord(id, 0u, extent)];
+    uint mask = ((stationary && sampleValid) ? ((storedMask & fullMask) | (1u << phase)) : 0u);
+
+    gathered = ((weightSum > 1.0e-6) && isfinite(weightSum) && all(isfinite(sum)) && all(isfinite(transportSum)));
+    current = (gathered ? (sum / weightSum) : float4(0.0, 0.0, 0.0, 0.0));
+    current.a = clamp(current.a, coverageMin, coverageMax);
+    currentTransport = (gathered ? (transportSum / weightSum) : float4(0.0, 0.0, 0.0, 0.0));
     float4 windowColor = 0.0;
     float4 windowTransport = 0.0;
     float windowWeight = 0.0;
@@ -667,7 +688,11 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     // The working history is half-float. A non-finite current sample contributes no reusable history, and a finite
     // reconstruction must remain representable when stored, so one bright transient cannot poison later frames.
     bool reusable = (all(isfinite(accumulated)) && all(isfinite(accumulatedTransport)) && isfinite(total));
-    historyWindowRW[sdfHistoryWindowWord(id, 0u, extent)] = (reusable ? mask : 0u);
+    uint writtenMask = (reusable ? mask : 0u);
+
+    if (writtenMask != storedMask) {
+        historyWindowRW[sdfHistoryWindowWord(id, 0u, extent)] = writtenMask;
+    }
     // The feature the pixel carries on: this frame's sighting for a whole period, or the accepted history's with one
     // frame less, which the jitter comes round to before it runs out; a restarted history remembers none.
     float3 writtenFeature = (sighted ? sightedYCoCg : featureYCoCg);
@@ -724,9 +749,12 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint lan
         float reactive = 0.0;
         float4 accumulated = float4(0.0, 0.0, 0.0, 0.0);
         float4 accumulatedTransport = float4(0.0, 0.0, 0.0, 0.0);
+        bool gathered = false;
+        float4 current = float4(0.0, 0.0, 0.0, 0.0);
+        float4 currentTransport = float4(0.0, 0.0, 0.0, 0.0);
 
         if (temporal) {
-            sdfResolveTemporal(id, extent, render, jitter, airDirection, accepted, complete, total, reactive, accumulated, accumulatedTransport);
+            sdfResolveTemporal(id, extent, render, jitter, airDirection, accepted, complete, total, reactive, accumulated, accumulatedTransport, gathered, current, currentTransport);
         }
 
         // The spatial path shows where the history is rejected or holds less than one sample's weight, and by its
@@ -742,12 +770,17 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint lan
         uint2 transportWord = sdfPackTransport(accumulatedTransport);
 
         if (shown < 1.0) {
-            float4 spatial;
-            float4 spatialTransport;
-            uint2 spatialWord;
+            // A steady pixel whose history is rejected or still gathering shows this frame's gathered samples, the mean
+            // its history restarts from, which costs it nothing more; only a reactive pixel, and a view with no temporal
+            // path, reconstructs the grid.
+            float4 spatial = current;
+            float4 spatialTransport = currentTransport;
+            uint2 spatialWord = sdfPackTransport(currentTransport);
 
-            sdfResolveSpatial(id.xy, (((((float2(id.xy) + 0.5) * float2(render)) / float2(extent)) - 0.5) - (still ? float2(0.0, 0.0) : jitter)),
-                (still && all(render == extent)), render, airOrigin, airDirection, spatial, spatialTransport, spatialWord);
+            if (!gathered || (reactive > 0.0)) {
+                sdfResolveSpatial(id.xy, (((((float2(id.xy) + 0.5) * float2(render)) / float2(extent)) - 0.5) - (still ? float2(0.0, 0.0) : jitter)),
+                    (still && all(render == extent)), render, airOrigin, airDirection, spatial, spatialTransport, spatialWord);
+            }
             resolved = lerp(spatial, accumulated, shown);
             transportWord = ((shown > 0.0) ? sdfPackTransport(lerp(spatialTransport, accumulatedTransport, shown)) : spatialWord);
         }

@@ -179,6 +179,12 @@ public sealed partial class WorldInputOwner {
             Array.Clear(array: m_matchCached);
         }
     }
+    /// <summary>Returns whether a batch with no event that carries <paramref name="image"/> and the contributions last
+    /// accepted would be admitted without changing what the owner holds: the steady case of
+    /// <see cref="TryAdmit"/>.</summary>
+    /// <param name="image">The final image such a batch would carry.</param>
+    /// <returns><see langword="true"/> when the owner holds that image, verified against its sources.</returns>
+    public bool HoldsSteady(in PlayerIntent image) => (m_steadyImageVerified && (Image == image));
     /// <summary>Gets how many events' capture times this owner moved to the tick that admitted them.</summary>
     public long RetimedEvents { get; private set; }
 

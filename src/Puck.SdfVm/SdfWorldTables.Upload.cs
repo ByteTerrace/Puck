@@ -28,6 +28,23 @@ public sealed partial class SdfWorldTables {
     /// here waits for the upload itself: the views' submissions that follow it on the queue read what it wrote.</summary>
     /// <exception cref="ObjectDisposedException">The tables are disposed.</exception>
     public void SubmitUpload() {
+        OpenUpload();
+        RecordUpload();
+        CloseUpload();
+    }
+
+    // The ring slot the upload before the open one wrote, which the open upload's recording copies the previous tables
+    // from (OpenUpload, RecordUpload).
+    private int m_uploadPreviousSlot = -1;
+    // Whether the open upload's recording carries copies the mesh region owed (SdfMeshRegionStore.RecordOwed), which
+    // its submission reports to the store.
+    private bool m_meshStoreCopies;
+
+    /// <summary>Opens the frame's upload on the frame thread: waits the previous upload and takes the next ring slot.
+    /// <see cref="RecordUpload"/> then records it and <see cref="CloseUpload"/> submits it, in that order, once
+    /// each.</summary>
+    /// <exception cref="ObjectDisposedException">The tables are disposed.</exception>
+    internal void OpenUpload() {
         ObjectDisposedException.ThrowIf(
             condition: m_disposed,
             instance: this
@@ -51,11 +68,15 @@ public sealed partial class SdfWorldTables {
         m_shadows?.Completed(slot: slot);
         // The flush below rewrites the slot's buffers, which a background job that leased the slot may still read.
         m_gpuWork.EndLeases(ringSlot: slot);
-
-        var previousSlot = m_currentSlot;
-
+        m_uploadPreviousSlot = m_currentSlot;
         m_currentSlot = slot;
-
+    }
+    /// <summary>Records the open upload into its ring slot's command list: the fillers' first transitions, the regions'
+    /// copies, the lighting's and the world's shadow layers. It touches only these tables and the device's recorder, so
+    /// it runs on whichever thread holds the tables between <see cref="OpenUpload"/> and <see cref="CloseUpload"/>.</summary>
+    internal void RecordUpload() {
+        var slot = m_currentSlot;
+        var previousSlot = m_uploadPreviousSlot;
         var recorder = m_gpu.Recorder;
         var commandBuffer = m_commandPools[slot].CommandBufferHandle;
 
@@ -79,8 +100,11 @@ public sealed partial class SdfWorldTables {
             RecordPreviousTables(commandBuffer: commandBuffer, previousSlot: previousSlot);
         }
         // The presentation's mesh region records what it owes that no landing job carries (a compaction's moves, a
-        // grown region's carry) ahead of this residency's passes, whichever residency's plan owed it.
-        var storeCopies = m_meshStore.RecordOwed(client: this, commandBuffer: commandBuffer, readers: RegionReaders, recorder: recorder);
+        // grown region's carry) ahead of this residency's passes, whichever residency's plan owed it. The store takes
+        // its gate, so residencies recording side by side record it once, in whichever upload reaches it first. That
+        // upload must reach the queue before any pass that reads the copies: it holds while every residency's upload
+        // of a frame is submitted (SdfWorldResidency.EndStage) before a view of that frame records.
+        m_meshStoreCopies = m_meshStore.RecordOwed(client: this, commandBuffer: commandBuffer, readers: RegionReaders, recorder: recorder);
 
         RecordRegionCopies();
         RecordMeshIrradiance(command: commandBuffer);
@@ -93,15 +117,21 @@ public sealed partial class SdfWorldTables {
         RecordShadows(commandBuffer: commandBuffer, slot: slot);
         recorder.EndDebugGroup(commandBufferHandle: commandBuffer);
         recorder.EndCommandBuffer(commandBufferHandle: commandBuffer);
+    }
+    /// <summary>Submits the recorded upload fenced, on the frame thread, and publishes it to the tables' readers.</summary>
+    internal void CloseUpload() {
+        using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Upload);
+        var slot = m_currentSlot;
+
         m_gpu.QueueSubmitter.Submit(
-            commandBufferHandles: [commandBuffer],
+            commandBufferHandles: [m_commandPools[slot].CommandBufferHandle],
             fence: m_frameFences[slot]
         );
         m_shadows?.Submitted(slot: slot);
         // Publish submission only after the fence has been armed by the queue. Before this point an initially
         // signaled fence must not satisfy geometry staged for the next upload.
         m_uploads = checked((m_uploads + 1UL));
-        if (storeCopies) { m_meshStore.SubmittedOwed(); }
+        if (m_meshStoreCopies) { m_meshStoreCopies = false; m_meshStore.SubmittedOwed(); }
         m_uploadedBindingRevision = m_bindingRevision;
         m_backgroundProgram = m_liveProgram;
         ServiceRetirements();

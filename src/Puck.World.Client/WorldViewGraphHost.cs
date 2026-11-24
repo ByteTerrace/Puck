@@ -51,7 +51,7 @@ public sealed partial class WorldViewGraphHost : IRenderGraphPlacements, IDispos
 
     /// <summary>One instance's presentation controls, pending compilation, and dependency watch.</summary>
     public sealed partial class Entry {
-        private readonly DependencyWatch<string, (DateTime Time, long Length)> m_watch = new(read: ReadStamp, comparer: PuckPaths.Comparer);
+        private readonly DependencyWatch<string, (DateTime Time, long Length)> m_watch = new(read: ReadStamp, comparer: PuckPaths.Comparer, directory: static path => Path.GetDirectoryName(path: path));
 
         /// <summary>The currently requested document-relative source.</summary>
         public string Source { get; internal set; } = string.Empty;

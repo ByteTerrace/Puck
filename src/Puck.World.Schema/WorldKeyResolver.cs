@@ -4,17 +4,19 @@ using Puck.Maths;
 
 namespace Puck.World;
 
-/// <summary>The live values a keyed value reads besides its keys: the presented tick every tick clock reads, and a
-/// state clock's row. The state mirror is the one source a presentation hands the resolver; the validator hands
-/// none.</summary>
+/// <summary>The live values a keyed value reads besides its keys: the presented tick every tick clock reads, a state
+/// clock's row and the viewer's position a view clock measures. The state mirror is the one source a presentation
+/// hands the resolver; the validator hands none.</summary>
 public interface IWorldClockSource {
     /// <summary>Gets the engine tick the source presents at.</summary>
     PresentedTick Presented { get; }
 
-    /// <summary>Reads a state clock's phase, reducing the raw value before conversion to presentation precision.</summary>
-    /// <param name="clock">The state clock.</param>
+    /// <summary>Reads the phase of a clock the source holds the live value of (<see cref="WorldClock.IsSourceClock"/>):
+    /// a state clock's, reducing the raw value before conversion to presentation precision, or a view clock's, from
+    /// where the source's viewer stands.</summary>
+    /// <param name="clock">The state clock or view clock.</param>
     /// <param name="phase">The presented phase, or zero when it reads none.</param>
-    /// <returns><see langword="true"/> when the row reads a number.</returns>
+    /// <returns><see langword="true"/> when the row reads a number, or the source has a viewer.</returns>
     bool TryClockPhase(WorldClock clock, out double phase);
 }
 /// <summary>The segment of a keyed value a phase falls in: the key it leaves, the key it reaches, and how far along
@@ -67,8 +69,9 @@ public static class WorldKeyResolver {
         return false;
     }
     /// <summary>Returns a clock's phase as a source presents it: a tick clock's at the source's tick, a state clock's
-    /// the fractional part of its row's presented value, and an anchored clock's predicted from its anchor at the
-    /// source's tick (<see cref="WorldClockAnchor.PhaseAt"/>).</summary>
+    /// the fractional part of its row's presented value, a view clock's from where the source's viewer stands
+    /// (<see cref="WorldClocks.Phase(WorldClockView, System.Numerics.Vector3)"/>), and an anchored clock's predicted
+    /// from its anchor at the source's tick (<see cref="WorldClockAnchor.PhaseAt"/>).</summary>
     /// <param name="clock">The clock.</param>
     /// <param name="source">The source, or <see langword="null"/> for none, which reads no phase.</param>
     /// <param name="phase">The phase, in <c>[0, 1)</c>, or zero when it reads none.</param>
@@ -82,7 +85,7 @@ public static class WorldKeyResolver {
             return false;
         }
 
-        if (clock.IsStateClock) {
+        if (clock.IsSourceClock) {
             return source.TryClockPhase(
                 clock: clock,
                 phase: out phase

@@ -110,7 +110,7 @@ internal sealed class SdfWorldPickReadback : IDisposable {
         return request with {
             Distance = BitConverter.Int32BitsToSingle(value: BinaryPrimitives.ReadInt32LittleEndian(source: bytes)),
             Identity = identity,
-            Material = BinaryPrimitives.ReadInt32LittleEndian(source: bytes[8..]),
+            Material = ((int)(BinaryPrimitives.ReadUInt32LittleEndian(source: bytes[8..]) & SdfVisibility.MaterialMask)),
             Normal = new Vector3(x: ((float)normal.Item1), y: ((float)normal.Item2), z: ((float)normal.Item3)),
         };
     }

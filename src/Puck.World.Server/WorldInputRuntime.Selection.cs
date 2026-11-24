@@ -14,6 +14,8 @@ public sealed partial class WorldInputRuntime {
     private int m_planBinding = -1;
     private int[] m_selectorSlots = [];
     private int[] m_selectionRows = [];
+    // The counter slot the kit assignment's selector reads, or -1.
+    private int m_kitSelectSlot = -1;
 
     private readonly List<int> m_touchedBodies = [];
     private readonly MarkedIndexSet m_touchedSeen = new();
@@ -136,7 +138,8 @@ public sealed partial class WorldInputRuntime {
                 if (kind == ActionStateKind.Counter) { slots[family] = slot; }
             }
         }
-        Watch(slot: WorldBodyStateReads.PlanFor(definition: definition).KitSelect);
+        m_kitSelectSlot = WorldBodyStateReads.PlanFor(definition: definition).KitSelect;
+        Watch(slot: m_kitSelectSlot);
         m_selectorSlots = slots;
         m_selectionRows = [.. rows];
         m_planDefinition = definition;

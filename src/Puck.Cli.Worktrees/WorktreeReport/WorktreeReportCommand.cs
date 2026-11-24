@@ -128,25 +128,52 @@ public static class WorktreeReportCommand {
         input: patch
     ).Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\n')
         .Select(selector: static line => line.Split(separator: ' ')[0]).ToHashSet(comparer: StringComparer.Ordinal);
-    private static bool SquashEquivalent(string repository, string into, string head, Dictionary<string, HashSet<string>> integrationPatches) {
+    private static HashSet<string> Paths(string listing) => listing.Split(separator: '\n')
+        .Select(selector: static line => line.TrimEnd(trimChar: '\r'))
+        .Where(predicate: static line => (line.Length != 0))
+        .ToHashSet(comparer: StringComparer.Ordinal);
+    // The integration commits since a merge base, each with the paths its first-parent diff touches. A squash's
+    // combined diff can only share a patch id with a commit that touches exactly its paths, so only those candidates
+    // are diffed: reading every commit's patch text since an old merge base exhausted memory with many worktrees.
+    private static List<(string Commit, HashSet<string> Paths)> IntegrationCommits(string repository, string basis, string into) => Read(
+        repository: repository,
+        arguments: ["log", "--format=%x00%H", "--name-only", "--no-renames", "--diff-merges=first-parent", $"{basis}..{into}", "--"]
+    ).Split(options: StringSplitOptions.RemoveEmptyEntries, separator: '\0').Select(selector: static record => {
+        var newline = record.IndexOf(value: '\n');
+
+        return ((newline < 0) ? (record.Trim(), new HashSet<string>(comparer: StringComparer.Ordinal)) : (record[..newline].Trim(), Paths(listing: record[(newline + 1)..])));
+    }).ToList();
+    private static bool SquashEquivalent(string repository, string into, string head, Dictionary<string, List<(string Commit, HashSet<string> Paths)>> integrationCommits, Dictionary<string, HashSet<string>> commitPatches) {
         var mergeBase = Git(repository: repository, arguments: ["merge-base", into, head]);
 
         if (mergeBase.ExitCode == 1) { return false; }
         if (mergeBase.ExitCode != 0) { throw new InvalidOperationException(message: Failure(operation: "merge-base", result: mergeBase)); }
         var basis = mergeBase.Stdout.Trim();
-        var combined = PatchIds(repository: repository, patch: Read(repository: repository, arguments: ["diff", .. DiffOptions, basis, head, "--"]));
+        var touched = Paths(listing: Read(repository: repository, arguments: ["diff", "--name-only", "--no-renames", basis, head, "--"]));
 
-        if (combined.Count != 1) { return false; }
-        if (!integrationPatches.TryGetValue(key: basis, value: out var landed)) {
-            landed = PatchIds(repository: repository, patch: Read(
-                repository: repository,
-                arguments: ["log", "--format=commit %H", "--no-decorate", "-p", "--diff-merges=first-parent", .. DiffOptions, $"{basis}..{into}", "--"]
-            ));
-            integrationPatches.Add(key: basis, value: landed);
+        if (touched.Count == 0) { return false; }
+        if (!integrationCommits.TryGetValue(key: basis, value: out var commits)) {
+            commits = IntegrationCommits(basis: basis, into: into, repository: repository);
+            integrationCommits.Add(key: basis, value: commits);
         }
-        return combined.Overlaps(other: landed);
+        HashSet<string>? combined = null;
+
+        foreach (var (commit, paths) in commits) {
+            if (!paths.SetEquals(other: touched)) { continue; }
+            combined ??= PatchIds(repository: repository, patch: Read(repository: repository, arguments: ["diff", .. DiffOptions, basis, head, "--"]));
+            if (combined.Count != 1) { return false; }
+            if (!commitPatches.TryGetValue(key: commit, value: out var landed)) {
+                landed = PatchIds(repository: repository, patch: Read(
+                    repository: repository,
+                    arguments: ["show", "--format=commit %H", "--no-decorate", "-p", "--diff-merges=first-parent", .. DiffOptions, commit, "--"]
+                ));
+                commitPatches.Add(key: commit, value: landed);
+            }
+            if (combined.Overlaps(other: landed)) { return true; }
+        }
+        return false;
     }
-    private static History ReadHistory(string repository, string into, string head, Dictionary<string, HashSet<string>> integrationPatches) {
+    private static History ReadHistory(string repository, string into, string head, Dictionary<string, List<(string Commit, HashSet<string> Paths)>> integrationCommits, Dictionary<string, HashSet<string>> commitPatches) {
         DateTimeOffset? date = null;
         int? unlanded = null;
 
@@ -164,7 +191,7 @@ public static class WorktreeReportCommand {
             unlanded = cherry.Count(predicate: static line => line.StartsWith(comparisonType: StringComparison.Ordinal, value: "+ "));
             // Cherry omits merge commits, including work introduced while resolving a merge.
             var hasMerges = ((unlanded == 0) && (Read(repository: repository, arguments: ["rev-list", "--merges", $"{into}..{head}", "--"]).Length != 0));
-            var landed = (((unlanded == 0) && !hasMerges) ? "patch-equivalent" : (SquashEquivalent(head: head, integrationPatches: integrationPatches, into: into, repository: repository) ? "squash-equivalent" : "no"));
+            var landed = (((unlanded == 0) && !hasMerges) ? "patch-equivalent" : (SquashEquivalent(commitPatches: commitPatches, head: head, integrationCommits: integrationCommits, into: into, repository: repository) ? "squash-equivalent" : "no"));
 
             return new History(Landed: landed, LastCommit: date, Unlanded: unlanded, Unreadable: null);
         } catch (Exception error) when ((error is InvalidOperationException or FormatException)) {
@@ -262,14 +289,15 @@ public static class WorktreeReportCommand {
         var main = worktrees.FirstOrDefault();
         var now = clock.GetUtcNow();
         var histories = new Dictionary<string, History>(comparer: StringComparer.Ordinal);
-        var integrationPatches = new Dictionary<string, HashSet<string>>(comparer: StringComparer.Ordinal);
+        var integrationCommits = new Dictionary<string, List<(string Commit, HashSet<string> Paths)>>(comparer: StringComparer.Ordinal);
+        var commitPatches = new Dictionary<string, HashSet<string>>(comparer: StringComparer.Ordinal);
         var entries = new List<Entry>();
 
         void Add(Branch? branch, Worktree? worktree) {
             var head = (worktree?.Head ?? branch!.Head);
 
             if (!histories.TryGetValue(key: head, value: out var history)) {
-                history = ReadHistory(head: head, integrationPatches: integrationPatches, into: integration, repository: repositoryRoot);
+                history = ReadHistory(commitPatches: commitPatches, head: head, integrationCommits: integrationCommits, into: integration, repository: repositoryRoot);
                 histories.Add(key: head, value: history);
             }
             entries.Add(item: Inspect(into: local, branch: branch, worktree: worktree, main: main, history: history, now: now, listingError: errors.FirstOrDefault()));

@@ -842,11 +842,15 @@ public sealed partial class WorldBody {
             }
         }
 
-        InputReadbacksEdit.ReadHeld = new PlayerIntent(Channels: heldOverlay);
-        InputReadbacksEdit.ReadComposed = (movement with { Channels = channels });
+        var readHeld = new PlayerIntent(Channels: heldOverlay);
+        var composed = (movement with { Channels = channels });
 
-        InputReadbacksEdit.ReadScalar = ProjectRelative(intent: InputReadbacks.ReadComposed);
-        return InputReadbacks.ReadScalar;
+        if (InputReadbacks.ReadHeld != readHeld) { InputReadbacksEdit.ReadHeld = readHeld; }
+        if (InputReadbacks.ReadComposed != composed) { InputReadbacksEdit.ReadComposed = composed; }
+        var scalar = ProjectRelative(intent: composed);
+
+        if (InputReadbacks.ReadScalar != scalar) { InputReadbacksEdit.ReadScalar = scalar; }
+        return scalar;
     }
     // The planar (XZ) offset from one point to another, whose Yaw is the bearing from the first to the second.
     private static FixedVector3 PlanarOffset(in FixedVector3 from, in FixedVector3 to) =>

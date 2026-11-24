@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/43e447bc227095a0b1025345e3ecfb6d0130b4315d25697e55d0939ee61e6357). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/9624c06f5fde6a9e09ad626013fb1da8a082f8f69b6544f7311c9e751b40d73d). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -247,8 +247,8 @@ struct SdfWorldPass {
     [[vk::offset(1820)]] uint _pad1820;
     [[vk::offset(1824)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa6295F7F6 : register(b0, space3);
-#define passGroup passGroupIsa6295F7F6
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa4186A554 : register(b0, space3);
+#define passGroup passGroupIsa4186A554
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);

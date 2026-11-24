@@ -95,6 +95,9 @@ public readonly record struct EntityContinuity(EntityContinuityKind Kind, float 
 /// then <c>state.identity</c>), so a render lane reads a slot the way a rule does. Like <paramref name="Facts"/> it
 /// rides the entry, so an observer is delivered it only for a body it is disclosed. The memory is borrowed scratch
 /// the next snapshot overwrites: a consumer copies what it keeps.</param>
+/// <param name="Mount">The index of the body this body rides this tick (a kit's <c>mount</c> facet holds it at its
+/// seat), or -1 when it rides nothing. A presentation frames a rider through the body it rides, and takes that body's
+/// rider camera.</param>
 public readonly record struct EntitySnapshot(
     int Index,
     Vector3 Position,
@@ -109,7 +112,8 @@ public readonly record struct EntitySnapshot(
     string? PlacementId = null,
     float Heading = 0f,
     BodyFacts Facts = BodyFacts.None,
-    ReadOnlyMemory<long> State = default
+    ReadOnlyMemory<long> State = default,
+    int Mount = -1
 );
 /// <summary>The server's outbound tick image — the whole entity table's authoritative render state plus a revision the
 /// client watches to rebuild its avatar program (as the population/roster revisions drive it today). The client

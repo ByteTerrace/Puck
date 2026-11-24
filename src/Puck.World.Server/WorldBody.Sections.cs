@@ -246,7 +246,10 @@ public sealed partial class WorldBody {
     /// <param name="contactFieldObservationCurrent">Whether the captured body had observed the contact field as it
     /// stood at capture.</param>
     /// <param name="contactFieldVersion">The restoring population's current contact-field version.</param>
-    internal void RestoreSections(in WorldBodySections sections, ReadOnlySpan<long> registers, bool contactFieldObservationCurrent, ulong contactFieldVersion) {
+    /// <param name="heldByRestorePoint">Whether the sections behind holders are put back from the body's open restore
+    /// point (<see cref="Puck.State.SlotBinding.Restore"/>) and <paramref name="sections"/> holds no image of them:
+    /// a step's own capture.</param>
+    internal void RestoreSections(in WorldBodySections sections, ReadOnlySpan<long> registers, bool contactFieldObservationCurrent, ulong contactFieldVersion, bool heldByRestorePoint = false) {
         if (!string.IsNullOrEmpty(value: sections.Program.BodyMotionProgramName)) {
             SetBodyMotionProgram(programName: sections.Program.BodyMotionProgramName);
         }
@@ -345,29 +348,36 @@ public sealed partial class WorldBody {
         m_restingHoldTicks = clocks.RigidRestingHoldTicks;
         CopyClamped(destination: m_motionRecency, source: sections.MotionRecency.Clocks.Span);
 
-        InputImagesEdit = sections.InputImages;
+        if (heldByRestorePoint) {
+            // After the program switch above, which writes through the same doors: each holder the step wrote goes
+            // back to the value it held when the step began.
+            m_action.Binding.Restore();
+            RestoreActionState(image: registers);
+        } else {
+            InputImagesEdit = sections.InputImages;
 
-        var readbacks = sections.InputReadbacks;
+            var readbacks = sections.InputReadbacks;
 
-        // A body with no relative channel carries no fractions, whatever the capture held.
-        if (m_channels.RelativeMask == 0) { readbacks.RelativeRemainders = default; }
-        InputReadbacksEdit = readbacks;
+            // A body with no relative channel carries no fractions, whatever the capture held.
+            if (m_channels.RelativeMask == 0) { readbacks.RelativeRemainders = default; }
+            InputReadbacksEdit = readbacks;
 
-        ActionEdit = sections.Action;
+            ActionEdit = sections.Action;
 
-        // The clocks are laid out by this body's own lanes, in lane order: the table takes as many as it holds from
-        // what the capture carried.
-        RestoreTable(holder: m_laneRecency, source: sections.LaneRecency.Clocks.Span);
-        RestoreActionState(image: registers);
-        RestoreTable(holder: m_registerWrites, source: sections.RegisterWrites.Rows.Span);
-        RestoreDurableInput(
-            rows: (sections.DurableInput.Rows.IsDefault ? default : sections.DurableInput.Rows.AsSpan()),
-            tick: sections.DurableInput.Tick
-        );
-        SetScriptActors(
-            pending: (sections.ScriptActors.Pending.IsDefault ? default : sections.ScriptActors.Pending.AsSpan()),
-            timers: (sections.ScriptActors.Timers.IsDefault ? default : sections.ScriptActors.Timers.AsSpan())
-        );
+            // The clocks are laid out by this body's own lanes, in lane order: the table takes as many as it holds
+            // from what the capture carried.
+            RestoreTable(holder: m_laneRecency, source: sections.LaneRecency.Clocks.Span);
+            RestoreActionState(image: registers);
+            RestoreTable(holder: m_registerWrites, source: sections.RegisterWrites.Rows.Span);
+            RestoreDurableInput(
+                rows: (sections.DurableInput.Rows.IsDefault ? default : sections.DurableInput.Rows.AsSpan()),
+                tick: sections.DurableInput.Tick
+            );
+            SetScriptActors(
+                pending: (sections.ScriptActors.Pending.IsDefault ? default : sections.ScriptActors.Pending.AsSpan()),
+                timers: (sections.ScriptActors.Timers.IsDefault ? default : sections.ScriptActors.Timers.AsSpan())
+            );
+        }
         RestoreTape(segments: sections.Tape.Segments.Span);
         m_pendingContinuum = sections.Program.PendingContinuum;
 

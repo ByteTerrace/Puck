@@ -195,16 +195,14 @@ public sealed partial class ShaderPipelineRenderNode {
         m_emissions.Add(item: emission);
         m_segments[^1] = m_segments[^1] with { RunCount = (m_segments[^1].RunCount + 1) };
     }
-    // Reserves a pass block's copy for an emission, zeroed as a stack block would be.
+    // Reserves a pass block's copy for an emission. It holds whatever an earlier frame's block left: FillPassBlock
+    // writes every byte of it before anything reads one.
     private Span<byte> ReserveEmitBlock(int bytes, out int start) {
         start = m_emitBlockBytes;
         ArrayCapacity.EnsureLength(array: ref m_emitBlocks, required: (start + bytes));
         m_emitBlockBytes += bytes;
 
-        var block = m_emitBlocks.AsSpan(start: start, length: bytes);
-
-        block.Clear();
-        return block;
+        return m_emitBlocks.AsSpan(start: start, length: bytes);
     }
     // Decides an emitter pass in the walk: everything RecordPackage does but record, which its emission does on its lane.
     private void DecidePackage(RuntimePass pass, int index, int slot, bool clearsCounters) {

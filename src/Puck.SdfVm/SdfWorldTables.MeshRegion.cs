@@ -164,7 +164,8 @@ public sealed partial class SdfWorldTables {
     }
     private double m_meshNamedWords;
     /// <summary>Measures a mesh's landing priority from this residency's rows naming it: the highest priority among
-    /// them at its demand points, and the first row at it. Called by the store under its gate.</summary>
+    /// them at its demand points, and the first row at it. Called by the store under its gate, from this residency's
+    /// own staging alone, since it reads the residency's draws and transforms.</summary>
     /// <param name="mesh">The mesh.</param>
     /// <param name="best">The highest priority so far, raised by a row that passes it.</param>
     /// <param name="first">The first row at the highest priority so far.</param>
@@ -423,12 +424,12 @@ public sealed partial class SdfWorldTables {
     private void StageMeshRegion(SdfFrame frame) {
         var draws = frame.DrawRows;
 
-        m_currentDrawRows = draws;
         ServiceMemoryTrim();
         SdfMeshHistory.ProcessWork.Raise(kind: SdfMeshHistory.PeakRowsExtent, value: draws.Count);
         PrepareMeshTransformCuts(frame: frame);
         EnsureMeshDrawCapacity(count: draws.Count);
         lock (m_meshStore.Gate) {
+            m_currentDrawRows = draws;
             BindMeshStore();
             var whole = m_drawCursor.Collect(draws.Changes, draws.Serial, draws.Roster, draws.Count,
                 draws.Revision, m_owedDraws, force: !m_meshStaged);
@@ -481,7 +482,7 @@ public sealed partial class SdfWorldTables {
             m_meshHistory.RetireAfter(count: draws.Count);
             EnsurePreviousMeshCapacity(count: draws.Count);
             m_meshSource = draws.Roster; m_meshCauseSource = draws.Roster; m_meshSourceRevision = draws.Revision; m_meshSourceSerial = draws.Serial; m_meshStaged = true;
-            m_meshStore.RankLanding(sweep: true);
+            m_meshStore.RankLanding(client: this, sweep: true);
             EndMotionStaging();
             FinishMeshStaging(frame: frame);
         }

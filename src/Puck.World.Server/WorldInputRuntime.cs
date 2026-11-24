@@ -32,6 +32,12 @@ public sealed partial class WorldInputRuntime {
         public WorldChannelTable? SnapshotChannels;
         public WorldInputCatalog? SnapshotCatalog;
         public int[] SnapshotAddresses = [];
+        // Whether the last snapshot observed a relative channel off zero: a delta, which the same image adds again.
+        public bool SnapshotRelative;
+        // What a world's own producer's last admission read and answered, or null for any other owner.
+        public ProgramStanding? Program;
+        // Whether the owner has left the runtime: a record kept by body index must not be read through it.
+        public bool Removed;
 
         public readonly Dictionary<string, string> SeatStates = new(comparer: StringComparer.Ordinal);
     }
@@ -199,21 +205,29 @@ public sealed partial class WorldInputRuntime {
     private void InstallOwner(Owner owner, WorldInputMapping? previous = null, bool reset = true, bool recompiled = false) {
         owner.KitName = ((owner.Body >= 0) ? m_host.Population.CandidateKitName(bodyIndex: owner.Body, definition: owner.Definition) : null);
         m_owners.Add(key: owner.Principal, value: owner);
-        m_ordered.Add(item: owner);
+        // Principals are distinct, so the search answers the complement of the place the owner belongs at.
+        m_ordered.Insert(index: ~m_ordered.BinarySearch(item: owner, comparer: OwnerOrder.Instance), item: owner);
         IndexBodyOwner(owner: owner);
-        m_ordered.Sort(comparison: static (a, b) => ComparePrincipal(a: a.Principal, b: b.Principal));
         InstallBodyMapping(owner, (previous ?? m_host.Population.InputCatalog.DefaultMapping), reset, recompiled);
     }
     private void IndexBodyOwner(Owner owner) {
         if (owner.Body < 0) { return; }
         if (!m_bodyOwners.TryGetValue(key: owner.Body, value: out var owners)) { m_bodyOwners.Add(key: owner.Body, value: owners = []); }
+        ForgetProgramStanding(owners: owners);
         owners.Add(item: owner);
+    }
+    private sealed class OwnerOrder : IComparer<Owner> {
+        public static readonly OwnerOrder Instance = new();
+
+        public int Compare(Owner? x, Owner? y) => ComparePrincipal(a: x!.Principal, b: y!.Principal);
     }
     private void RemoveOwner(Owner owner) {
         m_owners.Remove(key: owner.Principal);
         m_ordered.Remove(item: owner);
+        owner.Removed = true;
         if ((owner.Body >= 0) && m_bodyOwners.TryGetValue(key: owner.Body, value: out var owners)) {
             owners.Remove(item: owner);
+            ForgetProgramStanding(owners: owners);
             if (owners.Count == 0) { m_bodyOwners.Remove(key: owner.Body); }
         }
     }
@@ -463,7 +477,7 @@ public sealed partial class WorldInputRuntime {
     }
     /// <summary>Ends all admitted input episodes for an explicit fresh load/reset. Hosts must attach new profiles.</summary>
     public void Restart() {
-        foreach (var owner in m_ordered) { Reset(owner.Principal); }
+        foreach (var owner in m_ordered) { Reset(owner.Principal); owner.Removed = true; }
         m_owners.Clear();
         m_ordered.Clear();
         m_bodyOwners.Clear();
@@ -489,6 +503,7 @@ public sealed partial class WorldInputRuntime {
         var previousState = declaration.States.First(predicate: row => (row.Name == previous));
 
         owner.SeatStates[family] = state;
+        if (owner.Program is { } standing) { standing.Valid = false; }
         var cameraEdge = ((previousState.Target == WorldSeatModeState.CameraTarget) != (selected.Target == WorldSeatModeState.CameraTarget));
         if (cameraEdge) {
             if (!TrySetCameraRoute(owner, (actor ?? principal), (selected.Target == WorldSeatModeState.CameraTarget), activation, out reason)) {
@@ -637,8 +652,23 @@ public sealed partial class WorldInputRuntime {
     }
 
     /// <summary>Cancels histories and levels after grant, membership or gate changes, before gameplay consumes them.</summary>
+    /// <remarks>A world's own producer whose permission facts stand as its last admission read them is passed over:
+    /// the refresh would find it authored and permitted, and change nothing.</remarks>
     public void RefreshPermissions() {
-        foreach (var owner in m_ordered) { RefreshPermissions(owner: owner); }
+        var standing = 0;
+
+        // By index: a refresh resets an owner in place and never changes the list.
+        for (var index = 0; (index < m_ordered.Count); index++) {
+            var owner = m_ordered[index];
+
+            if ((owner.Program is { Valid: true } program) && ProgramPermissionStands(owner: owner, standing: program, target: m_host.Body(index: owner.Body))) {
+                standing++;
+                continue;
+            }
+            RefreshPermissions(owner: owner);
+        }
+        WorldTickWork.Process.Add(WorldTickWork.InputRefreshes, (m_ordered.Count - standing));
+        WorldTickWork.Process.Add(WorldTickWork.InputRefreshesStanding, standing);
     }
 
     private Principal RoutingPrincipal(Owner owner) {

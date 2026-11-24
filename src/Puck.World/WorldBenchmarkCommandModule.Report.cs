@@ -121,8 +121,15 @@ public sealed partial class WorldBenchmarkCommandModule {
             ["entry"] = m_entry,
             ["start"] = (m_entry.StartsWith(value: "fresh", comparisonType: StringComparison.Ordinal) ? "fresh" : "attached"),
             ["lockstepAtEntry"] = m_lockstepAtEntry,
-            ["rendered"] = (pacing is not null),
+            ["rendered"] = ((host is null) ? (pacing is not null) : !host.Headless),
             ["budgetMilliseconds"] = m_budget,
+            ["budgetSource"] = m_budgetSource,
+            // What a report folded from this run alone (a player build's) states for itself: its build, backend and machine.
+            ["build"] = WorldSchema.SourceRevision,
+            ["backend"] = ((host is null) ? null : (host.Headless ? "headless" : (host.HostsOnDirectX ? "directx" : "vulkan"))),
+            ["os"] = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
+            ["cpus"] = Environment.ProcessorCount,
+            ["window"] = ((host is null || host.Headless) ? null : new JsonObject { ["presentation"] = host.Presentation.ToString(), ["width"] = host.Width, ["height"] = host.Height, ["presentMode"] = host.PresentMode.ToString() }),
             ["loopsRequested"] = m_loops,
             ["iterationsDropped"] = (recording?.Dropped ?? 0L),
             ["iterations"] = (recording?.Count ?? 0),
@@ -276,6 +283,16 @@ public sealed partial class WorldBenchmarkCommandModule {
             }
         }
         node["gpu"] = DescribeGpu(chapter: chapter);
+        if (chapter.EndIndex >= 0) {
+            var (peak, budget, beyond) = chapter.Device;
+
+            node["deviceMemory"] = ((budget <= 0L) ? null : new JsonObject {
+                ["peakAtBeginBytes"] = chapter.DevicePeakAtBegin,
+                ["peakBytes"] = peak,
+                ["beyondLedgerBytes"] = beyond,
+                ["budgetBytes"] = budget,
+            });
+        }
         node["adapter"] = AdapterNode(summary: chapter.Adapter, whole: false);
         node["reads"] = DescribeReads(chapter: chapter);
 
