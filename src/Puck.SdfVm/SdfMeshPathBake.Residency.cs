@@ -421,7 +421,7 @@ public sealed partial class SdfMeshPathBake {
     private bool Schedule(Group group, Action work) {
         if (!group.QueueWork()) { return false; }
         // The first stage queued after a group's admission ends its lead.
-        if (group.TakeAdmittedAt() is var admittedAt and not 0L) { PoolBacklog.ObserveLead(seconds: Stopwatch.GetElapsedTime(startingTimestamp: admittedAt).TotalSeconds); }
+        EndLead(group: group);
         Enqueue(group: group, urgent: false, work: work);
         return true;
     }

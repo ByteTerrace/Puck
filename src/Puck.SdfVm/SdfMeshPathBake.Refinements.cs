@@ -141,8 +141,8 @@ public sealed partial class SdfMeshPathBake {
     // material a sample (FinalLattice's two buffers), which is what a group's admission promises.
     private static long SampledPeakOf(FinalLattice final) => checked(((long)final.Lattice.Samples) * (sizeof(float) + sizeof(int)));
 
-    // The ticks a group spent between its admission and its refinement's queueing: its lead (SdfMeshBakeBacklog), ended
-    // here rather than at the refinement's start, so the time a refinement waits for room never reads as the pool's.
+    // Ends a group's lead (SdfMeshBakeBacklog): the time from its admission to its first stage queued, or to its
+    // refinement's queueing, so the time a refinement waits for room never reads as the pool's.
     private static void EndLead(Group group) {
         if (group.TakeAdmittedAt() is var admittedAt and not 0L) { PoolBacklog.ObserveLead(seconds: Stopwatch.GetElapsedTime(startingTimestamp: admittedAt).TotalSeconds); }
     }
