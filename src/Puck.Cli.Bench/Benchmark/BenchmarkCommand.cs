@@ -447,9 +447,11 @@ public static partial class BenchmarkCommand {
 
             using var live = session!;
 
-            // Authority is held at the boot's first tick, so the renderer can finish starting without the route moving.
-            if ((shape == WorldShape.Windowed) && !live.Run("world.wait ready 60", 70).Ok) {
-                throw new InvalidOperationException("the renderer was not ready within 60 s");
+            // Authority is held at the boot's first tick, so the renderer can finish starting without the route moving. A
+            // cold pipeline cache (a first Vulkan boot) takes minutes, so the wait runs in rounds up to its bound and says
+            // what still stands.
+            if (shape == WorldShape.Windowed) {
+                WaitForRenderer(budget: budget, live: live, print: print);
             }
 
             var profile = live.Run($"world.device-profile {CommandEcho.Quote(parse.GetValue(options.Profile) ?? "auto")}", 60);
@@ -554,6 +556,34 @@ public static partial class BenchmarkCommand {
         _ = live.Run("view.override camera auto", 30);
 
         return captures;
+    }
+
+    // How long a windowed World may take to build its pipelines and produce its first frame, and the round each wait
+    // call takes.
+    private static readonly TimeSpan ReadyTimeout = TimeSpan.FromMinutes(minutes: 10);
+    private const int ReadyRoundSeconds = 60;
+
+    // Waits for the renderer in rounds until it is ready or the bound passes, then refuses naming what the World last said
+    // stood (its pipelines building, a frame withheld).
+    private static void WaitForRenderer(SuiteBudget budget, SweepWorld live, Action<string> print) {
+        var clock = Stopwatch.StartNew();
+        var last = string.Empty;
+
+        while (clock.Elapsed < ReadyTimeout) {
+            if (budget.Expired) {
+                throw new TimeoutException($"{budget.Reason}; the renderer was not ready: {last}");
+            }
+
+            var ready = live.Run($"world.wait ready {ReadyRoundSeconds}", (ReadyRoundSeconds + 10));
+
+            if (ready.Ok) {
+                return;
+            }
+            last = ready.Output;
+            print($"{Verb}: {last}\n");
+        }
+
+        throw new InvalidOperationException($"the renderer was not ready within {ReadyTimeout.TotalMinutes:0} minutes: {last}");
     }
 
     // The window size arguments: the named size, or the device profile's frame bar.

@@ -926,7 +926,8 @@ public sealed partial class SdfMeshPathBake {
             var sketch = new Puck.Maths.BottomKSketch();
 
             foreach (var group in m_groups) {
-                var element = unchecked((ulong)group.Identity ^ (ulong)(group.Identity >> 64));
+                // The group's geometry, which the library keys its mesh by; the bake identity is the same for every group.
+                var element = unchecked((ulong)group.Sealed.Hash ^ (ulong)(group.Sealed.Hash >> 64));
 
                 content = content.Add(element: element);
                 sketch.Add(element: element);
