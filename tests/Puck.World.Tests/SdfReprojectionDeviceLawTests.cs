@@ -156,7 +156,8 @@ public sealed class SdfReprojectionDeviceLawTests {
                     new GpuGroupBinding(binding: ((uint)index), kind: GpuBindingKind.ReadOnlyBuffer)),
                     new GpuGroupBinding(binding: 5, kind: GpuBindingKind.StorageImage),
                     new GpuGroupBinding(binding: 6, kind: GpuBindingKind.ReadOnlyBuffer),
-                    new GpuGroupBinding(binding: 7, kind: GpuBindingKind.ReadOnlyBuffer)])], pushesIndex: false, stages: GpuShaderStage.Compute));
+                    new GpuGroupBinding(binding: 7, kind: GpuBindingKind.ReadOnlyBuffer),
+                    new GpuGroupBinding(binding: 8, kind: GpuBindingKind.ReadOnlyBuffer)])], pushesIndex: false, stages: GpuShaderStage.Compute));
         using var module = services.ShaderModuleFactory.Create(stage: GpuShaderStage.Compute,
             bytecode: File.ReadAllBytes(path: Path.Combine(path1: AppContext.BaseDirectory, path2: "Assets", path3: "Shaders", path4: (Kernel + extension))));
         using var pipeline = services.PipelineFactory.Create(computeShaderModule: module, description: description, name: default);
@@ -177,6 +178,10 @@ public sealed class SdfReprojectionDeviceLawTests {
                 buffer.Write<byte>(data: contents[index]);
                 services.Bindings.WriteBuffer(binding: ((uint)index), bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes,
                     descriptorSetHandle: set, elementStride: ((index is 0 or 2 or 3) ? 4u : 16u), kind: GpuBindingKind.ReadOnlyBuffer);
+                if (index == 0) {
+                    services.Bindings.WriteBuffer(binding: 8, bufferHandle: buffer.BufferHandle, bufferSize: buffer.SizeBytes,
+                        descriptorSetHandle: set, elementStride: 4u, kind: GpuBindingKind.ReadOnlyBuffer);
+                }
             }
             services.Bindings.WriteStorageImage(arrayElement: 0, binding: 5, descriptorSetHandle: set, imageViewHandle: output.ImageViewHandle);
 

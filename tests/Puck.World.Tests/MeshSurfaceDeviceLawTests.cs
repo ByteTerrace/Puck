@@ -32,6 +32,7 @@ public sealed class MeshSurfaceDeviceLawTests {
     private const uint ResultsBinding = 2U;
     private const uint TransformsBinding = 3U;
     private const uint SampledBinding = 4U;
+    private const uint DrawsBinding = 5U;
 
     // The slanted triangle on the plane x + y = 1, wound so its face normal is +(1, 1, 0), with that normal at every
     // vertex and palette entry 3 on its one triangle.
@@ -138,6 +139,7 @@ public sealed class MeshSurfaceDeviceLawTests {
                         new GpuGroupBinding(binding: ResultsBinding, kind: GpuBindingKind.StorageImage),
                         new GpuGroupBinding(binding: TransformsBinding, kind: GpuBindingKind.ReadOnlyBuffer),
                         new GpuGroupBinding(binding: SampledBinding, kind: GpuBindingKind.ReadOnlyBuffer),
+                        new GpuGroupBinding(binding: DrawsBinding, kind: GpuBindingKind.ReadOnlyBuffer),
                     ],
                     ordinal: Group
                 )],
@@ -210,6 +212,14 @@ public sealed class MeshSurfaceDeviceLawTests {
 
             bindings.WriteBuffer(
                 binding: RegionBinding,
+                bufferHandle: region.BufferHandle,
+                bufferSize: region.SizeBytes,
+                descriptorSetHandle: set,
+                elementStride: sizeof(uint),
+                kind: GpuBindingKind.ReadOnlyBuffer
+            );
+            bindings.WriteBuffer(
+                binding: DrawsBinding,
                 bufferHandle: region.BufferHandle,
                 bufferSize: region.SizeBytes,
                 descriptorSetHandle: set,

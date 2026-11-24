@@ -12,6 +12,8 @@
 [[vk::binding(3, 3)]] StructuredBuffer<float4> sdfDynamicTransforms : register(t3, space3);
 // The frame's sampled table a displaced draw reads; no case's draw is displaced, so one empty word stands in.
 [[vk::binding(4, 3)]] StructuredBuffer<uint> sdfFrameSampled : register(t4, space3);
+// The draw records sit in the region buffer at the words the cases name; binding 5 is that buffer again.
+[[vk::binding(5, 3)]] StructuredBuffer<uint> sdfMeshDraws : register(t5, space3);
 // The pass values the mesh module reads: every case's draw lies below the hit door's bound, a rejection counts nowhere,
 // and the view has no pose overlay (a zero slot count), so every slot reads its own row.
 struct MeshProbePass {

@@ -106,7 +106,7 @@ public sealed class WorldTickScriptLawTests {
                     authority: authority,
                     gates: new FixedGate(gate: gate)
                 ),
-                new WorldTickScriptCommandModule(script: Script),
+                new WorldTickScriptCommandModule(script: Script, router: () => Router!),
                 new ProbeModule(
                     completed: Completed,
                     log: Log
