@@ -407,7 +407,11 @@ never interleave; never read another residency's rows or draws from a store call
 told the store (its landing priority). A mesh the store lands, moves or takes back has its rows staged again in every
 residency that names it (`SdfWorldTables.NoteStoreChange`), and the copies no landing job carries (a compaction's
 moves, a grown region's carry) ride whichever upload records next (`SdfMeshRegionStore.RecordOwed`), which relies on
-every residency's upload of a frame reaching the queue before a view of that frame records.
+every residency's upload of a frame reaching the queue before a view of that frame records. A residency's World sets
+bind the buffer its own plan left (`BindMeshStore` runs after `SdfMeshRegionStore.Plan` in the staging, since the
+records it packs address that plan's placements), and a buffer the region replaced is held while any residency's sets
+may still name it (`SdfWorldTables.NamesReplacedStoreBuffer`, in the replacement's pending use). A set bound before
+the plan reads a grown region's records through the smaller buffer, past its end.
 A world is resident once: a mesh renumbered for another program's materials (`SdfMesh.GeometrySource`) is placed as
 its triangle materials alone and draws the first mesh's vertices and indices (`SdfMeshRegion.PlacedWordsOf`), so use
 `PlacedWordsOf`, never `WordsOf`, for anything the region places or lands; the library finds a living mesh its cache
