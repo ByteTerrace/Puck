@@ -2636,9 +2636,12 @@ and the standard's ink are built ([what is built](ink.md#what-is-built)).
 
 - [high] The edge search is over [the frame budget](frame-budget.md#the-budget)'s
   ink share: about 0.9 ms at 2560 by 1440 against 0.4, scaled from a lane's
-  reading in a smaller window. The lead's quiet window reads `views-filter`
-  and `views` at the bar's size with and without `SDF_VIEWS_OMIT_INK`; the
-  cut is the search's memory traffic, as the budget says.
+  reading in a smaller window, taken while each tile entry read its draw's
+  record for the object key. The key and the clip bit now ride the visibility
+  record (`SdfVisibility`), so the search reads no draw record. The lead's
+  quiet window reads `views-filter` and `views` at the bar's size with and
+  without `SDF_VIEWS_OMIT_INK`; if the share is still over, the next cut is
+  seeds written by the surface pass, which already holds each hit.
 - [medium] `world.shaders.reload` and `world.reload` reach the boot world
   alone: a federated world a seat has crossed into (the city) keeps its
   kernels and its documents, so its look cannot be iterated without a

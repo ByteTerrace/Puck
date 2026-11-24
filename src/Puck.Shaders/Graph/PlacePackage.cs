@@ -257,12 +257,6 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
             BinaryPrimitives.WriteSingleLittleEndian(destination: destination[8..], value: value.Z);
             BinaryPrimitives.WriteSingleLittleEndian(destination: destination[12..], value: value.W);
         }
-        private static System.Numerics.Vector4 ReadVector(ReadOnlySpan<byte> source) => new(
-            x: BinaryPrimitives.ReadSingleLittleEndian(source: source),
-            y: BinaryPrimitives.ReadSingleLittleEndian(source: source[4..]),
-            z: BinaryPrimitives.ReadSingleLittleEndian(source: source[8..]),
-            w: BinaryPrimitives.ReadSingleLittleEndian(source: source[12..])
-        );
         // Writes one source's row of the pass block: its rect, an empty one for a source not shown, its crop and its
         // sharpness.
         private void WriteSource(Span<byte> passBlock, int source, System.Numerics.Vector4 rect, System.Numerics.Vector4 crop, float sharpness) {
@@ -328,9 +322,9 @@ public sealed class PlacePackage : IRenderGraphPackageFactory {
             } else {
                 // A pass no host places draws its bound config: its first source in the config's rect.
                 WriteSource(
-                    crop: ReadVector(source: recording.PassBlock[m_cropOffset..]),
+                    crop: System.Runtime.InteropServices.MemoryMarshal.Read<System.Numerics.Vector4>(source: recording.PassBlock[m_cropOffset..]),
                     passBlock: recording.PassBlock,
-                    rect: ReadVector(source: recording.PassBlock[m_rectOffset..]),
+                    rect: System.Runtime.InteropServices.MemoryMarshal.Read<System.Numerics.Vector4>(source: recording.PassBlock[m_rectOffset..]),
                     sharpness: BinaryPrimitives.ReadSingleLittleEndian(source: recording.PassBlock[m_sharpnessOffset..]),
                     source: 0
                 );
