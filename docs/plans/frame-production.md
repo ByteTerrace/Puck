@@ -348,8 +348,8 @@ across a benchmark chapter and divided by the frames.
    two or more residencies side by side, where it was one a residency.
 
    What remains of the frame thread's own chain is the host's capture and its
-   recording partitions. The next structural step is the pipeline this plan
-   weighed above: frame N+1's capture beside frame N's recording.
+   recording partitions; step 11 shortens the pack that runs beside them, and
+   weighs the pipeline again.
 9. **Judge rigid motion by slot.** Built. The previous draw-row judgement
    raised `sdf.residency.motion.rows` by 1,332,578 over 120 ticks of the
    east-wing route. `SdfWorldTables.NoteMovedSlots` now judges each moved
@@ -413,6 +413,78 @@ across a benchmark chapter and divided by the frames.
       and no produce over 33 ms at either crossing of
       `world.benchmark run moon`.
 
+11. **The host's pack costs what moved.** Built, in three parts. On the
+    settled spawn about 2,500 transform slots change every frame (the
+    creations' idle animation: `sdf.transforms.packed-rows` over
+    `sdf.creations.packs`), and the pack's own work was the shadows' judgement
+    of each one, then a CPU projection of the sky to learn a turning day had
+    moved its lighting by less than a display code.
+
+    - **A rigid slot is judged like a row.** A slot was taken as a union of
+      boxes that can hide motion inside it, so every moved slot owed both of
+      its ends at every shadow entry, however little it moved. A slot whose two
+      boxes are one box its pose carries (one carry, no fixed member, no member
+      added or gone, `SdfWorldTables.JudgeMotionSlot`) moves every caster point
+      with the box, so the box's displacement bounds the caster's and it takes
+      the standalone row's rule: drift under a texel of the finest entry costs
+      nothing until it gathers (`SdfWorldShadows.Moved`'s `rigid`). Decision:
+      a slot is a union only when it is one. Invariant: no caster moves a
+      texel of the finest entry without its entries owing where it was drawn
+      and where it is. Door: `Moved`, the one place a change reaches the
+      entries, whose bound applies only to a standalone row or a rigid slot.
+      `world.residency`'s `moved=` changes against `judged` read 88,339,857
+      against 88,187,550 before and 42,678,047 against 9,320,564 after: a
+      fifth of the changes reach the entries.
+    - **Dense tables for dense keys.** The slots' motion, the judged boxes and
+      each entry's drawn footprints were hashed dictionaries keyed by a slot
+      or a row, both dense; they are stamped tables now
+      (`StampedIndexTable`), and a whole redraw forgets an entry's footprints
+      by moving the stamp.
+    - **A drifting sky waits out its frames.** A sky whose lit layers keep
+      their kinds projects a new candidate at most once every
+      `SdfSkyEnvironmentRefresh.DriftFrames` frames, judging by the standing
+      candidate between; a change of kinds (an edit) projects at once. The
+      drift is gathered, never lost: the next projection reads the latest sky.
+
+    Sampled over six seconds of the settled spawn on a busy machine, the pack
+    lane fell from 322 samples to 152, its shadow judgement from 89 to 18 and
+    the sky's projection from 58 to 8.
+
+    **The frame thread's allocation.** The largest share was a closure:
+    `NavigationRuntime.Domain.BeginBake` declared its captured geometry at the
+    method's scope, so every call allocated, and `WorldPortalReach.Judge` calls
+    it every frame (4.9 of 8.5 MiB sampled by `puck host allocations`). The
+    capture is in a method of its own now.
+
+    **The pipeline, weighed again.** After the pack's reduction, the frame
+    thread's parts on the busy machine read pump 0.43, capture 0.92, pack 0.68
+    (almost all the join), schedule 0.09, prepare 0.30 and record 0.80 ms
+    (`host.frames`, attribution only). Decision: the pipeline is not built
+    yet; the chain is cut where it costs what did not change. Three reasons:
+
+    - A capture a frame ahead presents world state a frame later, against
+      [the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation),
+      which reads the camera and look at present time; the camera is placed by
+      the host's capture (`WorldFramePresenter.PlaceComposedFrame`), so a
+      pipeline must late-latch the camera into a frame captured earlier, a new
+      door of its own.
+    - The capture writes what this frame's recordings read: the graph host's
+      placements and footprints, the package's resolved views, and the
+      composition's transform table, which a residency's frame borrows by
+      reference (`SdfFrame.Writer.CopyFrom` copies the content's references,
+      not the arrays). Each needs a second buffer in step with frames in
+      flight before the two halves can overlap.
+    - What is left to hide is under a millisecond and a half (capture and the
+      join), and most of the capture is real change: the creations' poses
+      (`WorldCreationInstances.PackTransforms`, already forked) and the view
+      graph's footprint walk (`WorldViewGraphHost.CompleteFootprints`).
+
+    The next steps, in order: make the footprint walk cost what moved (it walks
+    every window from string-keyed sets each frame, `ReserveArrivals` and
+    `DecideScreenFootprints`); then, if the chain still misses, the pipeline
+    with the camera late-latched and the three products above double-buffered
+    through the residency's two capture writers.
+
 ## Systems considered
 
 - `JobPool.Fork` and its `JobClass.Frame` carry the pack fork, as they carry
@@ -430,6 +502,13 @@ across a benchmark chapter and divided by the frames.
   a requested goal field follows. The cross-domain route search
   (`NavigationRuntime.FindRoute`) still walks neighbours per visit and could
   read the same graph.
+- `MarkedIndexSet` and `MarkedIndexCounts` keep dense indices whose clear
+  costs what they hold, but carry no value and clear by visiting members;
+  `StampedIndexTable` is their value-carrying sibling, whose clear is a stamp,
+  for the shadows' judged boxes and drawn footprints and the tables' slot
+  motion. `GpuRowIndex` chains rows by key and stays the rows-by-slot index.
+- `GpuWorkLedger.CountEnvironmentProjection` already counts the sky's CPU
+  projections, so the drift rule adds no counter.
 - `CodeDerivedTable` is the one door for a value derived from a definition;
   the adjacency proofs use it rather than a field cache of their own.
 - `RenderGraphRuntime.RenderWaves` already groups recordings by residency

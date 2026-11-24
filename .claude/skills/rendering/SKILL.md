@@ -530,7 +530,10 @@ records the options weighed.
 - **Moved rectangles.** `SdfWorldTables.NoteMotion` hands every non-shading change's before and after boxes to
   `SdfWorldShadows.Moved` before the scopes' early return; keep that call first, or a staging whose scopes are all met
   drops the change. `Moved` skips a change whose box lies within the finest judged texel of the box the entries last
-  judged the row by (`m_judged`); a passed change goes to each entry, which judges the row against its `Footprint` from
+  judged the row by (`m_judged`), for a standalone row or a rigid slot (one box its pose carries, decided in
+  `SdfWorldTables.JudgeMotionSlot`); any other slot is a union that can hide motion, and owes both ends whenever it
+  moves. A slot judged rigid that is not would let its casters drift a texel unseen, so a new member kind of a slot
+  (a second carry, a fixed member) must leave `rigid` false. A passed change goes to each entry, which judges the row against its `Footprint` from
   where it last drew it (`MoveTexels`) and owes at most `MaxRectangles` merged rectangles (`OwedRects`); a redraw under
   way also owes its own layers (`m_pending`), handed over when it lands. An upload takes the owed rectangles whose
   expected vertices (the entry's measured vertices a rectangle texel) fit `RectangleVertices`, at least one, and the
