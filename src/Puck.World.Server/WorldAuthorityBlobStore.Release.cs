@@ -291,16 +291,23 @@ public sealed partial class WorldAuthorityBlobStore {
             (operation.PendingStateReset is null) ||
             (operation.PendingTargetRelease != target.Identity) ||
             (identity.Owner != operation.Owner) ||
-            !operation.RecoveryRoots.TryGetValue(
-                key: key,
-                value: out var recoveryPin
-            ) ||
             !target.DefinitionFiles.TryGetValue(
                 key: key,
                 value: out var definitionFile
             )
         ) {
-            return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "release reset requires a reset operation, its protected world and the target's definition");
+            return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "release reset requires a reset operation and the target's definition");
+        }
+        // A world the source release did not name has no drained root: it starts from an empty root, as a bootstrap does.
+        if (!operation.RecoveryRoots.TryGetValue(key: key, value: out var recoveryPin)) {
+            return await PrepareReleaseResetFreshAsync(
+                cancellationToken: cancellationToken,
+                definitionFile: definitionFile,
+                identity: identity,
+                operation: operation,
+                archive: archive,
+                target: target
+            ).ConfigureAwait(continueOnCapturedContext: false);
         }
         if (!await StillOwnsActivationAsync(
             cancellationToken: cancellationToken,
@@ -403,7 +410,8 @@ public sealed partial class WorldAuthorityBlobStore {
     // Whether the durable group still holds exactly operation in private Activate, with admission closed and key's
     // protected root unchanged. Every write a release makes over a drained root during Activate rechecks this before and
     // after its uploads, so a delayed writer of an obsolete operation or phase cannot publish.
-    private async Task<bool> StillOwnsActivationAsync(WorldReleaseGroupRecord operation, string key, string recoveryPin, CancellationToken cancellationToken) {
+    // A null recoveryPin names a world the source release did not name: the group must hold no protected root for it.
+    private async Task<bool> StillOwnsActivationAsync(WorldReleaseGroupRecord operation, string key, string? recoveryPin, CancellationToken cancellationToken) {
         var current = await new WorldReleaseGroupStore(
             m_store,
             m_target,
@@ -422,11 +430,53 @@ public sealed partial class WorldAuthorityBlobStore {
             (group.PendingPhase == WorldReleaseOperationPhase.Activate) &&
             !group.PendingCommitted &&
             (group.Admission == WorldReleaseAdmissionState.Closed) &&
-            group.RecoveryRoots.TryGetValue(
-                key: key,
-                value: out var pin
-            ) &&
-            (pin == recoveryPin)
+            ((recoveryPin is null)
+                ? !group.RecoveryRoots.ContainsKey(key: key)
+                : (group.RecoveryRoots.TryGetValue(key: key, value: out var pin) && (pin == recoveryPin)))
         );
+    }
+    // Writes a fresh root for a world the reset's target names and its source did not, under the same activation
+    // ownership as a reset over a drained root. Any root already stored for it is scratch from an older release and is
+    // replaced under its own version; none is created only.
+    private async Task<WorldAuthorityStoreOutcome> PrepareReleaseResetFreshAsync(WorldAuthorityIdentity identity, WorldReleaseGroupRecord operation,
+        WorldReleaseManifest target, WorldReleaseArchive archive, string definitionFile, CancellationToken cancellationToken) {
+        var key = identity.RootKey;
+
+        if (!await StillOwnsActivationAsync(cancellationToken: cancellationToken, key: key, operation: operation, recoveryPin: null).ConfigureAwait(continueOnCapturedContext: false)) {
+            return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "release reset no longer owns private activation");
+        }
+        var definition = await archive.ReadFileAsync(target, definitionFile, cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+        var definitionHash = WorldDefinitionFileSource.ComputeContentHash(content: definition.Span);
+        var snapshot = await ReadRootSnapshotAsync(cancellationToken: cancellationToken, identity: identity).ConfigureAwait(continueOnCapturedContext: false);
+        var next = WorldAuthorityRoot.Empty with {
+            DefinitionHash = definitionHash,
+            Epoch = checked(((snapshot?.Root.Epoch ?? 0) + 1)),
+            Sequence = checked(((snapshot?.Root.Sequence ?? 0) + 1)),
+        };
+
+        if ((snapshot is { } existing) && (existing.Root with { Epoch = 0, Sequence = 0 } == next with { Epoch = 0, Sequence = 0 })) {
+            return WorldAuthorityStoreOutcome.Success(detail: "release reset is already durable", root: existing);
+        }
+        var definitionWrite = await PutImmutableAsync(
+            address: DefinitionCandidateAddress(hash: definitionHash, identity: identity),
+            bytes: definition,
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        if (!definitionWrite.Ok) { return definitionWrite; }
+        if (!await StillOwnsActivationAsync(cancellationToken: cancellationToken, key: key, operation: operation, recoveryPin: null).ConfigureAwait(continueOnCapturedContext: false)) {
+            return WorldAuthorityStoreOutcome.PreconditionFailed(detail: "release reset lost private activation before publishing");
+        }
+        var write = await WriteRootAsync(
+            identity,
+            next,
+            snapshot?.VersionToken,
+            ((snapshot is null) ? ObjectBlobWriteMode.CreateOnly : ObjectBlobWriteMode.Overwrite),
+            cancellationToken
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return (write.Succeeded
+            ? WorldAuthorityStoreOutcome.Success(root: new(Root: next, VersionToken: (write.VersionToken ?? string.Empty)))
+            : WorldAuthorityStoreOutcome.PreconditionFailed(detail: "authority root moved before a fresh release reset; no state was replaced"));
     }
 }

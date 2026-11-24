@@ -4,12 +4,16 @@ using System.Diagnostics;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Memory;
 using Puck.Maths;
+using Bottom = Puck.SdfVm.SdfMeshTraceBottoms.Bottom;
+using BottomState = Puck.SdfVm.SdfMeshTraceBottoms.State;
 
 namespace Puck.SdfVm;
 
 // The probe scene's acceleration structures, on a device created with ray queries whose pipeline set holds the probe
 // kernels' ray-query variants (SdfKernelSet.RaysOf): one bottom level a geometry of the published scene, built from the
-// mesh region's words in place and compacted, then one top level over the scene's draws, each draw an instance whose
+// mesh region's words in place and compacted, and claimed from the device's table (SdfMeshTraceBottoms), so the residencies
+// of one world, whose scenes hold the same geometries, build each bottom once; then one top level over the scene's draws,
+// the client's own, each draw an instance whose
 // index is its record's in the uploaded scene. A query whose kernel traces takes the variant once the top level stands for
 // the published scene; until then, and wherever the frame's lever leaves ray queries off, it takes the software walk.
 //
@@ -18,8 +22,10 @@ namespace Puck.SdfVm;
 // one has landed: that is the client's completion point, the shape GpuRetirementQueue releases by. A structure leaves
 // service only through Retire, which holds it until the last serial admitted so far has landed, and DrainRetired releases
 // it then. A job admitted before Retire may hold the structure (its query's Top, its build's inputs); one admitted after
-// cannot, since Retire runs under the gate after the structure stopped being published. Nothing else disposes a structure
-// while the client lives: Bottom and Top expose none, and Dispose, which frees the rest, runs after the service drained.
+// cannot, since Retire runs under the gate after the structure stopped being published. A shared bottom leaves the
+// client's service the same way, as its claim (RetireClaim), and the table disposes the structure with the last claim any
+// client gives back. Nothing else disposes a structure while the client lives: Top exposes none, and Dispose, which frees
+// the rest and gives back its claims, runs after the service drained.
 internal sealed partial class SdfMeshProbeGpuWork {
     private readonly IGpuAccelerationStructures? m_structures;
     private readonly nint m_raysPool;
@@ -29,7 +35,10 @@ internal sealed partial class SdfMeshProbeGpuWork {
     private readonly HashSet<Bottom> m_takenBottoms = new(ReferenceEqualityComparer.Instance);
     private readonly List<(Bottom Bottom, SdfMesh Mesh)> m_takenBuilds = [];
     private readonly List<Bottom> m_takenCompactions = [];
-    private readonly GpuRetirementQueue<IGpuAccelerationStructure> m_retired = new();
+    // What leaves service once every job admitted before it has landed: the structures the client alone made (a top, a
+    // compaction's uncompacted build, a handed-back job's outputs) and its claims on the device's shared bottoms.
+    private readonly GpuRetirementQueue<IDisposable> m_retired = new();
+    private readonly SdfMeshTraceBottoms m_shared;
     private readonly List<long> m_flying = [];
     // Seconds a structure job takes a unit, by its kind (StructureKind): a triangle of a bottom's build or of its
     // compaction's copy, or an instance of a top's build. Each kind is measured apart, since a compaction copies a
@@ -115,6 +124,13 @@ internal sealed partial class SdfMeshProbeGpuWork {
         if (structure is null) { return; }
         m_retired.Retire(after: (ulong)(m_nextSerial - 1L), item: structure);
     }
+    // Stops naming a shared bottom: the claim goes back once every job admitted before now has landed, and the bottom's
+    // structure goes with the last claim any client holds. Under the gate.
+    private void RetireClaim(Bottom bottom) => m_retired.Retire(after: (ulong)(m_nextSerial - 1L), item: new Claim(bottoms: m_shared, bottom: bottom));
+    // A claim on a shared bottom, given back when disposed.
+    private sealed class Claim(SdfMeshTraceBottoms bottoms, Bottom bottom) : IDisposable {
+        public void Dispose() => bottoms.Release(bottom: bottom)?.Dispose();
+    }
     // Releases what every job admitted before its retirement has landed past: every serial below the oldest flying one,
     // or every serial admitted when none flies. Under the gate.
     private void DrainRetired() {
@@ -123,15 +139,17 @@ internal sealed partial class SdfMeshProbeGpuWork {
         foreach (var serial in m_flying) { oldest = Math.Min(val1: oldest, val2: serial); }
         m_retired.Release(completed: (ulong)(oldest - 1L), release: m_releaseStructure ??= ReleaseStructure);
     }
-    private Action<IGpuAccelerationStructure>? m_releaseStructure;
-    private void ReleaseStructure(IGpuAccelerationStructure structure) {
-        m_structureBytes -= (long)structure.SizeBytes;
-        structure.Dispose();
+    private Action<IDisposable>? m_releaseStructure;
+    private void ReleaseStructure(IDisposable item) {
+        if (item is IGpuAccelerationStructure { Level: GpuAccelerationStructureLevel.Top } top) { m_structureBytes -= (long)top.SizeBytes; }
+        item.Dispose();
     }
+    // Creates a structure. m_structureBytes counts the client's top levels alone: a bottom belongs to the device's shared
+    // table, which any claimant may be the last to let go of.
     private IGpuAccelerationStructure CreateStructure(GpuAccelerationStructureLevel level, ulong bytes, string part) {
         var structure = m_structures!.Create(level: level, name: Name(part: part), sizeBytes: bytes);
 
-        m_structureBytes += (long)structure.SizeBytes;
+        if (level == GpuAccelerationStructureLevel.Top) { m_structureBytes += (long)structure.SizeBytes; }
 
         return structure;
     }
@@ -171,76 +189,81 @@ internal sealed partial class SdfMeshProbeGpuWork {
         var heldCompaction = 0L;
         var ready = true;
 
-        // Many instances share one geometry's bottom: each bottom is taken once, whichever instance names it first.
-        m_takenBottoms.Clear();
-        for (var index = 0; (index < count); index++) {
-            var (geometry, mesh, _) = scene.GpuInstance(index: index);
+        // The bottoms' states are the device's, shared with every client whose scene holds the same geometry: they are
+        // chosen and marked under the shared gate, so no two clients take one bottom, and a bottom another client builds
+        // or compacts is waited for, not taken.
+        lock (m_shared.Gate) {
+            // Many instances share one geometry's bottom: each bottom is taken once, whichever instance names it first.
+            m_takenBottoms.Clear();
+            for (var index = 0; (index < count); index++) {
+                var (geometry, mesh, _) = scene.GpuInstance(index: index);
 
-            if (geometry.Count == 0) { continue; }
-            if (!m_bottoms.TryGetValue(key: geometry, value: out var bottom)) {
-                bottom = new Bottom(geometry: geometry);
-                m_bottoms.Add(key: geometry, value: bottom);
-            }
-            if (bottom.State == BottomState.Ready) { continue; }
-            ready = false;
-            if (bottom.State == BottomState.Wanted) {
-                if (((build.Count != 0) || allowance.Queued) && ((units + geometry.Count) > most)) {
-                    if ((build.Count == 0) && (held == 0L)) { held = geometry.Count; }
-                    continue;
+                if (geometry.Count == 0) { continue; }
+                if (!m_bottoms.TryGetValue(key: geometry, value: out var bottom)) {
+                    bottom = m_shared.Claim(geometry: geometry);
+                    m_bottoms.Add(key: geometry, value: bottom);
                 }
-                if (!m_takenBottoms.Add(item: bottom)) { continue; }
-                build.Add(item: (bottom, mesh));
-                units += geometry.Count;
-            } else if ((bottom.State == BottomState.Built) && !m_takenBottoms.Contains(item: bottom)) {
-                if (((compact.Count != 0) || allowance.Queued) && ((compacted + geometry.Count) > mostCompacted)) {
-                    if ((compact.Count == 0) && (heldCompaction == 0L)) { heldCompaction = geometry.Count; }
-                    continue;
+                if (bottom.State == BottomState.Ready) { continue; }
+                ready = false;
+                if (bottom.State == BottomState.Wanted) {
+                    if (((build.Count != 0) || allowance.Queued) && ((units + geometry.Count) > most)) {
+                        if ((build.Count == 0) && (held == 0L)) { held = geometry.Count; }
+                        continue;
+                    }
+                    if (!m_takenBottoms.Add(item: bottom)) { continue; }
+                    build.Add(item: (bottom, mesh));
+                    units += geometry.Count;
+                } else if ((bottom.State == BottomState.Built) && !m_takenBottoms.Contains(item: bottom)) {
+                    if (((compact.Count != 0) || allowance.Queued) && ((compacted + geometry.Count) > mostCompacted)) {
+                        if ((compact.Count == 0) && (heldCompaction == 0L)) { heldCompaction = geometry.Count; }
+                        continue;
+                    }
+                    _ = m_takenBottoms.Add(item: bottom);
+                    compact.Add(item: bottom);
+                    compacted += geometry.Count;
                 }
-                _ = m_takenBottoms.Add(item: bottom);
-                compact.Add(item: bottom);
-                compacted += geometry.Count;
             }
-        }
-        if (build.Count != 0) {
-            if (!tables.TryProbeScene(scene: scene, placements: out var placements, meshes: out var meshes, version: out _)) { return false; }
-            var builds = new StructureJob.Build[build.Count];
+            if (build.Count != 0) {
+                if (!tables.TryProbeScene(scene: scene, placements: out var placements, meshes: out var meshes, version: out _)) { return false; }
+                var builds = new StructureJob.Build[build.Count];
 
-            for (var index = 0; (index < build.Count); index++) {
-                var (bottom, mesh) = build[index];
-                var placement = placements[mesh];
-                var inputs = GpuAccelerationStructureInputs.Triangles(
-                    indexOffsetBytes: (ulong)placement.IndexWord * sizeof(uint),
-                    source: meshes,
-                    triangleCount: (uint)bottom.Geometry.Count,
-                    vertexCount: (uint)bottom.Geometry.Positions.Length,
-                    vertexOffsetBytes: (ulong)placement.VertexWord * sizeof(uint),
-                    vertexStrideBytes: (uint)SdfMeshRecord.VertexWords * sizeof(uint)
-                );
+                for (var index = 0; (index < build.Count); index++) {
+                    var (bottom, mesh) = build[index];
+                    var placement = placements[mesh];
+                    var inputs = GpuAccelerationStructureInputs.Triangles(
+                        indexOffsetBytes: (ulong)placement.IndexWord * sizeof(uint),
+                        source: meshes,
+                        triangleCount: (uint)bottom.Geometry.Count,
+                        vertexCount: (uint)bottom.Geometry.Positions.Length,
+                        vertexOffsetBytes: (ulong)placement.VertexWord * sizeof(uint),
+                        vertexStrideBytes: (uint)SdfMeshRecord.VertexWords * sizeof(uint)
+                    );
 
-                builds[index] = new StructureJob.Build(Bottom: bottom, Inputs: inputs, Sizes: m_structures.Size(inputs: in inputs));
-                bottom.State = BottomState.Building;
-            }
-            job = new StructureJob(serial: Admit(), kind: StructureKind.Bottoms) { Builds = builds, Units = units };
-        } else if (compact.Count != 0) {
-            units = compacted;
-            foreach (var bottom in compact) { bottom.State = BottomState.Compacting; }
-            job = new StructureJob(serial: Admit(), kind: StructureKind.Compaction) { Compactions = [.. compact], Units = units };
-        } else if (ready) {
-            if (!allowance.Admits(seconds: topRate.SecondsOf(units: count))) {
-                estimatedSeconds = topRate.SecondsOf(units: count);
+                    builds[index] = new StructureJob.Build(Bottom: bottom, Inputs: inputs, Sizes: m_structures.Size(inputs: in inputs));
+                    bottom.State = BottomState.Building;
+                }
+                job = new StructureJob(serial: Admit(), kind: StructureKind.Bottoms) { Builds = builds, Units = units };
+            } else if (compact.Count != 0) {
+                units = compacted;
+                foreach (var bottom in compact) { bottom.State = BottomState.Compacting; }
+                job = new StructureJob(serial: Admit(), kind: StructureKind.Compaction) { Compactions = [.. compact], Units = units };
+            } else if (ready) {
+                if (!allowance.Admits(seconds: topRate.SecondsOf(units: count))) {
+                    estimatedSeconds = topRate.SecondsOf(units: count);
+                    return false;
+                }
+                var bottoms = new Bottom?[count];
+
+                for (var index = 0; (index < count); index++) {
+                    var geometry = scene.GpuInstance(index: index).Geometry;
+
+                    bottoms[index] = ((geometry.Count == 0) ? null : m_bottoms[geometry]);
+                }
+                job = new StructureJob(serial: Admit(), kind: StructureKind.Top) { Scene = scene.Acquire(), Instances = bottoms, Units = count };
+            } else {
+                estimatedSeconds = ((held != 0L) ? buildRate.SecondsOf(units: held) : compactRate.SecondsOf(units: heldCompaction));
                 return false;
             }
-            var bottoms = new Bottom?[count];
-
-            for (var index = 0; (index < count); index++) {
-                var geometry = scene.GpuInstance(index: index).Geometry;
-
-                bottoms[index] = ((geometry.Count == 0) ? null : m_bottoms[geometry]);
-            }
-            job = new StructureJob(serial: Admit(), kind: StructureKind.Top) { Scene = scene.Acquire(), Instances = bottoms, Units = count };
-        } else {
-            estimatedSeconds = ((held != 0L) ? buildRate.SecondsOf(units: held) : compactRate.SecondsOf(units: heldCompaction));
-            return false;
         }
 
         m_structureInFlight = true;
@@ -343,23 +366,27 @@ internal sealed partial class SdfMeshProbeGpuWork {
             }
             switch (job.Kind) {
                 case StructureKind.Bottoms:
-                    for (var index = 0; (index < job.Builds!.Length); index++) {
-                        var bottom = job.Builds[index].Bottom;
+                    lock (m_shared.Gate) {
+                        for (var index = 0; (index < job.Builds!.Length); index++) {
+                            var bottom = job.Builds[index].Bottom;
 
-                        bottom.Structure = job.Created[index];
-                        bottom.CompactedBytes = BinaryPrimitives.ReadUInt64LittleEndian(source: sizes[(index * sizeof(ulong))..]);
-                        // A size the driver did not answer keeps the uncompacted build in service.
-                        bottom.State = ((bottom.CompactedBytes == 0UL) ? BottomState.Ready : BottomState.Built);
+                            bottom.Structure = job.Created[index];
+                            bottom.CompactedBytes = BinaryPrimitives.ReadUInt64LittleEndian(source: sizes[(index * sizeof(ulong))..]);
+                            // A size the driver did not answer keeps the uncompacted build in service.
+                            bottom.State = ((bottom.CompactedBytes == 0UL) ? BottomState.Ready : BottomState.Built);
+                        }
                     }
                     m_volume.Counters.Add(SdfMeshIrradiance.StructuresBuilt, job.Builds.Length);
                     break;
                 case StructureKind.Compaction:
-                    for (var index = 0; (index < job.Compactions!.Length); index++) {
-                        var bottom = job.Compactions[index];
+                    lock (m_shared.Gate) {
+                        for (var index = 0; (index < job.Compactions!.Length); index++) {
+                            var bottom = job.Compactions[index];
 
-                        Retire(structure: bottom.Structure);
-                        bottom.Structure = job.Created[index];
-                        bottom.State = BottomState.Ready;
+                            Retire(structure: bottom.Structure);
+                            bottom.Structure = job.Created[index];
+                            bottom.State = BottomState.Ready;
+                        }
                     }
                     break;
                 default:
@@ -389,11 +416,13 @@ internal sealed partial class SdfMeshProbeGpuWork {
         m_structureBackoffScene = m_scene?.Acquire();
         foreach (var structure in job.Created) { Retire(structure: structure); }
         job.Created.Clear();
-        if (job.Builds is { } builds) {
-            foreach (var build in builds) { build.Bottom.State = BottomState.Wanted; }
-        }
-        if (job.Compactions is { } compactions) {
-            foreach (var bottom in compactions) { bottom.State = BottomState.Built; }
+        lock (m_shared.Gate) {
+            if (job.Builds is { } builds) {
+                foreach (var build in builds) { build.Bottom.State = BottomState.Wanted; }
+            }
+            if (job.Compactions is { } compactions) {
+                foreach (var bottom in compactions) { bottom.State = BottomState.Built; }
+            }
         }
         job.Scene?.Dispose();
         job.Scene = null;
@@ -440,10 +469,12 @@ internal sealed partial class SdfMeshProbeGpuWork {
         if (m_volume.RayQueries && (m_scene is { } scene)) {
             for (var index = 0; (index < scene.GpuInstanceCount); index++) { _ = named.Add(item: scene.GpuInstance(index: index).Geometry); }
         }
-        foreach (var (geometry, bottom) in m_bottoms.ToArray()) {
-            if (named.Contains(item: geometry) || (bottom.State is BottomState.Building or BottomState.Compacting)) { continue; }
-            Retire(structure: bottom.Structure);
-            _ = m_bottoms.Remove(key: geometry);
+        lock (m_shared.Gate) {
+            foreach (var (geometry, bottom) in m_bottoms.ToArray()) {
+                if (named.Contains(item: geometry) || (bottom.State is BottomState.Building or BottomState.Compacting)) { continue; }
+                RetireClaim(bottom: bottom);
+                _ = m_bottoms.Remove(key: geometry);
+            }
         }
     }
     // What the structures hold, for the volume's memory line: every byte still held (retired ones included), the bottoms'
@@ -454,21 +485,25 @@ internal sealed partial class SdfMeshProbeGpuWork {
         var uncompacted = 0;
         var bottomBytes = 0UL;
         var triangles = 0L;
+        var shared = 0;
 
-        foreach (var bottom in m_bottoms.Values) {
-            if (bottom.State == BottomState.Ready) {
-                ready++;
-                if (bottom.CompactedBytes == 0UL) { uncompacted++; }
+        lock (m_shared.Gate) {
+            foreach (var bottom in m_bottoms.Values) {
+                if (bottom.State == BottomState.Ready) {
+                    ready++;
+                    if (bottom.CompactedBytes == 0UL) { uncompacted++; }
+                }
+                bottomBytes += bottom.Structure?.SizeBytes ?? 0UL;
+                if (bottom.Structure is not null) { triangles += bottom.Geometry.Count; }
+                if (bottom.Claims > 1) { shared++; }
             }
-            bottomBytes += bottom.Structure?.SizeBytes ?? 0UL;
-            if (bottom.Structure is not null) { triangles += bottom.Geometry.Count; }
         }
-        return FormattableString.Invariant($"trace-structures={((m_structures is null) ? "unsupported" : (m_volume.RayQueries ? "on" : "off"))} trace-structure-device-bytes={m_structureBytes} trace-structure-bottom-bytes={bottomBytes} trace-structure-bottom-triangles={triangles} trace-structure-top-bytes={m_top?.Structure.SizeBytes ?? 0UL} trace-structure-bottoms={m_bottoms.Count} trace-structure-bottoms-ready={ready} trace-structure-bottoms-uncompacted={uncompacted} trace-structure-top-instances={m_top?.Instances.Length ?? 0} trace-structure-tops-built={m_topsBuilt} trace-structure-retired={m_retired.Count}");
+        return FormattableString.Invariant($"trace-structures={((m_structures is null) ? "unsupported" : (m_volume.RayQueries ? "on" : "off"))} trace-structure-top-device-bytes={m_structureBytes} trace-structure-bottom-bytes={bottomBytes} trace-structure-bottoms-shared={shared} trace-structure-bottom-triangles={triangles} trace-structure-top-bytes={m_top?.Structure.SizeBytes ?? 0UL} trace-structure-bottoms={m_bottoms.Count} trace-structure-bottoms-ready={ready} trace-structure-bottoms-uncompacted={uncompacted} trace-structure-top-instances={m_top?.Instances.Length ?? 0} trace-structure-tops-built={m_topsBuilt} trace-structure-retired={m_retired.Count}");
     }
     // Frees every structure the client holds; the service has drained, so no submission reads them.
     private void DisposeStructures() {
-        m_retired.Release(completed: ulong.MaxValue, release: static structure => structure.Dispose());
-        foreach (var bottom in m_bottoms.Values) { bottom.Structure?.Dispose(); bottom.Structure = null; }
+        m_retired.Release(completed: ulong.MaxValue, release: static item => item.Dispose());
+        foreach (var bottom in m_bottoms.Values) { m_shared.Release(bottom: bottom)?.Dispose(); }
         m_bottoms.Clear();
         if (m_top is { } top) {
             top.Structure.Dispose();
@@ -481,15 +516,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
         if (m_raysPool != 0) { m_gpu.Bindings.DestroyPool(m_raysPool); }
     }
 
-    private enum BottomState { Wanted, Building, Built, Compacting, Ready }
-    // One geometry's bottom level: wanted, being built, built with its compacted size read, being compacted, or ready,
-    // its structure the one a top level names.
-    private sealed class Bottom(SdfMeshIrradianceScene.Geometry geometry) {
-        public SdfMeshIrradianceScene.Geometry Geometry { get; } = geometry;
-        public BottomState State { get; set; }
-        public IGpuAccelerationStructure? Structure { get; set; }
-        public ulong CompactedBytes { get; set; }
-    }
+
     // The published top level, the scene whose draws are its instances (a claim, moved to an equivalent scene the client
     // adopts), and each instance's bottom (null for a draw of no triangles, which has no instance).
     private sealed class Top(IGpuAccelerationStructure structure, Bottom?[] instances) {

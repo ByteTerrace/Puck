@@ -45,6 +45,38 @@ public static class WorldContentIndex {
                 RegisterFile(canonical: WorldAssetRowLoader.Canonical(family: family, name: name), directory: directory, hash: hash, source: source);
             }
         }
+        if (
+            moved ||
+            !ReferenceEquals(objA: definition.Hud, objB: previous?.Hud) ||
+            !ReferenceEquals(objA: definition.Identity, objB: previous?.Identity)
+        ) {
+            var registeredSets = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            foreach (var voice in Voices(hud: definition.Hud, identity: definition.Identity)) {
+                if ((voice.SampleSet is not { } sampleSet) || (voice.Hash is not { } hash)) {
+                    continue;
+                }
+                RegisterFile(canonical: WorldVoiceSampleLoader.CanonicalBytes, directory: directory, hash: hash, source: sampleSet);
+                if (
+                    WorldDocumentPaths.TryResolve(documentDirectory: directory, path: sampleSet, reason: out _, resolved: out var setPath) &&
+                    registeredSets.Add(item: setPath) &&
+                    File.Exists(path: setPath)
+                ) {
+                    try {
+                        var set = System.Text.Json.JsonSerializer.Deserialize<WorldVoiceSampleSet>(
+                            utf8Json: File.ReadAllBytes(path: setPath),
+                            options: Puck.Assets.Documents.DocumentJsonOptions.Shared
+                        );
+                        if (set is not null) {
+                            var setDirectory = WorldDocumentPaths.DirectoryOf(documentPath: setPath);
+                            foreach (var (wavSource, wavPin) in WorldVoiceSampleLoader.SyllablePins(set: set)) {
+                                RegisterFile(canonical: null, directory: setDirectory, hash: wavPin.Hex, source: wavSource);
+                            }
+                        }
+                    } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+                }
+            }
+        }
     }
     /// <summary>Fetches the content a delivered document names by pin that this process does not hold, so the
     /// presentation's later reads by pin find it without touching the network. It runs where a delivery is decoded, on
@@ -63,9 +95,13 @@ public static class WorldContentIndex {
 
         var resolver = WorldProjectionContent.Resolver;
 
-        foreach (var (pin, maximumBytes, admit) in Named(music: definition.Music, patches: definition.Patches, text: definition.Text, tunes: definition.Tunes)) {
-            if (!resolver.Contains(held: held, pin: pin)) {
-                _ = resolver.TryRead(admit: admit, content: out _, fetch: fetch, held: held, maximumBytes: maximumBytes, pin: pin);
+        // Two passes: the first fetches any missing voice sample-set manifests into held so the second pass can read
+        // their syllable WAV pins out of held and fetch any missing WAVs on the same delivery.
+        for (var pass = 0; (pass < 2); pass++) {
+            foreach (var (pin, maximumBytes, admit) in Named(hud: definition.Hud, held: held, identity: definition.Identity, music: definition.Music, patches: definition.Patches, text: definition.Text, tunes: definition.Tunes)) {
+                if (!resolver.Contains(held: held, pin: pin)) {
+                    _ = resolver.TryRead(admit: admit, content: out _, fetch: fetch, held: held, maximumBytes: maximumBytes, pin: pin);
+                }
             }
         }
     }
@@ -81,7 +117,7 @@ public static class WorldContentIndex {
     public static bool Names(WorldProjectionDocument projection, ContentPin pin, out int maximumBytes) {
         ArgumentNullException.ThrowIfNull(argument: projection);
 
-        return Names(maximumBytes: out maximumBytes, named: Named(music: projection.Music, patches: projection.Patches, text: projection.Text, tunes: projection.Tunes), pin: pin);
+        return Names(maximumBytes: out maximumBytes, named: Named(hud: projection.Hud, music: projection.Music, patches: projection.Patches, text: projection.Text, tunes: projection.Tunes), pin: pin);
     }
     /// <summary>Returns whether a document names a pin among the content its recipient reads by pin: the test an
     /// authority's fetch door applies to the document a replica-tier recipient is currently delivered.</summary>
@@ -94,7 +130,7 @@ public static class WorldContentIndex {
     public static bool Names(WorldDefinition definition, ContentPin pin, out int maximumBytes) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        return Names(maximumBytes: out maximumBytes, named: Named(music: definition.Music, patches: definition.Patches, text: definition.Text, tunes: definition.Tunes), pin: pin);
+        return Names(maximumBytes: out maximumBytes, named: Named(hud: definition.Hud, identity: definition.Identity, music: definition.Music, patches: definition.Patches, text: definition.Text, tunes: definition.Tunes), pin: pin);
     }
 
     private static bool Names(IEnumerable<(ContentPin Pin, int MaximumBytes, Func<ReadOnlyMemory<byte>, bool> Admit)> named, ContentPin pin, out int maximumBytes) {
@@ -114,7 +150,7 @@ public static class WorldContentIndex {
     // Every pin a document's presentation reads content by, with the most bytes its family admits and the check
     // fetched bytes must pass before they are stored. A family of content row that carries a pin owes a branch here as
     // well. A table is not here: only rules read one, and a recipient runs no rules of a world it presents.
-    private static IEnumerable<(ContentPin Pin, int MaximumBytes, Func<ReadOnlyMemory<byte>, bool> Admit)> Named(Puck.Text.TextFontCatalogDefinition? text, IReadOnlyList<WorldTune>? tunes, IReadOnlyList<WorldPatch>? patches, IReadOnlyList<WorldMusicRow>? music) {
+    private static IEnumerable<(ContentPin Pin, int MaximumBytes, Func<ReadOnlyMemory<byte>, bool> Admit)> Named(Puck.Text.TextFontCatalogDefinition? text, IReadOnlyList<WorldTune>? tunes, IReadOnlyList<WorldPatch>? patches, IReadOnlyList<WorldMusicRow>? music, WorldHudSection? hud = null, WorldIdentityDefinition? identity = null, ContentAddressedStore? held = null) {
         foreach (var font in (text?.Fonts ?? [])) {
             if ((font is not null) && ContentPin.TryParse(pin: out var pin, text: font.Hash)) {
                 yield return (pin, Puck.Text.FontAtlasSourceResolver.MaxPinnedFontBytes, static bytes => Puck.Text.OpenTypeFontFace.HasFontSignature(bytes: bytes.Span));
@@ -123,6 +159,31 @@ public static class WorldContentIndex {
         foreach (var (family, _, _, hash) in WorldAssetRowLoader.PinnedRows(music: music, patches: patches, tables: null, tunes: tunes)) {
             if (WorldAssetRowLoader.TryPin(hash: hash, pin: out var pin)) {
                 yield return (pin, WorldAssetRowLoader.MaxPinnedRowBytes, bytes => WorldAssetRowLoader.IsCanonical(bytes: bytes, family: family));
+            }
+        }
+        foreach (var voice in Voices(hud: hud, identity: identity)) {
+            if ((voice.SampleSet is null) || !WorldAssetRowLoader.TryPin(hash: voice.Hash, pin: out var setPin)) {
+                continue;
+            }
+            yield return (setPin, WorldVoiceSampleLoader.MaxPinnedManifestBytes, WorldVoiceSampleLoader.IsCanonical);
+            if (WorldVoiceSampleLoader.TryReadPinnedSet(pin: setPin, held: held, set: out var set) && (set is not null)) {
+                foreach (var (_, wavPin) in WorldVoiceSampleLoader.SyllablePins(set: set)) {
+                    yield return (wavPin, WorldVoiceSampleLoader.MaxPinnedSampleBytes, WorldVoiceSampleLoader.IsValidWave);
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<WorldVoiceProfile> Voices(WorldHudSection? hud, WorldIdentityDefinition? identity) {
+        if (identity?.Voice is { } identityVoice) {
+            yield return identityVoice;
+        }
+        foreach (var panel in (hud?.Panels ?? [])) {
+            if (panel is null) { continue; }
+            foreach (var element in (panel.Elements ?? [])) {
+                if (element?.Voice is { } elementVoice) {
+                    yield return elementVoice;
+                }
             }
         }
     }

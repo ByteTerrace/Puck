@@ -25,6 +25,9 @@ public static partial class AzureCommand {
         private static readonly JsonSerializerOptions Json = new(defaults: JsonSerializerDefaults.Web);
 
         private readonly WorldAuthorityIdentity[] m_identities = target.Manifest.Definitions.Keys.Select(selector: ParseIdentity).ToArray();
+        // The worlds the running source names: its drain, protected roots and recovery are its own inventory, which a
+        // reset's target may change (a world added starts fresh; a world removed keeps its protected root).
+        private readonly WorldAuthorityIdentity[] m_sourceIdentities = (source ?? target).Manifest.Definitions.Keys.Select(selector: ParseIdentity).ToArray();
 
         private async Task CheckWorkerAsync(string worker, AzureWorldReleaseDeployment deployment) {
             var process = await InspectAsync(worker: worker).ConfigureAwait(continueOnCapturedContext: false);
@@ -140,7 +143,7 @@ public static partial class AzureCommand {
         public async Task<SortedDictionary<string, string>> FindCapturedRootsAsync(Guid operationId, CancellationToken cancellationToken) {
             var captured = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
 
-            foreach (var identity in m_identities) {
+            foreach (var identity in m_sourceIdentities) {
                 var saved = await authority.FindRecoveryRootAsync(
                     identity,
                     operationId,
@@ -257,8 +260,8 @@ public static partial class AzureCommand {
         }
         private void ValidateRoots(IReadOnlyDictionary<string, string> roots) {
             if (
-                (roots.Count != m_identities.Length) ||
-                !roots.Keys.ToHashSet(comparer: StringComparer.Ordinal).SetEquals(other: m_identities.Select(selector: identity => identity.RootKey))
+                (roots.Count != m_sourceIdentities.Length) ||
+                !roots.Keys.ToHashSet(comparer: StringComparer.Ordinal).SetEquals(other: m_sourceIdentities.Select(selector: identity => identity.RootKey))
             ) {
                 throw new InvalidDataException(message: "protected source roots do not match the release inventory");
             }
@@ -337,7 +340,7 @@ public static partial class AzureCommand {
                     : null
                 );
 
-                if (retained.Count == m_identities.Length) {
+                if (retained.Count == m_sourceIdentities.Length) {
                     // The drain endpoint writes these only after the whole host is frozen. A retry after source
                     // stop must reuse them; it must neither contact a stopped endpoint nor recapture newer state.
                     roots = retained;
@@ -362,7 +365,7 @@ public static partial class AzureCommand {
                         if ((await InspectAsync(worker: worker).ConfigureAwait(continueOnCapturedContext: false))["running"]?.GetValue<bool>() == true) { throw; }
                         throw new InvalidOperationException(
                             innerException: error,
-                            message: $"the source host is not running on {worker} (Azure replaced the worker or its host stopped) before its drain retained all roots ({retained.Count} of {m_identities.Length}), so its state cannot be drained: {error.Message}"
+                            message: $"the source host is not running on {worker} (Azure replaced the worker or its host stopped) before its drain retained all roots ({retained.Count} of {m_sourceIdentities.Length}), so its state cannot be drained: {error.Message}"
                         );
                     }
 
@@ -455,7 +458,7 @@ public static partial class AzureCommand {
             ).ConfigureAwait(continueOnCapturedContext: false);
             ValidateRoots(roots: operation.RecoveryRoots);
             // Validate the entire protected inventory before the first maintenance takeover.
-            foreach (var identity in m_identities) {
+            foreach (var identity in m_sourceIdentities) {
                 _ = (await authority.LoadRecoveryRootAsync(
                     identity,
                     operation.RecoveryRoots[identity.RootKey],
@@ -464,7 +467,7 @@ public static partial class AzureCommand {
                 ).ConfigureAwait(continueOnCapturedContext: false)
                     ?? throw new InvalidDataException(message: "a protected source root is missing"));
             }
-            foreach (var identity in m_identities) {
+            foreach (var identity in m_sourceIdentities) {
                 await RequireAsync(
                     cancellationToken: cancellationToken,
                     expected: operation,

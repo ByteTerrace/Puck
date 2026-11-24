@@ -3,7 +3,7 @@ using System.Globalization;
 namespace Puck.SdfVm;
 
 // A residency nothing observes gives its tables back on a live device and builds them again when it is read: the door a
-// device loss uses (the residency keeps its bake, its lighting's measured words, its exposures and its frame, and its
+// device loss uses (the residency keeps its bake, its lighting's measured words for ForgetLightingSeconds, its exposures and its frame, and its
 // next preparation builds tables from its pipeline set, which it keeps leased), opened by the presentation
 // (SdfWorldPasses.BeginFrame) for a world no view has shown for a while.
 //
@@ -26,6 +26,9 @@ public sealed partial class SdfWorldResidency {
     /// <summary>The longest a woken residency withholds its views (<see cref="Waking"/>) while its lighting republishes
     /// and its meshes land, in seconds: past it the views render whatever has arrived.</summary>
     public const double WakeHoldSeconds = 1.5d;
+    /// <summary>The seconds a residency stays parked before it gives back its measured lighting too: past it, a wake
+    /// lights the world from nothing, as a world first shown is lit.</summary>
+    public const double ForgetLightingSeconds = 60d;
 
     // The clock the residency's observation and wake are timed by (its selector's), taken when its tables are first built.
     private TimeProvider? m_clock;
@@ -41,6 +44,9 @@ public sealed partial class SdfWorldResidency {
     // the edge of sight) stops rebuilding its tables and lighting every few seconds, and reset by a park that lasts.
     private long m_parkedAt;
     private int m_parkBackoff = 1;
+    // Whether the current park has given back the lighting (ForgetParkedLighting), and how many parks have.
+    private bool m_lightingForgotten;
+    private long m_lightingDrops;
 
     /// <summary>Gets the seconds the residency must go unobserved before it parks while the device's pool stands past
     /// its limit: <see cref="PressedParkSeconds"/>, longer for a residency that woke soon after its recent parks, and
@@ -115,7 +121,7 @@ public sealed partial class SdfWorldResidency {
     /// <summary>Gives the residency's tables back on a live device: the tables, their regions and draw records, their
     /// shadows and their background work (the lighting's trace scene, hit cache and feedback among it) go to the device's
     /// retirement, which disposes them once every submission recorded before now has completed, and the residency's names
-    /// leave the presentation's mesh region with them. The residency keeps its bake, its lighting's measured volume, its
+    /// leave the presentation's mesh region with them. The residency keeps its bake, its lighting's measured volume (for <see cref="ForgetLightingSeconds"/>), its
     /// exposures, its frame and its pipeline set, and builds its tables again when it is next read
     /// (<see cref="Prepare"/>). Called on the frame thread between frames, before any residency is staged.</summary>
     /// <returns><see langword="true"/> when the tables were given back; <see langword="false"/> when the residency has
@@ -131,6 +137,7 @@ public sealed partial class SdfWorldResidency {
         m_wakeOwed = false;
         m_wokenAt = 0L;
         m_parkedAt = (m_clock?.GetTimestamp() ?? 0L);
+        m_lightingForgotten = false;
         m_parks++;
         ResetReady();
         Array.Clear(array: m_renderedSignatures);
@@ -140,6 +147,23 @@ public sealed partial class SdfWorldResidency {
         device.Services.Retirement.Retire(item: tables);
 
         return true;
+    }
+    // Gives back the measured lighting of a residency parked for ForgetLightingSeconds: its irradiance volume (the probe
+    // cache's blocks and tables, the volume's words and the trace scene's hierarchies, all host memory) is disposed and a
+    // fresh one stands in its place, which the next tables bind (EnsureTables hands the volume to the new probe client)
+    // and which lights the world from nothing when it wakes. Only a parked residency drops it: no tables, so no client
+    // or recording reads the old volume, and the parked tables' client was stopped at the park and retired long before.
+    private void ForgetParkedLighting() {
+        if (!m_parked || m_lightingForgotten || (m_clock is not { } clock) || (clock.GetElapsedTime(startingTimestamp: m_parkedAt).TotalSeconds < ForgetLightingSeconds)) {
+            return;
+        }
+
+        var forgotten = MeshIrradiance;
+
+        MeshIrradiance = new SdfMeshIrradiance();
+        m_lightingForgotten = true;
+        m_lightingDrops++;
+        forgotten.Dispose();
     }
     // Leaves the parked state as new tables are built for a reader (EnsureTables).
     private void Wake() {
@@ -155,5 +179,5 @@ public sealed partial class SdfWorldResidency {
     }
     /// <summary>Describes the residency's parking for <c>world.residency</c>.</summary>
     /// <returns>One line.</returns>
-    public string DescribeParking() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"parking parked={(m_parked ? "yes" : "no")} sighted={(m_sighted ? "yes" : "no")} wake-owed={(m_wakeOwed ? "yes" : "no")} parks={m_parks} wakes={m_wakes} unobserved={UnobservedSeconds():0.0}s pressed-after={PressedParkAfter:0.0}s parkable-device-bytes={ParkableBytes} waking={(Waking is null ? "no" : "yes")}");
+    public string DescribeParking() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"parking parked={(m_parked ? "yes" : "no")} sighted={(m_sighted ? "yes" : "no")} wake-owed={(m_wakeOwed ? "yes" : "no")} parks={m_parks} wakes={m_wakes} unobserved={UnobservedSeconds():0.0}s pressed-after={PressedParkAfter:0.0}s lighting-drops={m_lightingDrops} parkable-device-bytes={ParkableBytes} waking={(Waking is null ? "no" : "yes")}");
 }

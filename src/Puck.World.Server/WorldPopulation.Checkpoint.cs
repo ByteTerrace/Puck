@@ -674,7 +674,7 @@ public sealed partial class WorldPopulation {
     }
 
     private byte CapturedKitIndex(in WorldPopulationEntryCheckpoint captured, byte seatKit) => ((captured.Admission.SelectedKit >= 0)
-        ? checked((byte)captured.Admission.SelectedKit) : ((captured.Index < LocalSeatCount) ? seatKit : captured.Admission.KitIndex));
+        ? checked((byte)captured.Admission.SelectedKit) : (((captured.Index < LocalSeatCount) || captured.Admission.IsRemoteHuman) ? seatKit : captured.Admission.KitIndex));
     private static void ValidateAutonomyCheckpoint(in EntryCadenceSection state, in EntrySteeringSection steering, in FixedWorldKit kit) {
         var maximum = FixedTickConversion.TicksPerSecond;
 

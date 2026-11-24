@@ -645,11 +645,13 @@ the Entra session segment is minted per process, only a `*` row can admit an
 API user's arrivals **[inference]**.
 
 The deployed debug world admits every authenticated authority, with the whole
-document **[opened]** (`worlds/debug/debug.puck:80-97`):
+document, and admits remote visitors through the standard visitor row
+**[opened]** (`worlds/debug/debug.puck:102-122`):
 
 ```text
 admission [
   {
+    admits: Session
     disclosure: Replica
     domain: "*"
     grants [
@@ -666,6 +668,7 @@ admission [
     ]
     mode: FederatedAuthority
   }
+  visitorAdmissionRow(domain: "*")
 ]
 ```
 

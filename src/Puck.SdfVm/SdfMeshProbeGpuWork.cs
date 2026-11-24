@@ -109,6 +109,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         // A device that runs the ray-query variants holds a set of each ray-query interface a slot too, from a pool only
         // such a device lays out.
         m_structures = StructuresOf(tables: tables);
+        m_shared = tables.Grant.Selector.TraceBottoms;
         if (m_structures is not null) {
             var tracePipeline = tables.Pipeline(SdfKernel.ProbeTraceRays);
             var relightRaysPipeline = tables.Pipeline(SdfKernel.ProbeRelightRays);

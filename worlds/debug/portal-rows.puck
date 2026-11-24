@@ -1,6 +1,6 @@
 // A brass diamond on a teal keel: authored triangles beside a field, carried by one articulated body.
 // The neutral timeline keeps it in the stamp pool, so its diamond is a host draw and its keel an in-place bake.
-// Imported ahead of every other inhabitant, with one extra capacity slot, it takes body 560 without moving them.
+// Imported ahead of every other inhabitant, with one extra capacity slot, it takes body 573 without moving them.
 // This is a probe of the renderer, not a sculpting project: an engine limit here is fixed at its cause or handed back.
 import "../standard/kits"
 

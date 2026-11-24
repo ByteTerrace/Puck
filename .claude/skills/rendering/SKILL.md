@@ -462,7 +462,7 @@ itself before that table, in its holdings and in its loss.
 A residency no reader asked for parks on a live device (`SdfWorldResidency.Park`, decided once a frame by
 `SdfWorldPasses.ParkUnobserved` from `SdfResidencySelector.Excess`, the device pool past its limit, which follows the
 system's budget less the usage the ledgers do not hold): `m_tables` is cleared between frames and the tables go to the
-device's retirement, keeping the bake, the lighting's measured words, the frame and the leased pipeline set. Every
+device's retirement, keeping the bake, the lighting's measured words (for `SdfWorldResidency.ForgetLightingSeconds`, after which the residency's upkeep disposes the volume and a wake lights the world from nothing), the frame and the leased pipeline set. Every
 path that reaches the tables goes through `m_tables`, so a reader that comes for a parked residency prepares it, which
 builds new tables, and its views keep their last images while `SdfWorldResidency.Waking` stands. A park while
 `OwesPreparation` would rebuild at once, so a parked residency owes nothing and has nothing arriving. Never add a `TryWaitIdle` to a release

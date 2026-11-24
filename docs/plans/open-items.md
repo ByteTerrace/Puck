@@ -926,26 +926,16 @@ whose check boots did not settle with no tier missed.
 
 ### A hosted world on a client
 
-Owner: federation and presentation · high, M1 · Next: step 5 of
-[the design](remote-content.md)'s
-[build order](remote-content.md#the-build-order), authored admission and the
-idle boot world, then machines (step 6) and windows (step 7), which the
-picture needs. Steps 1 to 4 are built: the debug world's transfer commits on
-a staged pair and its document arrives as a manifest. Voice sets and machine
-content are the part of step 3 still open.
+Owner: federation and presentation · high, M1 · Next: machines (step 6) and
+windows (step 7) of [the design](remote-content.md)'s
+[build order](remote-content.md#the-build-order), which the picture needs.
+Steps 1 to 5 are built: the debug world's transfer commits, its document and
+pinned voice sets arrive by pin, visitors embody the world's seat kit, a
+non-listening client pauses its idle boot world, per-run session-qualified
+client authorities rejoin cleanly, and departed travellers release after
+`bodies.reconnectGraceSeconds`. Machine content is the part of step 3 still
+open.
 
-- [high] A client that is started again cannot join an authority it joined
-  before, and two clients that share a namespace cannot both join. A transfer
-  is keyed by its source authority's name and a transfer id, a client's ids
-  start at zero in every run (`WorldInstance.NextTransferId` is durable only
-  where the authority keeps a crossing log), and a key is leased at most once:
-  on a staged pair, a second client process started against a living
-  authority was refused with "transfer 0 was already leased or answered here".
-  The first run's traveller also stays at the authority after its client
-  exits, holding a visitor slot. Decide what names a client's authority (its
-  key's domain is unique where the document's namespace is not), give a source
-  with no crossing log ids it cannot reuse, and release a traveller whose
-  client's streams have been gone for the world's reconnect grace.
 - [medium] A manifest's member is fetched whole and the whole manifest is sent
   each time ([decision 4](remote-content.md#decision-4-the-document-travels-as-a-manifest)).
   A recipient with another version of the package fetches each differing
@@ -978,30 +968,6 @@ content are the part of step 3 still open.
   the picture. Check: the capture set (the press, an emulator cabinet, a chess
   screen and a gallery painting) on the client matches the same set taken in
   process, which is the lead's windowed leg after the design's step 7.
-- [high] A remote seat does not play. The design fixes each defect at its
-  cause: the intent stream holds a backlog, a remote input batch applied after
-  the tick it was captured for is refused by the authority's input admission,
-  and one refusal refuses every batch after it
-  ([what ran](remote-content.md#what-ran-and-what-it-settled)); the debug
-  world admits no remote player, a replica travels as one capped message, a
-  delivered document that names content by relative path fails validation, and
-  the client still steps its whole boot world.
-- [high] A visitor's body does not stand on the ground in the debug world,
-  which stops the debug route against a remote authority at its first
-  chapter. On a staged headless pair the traveller is body 1 at the
-  authority. `body.where 1` there reads `pos=(190.00, -9.25, 0.00)
-  facts=airborne|falling`: it falls, the valley's recovery rule stands it at
-  the east sector's spot (`valley-east`, in `valley.puck`), and it falls
-  again. The authority's own seat, posed at the same spot
-  (`body.pose spawn:valley-east 0`), reads `grounded` there, and the two
-  bodies' registers read alike (`body.state`). In `worlds/minimal` four
-  visitors stand and walk. The cause is not shown. The lead is the kit: a
-  local seat is embodied in the world's seat kit whatever its own row says
-  (`WorldPopulation`'s seat kit, from `defaultSeatKit`), and a visitor in the
-  kit index its entry carries. The debug world also authors no admission for
-  a visitor, no namespace and no visitor slot of its own, so the staged pair
-  gives the visitor a body index (1) the world's own authoring never planned
-  for. Author what a visitor is embodied as, with the design's step 5.
 - [medium] A benchmark route's `pose` step is a teleport a visitor's Drive
   grant allows on its own body (`WorldCommand.SnapPose` passes the same Drive
   check as input). The debug route against a remote authority relies on it.
@@ -1067,14 +1033,6 @@ each gap below; how each answer behaves in a town and when one seat moves to
 another server; and the delegate skill's requirements of a design (its
 invariant, what enforces it, a check per step).
 
-- [high] The debug world has no room for four seats. A world staged with four
-  local seats needs `bodies.capacity` to hold them and their visitor slots,
-  and the staging cannot raise a capacity it does not know: `worlds/minimal`
-  now authors the room and the debug world does not, so
-  `puck benchmark --seats 4` on the debug world is refused at boot for its
-  capacity. Author the debug world's four local seats (seat 1 at boot, the
-  others on demand) and its visitor slots, and check what its population's
-  body indices assume about one local seat.
 - [high] Seats multiplexed on one connection, with the union of their
   interest disclosed once. It meets
   [replication](replication.md#decision-6-interest-and-priority-under-a-byte-budget)'s
@@ -3979,6 +3937,15 @@ Owner: delivery lane · high, M1 · Next: [the release](#the-release), the
 checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
+
+- [high, M1] **A reset across a changed world inventory needs its first
+  deploy and a review.** The Azure runtime drains, protects and recovers the
+  source's own worlds, activation resets each target world over its drained
+  root, and a world only the target names starts from a fresh root
+  (`WorldAuthorityBlobStore.PrepareReleaseResetFreshAsync`, under the same
+  activation ownership with no protected root for it). Next: the release from
+  `main` exercises it; a findings-only review of the activation-ownership
+  check by another family (persisted data).
 
 The RTX 2060 machine is a consumer release target (the owner's ruling,
 AGENTS.md): it installs and updates through the launcher from the hosted

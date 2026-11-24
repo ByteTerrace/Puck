@@ -4613,6 +4613,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].voice.patchId` | `WorldVoiceProfile.PatchId` | a synth patch id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
+| `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].voice.hash` | `WorldVoiceProfile.Hash` | a content hash |
 | `kits.rows[].actions{*}.onPress.effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onPress.effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -4903,6 +4904,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].voice.patchId` | `WorldVoiceProfile.PatchId` | a synth patch id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].voice.hash` | `WorldVoiceProfile.Hash` | a content hash |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onRelease.effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -5193,6 +5195,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].voice.patchId` | `WorldVoiceProfile.PatchId` | a synth patch id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].voice.hash` | `WorldVoiceProfile.Hash` | a content hash |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `kits.rows[].actions{*}.onFact[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -5502,6 +5505,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `hud.panels[].elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `hud.panels[].elements[].voice.patchId` | `WorldVoiceProfile.PatchId` | a synth patch id |
 | `hud.panels[].elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
+| `hud.panels[].elements[].voice.hash` | `WorldVoiceProfile.Hash` | a content hash |
 | `hud.panels[].elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `icons.rows[].name` | `WorldIconRow.Name` | an icon name |
 | `icons.rows[].glyph.font` | `WorldIconGlyphRef.Font` | a font name |
@@ -5768,6 +5772,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].effects[][upsertHudPanel].panel.elements[].voice.patchId` | `WorldVoiceProfile.PatchId` | a synth patch id |
 | `rules[].effects[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
+| `rules[].effects[][upsertHudPanel].panel.elements[].voice.hash` | `WorldVoiceProfile.Hash` | a content hash |
 | `rules[].effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `rules[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -6075,6 +6080,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].voice.patchId` | `WorldVoiceProfile.PatchId` | a synth patch id |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
+| `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].voice.hash` | `WorldVoiceProfile.Hash` | a content hash |
 | `rules[].decision.options[].effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].decision.options[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -6400,6 +6406,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].voice.patchId` | `WorldVoiceProfile.PatchId` | a synth patch id |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
+| `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].voice.hash` | `WorldVoiceProfile.Hash` | a content hash |
 | `rules[].decision.onNoChoice[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `rules[].decision.onNoChoice[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |
@@ -6500,6 +6507,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `identity.controllers[].deviceState` | `WorldControllerStateSlots.DeviceState` | an identity-lane slot name |
 | `identity.voice.patchId` | `WorldVoiceProfile.PatchId` | a synth patch id |
 | `identity.voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
+| `identity.voice.hash` | `WorldVoiceProfile.Hash` | a content hash |
 | `identity.facts.state` | `WorldIdentityFacts.State` | an identity-lane row name |
 | `groups.kinds[].name` | `WorldGroupKind.Name` | a group kind name |
 | `groups.kinds[].roles[].name` | `WorldGroupRole.Name` | a group role name |
@@ -6696,6 +6704,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].sources[].when[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].voice.patchId` | `WorldVoiceProfile.PatchId` | a synth patch id |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].voice.sampleSet` | `WorldVoiceProfile.SampleSet` | a sample set id |
+| `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].voice.hash` | `WorldVoiceProfile.Hash` | a content hash |
 | `interactions.interactions[].effects[][upsertHudPanel].panel.elements[].plotReferenceBinding` | `WorldHudElement.PlotReferenceBinding` | a presentation reading's source name, in the readings vocabulary |
 | `interactions.interactions[].effects[][removeHudPanel].id` | `WorldEffect.RemoveHudPanel.Id` | a HUD panel id |
 | `interactions.interactions[].effects[][upsertPlacement].placement.distribution.fill.name` | `WorldSequence.Name` | a sequence name |

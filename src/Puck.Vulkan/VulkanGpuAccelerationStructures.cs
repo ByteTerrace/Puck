@@ -45,6 +45,12 @@ public sealed unsafe class VulkanGpuAccelerationStructures(IVulkanDeviceContext 
     // The largest minAccelerationStructureScratchOffsetAlignment any driver reports is well under this; the scratch size
     // Size reports carries this much slack, and RecordBuild rounds the scratch's address up to it.
     private const ulong ScratchAlignment = 256UL;
+    // Owned memory past every structure's reported size, which the structure itself never names (its create info keeps
+    // the reported size). The arena packs structures at the driver's 256-byte alignment, so a small one can end at a
+    // block's end with unmapped addresses after it, and NVIDIA's ray-query traversal reads past a compacted bottom level's
+    // reported size (driver 621.24 on an RTX 2060: VK_EXT_device_fault named a page fault at the block end 0x80 bytes past
+    // one). A Direct3D 12 placed buffer takes a whole 64 KiB placement, so its reads land in owned memory already.
+    private const ulong TraversalSlackBytes = 4096UL;
 
     private VulkanDeviceCommands Device => deviceContext.LogicalDevice.Commands;
     private VulkanRayCommands Rays => (Device.Rays ?? throw new NotSupportedException(message: "This Vulkan device was created without ray queries (GpuOptionalCapabilities.RayQuery)."));
@@ -67,7 +73,7 @@ public sealed unsafe class VulkanGpuAccelerationStructures(IVulkanDeviceContext 
         ArgumentOutOfRangeException.ThrowIfZero(value: sizeBytes);
         var rays = Rays;
         var storage = VulkanBuffer.Create(bufferApi: bufferApi, device: deviceContext, family: name.MemoryFamily(), memory: VulkanBufferMemory.DeviceLocal,
-            sizeBytes: sizeBytes, usage: (VulkanBufferUsageFlags.AccelerationStructureStorage | VulkanBufferUsageFlags.ShaderDeviceAddress));
+            sizeBytes: (sizeBytes + TraversalSlackBytes), usage: (VulkanBufferUsageFlags.AccelerationStructureStorage | VulkanBufferUsageFlags.ShaderDeviceAddress));
 
         try {
             naming.Name(handle: storage.BufferHandle, kind: GpuObjectKind.Buffer, name: in name);

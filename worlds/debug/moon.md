@@ -44,7 +44,7 @@ The seam is a level plane `skySeamAltitude` metres over the valley floor
 moon's from there, with its pilot. Both crossings narrate:
 
 ```text
-[world.adjacency: 'boot/sky' body:561 crossed -> queued transfer=2 ...]
+[world.adjacency: 'boot/sky' body:574 crossed -> queued transfer=2 ...]
 [world.transfer: transfer=3 'boot' seat 1 departed -> '<moon instance>' seat 1 arrived (anonymous), driving body:1 (kit 'ship') ...]
 ```
 

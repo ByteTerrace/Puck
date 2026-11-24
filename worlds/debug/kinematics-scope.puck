@@ -1,4 +1,5 @@
 // Optional development scope. The controller bar remains the normal play UI; this panel starts hidden.
+import "shapes"
 state {
   world {
     table scope {
@@ -89,7 +90,7 @@ addon "kinematics-scope" {
   requests: concat(
     [{ capability: Observe, subject: "state:scope" }],
     map(scopeRows, row => { capability: Edit, subject: $"state:{row}" }),
-    map(range(0, 45), body => { capability: Observe, subject: $"body:{body}" })
+    map(range(0, (galleryPopulation + 2)), body => { capability: Observe, subject: $"body:{body}" })
   )
 }
 
@@ -109,7 +110,7 @@ grants: concat(
     }
   ),
   map(
-    range(0, 45),
+    range(0, (galleryPopulation + 2)),
     body => { grantee: "addon:kinematics-scope", capability: Observe, subject: $"body:{body}", budget: 2 }
   )
 )

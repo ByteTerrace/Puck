@@ -945,9 +945,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <see cref="FrameWithheld"/>, is that frame's own, which the budget does not meter); publishes the uploads whose
     /// fences have signaled; and polls retired device objects and answers a memory trim the process account asked for.
     /// Called on the frame thread at the top of each frame, before any residency prepares; a residency with no tables
-    /// keeps nothing to serve.</summary>
+    /// keeps nothing to serve, beyond giving back the lighting of one parked for <see cref="ForgetLightingSeconds"/>.</summary>
     public void Upkeep() {
-        if (m_disposed || (m_tables is not { } tables)) { return; }
+        if (m_disposed) { return; }
+        ForgetParkedLighting();
+        if (m_tables is not { } tables) { return; }
         tables.GpuWork.Pump(tables: tables, withheld: FrameWithheld);
         m_work.Poll();
         tables.ServiceMemoryTrim();
@@ -1130,7 +1132,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     /// <summary>Gets the residency's indirect lighting, the irradiance volume its views read while its frame asks for
     /// indirect light.</summary>
-    public SdfMeshIrradiance MeshIrradiance { get; } = new();
+    public SdfMeshIrradiance MeshIrradiance { get; private set; } = new();
     /// <summary>Gets the exposure each view of the residency's latest frame maps the luminance it shades by.</summary>
     public SdfViewExposures Exposures { get; } = new();
 

@@ -20,6 +20,7 @@ documentId: "debug"
 import "../standard/skies"
 import "../standard/free-camera"
 import "../standard/benchmark"
+import "../standard/visitors"
 // The benchmark's route through this world (`world.benchmark run debug`).
 import "benchmark-route"
 // The trip to the moon as a route (`world.benchmark run moon`).
@@ -92,10 +93,15 @@ metadata {
   description: "The flat floor of a caldera ringed by eight terrain sectors with an overlook, under a clear day, with axis markers, 1, 2 and 4 m reference cubes, a coloured test room near the origin and a gallery hall whose east wing holds five portal paintings."
 }
 
-// A traveller coming back from the garden or the night field arrives here, and their windows onto this world observe
-// it whole.
+host {
+  authorityNamespace: "debug"
+}
+
+// Neighbour windows observe the whole world as sessions; arriving visitors receive the standard visitor row (exclusive
+// Drive and Observe over the body admission assigns, at presentation disclosure).
 admission [
   {
+    admits: Session
     disclosure: Replica
     domain: "*"
     grants [
@@ -112,6 +118,7 @@ admission [
     ]
     mode: FederatedAuthority
   }
+  visitorAdmissionRow(domain: "*")
 ]
 
 references [
@@ -217,13 +224,16 @@ spawnPoints: concat(
 commands: galleryCommands
 
 // The board game room's Go and Reversi bodies take the top slots (go.puck, reversi.puck); below them the development
-// fuzzer and traversal bot take bodies 44 and 43 and the companion keeps 42. The gallery hall and chess imports keep
-// their existing indices. Each import names its population; this body settles the total, the last one the launch
-// field's ship (launch.puck). The rate range's six
-// walkers, imported last, take the free slots below the pieces (range.puck). Each body's size is its `size` register
+// fuzzer and traversal bot take bodies 54 and 53 and the companion takes 52. The gallery hall and chess imports keep
+// their relative order above the four local-seat and eight visitor slots. Each import names its population; this body
+// settles the total, the last one the launch field's ship (launch.puck). The rate range's six
+// walkers, imported last, take the slots below the pieces (range.puck). Each body's size is its `size` register
 // (size.puck).
 bodies {
-  capacity: (galleryPopulation + 2 + boardRoomBodies + cardBodies + freeCameraBodies + 1 + 1)
+  capacity: (galleryPopulation + 2 + boardRoomBodies + cardBodies + seatPopulation + 1 + 1)
+  localSeats: seatPopulation
+  networkPlayers: visitorPopulation
+  reconnectGraceSeconds: 3
 }
 
 placements {

@@ -1186,6 +1186,8 @@ not "religious"):
 - the environment the work needs;
 - measured results on that kind of task.
 
+**A Codex lane hands back at an open design question, so decide it in the brief.** Two Codex lanes in a row (Sol, then Astra with its authority stated outright) stopped with `Brief: … blocked: how should …` on design questions inside render-graph recording, each after a partial checkpoint. When a step's next move is an invariant-bearing design, the lead decides it in the brief (the rule, the invariant and its one door) before routing it to Codex, or routes the design step to a Claude judgement lane told to decide and record further questions itself; a second design-question stop in the same area changes the family, not the brief.
+
 **Word a review brief for what it is.** Codex's safety filter refused a brief titled an "adversarial security review" that asked it to "attack" a disclosure change, and the lane burned its tokens and stalled. A review of Puck's own access-control or disclosure code is a correctness review: say what the code intends, ask whether it does it, and keep "attack" and "exploit" out of the brief.
 
 **A lane's caveat is not a landing condition the lead accepts on the owner's behalf.** When a hand-back names a known failure mode the change introduces (a rate limit, a cliff, a race), the lead fixes it in the same wave or holds the change, rather than landing it with the caveat filed. A caveat that would break a bar or the hosted world under ordinary operation is a defect.

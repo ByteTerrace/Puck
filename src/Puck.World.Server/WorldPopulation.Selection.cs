@@ -15,7 +15,7 @@ public sealed partial class WorldPopulation {
     public string CandidateKitName(int bodyIndex, WorldDefinition definition) {
         var selected = SelectRow(WorldBodyStateReads.PlanFor(definition: definition).KitSelect, definition.Assignment.Select, true, bodyIndex);
 
-        return m_kitRows[((selected >= 0) ? selected : ((bodyIndex < LocalSeatCount) ? m_seatKit : m_entries[bodyIndex].KitIndex))].Name;
+        return m_kitRows[((selected >= 0) ? selected : (UsesSeatKit(index: bodyIndex) ? m_seatKit : m_entries[bodyIndex].KitIndex))].Name;
     }
     /// <summary>Resolves a replacement definition's kit against staged named register values before installing it.</summary>
     public string PreviewKitName(int bodyIndex, WorldDefinition definition, Func<string, FixedQ4816?> counter) {
@@ -25,7 +25,7 @@ public sealed partial class WorldPopulation {
                 if (row.Value == (value.Value >> FixedQ4816.FractionBitCount)) { return row.Row; }
             }
         }
-        if (bodyIndex < definition.Population.LocalSeats) { return definition.DefaultSeatKit; }
+        if ((bodyIndex < definition.Population.LocalSeats) || ((((uint)bodyIndex) < ((uint)m_entries.Length)) && m_entries[bodyIndex].IsRemoteHuman)) { return definition.DefaultSeatKit; }
         var rows = ResolveRows(assignment: definition.Assignment, resolve: name => checked((byte)definition.Kits.ToList().FindIndex(match: kit => (kit.Name == name))));
 
         return definition.Kits[SelectRow(bodyIndex, definition.Assignment, rows, definition.Kits.Count)].Name;

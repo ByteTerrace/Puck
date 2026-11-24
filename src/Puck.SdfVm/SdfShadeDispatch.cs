@@ -17,9 +17,11 @@ public sealed class SdfShadeDispatch {
     /// bin to hold every tile of the extent) and the work one of its tiles is priced at.</summary>
     public readonly record struct Bin(uint Width, uint Jobs, ulong TileWork);
 
-    // The key that decides whether an existing plan stands for the next call to For/ForEngine without replanning.
-    private readonly struct PlanKey(SdfProgram? scene, SdfShadeProgram? fallback, bool enabled, uint width, uint height, uint lights, bool glass, bool binned, SdfShadeTier tier) : IEquatable<PlanKey> {
-        public readonly SdfProgram? Scene = scene;
+    // The key that decides whether an existing plan stands for the next call to For/ForEngine without replanning. A plan
+    // prices the scene's shading programs alone, so it keys on the scene's appearance, which holds them, never on the
+    // program: a plan a view keeps while it stops rendering must not keep a replaced program's words alive.
+    private readonly struct PlanKey(SdfAppearance? scene, SdfShadeProgram? fallback, bool enabled, uint width, uint height, uint lights, bool glass, bool binned, SdfShadeTier tier) : IEquatable<PlanKey> {
+        public readonly SdfAppearance? Scene = scene;
         public readonly SdfShadeProgram? Fallback = fallback;
         public readonly uint Width = width;
         public readonly uint Height = height;
@@ -111,7 +113,7 @@ public sealed class SdfShadeDispatch {
             glass: glass,
             height: height,
             lights: lights,
-            scene: frame.Program,
+            scene: frame.Program.Appearance,
             tier: tier,
             width: width
         );

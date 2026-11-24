@@ -128,7 +128,8 @@ public sealed class WorldSessionObservation : IDisposable {
             (WorldAdmissionDoor.TryAdmitArrival(
             entries: candidate.Admission,
             sourceAuthority: SourceAuthority,
-            verdict: out var verdict
+            verdict: out var verdict,
+            kind: WorldAdmissionArrival.Session
         ) is not null)
         ) {
             return null;

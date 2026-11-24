@@ -236,6 +236,13 @@ public sealed partial class WorldServer : IWorldServerHost {
     /// the replay format and are refused while its screen-operation tap is attached.</summary>
     public bool AnyScreenOpEverApplied { get { ThrowIfOutsideWindow(); return m_anyScreenOpEverApplied; } private set => m_anyScreenOpEverApplied = value; }
     private bool m_anyScreenOpEverApplied;
+    /// <summary>Overrides this boot server's federation <see cref="AuthorityIdentity"/> with its session-authenticated
+    /// client identity before any instance or link is admitted.</summary>
+    /// <param name="authorityIdentity">The session-authenticated client authority identity.</param>
+    public void OverrideAuthorityIdentity(string authorityIdentity) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: authorityIdentity);
+        AuthorityIdentity = authorityIdentity;
+    }
     /// <summary>Gets the namespace used by durable entity addresses emitted by this authority. A federated
     /// authority uses its declared network identity so two processes whose local instance is named <c>boot</c>
     /// cannot publish colliding addresses; a loopback-only authority uses its process-local instance identity, or the

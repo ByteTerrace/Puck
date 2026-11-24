@@ -10,7 +10,7 @@ public static class WorldTextSpeechFactory {
         error = null;
         if (voice.CadenceTicks is not { } cadence) { error = "Voice needs cadenceTicks."; return false; }
         if (voice.SampleSet is { } sampleSet) {
-            if (!WorldVoiceSampleLoader.TryLoad(definition.DocumentDirectory, sampleSet, out var samples, out var rate, out error)) { return false; }
+            if (!WorldVoiceSampleLoader.TryLoad(definition.DocumentDirectory, sampleSet, out var samples, out var rate, out error, voice.Hash)) { return false; }
             source = new TextSpeechSource(text, default, cadence, voice.PitchThousandths, voice.FormantThousandths,
                 voice.PaceThousandths, samples, rate);
             return true;

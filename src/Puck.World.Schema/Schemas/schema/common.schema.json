@@ -8214,6 +8214,14 @@
             "null"
           ],
           "default": null
+        },
+        "hash": {
+          "description": "Optional SHA-256 content pin of the canonical SampleSet manifest so a delivered world with no document directory resolves its voice samples through Resolver.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
         }
       },
       "additionalProperties": false,
