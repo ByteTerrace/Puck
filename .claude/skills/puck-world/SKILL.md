@@ -231,9 +231,11 @@ worktree's absolute path; `windowed: true` only for a granted GPU leg). The
 call returns `pending` and a `startId` promptly. Inspect the connected tool's
 schema before using optional arguments: the checkout's current implementation can
 accept capabilities absent from an older connected adapter. A windowed start's
-`width` and `height` set the window's client size (`--width`, `--height`), such as
-a device's frame-bar size (2560x1440 on the RTX 4070), without touching the
-document's `host` block. Where advertised,
+`width` and `height` set the window's client size (`--width`, `--height`) without
+touching the document's `host` block, and `frameBar: "auto"` (or a device profile's
+name) opens it at that device's frame-bar size instead (`--frame-bar`, from
+`render.devices`' `frameBar`: 2560x1440 on the RTX 4070, 1920x1080 on the RTX 2060).
+Where advertised,
 `captureTool: "pix"` forwards `--capture-tool pix` before device creation (windowed
 Direct3D 12); `"renderdoc"` selects RenderDoc. Both enable existing GPU object names.
 Otherwise use `puck sweep --tour --backend directx --capture-tool pix` with a plan

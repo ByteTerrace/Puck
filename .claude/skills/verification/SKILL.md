@@ -144,12 +144,13 @@ runs them to prove its own change, and never re-runs a check for confidence.
    topology it measured, and covers nothing else. Until the other devices are
    tested (AGENTS.md: the work meets the bars on the RTX 4070 first), the bar
    read on the lead machine is the RTX 4070 at 2560 by 1440 against 16.7 ms.
-   `puck benchmark` and `bench frames` open that size by default; on the 4070
-   a reading at another `--width` and `--height`, or from `bench startup`
+   `puck benchmark` opens each device's frame-bar size (`--frame-bar`, from the
+   device profile) and `bench frames` that size by default; on the 4070 a
+   reading at another `--width` and `--height`, or from `bench startup`
    (which keeps 1280 by 720, since it times boot), is not a bar reading. The
-   benchmark plays with the authority in process and has no remote endpoint,
-   so it does not establish the remote topology; that verdict waits for the
-   route against a remote authority
+   remote topology is read by `puck benchmark --remote local` (or the standing
+   set's `remote` leg) against a listening World on the same machine; the debug
+   world's delivery to it is still refused, by name
    ([open items](../../../docs/plans/open-items.md#the-benchmark)). A coding
    lane has no GPU leg, so its commit body names the workload its change adds
    (the area to walk, the `player.move` in a `world.at` script) for the batch's
