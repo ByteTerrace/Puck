@@ -298,6 +298,17 @@ internal sealed class SdfWorldShadows : IDisposable {
             }
         }
     }
+    /// <summary>Gets the displacement, in metres, under which <see cref="Moved"/> takes a bounded change as costing
+    /// nothing against the box it last judged the change's key by: the finest standing entry's texel times
+    /// <see cref="MoveTexels"/>, or zero while no entry that follows motion stands, when every change reaches the
+    /// entries.</summary>
+    internal float StillDisplacement => (m_finestTexel * MoveTexels);
+    /// <summary>Returns whether the entries hold a judged box for a key: what <see cref="Moved"/> measures a bounded
+    /// change against.</summary>
+    /// <param name="key">The slot, or the complemented index of a standalone row.</param>
+    /// <param name="box">The box the entries last judged the key by.</param>
+    /// <returns><see langword="true"/> when a box is held.</returns>
+    internal bool TryJudged(int key, out SdfMeshBox box) => m_judged.TryGetValue(index: StampedIndexTable<SdfMeshBox>.IndexOfSigned(key: key), value: out box);
     // A bound, in metres, on how far any point of the second box lies from where the first box puts it, along any
     // direction: the centres' distance and each half axis's change.
     private static float Displacement(in SdfMeshBox first, in SdfMeshBox second) =>

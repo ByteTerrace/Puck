@@ -36,6 +36,9 @@ public static class WorldCreationWork {
     /// <summary>Rig terms (swings and slides) evaluated: a term whose driver's weight is zero is skipped and not
     /// counted.</summary>
     public static WorkKind TermsEvaluated { get; } = new(name: "sdf.creations.terms.evaluated", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Still shapes (no driver term, part follower or driven parent) whose pose was not composed again because
+    /// their root, scale, lanes and frame poses stood since the registration's last pack.</summary>
+    public static WorkKind StillShapesSpared { get; } = new(name: "sdf.creations.shapes.still-spared", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Effector solves run: an effector whose applied weight is zero or which resolved no target is not
     /// counted.</summary>
     public static WorkKind EffectorSolves { get; } = new(name: "sdf.creations.effectors.solves", unit: "count", workClass: WorkClass.Pacing);
@@ -51,5 +54,5 @@ public static class WorldCreationWork {
     /// <summary>Process totals; read twice to measure a window. Posed, retained and the visited share of rate-held
     /// partition visited registrations; the bodies and placements among the posed and held count in
     /// <see cref="Puck.SdfVm.SdfUpdateRateCounts"/>.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Forked, Retained, RateHeld, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, TermsEvaluated, EffectorSolves, StaticTemplates, StaticCopies, StaticReconciles, StaticCopiesRebuilt, Packs]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.creations", kinds: [Visited, Posed, Forked, Retained, RateHeld, SlotsPosed, SlotsRetained, DriverInitializations, DriverEvaluations, DriverIntegrations, DriverPhaseChanges, DriverContinuations, TermsEvaluated, StillShapesSpared, EffectorSolves, StaticTemplates, StaticCopies, StaticReconciles, StaticCopiesRebuilt, Packs]);
 }

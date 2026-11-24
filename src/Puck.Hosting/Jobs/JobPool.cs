@@ -12,12 +12,17 @@ namespace Puck.Hosting.Jobs;
 /// </summary>
 /// <remarks>The pool holds <see cref="JobWorkers.Count"/> less one threads, at <see cref="WorkerPriority"/>; a forking
 /// thread is the remaining one. Idle workers block on an operating-system semaphore and a forking thread on its fork's event,
-/// so nothing spins. Each <see cref="JobClass"/> holds one fork across the workers at a time, so the frame thread's
-/// fork and a tick thread's fork run side by side; a worker takes its next partition from the highest class with
-/// partitions left. A fork requested while its class's fork is in flight, a fork of one partition, and every fork of
-/// a serial pool run on the calling thread in partition order. Every fork, wherever it runs, runs every partition and
+/// so nothing spins. Each <see cref="JobClass"/> holds up to <see cref="ForksPerClass"/> forks across the workers at
+/// once, so the frame thread's fork and a tick thread's fork run side by side, and so does a fork opened inside
+/// another's partition (a parallel wave's tick forking its population): a worker takes its next partition from the
+/// highest class with partitions left, and within a class from the fork opened last, which is the deepest a running
+/// partition waits on. A fork whose class has every slot in flight, a fork of one partition, and every fork of a
+/// serial pool run on the calling thread in partition order. Every fork, wherever it runs, runs every partition and
 /// then rethrows the lowest-numbered failing partition's exception, so what a fork completes never depends on the
-/// worker count or on which path it took.</remarks>
+/// worker count or on which path it took.
+/// <para>A fork's owner waits only once every partition of its fork is taken, so every partition it waits for is
+/// running on some thread, and every partition not yet taken belongs to a fork whose owner is still taking them: a
+/// nested fork can never leave the pool waiting with work no thread will take.</para></remarks>
 public sealed class JobPool : IDisposable {
     /// <summary>The dependency of a pending fork.</summary>
     public static readonly WaitReason JoinWait = new("jobs", "fork partitions");
@@ -28,6 +33,9 @@ public sealed class JobPool : IDisposable {
     /// never queued behind that work on a loaded machine, and below the frame thread's. A worker with no partition
     /// waits on the pool's semaphore, so the priority takes no time from other programs while the pool is idle.</summary>
     public const ThreadPriority WorkerPriority = ThreadPriority.AboveNormal;
+    /// <summary>How many forks of one class may run across the workers at once: one per thread that can be forking at
+    /// a time, with room for a fork nested in a partition of another. A fork past it runs inline.</summary>
+    public const int ForksPerClass = 32;
     // The open fork: the high 32 bits its generation, the low 32 bits the next unclaimed partition. Closed while a
     // fork is being set up, so a worker that read an earlier generation can never claim a partition of the next.
     private const uint Closed = uint.MaxValue;
@@ -37,8 +45,11 @@ public sealed class JobPool : IDisposable {
     // while it runs none.
     private readonly long[] m_workerHeld;
     private readonly Semaphore m_wake = new(initialCount: 0, maximumCount: int.MaxValue);
-    // One fork slot per class, indexed by the class's value, which is also its rank: a lower value is taken first.
-    private readonly ForkSlot[] m_slots;
+    // Per class, indexed by the class's value, which is also its rank (a lower value is taken first): the fork slots,
+    // each made by the first fork that holds it, and the mask of the slots a fork holds. A fork takes the lowest free
+    // slot, so a fork nested in another's partition holds a higher bit, and a worker scans the bits from the highest.
+    private readonly ForkSlot?[][] m_slots;
+    private readonly int[] m_held;
 
     // Wake signals released to the semaphore that no worker has taken yet, and the workers counted idle: a worker
     // counts itself idle before its last look for partitions and stops counting once it wakes. A wake signals at most
@@ -55,9 +66,10 @@ public sealed class JobPool : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: workers);
 
         Workers = workers;
-        m_slots = new ForkSlot[Classes.Length];
+        m_slots = new ForkSlot?[Classes.Length][];
+        m_held = new int[Classes.Length];
         for (var index = 0; (index < m_slots.Length); index++) {
-            m_slots[index] = new ForkSlot();
+            m_slots[index] = new ForkSlot?[ForksPerClass];
         }
         m_threads = new Thread[(workers.Count - 1)];
         m_workerHeld = new long[m_threads.Length];
@@ -102,7 +114,9 @@ public sealed class JobPool : IDisposable {
         HostWaits.ThrowIfPending((Fork(jobClass, partitions, body, ref fork, WaitDeadline.Synchronous()) == WaitOutcome.DeadlinePassed) ? JoinWait : null);
     }
 
-    /// <summary>Starts a fork or resumes its join. Keep the operation and all partition inputs until it settles.</summary>
+    /// <summary>Starts a fork or resumes its join. Keep the operation and all partition inputs until it settles. A join
+    /// may resume on another thread than the one that started the fork (a tick held across wait slices resumes where
+    /// its host runs it), one thread at a time.</summary>
     /// <param name="jobClass">The class the fork runs at; a resumed join names the class it started with.</param>
     /// <param name="partitions">The partition count; zero or less runs nothing.</param>
     /// <param name="body">The partitions' work.</param>
@@ -118,33 +132,90 @@ public sealed class JobPool : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: body);
         ObjectDisposedException.ThrowIf(condition: m_stopping, instance: this);
 
-        var slot = m_slots[(int)jobClass];
-
         if (fork.Pool is not null) {
-            if (!ReferenceEquals(fork.Pool, this) || (fork.Class != jobClass) || (fork.ThreadId != Environment.CurrentManagedThreadId) ||
-                (fork.Generation != PackedIntPair.High(Volatile.Read(ref slot.State))) ||
-                (Volatile.Read(ref slot.Busy) == 0) || !ReferenceEquals(body, slot.Body) || (partitions != slot.Count)) {
+            var resumed = Owned(fork: in fork);
+
+            if ((resumed.Class != jobClass) || !ReferenceEquals(body, resumed.Slot.Body) || (partitions != resumed.Slot.Count)) {
                 throw new InvalidOperationException("The fork operation no longer owns these partitions.");
             }
-            return Join(slot, ref fork, deadline);
+            return JoinSlot(resumed.Slot, ref fork, deadline);
         }
+        return (Start(body: body, drains: true, fork: ref fork, jobClass: jobClass, partitions: partitions) is { } slot)
+            ? JoinSlot(slot, ref fork, deadline)
+            : WaitOutcome.Completed;
+    }
+
+    /// <summary>Opens a fork across the workers and returns at once, the calling thread running none of its partitions;
+    /// <see cref="Join"/> settles it. A fork the workers cannot take (a serial pool, one partition, every slot of its
+    /// class held) runs on the calling thread here, and its operation stays default, which a join answers at once. Keep
+    /// the operation and all partition inputs until the join settles.</summary>
+    /// <param name="jobClass">The class the fork runs at.</param>
+    /// <param name="partitions">The partition count; zero or less runs nothing.</param>
+    /// <param name="body">The partitions' work.</param>
+    /// <param name="fork">The operation, default on entry.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="body"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The pool has been disposed.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="fork"/> holds a fork already.</exception>
+    public void Open(JobClass jobClass, int partitions, IJobPartitions body, ref ForkOperation fork) {
+        ArgumentNullException.ThrowIfNull(argument: body);
+        ObjectDisposedException.ThrowIf(condition: m_stopping, instance: this);
+        if (fork.Pool is not null) {
+            throw new InvalidOperationException("The fork operation holds a fork already.");
+        }
+        _ = Start(body: body, drains: false, fork: ref fork, jobClass: jobClass, partitions: partitions);
+    }
+
+    /// <summary>Joins a fork <see cref="Open"/> or a sliced <see cref="Fork(JobClass, int, IJobPartitions, ref ForkOperation, WaitDeadline)"/>
+    /// started: the calling thread takes every partition of it no thread has taken, then waits for the rest, and
+    /// rethrows the lowest-numbered failing partition's exception once all have run.</summary>
+    /// <param name="fork">The operation; default answers at once.</param>
+    /// <param name="deadline">How long the join may wait for partitions other threads hold.</param>
+    /// <returns><see cref="WaitOutcome.Completed"/> once every partition has run, or
+    /// <see cref="WaitOutcome.DeadlinePassed"/> while partitions are still running.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="fork"/> no longer owns its partitions.</exception>
+    public WaitOutcome Join(ref ForkOperation fork, WaitDeadline deadline) =>
+        (fork.Pool is null) ? WaitOutcome.Completed : JoinSlot(Owned(fork: in fork).Slot, ref fork, deadline);
+
+    // The slot an operation holds, refused when the operation no longer owns it.
+    private (ForkSlot Slot, JobClass Class) Owned(in ForkOperation fork) {
+        var rank = (int)fork.Class;
+
+        if (!ReferenceEquals(fork.Pool, this) || ((Volatile.Read(ref m_held[rank]) & (1 << fork.Slot)) == 0) ||
+            (m_slots[rank][fork.Slot] is not { } slot) || (fork.Generation != PackedIntPair.High(Volatile.Read(ref slot.State)))) {
+            throw new InvalidOperationException("The fork operation no longer owns these partitions.");
+        }
+        return (slot, fork.Class);
+    }
+
+    // Opens a fork in a slot of its class and answers the slot, or runs it inline and answers null. A fork whose owner
+    // drains it at once wakes a worker fewer, the owner taking a partition itself.
+    private ForkSlot? Start(JobClass jobClass, int partitions, IJobPartitions body, bool drains, ref ForkOperation fork) {
         if (partitions <= 0) {
-            return WaitOutcome.Completed;
+            return null;
         }
-        if (
-            Serial ||
-            (partitions == 1) ||
-            (Interlocked.CompareExchange(location1: ref slot.Busy, value: 1, comparand: 0) != 0)
-        ) {
-            // The inline path's fault is local to this call, so a fork nested in a partition, or one on another
-            // thread that found its class busy, never touches the fork in flight.
+
+        var rank = (int)jobClass;
+        var index = (Serial || (partitions == 1)) ? -1 : TryHoldSlot(rank: rank);
+
+        if (index < 0) {
+            // The inline path's fault is local to this call, so a fork on a thread that found its class's slots all
+            // held never touches a fork in flight.
             var fault = default(PartitionFault);
 
             for (var partition = 0; (partition < partitions); partition++) {
                 fault.Run(body: body, partition: partition);
             }
             fault.Rethrow();
-            return WaitOutcome.Completed;
+            return null;
+        }
+
+        // Only the fork holding the slot's bit writes the slot, so the first one to hold it makes it; a worker that
+        // reads the slot before it is published skips it, and one that reads it before its state opens takes nothing.
+        var slot = m_slots[rank][index];
+
+        if (slot is null) {
+            slot = new ForkSlot(rank: rank, index: index);
+            Volatile.Write(location: ref m_slots[rank][index], value: slot);
         }
 
         var generation = unchecked(PackedIntPair.High(value: slot.State) + 1);
@@ -155,20 +226,39 @@ public sealed class JobPool : IDisposable {
         slot.Fault = default;
         Volatile.Write(location: ref slot.Remaining, value: partitions);
         _ = Interlocked.Exchange(location1: ref slot.State, value: PackedIntPair.Pack(high: generation, low: 0));
-        fork = new ForkOperation(this, jobClass, generation, Environment.CurrentManagedThreadId);
-        Wake(wanted: (partitions - 1));
+        fork = new ForkOperation(this, jobClass, index, generation);
+        Wake(wanted: (drains ? (partitions - 1) : partitions));
+        return slot;
+    }
 
-        // The owner drains only its own fork, so its join never waits behind another class's partition.
+    // Holds the lowest free slot of a class and answers its index, or -1 when every slot is held.
+    private int TryHoldSlot(int rank) {
+        while (true) {
+            var held = Volatile.Read(location: ref m_held[rank]);
+            var free = ~held;
+
+            if (free == 0) {
+                return -1;
+            }
+
+            var index = System.Numerics.BitOperations.TrailingZeroCount(value: free);
+
+            if (Interlocked.CompareExchange(location1: ref m_held[rank], value: (held | (1 << index)), comparand: held) == held) {
+                return index;
+            }
+        }
+    }
+
+    // The owner takes every partition of its own fork no thread has taken before it waits, so every partition it waits
+    // for is running; it drains only its own fork, so its join never waits behind another fork's partition.
+    private static WaitOutcome JoinSlot(ForkSlot slot, ref ForkOperation fork, WaitDeadline deadline) {
         while (slot.TryTake(body: out var taken, partition: out var partition)) {
             slot.Run(body: taken, partition: partition);
             if (Interlocked.Decrement(ref slot.Remaining) == 0) {
                 return Settle(slot, ref fork);
             }
         }
-        return Join(slot, ref fork, deadline);
-    }
 
-    private static WaitOutcome Join(ForkSlot slot, ref ForkOperation fork, WaitDeadline deadline) {
         var outcome = HostWaits.Wait(slot.Done, JoinWait, deadline);
         if (outcome == WaitOutcome.DeadlinePassed) {
             return outcome;
@@ -177,12 +267,14 @@ public sealed class JobPool : IDisposable {
     }
 
     private static WaitOutcome Settle(ForkSlot slot, ref ForkOperation fork) {
+        var pool = fork.Pool!;
+
         try {
             slot.Body = null;
             fork = default;
             slot.Fault.Rethrow();
         } finally {
-            Volatile.Write(location: ref slot.Busy, value: 0);
+            _ = Interlocked.And(location1: ref pool.m_held[slot.Rank], value: ~(1 << slot.Index));
         }
         return WaitOutcome.Completed;
     }
@@ -202,17 +294,17 @@ public sealed class JobPool : IDisposable {
 
     /// <summary>The owning caller's handle for a fork whose partitions may still be running.</summary>
     public readonly struct ForkOperation {
-        internal ForkOperation(JobPool pool, JobClass jobClass, int generation, int threadId) {
+        internal ForkOperation(JobPool pool, JobClass jobClass, int slot, int generation) {
             Pool = pool;
             Class = jobClass;
+            Slot = slot;
             Generation = generation;
-            ThreadId = threadId;
         }
 
         internal JobPool? Pool { get; }
         internal JobClass Class { get; }
+        internal int Slot { get; }
         internal int Generation { get; }
-        internal int ThreadId { get; }
     }
     /// <summary>Stops and joins every worker thread. A fork in flight on another thread must have returned first.</summary>
     public void Dispose() {
@@ -224,8 +316,8 @@ public sealed class JobPool : IDisposable {
         if (m_threads.Length > 0) {
             _ = m_wake.Release(releaseCount: m_threads.Length);
         }
-        foreach (var slot in m_slots) {
-            if (Volatile.Read(ref slot.Busy) != 0) {
+        for (var rank = 0; (rank < m_held.Length); rank++) {
+            if (Volatile.Read(ref m_held[rank]) != 0) {
                 Console.Error.WriteLine("[jobs: leaving the active fork and its handles with the retiring workers]");
                 return;
             }
@@ -234,8 +326,10 @@ public sealed class JobPool : IDisposable {
             thread.Join();
         }
         m_wake.Dispose();
-        foreach (var slot in m_slots) {
-            slot.Done.Dispose();
+        foreach (var slots in m_slots) {
+            foreach (var slot in slots) {
+                slot?.Done.Dispose();
+            }
         }
     }
 
@@ -257,31 +351,34 @@ public sealed class JobPool : IDisposable {
             }
         }
     }
-    // Runs partitions until no class has one left, each taken from the highest class that has; the worker that
-    // completes a fork's last partition signals its owner.
+    // Runs partitions until no fork has one left, each taken from the highest class that has, and within it from the
+    // fork that holds the highest slot; the worker that completes a fork's last partition signals its owner.
     private void Drain(int workerIndex) {
-        while (true) {
-            var found = false;
-
-            for (var rank = 0; (rank < m_slots.Length); rank++) {
-                var slot = m_slots[rank];
-
-                if (!slot.TryTake(body: out var body, partition: out var partition)) {
-                    continue;
-                }
-                found = true;
-                Volatile.Write(ref m_workerHeld[workerIndex], PackedIntPair.Pack(high: (rank + 1), low: (partition + 1)));
-                slot.Run(body: body, partition: partition);
-                Volatile.Write(ref m_workerHeld[workerIndex], 0L);
-                if (Interlocked.Decrement(ref slot.Remaining) == 0) {
-                    _ = slot.Done.Set();
-                }
-                break;
-            }
-            if (!found) {
-                return;
+        while (TryTakeAny(slot: out var slot, body: out var body, partition: out var partition)) {
+            Volatile.Write(ref m_workerHeld[workerIndex], PackedIntPair.Pack(high: (slot.Rank + 1), low: (partition + 1)));
+            slot.Run(body: body, partition: partition);
+            Volatile.Write(ref m_workerHeld[workerIndex], 0L);
+            if (Interlocked.Decrement(ref slot.Remaining) == 0) {
+                _ = slot.Done.Set();
             }
         }
+    }
+    private bool TryTakeAny(out ForkSlot slot, out IJobPartitions body, out int partition) {
+        for (var rank = 0; (rank < m_slots.Length); rank++) {
+            for (var held = Volatile.Read(location: ref m_held[rank]); (held != 0);) {
+                var index = (31 - System.Numerics.BitOperations.LeadingZeroCount(value: (uint)held));
+
+                held &= ~(1 << index);
+                if ((Volatile.Read(location: ref m_slots[rank][index]) is { } candidate) && candidate.TryTake(body: out body, partition: out partition)) {
+                    slot = candidate;
+                    return true;
+                }
+            }
+        }
+        slot = null!;
+        body = null!;
+        partition = -1;
+        return false;
     }
     // A worker counts itself idle and only then looks for partitions once more before it waits. A fork publishes its
     // partitions and only then reads the idle count (both through interlocked operations, which order them), so either
@@ -303,21 +400,27 @@ public sealed class JobPool : IDisposable {
         }
     }
     private bool HasUntaken() {
-        foreach (var slot in m_slots) {
-            if (slot.HasUntaken) {
-                return true;
+        for (var rank = 0; (rank < m_slots.Length); rank++) {
+            for (var held = Volatile.Read(location: ref m_held[rank]); (held != 0); held &= (held - 1)) {
+                var index = System.Numerics.BitOperations.TrailingZeroCount(value: held);
+
+                if (Volatile.Read(location: ref m_slots[rank][index]) is { HasUntaken: true }) {
+                    return true;
+                }
             }
         }
         return false;
     }
 
-    // One class's fork: its partitions' counter, the partitions still running, its owner's event and its error.
-    private sealed class ForkSlot {
+    // One fork's slot: its class and index, its partitions' counter, the partitions still running, its owner's event
+    // and its error.
+    private sealed class ForkSlot(int rank, int index) {
+        public readonly int Rank = rank;
+        public readonly int Index = index;
         public long State = PackedIntPair.Pack(high: 0, low: unchecked((int)Closed));
         public IJobPartitions? Body;
         public int Count;
         public int Remaining;
-        public int Busy;
         public PartitionFault Fault;
         public readonly AutoResetEvent Done = new(initialState: false);
         private readonly Lock m_faultGate = new();

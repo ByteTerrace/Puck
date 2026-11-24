@@ -36,6 +36,22 @@ public sealed partial class SdfWorldTables {
         }
         public readonly SdfMeshBox At(in DynamicTransform transform) =>
             Carry.Place((Low + High) * 0.5f, (High - Low) * 0.5f, 1f, in transform);
+        // A bound, in metres, on SdfWorldShadows' displacement between this box placed at one pose and at another: the
+        // carry scales a point's motion, the translation moves every point alike, and the rotation's change moves a
+        // point at distance r by at most its operator norm times r, which for unit quaternions is at most twice their
+        // nearer distance. The displacement sums the centre's motion and each half axis's, so the radius is the
+        // centre's distance from the slot's origin plus every half axis's length.
+        public readonly float Displacement(in DynamicTransform from, in DynamicTransform to) {
+            var center = (Low + High) * 0.5f;
+            var half = Vector3.Abs((High - Low) * 0.5f);
+            var radius = center.Length() + half.X + half.Y + half.Z;
+            // The nearer of the two quaternions' distances, taken from their difference rather than their dot product, whose
+            // cancellation would understate a small turn.
+            var difference = (Quaternion.Dot(from.Orientation, to.Orientation) >= 0f) ? (from.Orientation - to.Orientation) : (from.Orientation + to.Orientation);
+            var turn = 2f * difference.Length();
+
+            return MathF.Abs(Carry.Scale) * (Vector3.Distance(from.Position, to.Position) + (turn * radius));
+        }
     }
 
     private sealed class SlotMotion {
@@ -47,6 +63,13 @@ public sealed partial class SdfWorldTables {
         public bool Glass;
         public bool Dirty;
         public long Staging;
+        // Previous was left at an earlier pose while the slot moved unplaced: it is placed again at Pose before it is
+        // read.
+        public bool PreviousStale;
+        // The pose the slot's one carried box stood at when the shadows last judged it (SdfWorldShadows.Moved took the
+        // box as its judged box), while HasJudgedPose holds.
+        public DynamicTransform JudgedPose;
+        public bool HasJudgedPose;
     }
 
     private static int MotionSlotOf(in SdfMeshDraw draw) =>
@@ -97,12 +120,35 @@ public sealed partial class SdfWorldTables {
         if (motion.Staging == m_motionStaging) { return; }
         motion.Staging = m_motionStaging;
         var dirty = motion.Dirty;
-
-        if (dirty) { RebuildMotionSlot(slot, motion); }
         var hasPose = slot < m_motionTransforms.Count;
         var pose = hasPose ? m_motionTransforms[slot] : default;
         var poseChanged = (hasPose != motion.HasPose) ||
             (hasPose && ((pose.Position != motion.Pose.Position) || (pose.Orientation != motion.Pose.Orientation)));
+
+        // With every scope met only the shadows read the change, and a rigid slot's box (one carried box, no fixed
+        // member) is a function of its pose alone. An unmoved one is the box it was; a moved one whose pose change
+        // bounds its box's displacement from the box the shadows last judged it by under their finest texel is a
+        // change Moved would take as costing nothing, so neither is placed. Moved measures against its judged box,
+        // never the previous placement, so the drift gathers until it passes the texel.
+        if (!dirty && (m_motionOpen == 0) && hasPose && motion.HasPose && !motion.Fixed.Live && (motion.Carried.Count == 1)) {
+            var spared = !poseChanged || (m_shadows is null) ||
+                (motion.HasJudgedPose && m_shadows.TryJudged(key: slot, box: out _) &&
+                (motion.Carried[0].Displacement(from: in motion.JudgedPose, to: in pose) < StillMargin(m_shadows.StillDisplacement, in pose)));
+
+            if (spared) {
+                motion.PreviousStale |= poseChanged;
+                motion.Pose = pose;
+                SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.MotionRowsSpared);
+                return;
+            }
+        }
+        if (motion.PreviousStale) {
+            // Unplaced moves left the previous box at an earlier pose; the one carried box it held stands at the last.
+            motion.PreviousStale = false;
+            motion.Previous = default;
+            motion.Previous.Include(motion.Carried[0].At(in motion.Pose), motion.Glass);
+        }
+        if (dirty) { RebuildMotionSlot(slot, motion); }
         var before = motion.Previous;
         var after = motion.Fixed;
 
@@ -122,7 +168,20 @@ public sealed partial class SdfWorldTables {
         SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.MotionRows);
         NoteMotion(cause: SdfMotionCause.Slot, row: slot, wasLive: before.Live, before: in before.Box, wasGlass: before.Glass,
             isLive: after.Live, after: in after.Box, isGlass: after.Glass, affectsShadows: dirty || poseChanged, rigid: rigid);
+
+        // The judged pose follows the shadows' judged box: taken when Moved judged this one carried box, kept while
+        // Moved left an earlier one standing (it measured within a texel of it), and dropped when the shadows hold none
+        // or the slot's box is no single carried box.
+        if (!hasPose || motion.Fixed.Live || (motion.Carried.Count != 1) || (m_shadows is null) || !m_shadows.TryJudged(key: slot, box: out var judged)) {
+            motion.HasJudgedPose = false;
+        } else if ((after.Box is { } placed) && judged.Equals(placed)) {
+            (motion.JudgedPose, motion.HasJudgedPose) = (pose, true);
+        }
     }
+    // The displacement under which a slot is left unplaced: a tenth under the shadows' own bound, less the float error
+    // the two boxes' placements can carry at the slot's distance from the origin.
+    private static float StillMargin(float stillDisplacement, in DynamicTransform pose) =>
+        ((0.9f * stillDisplacement) - (8e-6f * pose.Position.Length()));
 
     private void NoteSlotMotion() {
         // A resized table can add or remove a pose without a row write at that slot.

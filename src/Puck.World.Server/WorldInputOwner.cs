@@ -235,8 +235,15 @@ public sealed partial class WorldInputOwner {
             return true;
         }
         Array.Clear(array: m_seen);
-        Array.Clear(array: m_sum);
-        Array.Clear(array: m_maximum);
+        // The fold reads only the live addresses, so only theirs start the batch at zero; a contribution to any other
+        // address accumulates where nothing reads it.
+        foreach (var channel in Mapping.Live) {
+            var address = Mapping.Address(logicalId: channel);
+
+            if (address < 0) { continue; }
+            m_sum[address] = 0;
+            m_maximum[address] = 0;
+        }
         for (var index = 0; (index < m_sources.Length); index++) {
             m_sourceScratch[index] = m_sources[index] with { RawValue = 0 };
         }
@@ -297,8 +304,11 @@ public sealed partial class WorldInputOwner {
         var eventImage = Image;
         var hasEvents = !batch.Events.IsEmpty;
 
+        // The batch's holds overlay the accepted ones: an address the batch wrote reads its scratch entry, every other
+        // address the accepted hold, and the commit copies only the addresses written.
+        var holdsWritten = UInt128.Zero;
+
         if (hasEvents) {
-            m_holds.CopyTo(array: m_holdScratch, index: 0);
             m_crossingHeld.CopyTo(array: m_crossingScratch, index: 0);
         }
         var sequence = m_sequence;
@@ -355,7 +365,7 @@ public sealed partial class WorldInputOwner {
                     var press = (input.Kind == WorldInputEventKind.Press);
                     if ((shape != ChannelShape.Binary) || (input.RawValue != (press ? FixedQ4816.One.Value : 0)) ||
                         ((eventImage[address] != FixedQ4816.Zero) == press)) { reason = "input.transition: impossible press/release sequence"; return false; }
-                    holdPress = (press ? id : m_holdScratch[address].Press);
+                    holdPress = (press ? id : (((holdsWritten & (UInt128.One << address)) != 0) ? m_holdScratch[address] : m_holds[address]).Press);
                     eventImage = eventImage.WithChannel(ordinal: address, value: (press ? FixedQ4816.One : FixedQ4816.Zero));
                     break;
                 case WorldInputEventKind.AxisSample:
@@ -394,7 +404,13 @@ public sealed partial class WorldInputOwner {
                     if (!TryStageEvent(admission: admission, count: ref eventCount, prior: stepEvents, reason: out reason, record: derived)) { return false; }
                 }
             }
-            if (input.Kind == WorldInputEventKind.Press) { m_holdScratch[address] = new(input.Channel, id, record, false); } else if (input.Kind == WorldInputEventKind.Release) { m_holdScratch[address] = default; }
+            if (input.Kind == WorldInputEventKind.Press) {
+                m_holdScratch[address] = new(input.Channel, id, record, false);
+                holdsWritten |= (UInt128.One << address);
+            } else if (input.Kind == WorldInputEventKind.Release) {
+                m_holdScratch[address] = default;
+                holdsWritten |= (UInt128.One << address);
+            }
             sequence = input.Sequence;
             lastCapture = capture;
             lastOffset = input.Offset;
@@ -409,9 +425,22 @@ public sealed partial class WorldInputOwner {
         }
         var imageChanged = (folded != Image);
 
-        m_sourceScratch.CopyTo(array: m_sources, index: 0);
+        // A batch changes a source's value, activation and neutral latch, never its registration, so only a source whose
+        // state moved is written back.
+        for (var index = 0; (index < m_sources.Length); index++) {
+            ref readonly var next = ref m_sourceScratch[index];
+            ref var accepted = ref m_sources[index];
+
+            if ((next.RawValue != accepted.RawValue) || (next.Activation != accepted.Activation) || (next.AwaitingNeutral != accepted.AwaitingNeutral)) {
+                accepted = next;
+            }
+        }
         if (hasEvents) {
-            m_holdScratch.CopyTo(array: m_holds, index: 0);
+            for (var written = holdsWritten; (written != 0); written &= (written - 1)) {
+                var address = (int)UInt128.TrailingZeroCount(value: written);
+
+                m_holds[address] = m_holdScratch[address];
+            }
             m_crossingScratch.CopyTo(array: m_crossingHeld, index: 0);
             for (var index = 0; (index < eventCount); index++) { m_history[((m_head + m_count++) % m_history.Length)] = m_eventScratch[index]; }
             m_sequence = sequence;

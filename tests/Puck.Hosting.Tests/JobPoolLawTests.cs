@@ -5,7 +5,7 @@ namespace Puck.Hosting.Tests;
 
 /// <summary>
 /// Laws for <see cref="JobPool"/>: a fork runs every partition and rethrows the lowest-numbered failure whatever the
-/// worker count and whichever path it takes, a fork that falls back inline inside another keeps its own failure, the
+/// worker count and whichever path it takes, a fork nested inside another keeps its own failure, the
 /// wake signals idle workers hold never exceed the worker count however many forks have run, and two classes' forks run
 /// across the workers side by side.
 /// </summary>
@@ -82,7 +82,7 @@ public sealed class JobPoolLawTests {
         }
     }
     [Fact]
-    public void AForkThatFallsBackInlineKeepsItsOwnFailure() {
+    public void ANestedForkKeepsItsOwnFailure() {
         using var pool = new JobPool(workers: new JobWorkers(requested: 3));
         var nestedRan = new int[2];
         Exception? nested = null;
@@ -91,7 +91,7 @@ public sealed class JobPoolLawTests {
                 case 0:
                     throw new InvalidOperationException(message: "outer 0");
                 case 1:
-                    // The workers are already forked, so this fork runs inline on whichever thread holds partition 1.
+                    // A fork nested in a partition runs across the workers, keeping its own failure apart from the outer fork's.
                     nested = Record.Exception(testCode: () => pool.Fork(jobClass: JobClass.Tick, partitions: 2, body: new Partitions(run: inner => {
                         nestedRan[inner] = 1;
                         if (inner == 1) {
@@ -107,6 +107,59 @@ public sealed class JobPoolLawTests {
         Assert.Equal(actual: thrown.Message, expected: "outer 0");
         Assert.Equal(actual: nested?.Message, expected: "nested 1");
         Assert.Equal(actual: nestedRan, expected: [1, 1]);
+    }
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void AnOpenedForkRunsEveryPartitionOnceAndItsJoinRethrowsTheLowestFailure(int threads) {
+        using var pool = new JobPool(workers: new JobWorkers(requested: threads));
+
+        for (var round = 0; (round < 100); round++) {
+            var runs = new int[6];
+            var body = new Partitions(run: partition => {
+                Interlocked.Increment(ref runs[partition]);
+                if (partition is 4 or 2) {
+                    throw new InvalidOperationException(message: $"partition {partition}");
+                }
+            });
+            var fork = default(JobPool.ForkOperation);
+            Exception? thrown = null;
+
+            // A serial pool runs the fork as it opens; otherwise the join takes whatever the workers have not.
+            try {
+                pool.Open(jobClass: JobClass.Frame, partitions: 6, body: body, fork: ref fork);
+                pool.Join(fork: ref fork, deadline: WaitDeadline.In(TimeSpan.FromSeconds(10)));
+            } catch (InvalidOperationException error) {
+                thrown = error;
+            }
+
+            Assert.Equal(actual: thrown?.Message, expected: "partition 2");
+            Assert.Equal(actual: runs, expected: [1, 1, 1, 1, 1, 1]);
+            Assert.Equal(actual: pool.Join(fork: ref fork, deadline: default), expected: WaitOutcome.Completed);
+        }
+    }
+    [Fact]
+    public void AForkNestedInAPartitionRunsAcrossTheWorkers() {
+        using var pool = new JobPool(workers: new JobWorkers(requested: 4));
+
+        for (var round = 0; (round < 50); round++) {
+            using var firstEntered = new ManualResetEventSlim();
+            using var secondEntered = new ManualResetEventSlim();
+            // Each nested partition waits for the other to start, so the nested fork completes only if two threads run it
+            // at once while the outer fork holds its class.
+            var nested = new Partitions(run: partition => {
+                (partition == 0 ? firstEntered : secondEntered).Set();
+                Assert.True((partition == 0 ? secondEntered : firstEntered).Wait(TimeSpan.FromSeconds(10)), "the nested fork never had two threads at once");
+            });
+            var outer = new Partitions(run: partition => {
+                if (partition == 1) {
+                    pool.Fork(jobClass: JobClass.Tick, partitions: 2, body: nested);
+                }
+            });
+
+            pool.Fork(jobClass: JobClass.Tick, partitions: 2, body: outer);
+        }
     }
     [Fact]
     public void AFrameForkRunsAcrossTheWorkersWhileATickForkIsInFlight() {
