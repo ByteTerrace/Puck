@@ -98,6 +98,10 @@ adjacencies [
   }
 ]
 
+// The beacon's mast height over the pad and its lamp's luminous power while lit.
+let beaconHeight = 4
+let beaconLumens = 40000
+
 // The moon holds more than a traveller's own body: a ship and its pilot arrive as two.
 bodies {
   capacity: 16
@@ -185,6 +189,19 @@ placements {
     solid
   }
 
+  // The beacon on the pad's far rim, behind the arrival frame: a mast whose lamp burns while the valley's switch is on.
+  placement "moon-beacon" {
+    prototype: "moon-beacon-dark"
+    position [0, (moonRadius + padTop), (0 - padRadius)]
+    solid
+    respond [
+      {
+        when: state(state: moonBeacon, comparison: Equal, value: 1)
+        prototypeId: "moon-beacon-lit"
+      }
+    ]
+  }
+
   // The moon painting's counterpart, facing -Z like it, so a crossing turns the traveller about. Its glass is the way
   // back: walking +Z into it arrives out of the painting walking -Z, into the wing.
   placement "arrival" {
@@ -241,6 +258,29 @@ prototypes {
     }
   }
 
+  for lamp in [{ name: "dark", glow: 0 }, { name: "lit", glow: 2500 }] {
+    prototype $"moon-beacon-{lamp.name}" {
+      document {
+        name: $"moon-beacon-{lamp.name}"
+        schema: "puck.creation.v1"
+        palette [
+          { color: "#5A5E66", roughness: 0.5, specular: 0.3 }
+          { color: "#FFB347", roughness: 0.3, emissive: lamp.glow }
+        ]
+        shape Cylinder "mast" {
+          material: 0
+          position [0, (beaconHeight / 2), 0]
+          scale [0.12, (beaconHeight / 2), 0.12]
+        }
+        shape Sphere "lamp" {
+          material: 1
+          position [0, beaconHeight, 0]
+          scale [0.45, 0.45, 0.45]
+        }
+      }
+    }
+  }
+
   // The way back: the shared arrival frame (painting-kit.puck) in pale stone.
   prototype "frame" {
     document {
@@ -249,7 +289,10 @@ prototypes {
   }
 }
 
-// The day the two worlds share (moon-frame.puck): this world's own row of it, from the same start at the same rate.
+// The day the two worlds share (moon-frame.puck): the debug world's own `day`, which this row follows. The debug
+// world owns the hour; this authority adopts it from that world's delivery whenever the two read apart, so writing
+// `day` there moves the moon's sun too, and writing it here is refused. Between adoptions the row advances at the
+// shared rate, as the debug world's does, so the two read alike every tick.
 timeline {
   clocks [{ name: day, state: day, spanSeconds: 24h }]
 }
@@ -261,8 +304,26 @@ state {
       kind: "Fixed"
       value: $"{sharedDayStart / 24}"
       advance { perSecondNumerator: 1, perSecondDenominator: sharedDaySeconds }
+      follows { destination: "debug" }
     }
+    // The beacon switch beside the moon painting in the debug world (moon-beacon.puck): the debug world owns it, this
+    // row follows it, and the rules below decide what it does here.
+    { name: "moonBeacon", kind: "Int", value: 0, min: 0, max: 1, follows { destination: "debug" } }
+    // The beacon's light, in lumens, which this world's own rules write from the switch's state.
+    { name: "beaconPower", kind: "Fixed", value: "0" }
   ]
+}
+
+// What the valley's switch does on the moon is this world's to decide: the pad's beacon burns while it is on.
+rule "beacon-lit" {
+  when moonBeacon == 1
+  mode: Edge
+  beaconPower = beaconLumens
+}
+rule "beacon-dark" {
+  when moonBeacon == 0
+  mode: Edge
+  beaconPower = 0
 }
 
 // Vacuum: a hard sun over a black sky of stars, and no air between the eye and the far crater walls. The sun is the
@@ -280,6 +341,7 @@ render {
         shadow: always,
         angularRadius: 0.0046
       )
+      point(name: "beacon", position: [0, (moonRadius + padTop + beaconHeight), (0 - padRadius)], temperature: 2200K, power: "state.beaconPower")
     ]
     clock: day
     keys: map(range(0, 24), h => {

@@ -100,7 +100,7 @@ public sealed partial class WorldServer {
         }
         if ((write is not (WorldDocumentWriteKind.Set or WorldDocumentWriteKind.Add)) ||
             ((text is not null) && (write != WorldDocumentWriteKind.Set)) || descriptor.Generated || descriptor.HostOwned ||
-            (m_arena.Rows[row.Ordinal] is WorldStateRow { IsRuleWritten: true })) {
+            (m_arena.Rows[row.Ordinal] is WorldStateRow { IsRuleWritten: true } or WorldStateRow { Follows: not null })) {
             return WorldCellWriteVerdict.Rejected;
         }
         var mark = BeginStateTransaction();

@@ -14924,6 +14924,19 @@ export type WorldStateRow = {
    * A validated state-section row name or cell key — the base SafeName rule plus no dot anywhere, which is what makes the state.<row>.<key> HUD binding grammar unambiguous by construction: splitting a bound token on '.' can never mistake part of a row or cell name for a grammar separator, because neither can hold one. It holds no backquote either, the expression language's quote for a name, so every row and cell key can be written in an expression. A row's reserved slot key ("$value") is unaffected — '$' is neither a reserved character nor a dot, so it is already a legal CellName like any other author-chosen key, exactly the one reserved exception the substrate mints rather than authors. A generated name (GeneratedName, turn$east) is a legal CellName for the same reason; the doors an author writes through refuse it, not this type.
    */
   witness?: string;
+  /**
+   * A state row's federated import: the row holds another world's published value, the value of a row that world discloses to this one, and only that world writes it. The world it follows is a global destination this document declares; its authority observes that world as a session and adopts the delivered value at a tick boundary, as an ordinary state write its tape records, whenever this row no longer reads what the followed row reads. One value therefore has one writer, the authority that owns it, wherever it is read: the moon's day is the debug world's day, a lever's pull in one world is a fact the other world's rules read, and neither world reaches into the other's state.
+   */
+  follows?: {
+    /**
+     * The global destination whose world this row follows.
+     */
+    destination: string;
+    /**
+     * The row of that world this row holds. Absent is this row's own name.
+     */
+    row?: string | null;
+  };
 };
 
 export type WorldStateSection = {

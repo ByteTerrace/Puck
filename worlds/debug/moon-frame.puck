@@ -30,7 +30,8 @@ let launchHeading = 220
 
 // One sun lights both worlds, since they share a frame: the day both run (day.puck's cycle and the moon's own light),
 // so the moon's lit side in the valley's sky is the side the valley's sun is on, its phase tells the hour, and a ship
-// crossing the seam keeps its light. Each authority advances its own `day` row from the same start at the same rate.
+// crossing the seam keeps its light. The debug world owns the day; the moon's `day` row follows it (moon.puck), from the
+// same start at the same rate.
 let sharedDaySeconds = 1440
 let sharedDayStart = 10
 let sharedNoonElevation = 46

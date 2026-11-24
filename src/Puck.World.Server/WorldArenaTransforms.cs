@@ -50,6 +50,17 @@ public static class WorldArenaTransforms {
 
             return false;
         }
+        if (
+            (actor != Principal.World) &&
+            (transform.Subjects().Where(predicate: static subject => (subject.Access == StateAccess.Write)).Select(selector: subject => WorldDefinitionRows.FindStateRow(
+            rows: definition.State,
+            name: subject.Name
+        )).FirstOrDefault(predicate: static subject => (subject?.Follows is not null)) is { } followedRow)
+        ) {
+            reason = WorldStateFollow.RefuseWrite(row: followedRow);
+
+            return false;
+        }
         // The arena kernels know no principals, so the one authority an operation carries is decided here, at the
         // ingress that stamped the acting principal, before the operation is resolved against any store.
         if (

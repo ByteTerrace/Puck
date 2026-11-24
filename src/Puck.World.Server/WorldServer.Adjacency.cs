@@ -1,4 +1,6 @@
 using System.Collections.Immutable;
+using Puck.Commands;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -22,6 +24,10 @@ public sealed partial class WorldServer {
     /// calls it at a boundary where no authority it steps holds a prepared or executing tick
     /// (<see cref="WorldAdjacencyFields.ResolveNeighbours"/>).</summary>
     public void ResolveAdjacencyNeighbours() => m_adjacencyFields?.ResolveNeighbours();
+
+    // A followed row's one writer: the leader's value, written as the world's own program through the taped door, so the
+    // next drain applies it and a drive re-applies it from the tape.
+    internal void AdoptFollowed(WorldMutation.UpsertStateCell mutation) => m_document.EnqueueTapedMutation(mutation: mutation, actor: Principal.World);
     internal ImmutableArray<WorldAdjacencyProjection> PrepareAdjacency(ulong tick) {
         if (m_adjacencies is null) { return []; }
         if (m_population.HasAdjacencyImage(tick)) { return m_population.AdjacencyProjections; }

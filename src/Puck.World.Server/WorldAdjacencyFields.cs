@@ -18,7 +18,7 @@ namespace Puck.World;
 /// hold what each neighbour last delivered. The one place that enforces the split is <c>ResolveHandle</c>: outside a
 /// boundary read it answers from the held handles and never reaches the host.
 /// </remarks>
-public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
+public sealed partial class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
     private readonly WorldInstanceHost m_instances;
     private readonly string m_sourceInstanceName;
     // Whether the host's boundary is resolving: only then may a handle be looked up through the host and attached.
@@ -208,9 +208,10 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
 
     /// <summary>Resolves which authority each adjacency's neighbour is, direct edges and the corners two of them share,
     /// and attaches a mirror to each one not yet held. The host calls it at a boundary where no authority it steps
-    /// holds a prepared or executing tick: it reads the neighbours' live definitions and observation doors.</summary>
+    /// holds a prepared or executing tick: it reads the neighbours' live definitions and observation doors. The same
+    /// boundary brings every followed row to its leader's latest delivery (<see cref="WorldStateFollow"/>).</summary>
     public void ResolveNeighbours() {
-        if (!m_instances.TryGet(instance: out var source, name: m_sourceInstanceName) || (source?.Server.Configuration is not { Adjacencies.Count: > 0 } definition)) {
+        if (!m_instances.TryGet(instance: out var source, name: m_sourceInstanceName) || (source is null)) {
             return;
         }
 
@@ -218,7 +219,10 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         try {
             // Discovery reads each held image as it stands, which keeps the resolver's generation order across live
             // edits; a corner first reachable through an image this pass attached is found at the next boundary.
-            _ = BuildProjections(source, definition, ImmutableHashSet<Protocol.WorldEntityAddress>.Empty, pin: false);
+            if (source.Server.Configuration is { Adjacencies.Count: > 0 } definition) {
+                _ = BuildProjections(source, definition, ImmutableHashSet<Protocol.WorldEntityAddress>.Empty, pin: false);
+            }
+            AdoptFollows(source: source);
         } finally {
             m_resolving = false;
         }
@@ -276,6 +280,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         }
         m_handles.Clear();
         m_linkAuthorities.Clear();
+        ReleaseFollows();
     }
 
     private readonly record struct HandleIdentity(string Destination, string InstanceName, ulong GenerationId, string Counterpart, WorldFaceFrame SourceFrame);
@@ -299,6 +304,7 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
     }
     private sealed class Handle(HandleIdentity identity, LinkAuthority authority, WorldSessionMirror mirror, IDisposable lease, WorldOutputHub narrationHub, string sourceDescription) : IDisposable {
         public HandleIdentity Identity { get; } = identity;
+        public WorldSessionMirror Mirror => mirror;
         private WorldSessionMirror.BodyImage? m_image;
         private PinnedNeighbour? m_pinned;
         private WorldDefinition? m_builtSource;

@@ -282,6 +282,14 @@ public sealed partial class WorldDocument {
             return false;
         }
 
+        // A followed row's one writer is its import, which writes as the world's own program
+        // (WorldFederatedImports); every other actor writes the leader.
+        if ((row.Follows is not null) && (mutation.Principal != Puck.Commands.Principal.World)) {
+            reason = WorldStateFollow.RefuseWrite(row: row);
+
+            return false;
+        }
+
         if (!CellName.TryParse(
             candidate: mutation.Key,
             name: out var cellKey,
@@ -583,6 +591,12 @@ public sealed partial class WorldDocument {
 
         if (row.IsRuleWritten) {
             reason = WorldVerdict.RefuseWrite(row: row);
+
+            return false;
+        }
+
+        if (row.Follows is not null) {
+            reason = WorldStateFollow.RefuseWrite(row: row);
 
             return false;
         }
