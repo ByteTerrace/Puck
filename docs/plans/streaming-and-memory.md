@@ -1776,7 +1776,7 @@ rtx2060`, Direct3D 12, a warm store, `world.benchmark run debug`:
   on the board was read from its box after the bake's lattices narrowed it
   (`SdfMeshBakeGroup.Low`), which depends on the tier each residency baked or
   loaded. Keyed by the planned box instead (`SdfMeshDemand.PlannedCenterOf`),
-  the board led 1,321 groups and 6,022 still had no entry. Those groups carry
+  the board led 1,866 groups at the route's end and 5,477 still had no entry. Those groups carry
   a shape (`SdfMeshBakeGroup.Shape`) the world's program does not, so the two
   programs partition the same statics into groups differently **[inference]**.
 - The trace scene built every static mesh's own triangles, 12.4 million in the
@@ -1836,7 +1836,7 @@ Built with it:
    `trace-hits-device-bytes=0` beside the same irradiance revision, and its
    views' indirect light unchanged in a capture.
 2. **One partition of one content.** Find why the session's program shapes
-   6,022 of its groups differently from the world's, and make two programs of
+   5,477 of its groups differently from the world's, and make two programs of
    one content group alike. Check: `board-unled` falls to the session's dynamic
    groups, and the mesh store's `shared-saved` rises by the bytes it names.
 3. **A's overlay.** Once 1 and 2 stand, a second instance of one content
@@ -1846,8 +1846,12 @@ Built with it:
 **Closes.** A board that led a second scene by where each bake had narrowed a
 group's box; a trace scene sized by view detail; a relayout holding two hit
 caches and two feedback tables; shadow memory fixed for every device.
-**Leaves open.** The three steps above, and the display-sized storage of an
-infinity layer's views (`sky/sdf.world$visibility`, 66 MB at 1920 by 1080).
+**Leaves open.** The three steps above; the display-sized storage of an
+infinity layer's views (`sky/sdf.world$visibility`, 66 MB at 1920 by 1080);
+and the moon resident eight times at the route's end, since each session
+screen's sky builds an infinity residency of its own (`session$22$sky$moon`
+through `session$27$sky$moon`, 13 groups each, beside `sky$moon` and
+`routed$6~global4~moon`), which step 3 resolves to one.
 **Strongest case against.** B shares only what is keyed alike, so a content
 whose programs group differently pays twice until step 2. Sharing by content
 key is still the mechanism A needs, and every byte it keys alike is a byte A
