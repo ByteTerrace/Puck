@@ -78,22 +78,6 @@ public sealed partial class WorldScreenBinder {
             });
         }
     }
-    // The infinity layer's or routed world's level whose screens show a camera view of another world, or null.
-    private WorldNestedScreens<SessionFeed>? PresentedCameraLevel(string name) {
-        foreach (var entry in InfinityEntries()) {
-            if ((entry.Screens is { } screens) && screens.TryCamera(camera: out _, name: name)) { return screens; }
-        }
-        foreach (var routed in m_routedScreens.Values) {
-            if (routed.TryCamera(
-                camera: out _,
-                name: name
-            )) {
-                return routed;
-            }
-        }
-
-        return null;
-    }
     // Resolves a camera view of another world: the view its residency's last dress filmed it at, in the residency the
     // level's world renders through; the first view of that residency until a dress has filmed it.
     private bool TryResolveNestedCameraView(string name, out SdfWorldView view) {
