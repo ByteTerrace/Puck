@@ -108,6 +108,37 @@ public sealed class JobPoolLawTests {
         Assert.Equal(actual: nested?.Message, expected: "nested 1");
         Assert.Equal(actual: nestedRan, expected: [1, 1]);
     }
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void AnOpenedForkRunsEveryPartitionOnceAndItsJoinRethrowsTheLowestFailure(int threads) {
+        using var pool = new JobPool(workers: new JobWorkers(requested: threads));
+
+        for (var round = 0; (round < 100); round++) {
+            var runs = new int[6];
+            var body = new Partitions(run: partition => {
+                Interlocked.Increment(ref runs[partition]);
+                if (partition is 4 or 2) {
+                    throw new InvalidOperationException(message: $"partition {partition}");
+                }
+            });
+            var fork = default(JobPool.ForkOperation);
+            Exception? thrown = null;
+
+            // A serial pool runs the fork as it opens; otherwise the join takes whatever the workers have not.
+            try {
+                pool.Open(jobClass: JobClass.Frame, partitions: 6, body: body, fork: ref fork);
+                pool.Join(fork: ref fork, deadline: WaitDeadline.In(TimeSpan.FromSeconds(10)));
+            } catch (InvalidOperationException error) {
+                thrown = error;
+            }
+
+            Assert.Equal(actual: thrown?.Message, expected: "partition 2");
+            Assert.Equal(actual: runs, expected: [1, 1, 1, 1, 1, 1]);
+            Assert.Equal(actual: pool.Join(fork: ref fork, deadline: default), expected: WaitOutcome.Completed);
+        }
+    }
     [Fact]
     public void AForkNestedInAPartitionRunsAcrossTheWorkers() {
         using var pool = new JobPool(workers: new JobWorkers(requested: 4));

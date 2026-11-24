@@ -116,8 +116,7 @@ public sealed class JobPool : IDisposable {
 
     /// <summary>Starts a fork or resumes its join. Keep the operation and all partition inputs until it settles. A join
     /// may resume on another thread than the one that started the fork (a tick held across wait slices resumes where
-    /// its host runs it), one thread at a time: the starting call takes every partition its thread can before it
-    /// returns, so a resumed join only waits.</summary>
+    /// its host runs it), one thread at a time.</summary>
     /// <param name="jobClass">The class the fork runs at; a resumed join names the class it started with.</param>
     /// <param name="partitions">The partition count; zero or less runs nothing.</param>
     /// <param name="body">The partitions' work.</param>
@@ -133,22 +132,69 @@ public sealed class JobPool : IDisposable {
         ArgumentNullException.ThrowIfNull(argument: body);
         ObjectDisposedException.ThrowIf(condition: m_stopping, instance: this);
 
-        var rank = (int)jobClass;
-
         if (fork.Pool is not null) {
-            var owned = ReferenceEquals(fork.Pool, this) && (fork.Class == jobClass) &&
-                ((Volatile.Read(ref m_held[rank]) & (1 << fork.Slot)) != 0) && (m_slots[rank][fork.Slot] is { } resumed) &&
-                (fork.Generation == PackedIntPair.High(Volatile.Read(ref resumed.State))) && ReferenceEquals(body, resumed.Body) && (partitions == resumed.Count);
+            var resumed = Owned(fork: in fork);
 
-            if (!owned) {
+            if ((resumed.Class != jobClass) || !ReferenceEquals(body, resumed.Slot.Body) || (partitions != resumed.Slot.Count)) {
                 throw new InvalidOperationException("The fork operation no longer owns these partitions.");
             }
-            return Join(m_slots[rank][fork.Slot]!, ref fork, deadline);
+            return JoinSlot(resumed.Slot, ref fork, deadline);
         }
+        return (Start(body: body, drains: true, fork: ref fork, jobClass: jobClass, partitions: partitions) is { } slot)
+            ? JoinSlot(slot, ref fork, deadline)
+            : WaitOutcome.Completed;
+    }
+
+    /// <summary>Opens a fork across the workers and returns at once, the calling thread running none of its partitions;
+    /// <see cref="Join"/> settles it. A fork the workers cannot take (a serial pool, one partition, every slot of its
+    /// class held) runs on the calling thread here, and its operation stays default, which a join answers at once. Keep
+    /// the operation and all partition inputs until the join settles.</summary>
+    /// <param name="jobClass">The class the fork runs at.</param>
+    /// <param name="partitions">The partition count; zero or less runs nothing.</param>
+    /// <param name="body">The partitions' work.</param>
+    /// <param name="fork">The operation, default on entry.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="body"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The pool has been disposed.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="fork"/> holds a fork already.</exception>
+    public void Open(JobClass jobClass, int partitions, IJobPartitions body, ref ForkOperation fork) {
+        ArgumentNullException.ThrowIfNull(argument: body);
+        ObjectDisposedException.ThrowIf(condition: m_stopping, instance: this);
+        if (fork.Pool is not null) {
+            throw new InvalidOperationException("The fork operation holds a fork already.");
+        }
+        _ = Start(body: body, drains: false, fork: ref fork, jobClass: jobClass, partitions: partitions);
+    }
+
+    /// <summary>Joins a fork <see cref="Open"/> or a sliced <see cref="Fork(JobClass, int, IJobPartitions, ref ForkOperation, WaitDeadline)"/>
+    /// started: the calling thread takes every partition of it no thread has taken, then waits for the rest, and
+    /// rethrows the lowest-numbered failing partition's exception once all have run.</summary>
+    /// <param name="fork">The operation; default answers at once.</param>
+    /// <param name="deadline">How long the join may wait for partitions other threads hold.</param>
+    /// <returns><see cref="WaitOutcome.Completed"/> once every partition has run, or
+    /// <see cref="WaitOutcome.DeadlinePassed"/> while partitions are still running.</returns>
+    /// <exception cref="InvalidOperationException"><paramref name="fork"/> no longer owns its partitions.</exception>
+    public WaitOutcome Join(ref ForkOperation fork, WaitDeadline deadline) =>
+        (fork.Pool is null) ? WaitOutcome.Completed : JoinSlot(Owned(fork: in fork).Slot, ref fork, deadline);
+
+    // The slot an operation holds, refused when the operation no longer owns it.
+    private (ForkSlot Slot, JobClass Class) Owned(in ForkOperation fork) {
+        var rank = (int)fork.Class;
+
+        if (!ReferenceEquals(fork.Pool, this) || ((Volatile.Read(ref m_held[rank]) & (1 << fork.Slot)) == 0) ||
+            (m_slots[rank][fork.Slot] is not { } slot) || (fork.Generation != PackedIntPair.High(Volatile.Read(ref slot.State)))) {
+            throw new InvalidOperationException("The fork operation no longer owns these partitions.");
+        }
+        return (slot, fork.Class);
+    }
+
+    // Opens a fork in a slot of its class and answers the slot, or runs it inline and answers null. A fork whose owner
+    // drains it at once wakes a worker fewer, the owner taking a partition itself.
+    private ForkSlot? Start(JobClass jobClass, int partitions, IJobPartitions body, bool drains, ref ForkOperation fork) {
         if (partitions <= 0) {
-            return WaitOutcome.Completed;
+            return null;
         }
 
+        var rank = (int)jobClass;
         var index = (Serial || (partitions == 1)) ? -1 : TryHoldSlot(rank: rank);
 
         if (index < 0) {
@@ -160,7 +206,7 @@ public sealed class JobPool : IDisposable {
                 fault.Run(body: body, partition: partition);
             }
             fault.Rethrow();
-            return WaitOutcome.Completed;
+            return null;
         }
 
         // Only the fork holding the slot's bit writes the slot, so the first one to hold it makes it; a worker that
@@ -181,16 +227,8 @@ public sealed class JobPool : IDisposable {
         Volatile.Write(location: ref slot.Remaining, value: partitions);
         _ = Interlocked.Exchange(location1: ref slot.State, value: PackedIntPair.Pack(high: generation, low: 0));
         fork = new ForkOperation(this, jobClass, index, generation);
-        Wake(wanted: (partitions - 1));
-
-        // The owner drains only its own fork, so its join never waits behind another fork's partition.
-        while (slot.TryTake(body: out var taken, partition: out var partition)) {
-            slot.Run(body: taken, partition: partition);
-            if (Interlocked.Decrement(ref slot.Remaining) == 0) {
-                return Settle(slot, ref fork);
-            }
-        }
-        return Join(slot, ref fork, deadline);
+        Wake(wanted: (drains ? (partitions - 1) : partitions));
+        return slot;
     }
 
     // Holds the lowest free slot of a class and answers its index, or -1 when every slot is held.
@@ -211,7 +249,16 @@ public sealed class JobPool : IDisposable {
         }
     }
 
-    private static WaitOutcome Join(ForkSlot slot, ref ForkOperation fork, WaitDeadline deadline) {
+    // The owner takes every partition of its own fork no thread has taken before it waits, so every partition it waits
+    // for is running; it drains only its own fork, so its join never waits behind another fork's partition.
+    private static WaitOutcome JoinSlot(ForkSlot slot, ref ForkOperation fork, WaitDeadline deadline) {
+        while (slot.TryTake(body: out var taken, partition: out var partition)) {
+            slot.Run(body: taken, partition: partition);
+            if (Interlocked.Decrement(ref slot.Remaining) == 0) {
+                return Settle(slot, ref fork);
+            }
+        }
+
         var outcome = HostWaits.Wait(slot.Done, JoinWait, deadline);
         if (outcome == WaitOutcome.DeadlinePassed) {
             return outcome;

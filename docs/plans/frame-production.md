@@ -385,6 +385,19 @@ across a benchmark chapter and divided by the frames.
       `puck test worlds/debug/city-tests.puck --reproduce` diverged at its
       first tick; that version is gone. `physics.navigation.field-waits`
       counts the reads that held a step.
+    - **A tick's own forks run across the workers.** Built. The step thread
+      forks a wave of authorities' ticks at `JobClass.Tick`, and a class held
+      one fork at a time, so a tick's kit forks, opened inside the wave's
+      partition, ran inline: `puck host samples --focus WorldStepThread` put
+      half the step thread's time in `JobPool.Fork`, which was the city's
+      population stepping serially. A class now holds up to
+      `JobPool.ForksPerClass` forks, and a worker takes from the deepest one
+      first. Invariant: no owner waits while a partition is untaken by a
+      thread that will take it. Door: an owner drains its own fork before it
+      waits, so every partition it waits on is running. A sliced join
+      resumes on whichever thread resumes its tick. The serial input pass
+      between the kit forks (`WorldInputOwner.TryAdmit`) clears and copies
+      only what a batch touches.
     - **A climb carries across a seam.** Built. Thrust drives the vertical
       channel directly each tick, so a transfer captured no vertical motion;
       the body keeps the direct velocity its last step drove and its transfer
@@ -523,31 +536,61 @@ across a benchmark chapter and divided by the frames.
     - What shows it: `host.frames` produce falls to the larger of capture
       plus pack and prepare plus record, rather than their sum.
 
-14. **Smaller cuts beside the chain.** Not built, each with what was read:
+    **What a lane building it settles first.** Three things the step above
+    leaves implicit, read in the code:
 
-    - `SdfWorldTables.JudgeMotionSlot` places every moved slot's carried boxes
-      (`CarriedBound.At`) before `SdfWorldShadows.Moved` decides the motion was
-      under a texel. With every motion scope met (`m_motionOpen == 0`) and a
-      rigid slot, a bound on the box's displacement from the pose change alone
-      (translation plus rotation times the carried box's radius about the
-      slot) would skip the placement; the drift still gathers, since `Moved`
-      measures against the box it last handed the entries (`m_judged`), not
-      against the slot's previous placement. The carry's order against the
-      pose (applied after it) has to be read before writing the bound.
-    - `WorldCreationInstances.PackTransforms` already visits only what woke,
-      forks the full poses and writes only changed slots
-      (`SdfMovedTransforms.Write`); the slots an idle animation moves change
-      every frame, so what remains is the rig's own evaluation
-      (`WorldGaitDrivers.ComposeDelta` for every shape, including shapes no
-      driver term moves). Precomputing each registration's driven shapes and
-      skipping the rest while the root holds still is the next CPU cut; moving
-      the drivers' evaluation to the GPU is the structural one, since the bake
-      and the draws already read each slot's transform.
+    - The recording fork must start without its owner draining it, since a
+      `JobPool.Fork` owner takes partitions until none is left before it
+      returns. Built: `JobPool.Open` opens a fork across the workers and
+      returns at once, and `JobPool.Join` takes whatever partitions no
+      worker has taken before it waits, so a fork opened while every worker
+      is busy still completes on its joining thread.
+    - The late-latched camera reaches CPU decisions made before it, at
+      capture and pack: each view's light mask (`SdfLightSelection`), the
+      shadow anchors' fits (`SdfMeshShadowCascades.Fit`), glass in sight
+      (`SdfWorldPasses.GlassSeen`), portal sight and the footprints' demand.
+      A camera that turns between those decisions and the recording would
+      drop a light or a glass pass at the screen's edge for a frame, so each
+      of them is padded by the most the look can turn in one frame, or reads
+      the latched camera. The GPU selection and occlusion read the pass
+      block's camera, so they follow the latch with no change.
+    - Verification needs a GPU leg. A headless World runs none of the
+      frame's production, so every checkpoint of this step is a windowed run
+      on both backends: `host.frames` produce against capture plus pack and
+      prepare plus record, `render.record`, and presented bursts in motion
+      for tearing or a frame-old camera.
+
+14. **Smaller cuts beside the chain.** Built.
+
+    - **A rigid slot under met scopes is placed only past a texel.** With
+      every motion scope met (`m_motionOpen == 0`) only the shadows read a
+      slot's change, and a rigid slot's box is a function of its pose, so
+      `SdfWorldTables.JudgeMotionSlot` leaves an unmoved slot unplaced, and
+      a moved one whose pose change bounds its box's displacement from the
+      shadows' judged box under their finest texel
+      (`CarriedBound.Displacement` against `SdfWorldShadows.StillDisplacement`).
+      The carry applies after the pose, so it scales the bound. Invariant:
+      no caster moves a texel of the finest entry without its entries owing
+      where it was and where it is. Door: the bound is measured from the pose
+      the shadows' judged box was placed at (`SlotMotion.JudgedPose`), which
+      follows `SdfWorldShadows.TryJudged`, so the drift gathers as `Moved`'s
+      own does. `sdf.residency.motion.rows-spared` counts the slots left
+      unplaced.
+    - **A still shape keeps its pose.** A shape with no driver term, no part
+      follower and no driven parent carries the identity delta, so while its
+      registration's root, scale, lanes and frame poses stand its composed
+      pose stands too (`WorldCreationInstances.PackRegistration`,
+      `Registration.PartStill`); a rig with effectors keeps none still, and
+      `CarryPose` forgets the record. `sdf.creations.shapes.still-spared`
+      counts the shapes not composed again. Moving the drivers' evaluation to
+      the GPU stays the structural cut, since the bake and the draws already
+      read each slot's transform.
 
 ## Systems considered
 
 - `JobPool.Fork` and its `JobClass.Frame` carry the pack fork, as they carry
-  the pose pack and the recording waves. No second pool.
+  the pose pack and the recording waves. No second pool. A nested fork takes
+  another slot of its class rather than a pool or class of its own.
 - `JobLane` runs one unit beside its owner; the host's pack runs on one
   beside the readers' rounds (`SdfWorldResidency.PackAhead`), joined at its
   doors as the bake's demand measure is (`SdfMeshPathBake.JoinMeasure`), and it
