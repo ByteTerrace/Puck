@@ -933,8 +933,14 @@ public static partial class WorldDefinitionFileSource {
 
         return NormalizeRelativeDocumentName(path: combined);
     }
-    // Each part contributes its 64-bit little-endian length followed by its bytes, in caller order.
     internal static string HashLengthPrefixedParts(IEnumerable<byte[]> parts) {
+        Span<byte> hash = stackalloc byte[Sha256Digest.SizeInBytes];
+
+        HashLengthPrefixedParts(parts, hash);
+        return AssetContentHash.FromDigest(digest: hash).ToString();
+    }
+    // Each part contributes its 64-bit little-endian length followed by its bytes, in caller order.
+    internal static void HashLengthPrefixedParts(IEnumerable<byte[]> parts, Span<byte> hash) {
         using var sha = IncrementalHash.CreateHash(hashAlgorithm: HashAlgorithmName.SHA256);
 
         Span<byte> length = stackalloc byte[8];
@@ -948,10 +954,7 @@ public static partial class WorldDefinitionFileSource {
             sha.AppendData(data: content);
         }
 
-        Span<byte> hash = stackalloc byte[32];
-
         _ = sha.GetHashAndReset(destination: hash);
-        return AssetContentHash.FromDigest(digest: hash).ToString();
     }
     /// <summary>Computes the canonical <c>sha256-64/{16 lowercase hex}</c> content-address pin of
     /// <paramref name="content"/>: the text form of <see cref="AssetContentHash"/>, which every "sha256-64/" pin in the

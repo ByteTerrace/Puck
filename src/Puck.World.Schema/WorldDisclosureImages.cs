@@ -441,7 +441,7 @@ public sealed partial class WorldDisclosureImages {
                 var members = WorldDefinitionMembers.Of(basis, m_frameBaseOf, out var written);
 
                 m_work.Add(DefinitionBytes, written);
-                m_frameBase = Convert.FromHexString(members.Pin);
+                m_frameBase = members.Digest;
                 m_frameBaseOf = basis;
             }
             Span<byte> parts = stackalloc byte[5 * SHA256.HashSizeInBytes];
@@ -537,7 +537,7 @@ public sealed partial class WorldDisclosureImages {
     }
     // The last frame with both variable sections removed.
     private WorldDefinition? m_frameBaseOf;
-    private byte[] m_frameBase = [];
+    private Sha256Digest m_frameBase;
     // The content identity of the recipient's disclosed document less its state rows: placements and every other
     // section a row snapshot does not carry. A value-only delivery owes the document again exactly when it moved.
     // Only the source, the audience and the images of the rows the placements read (FrameRows) move it, so only those

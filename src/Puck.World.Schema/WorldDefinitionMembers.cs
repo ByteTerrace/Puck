@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Abstractions;
 using Puck.Abstractions.Documents;
 using Puck.Assets;
 
@@ -40,12 +41,19 @@ public sealed class WorldDefinitionMembers {
     private WorldDefinitionMembers(IEnumerable<Member> members) {
         m_members = new Dictionary<string, Member>(comparer: StringComparer.Ordinal);
         foreach (var member in members) { m_members[member.Name] = member; }
-        Pin = PinOf(members: m_members.Values);
+        Span<byte> hash = stackalloc byte[Sha256Digest.SizeInBytes];
+        WorldDefinitionFileSource.HashLengthPrefixedParts(
+            m_members.Values.OrderBy(keySelector: static member => member.Name, comparer: StringComparer.Ordinal)
+                .SelectMany(selector: static member => new[] { Encoding.UTF8.GetBytes(s: member.Name), Encoding.UTF8.GetBytes(s: member.Digest) }),
+            hash);
+        Digest = Sha256Digest.Of(hash);
+        Pin = AssetContentHash.FromDigest(hash).ToString();
     }
 
     /// <summary>Gets the revision pin over every present member's name and digest, in ordinal name order, so
     /// it depends on what the document holds and never on the order its members were sliced in.</summary>
     public string Pin { get; }
+    internal Sha256Digest Digest { get; }
     /// <summary>Gets the present members, in no particular order.</summary>
     public IReadOnlyCollection<Member> Members => m_members.Values;
 
@@ -518,9 +526,4 @@ public sealed class WorldDefinitionMembers {
 
         return new WorldDefinitionMembers(members: members.Select(selector: member => Member.Of(name: member.Name, value: memory.Slice(start: member.Start, length: member.Length))));
     }
-    // The digest over every member's name and digest, in ordinal name order, through the length-delimited chain pin a
-    // composed source's content pin folds its files with.
-    private static string PinOf(IEnumerable<Member> members) => WorldDefinitionFileSource.HashLengthPrefixedParts(parts: members
-        .OrderBy(keySelector: static member => member.Name, comparer: StringComparer.Ordinal)
-        .SelectMany(selector: static member => new[] { Encoding.UTF8.GetBytes(s: member.Name), Encoding.UTF8.GetBytes(s: member.Digest) }));
 }
