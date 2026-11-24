@@ -1661,10 +1661,18 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                     }
                 }
                 if (answer.IsCompleted) {
-                    throw new IOException(message: DescribeHandshake(
-                        read: await answer.ConfigureAwait(continueOnCapturedContext: false),
-                        stage: "intent stream update"
-                    ));
+                    var read = await answer.ConfigureAwait(continueOnCapturedContext: false);
+                    var described = DescribeHandshake(read: read, stage: "intent stream update");
+
+                    // A frame the authority wrote is its word on why the stream ends, unlike a lane that only closed:
+                    // it is said every time, since the authority restarts every traveller's input on the next stream.
+                    if (read.Ok && (m_owner.m_narrationHub is { HasNarrationSink: true } hub)) {
+                        hub.Narrate(
+                            channel: "world.authority unavailable",
+                            text: $"[world.authority unavailable: '{m_owner.Endpoint}' ended the intent stream: {described}]"
+                        );
+                    }
+                    throw new IOException(message: described);
                 }
                 if (!string.Equals(
                     a: connectedEndpoint,

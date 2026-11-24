@@ -252,7 +252,7 @@ public sealed class WorldPeerHost : IDisposable {
     // receives no document. A cryptographic identity alone authorizes no public federation disclosure.
     private WorldDisclosureTier DisclosureFor(string sourceAuthority) =>
         (((WorldAdmissionDoor.TryAdmitArrival(
-            entries: m_server.Definition.Admission,
+            entries: m_server.AdmissionPolicy,
             sourceAuthority: sourceAuthority,
             verdict: out var verdict
         ) is null) && (verdict is not null))
@@ -470,9 +470,9 @@ public sealed class WorldPeerHost : IDisposable {
                     challenge: federationChallenge, counterChallenge: clientChallenge,
                     clientKeyHash: client.Link.RemoteId.KeyHash, serverKeyHash: m_network.Peer.Id.KeyHash,
                     serverProof: false);
-                var verifiedPolicy = m_server.Definition.Admission;
+                var verifiedPolicy = m_server.AdmissionPolicy;
                 var identityProof = await m_authenticator.VerifyAsync(boundChallenge, federationProof, handshakeCt).ConfigureAwait(false);
-                if (identityProof is null || !ReferenceEquals(verifiedPolicy, m_server.Definition.Admission)) {
+                if (identityProof is null || !ReferenceEquals(verifiedPolicy, m_server.AdmissionPolicy)) {
                     await WriteFederationRefusal(ct: handshakeCt, detail: "the presented proof did not verify",
                         refusal: WorldFederationRefusal.AuthenticationFailed, stream: stream).ConfigureAwait(false);
                     return;
@@ -539,6 +539,16 @@ public sealed class WorldPeerHost : IDisposable {
                             credential: credential,
                             ct: credential.Token
                         ).ConfigureAwait(continueOnCapturedContext: false);
+                    } catch (Exception exception) when (exception is not (IOException or SocketException or OperationCanceledException or ObjectDisposedException)) {
+                        // The connection's task is not awaited, so a fault that ended it would close the peer's lanes
+                        // and streams with nothing said on either side.
+                        if (m_server.Output.HasNarrationSink) {
+                            m_server.Output.Narrate(
+                                channel: "world.federation",
+                                text: $"[world.federation: the connection from '{federationAuthority}' ended on a fault ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")})]"
+                            );
+                        }
+                        throw;
                     } finally {
                         _ = m_federationConnections.TryRemove(
                             key: client,
@@ -604,7 +614,7 @@ public sealed class WorldPeerHost : IDisposable {
             // policy has not moved since (WorldDefinition's sections are immutable records: an unrelated
             // mutation/rebuild that never touches Admission leaves this reference unchanged; one that does mints a
             // new list — see WorldServer.TryAdmitPeerConnection's own remarks on this parameter).
-            var admissionEntriesAtVerify = m_server.Definition.Admission;
+            var admissionEntriesAtVerify = m_server.AdmissionPolicy;
             var clientKeyHash = client.Link.RemoteId.KeyHash;
             var serverKeyHash = m_network.Peer.Id.KeyHash;
 
@@ -863,7 +873,7 @@ public sealed class WorldPeerHost : IDisposable {
 
     private Task<Principal?> TransferredPrincipalAsync(Credential credential, WorldMobilityIdentity mobility, string sourceAuthority) =>
         ExecuteAuthenticatedAsync<Principal?>(credential, () =>
-            ((WorldAdmissionDoor.TryAdmitArrival(m_server.Definition.Admission, sourceAuthority, out _) is null) &&
+            ((WorldAdmissionDoor.TryAdmitArrival(m_server.AdmissionPolicy, sourceAuthority, out _) is null) &&
             m_server.TryTransferredPrincipal(sourceAuthority, mobility, out var principal)) ? principal : null);
 
     // A destination asks this authority, as a companion's title authority, whether a hop is currently granted to it.
@@ -1222,7 +1232,7 @@ public sealed class WorldPeerHost : IDisposable {
                 var refusal = await WorldTravelerProjection.StreamAsync(
                     m_server,
                     observation,
-                    (m_server.Definition.Host.Authority ?? ListenEndpoint ?? m_server.AuthorityIdentity),
+                    (m_server.DeclaredEndpoint ?? ListenEndpoint ?? m_server.AuthorityIdentity),
                     stream,
                     ct,
                     credential.IsValid
@@ -1378,7 +1388,7 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        var declaredEndpoint = (m_server.Definition.Host.Authority ?? ListenEndpoint);
+        var declaredEndpoint = (m_server.DeclaredEndpoint ?? ListenEndpoint);
         // Read the body and its address inside the same gated operation that decided it is live.
         var local = ((declaredEndpoint is { } localEndpoint)
             ? await ExecuteAuthenticatedAsync(credential, () => (WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
@@ -1737,7 +1747,7 @@ public sealed class WorldPeerHost : IDisposable {
                 var (resolved, accepted) = m_server.ExecuteAuthorityOperation(operation: () => {
                     credential.RequireValid();
 
-                    return ((WorldAdmissionDoor.TryAdmitArrival(m_server.Definition.Admission, sourceAuthority, out _) is null)
+                    return ((WorldAdmissionDoor.TryAdmitArrival(m_server.AdmissionPolicy, sourceAuthority, out _) is null)
                         ? WorldLocalForwardedAuthority.TryApplyIntent(m_server, sourceAuthority, in mobility, leaseId, in submission)
                         : (((IntentSubmission?)null), false));
                 });
@@ -1763,7 +1773,7 @@ public sealed class WorldPeerHost : IDisposable {
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     credential.RequireValid();
                     accepted = await ExecuteAuthenticatedAsync(credential, () =>
-                        (WorldAdmissionDoor.TryAdmitArrival(m_server.Definition.Admission, sourceAuthority, out _) is null) &&
+                        (WorldAdmissionDoor.TryAdmitArrival(m_server.AdmissionPolicy, sourceAuthority, out _) is null) &&
                         forwarder.TryForwardIntent(
                             mobility: in mobility,
                             reason: out reason,
@@ -1835,7 +1845,7 @@ public sealed class WorldPeerHost : IDisposable {
     // The lane authenticated a source authority's namespace, which names no body here, so it observes as the public
     // observer. A seat reads its own disclosure through ObserveTraveler, whose credential resolves to its principal.
     private async Task StreamProjectionAsync(Stream stream, string sourceAuthority, Credential credential, CancellationToken ct) {
-        var policy = m_server.Definition.Admission;
+        var policy = m_server.AdmissionPolicy;
 
         var tier = DisclosureFor(sourceAuthority: sourceAuthority);
         if (tier == WorldDisclosureTier.Frames) {
@@ -1845,7 +1855,7 @@ public sealed class WorldPeerHost : IDisposable {
         }
         var view = m_server.DeliveryView(null, tier);
         var sink = new WorldFederationProjectionSink(
-            isCurrent: () => (ReferenceEquals(objA: policy, objB: m_server.Definition.Admission) && credential.IsValid()),
+            isCurrent: () => (ReferenceEquals(objA: policy, objB: m_server.AdmissionPolicy) && credential.IsValid()),
             authority: m_server.AuthorityIdentity,
             server: m_server,
             tier: tier,
@@ -2027,7 +2037,7 @@ public sealed class WorldPeerHost : IDisposable {
             return now >= verdict.VerifiedAt && now <= verdict.Proof.ValidThrough;
         }
         public bool IsValid() => Volatile.Read(ref m_verdict) is { } verdict &&
-            ReferenceEquals(verdict.Policy, m_host.m_server.Definition.Admission) &&
+            ReferenceEquals(verdict.Policy, m_host.m_server.AdmissionPolicy) &&
             WithinWindow(verdict) && verdict.Proof.TrustIsCurrent?.Invoke() != false && !Token.IsCancellationRequested;
 
         public async ValueTask<bool> RefreshAsync(bool refreshTrust = false) {
@@ -2037,7 +2047,7 @@ public sealed class WorldPeerHost : IDisposable {
                 if (refreshTrust && prior.Proof.RefreshTrustAsync is { } refresh) {
                     await refresh(Token).ConfigureAwait(false);
                 }
-                var policy = m_host.m_server.Definition.Admission;
+                var policy = m_host.m_server.AdmissionPolicy;
                 if (ReferenceEquals(policy, prior.Policy) && prior.Proof.TrustIsCurrent?.Invoke() != false) { return true; }
                 try {
                     if (await m_verify(policy, Token).ConfigureAwait(false) is { } through) {

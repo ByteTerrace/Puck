@@ -381,6 +381,7 @@ public sealed partial class WorldTick {
                 ) {
                     Host.Input.Reset(m_federatedIntents[index].Principal);
                     m_federatedIntents[index] = default;
+                    NoteFederatedDrop(bodyIndex: index, reason: "its intent stream ended, so what it held is released until the stream reopens");
                 }
             }
         }

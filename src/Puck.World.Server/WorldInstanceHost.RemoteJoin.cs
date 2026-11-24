@@ -4,9 +4,10 @@ namespace Puck.World;
 
 // A HOST STARTED TO JOIN ANOTHER AUTHORITY SENDS ITS SEATS THERE. The host boots its own copy of the world so its
 // seats have bodies to send, and every local seat that stands in that copy crosses to the authority the host names:
-// the seats active when the host starts as one party, in one reservation, and a seat that joins later by itself, when
-// it joins. A seat is tried once for each body it takes: a refusal is narrated by the transfer and is not retried
-// until the seat leaves and joins again, so a full authority is not asked every tick.
+// the seats the world seats at boot as one party, in one reservation, and a seat that joins later by itself, when it
+// joins. The boot world seats its eager seats over its first steps, one a step, so the join waits until every one of
+// them stands there before it sends the party. A seat is tried once for each body it takes: a refusal is narrated by
+// the transfer and is not retried until the seat leaves and joins again, so a full authority is not asked every tick.
 public sealed partial class WorldInstanceHost {
     // Where the boot world's seats go, or null for a host that keeps them.
     private TransferDestination? m_remoteJoin;
@@ -17,6 +18,10 @@ public sealed partial class WorldInstanceHost {
     private readonly int[] m_remoteJoinSeats = new int[WorldBodiesLimits.LocalSeatCount];
     private readonly int[] m_remoteJoinGenerations = new int[WorldBodiesLimits.LocalSeatCount];
     private Func<int>? m_remoteJoinScan;
+    // The seats the boot world's document seats at boot, as the last scan read it, and whether the boot party has been
+    // sent: until it has, the join holds back while fewer seats than that stand in the boot world.
+    private int m_remoteJoinEager;
+    private bool m_remoteJoinPartySent;
 
     /// <summary>Sends every local seat that stands in the boot world to a remote authority, now and as each one
     /// joins.</summary>
@@ -34,6 +39,7 @@ public sealed partial class WorldInstanceHost {
             name: "remote-boot"
         );
         Array.Clear(array: m_remoteJoinTried);
+        m_remoteJoinPartySent = false;
     }
 
     // Reads the boot world's active local seats and their generations into the scan's arrays; returns how many.
@@ -41,6 +47,12 @@ public sealed partial class WorldInstanceHost {
         if (Boot is not { } boot) { return 0; }
         var population = boot.Server.Population;
         var count = 0;
+        var eager = 0;
+
+        foreach (var policy in boot.Server.Definition.Population.SeatActivation) {
+            eager += ((policy == SeatActivationPolicy.Eager) ? 1 : 0);
+        }
+        m_remoteJoinEager = Math.Min(val1: eager, val2: population.LocalSeatCount);
 
         for (var slot = 0; (slot < population.LocalSeatCount); slot++) {
             if (!population.IsActive(index: slot)) { continue; }
@@ -61,7 +73,8 @@ public sealed partial class WorldInstanceHost {
         for (var index = 0; (index < active); index++) {
             untried += ((m_remoteJoinTried[m_remoteJoinSeats[index]] == m_remoteJoinGenerations[index]) ? 0 : 1);
         }
-        if (untried == 0) { return 0; }
+        if ((untried == 0) || (!m_remoteJoinPartySent && (active < m_remoteJoinEager))) { return 0; }
+        m_remoteJoinPartySent = true;
         var held = HeldCrossingSeats(instance: boot);
         Span<int> waiting = stackalloc int[active];
         var count = 0;
