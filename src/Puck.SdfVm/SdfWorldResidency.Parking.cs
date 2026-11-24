@@ -75,6 +75,11 @@ public sealed partial class SdfWorldResidency {
     /// <summary>Gets whether the presentation's sight judges the residency (<see cref="Want"/>): its views' images may be
     /// read while it is parked, standing on the images they last rendered, and only a render or the sight wakes it.</summary>
     public bool Sighted => m_sighted;
+    /// <summary>Gets whether the presentation's sight judges the residency and has not wanted it for
+    /// <see cref="PressedParkSeconds"/>: no rendering view sees its glass or is led to it. A window kept rendering only so
+    /// the world's meshes arrive is not kept for such a world, whose render would otherwise observe it every frame and
+    /// keep it from ever parking.</summary>
+    public bool SightLetGo => (m_sighted && (m_clock is { } clock) && (clock.GetElapsedTime(startingTimestamp: m_wantedAt).TotalSeconds >= PressedParkSeconds));
     /// <summary>Gets whether the residency is parked and stands only on its views' last images: no reader has asked to
     /// render it, and the sight has not wanted it, since it parked. A preparation builds no tables for it.</summary>
     public bool StandsParked => (m_parked && !m_wakeOwed);

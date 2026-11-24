@@ -419,7 +419,9 @@ public sealed partial class WorldScreenBinder {
     public object? ArrivingWorld(string view, string consumer) {
         var residency = ResidencyOfFeed(view: view);
 
-        if ((residency is null) || !residency.MeshesFirstArriving) { return null; }
+        // A world the sight let go of brings no meshes in: nobody sees or nears its glass, and keeping its window
+        // rendering would observe it every frame, so it would never park.
+        if ((residency is null) || !residency.MeshesFirstArriving || residency.SightLetGo) { return null; }
         // The consumer's own render brings the meshes of the world it renders.
         if ((ViewHost is { } host) && ReferenceEquals(objA: ResolveInstanceView(name: consumer, world: host)?.Residency, objB: residency)) { return null; }
 

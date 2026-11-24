@@ -81,7 +81,8 @@ public interface IWorldViewScenes {
     /// <param name="view">The session view's instance name.</param>
     /// <param name="consumer">The instance whose image shows the view.</param>
     /// <returns>The world's residency, as an identity to compare by reference; <see langword="null"/> when the
-    /// view's world has no mesh still arriving or is the world its consumer renders.</returns>
+    /// view's world has no mesh still arriving, is the world its consumer renders, or is one the sight let go of
+    /// (<see cref="SdfVm.SdfWorldResidency.SightLetGo"/>).</returns>
     object? ArrivingWorld(string view, string consumer);
     /// <summary>Records that the world a session view renders is wanted this frame: a consumer sees the view's glass,
     /// or the glass stands near enough out of sight, by the walk to it, that a viewer comes to it soon

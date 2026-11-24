@@ -1794,6 +1794,8 @@ counts in `sdf.transforms`, never in `records.posed`.
 - **A hidden window renders until its world is resident.** `WorldViewGraphHost.ReserveArrivals` keeps one window,
   and the windows on the way to it, at `WorldPortalVisibility.ArrivalShare` for each world a rendered view leads to
   whose `SdfWorldResidency.MeshesFirstArriving` holds: a group owing its first mesh or the first detail over its floor (`SdfMeshPathBake.OwedGroups`), or a staged draw waiting for its mesh; a retier or another residency's landing is no arrival. A
+  world the sight has not wanted for `SdfWorldResidency.PressedParkSeconds` (`SightLetGo`) takes no window: the render
+  observes its residency, so a kept window would hold a world nobody approaches from parking for good. A
   residency's bake samples and its meshes land only in frames that render one of its views: a frame that renders none
   still prepares it while it owes its minimum (`SdfWorldResidency.OwesPreparation`) and may pack, which moves what its
   background work binds. In `world.residency`, a residency
