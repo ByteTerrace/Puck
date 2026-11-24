@@ -777,6 +777,35 @@
             "$ref": "./common.schema.json#/$defs/WorldQualityPreset",
             "description": "The device\u0027s own quality table: the levers it runs in place of the world\u0027s render preset of Quality, so each device meets its bar by the path it enables (its render scale, its distant shadow map\u0027s texels, its indirect tier, which sizes the irradiance volume and its caches). Absent runs the tier\u0027s preset.",
             "default": null
+          },
+          "frameBar": {
+            "description": "The device\u0027s frame bar: the window size its frame time is judged at and the rate it must hold there. A host started with --frame-bar opens its window at this size, and a benchmark run judges its iterations against this rate\u0027s period. Absent where the world states no bar for the device.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "width": {
+                "description": "The window\u0027s client width in pixels.",
+                "type": "integer"
+              },
+              "height": {
+                "description": "The window\u0027s client height in pixels.",
+                "type": "integer"
+              },
+              "hertz": {
+                "description": "The presented frames a second the device must hold at that size.",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "width",
+              "height",
+              "hertz"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldFrameBar"
           }
         },
         "required": [

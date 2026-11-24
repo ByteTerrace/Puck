@@ -67,6 +67,7 @@ public static class McpCommand {
                     .. ((world.FederationKeyFile is { } key) ? ["--federation-key-file", key] : Array.Empty<string>()),
                     .. ((world.Width is { } width) ? ["--width", width.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)] : Array.Empty<string>()),
                     .. ((world.Height is { } height) ? ["--height", height.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)] : Array.Empty<string>()),
+                    .. ((world.FrameBar is { } frameBar) ? ["--frame-bar", frameBar] : Array.Empty<string>()),
                 ],
                 Backend = world.Backend,
                 Checkout = world.Checkout,

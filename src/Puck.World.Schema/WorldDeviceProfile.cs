@@ -26,6 +26,9 @@ namespace Puck.World;
 /// of <paramref name="Quality"/>, so each device meets its bar by the path it enables (its render scale, its distant
 /// shadow map's texels, its indirect tier, which sizes the irradiance volume and its caches). Absent runs the tier's
 /// preset.</param>
+/// <param name="FrameBar">The device's frame bar: the window size its frame time is judged at and the rate it must hold
+/// there. A host started with <c>--frame-bar</c> opens its window at this size, and a benchmark run judges its iterations
+/// against this rate's period. Absent where the world states no bar for the device.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldDeviceProfile(
     [property: DocumentText("a device profile's name, which a host selects the profile by (WorldDeviceProfiles.Find)")] string Name,
@@ -33,7 +36,8 @@ public sealed record WorldDeviceProfile(
     QualityTier Quality,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? DeviceMemoryMiB = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? HostMemoryMiB = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? Table = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldQualityPreset? Table = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFrameBar? FrameBar = null
 ) {
     /// <summary>Gets the device pool's memory bar in bytes, or <see langword="null"/> when the profile states none.</summary>
     [JsonIgnore]
@@ -55,6 +59,16 @@ public sealed record WorldDeviceProfile(
     [JsonIgnore]
     public string TableName => ((Table is null) ? QualityTiers.Name(tier: Quality) : Name);
 }
+/// <summary>A device's frame bar: the window size its frame time is read at and the presented rate it must hold there.</summary>
+/// <param name="Width">The window's client width in pixels.</param>
+/// <param name="Height">The window's client height in pixels.</param>
+/// <param name="Hertz">The presented frames a second the device must hold at that size.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldFrameBar(int Width, int Height, int Hertz) {
+    /// <summary>Gets the period of the bar's rate, in milliseconds: the work past which an iteration misses the bar.</summary>
+    [JsonIgnore]
+    public double PeriodMilliseconds => (1000.0 / Hertz);
+}
 /// <summary>Selects a <see cref="WorldDeviceProfile"/> from a world's <c>render.devices</c>.</summary>
 public static class WorldDeviceProfiles {
     /// <summary>Returns the first profile whose <see cref="WorldDeviceProfile.Match"/> the adapter's name contains,
@@ -71,6 +85,34 @@ public static class WorldDeviceProfiles {
         }
 
         return null;
+    }
+    /// <summary>Returns the profile whose frame bar a host opens its window at: the named one, or, for <c>auto</c>, the one
+    /// the adapter selects.</summary>
+    /// <param name="render">The world's render defaults.</param>
+    /// <param name="request">A profile's name, or <c>auto</c> for the one <paramref name="adapterName"/> selects.</param>
+    /// <param name="adapterName">The adapter's name, read before any device opens; <see langword="null"/> where it cannot
+    /// be read.</param>
+    /// <param name="refusal">Why no frame bar applies, naming the profiles that author one; <see langword="null"/> when one
+    /// does.</param>
+    /// <returns>The profile, whose <see cref="WorldDeviceProfile.FrameBar"/> is set, or <see langword="null"/> with
+    /// <paramref name="refusal"/> set.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="render"/> or <paramref name="request"/> is <see langword="null"/>.</exception>
+    public static WorldDeviceProfile? FrameBarOf(WorldRenderDefaults render, string request, string? adapterName, out string? refusal) {
+        ArgumentNullException.ThrowIfNull(argument: render);
+        ArgumentNullException.ThrowIfNull(argument: request);
+
+        var named = string.Equals(a: request, b: "auto", comparisonType: StringComparison.Ordinal) ? null : request;
+        var profile = ((named is null) ? Select(adapterName: adapterName, render: render) : Find(name: named, render: render));
+        var authored = string.Join(separator: ", ", values: (render.Devices ?? []).Where(predicate: static candidate => candidate.FrameBar is not null).Select(selector: static candidate => candidate.Name)) is { Length: > 0 } names ? names : "none";
+
+        refusal = (profile, named) switch {
+            (null, null) => $"no device profile matches the adapter '{adapterName ?? "(unread)"}'; name one of the profiles that author a frame bar ({authored})",
+            (null, _) => $"the world authors no device profile '{named}'; the profiles that author a frame bar are {authored}",
+            ({ FrameBar: null }, _) => $"the device profile '{profile.Name}' authors no frame bar; the profiles that do are {authored}",
+            _ => null,
+        };
+
+        return ((refusal is null) ? profile : null);
     }
     /// <summary>Returns the profile of a name.</summary>
     /// <param name="render">The world's render defaults.</param>
