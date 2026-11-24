@@ -14,6 +14,8 @@ param registryName string
 param keyVaultName string
 param location string = resourceGroup().location
 param tags { *: string } = {}
+@description('The world group\'s hosted-data policy, as main.bicep declares it: scratch is discarded by each release deployment.')
+param hostedData ('durable' | 'scratch')
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Resources
@@ -48,4 +50,5 @@ output worldSiloConfiguration worldSiloConfigType = world.outputs.deploymentConf
 output deploymentKeyVaultName string = keyVaultName
 output deploymentLocation string = location
 output deploymentTags { *: string } = tags
+output worldSiloHostedData string = hostedData
 output deploymentResourceGroupName string = resourceGroup().name

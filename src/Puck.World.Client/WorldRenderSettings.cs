@@ -88,6 +88,16 @@ public sealed partial class WorldRenderSettings {
     /// <see langword="null"/> to refresh it every frame. Boots at <c>render.farShadows</c>; a quality preset's row (the
     /// device table) moves it live.</summary>
     public WorldFarShadows? FarShadows { get => m_farShadows; set { m_farShadows = value; m_revision++; } }
+    /// <summary>The texels a side of a full-resolution shadow cascade (<see cref="Puck.SdfVm.SdfFrame.ShadowTexels"/>) for
+    /// every residency the session presents, routed worlds' included, or <see langword="null"/> for the engine's
+    /// <see cref="Puck.SdfVm.SdfShadowResolutions.DefaultTexels"/>. A quality preset's row (the device table) moves it
+    /// live.</summary>
+    public int? ShadowTexels { get => m_shadowTexels; set { m_shadowTexels = value; m_revision++; } }
+    private int? m_shadowTexels;
+    /// <summary>Returns the texels a side a frame's full-resolution cascades take.</summary>
+    /// <param name="row">The presenting session's device row, or <see langword="null"/> for none.</param>
+    /// <returns>The row's texels, else <see cref="Puck.SdfVm.SdfShadowResolutions.DefaultTexels"/>.</returns>
+    public static int ResolveShadowTexels(int? row) => (row ?? Puck.SdfVm.SdfShadowResolutions.DefaultTexels);
     /// <summary>The irradiance work each presented frame grants every residency's volume the session presents, routed
     /// worlds' included (<see cref="Puck.SdfVm.SdfFrame.IndirectBudget"/>): the device table's row, or
     /// <see langword="null"/> to run each world's own <c>render.indirect.budget</c> (<see cref="ResolveIndirectBudget"/>).

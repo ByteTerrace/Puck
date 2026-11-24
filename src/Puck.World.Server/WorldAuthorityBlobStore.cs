@@ -190,12 +190,16 @@ public sealed partial class WorldAuthorityBlobStore : IWorldAuthorityStore, IWor
 #pragma warning disable IDE0011
     private static ObjectBlobAddress AuthorityAddress(WorldAuthorityIdentity identity, string leaf) => new(
         ObjectId: identity.Owner,
-        Key: $"{WorldOwnedWorldSync.HostedPrivateNamespace}/{identity.World.Value}/authority/{leaf}"
+        Key: $"{WorldOwnedWorldSync.HostedPrivateNamespace}/{identity.World.Value}/{AuthoritySegment}/{leaf}"
     );
+    // The key segment after a world's name under which every object of its authority lives: root, definitions,
+    // checkpoints, journal, receipts and recovery roots. WorldHostedData discards a world by this segment.
+    internal const string AuthoritySegment = "authority";
+    internal const string RootLeaf = "root";
 
     internal static ObjectBlobAddress RootAddress(WorldAuthorityIdentity identity) => AuthorityAddress(
         identity: identity,
-        leaf: "root"
+        leaf: RootLeaf
     );
     internal static ObjectBlobAddress DefinitionCandidateAddress(WorldAuthorityIdentity identity, string hash) => AuthorityAddress(
         identity: identity,

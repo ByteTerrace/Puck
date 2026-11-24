@@ -1005,7 +1005,14 @@ existing VM runs the new OS.
 Release Azure owns the silo release alongside website and Entra reconciliation.
 Runtime verification runs the compiled Entra admission, silo schema, and lifecycle
 recovery laws on Linux. Container verification boots the saved candidate image
-twice to verify checkpoint recovery and QUIC. Deployment uses the existing `zzz`
+twice to verify checkpoint recovery and QUIC, then rehearses a first deployment of
+the image's own worlds inside the image (`puck world release rehearse --image`):
+the bootstrap transaction's roots and group record in a local store, and the
+image's silo started on a managed silo document as a worker starts it, through
+private health, release control, admission, a progress window and drain. A defect in
+the worker's managed start fails there, before any deploy touches Azure; locally,
+the same verb runs a package or a `puck world prepare` output against a built
+`Puck.World.Silo` (`--silo`, with `--extensions-dir` holding the machine providers). Deployment uses the existing `zzz`
 identity and production concurrency group. The runner's QUIC installer is the
 `setup-quic` action, pinned to Microsoft's checksum-verified package source for
 the one Ubuntu release the action accepts; the VM's pre-container host bootstrap (`build/Start-WorldSilo.sh`, which
@@ -1027,7 +1034,20 @@ same commit instead of pushing through a retained release's write protection.
 Registry administrators can still change those protection settings; retention
 must remain part of the operator's storage policy.
 
-Deployment enters the durable maintenance coordinator. The source freezes
+How a deploy treats the hosted world follows the policy the deployment declares,
+`worldSiloHostedData` in `main.bicepparam`, which reaches the deploy as a deployment
+output ([the decision](../decisions/runtime-and-delivery.md#releases)). While it is
+`scratch` (AGENTS.md rule 5), `puck world release deploy` replaces the hosted world
+(`AzureCommand.ReplaceWorldReleaseAsync`): it qualifies the candidate alone from a
+fresh bootstrap fixture while the serving world still runs, then deletes the group's
+compute, discards its hosted data (`WorldHostedData.DiscardAsync`: every world
+authority under the owner's private hosted namespace, then the group record), and
+runs a first deployment's bootstrap. A qualification failure leaves the serving world
+as it was. A failure after the discard leaves the group without a world until a later
+deploy succeeds, since there is no source to recover; the next push deploys again.
+Only a `durable` declaration runs the maintenance transaction below.
+
+Under a `durable` declaration, deployment enters the durable maintenance coordinator. The source freezes
 and saves protected roots before its service stops. The candidate starts with
 admission closed, and the VM extension waits only for what a candidate reaches
 before its commit: private health and, with MCP, Caddy's TLS front. Public
@@ -1037,9 +1057,15 @@ ACME can validate a fresh worker's certificate before the commit. The platform
 reconcile, which runs before the deploy, is the only writer of the world
 subnet's security group and its MCP rule
 ([the decision](../decisions/runtime-and-delivery.md#the-hosted-mcp-fronts-certificate)).
-A timed-out extension prints only this pass's journal lines, then ends its
-output with each wait's last answer (for the TLS front, the keeper's unit state
-and last lines), the public health reason and the container state. The coordinator
+The extension's wait ends at the silo's first exit rather than at its deadline: a
+silo's start is deterministic over the stored roots and the release, so systemd's
+restart would only repeat a refusal, and the wait stops the unit. A failed wait
+prints only this pass's journal lines, then ends its output with each wait's last
+answer (for the TLS front, the keeper's unit state and last lines), the public
+health reason, the container state and the silo's own tagged lines. Private health
+names why the host is not live (`WorldSiloHost.DescribeLiveness`): draining, the
+pump's fault, startup activation's progress or its refusal, or, for a pump that
+stopped stepping, the mailbox work or held step it is inside. The coordinator
 verifies its identity and ownership before committing and opening admission.
 Pre-commit recovery restores only that operation's protected source roots and
 then restarts the retained source. The removed blob-version rewind path is not
@@ -1058,9 +1084,9 @@ committed release is admitted first, an operation that had no effect is abandone
 and every other pre-commit operation recovers its source. Nothing an Azure
 operation already did is retracted outside that recovery.
 
-Hosted data is scratch until its owner says otherwise (AGENTS.md rule 5), so a
-deploy that cannot carry its source's state resets it rather than refusing or
-migrating it. The decision has one home, `WorldReleaseFixtureBuilder.BuildAsync`,
+Under a `durable` declaration, a deploy that cannot carry its source's state
+resets it rather than refusing or migrating it, until the preservation rules for
+definition edits exist. The decision has one home, `WorldReleaseFixtureBuilder.BuildAsync`,
 which asks two questions in order. `WorldReleaseCoordinator.FindDefinitionResetAsync`
 compares the two releases' package definitions: a world whose definition changes
 anywhere but its metadata has no preservation rule yet, so its state resets, while a
@@ -1073,14 +1099,14 @@ the group with `BeginResetAsync`, which records a `reset:` entry and its reason
 in the operation's history. The source still drains and its protected roots
 still permit pre-commit recovery; at Activate,
 `WorldAuthorityBlobStore.PrepareReleaseResetAsync` replaces each drained root
-with the new release's definition and no gameplay, without reading the old
-state. State that decodes under a metadata-only change is carried, and a
+with the new release's definition, no gameplay and no rewind boundary, without
+reading the old state. State that decodes under a metadata-only change is carried, and a
 qualification that fails on it still refuses. A rollback asks neither question
 and refuses a definition change outside metadata. The reset lives in history rather than a member of its own
 because the draining source, an earlier build, reads the group record.
 
-Release Azure prepares the package before deploying it. Deploy automatically
-exports a coherent capture from the active source, preserving admission while
+Release Azure prepares the package before deploying it. Under a `durable`
+declaration, deploy exports a coherent capture from the active source, preserving admission while
 all hosted rows are captured at one simulation boundary. Immutable fixture
 objects are uploaded before their inventory; the CLI materializes an isolated
 store with exact checkpoints and test signing keys. Bootstrap uses a fixture

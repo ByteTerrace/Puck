@@ -876,11 +876,16 @@ public sealed partial class WorldReleaseGroupStore {
             left: pair.First.RecoveryRoots,
             right: pair.Second.RecoveryRoots
         ))));
-    private ObjectBlobAddress Address(string group) {
+    private ObjectBlobAddress Address(string group) => RecordAddress(
+        group: group,
+        owner: m_owner
+    );
+    // The one key layout of a group record, which WorldHostedData discards beside the group's authorities.
+    internal static ObjectBlobAddress RecordAddress(Guid owner, string group) {
         ValidateGroup(group: group);
         return new(
             Key: $"{WorldOwnedWorldSync.HostedPrivateNamespace}/release-groups/{group}.json",
-            ObjectId: m_owner
+            ObjectId: owner
         );
     }
     private static byte[] Serialize(WorldReleaseGroupRecord record) => Encoding.UTF8.GetBytes(s: JsonSerializer.Serialize(

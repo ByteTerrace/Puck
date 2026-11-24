@@ -568,6 +568,6 @@ public static class WorldReleaseCommand {
         return new Command(
             description: "Prepare, deploy, roll back, inspect, and recover hosted-world deployment groups.",
             name: "release"
-        ) { host, prepare, status, finalize, qualify, resume, deploy, rollback, checkpoint, restore, WorldReleaseExerciseCommand.Create() };
+        ) { host, prepare, status, finalize, qualify, resume, deploy, rollback, checkpoint, restore, WorldReleaseExerciseCommand.Create(), WorldReleaseRehearsal.Create(clock: clock) };
     }
 }

@@ -17,7 +17,8 @@ namespace Puck.World.Server;
 /// of waiting for a boundary only it can bring.
 /// <para>
 /// A wave of several fresh ticks runs its ticks in parallel on the host's job pool, one partition each, at
-/// <see cref="JobClass.Tick"/>; a tick's own forks then run inline in its partition. Each tick touches only its own
+/// <see cref="JobClass.Tick"/>; a tick's own forks nest inside its partition and spread across the workers the other
+/// ticks leave (<see cref="JobPool.ForksPerClass"/>). Each tick touches only its own
 /// authority and the services that authority's tick already reaches from the step thread (the outbox records its
 /// deliveries, narration locks), and a tick in a parallel partition that enters another authority's gate is refused
 /// (<see cref="WorldServer.EnterAtTickBoundary"/>), so no two partitions share an authority. A wave holding a slice that

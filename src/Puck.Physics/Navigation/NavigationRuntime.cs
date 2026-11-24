@@ -304,9 +304,11 @@ public sealed partial class NavigationRuntime {
             if ((m_bake is not null) || (m_pending is not null)) {
                 return;
             }
-            var geometry = m_geometry;
-            StartBake(bake: cancellation => Bake(cancellation: cancellation, geometry: geometry));
+            StartBake(geometry: m_geometry);
         }
+        // Apart from BeginBake, whose closure would otherwise be allocated on every call, a domain already baked included.
+        private void StartBake(IContactField geometry) =>
+            StartBake(bake: cancellation => Bake(cancellation: cancellation, geometry: geometry));
 
         private void StartBake(Func<CancellationToken, NavigationDomainBake> bake) {
             var cancellation = new CancellationTokenSource();

@@ -290,6 +290,7 @@ public static partial class AzureCommand {
             "tsv"
         ),
             ["tags"] = source["tags"]!["value"]!.DeepClone(),
+            ["hostedData"] = source["worldSiloHostedData"]!["value"]!.DeepClone(),
         };
 
         WriteParameters(

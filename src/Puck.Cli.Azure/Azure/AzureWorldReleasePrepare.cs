@@ -3,6 +3,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Puck.Cli.Automation;
 using Puck.World;
+using Puck.World.Server;
 
 namespace Puck.Cli.Azure;
 
@@ -176,8 +177,8 @@ public static partial class AzureCommand {
                 revision[..12],
                 revision,
                 image[(image.LastIndexOf(value: '@') + 1)..],
-                "puck.world.persistence.v1",
-                "puck.world.peer.v1"
+                WorldReleaseManifest.CurrentPersistenceContract,
+                WorldReleaseManifest.CurrentPeerProtocolContract
             );
             Directory.CreateDirectory(path: outputDirectory);
             // The manifest is the local publication point; an interrupted copy cannot pass complete file verification.

@@ -235,7 +235,7 @@ public readonly struct SdfMeshShadowCascades {
 
         var resolution = frame.Views[Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1))].Quality.ShadowResolution;
 
-        return (SdfShadowResolutions.Texels(resolution: resolution), frame.DistantShadows.TexelsAt(resolution: resolution));
+        return (SdfShadowResolutions.Texels(full: frame.ShadowTexels, resolution: resolution), frame.DistantShadows.TexelsAt(resolution: resolution));
     }
 
     // An entry of `reach` metres: the square about the cell of its grid the eye stands in, seen along the light.

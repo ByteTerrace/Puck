@@ -5291,6 +5291,7 @@ public static partial class WorldModelShape {
                 M("viewsRate", typeof(global::Puck.SignedDistance.SdfViewsRate), typeof(global::Puck.World.WorldQualityPreset), "ViewsRate", Read | Write, static value => ((global::Puck.World.WorldQualityPreset)value).ViewsRate),
                 M("nested", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldNestedViewQuality>), typeof(global::Puck.World.WorldQualityPreset), "Nested", Read | Write, static value => ((global::Puck.World.WorldQualityPreset)value).Nested),
                 M("indirectBudget", typeof(global::Puck.World.WorldRenderIndirectBudget), typeof(global::Puck.World.WorldQualityPreset), "IndirectBudget", Read | Write, static value => ((global::Puck.World.WorldQualityPreset)value).IndirectBudget),
+                M("shadowTexels", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.WorldQualityPreset), "ShadowTexels", Read | Write, static value => ((global::Puck.World.WorldQualityPreset)value).ShadowTexels),
             ],
             []),
         T(typeof(global::Puck.World.WorldReaction), true, JsonTypeInfoKind.Object, null,

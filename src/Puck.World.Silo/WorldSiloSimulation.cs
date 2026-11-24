@@ -27,7 +27,18 @@ public sealed class WorldSiloSimulation(WorldSiloHost host) : IFixedStepSimulati
     }
 
     /// <inheritdoc/>
+    /// <remarks>An exception from the step is recorded on the host, whose health names it until the host loop it
+    /// faulted stops the process.</remarks>
     public bool TryStep(in FixedStepContext context, in CommandSnapshot commands) {
+        try {
+            return TryStepCore(in context);
+        } catch (Exception fault) {
+            host.NotePumpFault(fault: fault);
+            throw;
+        }
+    }
+
+    private bool TryStepCore(in FixedStepContext context) {
         // Activation work (checkpoints, releases, deactivations) runs only at a tick boundary, never against a row
         // whose tick is held across wait slices.
         if (!m_resumingRows) {
@@ -41,7 +52,10 @@ public sealed class WorldSiloSimulation(WorldSiloHost host) : IFixedStepSimulati
             host.Instances.DrainPendingTransfers();
         }
         var deadline = WaitDeadline.In(HostWaits.PumpAllowance ?? TimeSpan.FromSeconds(30));
-        m_resumingRows = host.Instances.TryStepInstances(context.StepTicks, deadline) is not null;
+        var held = host.Instances.TryStepInstances(context.StepTicks, deadline);
+
+        host.NotePumpWait(reason: held);
+        m_resumingRows = held is not null;
         if (m_resumingRows) { return false; }
         host.PumpExtensions();
         host.NoteMasterStep(stepTicks: context.StepTicks);

@@ -530,7 +530,13 @@ records the options weighed.
 - **Moved rectangles.** `SdfWorldTables.NoteMotion` hands every non-shading change's before and after boxes to
   `SdfWorldShadows.Moved` before the scopes' early return; keep that call first, or a staging whose scopes are all met
   drops the change. `Moved` skips a change whose box lies within the finest judged texel of the box the entries last
-  judged the row by (`m_judged`); a passed change goes to each entry, which judges the row against its `Footprint` from
+  judged the row by (`m_judged`), for a standalone row or a rigid slot (one box its pose carries, decided in
+  `SdfWorldTables.JudgeMotionSlot`); any other slot is a union that can hide motion, and owes both ends whenever it
+  moves. A slot judged rigid that is not would let its casters drift a texel unseen, so a new member kind of a slot
+  (a second carry, a fixed member) must leave `rigid` false. With every motion scope met, a rigid slot is not placed
+  at all while its pose change bounds its box's displacement from the shadows' judged box (`TryJudged`) under
+  `StillDisplacement` (`CarriedBound.Displacement`, counted in `sdf.residency.motion.rows-spared`); its judged pose
+  follows `m_judged`, so a new writer of `m_judged` for a slot key must leave a box `TryJudged` answers truthfully. A passed change goes to each entry, which judges the row against its `Footprint` from
   where it last drew it (`MoveTexels`) and owes at most `MaxRectangles` merged rectangles (`OwedRects`); a redraw under
   way also owes its own layers (`m_pending`), handed over when it lands. An upload takes the owed rectangles whose
   expected vertices (the entry's measured vertices a rectangle texel) fit `RectangleVertices`, at least one, and the
@@ -1582,9 +1588,14 @@ wrong. The contracts that bite most often:
   a first vertex: Direct3D 12's `SV_VertexID` counts from zero whatever the
   draw's first vertex, so the draw fetches the merged mesh's first triangles and
   objects go missing. The surface pass reads the triangle the pixel names with
-  no level of its own. Everything that reads `SdfMesh.Indices` (the
-  irradiance trace, the audit, the diagnostics' nearest query) reads the merged
-  mesh, level zero. Each pass's choice runs beside the box cull in
+  no level of its own. The audit reads the merged mesh, level zero. The
+  irradiance trace reads each static mesh's coarsest level within
+  `SdfMeshIrradiance.TraceError` (`SdfMeshIrradianceScene.GeometryKey.Of`): its
+  geometry copies that level's indices, its instance records and bottoms
+  address the level's indices and materials past the finer levels' in the region
+  (`Geometry.FirstTriangle`), a hit's triangle is the level's own, and the
+  diagnostics' nearest query adds the level's error to its budget. A scene built
+  with no `traceError` (the offline field-level audit) traces level zero. Each pass's choice runs beside the box cull in
   `frame/sdf-mesh-selection.hlsli`, from `SdfMeshDetail`'s packed controls;
   `world.detail 0|1|2` forces one level
   everywhere, and `world.detail auto` restores the choice.

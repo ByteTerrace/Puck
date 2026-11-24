@@ -214,7 +214,7 @@ public sealed unsafe class DirectXDeviceContext : IDirectXDeviceContext, IGpuDev
     }
 
     /// <summary>Gets the native queue without handing the batch's deferred submissions to it, for the submitter's own
-    /// executes and signals, which are those submissions.</summary>
+    /// executes and signals, which are those submissions, and for reads that submit nothing (a timestamp frequency).</summary>
     internal nint SubmissionQueueHandle {
         get {
             EnsureCreated();

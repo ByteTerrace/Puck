@@ -72,6 +72,9 @@ public static class SdfResidencyWork {
     public static readonly WorkKind TierStarts = new(name: "sdf.residency.tiers.started", unit: "groups", workClass: WorkClass.Pacing);
     /// <summary>Counts the rows a staging judged because the slot they ride moved.</summary>
     public static readonly WorkKind MotionRows = new(name: "sdf.residency.motion.rows", unit: "rows", workClass: WorkClass.Pacing);
+    /// <summary>Counts the moved rigid slots a staging left unplaced: every motion scope was met, and the pose change
+    /// bounded the slot's box's displacement from the box the shadows last judged it by under their finest texel.</summary>
+    public static readonly WorkKind MotionRowsSpared = new(name: "sdf.residency.motion.rows-spared", unit: "rows", workClass: WorkClass.Pacing);
     /// <summary>Counts the slot readers (lights, media, paints) a staging judged because their slot moved, each slot's
     /// readers of one kind judged once, as the box that holds them all.</summary>
     public static readonly WorkKind MotionReaders = new(name: "sdf.residency.motion.readers", unit: "readers", workClass: WorkClass.Pacing);
@@ -79,5 +82,5 @@ public static class SdfResidencyWork {
     public static readonly WorkKind MarkMeshes = new(name: "sdf.residency.marks.meshes", unit: "meshes", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the process's residency counts.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.residency", kinds: [Prepared, DemandGroups, DemandBoxes, DemandViews, DemandDue, DemandDueTravel, DemandDueScale, DemandWatched, DemandFramed, DemandRenewed, DemandSlots, DemandStood, DemandMoved, DemandCopied, DemandChanges, DemandReached, DemandChanged, DemandRebiased, DemandResets, DemandJoinWaits, TierGroups, TierDecisions, TierStarts, MotionRows, MotionReaders, MarkMeshes]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.residency", kinds: [Prepared, DemandGroups, DemandBoxes, DemandViews, DemandDue, DemandDueTravel, DemandDueScale, DemandWatched, DemandFramed, DemandRenewed, DemandSlots, DemandStood, DemandMoved, DemandCopied, DemandChanges, DemandReached, DemandChanged, DemandRebiased, DemandResets, DemandJoinWaits, TierGroups, TierDecisions, TierStarts, MotionRows, MotionRowsSpared, MotionReaders, MarkMeshes]);
 }

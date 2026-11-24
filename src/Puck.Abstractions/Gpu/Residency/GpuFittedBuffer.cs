@@ -59,6 +59,21 @@ public sealed class GpuFittedBuffer(Func<ulong, IGpuBuffer> allocate, GpuBufferS
         return true;
     }
 
+    /// <summary>Replaces the buffer when needed, disposing the current allocation before the next is made, so the two
+    /// never stand at once: for an owner every reader of whose current allocation has completed. A refused allocation
+    /// leaves no buffer and throws.</summary>
+    /// <param name="bytes">The bytes the buffer must hold.</param>
+    /// <returns>Whether the buffer was replaced.</returns>
+    public bool Refit(ulong bytes) {
+        var previous = Buffer;
+        var size = AllocationSize(sizing, previous?.SizeBytes ?? 0, bytes);
+        if (previous?.SizeBytes == size) { return false; }
+        Buffer = null;
+        previous?.Dispose();
+        Buffer = allocate(size);
+        return true;
+    }
+
     /// <inheritdoc/>
     public void Dispose() { Buffer?.Dispose(); Buffer = null; }
 }

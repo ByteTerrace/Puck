@@ -348,8 +348,8 @@ across a benchmark chapter and divided by the frames.
    two or more residencies side by side, where it was one a residency.
 
    What remains of the frame thread's own chain is the host's capture and its
-   recording partitions. The next structural step is the pipeline this plan
-   weighed above: frame N+1's capture beside frame N's recording.
+   recording partitions; step 11 shortens the pack that runs beside them, and
+   weighs the pipeline again.
 9. **Judge rigid motion by slot.** Built. The previous draw-row judgement
    raised `sdf.residency.motion.rows` by 1,332,578 over 120 ticks of the
    east-wing route. `SdfWorldTables.NoteMovedSlots` now judges each moved
@@ -385,6 +385,19 @@ across a benchmark chapter and divided by the frames.
       `puck test worlds/debug/city-tests.puck --reproduce` diverged at its
       first tick; that version is gone. `physics.navigation.field-waits`
       counts the reads that held a step.
+    - **A tick's own forks run across the workers.** Built. The step thread
+      forks a wave of authorities' ticks at `JobClass.Tick`, and a class held
+      one fork at a time, so a tick's kit forks, opened inside the wave's
+      partition, ran inline: `puck host samples --focus WorldStepThread` put
+      half the step thread's time in `JobPool.Fork`, which was the city's
+      population stepping serially. A class now holds up to
+      `JobPool.ForksPerClass` forks, and a worker takes from the deepest one
+      first. Invariant: no owner waits while a partition is untaken by a
+      thread that will take it. Door: an owner drains its own fork before it
+      waits, so every partition it waits on is running. A sliced join
+      resumes on whichever thread resumes its tick. The serial input pass
+      between the kit forks (`WorldInputOwner.TryAdmit`) clears and copies
+      only what a batch touches.
     - **A climb carries across a seam.** Built. Thrust drives the vertical
       channel directly each tick, so a transfer captured no vertical motion;
       the body keeps the direct velocity its last step drove and its transfer
@@ -413,10 +426,171 @@ across a benchmark chapter and divided by the frames.
       and no produce over 33 ms at either crossing of
       `world.benchmark run moon`.
 
+11. **The host's pack costs what moved.** Built, in three parts. On the
+    settled spawn about 2,500 transform slots change every frame (the
+    creations' idle animation: `sdf.transforms.packed-rows` over
+    `sdf.creations.packs`), and the pack's own work was the shadows' judgement
+    of each one, then a CPU projection of the sky to learn a turning day had
+    moved its lighting by less than a display code.
+
+    - **A rigid slot is judged like a row.** A slot was taken as a union of
+      boxes that can hide motion inside it, so every moved slot owed both of
+      its ends at every shadow entry, however little it moved. A slot whose two
+      boxes are one box its pose carries (one carry, no fixed member, no member
+      added or gone, `SdfWorldTables.JudgeMotionSlot`) moves every caster point
+      with the box, so the box's displacement bounds the caster's and it takes
+      the standalone row's rule: drift under a texel of the finest entry costs
+      nothing until it gathers (`SdfWorldShadows.Moved`'s `rigid`). Decision:
+      a slot is a union only when it is one. Invariant: no caster moves a
+      texel of the finest entry without its entries owing where it was drawn
+      and where it is. Door: `Moved`, the one place a change reaches the
+      entries, whose bound applies only to a standalone row or a rigid slot.
+      `world.residency`'s `moved=` changes against `judged` read 88,339,857
+      against 88,187,550 before and 42,678,047 against 9,320,564 after: a
+      fifth of the changes reach the entries.
+    - **Dense tables for dense keys.** The slots' motion, the judged boxes and
+      each entry's drawn footprints were hashed dictionaries keyed by a slot
+      or a row, both dense; they are stamped tables now
+      (`StampedIndexTable`), and a whole redraw forgets an entry's footprints
+      by moving the stamp.
+    - **A drifting sky waits out its frames.** A sky whose lit layers keep
+      their kinds projects a new candidate at most once every
+      `SdfSkyEnvironmentRefresh.DriftFrames` frames, judging by the standing
+      candidate between; a change of kinds (an edit) projects at once. The
+      drift is gathered, never lost: the next projection reads the latest sky.
+
+    Sampled over six seconds of the settled spawn on a busy machine, the pack
+    lane fell from 322 samples to 152, its shadow judgement from 89 to 18 and
+    the sky's projection from 58 to 8.
+
+    **The frame thread's allocation.** The largest share was a closure:
+    `NavigationRuntime.Domain.BeginBake` declared its captured geometry at the
+    method's scope, so every call allocated, and `WorldPortalReach.Judge` calls
+    it every frame (4.9 of 8.5 MiB sampled by `puck host allocations`). The
+    capture is in a method of its own now.
+
+    **The pipeline, weighed again.** After the pack's reduction, the frame
+    thread's parts on the busy machine read pump 0.43, capture 0.92, pack 0.68
+    (almost all the join), schedule 0.09, prepare 0.30 and record 0.80 ms
+    (`host.frames`, attribution only). Decision: the pipeline is not built
+    yet; the chain is cut where it costs what did not change. Three reasons:
+
+    - A capture a frame ahead presents world state a frame later, against
+      [the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation),
+      which reads the camera and look at present time; the camera is placed by
+      the host's capture (`WorldFramePresenter.PlaceComposedFrame`), so a
+      pipeline must late-latch the camera into a frame captured earlier, a new
+      door of its own.
+    - The capture writes what this frame's recordings read: the graph host's
+      placements and footprints, the package's resolved views, and the
+      composition's transform table, which a residency's frame borrows by
+      reference (`SdfFrame.Writer.CopyFrom` copies the content's references,
+      not the arrays). Each needs a second buffer in step with frames in
+      flight before the two halves can overlap.
+    - What is left to hide is under a millisecond and a half (capture and the
+      join), and most of the capture is real change: the creations' poses
+      (`WorldCreationInstances.PackTransforms`, already forked) and the view
+      graph's footprint walk (`WorldViewGraphHost.CompleteFootprints`).
+
+12. **The footprint walk reads dense ids.** Built. `ReserveArrivals` and
+    `WantSightedWorlds` walked every screen footprint and filming camera once
+    a level, testing string-keyed sets, and `DecideScreenFootprints` tested
+    string sets on every pass of its fixed point. The host now derives a
+    topology once per set of screen footprints
+    (`WorldViewGraphHost.FootprintTopology`): view names to dense ids, each
+    edge's consumer and producer, portals by id, each consumer's edges and
+    each view's consuming portal. The walks visit only the edges out of the
+    views the last pass reached, in edge order, so their choices stand as
+    they were; a sight, its coverage and its occlusion answer are read once
+    an edge a frame (`EdgeSight`). Decision: the topology is derived, never
+    kept in step by hand. Invariant: it describes the current screen
+    footprints, filmed views and portals. Door: `Topology`, which compares
+    the screen list's identity, the portal version and the filmed count; the
+    host replaces the screen list whenever it changes any of the three.
+
+13. **The pipeline with a camera late-latch.** Decided, not built. Capture
+    frame N+1 on the frame thread while frame N's recordings run on the pool,
+    and place the camera the recording renders at submission. The order of
+    work:
+
+    - Double-buffer what a capture writes and a recording reads, indexed by
+      the frame's parity through the residency's two capture writers
+      (`SdfFrame.Writer`): the graph host's placements, footprints and
+      roots, the package's resolved views, and the composition's transform table, which
+      `SdfFrame.Writer.CopyFrom` borrows by reference today and must copy or
+      own per parity.
+    - Late-latch the camera: the host's capture places the cameras
+      (`WorldFramePresenter.PlaceComposedFrame`); the recording instead reads
+      a camera slot the presenter writes from the latest look input just
+      before `RenderGraphRuntime.RenderWaves` submits, as
+      [the pipeline foundation](../decisions/rendering.md#the-pipeline-foundation)
+      requires (look input stays present-time).
+    - Invariant: a recording reads only its own frame's buffers, and the
+      camera it renders is the latest at submission. Door: the parity a
+      prepared frame carries (`RenderGraphRuntime.ReserveOutput` already
+      writes per-frame reservations), so a reader given another parity's
+      buffer is a type error, not a review finding.
+    - Latency: input to display stays one frame for look (the late-latched
+      camera) and becomes two frames for world state (a capture a frame
+      ahead), which the foundation allows.
+    - What shows it: `host.frames` produce falls to the larger of capture
+      plus pack and prepare plus record, rather than their sum.
+
+    **What a lane building it settles first.** Three things the step above
+    leaves implicit, read in the code:
+
+    - The recording fork must start without its owner draining it, since a
+      `JobPool.Fork` owner takes partitions until none is left before it
+      returns. Built: `JobPool.Open` opens a fork across the workers and
+      returns at once, and `JobPool.Join` takes whatever partitions no
+      worker has taken before it waits, so a fork opened while every worker
+      is busy still completes on its joining thread.
+    - The late-latched camera reaches CPU decisions made before it, at
+      capture and pack: each view's light mask (`SdfLightSelection`), the
+      shadow anchors' fits (`SdfMeshShadowCascades.Fit`), glass in sight
+      (`SdfWorldPasses.GlassSeen`), portal sight and the footprints' demand.
+      A camera that turns between those decisions and the recording would
+      drop a light or a glass pass at the screen's edge for a frame, so each
+      of them is padded by the most the look can turn in one frame, or reads
+      the latched camera. The GPU selection and occlusion read the pass
+      block's camera, so they follow the latch with no change.
+    - Verification needs a GPU leg. A headless World runs none of the
+      frame's production, so every checkpoint of this step is a windowed run
+      on both backends: `host.frames` produce against capture plus pack and
+      prepare plus record, `render.record`, and presented bursts in motion
+      for tearing or a frame-old camera.
+
+14. **Smaller cuts beside the chain.** Built.
+
+    - **A rigid slot under met scopes is placed only past a texel.** With
+      every motion scope met (`m_motionOpen == 0`) only the shadows read a
+      slot's change, and a rigid slot's box is a function of its pose, so
+      `SdfWorldTables.JudgeMotionSlot` leaves an unmoved slot unplaced, and
+      a moved one whose pose change bounds its box's displacement from the
+      shadows' judged box under their finest texel
+      (`CarriedBound.Displacement` against `SdfWorldShadows.StillDisplacement`).
+      The carry applies after the pose, so it scales the bound. Invariant:
+      no caster moves a texel of the finest entry without its entries owing
+      where it was and where it is. Door: the bound is measured from the pose
+      the shadows' judged box was placed at (`SlotMotion.JudgedPose`), which
+      follows `SdfWorldShadows.TryJudged`, so the drift gathers as `Moved`'s
+      own does. `sdf.residency.motion.rows-spared` counts the slots left
+      unplaced.
+    - **A still shape keeps its pose.** A shape with no driver term, no part
+      follower and no driven parent carries the identity delta, so while its
+      registration's root, scale, lanes and frame poses stand its composed
+      pose stands too (`WorldCreationInstances.PackRegistration`,
+      `Registration.PartStill`); a rig with effectors keeps none still, and
+      `CarryPose` forgets the record. `sdf.creations.shapes.still-spared`
+      counts the shapes not composed again. Moving the drivers' evaluation to
+      the GPU stays the structural cut, since the bake and the draws already
+      read each slot's transform.
+
 ## Systems considered
 
 - `JobPool.Fork` and its `JobClass.Frame` carry the pack fork, as they carry
-  the pose pack and the recording waves. No second pool.
+  the pose pack and the recording waves. No second pool. A nested fork takes
+  another slot of its class rather than a pool or class of its own.
 - `JobLane` runs one unit beside its owner; the host's pack runs on one
   beside the readers' rounds (`SdfWorldResidency.PackAhead`), joined at its
   doors as the bake's demand measure is (`SdfMeshPathBake.JoinMeasure`), and it
@@ -430,6 +604,13 @@ across a benchmark chapter and divided by the frames.
   a requested goal field follows. The cross-domain route search
   (`NavigationRuntime.FindRoute`) still walks neighbours per visit and could
   read the same graph.
+- `MarkedIndexSet` and `MarkedIndexCounts` keep dense indices whose clear
+  costs what they hold, but carry no value and clear by visiting members;
+  `StampedIndexTable` is their value-carrying sibling, whose clear is a stamp,
+  for the shadows' judged boxes and drawn footprints and the tables' slot
+  motion. `GpuRowIndex` chains rows by key and stays the rows-by-slot index.
+- `GpuWorkLedger.CountEnvironmentProjection` already counts the sky's CPU
+  projections, so the drift rule adds no counter.
 - `CodeDerivedTable` is the one door for a value derived from a definition;
   the adjacency proofs use it rather than a field cache of their own.
 - `RenderGraphRuntime.RenderWaves` already groups recordings by residency

@@ -11359,6 +11359,10 @@ export type WorldQualityPreset = {
    * The irradiance work each presented frame grants the volume on this device (WorldRenderIndirectBudget), in place of the world's render.indirect.budget, so each device chooses how much lighting work it affords a frame. Absent runs the world's budget.
    */
   indirectBudget?: WorldRenderIndirectBudget | null;
+  /**
+   * The texels along each side of a full-resolution shadow cascade (the near, far and secondary entries) on this device, a power of two from MinShadowTexels through MaxShadowTexels: a shadow tier below High and a nested view's row halve it as they halve the engine's. Each entry's depth, exit and glass layers are sized by its square, so it sets what every world's shadows hold on the device. Absent keeps the engine's 2048.
+   */
+  shadowTexels?: number | null;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;

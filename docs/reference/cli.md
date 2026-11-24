@@ -319,6 +319,7 @@ puck world release checkpoint [--request <guid>] [--host <installed-host>]
 puck world release restore <recovery-point> [--operation <guid>] [--discard-progress] [--host <installed-host>]
 puck azure prepare-world-release [--output <package-directory>]
 puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-image <image> --target-image <image> --output <evidence-directory> [--steps <count>] [--document-directory <asset-layout>]
+puck world release rehearse [<package-directory>] (--silo <path> | --image <reference>) [--extensions-dir <directory>] [--document-directory <directory>] [--output <directory>] [--timeout <seconds>]
 puck world probe <host> <port> <public-key-file>
 puck wasm build
 ```
@@ -503,7 +504,12 @@ A recovered source is reported as a failed deployment, not a successful upgrade.
 
 `world release deploy` verifies the package, retains its files and versioned
 deployment inputs, protects and pulls the exact source and target registry
-digests, and runs qualification before entering the coordinator. Repeating a
+digests, and runs qualification before entering the coordinator. A host whose
+deployment declares its hosted data scratch replaces the hosted world instead
+([the decision](../decisions/runtime-and-delivery.md#releases)): it qualifies the
+candidate alone, then stops the group's compute, discards its hosted data and
+bootstraps the release; everything below in this paragraph describes a durable
+declaration. Repeating a
 pending target resumes it. Another target follows whatever its predecessor left
 (`WorldReleaseCoordinator.Succession` and `SupersedeAsync`): it accepts an
 admitted release, closing its rollback window as it claims the group; it admits a
@@ -614,6 +620,23 @@ contract cannot capture rejects qualification.
 Rollback and restore remain hosted maintenance operations
 until their coordinator can perform the corresponding guarded storage and
 admission transitions.
+
+`world release rehearse [<package-directory>] (--silo <path> | --image <reference>) [--extensions-dir <directory>] [--document-directory <directory>] [--output <directory>] [--timeout <seconds>]`
+rehearses a replace deployment on this machine, against a local directory store:
+the coordinator's bootstrap transaction from its Drain phase (the definitions
+published through unowned roots, their recovery roots, the group record in
+Activate), then the release's own silo started on a managed silo document as a
+worker starts it, reached through its loopback release-control routes. It passes
+once the silo opens admission, keeps answering public health across a progress
+window and drains with a success code; a failure prints the private health reason
+and the silo's own lines. The argument is a release package, or a
+`puck world prepare` output, which is packaged first under one generated owner.
+`--silo` names a built `Puck.World.Silo.dll` or its executable; the release's
+machine providers must be installed where the silo looks (`--extensions-dir`).
+`--image` runs the same verb inside a world-silo image, with its CLI, silo,
+extensions and asset layout and no network; without an argument it rehearses the
+image's own composed worlds. Qualification is not part of a rehearsal.
+
 Azure credentials, deployment ordering, and access restoration belong to
 [`puck azure`](../development/ci.md#azure-production-deployment), which reaches these
 verbs in process.
@@ -1330,6 +1353,30 @@ over 1000) to look at one stall, and `--focus` keeps the ticks beneath an
 engine frame naming the text and lists the `path`s of callers from it outward.
 The target pays only the sampling, so a recording can run beside a
 `puck benchmark` route; its figures are counts, never timings.
+
+Exit codes: 0 done, 2 refused (no diagnostics port, or the trace could not be
+read).
+
+## `puck host samples`—where another process's threads spend their time, beneath a frame
+
+`puck host samples (--pid <pid> [--seconds <n>] [--output <file>] | --trace <file>) [--thread <id>] [--focus <text>] [--depth <n>] [--from <s>] [--to <s>] [--top <n>]`
+attributes another .NET process's thread time by the runtime's sample
+profiler. With `--pid` the CLI records an EventPipe session on the target's
+diagnostics port for `--seconds` (default 6) with the sample profiler, plus
+loader, JIT and rundown events that name the code, and keeps the `.nettrace`
+at `--output`; `--trace` reads a trace already taken, such as a
+`dotnet-trace collect --profile cpu-sampling` or `thread-time` one. The
+profiler records each managed thread's stack about every millisecond, running
+or waiting, so a thread's samples beneath a frame are its share of wall time
+there. The report lists every thread's samples, named by its outermost engine
+frame, then, of the samples whose stack holds a frame naming `--focus` (its
+outermost such frame, so recursion counts once), the `callee` paths of
+`--depth` frames beneath it (default 1), with `self` for samples in the frame
+itself, each with its share of the focused samples. `--thread` reads one
+thread, and `--from` and `--to` read a window in seconds from the trace's
+start. A frame thread's parts read this way are attribution on a machine
+others share, never timings: for example `--focus
+WorldViewGraphHost.CompleteFootprints --depth 2` on the World's frame thread.
 
 Exit codes: 0 done, 2 refused (no diagnostics port, or the trace could not be
 read).

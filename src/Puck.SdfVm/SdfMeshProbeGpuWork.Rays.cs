@@ -231,7 +231,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
                     var (bottom, mesh) = build[index];
                     var placement = placements[mesh];
                     var inputs = GpuAccelerationStructureInputs.Triangles(
-                        indexOffsetBytes: (ulong)placement.IndexWord * sizeof(uint),
+                        indexOffsetBytes: (ulong)(placement.IndexWord + (3 * bottom.Geometry.FirstTriangle)) * sizeof(uint),
                         source: meshes,
                         triangleCount: (uint)bottom.Geometry.Count,
                         vertexCount: (uint)bottom.Geometry.Positions.Length,

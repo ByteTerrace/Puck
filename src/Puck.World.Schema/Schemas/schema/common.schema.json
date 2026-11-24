@@ -366,6 +366,14 @@
           "$ref": "#/$defs/WorldRenderIndirectBudget",
           "description": "The irradiance work each presented frame grants the volume on this device (WorldRenderIndirectBudget), in place of the world\u0027s render.indirect.budget, so each device chooses how much lighting work it affords a frame. Absent runs the world\u0027s budget.",
           "default": null
+        },
+        "shadowTexels": {
+          "description": "The texels along each side of a full-resolution shadow cascade (the near, far and secondary entries) on this device, a power of two from MinShadowTexels through MaxShadowTexels: a shadow tier below High and a nested view\u0027s row halve it as they halve the engine\u0027s. Each entry\u0027s depth, exit and glass layers are sized by its square, so it sets what every world\u0027s shadows hold on the device. Absent keeps the engine\u0027s 2048.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
         }
       },
       "required": [

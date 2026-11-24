@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Puck.Cli.Automation;
 using Puck.World.Server;
 using Puck.World.Silo;
 
@@ -24,10 +25,10 @@ public static partial class AzureCommand {
         Func<CancellationToken, Task> initializeBootstrap, TimeProvider clock) : IWorldReleaseRuntime {
         private static readonly JsonSerializerOptions Json = new(defaults: JsonSerializerDefaults.Web);
 
-        private readonly WorldAuthorityIdentity[] m_identities = target.Manifest.Definitions.Keys.Select(selector: ParseIdentity).ToArray();
+        private readonly WorldAuthorityIdentity[] m_identities = target.Manifest.Definitions.Keys.Select(selector: WorldAuthorityIdentity.ParseRootKey).ToArray();
         // The worlds the running source names: its drain, protected roots and recovery are its own inventory, which a
         // reset's target may change (a world added starts fresh; a world removed keeps its protected root).
-        private readonly WorldAuthorityIdentity[] m_sourceIdentities = (source ?? target).Manifest.Definitions.Keys.Select(selector: ParseIdentity).ToArray();
+        private readonly WorldAuthorityIdentity[] m_sourceIdentities = (source ?? target).Manifest.Definitions.Keys.Select(selector: WorldAuthorityIdentity.ParseRootKey).ToArray();
 
         private async Task CheckWorkerAsync(string worker, AzureWorldReleaseDeployment deployment) {
             var process = await InspectAsync(worker: worker).ConfigureAwait(continueOnCapturedContext: false);
@@ -178,23 +179,6 @@ public static partial class AzureCommand {
             script: "if docker inspect puck-world >/dev/null 2>&1; then docker inspect --format '{\"image\":{{json .Config.Image}},\"running\":{{.State.Running}}}' puck-world; else printf '%s' '{\"image\":null,\"running\":false}'; fi",
             worker: worker
         );
-        private static WorldAuthorityIdentity ParseIdentity(string value) {
-            var pieces = value.Split('/');
-
-            if (
-                (pieces.Length != 2) ||
-                !Guid.TryParseExact(
-                pieces[0],
-                "D",
-                out var owner
-            ) ||
-                (owner == Guid.Empty)
-            ) { throw new InvalidDataException(message: "release has an invalid stable world identity"); }
-            return new(
-                Owner: owner,
-                World: SafeName.Parse(candidate: pieces[1])
-            );
-        }
         private async Task<WorldReleaseRuntimePublicationResult> PublishAsync(WorldReleaseGroupRecord operation, AzureWorldReleaseDeployment deployment, WorldReleaseOperationPhase phase, CancellationToken cancellationToken) {
             await RequireAsync(
                 cancellationToken: cancellationToken,
@@ -310,20 +294,12 @@ public static partial class AzureCommand {
                     ).ConfigureAwait(continueOnCapturedContext: false);
                 }
                 await initializeBootstrap(cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-                var captured = new SortedDictionary<string, string>(comparer: StringComparer.Ordinal);
-
-                foreach (var identity in m_identities) {
-                    var saved = (await authority.CaptureRecoveryRootAsync(
-                        identity,
-                        operation.PendingOperationId!.Value,
-                        cancellationToken
-                    ).ConfigureAwait(continueOnCapturedContext: false)
-                        ?? throw new InvalidDataException(message: "bootstrap recovery root is missing"));
-
-                    if (saved.Root.FenceToken != Guid.Empty) { throw new InvalidDataException(message: "bootstrap cannot capture an owned world"); }
-                    captured[identity.RootKey] = saved.Pin;
-                }
-                roots = captured;
+                roots = await WorldReleaseBootstrap.CaptureRootsAsync(
+                    authority: authority,
+                    cancellationToken: cancellationToken,
+                    identities: m_identities,
+                    operationId: operation.PendingOperationId!.Value
+                ).ConfigureAwait(continueOnCapturedContext: false);
             } else {
                 var retained = await FindCapturedRootsAsync(
                     cancellationToken: cancellationToken,
@@ -432,14 +408,7 @@ public static partial class AzureCommand {
                 $"/release/fences/{operation.PendingOperationId:D}"
             ).ConfigureAwait(continueOnCapturedContext: false);
             var census = (response.Deserialize<WorldReleaseWorkerFence[]>(options: Json) ?? throw new InvalidDataException(message: "candidate returned no fence census"));
-            var result = census.Select(selector: row => (Identity: new WorldAuthorityIdentity(
-                Owner: row.Owner,
-                World: SafeName.Parse(candidate: row.World)
-            ), Fence: new WorldAuthorityFence(
-                row.Epoch,
-                row.Token,
-                row.RootVersion
-            ))).ToArray();
+            var result = census.Select(selector: static row => row.ToCensusRow()).ToArray();
 
             if (
                 (result.Length != m_identities.Length) ||

@@ -449,6 +449,7 @@ public sealed partial class WorldCreationInstances {
             }));
         }
 
+        live.StillPoseValid = false;
         for (var shape = 0; (shape < live.ShapeTransforms.Length); shape++) {
             var held = live.ShapeTransforms[shape];
 

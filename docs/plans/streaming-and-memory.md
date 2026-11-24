@@ -1740,6 +1740,123 @@ for every demanded world is a cost a hub pays per window. It is sized by the
 glass, it is the first thing rung 4 gives back, and the alternative is a
 lighting snap at every first sight.
 
+### Decision 10: a world is resident once, and an instance is an overlay on it
+
+**The question.** Two residencies of one presentation can show one content:
+a session screen's shared scene of the debug world beside the world the seat
+stands in (`routed$session$18$0$shared` and `world`), and the moon in the sky
+beside the moon through its portal (`sky$moon` and `routed$6~global4~moon`).
+What each holds twice, and where sharing is enforced, at the scale of a hub
+whose screens and portals show the worlds around it.
+
+**The ruling it rests on.** The owner's: "a world is resident once however
+many views show it" (AGENTS.md). The lead's design ruling from it: what is a
+function of a world's content (its document and static field) is held once a
+presentation, and only what an instance's own state changes (its bodies, its
+state-driven lighting, its transforms) is held per instance, as an overlay;
+where two instances differ in lighting inputs, the lighting and shadows that
+depend on them stay per instance until the inputs match.
+
+**Evidence** **[reading]**, on the RTX 2060 under `world.device-profile
+rtx2060`, Direct3D 12, a warm store, `world.benchmark run debug`:
+
+- The device ledger's peak was 5.12 GB in the first chapter and 5.74 GB at the
+  garden painting, against the 4.83 GB cap. At that peak `host.memory peak`
+  named the mesh region (1.79 GB), the probe lighting (bottoms 349 MB, hit
+  cache 200 MB, probe scene 163 MB, irradiance and feedback tables 146 MB each)
+  and the shadows (about 0.5 GB across the world's and the routed residencies'
+  entries) as the largest holders.
+- `world.residency` listed the world at 7,395 groups and the session's scene
+  at 7,163, its region naming 415 MB against the world's 250 MB. The session's
+  lighting held 19 MB of hits and 12 MB of feedback, the coarse levels its
+  nested table asks for, against the world's 62 MB and 48 MB.
+- The tier board (`SdfMeshLibrary.TierBoard`), through which the second scene
+  follows the tiers the world draws, led 612 of the session's 7,343 groups
+  (`board-led`), and 6,731 groups holding 204 MB had no entry. A group's place
+  on the board was read from its box after the bake's lattices narrowed it
+  (`SdfMeshBakeGroup.Low`), which depends on the tier each residency baked or
+  loaded. Keyed by the planned box instead (`SdfMeshDemand.PlannedCenterOf`),
+  the board led 1,866 groups at the route's end and 5,477 still had no entry. Those groups carry
+  a shape (`SdfMeshBakeGroup.Shape`) the world's program does not, so the two
+  programs partition the same statics into groups differently **[inference]**.
+- The trace scene built every static mesh's own triangles, 12.4 million in the
+  world, where the probes resolve nothing under a twentieth of their finest
+  spacing.
+
+| Option | Gives | Costs |
+|---|---|---|
+| A. One `SdfWorldResidency` a content, each instance an overlay of tables (its draws, transforms and lights) over shared ones | Every content-derived store held once by construction, the tiers decided once | The tables, the bake and the lighting rebuilt around two frames. A session's frame is what its stream discloses, so its overlay must replace the host's dynamic state, never add to it, and disclosure is never traded for a saving |
+| B. Residencies stay a frame each; every content-derived store is keyed by content and consulted at its own door | Meshes once (`SdfMeshRegionStore`, `SdfMeshLibrary`), trace geometries and bottoms once (`SdfMeshIrradianceScene.GeometryKey`, `SdfMeshTraceBottoms`), tiers once (the board) | Each residency keeps its tables, shadows and graphs; a store shares only what is keyed alike, so two programs that group alike are the precondition |
+| C. Leave the residencies as they are | Nothing | Every portal and screen to an occupied world pays for that world again |
+
+**Ruling: B now, as the content half of A.** The stores B keys are the stores
+A shares, so B is built first and A's overlay is the remaining step. The
+invariant: a store's entry is keyed by content identity, and a residency of
+the same content resolves to the existing entry. It is enforced at each
+store's one door: the region places a mesh once whichever residencies name it
+(`SdfMeshRegionStore.Plan`); the library hands one mesh to every group of one
+geometry and tier; the trace scene takes the geometry another scene built of
+the same positions and level (`SdfMeshIrradianceScene.GeometryKey.Of`), and
+every bottom is claimed by geometry; the board answers a second scene's group
+by its shape and planned place, and the follower then draws the world's tier
+whatever its own demand asks (`SdfMeshPathBake.FollowedTiers`). The guarantee
+stops at a group the two programs shape differently, at the lighting, and at
+the shadows. A world's shadows bind its dynamic casters, which are instance
+state, so they stay per instance; this step makes them cost less instead.
+
+Built with it:
+
+- **The trace takes the detail the probes need** (decision 9's option B,
+  without a third product). Each static mesh traces its coarsest collapse level
+  whose measured error lies within `SdfMeshIrradiance.TraceError`, the
+  receiver's normal bias: a surface moved less than a receiver already stands
+  off its own changes no side a probe sees it from. The level's indices are
+  copied into the geometry's storage, since a published mesh lets its levels
+  go, and its records and bottoms address the level past the finer levels in
+  the region (`Geometry.FirstTriangle`). Check: `world.residency`'s
+  `probe-scenes live-bytes` and `host.memory`'s `probe-trace bottom` families.
+- **A relayout gives back before it allocates.** The hit cache is refitted by
+  disposing the old cache first (`GpuFittedBuffer.Refit`; its job is
+  exclusive), and the feedback table retires the old table and allocates the
+  new one only once the retirement released it
+  (`SdfWorldTables.RetireBackgroundResource`'s `released`). The published table
+  is still replaced while its views read the old one, the transient that
+  remains. Check: `host.memory`'s `probe-trace hit-cache` and `probe-feedback`
+  families, whose `peak` stays at one table's bytes.
+- **Each device authors its cascades' texels** (`WorldQualityPreset.ShadowTexels`,
+  carried as `SdfFrame.ShadowTexels`), the engine keeping 2048. The 2060's table
+  sets 1024 (`worlds/standard/quality.puck`), a quarter of each entry's layers.
+
+**Next steps, each with its check.**
+
+1. **The lighting overlay.** A residency whose static scene key and lighting
+   inputs equal another's binds that residency's published table and
+   parameters instead of staging a volume of its own; the camera samples its
+   exposure reads stay its own. Check: the follower's
+   `trace-hits-device-bytes=0` beside the same irradiance revision, and its
+   views' indirect light unchanged in a capture.
+2. **One partition of one content.** Find why the session's program shapes
+   5,477 of its groups differently from the world's, and make two programs of
+   one content group alike. Check: `board-unled` falls to the session's dynamic
+   groups, and the mesh store's `shared-saved` rises by the bytes it names.
+3. **A's overlay.** Once 1 and 2 stand, a second instance of one content
+   resolves to the first's residency with its own frame as an overlay of
+   tables. Check: `world.residency` lists one residency a content.
+
+**Closes.** A board that led a second scene by where each bake had narrowed a
+group's box; a trace scene sized by view detail; a relayout holding two hit
+caches and two feedback tables; shadow memory fixed for every device.
+**Leaves open.** The three steps above; the display-sized storage of an
+infinity layer's views (`sky/sdf.world$visibility`, 66 MB at 1920 by 1080);
+and the moon resident eight times at the route's end, since each session
+screen's sky builds an infinity residency of its own (`session$22$sky$moon`
+through `session$27$sky$moon`, 13 groups each, beside `sky$moon` and
+`routed$6~global4~moon`), which step 3 resolves to one.
+**Strongest case against.** B shares only what is keyed alike, so a content
+whose programs group differently pays twice until step 2. Sharing by content
+key is still the mechanism A needs, and every byte it keys alike is a byte A
+would have had to share the same way.
+
 ### Read at the scale Puck aims for
 
 The purpose asks what each answer becomes when every zone, character and

@@ -1019,8 +1019,27 @@ public sealed partial class WorldCreationInstances {
         }
 
         var terms = 0;
+        // A still shape (no driver term of its own, no part follower, every parent still) carries the identity delta
+        // and composes its pose from the root, the scale, the lanes and the frame's poses alone, so while those stand
+        // its pose is the one last composed and is not composed again. A rig with effectors corrects bones a frame's
+        // probes choose, so it keeps no still shape.
+        var stillStands = !cut && live.StillPoseValid && (live.Rig.Effectors.Count == 0) &&
+            live.StillRootPosition.Equals(other: rootPosition) && live.StillRootRotation.Equals(other: rootRotation) &&
+            (live.StillScale == placementScale) && live.StillLanes.Equals(other: lanes) && ReferenceEquals(objA: live.StillPoses, objB: poses);
+        var spared = 0;
 
         for (var shapeIndex = 0; (shapeIndex < shapeCount); shapeIndex++) {
+            var parent = live.PartParent[shapeIndex];
+            var still = (live.Rig.Terms(shape: shapeIndex).IsEmpty && !live.PartFollows[shapeIndex] && ((parent < 0) || live.PartStill[parent]));
+
+            // A shape that became still this frame holds a pose composed while it moved.
+            stillStands &= (live.PartStill[shapeIndex] == still);
+            live.PartStill[shapeIndex] = still;
+            if (still) {
+                live.PartOwnRotation[shapeIndex] = Quaternion.Identity;
+                live.PartOwnTranslation[shapeIndex] = Vector3.Zero;
+                continue;
+            }
             terms += WorldGaitDrivers.ComposeDelta(
                 phases: live.DriverPhase,
                 rig: live.Rig,
@@ -1060,6 +1079,10 @@ public sealed partial class WorldCreationInstances {
         }
 
         for (var shapeIndex = 0; (shapeIndex < shapeCount); shapeIndex++) {
+            if (stillStands && live.PartStill[shapeIndex]) {
+                spared++;
+                continue;
+            }
 
             var shape = shapes[shapeIndex];
 
@@ -1116,6 +1139,13 @@ public sealed partial class WorldCreationInstances {
                 Position: worldPosition
             ) { Scale = placementScale };
         }
+        live.StillPoseValid = true;
+        live.StillRootPosition = rootPosition;
+        live.StillRootRotation = rootRotation;
+        live.StillScale = placementScale;
+        live.StillLanes = lanes;
+        live.StillPoses = poses;
+        WorldCreationWork.ProcessWork.Add(amount: spared, kind: WorldCreationWork.StillShapesSpared);
         for (var owner = 0; (owner < live.Motion.Owners.Length); owner++) {
             var shapeIndex = live.Motion.Owners[owner];
             var shape = shapes[shapeIndex];

@@ -231,6 +231,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// <summary>The most probes a volume holds, over every tier's levels.</summary>
     public static readonly int MaxProbes = Math.Max(val1: HighLevels.Sum(selector: static level => level.Count), val2: MediumLevels.Sum(selector: static level => level.Count));
 
+    /// <summary>The most, in metres, a traced surface stands from a static mesh's own triangles: the trace scene takes each
+    /// mesh's coarsest level within it (<see cref="SdfMeshIrradianceScene.Build"/>). It is the receiver's normal bias
+    /// (<see cref="SdfMeshIrradianceProbe.NormalBias"/>), a twentieth of the finest probe spacing: a surface moved less
+    /// than the offset a receiver already stands off its own surface changes no side a probe sees it from, while the
+    /// coarser levels hold a fraction of the triangles every bottom, hierarchy and probe-scene word is sized by.</summary>
+    public const float TraceError = SdfMeshIrradianceProbe.NormalBias;
     /// <summary>The counter source's name.</summary>
     public const string SourceName = "sdf.mesh-gi";
     /// <summary>The probe slots a gather fills: the chosen stage's eight corners, then the remainder stage's eight.</summary>
@@ -1862,7 +1868,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     // Parallel hierarchy workers can report several refusals together. Other build faults still reach the caller.
     private static SdfMeshIrradianceScene? TryBuildScene(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous, WorkCounterSet? counters = null) {
-        try { return SdfMeshIrradianceScene.Build(draws, previous, counters); }
+        try { return SdfMeshIrradianceScene.Build(draws, previous, counters, traceError: TraceError); }
         catch (Exception exception) when (HostMemoryRefusedException.Of(exception: exception) is not null) { return null; }
     }
     // A built scene waiting to replace the installed one: its input, its key and the change it makes; Done completes

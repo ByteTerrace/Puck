@@ -519,9 +519,7 @@ measured.**
 17. [high] [Bake proportional to change](#bake-proportional-to-change): the
     bake samples a dense lattice in about twenty round trips a group. Its
     replacement is sampling in one round trip a stage from one root-search
-    source, with coarse-to-fine pruning; the CPU-stage cuts follow it. First,
-    though, the defect that an edit the bake never reads moved its identity
-    and forced a cold set: it taxes every engine edit and every release.
+    source, with coarse-to-fine pruning; the CPU-stage cuts follow it.
 18. [high, before the hosted world admits players] [Security review](#security-review):
     the write door's remaining leaks, then
     [disclosure](disclosure.md#the-build-order)'s next steps and what
@@ -1736,8 +1734,7 @@ Stalls and hitches to attribute:
 
 ### Bake proportional to change
 
-Owner: specialist (rendering) · high · Next: the identity defect below, which
-taxes every engine edit and every release; a quiet cold bake per backend on
+Owner: specialist (rendering) · high · Next: a quiet cold bake per backend on
 the integration head, which the cache sets need anyway
 ([verification debts](#verification-debts)); then
 [the cold bake's steps](iteration.md#the-cold-bakes-steps), whose step 3
@@ -1828,27 +1825,18 @@ Remaining detailed findings and smaller cuts in this area:
   `SdfWorldResidency.Prepare` rules it out; if not, bind both in one step.
   `WorldTextCatalog.Reconcile` also copies the whole packed image into
   `SdfGlyphAtlas`.
-- [high, iteration] An edit to `SdfMeshPathBake` that the bake's content never
-  reads still moved the mesh bake identity and forced a cold set: the lane
-  that built the cache policy added state only its own `Driven` reads and
-  every stored mesh missed. The mesh-bake reference says a field the closure
-  never reads leaves the identity alone
-  ([the closure](../../.claude/skills/rendering/references/mesh-bake.md#the-library-and-the-store)),
-  so either the closure counts that type whole or the reference is wrong.
-  Reproduce with a scratch field on `SdfMeshPathBake` and
-  `puck mesh identity --against`, then fix whichever is wrong. An engine edit
-  that rebakes the world breaks the edit loop the iteration plan protects, and
-  costs the lead a cold set per backend before every release. Unconfirmed
-  beside it: a kernel reload may move the identity, so the next restart
-  rebakes.
+- [medium, iteration] Unconfirmed: a kernel reload may move the bake identity,
+  so the next restart rebakes. Check with `puck mesh identity --against` across
+  a reload's build.
 - [low] Two leads from the bake's lanes, neither reproduced: a change in a
   group's material order discards an identical bake in flight
   (`SdfMeshPathBake`'s `Keeps` and `Place`), and the landing stage may judge
   its error in clamped units, several times more lenient than the field's.
 - [medium] The bake closure reaches code that decides no content, so editing it
-  moves the store identity: `WorkCounterSet`, `WorkCount` and `WorkKind`,
-  `CameraSnapshot` and `SweptBox`, `CodeDerivedTable`, and a group's `Outcome`
-  text literals, which only the done line reads. Make them stop types or
+  moves the store identity: `CameraSnapshot` and `SweptBox`,
+  `CodeDerivedTable`, and a group's `Outcome` text literals, which only the
+  done line reads. A field the bake's code only writes (a counter set in the
+  constructor) still moves the constructor's IL. Make them stop types or
   values the report words (`SdfMeshBakeReport`), with a scratch-edit check
   that each no longer moves the identity; the `m_restarts`, `m_loads*` and
   `m_planMilliseconds` counters belong in `SdfMeshBakeReport.Accounts` too.
@@ -2524,6 +2512,19 @@ Owner: rendering (GPU leg, the lead scheduling the GPU) · medium · Next: one
 draw identity, which visibility's V1 and V2 build on; then Vulkan's crossing
 frame and the pixel-pass gap at locked clocks.
 
+- [high] **A split of the open submission batch mid-frame can re-arm an
+  outstanding fence.** A shadow entry built during a residency's upload created
+  a timestamp heap through `DirectXDeviceContext.CommandQueueHandle`, whose read
+  splits the open batch; the split's owner fence (`GpuSubmissionBatch.Split`,
+  the last deferred fence) threw "A submission is already outstanding on this
+  fence" in `GpuBatchedSubmissionFence.ArmBehind`, and the D3D12 World stopped
+  (`gallery.go shape-superellipsoid-8` after a cold bake on 144b1dd5fc). The
+  heap path now reads `SubmissionQueueHandle`, which submits nothing, but every
+  other `CommandQueueHandle` reader that can run while a frame's batch is open
+  (mapped buffers, exportable images) can still reach the same throw. Find why
+  the owner was already armed or aliased, and make a mid-batch split safe or
+  have the door refuse it while recording. GPU lifetimes are a review-only
+  hazard class.
 - [high] **One screen row of the main view is unwritten at some window
   sizes.** At 1600 by 900 on Direct3D 12 (RTX 4070), a one-pixel row at about
   y 488 across the left 77% of the frame reads no hit in the visibility buffer
@@ -3960,21 +3961,46 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
-- [high, M1] **A reset across a changed world inventory needs its first
-  deploy and a review.** The Azure runtime drains, protects and recovers the
-  source's own worlds, activation resets each target world over its drained
-  root, and a world only the target names starts from a fresh root
-  (`WorldAuthorityBlobStore.PrepareReleaseResetFreshAsync`, under the same
-  activation ownership with no protected root for it). Next: the release from
-  `main` exercises it; a findings-only review of the activation-ownership
-  check by another family (persisted data).
-
-The RTX 2060 machine is a consumer release target (the owner's ruling,
-AGENTS.md): it installs and updates through the launcher from the hosted
-`player` channel and runs only what a player runs. It never builds from
-source, compiles a cartridge or cold-bakes. The lead machine bakes each
-backend's mesh cache set and pushes it as a prerelease, and CI releases what
-is pushed to `main` ([the player channel](../development/ci.md#the-player-channel)).
+- [high, M1] **The first replace deploy, and a review of the discard.** A
+  deploy over scratch hosted data replaces the hosted world
+  ([the decision](../decisions/runtime-and-delivery.md#releases)), and CI's
+  container verification rehearses the image's managed start
+  (`puck world release rehearse --image`). Next: the release from `main`
+  exercises the replace path; a findings-only review by another family of
+  `WorldHostedData.DiscardAsync` and its caller
+  (`AzureCommand.ReplaceWorldReleaseAsync`), the review-only class of deleting
+  persisted data: the policy door, the stop before deletion, the root-first
+  order, and the two conditions the code does not enforce (one deployment
+  group per owner container, the controller lease held).
+- [medium] **Release time.** The failed release of run 45422220920 spent 92
+  minutes: about 21 on the .NET artifacts, 8.5 on the infrastructure
+  reconcile (it plans and applies on every push, changed or not), and 54 in
+  the world release, of which 3.6 went to four qualification legs of one image
+  for a bootstrap, 5.5 to a graceful worker delete, about 10 to provisioning
+  the new worker's disk, and 23 to a readiness wait over a silo that had exited
+  at its first start. The wait now ends at the first exit, a replace deploy
+  skips the export, drain and source recovery, and the worker is
+  force-deleted. Left: skip the infrastructure apply when the compiled
+  template and parameters equal the last deployment's; weigh whether a
+  bootstrap needs both of its qualification pairs, which for one image are two
+  determinism checks (two imports of the seed, then two imports of the state
+  the first continuation wrote); and measure whether reusing
+  the worker VM (stop the container, rerun the extension) beats a fresh one,
+  which costs a delete and a create on every deploy.
+- [medium] **Silo telemetry.** A failed worker is deleted after its attempt,
+  and the silo sends nothing to the deployment's Log Analytics, so only the
+  start script's printed tail survives. Give the silo a provider-neutral
+  telemetry selection (a `telemetry` type and settings in the silo document,
+  contributed by an installed extension, as `lifecycle.observer` is), let
+  `Puck.World.Azure` contribute the Azure Monitor exporter
+  (`AzureMonitorTelemetryExtensions`, Entra authentication with the silo
+  identity), and grant the silo identity Monitoring Metrics Publisher on the
+  environment's Application Insights in `main.bicep`; the deployment's silo
+  document names its connection string from an output.
+- [low] The rehearsal covers a first deployment. A rehearsal of the durable
+  path (a source silo, its drain and capture, then a reset or metadata
+  transition) would run that path before the owner declares hosted data
+  durable, which no deploy runs today.
 
 - [high] No release has passed its public probe, and no player build has
   reached the RTX 2060 through the hosted channel: its one run was a local

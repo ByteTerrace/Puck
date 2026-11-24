@@ -42,6 +42,10 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private bool m_disposed;
     private bool m_stopping;
     private GpuRegion? m_feedback;
+    // Whether a relayout's old feedback table waits in the tables' retirement, and the callback that clears this when the
+    // retirement releases it.
+    private bool m_feedbackRetiring;
+    private Action? m_feedbackReleased;
     private readonly GpuFittedBuffer m_hitCache;
     private readonly GpuFittedBuffer m_cameraSampleCache;
     // Where a relight batch's jobs copy their results on the device, at each job's first probe: the batch's last job
@@ -412,6 +416,18 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 if (m_feedbackRefusedAt is { } refused && m_volume.Time.GetElapsedTime(refused) < SdfGpuWork.DeferralRetry) {
                     return false;
                 }
+                // A relayout gives the old table back before it makes the new one, so the two never stand at once: the old
+                // retires once no job in flight records against it, and the new is made at the first take after the
+                // retirement released it (m_feedbackRetiring).
+                if (m_feedback is { } old) {
+                    if (m_inFlight != 0) { return false; }
+                    m_feedback = null;
+                    m_feedbackWords = 0;
+                    m_feedbackRetiring = true;
+                    tables.RetireBackgroundResource(replaced: old, released: m_feedbackReleased ??= () => Volatile.Write(location: ref m_feedbackRetiring, value: false));
+                    return false;
+                }
+                if (Volatile.Read(location: ref m_feedbackRetiring)) { return false; }
                 // A slot of the service is the region's slot its job flushes through (Record), so a ring block is
                 // rewritten only once the job that last staged through it completed. The region keeps no host copy: each
                 // relight job hands it its own updates (Record).
@@ -422,7 +438,6 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                     m_feedbackRefusedAt = m_volume.Time.GetTimestamp();
                     return false;
                 }
-                if (m_feedback is not null) { tables.RetireBackgroundResource(m_feedback); }
                 m_feedback = replacement;
                 m_feedbackWords = pending.VolumeWords;
             }
@@ -642,7 +657,8 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // recorded it completes (Complete): a job handed back unsubmitted discarded it, and the next job clears again.
     private void FitHitCache(Job query, uint capacity, nint command) {
         var bytes = HitCacheBytes(capacity: capacity);
-        m_hitCacheOwed |= m_hitCache.Fit(bytes);
+        // The old cache goes before the new is made, so a relayout never holds both at once.
+        m_hitCacheOwed |= m_hitCache.Refit(bytes);
         if (!m_hitCacheOwed) { return; }
         query.ClearsHitCache = true;
         var recorder = m_gpu.Recorder;

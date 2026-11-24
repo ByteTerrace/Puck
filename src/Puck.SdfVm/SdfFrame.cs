@@ -468,6 +468,11 @@ public sealed record SdfFrame(
         get => m_settings.DistantShadows;
         init => m_settings = (m_settings with { DistantShadows = value });
     }
+    /// <inheritdoc cref="SdfFrameSettings.ShadowTexels"/>
+    public int ShadowTexels {
+        get => m_settings.ShadowTexels;
+        init => m_settings = (m_settings with { ShadowTexels = value });
+    }
     /// <inheritdoc cref="SdfFrameSettings.FarShadows"/>
     public SdfFarShadows FarShadows {
         get => m_settings.FarShadows;

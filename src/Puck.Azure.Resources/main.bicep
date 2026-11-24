@@ -403,6 +403,8 @@ param gitHubApplicationPrivateKey string?
 param location string = resourceGroup().location
 @description('Optional delegated World MCP deployment using the existing application registration and silo. The host automatically obtains and renews its TLS certificate over port 443.')
 param worldMcp worldMcpType?
+@description('Whether the world group\'s hosted data (its worlds\' authority roots, checkpoints and journals, and its release record) outlives a deployment. Scratch: each release deployment discards it and starts fresh. Durable: deployments carry it through the release transaction. Declared, never defaulted, because scratch deletes data.')
+param worldSiloHostedData ('durable' | 'scratch')
 param tags tagsType = {}
 param website {
   officialContentBaseUrl: string
@@ -3351,6 +3353,7 @@ output worldSiloOwner string = worldSiloIdentity.outputs.principalId
 output worldSiloStorageEndpoint string = worldSilo.outputs.storageEndpoint
 output worldSiloConfiguration worldSiloConfigType = worldSilo.outputs.deploymentConfiguration
 output worldMcpConfiguration worldMcpConfigurationType? = worldMcp == null ? null : mcp!.outputs.worldMcpConfiguration
+output worldSiloHostedData string = worldSiloHostedData
 output deploymentLocation string = location
 output deploymentLockKind string = lockKind
 output deploymentTags tagsType = tags

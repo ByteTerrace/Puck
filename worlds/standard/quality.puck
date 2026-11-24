@@ -58,7 +58,10 @@ render {
   // takes less of the one background share for lighting and the lighting's age grows before the frame does. Its bloom scatters from the
   // low pyramid and its sky field shades at half the grid, each a soft term whose full grid the 2060 cannot afford. It
   // keeps the second shadow slot: that cascade draws only while a second shadowed light (a hearth, a lantern) is in reach,
-  // and dropping it would drop that light's shadow. Every nested view takes the 2060's render scale as its ceiling, and
+  // and dropping it would drop that light's shadow. Its cascades draw 1024 texels a side (`shadowTexels`), half the
+  // engine's 2048: each entry's depth, exit and glass layers then hold a quarter of the memory and a quarter of the fill,
+  // and the near cascade's texel, about 3 cm, still lies under the 4 by 4 filter's penumbra at the 2060's three-quarter
+  // render scale, so every world's shadows on the card hold a quarter of what they would. Every nested view takes the 2060's render scale as its ceiling, and
   // its own nested table gives up more than the world's: a view up to half the display's height draws half-size
   // cascades, one up to a third quarter-size cascades, and one smaller than a postcard draws none and renders at half
   // its size, where the fixed cost of a view dominates its pixels.
@@ -75,6 +78,7 @@ render {
         viewsRate { maxRate: 2, tileSize: 4 }
         distantShadows { reach: 1200, texels: 1024, frames: 4 }
         farShadows { hertz: 15 }
+        shadowTexels: 1024
         indirectBudget { relightPerFrame: 1024, tracePerFrame: 1024, age: 8 }
         bloom: Low
         indirect: Medium
