@@ -337,11 +337,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         return false;
     }
     // A keyed value follows its named clock's presented phase, including a held or scrubbed preview.
-    private void NoteKeys(WorldStateMirror mirror, IWorldKeyTrack? keys) {
-        for (var link = keys; (link is not null); link = link.With) {
-            m_clocks.Note(mirror, link.Clock);
-        }
-    }
+    private void NoteKeys(WorldStateMirror mirror, IWorldKeyTrack? keys) => m_clocks.Note(keys: keys, mirror: mirror);
     private void NoteBinding(WorldStateMirror mirror, StateBinding? binding, WorldStateConversion conversion) {
         if (binding is { } bound) {
             NoteSlot(mirror: mirror, slot: mirror.SlotOf(

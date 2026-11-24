@@ -71,11 +71,7 @@ public sealed class WorldThemeResolve {
         }
 
         // A keyed token re-resolves when its presented phase moves, including a session preview.
-        private void NoteKeys(IWorldKeyTrack? keys) {
-            for (var link = keys; (link is not null); link = link.With) {
-                Clocks.Note(Mirror, link.Clock);
-            }
-        }
+        private void NoteKeys(IWorldKeyTrack? keys) => Clocks.Note(keys: keys, mirror: Mirror);
         private void Note(StateBinding? binding, WorldStateConversion conversion) {
             if (binding is { } bound) {
                 NoteSlot(slot: Mirror.SlotOf(
