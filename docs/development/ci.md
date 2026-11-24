@@ -719,11 +719,12 @@ hosted Windows runner, and nothing waits on it:
    identity equals this build's from its GitHub prerelease
    (`caches/<backend>-<identity>`), verifies every content pin, unpacks it
    into `cache/meshes` and checks that the set was produced for the groups this
-   release's world plans. A backend with no matching set, or whose set was
-   produced for another world, fails the step: the job summary names the
-   backend, the identity and what the lead runs, nothing is signed or
-   uploaded, and the channel keeps its last complete release. The deploy is a
-   separate job and goes ahead.
+   release's world plans. While a backend has no matching set, or its set was
+   produced for another world, the step looks again each minute for 45 minutes
+   (`--wait`), so a set the GPU machine finishes after the push still ships.
+   After that it fails: the job summary names the backend, the identity and
+   what the lead runs, nothing is signed or uploaded, and the channel keeps its
+   last complete release. The deploy is a separate job and goes ahead.
 3. `puck publish … --exclude player-logs cache/meshes-intermediates player-caches --bootstrap launcher`
    writes the unsigned tree, with the installer copied to the stable
    `<channel>/<rid>/` path a first install downloads.
@@ -747,11 +748,17 @@ check boot bakes or misses, and `produce` refuses an incomplete folder
 ([the decision](../decisions/runtime-and-delivery.md#the-player-channel)).
 
 `--push` uses `gh` with the developer's own login to create the prerelease when
-it is missing and replace its `cache-set.zip`. The next release whose build has
-the same mesh bake identity, and whose world plans the groups the set was
-produced for, ships the set. A change to the bake's code or to a world document
-therefore needs a fresh `produce --push` before the push to `main` that should
-reach players. Locally, `puck channel push --to
+it is missing and replace its `cache-set.zip` and its `cache-set.json`, the
+set's record. The next release whose build has the same mesh bake identity, and
+whose world plans the groups the set was produced for, ships the set. A change
+to the bake's code or to a world document therefore needs a fresh
+`produce --push` before the push to `main` that should reach players. Every
+Azure run says early whether one is needed: its `player-caches` job runs
+`puck world caches status worlds/debug --build artifacts/world` over the run's
+own World build, which reads each backend's identity and the world's plan with
+no device and downloads only the matching record. A missing or stale set is a
+warning on the run's page and in its summary, with the commands above; it holds
+nothing. Locally, `puck channel push --to
 <directory> --signing-key <file>` mirrors a channel instead, which `puck official
 serve --tree <directory>` serves over HTTP for the installer to test against.
 
@@ -874,6 +881,18 @@ older run cannot substitute its payload into a newer infrastructure deployment.
 The platform reconciliation preserves the current Actors image and declared
 subnets, records a what-if plan, rejects resource deletion, and applies
 `main.bicep`. It does not grant CI Owner; that is identity-team setup.
+A reconcile whose inputs did not change is skipped: `deploy-infrastructure`
+hashes the compiled template and the parameters it deploys (the live Actors
+image among them) into an input identity, passes it as `main.bicep`'s
+`inputIdentity` and reads it back as the `deploymentInputIdentity` output. When
+the latest `puck-production-platform` deployment succeeded with the same
+identity, it reuses that deployment's outputs and runs neither the plan nor the
+apply. A changed input, a failed or missing deployment, or one deployed by hand
+(whose identity is empty) applies in full. The identity is recorded only on
+Azure's deployment record. Because the skip trusts that nothing changed the
+resources since that deployment, a change made in Azure by hand is repaired by
+an explicit full reconcile: `deploy-infrastructure --full`, which a manual run
+of the workflow passes when its `full-reconcile` input is set.
 
 Front Door refuses a rule write that leaves two rules of a set at one order, and
 Resource Manager writes a set's rules all at once, so a deployment that inserts or
@@ -1048,6 +1067,29 @@ as it was. A failure after the discard leaves the group without a world until a 
 deploy succeeds, since there is no source to recover; the next push deploys again.
 Only a `durable` declaration runs the maintenance transaction below.
 
+Qualification runs each pair's two legs side by side
+(`WorldReleaseQualificationRunner`): they import the same seed into their own
+copies and containers, so neither waits on the other. Every check of the worker,
+in every phase of either path, is one Run Command
+(`AzureCommand.WorldProbeScript`): the world container's image and state, then,
+when it runs, its release status and private health from the loopback listener,
+read together as one JSON answer. Ensuring a worker reuses that probe rather than
+inspecting first.
+
+The worker's silo also writes its logs and narration to the deployment's
+telemetry sink, so a worker the deploy deletes after a failure leaves its
+evidence behind. The silo document selects a sink as it selects an observer
+(`lifecycle.telemetry`, an installed extension's type and settings); the
+deployment names `azure.monitor`, which `Puck.World.Azure` contributes
+(`AzureMonitorTelemetrySink`), with the containers Application Insights
+connection string from the `worldSiloTelemetryConnectionString` output. The sink
+signs in as the silo identity, which `main.bicep` grants Monitoring Metrics
+Publisher on that component, since its local authentication is disabled. Records
+land in the component's `traces` table under their category; the narration's is
+`Puck.World.Silo.Narration`. Each transmission is bounded and nothing is kept on
+disk (`AzureMonitorLogging`). A local silo or rehearsal selects the built-in
+`file` sink, one JSON record per line.
+
 Under a `durable` declaration, deployment enters the durable maintenance coordinator. The source freezes
 and saves protected roots before its service stops. The candidate starts with
 admission closed, and the VM extension waits only for what a candidate reaches
@@ -1113,6 +1155,16 @@ objects are uploaded before their inventory; the CLI materializes an isolated
 store with exact checkpoints and test signing keys. Bootstrap uses a fixture
 built from the package: each world's definition published under an unowned root
 and no gameplay state. The source's uncapturable state refuses deployment.
+
+No deploy runs the durable path while the declaration is scratch, so
+`puck world release rehearse --mode durable` keeps it proven locally: after a
+first deployment's bootstrap it runs a reset deployment through the source's own
+`/release/drain` route and a deployment whose candidate refuses activation, which
+pre-commit recovery must answer by restoring and readmitting the source. Both use
+the same storage steps the Azure runtime takes over drained roots
+(`WorldReleaseRoots`). Run it before a change to the release transaction, the
+silo's release routes or the root store reaches `main`
+([the CLI reference](../reference/cli.md#automation-commands) has the verb).
 
 Explicit restore is implemented and undergoing local acceptance. Cloud interruption
 acceptance is still outstanding. Do not treat a successful local qualification

@@ -257,9 +257,13 @@ extension that cannot load fails CI rather than the VM. Linux requires `libmsqui
 package (or a `world prepare` output, packaged first) through `WorldReleaseCoordinator.ResumeAsync` from Drain over a
 directory store, with the release's own silo started as a child process on a managed silo document and reached through
 the release-control routes. Use it before any change to the silo's startup, the release transaction or the worker's
-silo document reaches a deploy: `--silo <Puck.World.Silo.dll> --extensions-dir <dir>` locally (publish the GB, AGB and
-HGD forge projects into that directory, as the Dockerfile does), `--image` inside a built image, as CI's container
-verification does. When private health is not ready it says why (`WorldSiloHost.DescribeLiveness`): activation's
+silo document reaches a deploy: `--silo <Puck.World.Silo.dll> --extensions-dir <dir> --document-directory worlds/debug`
+locally (publish the GB, AGB and HGD forge projects, and `Puck.World.Azure` to load the provider's extension, into that
+directory, as the Dockerfile does), `--image` inside a built image, as CI's container verification does. `--mode
+durable` adds a reset deployment through the source's `/release/drain` and a failed deployment the source is recovered
+from; the storage steps over drained roots are `WorldReleaseRoots`, shared with `AzureCommand`'s runtime. Each silo's
+lines are `<name>.log` in the output directory (`source`, `candidate`, `refused-candidate`, `recovered-source`) and the
+file telemetry sink's records `telemetry.jsonl`. When private health is not ready it says why (`WorldSiloHost.DescribeLiveness`): activation's
 progress or refusal, a pump fault, or the mailbox work or held step a stalled pump is inside; `Live` is false until
 `Ready`, so "not progressing" alone never means a stalled pump before activation finished.
 

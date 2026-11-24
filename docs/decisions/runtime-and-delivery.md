@@ -271,6 +271,50 @@ delete versions itself, because that needs a version-delete permission the publi
 identity does not hold. When the owner declares hosted data durable, the declaration
 changes to `durable` and nothing else does.
 
+**The durable path is rehearsed locally while no deploy runs it.** Four durable
+releases failed in the preservation transaction because it had never run where its
+defects could be seen, and a scratch declaration means no deploy runs it now. The
+rehearsal's durable mode (`puck world release rehearse --mode durable`) runs it on
+every use: a reset deployment through the source silo's own `/release/drain` route,
+then a deployment whose candidate fails, from which pre-commit recovery must restore
+and readmit the source. Its candidate fails by refusing activation (it is started
+naming the source release, which is not the pending candidate), because that failure
+comes after Activate has replaced the drained roots, so recovery must put the
+protected roots back rather than find them untouched. The storage steps over drained
+roots have one home (`WorldReleaseRoots`) that the Azure runtime and the rehearsal
+share, so the rehearsal proves the code a deploy runs, not a copy of it. What it does
+not prove is the hosting half: draining a worker through Run Command, the VM's
+replacement and the extension's waits.
+
+**A deploy spends its time only where something changed.** A push that changes no
+infrastructure reuses the last platform deployment instead of planning and applying
+it again (about nine minutes on the first replace deploy): the input identity is a
+hash of the compiled template and the parameters, recorded on Azure's deployment
+record and nowhere in the tree, so a hand deployment, a failed one or any input
+change applies in full. The skip trusts that nothing outside the pipeline changed
+the resources since; an explicit full reconcile (the workflow's `full-reconcile`
+input) is the repair when something did, rather than a periodic apply that would
+cost every push. Each check of the worker is one Run Command, since a Run Command
+round trip costs about half a minute whatever it runs and the first replace deploy
+spent ten minutes in about thirty of them; one probe now reads the container, the
+release status and private health together. The two legs of a qualification pair
+import the same seed into separate copies and containers, so they run side by side.
+
+**A worker's evidence outlives the worker.** A deploy deletes a failed worker, its
+journal and its console with it, so the silo writes its logs and narration to a
+telemetry sink the silo document selects (`lifecycle.telemetry`), through the same
+extension seam as its observer, so the silo and its schema name no provider. The
+Azure deployment selects `azure.monitor`, contributed by the provider's world
+extension and authenticated as the silo identity; the built-in `file` sink serves
+local runs and the rehearsal, which fails unless its sink received the activation
+narration. The export holds the bounds the hosted services already use (one
+transmission at a time, each bounded, a bounded flush at shutdown) and keeps nothing
+on disk, since the disk goes with the worker. Orleans and ASP.NET Core reach the sink
+as logs through the silo's logging pipeline. Spans are not exported: nothing in Puck
+emits activities, Orleans emits grain-call activities only with propagation turned on
+for the whole host, and the request spans the silo would emit are mostly the load
+balancer's health probes.
+
 **Uncapturable machine state is not captured.** A pair carrying machines
 qualifies by boot-anchored reproduction, so addon guest state, applied screen
 operations, live coupled links, and rewind history stay live features rather
@@ -356,6 +400,21 @@ groups its world planned, and the release compares its own world's plan
 (`WorldCachePlan`, from the rest scene `puck mesh audit` also plans). The plan
 is compared, not looked up in the store, because a live frame keys a posed
 character's parts by poses a rest scene does not stand.
+
+**The pipeline says early when a set is owed, and waits for one.** The identity
+already follows only what the bake runs (`SdfMeshBakeClosure` walks the code the
+bake reaches, and the kernels' bytecode), so a set is owed only when the bake's
+code, its kernels or a world document change. Producing it stays a GPU machine's
+job, and the time it takes is the bake's. What made it manual was learning of the
+need from a held channel after the deploy: the first replace deploy shipped with
+its channel held. Every Azure run now checks, with no device, whether whole sets
+exist for its own World build and world (`puck world caches status`, which reads
+only a set's record, published beside its archive) and warns on the run's page
+without holding anything, so the lead produces the sets beside the validation run.
+The player job then waits for a set (`fetch --wait`) instead of failing at once, so
+a set that lands after the push ships with that release. A GPU runner that produces
+the sets when the check finds none would remove the hand step; it needs a
+self-hosted runner on a GPU machine, which only the owner can register.
 
 **A set is whole by construction, and a player's build draws only what is
 stored.** A mesh has one store entry for each detail tier, and which tier a
