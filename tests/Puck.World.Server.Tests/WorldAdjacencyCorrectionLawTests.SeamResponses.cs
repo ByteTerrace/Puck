@@ -42,7 +42,8 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
             server.Adjacencies = fields;
             firstRow.Server.Advance(1680);
             server.PrepareAdjacencyContacts();
-            var prepared = Assert.Single(fields.Visuals());
+            using var published = fields.Visuals();
+            var prepared = Assert.Single(published.Projections);
             Assert.Equal("first-authority", prepared.Neighbour.Authority);
             Assert.Equal(1UL, prepared.Neighbour.SnapshotTick);
             Assert.True(host.TryRetire("remote-first", out var reason), reason);
@@ -56,12 +57,14 @@ public sealed partial class WorldAdjacencyCorrectionLawTests {
                 await Task.Run(() => server.Advance(1680), TestContext.Current.CancellationToken);
                 Assert.Equal(new[] { "seam" }, deliveries);
                 Assert.Equal(before, host.Names);
-                Assert.Same(prepared, Assert.Single(fields.Visuals()));
+                using var during = fields.Visuals();
+                Assert.Same(prepared, Assert.Single(during.Projections));
             }
             var replacement = FileBackedRows.Build("remote-second", remotePath, changed);
             try {
                 host.Admit(replacement.Instance);
-                var fresh = Assert.Single(fields.Prepare());
+                using var advanced = fields.Prepare();
+                var fresh = Assert.Single(advanced.Projections);
                 Assert.Equal("first-authority", fresh.Neighbour.Authority);
                 Assert.Equal(0UL, fresh.Neighbour.SnapshotTick);
                 Assert.Equal(1UL, prepared.Neighbour.SnapshotTick);

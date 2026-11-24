@@ -31,6 +31,7 @@ public sealed partial class WorldFramePresenter {
         m_binder.MachinesChanged -= m_audio.InvalidateMachineBindings;
         m_client.DeliveredState -= AdvanceShadows;
         m_environment.Dispose();
+        m_adjacencies.Dispose();
         foreach (var scene in m_routedScenes.Values) { scene.Dispose(); }
     }
 }

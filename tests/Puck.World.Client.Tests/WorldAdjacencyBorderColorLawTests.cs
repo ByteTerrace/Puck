@@ -244,7 +244,7 @@ public sealed class WorldAdjacencyBorderColorLawTests {
             Direct: true
         )];
 
-        public IReadOnlyList<WorldAdjacencyProjection> Visuals() => m_projections;
+        public WorldAdjacencyRead Visuals() => new(m_projections);
     }
     // A neighbour whose Definition is the image pinned for the tick, which the law advances by hand.
     private sealed class PinnedNeighbour(WorldDefinition definition, WorldFaceFrame counterpartFrame) : IWorldAdjacencyNeighbour {

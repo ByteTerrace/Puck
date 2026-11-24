@@ -1302,23 +1302,6 @@ public static partial class WorldDefinitionValidator {
             definition: definition,
             errors: errors
         );
-        WorldFactsCompileContext? ruleContext = null;
-        // A recipient runs no rule of a world it presents, and a disclosed document may carry a rule beside a cell
-        // its recipient is not sent, so a delivered document's rules, groups and interactions are not compiled.
-        var compiledRules = (run.Delivered ? [] : ValidateRules(
-            rules: definition.Rules,
-            definition: definition,
-            errors: errors,
-            context: ref ruleContext
-        ));
-
-        var compiledGroups = (run.Delivered ? [] : ValidateRuleGroups(
-            context: ref ruleContext,
-            definition: definition,
-            errors: errors,
-            rules: compiledRules
-        ));
-
         ValidateCellSets(
             definition: definition,
             errors: errors
@@ -1332,38 +1315,8 @@ public static partial class WorldDefinitionValidator {
             stateRows: stateRows,
             errors: errors
         );
-        var compiledInteractions = (run.Delivered ? [] : ValidateInteractions(
-            interactions: definition.Interactions,
-            definition: definition,
-            errors: errors,
-            context: ref ruleContext
-        ));
-        (WorldRuleWorkBudget Budget, IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Contributors)? work = null;
-
+        var compiled = ValidatePrograms(run);
         if (errors.Count == 0) {
-            foreach (var (rule, cell) in WorldRuleWorkBudget.ContradictoryGates(
-                catalog: definition.StateCatalog,
-                rules: compiledRules
-            )) {
-                errors.Add(item: $"rule '{rule}' gate can never hold: its comparisons pin {cell} to an empty range.");
-            }
-            work = WorldRuleWorkBudget.Analyze(
-                context: ruleContext,
-                definition: definition,
-                interactions: compiledInteractions,
-                order: Puck.State.Rules.RuleEvaluationOrder.Of(groups: compiledGroups, rules: compiledRules)
-            );
-
-            if (WorldRuleWorkBudget.Refuse(
-                contributors: () => work.Value.Contributors,
-                rowsAtCeiling: name => ((compiledRules.Concat(second: compiledInteractions)
-                    .FirstOrDefault(predicate: rule => string.Equals(a: rule.Name, b: name, comparisonType: StringComparison.Ordinal)) is { } line)
-                    ? WorldRuleWorkBudget.RowsAtCeiling(context: (ruleContext ??= WorldFactsCompiler.Context(definition: definition)), rule: line)
-                    : []),
-                work: work.Value.Budget.WorkUnitsPerTick
-            ) is { } refusal) {
-                errors.Add(item: refusal);
-            }
             // The other real limit: what the document's state occupies, laid out exactly as the server lays it out.
             if (!ArenaLayout.TryBuild(
                 catalog: definition.StateCatalog,
@@ -1382,19 +1335,6 @@ public static partial class WorldDefinitionValidator {
             } else if (((arenaLayout.Bytes + visibilityBytes) + definition.StateCatalog.Keys.Bytes) > ArenaCapacity.MaxBytes) {
                 errors.Add(item: $"state: visibility and retained keys bring the arena to {((arenaLayout.Bytes + visibilityBytes) + definition.StateCatalog.Keys.Bytes)} bytes, past the {ArenaCapacity.MaxBytes}-byte ceiling.");
             }
-        }
-        // A search is the authority's work over cells its recipient may not be sent, as its rules are.
-        if (
-            (errors.Count == 0) &&
-            !run.Delivered &&
-            (work is { } admitted)
-        ) {
-            ValidateSearch(
-                definition: definition,
-                errors: errors,
-                recurringWork: admitted.Budget.WorkUnitsPerTick,
-                rules: compiledRules
-            );
         }
 
         // Called early — the host section references no other section. Only an AUTHORED section validates: absence
@@ -1771,19 +1711,65 @@ public static partial class WorldDefinitionValidator {
             );
         }
 
-        return ((retainCompilation && (errors.Count == 0))
-            ? new WorldRuleCompilation(
-                definition,
-                compiledRules,
-                compiledGroups,
-                compiledInteractions,
-                WorldRuleCompilation.CompileTables(
-                    context: ruleContext,
-                    definition: definition
-                ), context: ruleContext, work: work
-            )
-            : null
-        );
+        return retainCompilation && (errors.Count == 0) ? compiled : null;
+    }
+
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, WorldRuleCompilation> ValidatedPrograms = new();
+
+    // The checks and compilation of executable rules form one product. Only that product vouches for its inputs.
+    private static WorldRuleCompilation? ValidatePrograms(WorldValidationRun run) {
+        if (run.Delivered) { return null; }
+        var definition = run.Definition;
+        var errors = run.Errors;
+
+        if ((run.Before is { } before) && ValidatedPrograms.TryGetValue(before, out var previous) &&
+            (previous.ReuseFor(definition) is { } reused)) {
+            ValidatedPrograms.AddOrUpdate(definition, reused);
+            return reused;
+        }
+
+        var recording = WorldDocumentReads.Begin();
+        WorldDocumentInputs inputs;
+        Puck.State.Rules.CompiledRule[] rules;
+        Puck.State.Rules.CompiledRuleGroup[] groups;
+        Puck.State.Rules.CompiledRule[] interactions;
+        CompiledTable[] tables;
+        Puck.State.Rules.RuleEvaluationOrder order;
+        (WorldRuleWorkBudget Budget, IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Contributors) work;
+
+        try {
+            WorldFactsCompileContext? context = null;
+            rules = ValidateRules(definition.Rules, definition, errors, ref context);
+            groups = ValidateRuleGroups(definition, rules, errors, ref context);
+            interactions = ValidateInteractions(definition.Interactions, definition, errors, ref context);
+            if (errors.Count > 0) { return null; }
+
+            foreach (var (rule, cell) in WorldRuleWorkBudget.ContradictoryGates(catalog: definition.StateCatalog, rules: rules)) {
+                errors.Add($"rule '{rule}' gate can never hold: its comparisons pin {cell} to an empty range.");
+            }
+            order = Puck.State.Rules.RuleEvaluationOrder.Of(groups: groups, rules: rules);
+            work = WorldRuleWorkBudget.Analyze(definition, order, interactions, context);
+            if (WorldRuleWorkBudget.Refuse(
+                contributors: () => work.Contributors,
+                rowsAtCeiling: name => (rules.Concat(interactions).FirstOrDefault(rule => rule.Name == name) is { } line
+                    ? WorldRuleWorkBudget.RowsAtCeiling(context: context ??= WorldFactsCompiler.Context(definition), rule: line)
+                    : []),
+                work: work.Budget.WorkUnitsPerTick
+            ) is { } refusal) {
+                errors.Add(refusal);
+            }
+            if (errors.Count > 0) { return null; }
+
+            ValidateSearch(definition: definition, errors: errors, recurringWork: work.Budget.WorkUnitsPerTick, rules: rules);
+            if ((errors.Count > 0) || !run.RetainCompilation) { return null; }
+
+            tables = WorldRuleCompilation.CompileTables(definition, context);
+        } finally {
+            inputs = recording.End();
+        }
+        var compiled = new WorldRuleCompilation(definition, rules, groups, interactions, tables, order, work, inputs);
+        ValidatedPrograms.AddOrUpdate(definition, compiled);
+        return compiled;
     }
     private static void RefuseCollected(List<string> errors) {
         if (errors.Count > 0) {

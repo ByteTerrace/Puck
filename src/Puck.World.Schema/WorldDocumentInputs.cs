@@ -70,8 +70,10 @@ public enum WorldDocumentInput : byte {
     Gravity,
     /// <summary>The <c>host</c> member.</summary>
     Host,
-    /// <summary>The <c>views</c> member.</summary>
+    /// <summary>The <c>views</c> member, less its screen nesting depth.</summary>
     Views,
+    /// <summary>The <c>views.nestingDepth</c> value.</summary>
+    ViewNesting,
     /// <summary>The rows of the <c>looks</c> member.</summary>
     LookRows,
     /// <summary>The assignment of the <c>looks</c> member.</summary>
@@ -344,7 +346,10 @@ public readonly struct WorldDocumentInputs : IEquatable<WorldDocumentInputs> {
                 var left = read(arg: before);
                 var right = read(arg: after);
 
-                if (!ReferenceEquals(objA: left, objB: right) && !((left is string or ValueType) && left.Equals(obj: right))) {
+                if (!ReferenceEquals(objA: left, objB: right) &&
+                    !((left is string or ValueType) && left.Equals(obj: right)) &&
+                    !(input == WorldDocumentInput.Views && left is WorldViewDefaults oldViews &&
+                        right is WorldViewDefaults newViews && oldViews.SameConfiguration(newViews))) {
                     changed = changed.With(input: input);
                 }
             }
@@ -496,6 +501,7 @@ internal static class WorldDocumentInputTable {
         (WorldDocumentInput.Gravity, static d => d.GravityRaw),
         (WorldDocumentInput.Host, static d => d.HostRaw),
         (WorldDocumentInput.Views, static d => d.ViewsRaw),
+        (WorldDocumentInput.ViewNesting, static d => d.ViewNestingInput),
         (WorldDocumentInput.LookRows, static d => d.LookRowsRaw),
         (WorldDocumentInput.LookAssignment, static d => d.LookAssignmentRaw),
         (WorldDocumentInput.Dynamics, static d => d.DynamicsRaw),
@@ -605,6 +611,7 @@ internal static class WorldDocumentInputTable {
         names[(int)WorldDocumentInput.Prototypes] = "prototypes";
         names[(int)WorldDocumentInput.Bodies] = "bodies";
         names[(int)WorldDocumentInput.SeatDefaults] = "seatDefaults";
+        names[(int)WorldDocumentInput.ViewNesting] = "views.nestingDepth";
         return names;
     }
 
@@ -626,7 +633,8 @@ internal static class WorldDocumentInputTable {
         // Every other stored member is its own part, named by the selector that reads it.
         foreach (var (input, _) in Selectors) {
             if (WorldDocumentInputs.Kits.Contains(input: input) || WorldDocumentInputs.Looks.Contains(input: input) ||
-                WorldDocumentInputs.Placements.Contains(input: input) || WorldDocumentInputs.State.Contains(input: input) || (input == WorldDocumentInput.Shades)) {
+                WorldDocumentInputs.Placements.Contains(input: input) || WorldDocumentInputs.State.Contains(input: input) ||
+                (input is WorldDocumentInput.Shades or WorldDocumentInput.ViewNesting)) {
                 continue;
             }
             inputs.Add(key: SelectedProperty(input: input), value: WorldDocumentInputs.Of(input));

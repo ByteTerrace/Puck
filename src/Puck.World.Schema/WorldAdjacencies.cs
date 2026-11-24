@@ -615,8 +615,36 @@ public static class WorldAdjacencyPolicy {
             )
         );
     }
-    /// <summary>Derives the greatest collider-center reach in a document for overlap and reciprocal-contact proofs.</summary>
-    public static bool TryBodyReach(WorldDefinition definition, out FixedQ4816 reach, out string reason) {
+    // A fixed-point bound a definition proves, or why it cannot. Each is derived once a definition: every adjacency
+    // projection and ownership sweep of every tick asks for them, and deriving one walks every kit (a creation's
+    // collider compiles whole).
+    private delegate bool ProofDerivation(WorldDefinition definition, out FixedQ4816 value, out string reason);
+    private sealed record Proof(bool Proven, FixedQ4816 Value, string Reason);
+    private sealed class Proofs(ProofDerivation derivation) {
+        private readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, Proof> m_table = new();
+        private readonly Func<WorldDefinition, Proof> m_derive = candidate => new Proof(
+            Proven: derivation(candidate, out var value, out var reason), Value: value, Reason: reason);
+
+        public bool Answer(WorldDefinition definition, out FixedQ4816 value, out string reason) {
+            var proof = m_table.GetValue(key: definition, derive: m_derive);
+
+            value = proof.Value;
+            reason = proof.Reason;
+            return proof.Proven;
+        }
+    }
+    private static readonly Proofs BodyReaches = new(derivation: DeriveBodyReach);
+    private static readonly Proofs VerticalDeadbands = new(derivation: DeriveVerticalOwnershipDeadband);
+
+    /// <summary>Derives the greatest collider-center reach in a document for overlap and reciprocal-contact proofs, once
+    /// a definition.</summary>
+    /// <param name="definition">The document.</param>
+    /// <param name="reach">The reach, or zero when it cannot be proven.</param>
+    /// <param name="reason">Why the reach cannot be proven, or empty.</param>
+    /// <returns><see langword="true"/> when every kit's collider bounds its reach.</returns>
+    public static bool TryBodyReach(WorldDefinition definition, out FixedQ4816 reach, out string reason) =>
+        BodyReaches.Answer(definition: definition, reason: out reason, value: out reach);
+    private static bool DeriveBodyReach(WorldDefinition definition, out FixedQ4816 reach, out string reason) {
         reach = FixedQ4816.Zero;
         foreach (var kit in definition.Kits) {
             if ((kit?.Collider) is not { } collider) {
@@ -908,6 +936,9 @@ public static class WorldAdjacencyPolicy {
     public static bool TryVerticalOwnershipDeadband(WorldDefinition definition, out FixedQ4816 depth, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
+        return VerticalDeadbands.Answer(definition: definition, reason: out reason, value: out depth);
+    }
+    private static bool DeriveVerticalOwnershipDeadband(WorldDefinition definition, out FixedQ4816 depth, out string reason) {
         depth = FixedQ4816.Zero;
         var rate = Math.Max(
             val1: definition.SimulationRateHz,

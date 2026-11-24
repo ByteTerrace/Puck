@@ -225,10 +225,10 @@ across a benchmark chapter and divided by the frames.
    `WaitService.Signal` still wakes the thread, and each service then reads its
    own causes: a completed slot fence, its own wake (`SdfGpuWork.Wake`, which
    every client with work outside a frame calls, and a released readback), the
-   tables' next upload (`SdfWorldTables.Uploads`), a held frame. A client whose
-   next job comes due by the clock alone waits at most
-   `SdfGpuWork.QuiescentRest`; asking clients for their next due time would
-   remove that bound. Device retirement and memory trims run every frame
+   tables' next upload (`SdfWorldTables.Uploads`), a held frame, or the first
+   deadline a client or a deferred job reported. `ISdfGpuWorkClient.UntilDue`
+   gives the service the client deadline. The host wait anchors each deadline
+   as its service answers. Device retirement and memory trims run every frame
    whatever the work does (`SdfWorldResidency.Upkeep`), and a resting service
    still gives back idle buffers. `sdf.captures.pumped` against
    `sdf.captures.held` read 685 against 3256 over 120 ticks of the settled
@@ -247,15 +247,37 @@ across a benchmark chapter and divided by the frames.
    Skinned rows write only their selection words (`NoteSkinnedRows`).
 6. **Steady allocation.** The frame thread's median allocation on the settled
    spawn fell from about 43 KB to about 17 KB an iteration (`host.frames`).
-   What went: the reservations' named-output arrays, which the output records
-   now recycle (`OutputRecords`); the probe readback's second copy
-   (`SdfMeshProbeGpuWork.Complete` reads through pooled scratch); and the
-   binding bar's walk over every bank per slot (`CompiledBindingBarLayout.Places`,
-   one set per banks table). What remains on the frame thread is the simulation
-   step it runs between frames: the adjacency projections' body images
-   (`WorldSessionMirror.CaptureBodyImage`, about 3 MB a second) and the host's
-   presentation copies (`WorldPresentationCopy.Observations`). Those belong to
-   the federation work, not to frame production.
+   one set per banks table).
+   The output records recycle the reservations' named-output arrays
+   (`OutputRecords`). The binding bar builds one set per banks table
+   (`CompiledBindingBarLayout.Places`).
+
+   On the moving route the process's allocation was dominated by two sources
+   that had nothing to do with frame production, and both are gone:
+
+   - A scoped replay that captured the whole population every tick and then
+     refused (`WorldScopedReplayRuntime.Capture`). A scope now captures only
+     its own bodies, after checking they are present
+     (`WorldPopulation.TryCaptureEntries`).
+   - A blocking, compacting collection the memory account ran every two
+     seconds for a background bake (`MemoryAccount.ReclaimForAuthoring`), which
+     stopped every thread for 400 to 560 ms. Decision: a reclaim serves
+     authoring, so it is a background collection. Invariant: play never stops
+     for authoring's sake. The door is the account's one reclaim delegate; a
+     caller that passes its own `reclaim` chooses its own collection.
+
+   Per-definition derivations the adjacency step asked for several times a
+   tick are derived once a definition (`WorldAdjacencyPolicy.TryBodyReach`,
+   `TryVerticalOwnershipDeadband`, through `CodeDerivedTable`).
+
+   The tick and renderer retain the same frozen body image through
+   `WorldAdjacencyRead`. Only the last release returns its array.
+   `WorldSessionMirror.BodyImage.Entry` checks the pinned publication before
+   exposing a body. `SdfMeshProbeGpuWork.Complete` reads into answer buffers
+   the requesters reserve before submission. The volume exchanges its camera
+   sample's writable and published buffers under the camera readers' gate.
+   The view graph still builds footprints and instance sets when its inputs
+   move (`RenderGraphInstanceSet.TryCreate`, `WorldViewGraphHost.ScreenFootprints`).
 7. **A view-graph change rebuilds what it changed.** The client now keeps what
    it derives from a delivered definition while the delivery moves none of the
    parts the derivation read, through the document's own read recording
@@ -268,20 +290,61 @@ across a benchmark chapter and divided by the frames.
    is real new work and duplicate work elsewhere: opening the deeper screen
    sessions (`WorldInstanceHost.OpenScreenSession`), each session's facets
    derived again (`WorldPrototypeFacets.Seated`) and its scene composed, the new
-   residencies' programs, and the server's mutation pipeline, which validates,
-   compiles the rules and serializes the whole definition for a views row
-   (`WorldDefinitionValidator.TryValidateChange`, `WorldDeliveryCursor.DeliverDefinition`).
-   Those are the next step: the server's product plan
-   (`WorldDocument.PlanProducts`) already skips products whose inputs did not
-   move; validation, rule compilation and delivery need the same rule.
+   residencies' programs. The authority's validation, rule compilation and
+   delivery apply the same change rule as `WorldDocument.PlanProducts`.
+
+   The screen nesting limit is a tracked input of its own. The validation
+   partition for it checks the limit. Graph topology and the remaining
+   validation read the rest of the views section. Validated rule programs and
+   their work analysis carry the inputs they actually read and can serve a
+   candidate whose inputs stand. Delivery keeps canonical member bytes across
+   immutable definitions and omits inline bytes the stream already sent.
+   Composition shares unchanged view members with the installed record before
+   planning products. A depth-only edit that keeps the arena and rule receipt
+   publishes its new definition without reinstalling the authority's programs.
 8. **Then the pipeline**, if the host world's own chain still bounds a frame.
+   It does. A sampled thread-time trace of the frame thread on the moving route
+   (40 s, RTX 4070, 2560x1440) puts about two thirds of the thread's wall time in
+   producing the frame, and the largest parts are one world's own: the host
+   residency's pack (11% of the thread, which the frame thread runs as its own
+   partition of the pack fork while the workers pack the smaller worlds), the
+   host's capture (12%), the recording waves (14%, half of it the frame
+   thread's own partitions) and the routed readers' capture rounds (9%). No
+   step below 3 ms is reachable while one thread captures, packs and records
+   the host world in turn. Two things stand in the way of overlapping them, and
+   each is the next step's to settle:
+
+   - The host's pack cannot start before the readers' capture rounds end: its
+     first half binds the screens (`SdfWorldResidency.BeginPack`,
+     `BindScreens`), and what a screen shows is resolved by those rounds.
+   - Fewer queue executes need a deferred fence that reads as not signaled
+     until its batch reaches the queue: every upload hands its fence off at
+     once (`SdfWorldTables.CloseUpload`) because a deferred fence that started
+     signaled would satisfy geometry staged for the next upload.
+9. **Judge rigid motion by slot.** Built. The previous draw-row judgement
+   raised `sdf.residency.motion.rows` by 1,332,578 over 120 ticks of the
+   east-wing route. `SdfWorldTables.NoteMovedSlots` now judges each moved
+   slot once. Its union meets every scope and owes every rectangle its rows
+   would have owed. The shadow entries keep their drawn and judged bounds
+   by slot.
+
+   The slot judgement owns both the previous and current bounds of its rigid
+   rows. It reduces the boxes in the slot's frame when a draw record changes,
+   grouping by carry transform so a moved slot can project the union without
+   visiting its rows. A fixed world box stays fixed, and an unbounded member
+   makes the slot unbounded. `SdfWorldShadows.Moved` owes both projected bounds
+   for a moved slot because its union can hide motion inside it. Draws with no
+   slot and skins with multiple pose dependencies keep separate identities.
 
 ## Systems considered
 
 - `JobPool.Fork` and its `JobClass.Frame` carry the pack fork, as they carry
   the pose pack and the recording waves. No second pool.
-- `JobLane` runs one unit beside its owner. It fits a pipeline's second half
-  and nothing built here.
+- `JobLane` runs one unit beside its owner. It fits a pipeline's second half,
+  and the host's pack beside the readers' capture rounds once its screen
+  binding no longer waits on them.
+- `CodeDerivedTable` is the one door for a value derived from a definition;
+  the adjacency proofs use it rather than a field cache of their own.
 - `RenderGraphRuntime.RenderWaves` already groups recordings by residency
   (`IRenderGraphPackageRecorder.RecordingDomain`); the pack fork uses the same
   boundary, one residency a partition.

@@ -128,10 +128,8 @@ internal sealed class SdfWorldShadows : IDisposable {
     // Set by the memory account's trim request, on any thread; the next decision gives back what no view reads.
     private int m_trimRequested;
     private long m_trims;
-    // Where each staged row's box stood when it was last handed to the entries (Moved), valid where marked; and the finest
-    // texel of the standing entries that follow motion, in metres, zero while none stands.
-    private SdfMeshBox[] m_judged = [];
-    private bool[] m_judgedValid = [];
+    // Where a caster last stood. Rigid rows share their slot's nonnegative key; a standalone row takes its complement.
+    private readonly Dictionary<int, SdfMeshBox> m_judged = [];
     private float m_finestTexel;
     // What the stagings reported, for the report: the changes reported, those no box bounds, and those handed to the
     // entries.
@@ -258,44 +256,37 @@ internal sealed class SdfWorldShadows : IDisposable {
     /// it stood when last handed to the entries costs nothing more; the rest are handed to each entry that follows motion,
     /// which owes the rectangles where the caster was when the entry last drew it and where it is now, once the caster
     /// has moved at least <see cref="MoveTexels"/> of that entry's texels across its plane or along its light since.</summary>
-    /// <param name="row">The draw's row in the staged records, by which each entry remembers where it last drew the caster.</param>
+    /// <param name="key">The slot, or the complemented index of a standalone row.</param>
     /// <param name="wasLive">Whether the draw drew something before the change.</param>
     /// <param name="before">The box it was drawn by before, or <see langword="null"/> for a draw no box bounds.</param>
     /// <param name="isLive">Whether the draw draws something after the change.</param>
     /// <param name="after">The box it is drawn by after, or <see langword="null"/> for a draw no box bounds.</param>
     /// <param name="glass">Whether the draw is glass on either side of the change, whose extinction the entries then draw
     /// again.</param>
-    internal void Moved(int row, bool wasLive, in SdfMeshBox? before, bool isLive, in SdfMeshBox? after, bool glass) {
+    internal void Moved(int key, bool wasLive, in SdfMeshBox? before, bool isLive, in SdfMeshBox? after, bool glass) {
         if ((wasLive && (before is null)) || (isLive && (after is null))) {
             MovedEverywhere();
             return;
         }
         m_movedChanges++;
-        if (row < 0) { return; }
-        if (row >= m_judged.Length) {
-            var size = Math.Max((row + 1), (m_judged.Length * 2));
+        var was = wasLive ? before : null;
+        var now = isLive ? after : null;
+        var held = m_judged.TryGetValue(key, out var previous);
+        var slot = key >= 0;
 
-            Array.Resize(array: ref m_judged, newSize: size);
-            Array.Resize(array: ref m_judgedValid, newSize: size);
-        }
-
-        var was = (wasLive ? before : null);
-        var now = (isLive ? after : null);
-
-        // The box the entries last judged the row by stands for where every standing entry drew it to within the finest
-        // texel, so a change that stays that close to it moves no entry's shadow by a texel.
-        if ((m_finestTexel > 0f) && m_judgedValid[row] && (was is not null) && (now is { } held) && (Displacement(first: in m_judged[row], second: in held) < (m_finestTexel * MoveTexels))) {
+        // A union can conceal motion inside it. Every changed slot owes both ends at every entry.
+        if (!slot && (m_finestTexel > 0f) && held && (was is not null) && (now is { } next) &&
+            (Displacement(in previous, in next) < (m_finestTexel * MoveTexels))) {
             return;
         }
-        var judged = (m_judgedValid[row] ? m_judged[row] : was);
+        var judged = ((was is not null) && held && !slot) ? previous : was;
 
-        m_judgedValid[row] = (now is not null);
-        m_judged[row] = (now ?? default);
-        if (m_finestTexel <= 0f) { return; }
+        if (now is { } box) { m_judged[key] = box; }
+        else { _ = m_judged.Remove(key); }
         m_movedJudged++;
         foreach (var anchor in m_anchors) {
             foreach (var entry in anchor.Entries) {
-                entry.Note(row: row, before: ((was is null) ? null : judged), after: now, glass: glass);
+                entry.Note(key: key, before: judged, after: now, glass: glass);
             }
         }
     }
@@ -306,7 +297,7 @@ internal sealed class SdfWorldShadows : IDisposable {
     /// <summary>Notes a change no box bounds: every entry that follows motion owes its whole layer.</summary>
     internal void MovedEverywhere() {
         m_movedUnbounded++;
-        Array.Clear(array: m_judgedValid);
+        m_judged.Clear();
         foreach (var anchor in m_anchors) {
             foreach (var entry in anchor.Entries) { entry.OweAll(); }
         }
@@ -812,14 +803,16 @@ internal sealed class SdfWorldShadows : IDisposable {
             All = true;
         }
         // Owes a footprint's rectangle in a layer of `texels` a side.
-        public void Owe(in Footprint footprint, int texels) {
-            if (All) { return; }
-            Owe(rect: new TexelRect(
+        public bool Owe(in Footprint footprint, int texels) {
+            if (All) { return true; }
+            var rect = new TexelRect(
                 X0: Math.Clamp(value: ((int)MathF.Floor(footprint.U - footprint.HalfU) - RectanglePad), min: 0, max: texels),
                 Y0: Math.Clamp(value: ((int)MathF.Floor(footprint.V - footprint.HalfV) - RectanglePad), min: 0, max: texels),
                 X1: Math.Clamp(value: ((int)MathF.Ceiling(footprint.U + footprint.HalfU) + RectanglePad), min: 0, max: texels),
                 Y1: Math.Clamp(value: ((int)MathF.Ceiling(footprint.V + footprint.HalfV) + RectanglePad), min: 0, max: texels)
-            ), texels: texels);
+            );
+            Owe(rect, texels);
+            return !rect.IsEmpty;
         }
         // Takes every rectangle another owes, in a layer of `texels` a side.
         public void Merge(OwedRects other, int texels) {
@@ -948,7 +941,7 @@ internal sealed class SdfWorldShadows : IDisposable {
         private bool m_takenOptical;
         // Where the entry last drew each staged row's caster (Note), valid while its generation is the layer's: every
         // whole redraw moves the generation, after which a row's next change says where the redraw drew it.
-        private Footprint[] m_drawn = [];
+        private readonly Dictionary<int, Footprint> m_drawn = [];
         private int m_drawnGeneration = 1;
 
         private Pair? m_front;
@@ -1290,53 +1283,46 @@ internal sealed class SdfWorldShadows : IDisposable {
         // appears or goes owes the rectangle it covers, and one that moves owes where it was drawn and where it is once it
         // has moved MoveTexels across the plane or along the light since. A redraw under way owes its own layers where
         // the caster was and is, since a share already drawn may hold it where it was.
-        public void Note(int row, in SdfMeshBox? before, in SdfMeshBox? after, bool glass) {
-            if (m_redraw is { Started: true } redraw) { NotePending(redraw: in redraw, before: in before, after: in after); }
-            if (!m_stands || m_owed.All || (m_texels <= 0) || (row < 0)) { return; }
+        public void Note(int key, in SdfMeshBox? before, in SdfMeshBox? after, bool glass) {
+            var slot = key >= 0;
+
+            if (m_redraw is { Started: true } redraw) { NotePending(in redraw, in before, in after, slot); }
+            if (!m_stands || m_owed.All || (m_texels <= 0)) { return; }
 
             var camera = m_camera;
-            var owed = m_owed.Count;
+            var was = before is { } old ? Footprint.Of(in old, in camera, m_texels) : (Footprint?)null;
+            var current = after is { } now ? Footprint.Of(in now, in camera, m_texels) : (Footprint?)null;
+            var held = m_drawn.TryGetValue(key, out var drawn) && (drawn.Generation == m_drawnGeneration);
+            var origin = held ? drawn : was;
 
-            if (row >= m_drawn.Length) {
-                Array.Resize(array: ref m_drawn, newSize: Math.Max((row + 1), (m_drawn.Length * 2)));
-            }
-            ref var drawn = ref m_drawn[row];
-
-            if (after is not { } now) {
-                if (before is { } gone) { m_owed.Owe(footprint: Footprint.Of(box: in gone, camera: in camera, texels: m_texels), texels: m_texels); }
-                drawn = default;
-            } else {
-                var current = Footprint.Of(box: in now, camera: in camera, texels: m_texels);
-
-                if (drawn.Generation != m_drawnGeneration) {
-                    // Not judged since the layer was drawn: it was drawn where it stood before this change.
-                    if (before is { } was) {
-                        drawn = (Footprint.Of(box: in was, camera: in camera, texels: m_texels) with { Generation = m_drawnGeneration });
-                    } else {
-                        m_owed.Owe(footprint: current, texels: m_texels);
-                        drawn = current with { Generation = m_drawnGeneration };
-                    }
+            if (slot || (origin is not { } prior) || (current is not { } to) || prior.Movable(in to)) {
+                if (origin is { } previous) { Owe(in previous); }
+                if (slot && held && (was is { } immediate) && ((drawn with { Generation = 0 }) != immediate)) { Owe(in immediate); }
+                if (current is { } next) {
+                    Owe(in next);
+                    m_drawn[key] = next with { Generation = m_drawnGeneration };
+                } else {
+                    _ = m_drawn.Remove(key);
                 }
-                if (drawn.Movable(other: in current)) {
-                    m_owed.Owe(footprint: drawn, texels: m_texels);
-                    m_owed.Owe(footprint: current, texels: m_texels);
-                    drawn = current with { Generation = m_drawnGeneration };
-                }
+            } else if (!held) {
+                m_drawn[key] = prior with { Generation = m_drawnGeneration };
             }
-            if (glass && ((m_owed.Count != owed) || m_owed.All)) { m_owedOptical = true; }
+
+            void Owe(in Footprint footprint) {
+                if (m_owed.Owe(in footprint, m_texels) && glass) { m_owedOptical = true; }
+            }
         }
-        // Owes a redraw under way the places a changed caster was and is, in its own camera's texels, once they lie a
-        // texel apart.
-        private void NotePending(in Redraw redraw, in SdfMeshBox? before, in SdfMeshBox? after) {
+        // Owes a redraw under way the places a changed caster was and is, in its own camera's texels.
+        private void NotePending(in Redraw redraw, in SdfMeshBox? before, in SdfMeshBox? after, bool slot) {
             if (m_pending.All) { return; }
 
             var camera = redraw.Camera;
             var was = ((before is { } box) ? Footprint.Of(box: in box, camera: in camera, texels: redraw.Texels) : (Footprint?)null);
             var now = ((after is { } moved) ? Footprint.Of(box: in moved, camera: in camera, texels: redraw.Texels) : (Footprint?)null);
 
-            if ((was is { } from) && (now is { } to) && !from.Movable(other: in to)) { return; }
-            if (was is { } old) { m_pending.Owe(footprint: old, texels: redraw.Texels); }
-            if (now is { } current) { m_pending.Owe(footprint: current, texels: redraw.Texels); }
+            if (!slot && (was is { } from) && (now is { } to) && !from.Movable(in to)) { return; }
+            if (was is { } old) { _ = m_pending.Owe(in old, redraw.Texels); }
+            if (now is { } current) { _ = m_pending.Owe(in current, redraw.Texels); }
         }
         // The shares one redraw takes: the shares that keep each under the upload's budget by the entry's measured
         // vertices, never fewer than the distant map's authored frames or the far entry's refresh period (the authored far

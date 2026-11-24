@@ -18,9 +18,45 @@ namespace Puck.World.Server;
 /// (<c>WorldServer.AttachSink</c>), so the answer is data that could equally have arrived over a real network
 /// connection, never a same-process shortcut into the neighbour's live server objects.</remarks>
 public interface IWorldAdjacencySource {
+    /// <summary>Acquires the current coherent projection image. The reader releases it after its last entity read.</summary>
+    WorldAdjacencyRead Visuals();
+}
+
+/// <summary>A reader's hold on the projections and their entity images.</summary>
+public sealed class WorldAdjacencyRead : IDisposable {
+    private sealed class Image(IReadOnlyList<WorldAdjacencyProjection> projections, Action? release) {
+        public readonly IReadOnlyList<WorldAdjacencyProjection> Projections = projections;
+        public readonly Action? Release = release;
+        public int Readers = 1;
+    }
+
+    private Image? m_image;
+
+    /// <summary>Creates the first hold on a projection image, with an optional action returning its storage.</summary>
+    /// <param name="projections">The direct and corner projections that share this publication.</param>
+    /// <param name="release">Returns storage after the last reader releases it.</param>
+    public WorldAdjacencyRead(IReadOnlyList<WorldAdjacencyProjection> projections, Action? release = null) =>
+        m_image = new(projections, release);
+
+    private WorldAdjacencyRead(Image image) => m_image = image;
+
+    /// <summary>Gets the projections while this hold is open.</summary>
+    public IReadOnlyList<WorldAdjacencyProjection> Projections =>
+        (Volatile.Read(ref m_image) ?? throw new ObjectDisposedException(nameof(WorldAdjacencyRead))).Projections;
+
+    /// <summary>Gets a separate hold while the caller still owns this one.</summary>
+    public WorldAdjacencyRead Retain() {
+        var image = m_image ?? throw new ObjectDisposedException(nameof(WorldAdjacencyRead));
+
+        _ = Interlocked.Increment(ref image.Readers);
+        return new(image);
+    }
+
     /// <summary>Reads the published neighbour for one authored adjacency.</summary>
-    IWorldAdjacencyNeighbour? Find(string adjacencyName) {
-        var projections = Visuals();
+    /// <param name="adjacencyName">The authored adjacency name.</param>
+    /// <returns>The neighbour from this image, or null when its link is closed.</returns>
+    public IWorldAdjacencyNeighbour? Find(string adjacencyName) {
+        var projections = Projections;
         for (var index = 0; index < projections.Count; index++) {
             var projection = projections[index];
             if (projection.Direct && string.Equals(projection.Name, adjacencyName, StringComparison.Ordinal)) {
@@ -30,11 +66,12 @@ public interface IWorldAdjacencySource {
         return null;
     }
 
-    /// <summary>Returns the deterministic contact/render/interest projection set: every direct edge plus
-    /// compiler-derived corner peers reachable through two different direct neighbours. Corner peers observe and
-    /// provide geometry contact but never own a crossing; their path maps terrain and entity poses through the same
-    /// reciprocal frames as both edges.</summary>
-    IReadOnlyList<WorldAdjacencyProjection> Visuals();
+    /// <summary>Releases this reader's hold and returns the image when the last hold closes.</summary>
+    public void Dispose() {
+        var image = Interlocked.Exchange(ref m_image, null);
+
+        if ((image is not null) && (Interlocked.Decrement(ref image.Readers) == 0)) { image.Release?.Invoke(); }
+    }
 }
 /// <summary>One neighbour-to-source mapping stage.</summary>
 /// <param name="Neighbour">The counterpart face's frame, in the neighbour's own coordinates.</param>

@@ -310,7 +310,7 @@ public sealed record WorldViewDefaults(
     [property: DocumentText("a view instance name")]
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Root = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewPostPass>? Post = null,
-    [property: System.Text.Json.Serialization.JsonPropertyName("nestingDepth"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] int? NestingDepthRaw = null,
+    int? NestingDepthRaw = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldViewQuality>? Quality = null,
     [property: System.Text.Json.Serialization.JsonPropertyName("programs"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldCameraProgram>? ProgramsRaw = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldViewTransition? BuiltinTransition = null,
@@ -328,6 +328,14 @@ public sealed record WorldViewDefaults(
     public float PortalLead => (PortalLeadRaw ?? DefaultPortalLead);
 
     private readonly IReadOnlyList<WorldViewLayout> m_layouts = (Layouts ?? []);
+
+    /// <summary>Gets the authored limit on nested screens, or null for the default limit.</summary>
+    [System.Text.Json.Serialization.JsonPropertyName("nestingDepth"), System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public int? NestingDepthRaw { get { WorldDocumentReads.Note(WorldDocumentInput.ViewNesting); return field; } init; } = NestingDepthRaw;
+
+    // Record equality covers every member, including ones added later. This comparison masks only nesting depth.
+    internal bool SameConfiguration(WorldViewDefaults other) =>
+        Equals(NestingDepthRaw == other.NestingDepthRaw ? other : other with { NestingDepthRaw = NestingDepthRaw });
 
     /// <summary>Gets the named camera programs the section declares for selects and blends to name, or an empty list
     /// where it authors none.</summary>

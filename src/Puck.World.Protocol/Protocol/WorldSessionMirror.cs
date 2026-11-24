@@ -532,7 +532,7 @@ public sealed class WorldSessionMirror : IClientSink {
     /// slots and the slots whose body differs from <paramref name="previous"/>'s (<see cref="BodyImage.Changed"/>).</summary>
     /// <param name="previous">The image the caller holds, returned again while the publication and document stand, and
     /// compared against otherwise; <see langword="null"/> for none.</param>
-    /// <returns>The image.</returns>
+    /// <returns>The same hold when the image stands, or a new image whose caller owns one release.</returns>
     public BodyImage CaptureBodyImage(BodyImage? previous = null) => m_images.Read(
         state: (Mirror: this, Previous: previous),
         read: static (in SnapshotImage image, long version, (WorldSessionMirror Mirror, BodyImage? Previous) state) => {
@@ -544,48 +544,110 @@ public sealed class WorldSessionMirror : IClientSink {
                 return retained;
             }
 
-            var bodies = ImmutableArray.CreateBuilder<Body>(image.Extent);
-            var active = ImmutableArray.CreateBuilder<int>();
-            // A previous image of another authority names every body at another address, so it is no base.
-            var basis = ((state.Previous is { } held) && string.Equals(a: held.Authority, b: image.Authority, comparisonType: StringComparison.Ordinal)) ? state.Previous : null;
-            var changed = ((basis is null) ? null : ImmutableArray.CreateBuilder<int>());
-            var kitColliders = Volatile.Read(ref mirror.m_kitColliders);
-            var kitContacts = Volatile.Read(ref mirror.m_kitBodyContacts);
-            for (var index = 0; index < image.Extent; index++) {
-                var entry = image.Entries[index];
-                if (entry.Active) { active.Add(item: index); }
-                bodies.Add(new Body(
-                    Active: entry.Active,
-                    Address: new WorldEntityAddress(Authority: image.Authority, Generation: entry.Generation, Index: index),
-                    PoseEpoch: entry.PoseEpoch,
-                    PlacementId: entry.PlacementId,
-                    PreviousPosition: entry.PreviousPosition,
-                    PreviousOrientation: entry.PreviousOrientation,
-                    CurrentPosition: entry.CurrentPosition,
-                    CurrentOrientation: entry.CurrentOrientation,
-                    Color: entry.Color,
-                    Look: WorldDefinitionRows.ResolveLook(index: entry.Look, rows: definition.Looks),
-                    CatalogRig: entry.CatalogRig,
-                    Collider: (entry.Kit < kitColliders.Length) ? kitColliders[entry.Kit] : null,
-                    Contact: (entry.Kit < kitContacts.Length) ? kitContacts[entry.Kit] : WorldBodyContactMode.Overlap
-                ));
-                if ((changed is not null) && ((index >= basis!.Entries.Length) || (basis.Entries[index] != bodies[index]))) { changed.Add(item: index); }
-            }
-            // A slot past this image's extent that the base held active is a body that left.
-            for (var index = image.Extent; (changed is not null) && (index < basis!.Entries.Length); index++) {
-                if (basis.Entries[index].Active) { changed.Add(item: index); }
-            }
+            var bodies = System.Buffers.ArrayPool<Body>.Shared.Rent(image.Extent);
+            try {
+                var active = ImmutableArray.CreateBuilder<int>();
+                // A previous image of another authority names every body at another address, so it is no base.
+                var basis = ((state.Previous is { } held) && string.Equals(a: held.Authority, b: image.Authority, comparisonType: StringComparison.Ordinal)) ? state.Previous : null;
+                var changed = ((basis is null) ? null : ImmutableArray.CreateBuilder<int>());
+                var kitColliders = Volatile.Read(ref mirror.m_kitColliders);
+                var kitContacts = Volatile.Read(ref mirror.m_kitBodyContacts);
+                for (var index = 0; index < image.Extent; index++) {
+                    var entry = image.Entries[index];
+                    if (entry.Active) { active.Add(item: index); }
+                    bodies[index] = new Body(
+                        Active: entry.Active,
+                        Address: new WorldEntityAddress(Authority: image.Authority, Generation: entry.Generation, Index: index),
+                        PoseEpoch: entry.PoseEpoch,
+                        PlacementId: entry.PlacementId,
+                        PreviousPosition: entry.PreviousPosition,
+                        PreviousOrientation: entry.PreviousOrientation,
+                        CurrentPosition: entry.CurrentPosition,
+                        CurrentOrientation: entry.CurrentOrientation,
+                        Color: entry.Color,
+                        Look: WorldDefinitionRows.ResolveLook(index: entry.Look, rows: definition.Looks),
+                        CatalogRig: entry.CatalogRig,
+                        Collider: (entry.Kit < kitColliders.Length) ? kitColliders[entry.Kit] : null,
+                        Contact: (entry.Kit < kitContacts.Length) ? kitContacts[entry.Kit] : WorldBodyContactMode.Overlap
+                    );
+                    if ((changed is not null) && ((index >= basis!.Extent) || (basis.Entry(index, basis.Version) != bodies[index]))) { changed.Add(item: index); }
+                }
+                // A slot past this image's extent that the base held active is a body that left.
+                for (var index = image.Extent; (changed is not null) && (index < basis!.Extent); index++) {
+                    if (basis.Entry(index, basis.Version).Active) { changed.Add(item: index); }
+                }
 
-            return new BodyImage(definition, revision, image.Authority, image.Tick, image.Revision, image.StepSeconds,
-                image.ArrivalTimestamp, bodies.MoveToImmutable(), version) {
-                Active = active.ToImmutable(),
-                Changed = (changed?.ToImmutable() ?? default),
-            };
+                return new BodyImage(definition, revision, image.Authority, image.Tick, image.Revision, image.StepSeconds,
+                    image.ArrivalTimestamp, bodies, image.Extent, version) {
+                    Active = active.ToImmutable(),
+                    Changed = (changed?.ToImmutable() ?? default),
+                };
+            } catch {
+                System.Buffers.ArrayPool<Body>.Shared.Return(bodies, clearArray: true);
+                throw;
+            }
         });
 
     /// <summary>A retained delivery for an adjacency. Entries are indexed by the destination's entity slot.</summary>
-    public sealed record BodyImage(WorldDefinition Definition, int DefinitionRevision, string Authority, ulong Tick,
-        int Revision, float StepSeconds, long ArrivalTimestamp, ImmutableArray<Body> Entries, long Version) {
+    public sealed class BodyImage {
+        private Body[]? m_entries;
+        private int m_readers = 1;
+
+        internal BodyImage(WorldDefinition definition, int definitionRevision, string authority, ulong tick,
+            int revision, float stepSeconds, long arrivalTimestamp, Body[] entries, int extent, long version) {
+            Definition = definition;
+            DefinitionRevision = definitionRevision;
+            Authority = authority;
+            Tick = tick;
+            Revision = revision;
+            StepSeconds = stepSeconds;
+            ArrivalTimestamp = arrivalTimestamp;
+            m_entries = entries;
+            Extent = extent;
+            Version = version;
+        }
+
+        /// <summary>Gets the delivered definition.</summary>
+        public WorldDefinition Definition { get; }
+        /// <summary>Gets the delivered definition revision.</summary>
+        public int DefinitionRevision { get; }
+        /// <summary>Gets the delivered authority.</summary>
+        public string Authority { get; }
+        /// <summary>Gets the delivered simulation tick.</summary>
+        public ulong Tick { get; }
+        /// <summary>Gets the delivered body-set revision.</summary>
+        public int Revision { get; }
+        /// <summary>Gets the interval between delivered simulation ticks.</summary>
+        public float StepSeconds { get; }
+        /// <summary>Gets the host timestamp when the snapshot arrived.</summary>
+        public long ArrivalTimestamp { get; }
+        /// <summary>Gets the number of body slots in this image.</summary>
+        public int Extent { get; }
+        /// <summary>Gets the snapshot publication number.</summary>
+        public long Version { get; }
+
+        /// <summary>Reads one body while the caller holds this publication.</summary>
+        /// <param name="index">The slot in the delivered image.</param>
+        /// <param name="expectedVersion">The publication number pinned by the reader.</param>
+        /// <returns>The held body.</returns>
+        public ref readonly Body Entry(int index, long expectedVersion) {
+            if ((expectedVersion != Version) || (Volatile.Read(ref m_entries) is not { } held)) {
+                throw new InvalidOperationException("The reader no longer holds this body publication.");
+            }
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual((uint)index, (uint)Extent);
+            return ref held[index];
+        }
+
+        /// <summary>Retains the body storage while the caller owns this publication.</summary>
+        public void Retain() => _ = Interlocked.Increment(ref m_readers);
+
+        /// <summary>Returns the body storage once all owners have released the publication.</summary>
+        public void Release() {
+            if (Interlocked.Decrement(ref m_readers) != 0) { return; }
+            var held = Interlocked.Exchange(ref m_entries, null)!;
+
+            System.Buffers.ArrayPool<Body>.Shared.Return(held, clearArray: true);
+        }
         /// <summary>Gets the slots whose body is active, in ascending order.</summary>
         public ImmutableArray<int> Active { get; init; } = [];
         /// <summary>Gets the slots whose body differs from the image this one was captured over

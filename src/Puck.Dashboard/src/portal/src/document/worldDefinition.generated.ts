@@ -15468,10 +15468,6 @@ export type WorldViewDefaults = {
    */
   post?: (WorldViewPostPass | null)[] | null;
   /**
-   * How many screens deep a view of a world shows another world's view, or null for DefaultNestingDepth; refused past MaxNestingDepth. NestingDepth is what a reader resolves through.
-   */
-  nestingDepth?: number | null;
-  /**
    * Per-view render quality and tier floors; a row named * supplies the defaults.
    */
   quality?: (WorldViewQuality | null)[] | null;
@@ -15491,6 +15487,10 @@ export type WorldViewDefaults = {
    * How early the world's portals warm the worlds behind them, in metres of walk, or null for DefaultPortalLead; PortalLead is what a reader resolves through. Finite and non-negative.
    */
   portalLead?: number | null;
+  /**
+   * Gets the authored limit on nested screens, or null for the default limit.
+   */
+  nestingDepth?: number | null;
   /**
    * Gets the authored named layouts. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */

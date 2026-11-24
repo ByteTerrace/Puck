@@ -147,7 +147,7 @@ public sealed partial class SdfWorldTables : IDisposable {
     private ulong m_uploads;
 
     /// <summary>Gets how many uploads the tables have submitted: it moves with every frame, program and World set the
-    /// background work may bind, which ends that work's rest (<see cref="SdfGpuWork.QuiescentRest"/>).</summary>
+    /// background work may bind, which wakes the service on its next <see cref="SdfGpuWork.Pump"/>.</summary>
     public ulong Uploads => m_uploads;
 
     private readonly IGpuCommandPool[] m_commandPools = new IGpuCommandPool[FrameRingSize];

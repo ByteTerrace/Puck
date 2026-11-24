@@ -27,7 +27,8 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
     private readonly Dictionary<string, Handle> m_handles = new(comparer: StringComparer.Ordinal);
     private readonly Dictionary<(string Name, string Destination, string Counterpart), LinkAuthority> m_linkAuthorities = [];
     internal bool HasTickImage { get; private set; }
-    private IReadOnlyList<WorldAdjacencyProjection> m_published = ImmutableArray<WorldAdjacencyProjection>.Empty;
+    private readonly Lock m_publicationGate = new();
+    private WorldAdjacencyRead? m_published;
 
     /// <summary>Initializes the source.</summary>
     /// <param name="instances">The process's running world instances — the one observation door an adjacency's
@@ -224,14 +225,15 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
     }
 
     /// <summary>Closes the adjacency input at a host boundary and publishes the same record for presentation.</summary>
-    public ImmutableArray<WorldAdjacencyProjection> Prepare() {
+    public WorldAdjacencyRead Prepare() {
         HasTickImage = true;
-        return Publish();
+        Publish();
+        return Visuals();
     }
 
     internal void PreparePresentation() => Publish();
 
-    private ImmutableArray<WorldAdjacencyProjection> Publish() {
+    private void Publish() {
         var projections = ImmutableArray<WorldAdjacencyProjection>.Empty;
         if (m_instances.TryGet(instance: out var source, name: m_sourceInstanceName) && source?.Server.Configuration is { Adjacencies.Count: > 0 } definition) {
             var population = source.Server.Population;
@@ -248,15 +250,27 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
                 departed?.ToImmutable() ?? ImmutableHashSet<Protocol.WorldEntityAddress>.Empty, pin: true);
         }
 
-        Volatile.Write(ref m_published, projections);
-        return projections;
+        foreach (var projection in projections) { ((PinnedNeighbour)projection.Neighbour).RetainImage(); }
+        var next = new WorldAdjacencyRead(projections, () => {
+            foreach (var projection in projections) { ((PinnedNeighbour)projection.Neighbour).ReleaseImage(); }
+        });
+        WorldAdjacencyRead? previous;
+
+        lock (m_publicationGate) { (previous, m_published) = (m_published, next); }
+        previous?.Dispose();
     }
 
     /// <inheritdoc/>
-    public IReadOnlyList<WorldAdjacencyProjection> Visuals() => Volatile.Read(ref m_published);
+    public WorldAdjacencyRead Visuals() {
+        lock (m_publicationGate) { return m_published?.Retain() ?? new([]); }
+    }
 
     /// <inheritdoc/>
     public void Dispose() {
+        WorldAdjacencyRead? previous;
+
+        lock (m_publicationGate) { (previous, m_published) = (m_published, null); }
+        previous?.Dispose();
         foreach (var handle in m_handles.Values) {
             handle.Dispose();
         }
@@ -316,13 +330,14 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             if (!ReferenceEquals(image, held) || departures) {
                 // An image captured over the one held names the slots it changed; any other, or a departure, which moves
                 // an entity's activity outside its entry, owes every slot.
-                var whole = (departures || (held is null) || image.Changed.IsDefault || (!image.Changed.IsEmpty && (image.Changed[^1] >= image.Entries.Length)));
+                var whole = (departures || (held is null) || image.Changed.IsDefault || (!image.Changed.IsEmpty && (image.Changed[^1] >= image.Extent)));
 
-                serial = m_entities.Publish(everything: whole, owed: (whole ? [] : image.Changed.AsSpan()), rows: image.Entries.Length);
+                serial = m_entities.Publish(everything: whole, owed: (whole ? [] : image.Changed.AsSpan()), rows: image.Extent);
             }
             m_departed = departed;
 
             m_image = image;
+            if (!ReferenceEquals(held, image)) { held?.Release(); }
             m_pinned = (m_frameResolved && authority.Settle(image.Authority))
                 ? new PinnedNeighbour(authority.Value, image, m_frame, m_field, m_fieldReason, departed, m_entities, serial)
                 : null;
@@ -378,17 +393,26 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
             }
         }
 
-        public void Dispose() => lease.Dispose();
+        public void Dispose() {
+            m_image?.Release();
+            m_image = null;
+            lease.Dispose();
+        }
     }
 
     private sealed class PinnedNeighbour(string authority, WorldSessionMirror.BodyImage image, WorldFaceFrame frame,
         WorldSolidField? solids, string fieldReason, ImmutableHashSet<Protocol.WorldEntityAddress> departed,
         GpuSharedChangedRows entities, long entitiesSerial) : IWorldAdjacencyNeighbourContact {
         private IReadOnlyList<int>? m_active;
+        private readonly long m_version = image.Version;
+
+        public void RetainImage() => image.Retain();
+        public void ReleaseImage() => image.Release();
+        private ref readonly WorldSessionMirror.Body Entry(int index) => ref image.Entry(index, m_version);
 
         public IReadOnlyList<int> ActiveEntities => (m_active ??= (departed.IsEmpty
             ? image.Active
-            : image.Active.Where(predicate: index => !departed.Contains(image.Entries.ItemRef(index).Address)).ToArray()));
+            : image.Active.Where(predicate: index => !departed.Contains(Entry(index).Address)).ToArray()));
         public bool CollectEntityChanges(GpuRowCursor cursor, GpuUploadRuns into) =>
             entities.Collect(cursor: cursor, into: into, rows: EntityCapacity, through: entitiesSerial);
         public string Authority => authority;
@@ -398,24 +422,24 @@ public sealed class WorldAdjacencyFields : IWorldAdjacencySource, IDisposable {
         public ulong SnapshotTick => image.Tick;
         public int SnapshotRevision => image.Revision;
         public float InterpolationAlpha => WorldSessionMirror.ResolveInterpolationAlpha(stepSeconds: image.StepSeconds, arrivalTimestamp: image.ArrivalTimestamp);
-        public int EntityCapacity => image.Entries.Length;
+        public int EntityCapacity => image.Extent;
 
         public bool IsEntityActive(int index) {
-            ref readonly var entry = ref image.Entries.ItemRef(index);
+            ref readonly var entry = ref Entry(index);
             return entry.Active && (departed.IsEmpty || !departed.Contains(entry.Address));
         }
-        public Protocol.WorldEntityAddress EntityAddress(int index) => image.Entries.ItemRef(index).Address;
-        public int PoseEpoch(int index) => image.Entries.ItemRef(index).PoseEpoch;
-        public string? PlacementId(int index) => image.Entries.ItemRef(index).PlacementId;
-        public Vector3 PreviousPosition(int index) => image.Entries.ItemRef(index).PreviousPosition;
-        public Quaternion PreviousOrientation(int index) => image.Entries.ItemRef(index).PreviousOrientation;
-        public Vector3 CurrentPosition(int index) => image.Entries.ItemRef(index).CurrentPosition;
-        public Quaternion CurrentOrientation(int index) => image.Entries.ItemRef(index).CurrentOrientation;
-        public Vector3 BodyColor(int index) => image.Entries.ItemRef(index).Color;
-        public WorldLook Look(int index) => image.Entries.ItemRef(index).Look;
-        public byte CatalogRig(int index) => image.Entries.ItemRef(index).CatalogRig;
-        public FixedWorldCollider? Collider(int index) => image.Entries.ItemRef(index).Collider;
-        public WorldBodyContactMode BodyContact(int index) => image.Entries.ItemRef(index).Contact;
+        public Protocol.WorldEntityAddress EntityAddress(int index) => Entry(index).Address;
+        public int PoseEpoch(int index) => Entry(index).PoseEpoch;
+        public string? PlacementId(int index) => Entry(index).PlacementId;
+        public Vector3 PreviousPosition(int index) => Entry(index).PreviousPosition;
+        public Quaternion PreviousOrientation(int index) => Entry(index).PreviousOrientation;
+        public Vector3 CurrentPosition(int index) => Entry(index).CurrentPosition;
+        public Quaternion CurrentOrientation(int index) => Entry(index).CurrentOrientation;
+        public Vector3 BodyColor(int index) => Entry(index).Color;
+        public WorldLook Look(int index) => Entry(index).Look;
+        public byte CatalogRig(int index) => Entry(index).CatalogRig;
+        public FixedWorldCollider? Collider(int index) => Entry(index).Collider;
+        public WorldBodyContactMode BodyContact(int index) => Entry(index).Contact;
         public bool TryGetSolidField(out IContactField? field, out string reason) {
             field = solids;
             reason = fieldReason;

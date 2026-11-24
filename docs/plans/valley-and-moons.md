@@ -261,6 +261,19 @@ Left open, in the order they matter to the trip:
   keeping with [one world, many perspectives](../decisions/play.md#the-game).
   The ship is a real engine body a seat possesses; its flight is an authored
   motion program in `worlds/standard/`, and the Moth's own free flight stays.
+- **The journey is continuous, planet to atmosphere to space to the moon, and
+  movement includes jetpack flight and a space mode** (the owner's direction,
+  naming No Man's Sky for the continuous journey and Anthem and Firefall for
+  jetpack movement, "but with our fancy tech"). The flight from the valley up
+  through the air, into space and down onto a moon has no load or cut at any
+  stage, the portal stays a second way in, and both are built on Puck's own
+  properties (federated worlds, the shared mesh store, the view clock, the
+  rider's mount). Jetpack flight (thrust, hover, boost) is an authored motion
+  program in `worlds/standard/`, as the dash is, and a space mode is a seat
+  program that changes the camera rig and motion model by altitude or medium,
+  never an engine-coded feature. The rock skip exists to show continuous
+  transport inside a moving frame, as a submarine carries its crew, and the
+  same mount relationship carries riders in ships and stations across a seam.
 - **Landing is open,** anywhere a body can stand, as it is now.
 - **Each moon is a federated world of its own**, beside the debug world rather
   than inside it: "it actually makes sense in Puck for a moon and the debug

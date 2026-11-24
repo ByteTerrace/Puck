@@ -668,9 +668,11 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
 
     /// <summary>Serves what the store owes outside a plan, on the frame thread once a prepared frame for each residency:
     /// releases what the device has finished reading, answers an account trim, and fits the mapped region again while a
-    /// chunk the device refused waits.</summary>
+    /// chunk the device refused waits. None of that is due on any one frame, so a frame that finds the store held by a
+    /// plan or a landing on another thread leaves it to the next frame rather than waiting.</summary>
     internal void Service() {
-        lock (m_gate) {
+        if (!m_gate.TryEnter()) { return; }
+        try {
             if (m_disposed) { return; }
             if (m_retired.Count > 0) { m_retired.Poll(timeline: m_device.Services.QueueSubmitter.Timeline, release: static replaced => replaced.Dispose()); }
             if (Interlocked.Exchange(location1: ref m_trimRequested, value: 0) != 0) {
@@ -686,6 +688,8 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
                 }
             }
             if (m_backingRefused) { Cover(); }
+        } finally {
+            m_gate.Exit();
         }
     }
     // Forgets the placed meshes no name holds and what the store holds for them. A mapped region's chunks follow at its

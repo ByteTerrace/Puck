@@ -576,7 +576,7 @@ public static class HostWaits {
             var count = services.Length;
             var first = ((m_first < count) ? m_first : 0);
             var frequency = (double)time.TimestampFrequency;
-            var next = TimeSpan.MaxValue;
+            var next = long.MaxValue;
 
             for (var turn = 0; (turn < count); turn++) {
                 var index = ((first + turn) % count);
@@ -587,18 +587,14 @@ public static class HostWaits {
 
                     break;
                 }
-                if ((services[index].Run(remaining: TimeSpan.FromSeconds(value: (remaining / frequency))) is { } delay) && (delay < next)) {
-                    next = delay;
+                if (services[index].Run(remaining: TimeSpan.FromSeconds(value: (remaining / frequency))) is { } delay) {
+                    var budget = delay < LeastServiceDelay ? LeastServiceDelay : delay;
+                    var due = Stopwatch.GetTimestamp().AddSaturating(WaitDeadline.TicksOf(budget));
+
+                    next = Math.Min(next, due);
                 }
             }
-            if (next == TimeSpan.MaxValue) {
-                return long.MaxValue;
-            }
-            if (next < LeastServiceDelay) {
-                next = LeastServiceDelay;
-            }
-
-            return Stopwatch.GetTimestamp().AddSaturating(right: WaitDeadline.TicksOf(budget: next));
+            return next;
         }
     }
 
