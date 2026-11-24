@@ -18,6 +18,7 @@ namespace Puck.World;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldNavigationSection(
     IReadOnlyList<WorldNavigationDomain>? Domains = null,
+    [property: DocumentText("a navigation area type")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? AreaTypes = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNavigationArea>? Areas = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNavigationProfile>? Profiles = null
@@ -62,6 +63,7 @@ public sealed record WorldNavigationArea(
 public sealed record WorldNavigationProfile(
     [property: DocumentText("a navigation profile name")] string Name,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, float>? Costs = null,
+    [property: DocumentText("a navigation area type")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Exclude = null
 );
 /// <summary>The topology and occupancy constraint of an authored navigation domain.</summary>

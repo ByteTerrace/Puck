@@ -4767,14 +4767,14 @@ public static partial class WorldModelShape {
             [
                 M("name", typeof(global::System.String), typeof(global::Puck.World.WorldNavigationProfile), "Name", Read | Write | Required, static value => ((global::Puck.World.WorldNavigationProfile)value).Name, text: "a navigation profile name"),
                 M("costs", typeof(global::System.Collections.Generic.IReadOnlyDictionary<global::System.String, global::System.Single>), typeof(global::Puck.World.WorldNavigationProfile), "Costs", Read | Write, static value => ((global::Puck.World.WorldNavigationProfile)value).Costs),
-                M("exclude", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.WorldNavigationProfile), "Exclude", Read | Write, static value => ((global::Puck.World.WorldNavigationProfile)value).Exclude),
+                M("exclude", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.WorldNavigationProfile), "Exclude", Read | Write, static value => ((global::Puck.World.WorldNavigationProfile)value).Exclude, text: "a navigation area type"),
             ],
             []),
         T(typeof(global::Puck.World.WorldNavigationSection), true, JsonTypeInfoKind.Object, null,
             [],
             [
                 M("domains", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldNavigationDomain>), typeof(global::Puck.World.WorldNavigationSection), "Domains", Read | Write, static value => ((global::Puck.World.WorldNavigationSection)value).Domains),
-                M("areaTypes", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.WorldNavigationSection), "AreaTypes", Read | Write, static value => ((global::Puck.World.WorldNavigationSection)value).AreaTypes),
+                M("areaTypes", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.WorldNavigationSection), "AreaTypes", Read | Write, static value => ((global::Puck.World.WorldNavigationSection)value).AreaTypes, text: "a navigation area type"),
                 M("areas", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldNavigationArea>), typeof(global::Puck.World.WorldNavigationSection), "Areas", Read | Write, static value => ((global::Puck.World.WorldNavigationSection)value).Areas),
                 M("profiles", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldNavigationProfile>), typeof(global::Puck.World.WorldNavigationSection), "Profiles", Read | Write, static value => ((global::Puck.World.WorldNavigationSection)value).Profiles),
                 M("rows", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldNavigationDomain>), typeof(global::Puck.World.WorldNavigationSection), "Rows", None),

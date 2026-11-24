@@ -323,6 +323,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][view].anchor` | State | Binding | Binding | `WorldRenderSkyLayer.View.Anchor` |
 | `render.sky.layers[][view].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.View.Fallback` |
 | `render.sky.layers[][view].fallback.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.sky.layers[][view].bound.center` | State | Binding | Binding | `WorldRenderSkyLayer.WorldSkyViewBound.Center` |
 | `render.sky.layers[][view].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
 | `render.sky.layers[][view].opacity.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.sky.layers[][view].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
@@ -513,6 +514,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[view].anchor` | State | Binding | Binding | `WorldRenderSkyLayer.View.Anchor` |
 | `render.sky.keys[].layers{*}[view].fallback` | State | Binding | Binding | `WorldRenderSkyLayer.View.Fallback` |
 | `render.sky.keys[].layers{*}[view].fallback.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.sky.keys[].layers{*}[view].bound.center` | State | Binding | Binding | `WorldRenderSkyLayer.WorldSkyViewBound.Center` |
 | `render.sky.keys[].layers{*}[view].opacity` | State | Binding | Binding | `WorldRenderSkyLayer.Opacity` |
 | `render.sky.keys[].layers{*}[view].opacity.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.sky.keys[].layers{*}[view].mask.cone.toward` | State | Binding | Binding | `WorldRenderSkyCone.Toward` |
@@ -1115,6 +1117,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onPress.effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][holdProducer].key` | State | Key | Read | `WorldEffect.HoldProducer.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][releaseProducer].key` | State | Key | Read | `WorldEffect.ReleaseProducer.Key` |
 | `kits.rows[].actions{*}.onPress.gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `kits.rows[].actions{*}.onPress.gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `kits.rows[].actions{*}.onPress.gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -1518,6 +1522,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onRelease.effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][holdProducer].key` | State | Key | Read | `WorldEffect.HoldProducer.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][releaseProducer].key` | State | Key | Read | `WorldEffect.ReleaseProducer.Key` |
 | `kits.rows[].actions{*}.onRelease.gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `kits.rows[].actions{*}.onRelease.gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `kits.rows[].actions{*}.onRelease.gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -1921,6 +1927,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onFact[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][holdProducer].key` | State | Key | Read | `WorldEffect.HoldProducer.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][releaseProducer].key` | State | Key | Read | `WorldEffect.ReleaseProducer.Key` |
 | `kits.rows[].actions{*}.onFact[].gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `kits.rows[].actions{*}.onFact[].gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `kits.rows[].actions{*}.onFact[].gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -1967,6 +1975,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].collider[box].rotation` | State | Binding | Binding | `WorldCollider.Box.Rotation` |
 | `kits.rows[].collider[fromCreation].prototypeId` | Prototype | Names | Read | `WorldCollider.FromCreation.PrototypeId` |
 | `kits.rows[].carry.offset` | State | Binding | Binding | `WorldCarry.Offset` |
+| `kits.rows[].mount.seat` | State | Binding | Binding | `WorldMount.Seat` |
+| `kits.rows[].mount.exit` | State | Binding | Binding | `WorldMount.Exit` |
 | `kits.assignment.rows` | State | Binding | Binding | `WorldRowAssignment.Rows` |
 | `bindingOverlays[].document.chords[].group` | State | Binding | Binding | `BindingChordDefinition.Group` |
 | `bindingOverlays[].document.contexts[].group` | State | Binding | Binding | `BindingContextDefinition.Group` |
@@ -2786,6 +2796,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].effects[][holdProducer].key` | State | Key | Read | `WorldEffect.HoldProducer.Key` |
+| `rules[].effects[][releaseProducer].key` | State | Key | Read | `WorldEffect.ReleaseProducer.Key` |
 | `rules[].gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `rules[].gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `rules[].gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -3207,6 +3219,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.options[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.options[].effects[][holdProducer].key` | State | Key | Read | `WorldEffect.HoldProducer.Key` |
+| `rules[].decision.options[].effects[][releaseProducer].key` | State | Key | Read | `WorldEffect.ReleaseProducer.Key` |
 | `rules[].decision.options[].gate[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
 | `rules[].decision.options[].gate[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
 | `rules[].decision.options[].gate[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
@@ -3651,6 +3665,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.onNoChoice[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `rules[].decision.onNoChoice[][holdProducer].key` | State | Key | Read | `WorldEffect.HoldProducer.Key` |
+| `rules[].decision.onNoChoice[][releaseProducer].key` | State | Key | Read | `WorldEffect.ReleaseProducer.Key` |
 | `rules[].locals[].expression` | State | Expression | Read | `RuleLocal.Expression` |
 | `rules[].locals[].expression{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `rules[].locals[].expression{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -4037,6 +4053,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `interactions.interactions[].effects[][setBodyState].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `interactions.interactions[].effects[][holdProducer].key` | State | Key | Read | `WorldEffect.HoldProducer.Key` |
+| `interactions.interactions[].effects[][releaseProducer].key` | State | Key | Read | `WorldEffect.ReleaseProducer.Key` |
 | `generators[].name` | Generator | Declares |  | `GeneratorRow.Name` |
 | `adjacencies[].boundary.center` | State | Binding | Binding | `WorldAdjacencyBoundary.Center` |
 | `probes[].inputs{*}[view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
@@ -4044,6 +4062,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `curves[].knots[].position` | State | Binding | Binding | `WorldCurveKnot.Position` |
 | `navigation.domains[].medium` | Field | Names | Read | `WorldNavigationDomain.Medium` |
 | `navigation.domains[].parent` | Placement | Names | Read | `WorldNavigationDomain.Parent` |
+| `navigation.areas[].placement` | Placement | Names | Read | `WorldNavigationArea.Placement` |
 | `patterns[].name` | Pattern | Declares |  | `PatternRow.Name` |
 | `patterns[].pattern[sequence].items[]…` | | | | re-enters `PatternNode` |
 | `patterns[].pattern[choice].items[]…` | | | | re-enters `PatternNode` |
@@ -4334,6 +4353,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `bodyMotionPrograms[].target[curve].curve` | `BodyTargetSource.CurveFollow.Curve` | a curve name |
 | `bodyMotionPrograms[].target[navigated].domain` | `BodyTargetSource.Navigated.Domain` | a navigation domain |
 | `bodyMotionPrograms[].target[navigated].register` | `BodyTargetSource.Navigated.Register` | a target register name |
+| `bodyMotionPrograms[].target[navigated].profile` | `BodyTargetSource.Navigated.Profile` | a navigation profile name |
 | `kits.rows[].name` | `WorldKit.Name` | a kit name |
 | `kits.rows[].bodyMotionProgram` | `WorldKit.BodyMotionProgram` | a body motion program name |
 | `kits.rows[].motion.speed.held.channel` | `WorldSpeedHeld.Channel` | logical input channels |
@@ -5283,6 +5303,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].tether.detachChannel` | `WorldTether.DetachChannel` | logical input channels |
 | `kits.rows[].tether.reelChannel` | `WorldTether.ReelChannel` | logical input channels |
 | `kits.rows[].tether.modeState` | `WorldTether.ModeState` | a per-body slot name |
+| `kits.rows[].mount.board.channel` | `WorldMountBoard.Channel` | logical input channels |
 | `kits.assignment.sequence.name` | `WorldSequence.Name` | a sequence name |
 | `kits.assignment.select.bodyState` | `WorldRowSelector.BodyState` | a per-body slot name |
 | `kits.assignment.select.cases[].row` | `WorldRowSelectorCase.Row` | a kit or look row name |
@@ -6807,6 +6828,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `curves[].name` | `WorldCurveRow.Name` | a curve name |
 | `navigation.domains[].name` | `WorldNavigationDomain.Name` | a navigation domain name |
 | `navigation.domains[].network` | `WorldNavigationDomain.Network` | a navigation network name |
+| `navigation.domains[].area` | `WorldNavigationDomain.Area` | a navigation area type |
+| `navigation.areaTypes` | `WorldNavigationSection.AreaTypes` | a navigation area type |
+| `navigation.areas[].type` | `WorldNavigationArea.Type` | a navigation area type |
+| `navigation.profiles[].name` | `WorldNavigationProfile.Name` | a navigation profile name |
+| `navigation.profiles[].exclude` | `WorldNavigationProfile.Exclude` | a navigation area type |
 | `patterns[].symbols[].name` | `PatternSymbol.Name` | a symbol name is local to its pattern |
 | `patterns[].pattern[symbol].name` | `PatternNode.Symbol.Name` | a symbol name is local to its pattern |
 | `patterns[].pattern[except].name` | `PatternNode.Except.Name` | a symbol name is local to its pattern |
