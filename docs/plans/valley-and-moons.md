@@ -231,25 +231,12 @@ Left open, in the order they matter to the trip:
    worlds will. The pools that stamp a creation look read one world's bodies
    (`WorldBodyStampCensus`), so the fix gives the boot scene's pool the
    travelling seat and the band's bodies as stamp sources.
-4. **Each authority keeps its own day.** The two worlds start their `day`
-   rows alike and advance them at one rate, so they agree until one is written
-   (`world.state.cell.set day`): the moon's phase then stops matching the
-   valley's sun. The decision: the moon reads its parent's day through
-   federation, not a shared authored clock. A tick clock shared by both
-   documents agrees only while both authorities count one engine tick from one
-   start, which a remote authority does not, and it cannot be written, which
-   takes away the documented lever for moving the time. The moon's `day` clock
-   will name the destination whose clock it follows; a presentation that holds
-   that destination's session reads the leader's phase through it, and one
-   that holds none reads the moon's own advancing row. The invariant is one
-   day wherever both worlds are drawn, enforced at the one door every keyed
-   value's phase passes, `WorldStateMirror`'s clock phase read. It is not
-   built: the mirror has no reach to another world's mirror yet, which the
-   client's endpoints hold. The check: write `day` on the debug world and read
-   the moon's key light direction in `world.lighting` from a seat on either
-   side of the seam. The night crossing no longer lights the ship in one
-   frame: the valley's sun rises with height to the moon's full strength
-   (hall.puck's `key` light, a second track on `altitude`).
+4. **One day across both authorities** is built: the moon's `day` row follows
+   the debug world's (`follows`, [cross-world interaction](cross-world.md#1-one-day-across-both-authorities)),
+   so writing `day` in the valley moves the moon's sun on the next tick, and
+   writing it on the moon is refused. The night crossing no longer lights the
+   ship in one frame: the valley's sun rises with height to the moon's full
+   strength (hall.puck's `key` light, a second track on `altitude`).
 5. **A crossing turns a body about up only.** `WorldFrameIsometry` and the
    adjacency validator admit a yaw, so the two worlds' axes agree and the side of
    the moon that faces the valley has its up pointing down in the shared frame.

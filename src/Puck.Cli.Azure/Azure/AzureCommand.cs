@@ -59,6 +59,7 @@ public static partial class AzureCommand {
             name: "deploy-infrastructure"
         ) {
             resourceGroupOption, new Option<string?>(name: "--infrastructure-artifacts") { Description = "This commit's compiled templates; required in CI." },
+            new Option<bool>(name: "--full") { Description = "Plan and apply even when the latest successful deployment carries these inputs' identity, so a change made to Azure by hand is reconciled." },
         };
         var deployApplications = new Command(
             description: "Verify the bundle, publish both container images, apply application configuration, and roll the actors revision.",
@@ -148,6 +149,7 @@ public static partial class AzureCommand {
         Bind(command: buildInfrastructure, work: (parseResult, _) => BuildInfrastructureAsync(output: Path.GetFullPath(path: parseResult.GetRequiredValue(option: infrastructureOutput))));
         Bind(command: deployInfrastructure, work: (parseResult, _) => DeployInfrastructureAsync(
             clock: clock,
+            full: parseResult.GetValue<bool>(name: "--full"),
             group: parseResult.GetRequiredValue(option: resourceGroupOption),
             infrastructure: parseResult.GetValue<string?>(name: "--infrastructure-artifacts")
         ));

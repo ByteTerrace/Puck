@@ -40,7 +40,8 @@ dotnet publish src/Puck.World.Azure -c Release -nodeReuse:false -o extensions/Pu
 
 Publish it again after the engine's sources change: the installation loads
 against the World's own copy of every assembly they share. `AzureWorldExtension` then contributes
-`azure.blob` storage, the `azure.scheduled-events` retirement observer,
+`azure.blob` storage, the `azure.scheduled-events` retirement observer, the
+`azure.monitor` telemetry sink,
 `azure.api-users` authentication, the `azure.resource` operation provider, the
 `embedding.azure-openai` embedding provider and the `/livez/azure` health endpoint. Registration performs no cloud access; a
 deployment document selects each one by its key. `world.extensions.catalog`
@@ -48,7 +49,7 @@ confirms what a running host composed.
 
 ## Silo hosting
 
-The silo selects the storage and retirement providers from its document:
+The silo selects the storage, retirement and telemetry providers from its document:
 
 ```json
 "store": { "type": "azure.blob", "settings": { "accountUrl": "https://<account>.blob.core.windows.net" } },
@@ -56,7 +57,8 @@ The silo selects the storage and retirement providers from its document:
   "shutdownSeconds": 120, "healthPort": 8081, "healthAddress": "0.0.0.0",
   "progressTimeoutSeconds": 30, "checkpointTimeoutSeconds": 180,
   "journalTimeoutSeconds": 30, "journalBacklogLimit": 1024,
-  "observer": { "type": "azure.scheduled-events", "settings": { "pollSeconds": 1 } }
+  "observer": { "type": "azure.scheduled-events", "settings": { "pollSeconds": 1 } },
+  "telemetry": { "type": "azure.monitor", "settings": { "connectionString": "<Application Insights connection string>" } }
 }
 ```
 

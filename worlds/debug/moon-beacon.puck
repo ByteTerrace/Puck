@@ -1,0 +1,74 @@
+// The moon's beacon switch: a plate beside the moon painting in the painting wing (paintings.puck) that lights the
+// beacon on the moon's pad, in the moon's own world. The debug world owns the switch (`moonBeacon`); the moon follows
+// that row (moon.puck's `moonBeacon`, a federated import) and its own rules decide what a pull does there, so pressing
+// the context button here changes a place another authority runs without either world writing the other's state. The
+// lit beacon shows through the painting's glass and to anyone standing on the moon.
+
+import "../standard/bounds"
+import "shapes"
+
+// The plate stands on the wing's south wall, left of the moon painting as a viewer facing the painting sees it, its
+// face toward +Z; the reach box is the floor before it.
+let beaconPlateX = 63.9
+let beaconPlateZ = 12.6
+let beaconReach = { x0: 63.3, x1: 64.5, z0: 12.6, z1: 13.8, y0: -0.5, y1: 1 }
+let beaconStates = [
+  { name: "off", indicator: "#3A6B4A", glow: 40 }
+  { name: "on", indicator: "#FFB347", glow: 300 }
+]
+
+state {
+  world [
+    { name: "moonBeacon", kind: "Int", value: 0, min: 0, max: 1 }
+  ]
+}
+
+// A seat's press of the context button inside the reach box flips the switch; the edge fires once a press.
+for b in range(0, seatPopulation) {
+  let suffix = ((b == 0) ? "" : $"-{b}")
+  rule $"moon-beacon-switch{suffix}" {
+    when (channel(body, b, interact) >= 1 and
+      bodyPosition(body, b, x) > beaconReach.x0 and
+      bodyPosition(body, b, x) < beaconReach.x1 and
+      bodyPosition(body, b, z) > beaconReach.z0 and
+      bodyPosition(body, b, z) < beaconReach.z1 and
+      bodyPosition(body, b, y) > beaconReach.y0 and
+      bodyPosition(body, b, y) < beaconReach.y1)
+    mode: Edge
+    moonBeacon = 1 - moonBeacon
+  }
+}
+
+placements {
+  placement "moon-beacon-switch" {
+    prototype: "moon-beacon-switch-off"
+    position [0, 0.05, 0]
+    respond [
+      {
+        when: state(state: moonBeacon, comparison: Equal, value: 1)
+        prototypeId: "moon-beacon-switch-on"
+      }
+    ]
+  }
+}
+
+prototypes {
+  // The plate, its rocker and its indicator, in world bounds over the wing's floor: amber while the beacon burns, a
+  // green locator glow while it is dark.
+  for state in beaconStates {
+    prototype $"moon-beacon-switch-{state.name}" {
+      document {
+        name: $"moon-beacon-switch-{state.name}"
+        schema: "puck.creation.v1"
+        palette [
+          { color: "#F2EEE4", roughness: 0.55, specular: 0.08 }
+          { color: "#3A3F47", roughness: 0.6, specular: 0.15 }
+          { color: state.indicator, roughness: 0.4, emissive: state.glow }
+        ]
+        boundsBox(label: "plate", x0: (beaconPlateX - 0.13), x1: (beaconPlateX + 0.13), y0: 1.1, y1: 1.46, z0: beaconPlateZ, z1: (beaconPlateZ + 0.04), slot: 0)
+        boundsBox(label: "rocker", x0: (beaconPlateX - 0.035), x1: (beaconPlateX + 0.035), y0: 1.24, y1: 1.32, z0: (beaconPlateZ + 0.04), z1: (beaconPlateZ + 0.09), slot: 1)
+        boundsBox(label: "indicator", x0: (beaconPlateX - 0.02), x1: (beaconPlateX + 0.02), y0: 1.39, y1: 1.42, z0: (beaconPlateZ + 0.04), z1: (beaconPlateZ + 0.055), slot: 2)
+      }
+    }
+  }
+}

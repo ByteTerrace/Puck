@@ -791,6 +791,7 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
         new(After: "cycle", Name: "field", Spelling: """ "field":{"initial":…,"min":…,"max":…,"heightScale":…,"color":…,"paint":[…]} """),
         new(After: "inverse", Name: "verdict", Spelling: """ "verdict":{"gate":…,"status":…} """),
         new(After: "inverse", Name: "witness", Spelling: """ "witness":… """),
+        new(After: "inverse", Name: "follows", Spelling: """ "follows":{"destination":…,"row":…} """),
     ];
     /// <inheritdoc/>
     protected override WorldStateRow Create(StateRow row, RowMembers members, JsonSerializerOptions options) => new(
@@ -831,6 +832,16 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
                 options: options,
                 context: $"state row '{members.Name}'.witness"
             )
+        : null),
+        follows: (members.Claimed.TryGetValue(
+            key: "follows",
+            value: out var follows
+        )
+        ? ReadNested<WorldStateFollow>(
+                element: follows,
+                options: options,
+                context: $"state row '{members.Name}'.follows"
+            )
         : null)
     );
     /// <inheritdoc/>
@@ -852,6 +863,10 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
         new(
             Name: "witness",
             Schema: exportType(typeof(CellName))
+        ),
+        new(
+            Name: "follows",
+            Schema: exportType(typeof(WorldStateFollow))
         ),
     ];
     /// <inheritdoc/>
@@ -896,6 +911,15 @@ internal sealed class WorldStateRowJsonConverter : StateRowJsonConverter<WorldSt
             writer.WriteString(
                 propertyName: "witness",
                 value: witness.Value
+            );
+        }
+
+        if (row.Follows is { } follows) {
+            WriteNested(
+                options: options,
+                propertyName: "follows",
+                value: follows,
+                writer: writer
             );
         }
     }

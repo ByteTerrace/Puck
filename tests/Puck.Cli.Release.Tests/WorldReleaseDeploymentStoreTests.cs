@@ -381,6 +381,7 @@ public sealed class WorldReleaseDeploymentStoreTests : IDisposable {
             ["worldSiloOwner"] = Value(value: owner),
             ["worldSiloStorageEndpoint"] = Value(value: "https://store.blob.example.net/"),
             ["worldSiloClientId"] = Value(value: Guid.NewGuid().ToString(format: "D")),
+            ["worldSiloTelemetryConnectionString"] = Value(value: "InstrumentationKey=00000000-0000-0000-0000-000000000000;IngestionEndpoint=https://ingest.example.net/"),
             ["deploymentLocation"] = Value(value: "centralus"),
             ["deploymentTags"] = Value(value: new JsonObject()),
             ["worldSiloIdentityResourceId"] = Value(value: "/subscriptions/0/identity"),

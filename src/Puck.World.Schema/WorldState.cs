@@ -184,6 +184,8 @@ public sealed record WorldStateSection(
 /// expectation's answer; <see langword="null"/> for every other row.</param>
 /// <param name="Witness">The verdict row whose gate this row records (see <see cref="WorldVerdict"/>): the row holds
 /// the values that gate saw of rows of this row's own kind; <see langword="null"/> for every other row.</param>
+/// <param name="Follows">The federated import this row holds (see <see cref="WorldStateFollow"/>): another world's row
+/// that only that world writes; <see langword="null"/> for a row this world owns.</param>
 [method: JsonConstructor]
 public sealed record WorldStateRow(
     CellName Name,
@@ -215,7 +217,8 @@ public sealed record WorldStateRow(
     bool HostOwned = false,
     WorldVerdictTrait? Verdict = null,
     [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)] CellName? Witness = null,
-    bool CellVisibility = false
+    bool CellVisibility = false,
+    WorldStateFollow? Follows = null
 ) : StateRow(
     Name,
     Kind,
@@ -254,7 +257,8 @@ public sealed record WorldStateRow(
     /// <param name="field">The physical-field trait, or <see langword="null"/>.</param>
     /// <param name="verdict">The test-verdict trait, or <see langword="null"/>.</param>
     /// <param name="witness">The verdict row this row is a witness of, or <see langword="null"/>.</param>
-    public WorldStateRow(StateRow row, bool gatesDrive, WorldStateFieldTrait? field, WorldVerdictTrait? verdict = null, CellName? witness = null) : this(
+    /// <param name="follows">The federated import the row holds, or <see langword="null"/>.</param>
+    public WorldStateRow(StateRow row, bool gatesDrive, WorldStateFieldTrait? field, WorldVerdictTrait? verdict = null, CellName? witness = null, WorldStateFollow? follows = null) : this(
         Name: row.Name,
         Kind: row.Kind,
         Min: row.Min,
@@ -284,7 +288,8 @@ public sealed record WorldStateRow(
         Enum: row.Enum,
         HostOwned: row.HostOwned,
         Verdict: verdict,
-        Witness: witness
+        Witness: witness,
+        Follows: follows
     ) {
         this.Generated = row.Generated;
         ReservedCapacity = row.ReservedCapacity;

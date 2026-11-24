@@ -426,6 +426,7 @@ public sealed partial class WorldPopulation {
 
         // A portal's opening ignores this world's geometry behind its glass for a body standing in it.
         var opened = WorldPortalHoleContactField.Wrap(
+            closures: PortalClosures,
             definition: definition,
             inner: baseField
         );

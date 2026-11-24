@@ -1,0 +1,36 @@
+// The leader follows-tests.puck follows: a bare world that owns an advancing day and a counter its own rule writes.
+// Its authority runs beside the test world, which observes it as a session and adopts both rows from its delivery.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "follows-leader"
+
+admission [
+  {
+    admits: Session
+    disclosure: Replica
+    domain: "*"
+    grants [
+      { budget: 64, capability: Observe, subject: "all" }
+    ]
+    mode: FederatedAuthority
+  }
+]
+
+state {
+  world [
+    { name: "day", kind: "Fixed", value: "0.25", advance { perSecondNumerator: 1, perSecondDenominator: 1440 } }
+    { name: "pulls", kind: "Int", value: 0 }
+  ]
+}
+
+// A write the follower cannot predict: half a day ahead at tick 40, and a pull counted at tick 50.
+rule "leap" {
+  when $tick >= 40
+  mode: Edge
+  day = day + 0.5
+}
+rule "pull" {
+  when $tick >= 50
+  mode: Edge
+  pulls = pulls + 1
+}

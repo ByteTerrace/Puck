@@ -1387,6 +1387,10 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        ValidateStateFollows(
+            definition: definition,
+            errors: errors
+        );
 
         ValidateAdjacencies(
             definition: definition,

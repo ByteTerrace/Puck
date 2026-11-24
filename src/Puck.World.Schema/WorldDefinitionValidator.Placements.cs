@@ -911,6 +911,24 @@ public static partial class WorldDefinitionValidator {
                     path: $"{facePath}.portal",
                     portal: portal
                 );
+                if (portal.Open is WorldPlacementResponseCondition.StateCondition open) {
+                    ValidateStateCondition(condition: open, definition: definition, entryPath: $"{facePath}.portal.open", errors: errors);
+                } else if (portal.Open is not null) {
+                    errors.Add(item: $"{facePath}.portal.open must be a state condition — a door opens on a cell its rules write, read wherever the door stands.");
+                }
+                if (portal.Gate is { } gate) {
+                    if (!gate.Comparison.IsComparison()) {
+                        errors.Add(item: $"{facePath}.portal.gate.comparison '{gate.Comparison}' is unknown.");
+                    }
+                    if (!float.IsFinite(f: gate.Value)) {
+                        errors.Add(item: $"{facePath}.portal.gate.value must carry a finite value.");
+                    }
+                    if (WorldDefinitionRows.FindStateRow(rows: definition.State, name: gate.State) is not { } gateRow) {
+                        errors.Add(item: $"{facePath}.portal.gate.state '{gate.State}' names no state row.");
+                    } else if (gateRow.IsSlot || (gateRow.Kind is not (CellKind.Int or CellKind.Fixed or CellKind.Bool))) {
+                        errors.Add(item: $"{facePath}.portal.gate.state '{gate.State}' must be a keyed int, fixed or bool row — a gate reads one cell per body, at the traveller's index.");
+                    }
+                }
 
                 // A door is geometry the trigger scan derives ONCE per revision from the row's authored transform
                 // (WorldFaceCatalog). A row whose resolved pose moves every tick has no such derivation, so a portal

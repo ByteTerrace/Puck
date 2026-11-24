@@ -405,6 +405,8 @@ param location string = resourceGroup().location
 param worldMcp worldMcpType?
 @description('Whether the world group\'s hosted data (its worlds\' authority roots, checkpoints and journals, and its release record) outlives a deployment. Scratch: each release deployment discards it and starts fresh. Durable: deployments carry it through the release transaction. Declared, never defaulted, because scratch deletes data.')
 param worldSiloHostedData ('durable' | 'scratch')
+@description('The identity of this deployment\'s inputs (the compiled template and every other parameter), derived by puck azure deploy-infrastructure and returned as an output, so a later deployment of identical inputs can reuse this one instead of applying again. Empty when deployed by hand.')
+param inputIdentity string = ''
 param tags tagsType = {}
 param website {
   officialContentBaseUrl: string
@@ -1966,7 +1968,14 @@ module applicationInsightsContainers 'br/public:avm/res/insights/component:0.8.0
     publicNetworkAccessForIngestion: 'Enabled'
     publicNetworkAccessForQuery: 'Enabled'
     retentionInDays: 30
-    roleAssignments: []
+    // The world silo's azure.monitor telemetry sink signs in as the silo identity; local auth is disabled.
+    roleAssignments: [
+      {
+        principalId: worldSiloIdentity.outputs.principalId
+        principalType: 'ServicePrincipal'
+        roleDefinitionIdOrName: 'Monitoring Metrics Publisher'
+      }
+    ]
     samplingPercentage: 100
     tags: union(tags, resources.containerEnvironment.applicationInsights.?tags ?? {})
     workspaceResourceId: logAnalyticsWorkspace.outputs.resourceId
@@ -3374,9 +3383,11 @@ output worldSiloIdentityResourceId string = worldSiloIdentity.outputs.resourceId
 output worldSiloClientId string = worldSiloIdentity.outputs.clientId
 output worldSiloOwner string = worldSiloIdentity.outputs.principalId
 output worldSiloStorageEndpoint string = worldSilo.outputs.storageEndpoint
+output worldSiloTelemetryConnectionString string = applicationInsightsContainers.outputs.connectionString
 output worldSiloConfiguration worldSiloConfigType = worldSilo.outputs.deploymentConfiguration
 output worldMcpConfiguration worldMcpConfigurationType? = worldMcp == null ? null : mcp!.outputs.worldMcpConfiguration
 output worldSiloHostedData string = worldSiloHostedData
+output deploymentInputIdentity string = inputIdentity
 output deploymentLocation string = location
 output deploymentLockKind string = lockKind
 output deploymentTags tagsType = tags
