@@ -254,7 +254,17 @@ read again is refilled and republished whole.
   holds for the static draws changed, paced by the trace (`ScenePendingDue`: no
   build running, the installed scene's traces paid or as many traced since it was
   installed as the windows hold, at least `PendingSceneInterval` since the last
-  build began), and while opaque static groups are still pending it builds from
+  build began). The pacing holds only while the installed scene can be traced: a
+  scene names the meshes it traces, a group that traces the tier it draws leaves
+  the region when its view retiers it, and no query of that scene binds again
+  (`SdfWorldTables.TryProbeScene`), so the probe service reports a scene that
+  stayed unbound past its admission wait (`SdfMeshIrradiance.NoteScenePlacement`,
+  counted as `sdf.mesh-gi.scene-unplaced`) and the next build is due at once. A
+  volume whose `gpu-jobs` counts stand still across two readings of
+  `world.counters sdf.mesh-gi` while `gpu-cancelled` rises has stopped; before
+  this door it stopped for good, and every view it lit then read
+  `camera=none wait=unpublished` in `world.exposure` and metered and fogged as
+  open sky. While opaque static groups are still pending it builds from
   those landed once one has (an empty scene would measure open sky where walls have
   yet to land), so the volume and the camera sample answer during a cold bake
   instead of after it. Waiting for the whole bake left every view
