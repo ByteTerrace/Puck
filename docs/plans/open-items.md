@@ -197,7 +197,7 @@ defects, not looks.
    with headroom.** One lane over both, since both are the same discipline
    (work proportional to change, off the one thread): capture only what a
    view reads and capture routed scenes side by side (start from
-   `wip/frame-production`); recording in one fork; a pump that visits what
+   `wip/frame-production`); a pump that visits what
    completed; the input runtime proportional to seated or possessed bodies
    and grant changes; the step thread's copies and clears; fork and plan
    cost; `CaptureMotion`; the source watch on OS change notification instead
@@ -862,8 +862,9 @@ wait behind them.
    Routed compositions pack transforms and draw journals on the pool between
    serial preparation and filming. Mesh compaction marks only rows that
    reference moved meshes, using the same index for every residency.
-   Left, in [its order](frame-production.md#the-steps): one fork for a frame's
-   recordings and a pump that visits what completed. Check:
+   One fork records a frame ([as built](frame-production.md#one-fork-records-a-frame)).
+   Left, in [its order](frame-production.md#the-steps): a pump that visits
+   what completed. Check:
    `world.counters sdf.captures` across a benchmark chapter,
    `run` a frame against `held`, with `packed-on-worker` and
    `uploaded-on-worker`, beside `host.frames`' capture and pack parts. At

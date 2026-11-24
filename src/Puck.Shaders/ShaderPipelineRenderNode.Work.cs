@@ -138,6 +138,7 @@ public sealed partial class ShaderPipelineRenderNode : IGpuWorkSource, IWorkCoun
                 var signature = pass.Package?.Signature(context: in context, reads: Reads);
 
                 if (Stands(pass: pass, signature: signature)) {
+                    NoteStoodOn(pass: pass);
                     SkipAccesses(pass: pass, slot: slot);
                     m_work.StandPass(pass: index);
                     pass.Package?.Stood();

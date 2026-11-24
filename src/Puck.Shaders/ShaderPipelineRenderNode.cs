@@ -1231,17 +1231,25 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
     // Publish the handle, forwarded binding and layout together. A discarded recording leaves the
     // last publication intact, including the metadata a paused capture needs to read it.
     private string PublishSelectedOutput(RuntimeResource selected, int slot) {
-        var (resource, name, instance) = PublicationOf(selected: selected, slot: slot);
-        var surface = Output(selectedResource: selected, published: resource, publishedName: name, instance: instance, slot: slot);
-        // An external image selected directly is encoded into the node's own preview target.
-        // Only a forwarded image keeps its producer's binding and layout.
-        var binding = (((selected.Alias.Target is not null) && resource.Spec.IsExternal && surface.IsSameDeviceImage) ? name : null);
-        var layout = ((binding is null) ? m_outputLayout : ResolveExternalLayout(name: binding));
+        var surface = SelectedPublication(binding: out var binding, layout: out var layout, name: out var name, predicted: false, selected: selected, slot: slot);
 
         m_publishedBinding = binding;
         m_publishedLayout = layout;
         Publish(surface: surface);
         return name;
+    }
+    // The selected output's publication at a slot: its surface, the external binding it forwards (null for an image of the
+    // node's own) and the layout it rests in. The one routine a commit publishes by and a preparation reserves by
+    // (ReserveOutputs), which predicts each pass's outcome from its last.
+    private Surface SelectedPublication(RuntimeResource selected, int slot, bool predicted, out string? binding, out GpuImageLayout layout, out string name) {
+        (var resource, name, var instance) = PublicationOf(predicted: predicted, selected: selected, slot: slot);
+        var surface = Output(selectedResource: selected, published: resource, publishedName: name, instance: instance, slot: slot);
+
+        // An external image selected directly is encoded into the node's own preview target.
+        // Only a forwarded image keeps its producer's binding and layout.
+        binding = (((selected.Alias.Target is not null) && resource.Spec.IsExternal && surface.IsSameDeviceImage) ? name : null);
+        layout = ((binding is null) ? m_outputLayout : ResolveExternalLayout(name: binding));
+        return surface;
     }
     private Surface Output(RuntimeResource selectedResource, RuntimeResource published, string publishedName, int instance, int slot) {
         // A buffer output publishes no image; a graph instance's consumers bind the buffer itself (LatestOutputBuffer).
@@ -2073,6 +2081,7 @@ public sealed partial class ShaderPipelineRenderNode : ICaptureRequestTarget, ID
         HoldLeases();
         PrepareFrameCommands();
         m_commands.Clear();
+        m_stoodExternal.Clear();
         BeginCadenceFrame(slot: slotIndex);
         m_open.RecordingFault = (m_device.Services.Faults?.TakeRecordingDue() ?? 0L);
         // What a pass's recording would change outside the instance is changed here, on the frame thread, so the

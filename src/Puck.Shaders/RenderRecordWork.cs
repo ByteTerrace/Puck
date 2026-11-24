@@ -27,6 +27,7 @@ public sealed class RenderRecordWork : WorkLedger<WorkCounterSet> {
     private static readonly WorkKind Frames = Kind(name: "render.record.frames", unit: "count");
     private static readonly WorkKind Jobs = Kind(name: "render.record.jobs", unit: "count");
     private static readonly WorkKind Failed = Kind(name: "render.record.failed", unit: "count");
+    private static readonly WorkKind InvalidatedJobs = Kind(name: "render.record.invalidated", unit: "count");
     private static readonly WorkKind Prepare = Kind(name: "render.record.prepare-microseconds", unit: "microseconds");
     private static readonly WorkKind Record = Kind(name: "render.record.record-microseconds", unit: "microseconds");
     private static readonly WorkKind Commit = Kind(name: "render.record.commit-microseconds", unit: "microseconds");
@@ -42,7 +43,7 @@ public sealed class RenderRecordWork : WorkLedger<WorkCounterSet> {
     private static readonly WorkKind Lists = Kind(name: "render.record.lists", unit: "count");
     private static readonly WorkKind EmitLanes = Kind(name: "render.record.lanes", unit: "count");
     private static readonly WorkKind PassesEmitted = Kind(name: "render.record.passes.emitted", unit: "count");
-    private static readonly WorkKind[] Kinds = [Frames, Jobs, Failed, Prepare, Record, Commit, Longest, PackagePreparation, PassesRecorded, PassesStood, PassesSkipped, Waves, Partitions, WorkerJobs, WorkerPasses, Lists, EmitLanes, PassesEmitted];
+    private static readonly WorkKind[] Kinds = [Frames, Jobs, Failed, InvalidatedJobs, Prepare, Record, Commit, Longest, PackagePreparation, PassesRecorded, PassesStood, PassesSkipped, Waves, Partitions, WorkerJobs, WorkerPasses, Lists, EmitLanes, PassesEmitted];
 
     private RenderRecordWork() : base(counters: new(name: "render.record", kinds: Kinds)) { }
 
@@ -100,6 +101,9 @@ public sealed class RenderRecordWork : WorkLedger<WorkCounterSet> {
     internal void Submitted(int lists) => Counters.Add(Lists, lists);
     /// <summary>Counts one job whose recording failed and was abandoned.</summary>
     internal void Abandoned() => Counters.Count(Failed);
+    /// <summary>Counts one job abandoned because a reservation it bound did not hold: its producer's frame failed, or
+    /// committed another publication than it reserved. Its abandonment counts as a failed job too.</summary>
+    internal void Invalidated() => Counters.Count(InvalidatedJobs);
     /// <summary>Counts one render-graph frame that recorded jobs, with its longest single recording.</summary>
     /// <param name="longestRecordTicks">The frame's longest recording, in <see cref="Stopwatch"/> ticks.</param>
     internal void Frame(long longestRecordTicks) {

@@ -50,6 +50,10 @@ public sealed partial class SdfWorldTables {
         return (known ? unchecked((ulong)(m_skyEnvironment.Publication.Renders + (m_skyEnvironment.Owes ? 1 : 0))) : null);
     }
     internal long SubmitSkyEnvironment() => m_skyEnvironment.Publish();
+    // Records the projection this frame's recording draws, which a view recorded after it reads (EnvironmentPublication).
+    internal void RecordSkyEnvironment(long frame) => m_skyEnvironment.Publication.Record(frame: frame, tainted: m_skyEnvironment.Tainted);
+    // The projection a view of package frame `frame` samples.
+    internal SdfEnvironmentSubmission? SkyEnvironmentFor(long frame) => m_skyEnvironment.Publication.Current(frame: frame);
     internal void CompleteSkyEnvironment(long sequence) => m_skyEnvironment.Publication.Complete(sequence: sequence);
     /// <summary>Makes each lighting source whose submission holds unfilled external content (the sky environment's
     /// projection, the screen emission's reduction) derive itself again on its next recording, from whatever its sources
@@ -121,6 +125,8 @@ public sealed partial class SdfWorldTables {
         public bool[] Screens => m_watch.Screens;
 
         public EnvironmentPublication Publication { get; }
+        // Whether the latest observation read a source with unfilled external content.
+        public bool Tainted => m_watch.Tainted;
         public bool Demand { get; private set; }
         public bool Owes { get; private set; }
         public bool Projected { get; set; }
@@ -195,13 +201,30 @@ public sealed partial class SdfWorldTables {
 
     // One lighting source's submissions: the latest submitted, and the latest its render node proved complete while it was
     // still the latest submitted, since a newer submission owns the source's buffers.
+    //
+    // A recording that draws the source records what its submission will carry (Record) before its node commits, so a
+    // view of the same frame reads the classification of the buffer it samples (Current). That holds because the source's
+    // recorder and every view of its residency share one recording domain, which the runtime records on one thread in
+    // schedule order, the source first, and a view the source's frame does not commit with is abandoned with it
+    // (RenderGraphRuntime.Reservations.cs). A recorded classification belongs to its package frame only.
     private sealed class EnvironmentPublication(object owner) {
+        private SdfEnvironmentSubmission? m_recorded;
+        private long m_recordedFrame = -1;
+
         public SdfEnvironmentSubmission? Submitted { get; private set; }
         public ReferenceRevision Completed { get; private set; }
         public long Renders { get; private set; }
 
+        // The submission a view of package frame `frame` samples: the one recorded this frame, else the latest submitted.
+        public SdfEnvironmentSubmission? Current(long frame) => ((m_recordedFrame == frame) ? m_recorded : Submitted);
+        public void Record(long frame, bool tainted) {
+            m_recorded = new SdfEnvironmentSubmission(Owner: owner, Sequence: (Renders + 1), Tainted: tainted);
+            m_recordedFrame = frame;
+        }
         public long Publish(bool tainted) {
             Submitted = new SdfEnvironmentSubmission(Owner: owner, Sequence: ++Renders, Tainted: tainted);
+            m_recorded = null;
+            m_recordedFrame = -1;
             return Renders;
         }
         public void Complete(long sequence) {
@@ -213,6 +236,8 @@ public sealed partial class SdfWorldTables {
         public void Forget() {
             Submitted = null;
             Completed = default;
+            m_recorded = null;
+            m_recordedFrame = -1;
         }
     }
 }

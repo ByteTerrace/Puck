@@ -548,7 +548,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         );
 
         if (m_part == SdfWorldPackage.Parts.Views) {
-            m_sourceTaint = (SdfWorldPasses.SourceTaintOf(frame: frame, tables: tables) ?? SdfWorldPasses.ReadTaintOf(latch: recording.Latch, reads: recording.Reads));
+            m_sourceTaint = (SdfWorldPasses.SourceTaintOf(frame: frame, packageFrame: residency.PackageFrame, tables: tables) ??SdfWorldPasses.ReadTaintOf(latch: recording.Latch, reads: recording.Reads));
             m_readsHistory = (m_temporal && temporal.HasPreviousView);
         }
 
