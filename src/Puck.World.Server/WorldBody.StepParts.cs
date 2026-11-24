@@ -138,7 +138,9 @@ public sealed partial class WorldBody {
     /// <param name="tick">The explicit simulation tick.</param>
     internal void AdmitProducerObservation(int entityIndex, ulong tick) {
         if (AdmitsProducerObservation) {
-            InputImagesEdit.Producer = m_stateLane!.Input!.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
+            var admitted = m_stateLane!.Input!.AdmitProgramSnapshot(body: entityIndex, image: InputImages.Producer, tick: tick);
+
+            if (admitted != InputImages.Producer) { InputImagesEdit.Producer = admitted; }
         }
     }
 

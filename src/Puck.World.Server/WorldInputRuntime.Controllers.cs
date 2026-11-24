@@ -61,14 +61,27 @@ public sealed partial class WorldInputRuntime {
     /// structural actor is local-only; external submissions cannot claim the World principal.</summary>
     internal PlayerIntent AdmitProgramSnapshot(int body, PlayerIntent image, ulong tick) {
         m_host.Population.ThrowIfPartitioned();
-        if (m_host.Body(index: body) is not { Source.ProducerName: { } source }) { return default; }
-        if (!TryPublishSnapshotCore(Principal.World, body, source, image, tick, default, out var owner, out var principal, out var batch, out var reason) ||
+        if (m_host.Body(index: body) is not { Source.ProducerName: { } source } target) { return default; }
+        var standing = StandingProgramOwner(body: body, target: target);
+
+        // The same observation over standing facts: the admission would take the owner's steady branch and answer the
+        // projection it answered last.
+        if ((standing?.Program is { Repeats: true } held) && (image == held.Image) && standing.Input.HoldsSteady(image: in held.Accepted)) {
+            WorldTickWork.Process.Add(WorldTickWork.InputAdmissionsSteady, 1);
+            return held.Projection;
+        }
+        WorldTickWork.Process.Add(((standing is null) ? WorldTickWork.InputAdmissions : WorldTickWork.InputAdmissionsStanding), 1);
+        if (!TryPublishSnapshotCore(Principal.World, body, source, image, tick, default, out var owner, out var principal, out var batch, out var reason, standing) ||
             !TryAdmitSynchronized(alreadyPermitted: true, batch: in batch, owner: owner!, reason: out reason)) {
+            if (standing?.Program is { } refused) { refused.Valid = false; }
             RejectControllerBatch(principal: principal);
             m_host.Output.Narrate("input.refused", reason);
             return default;
         }
-        return ProjectSnapshot(batch: batch, body: body);
+        var projection = ProjectSnapshot(batch: batch, body: body);
+
+        RecordProgramStanding(accepted: batch.Image, image: in image, owner: owner!, projection: in projection, source: source, target: target, tick: tick);
+        return projection;
     }
 
     private PlayerIntent ProjectSnapshot(int body, in WorldInputBatch batch) {
@@ -103,8 +116,10 @@ public sealed partial class WorldInputRuntime {
         out Principal principal, out WorldInputBatch batch, out string reason, ReadOnlySpan<WorldInputEvent> observations = default) =>
         TryPublishSnapshotCore(actor, body, source, image, tick, observations, out _, out principal, out batch, out reason);
 
+    // standing names the owner of a world's own producer whose permission and selection facts all stand
+    // (StandingProgramOwner): the route check, the owner lookup and the synchronization would answer what they did.
     private bool TryPublishSnapshotCore(Principal actor, int body, string source, PlayerIntent image, ulong tick,
-        ReadOnlySpan<WorldInputEvent> observations, out Owner? resolvedOwner, out Principal principal, out WorldInputBatch batch, out string reason) {
+        ReadOnlySpan<WorldInputEvent> observations, out Owner? resolvedOwner, out Principal principal, out WorldInputBatch batch, out string reason, Owner? standing = null) {
         resolvedOwner = null;
         principal = default;
         batch = default;
@@ -112,7 +127,21 @@ public sealed partial class WorldInputRuntime {
         if (string.IsNullOrWhiteSpace(value: source) || (source.Length > 256) || (body < 0) || (body >= m_host.Population.Capacity) ||
             (m_host.Body(index: body) is not { } target)) { return false; }
         var observedChannels = target.Channels;
+        var catalog = Catalog;
+        var owner = standing;
 
+        if (owner is null) {
+            if (!TryResolveSnapshotOwner(actor: actor, body: body, catalog: catalog, owner: out owner, reason: out reason, source: source, target: target)) { return false; }
+            if (!TrySynchronize(activation: 0, owner: owner, reason: out reason)) { return false; }
+        }
+        return TryPublishSnapshotOf(owner: owner, catalog: catalog, image: image, observations: observations, observedChannels: observedChannels, tick: tick,
+            batch: out batch, principal: out principal, reason: out reason, resolvedOwner: out resolvedOwner);
+    }
+    // Resolves the controller owner a snapshot producer publishes through, admitting one for a first observation and
+    // replacing one whose body generation or session ended.
+    private bool TryResolveSnapshotOwner(Principal actor, int body, string source, WorldBody target, WorldInputCatalog catalog, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out Owner? owner, out string reason) {
+        owner = null;
+        reason = string.Empty;
         if (m_host.GrantTable.TryGetDriveGate(bodyIndex: body, gateRow: out _) ||
             (!IsAuthoredProducer(actor: actor, body: body, source: source) &&
             !m_host.GrantTable.Allows(actor, WorldCapability.Drive, GrantSubject.Body(index: body)).IsAllowed)) {
@@ -121,7 +150,7 @@ public sealed partial class WorldInputRuntime {
         }
         var key = (actor, body, source);
 
-        if (m_controllers.TryGetValue(key: key, value: out var owner) &&
+        if (m_controllers.TryGetValue(key: key, value: out owner) &&
             ((owner.Generation != m_host.Population.Generation(index: body)) || !m_host.GrantTable.IsLiveSession(principal: owner.Principal))) {
             Reset(owner.Principal);
             m_host.GrantTable.MarkObserverEnded(session: owner.Principal);
@@ -129,7 +158,6 @@ public sealed partial class WorldInputRuntime {
             m_controllers.Remove(key: key);
             owner = null;
         }
-        var catalog = Catalog;
         if (owner is null) {
             if (m_ordered.Count == ushort.MaxValue) { reason = "input.capacity: too many input owners"; return false; }
             var sources = catalog.SnapshotSources(prefix: "$snapshot:");
@@ -140,7 +168,15 @@ public sealed partial class WorldInputRuntime {
             InstallOwner(owner, catalog.Mappings[target.InputMappingId], reset: false, recompiled: true);
             m_controllers.Add(key: key, value: owner);
         }
-        if (!TrySynchronize(activation: 0, owner: owner, reason: out reason)) { return false; }
+        return true;
+    }
+    // Observes the snapshot into the owner's producer and publishes its batch, over storage the producer lends.
+    private bool TryPublishSnapshotOf(Owner owner, WorldInputCatalog catalog, PlayerIntent image, ulong tick, WorldChannelTable observedChannels,
+        ReadOnlySpan<WorldInputEvent> observations, out Owner? resolvedOwner, out Principal principal, out WorldInputBatch batch, out string reason) {
+        resolvedOwner = null;
+        principal = default;
+        batch = default;
+        reason = string.Empty;
         var input = owner.Input;
         var producer = owner.Producer ??= WorldInputProducer.FromAccepted(catalog, input.Mapping, input.Sources,
             (m_host.Definition.InputHistory?.MaximumEventsPerStep ?? 128), input.Revision, input.Epoch, input.Sequence, input.Image);
@@ -173,15 +209,19 @@ public sealed partial class WorldInputRuntime {
                 owner.SnapshotCatalog = catalog;
             }
             var cachedAddresses = owner.SnapshotAddresses;
+            var relative = false;
 
             for (var sourceIndex = 0; (sourceIndex < inputSources.Length); sourceIndex++) {
                 var address = cachedAddresses[sourceIndex];
                 var declaration = catalog.Channels[inputSources[sourceIndex].Source.Channel];
                 var raw = ((address < 0) ? 0 :
                     ((declaration.Shape == ChannelShape.Relative) ? image.Channels.Relative(ordinal: address).Value : image[address].Value));
+
+                relative |= ((declaration.Shape == ChannelShape.Relative) && (raw != 0));
                 // A snapshot's newly nonzero channel is one activation; all its later samples retain that origin.
                 _ = producer.ObserveSnapshotAt(index: sourceIndex, rawValue: raw, tick: tick, activationSequence: ref activationSequence);
             }
+            owner.SnapshotRelative = relative;
         }
         owner.Controller = origin with { ActivationSequence = activationSequence, ObservationTick = tick };
         if (producer.CaptureLost) { Reset(owner.Principal); reason = "input.capacity: synthetic snapshot exceeds the event allowance"; return false; }

@@ -65,6 +65,9 @@ public sealed class WorldInputProducer {
     public ulong Epoch { get; private set; }
     /// <summary>Current reconciled source state for read-back; callers cannot mutate it.</summary>
     public ReadOnlySpan<WorldInputSourceState> Sources => m_sources;
+    /// <summary>Gets a value indicating whether the producer holds nothing a later operation would publish: no event,
+    /// no deferred observation, no owed or pending neutral, no relative contribution and no capture loss.</summary>
+    public bool IsQuiescent => (!CaptureLost && !m_needsNeutral && !m_hasNeutral && !m_hasRelative && (m_deferredCount == 0) && (m_eventCount == 0));
     /// <summary>A capture overflow requires an authority reset; no truncated batch is published.</summary>
     public bool CaptureLost { get; private set; }
 
