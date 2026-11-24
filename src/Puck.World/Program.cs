@@ -622,6 +622,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     // headroom the player never offered. Anywhere else (a checkout, a player folder's own baking boots) authoring draws on
     // the machine's headroom.
     Puck.Hosting.Jobs.MemoryAccount.Shared.SetAuthoringOnPlayBar(onPlayBar: (runsAsPlayer || (caches.MeshPolicy == Puck.SdfVm.SdfMeshCachePolicy.Stored)));
+    // A reclaim returns the native allocator's unused pages with the collector's (MemoryAccount.Reclaims).
+    Puck.Hosting.Jobs.MemoryAccount.Shared.ReclaimRequested += static () => (Puck.Memory.Allocator.Current as Puck.Abstractions.Memory.IAllocatorStatistics)?.Collect();
     // Everything the boot resolved above becomes the one service collection its shape needs; the composition laws build
     // the same collection through the same method.
     services.AddWorldBoot(inputs: new WorldBootInputs(

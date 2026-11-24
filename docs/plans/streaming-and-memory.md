@@ -248,6 +248,15 @@ What the memory side holds today:
   memory). A player's build counts authoring as
   play (`MemoryAccount.SetAuthoringOnPlayBar`). The owners and their
   allowances are in [the large host owners](#the-large-host-owners).
+- **Authoring reclaims before it is refused.** The machine's room is its free
+  memory, and a bake's own dead arrays are not free until the collector has
+  decommitted them. A refused bake allocates little, so nothing else brings
+  that collection on. An authoring reservation the machine's room refuses
+  therefore runs one compacting collection, has the native allocator return
+  its unused pages, reads the machine again and asks once more
+  (`MemoryAccount.Reclaims`, at most every `MemoryAccount.ReclaimInterval` and
+  only after `MemoryAccount.ReclaimAllocatedBytes` of new allocation);
+  `host.memory` prints the count as `authoring-reclaims`.
 - **Progress is forced once in the process.** A bake with nothing admitted
   can spend headroom on its next group while its allowance has room
   and no other owner holds the forced allowance (`MemoryAccount.Owner.TryReserveForced`, reported by
@@ -600,7 +609,12 @@ bake on a 16 GB machine under a 6 GiB play bar has the machine's free memory to
 work in. It gives that room back as the machine fills: other programs' memory
 leaves the free reading, the system's low-memory signal
 (`HostMemory.LowMemorySignaled`) leaves authoring no room and asks the caches
-to trim, and on a busy machine the bake is what waits.
+to trim, and on a busy machine the bake is what waits. The margin holds the
+machine under the collector's own high-memory mark, so the collector leaves a
+bake's garbage standing there and the garbage reads as memory the machine
+lacks: a refused authoring reservation therefore collects it and asks again
+(`MemoryAccount.Reclaims`), so the bake waits on other programs' memory and
+never on its own dead arrays.
 
 The private bytes beyond the owners have no owner to say whose they are. In a
 process that has never run authoring work, which every player's process is,
