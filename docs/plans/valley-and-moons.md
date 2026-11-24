@@ -182,6 +182,18 @@ Built by this feature:
   against the field's domain (`WorldKeyResolver.Extremes`). A rate and an ordered set refuse a second track, since
   neither has a sound reading of one.
 
+- A held pace climbs as it travels (`WorldBody.VerticalThrust`): a hold's thrust reads the kit's resolved move speed
+  with its held pace, as its travel and a medium's thrust already did, so the ship's boost lifts it at four times its
+  cruise and the route's 5,900 m climb takes about a quarter of the time it did. One function serves every bond.
+- Jetpack flight (`worlds/standard/abilities.puck`'s `jetpack`): thrust, hover and boost as two hold rows and the
+  `flight` action an author expands into any kit, bound through the standard's `flight` channel. The Moth's flight
+  mode is that template (`avatars/moth-jetpack.puck`), no longer her own rows.
+- A space mode (`ship.puck`'s `shipSpace` and `shipCamera`'s `spaceRig`): a body is `Weightless` where a world's
+  gravity field no longer pulls (`ActionFact.Weightless`, the same one metre a second squared under which a body keeps
+  the up it had), the ship's kit marks its `space` register by it, and a world selects the space kit by that register
+  (`craft-form.puck`): a ship that coasts in vacuum, pitches further and frames its pilot from a longer boom behind a
+  wider lens. The engine supplies only the fact; the medium's motion and camera are the standard's data.
+
 Left open, in the order they matter to the trip:
 
 1. **The valley is not in the moon's sky.** A view of the debug world from the
@@ -241,10 +253,6 @@ Left open, in the order they matter to the trip:
     population's revision, 2 live and 3 replayed
     (`WorldTick.AppendRoutedInputHash`). Until it reproduces, the trip has no
     committed scenario.
-13. **The climb is slow.** The ship's boost multiplies its speed over the
-    ground and not its climb, so the 5,900 m the route climbs take about a
-    hundred seconds each way. Whether the boost lifts too is the ship's kit to
-    author; how long the ascent should be is the owner's open question below.
 
 ## The owner's rulings
 

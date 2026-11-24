@@ -1,0 +1,58 @@
+// The ship's boarding and lift-off as one deterministic scenario: the Moth beside the standard's ship presses the
+// context button, rides it, and climbs on the rise channel with the boost held. `puck test --reproduce` replays it to
+// show the tick a seat boards on re-drives as it ran (the routed input from the pilot to the ship).
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "moon-trip-tests"
+
+import "moth-controls"
+import "ship-rows"
+import "noclip"
+
+// The ship takes the population's highest slot (the Moth studio's capacity of eight, less one).
+grants [
+  { budget: 64, capability: Drive, grantee: "seat1", subject: "body:7" }
+]
+
+placements {
+  placement "test-ship" {
+    prototype: "ship"
+    position [4, 0.05, 0]
+    yawDegrees: 0
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "ship"
+      look: "ship"
+      source: "Live"
+    }
+  }
+}
+
+test "a seat boards the ship and climbs it at the boost" {
+  when {
+    ticks 15
+    seat1: body.pose 2 0.05 0 0 0 0 0
+    ticks 2
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    ticks 10
+    seat1: player.signal keyboard.shiftLeft press
+    seat1: player.signal keyboard.space press
+    ticks 30
+    seat1: player.signal keyboard.space release
+    seat1: player.signal keyboard.shiftLeft release
+  }
+  expect {
+    bodyState(body, 7, craft) == 1
+    bodyPosition(body, 7, y) > 20
+  }
+}

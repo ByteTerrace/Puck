@@ -5,6 +5,7 @@
 import "../standard/ship"
 
 shipFlight()
+shipSpace()
 shipCamera()
 shipLook()
 
