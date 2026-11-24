@@ -49,8 +49,12 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
     private sealed class World {
         public WorldStateLease? Scale;
         public IWorldSeatNavigation? Navigation;
+        public WorldDefinition? NavigationDefinition;
+        public WorldDocumentInputs NavigationInputs = WorldDocumentInputs.All;
         public int NavigationRevision = -1;
         public WorldPlaces Places = WorldPlaces.None;
+        public WorldDefinition? PlacesDefinition;
+        public WorldDocumentInputs PlacesInputs = WorldDocumentInputs.All;
         public int PlacesRevision = -1;
     }
 
@@ -66,12 +70,24 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
         var revision = endpoint.Mirror.DefinitionRevision;
 
         if ((world.Navigation is null) || (world.NavigationRevision != revision)) {
-            world.Navigation = navigation(arg1: endpoint.Definition, arg2: world.Navigation);
+            var definition = endpoint.Definition;
+
+            if ((world.Navigation is null) || (world.NavigationDefinition is null) ||
+                WorldDocumentInputs.Changed(before: world.NavigationDefinition, after: definition).Overlaps(other: world.NavigationInputs)) {
+                world.Navigation = WorldDocumentReads.Record(
+                    build: () => navigation(arg1: definition, arg2: world.Navigation),
+                    inputs: out world.NavigationInputs
+                );
+            }
+            world.NavigationDefinition = definition;
             world.NavigationRevision = revision;
         }
 
         return world.Navigation;
     }
+    /// <summary>Reports whether a seat's input source registry is admitted by its routed authority.</summary>
+    public bool InputAdmitted(int slot) => client.IsSeatInputAdmitted(slot: slot);
+
     /// <summary>Lists the places of the endpoint's delivered document whose volume holds a point, innermost first.</summary>
     /// <param name="endpoint">The authority.</param>
     /// <param name="point">The world point.</param>
@@ -150,7 +166,16 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
         var revision = endpoint.Mirror.DefinitionRevision;
 
         if (world.PlacesRevision != revision) {
-            world.Places = WorldPlaces.Of(definition: endpoint.Definition);
+            var definition = endpoint.Definition;
+
+            if ((world.PlacesDefinition is null) ||
+                WorldDocumentInputs.Changed(before: world.PlacesDefinition, after: definition).Overlaps(other: world.PlacesInputs)) {
+                world.Places = WorldDocumentReads.Record(
+                    build: () => WorldPlaces.Of(definition: definition),
+                    inputs: out world.PlacesInputs
+                );
+            }
+            world.PlacesDefinition = definition;
             world.PlacesRevision = revision;
         }
 

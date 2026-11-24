@@ -75,7 +75,7 @@ outline; it rests inside the tabletop while nobody sits at the table.
 ## Moving a piece from the console
 
 A piece is a body: piece `n` (the `piece<n>` keys of `pieceCell`) is body
-`39 - n`, so White's pieces are bodies 24 to 39 and Black's 8 to 23; piece `n`
+`49 - n`, so White's pieces are bodies 34 to 49 and Black's 18 to 33; piece `n`
 starts on file `n % 8` (piece 4 is the white king, piece 12 the e2 pawn).
 Square (file, rank), counting from a1 = (0, 0), is centred at
 x = 57.2 - 0.2 × file, z = 21.9 + 0.2 × rank: the files run toward -X, so a1
@@ -86,8 +86,8 @@ columns toward +X. Lift a piece onto a square by posing its body at y = 10.35,
 
 | Move | Console line |
 |---|---|
-| e2-e4 (the e2 pawn, body 27) | `body.pose 56.4 10.35 22.5 0 0 0 27` |
-| Ng1-f3 (body 33) | `body.pose 56.2 10.35 22.3 0 0 0 33` |
+| e2-e4 (the e2 pawn, body 37) | `body.pose 56.4 10.35 22.5 0 0 0 37` |
+| Ng1-f3 (body 43) | `body.pose 56.2 10.35 22.3 0 0 0 43` |
 | Take a piece off the board | pose its body onto the table beside the board past the h-file, as `body.pose 55.6 10.35 22.3 0 0 0 <body>` |
 
 Seat 1 holds `Drive` over the 32 piece bodies, so it may pose them as well as

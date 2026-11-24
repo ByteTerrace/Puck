@@ -68,8 +68,8 @@ the old connecting goals crossed its continuous front wall. To run the gallery
 pass separately, issue these lines after the studio pass stops:
 
 ```text
-body.stop 43
-body.pose 11.2 0.05 32.5 0 0 0 43
+body.stop 53
+body.pose 11.2 0.05 32.5 0 0 0 53
 world.state.cell.set traversal start 15
 world.state.cell.set traversal count 23
 world.state.cell.set traversal run 1
@@ -81,7 +81,7 @@ afterward: both passes together reach 23 goals with `done=1`, `missed=0` and
 `falls=0`. Restore `start=0` and `count=15` and initialize the body at
 (60, 0.05, -30) before another studio pass.
 
-**Scope.** Set `scope[body]` to a body index (0–44), then `scope[enabled]` to
+**Scope.** Set `scope[body]` to a body index (0–54), then `scope[enabled]` to
 1. It queries settled kinematics each tick and records `scopeHeight`,
 `scopeVelocity`, `scopeFacts`, `scopeContacts`, `scopeTicks` and `scopeEvents`
 at `samples & 127`. Heights and velocities are fixed-point raw bits; the
@@ -137,8 +137,8 @@ bulk query, and listens for collision begins. It records:
 |---|---|
 | `below-floor` | A body more than 1 m under y = 0, the lowest floor anything stands on; `fall-recovery` only catches a body at y = -40 |
 | `unnormalised-orientation` | A body's orientation quaternion more than 1/64 from unit length |
-| `piece-overlap` | Two chess pieces (bodies 8 to 39) begin to overlap |
-| `companion-overlap` | The Moth (body 0) and the companion (body 42) begin to overlap |
+| `piece-overlap` | Two chess pieces (bodies 18 to 49) begin to overlap |
+| `companion-overlap` | The Moth (body 0) and the companion (body 52) begin to overlap |
 
 The pieces, the Moth and the flying companion are `Solid` kits, whose contact solve separates two
 of them within the tick, and the event feed reads the settled tick, so the two

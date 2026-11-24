@@ -1,6 +1,6 @@
 // The chess table's scenarios (chess.puck), each booted in the whole debug world: `puck test worlds/debug/chess-tests.puck`.
 // A step poses a piece body onto a square's centre, 0.5 m over the table's top, and the piece drops onto the board. A
-// piece's body is 39 minus its piece number (the e2 pawn, piece12, is body 27); square (file, rank) from a1 = (0, 0)
+// piece's body is 49 minus its piece number (the e2 pawn, piece12, is body 37); square (file, rank) from a1 = (0, 0)
 // stands at x = 57.2 - 0.2 * file, z = 21.9 + 0.2 * rank, and its cell is 8 * rank + 7 - file (e2 is 11, e4 27).
 // x = 55.6 is beside the board past the h-file, on the table. Every scenario but the opponent's own leaves both sides to
 // the steps (aiSide -1).
@@ -32,7 +32,7 @@ test "the idle demo records all 19 moves then replays with matching scope hashes
     ticks 3500
     seat1: world.state chessDemo
     // Keep a different table active during playback; its airborne disc must not affect this verdict.
-    seat1: body.pose 65 30 22.6 0 0 0 108
+    seat1: body.pose 65 30 22.6 0 0 0 118
     ticks 3400
   }
   expect {
@@ -156,9 +156,9 @@ test "illegal knight move records illegal then legal succeeds" {
   }
   when {
     ticks 150
-    seat1: body.pose 56 10.35 22.3 0 0 0 33
+    seat1: body.pose 56 10.35 22.3 0 0 0 43
     ticks 150
-    seat1: body.pose 56.2 10.35 22.3 0 0 0 33
+    seat1: body.pose 56.2 10.35 22.3 0 0 0 43
     ticks 150
   }
   expect {
@@ -175,11 +175,11 @@ test "king step records legal and multi step refused" {
     aiSide = -1
   }
   when {
-    seat1: body.pose 55.6 10.35 22.3 0 0 0 27
+    seat1: body.pose 55.6 10.35 22.3 0 0 0 37
     ticks 150
-    seat1: body.pose 56.4 10.35 22.3 0 0 0 35
+    seat1: body.pose 56.4 10.35 22.3 0 0 0 45
     ticks 150
-    seat1: body.pose 56.4 10.35 22.1 0 0 0 35
+    seat1: body.pose 56.4 10.35 22.1 0 0 0 45
     ticks 150
   }
   expect {
@@ -198,10 +198,10 @@ test "pawn diagonal capture records legal" {
     aiSide = -1
   }
   when {
-    seat1: body.pose 56.6 10.35 22.3 0 0 0 20
+    seat1: body.pose 56.6 10.35 22.3 0 0 0 30
     ticks 150
-    seat1: body.pose 55.6 10.35 22.3 0 0 0 20
-    seat1: body.pose 56.6 10.35 22.3 0 0 0 27
+    seat1: body.pose 55.6 10.35 22.3 0 0 0 30
+    seat1: body.pose 56.6 10.35 22.3 0 0 0 37
     ticks 150
   }
   expect {
@@ -221,9 +221,9 @@ test "queen diagonal slide records legal" {
     aiSide = -1
   }
   when {
-    seat1: body.pose 55.6 10.35 22.3 0 0 0 27
+    seat1: body.pose 55.6 10.35 22.3 0 0 0 37
     ticks 150
-    seat1: body.pose 55.8 10.35 22.7 0 0 0 36
+    seat1: body.pose 55.8 10.35 22.7 0 0 0 46
     ticks 150
   }
   expect {
@@ -241,15 +241,15 @@ test "white kingside castle records legal" {
     aiSide = -1
   }
   when {
-    seat1: body.pose 55.6 10.35 21.9 0 0 0 34
-    seat1: body.pose 55.6 10.35 22.1 0 0 0 33
+    seat1: body.pose 55.6 10.35 21.9 0 0 0 44
+    seat1: body.pose 55.6 10.35 22.1 0 0 0 43
     ticks 150
-    seat1: body.pose 55.6 10.35 22.3 0 0 0 32
+    seat1: body.pose 55.6 10.35 22.3 0 0 0 42
     ticks 150
-    seat1: body.pose 55.8 10.35 21.9 0 0 0 32
+    seat1: body.pose 55.8 10.35 21.9 0 0 0 42
     ticks 150
-    seat1: body.pose 56 10.35 21.9 0 0 0 35
-    seat1: body.pose 56.2 10.35 21.9 0 0 0 32
+    seat1: body.pose 56 10.35 21.9 0 0 0 45
+    seat1: body.pose 56.2 10.35 21.9 0 0 0 42
     ticks 150
   }
   expect {
@@ -274,24 +274,24 @@ test "white queenside castle records legal" {
   }
   when {
     ticks 150
-    seat1: body.pose 56.8 10.35 22.3 0 0 0 38
+    seat1: body.pose 56.8 10.35 22.3 0 0 0 48
     ticks 150
-    seat1: body.pose 57.2 10.35 22.9 0 0 0 23
+    seat1: body.pose 57.2 10.35 22.9 0 0 0 33
     ticks 150
-    seat1: body.pose 56.6 10.35 22.3 0 0 0 28
+    seat1: body.pose 56.6 10.35 22.3 0 0 0 38
     ticks 150
-    seat1: body.pose 57.2 10.35 22.7 0 0 0 23
+    seat1: body.pose 57.2 10.35 22.7 0 0 0 33
     ticks 150
-    seat1: body.pose 56.4 10.35 22.3 0 0 0 37
+    seat1: body.pose 56.4 10.35 22.3 0 0 0 47
     ticks 150
-    seat1: body.pose 57.2 10.35 22.5 0 0 0 23
+    seat1: body.pose 57.2 10.35 22.5 0 0 0 33
     ticks 150
-    seat1: body.pose 56.6 10.35 22.1 0 0 0 36
+    seat1: body.pose 56.6 10.35 22.1 0 0 0 46
     ticks 150
-    seat1: body.pose 55.8 10.35 22.9 0 0 0 16
+    seat1: body.pose 55.8 10.35 22.9 0 0 0 26
     ticks 150
-    seat1: body.pose 56.8 10.35 21.9 0 0 0 35
-    seat1: body.pose 56.6 10.35 21.9 0 0 0 39
+    seat1: body.pose 56.8 10.35 21.9 0 0 0 45
+    seat1: body.pose 56.6 10.35 21.9 0 0 0 49
     ticks 150
   }
   expect {
@@ -314,12 +314,12 @@ test "castle cannot cross knight attack" {
     aiSide = -1
   }
   when {
-    seat1: body.pose 55.6 10.35 21.9 0 0 0 34
-    seat1: body.pose 55.6 10.35 22.1 0 0 0 33
-    seat1: body.pose 56 10.35 22.3 0 0 0 9
+    seat1: body.pose 55.6 10.35 21.9 0 0 0 44
+    seat1: body.pose 55.6 10.35 22.1 0 0 0 43
+    seat1: body.pose 56 10.35 22.3 0 0 0 19
     ticks 150
-    seat1: body.pose 56 10.35 21.9 0 0 0 35
-    seat1: body.pose 56.2 10.35 21.9 0 0 0 32
+    seat1: body.pose 56 10.35 21.9 0 0 0 45
+    seat1: body.pose 56.2 10.35 21.9 0 0 0 42
     ticks 150
   }
   expect {
@@ -336,12 +336,12 @@ test "castle safe when knight does not attack transit" {
     aiSide = -1
   }
   when {
-    seat1: body.pose 55.6 10.35 21.9 0 0 0 34
-    seat1: body.pose 55.6 10.35 22.1 0 0 0 33
-    seat1: body.pose 57 10.35 22.3 0 0 0 9
+    seat1: body.pose 55.6 10.35 21.9 0 0 0 44
+    seat1: body.pose 55.6 10.35 22.1 0 0 0 43
+    seat1: body.pose 57 10.35 22.3 0 0 0 19
     ticks 150
-    seat1: body.pose 56 10.35 21.9 0 0 0 35
-    seat1: body.pose 56.2 10.35 21.9 0 0 0 32
+    seat1: body.pose 56 10.35 21.9 0 0 0 45
+    seat1: body.pose 56.2 10.35 21.9 0 0 0 42
     ticks 150
   }
   expect {
@@ -359,9 +359,9 @@ test "move leaving king in check is refused" {
   }
   when {
     ticks 150
-    seat1: body.pose 56.2 10.35 22.3 0 0 0 9
+    seat1: body.pose 56.2 10.35 22.3 0 0 0 19
     ticks 150
-    seat1: body.pose 56.4 10.35 22.5 0 0 0 27
+    seat1: body.pose 56.4 10.35 22.5 0 0 0 37
     ticks 150
   }
   expect {
@@ -378,16 +378,16 @@ test "en passant capture records move kind en passant" {
   }
   when {
     ticks 150
-    seat1: body.pose 56.4 10.35 22.5 0 0 0 27
+    seat1: body.pose 56.4 10.35 22.5 0 0 0 37
     ticks 150
-    seat1: body.pose 57.2 10.35 22.9 0 0 0 23
+    seat1: body.pose 57.2 10.35 22.9 0 0 0 33
     ticks 150
-    seat1: body.pose 56.4 10.35 22.7 0 0 0 27
+    seat1: body.pose 56.4 10.35 22.7 0 0 0 37
     ticks 150
-    seat1: body.pose 56.6 10.35 22.7 0 0 0 20
+    seat1: body.pose 56.6 10.35 22.7 0 0 0 30
     ticks 150
-    seat1: body.pose 55.6 10.35 22.3 0 0 0 20
-    seat1: body.pose 56.6 10.35 22.9 0 0 0 27
+    seat1: body.pose 55.6 10.35 22.3 0 0 0 30
+    seat1: body.pose 56.6 10.35 22.9 0 0 0 37
     ticks 150
   }
   expect {
@@ -407,21 +407,21 @@ test "initial position counts in threefold repetition" {
   }
   when {
     ticks 150
-    seat1: body.pose 56.2 10.35 22.3 0 0 0 33
+    seat1: body.pose 56.2 10.35 22.3 0 0 0 43
     ticks 150
-    seat1: body.pose 56.2 10.35 22.9 0 0 0 9
+    seat1: body.pose 56.2 10.35 22.9 0 0 0 19
     ticks 150
-    seat1: body.pose 56 10.35 21.9 0 0 0 33
+    seat1: body.pose 56 10.35 21.9 0 0 0 43
     ticks 150
-    seat1: body.pose 56 10.35 23.3 0 0 0 9
+    seat1: body.pose 56 10.35 23.3 0 0 0 19
     ticks 150
-    seat1: body.pose 56.2 10.35 22.3 0 0 0 33
+    seat1: body.pose 56.2 10.35 22.3 0 0 0 43
     ticks 150
-    seat1: body.pose 56.2 10.35 22.9 0 0 0 9
+    seat1: body.pose 56.2 10.35 22.9 0 0 0 19
     ticks 150
-    seat1: body.pose 56 10.35 21.9 0 0 0 33
+    seat1: body.pose 56 10.35 21.9 0 0 0 43
     ticks 150
-    seat1: body.pose 56 10.35 23.3 0 0 0 9
+    seat1: body.pose 56 10.35 23.3 0 0 0 19
     ticks 150
   }
   expect {

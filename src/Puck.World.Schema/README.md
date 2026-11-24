@@ -2408,12 +2408,11 @@ application onto that declared screen, captured or mirrored,
 received a delivered neighbour refresh, 0 when fresh and 0 forever when the row
 authors no `livenessGraceSeconds`; the row name is proven at compile time, and
 this is a federation seam—unrelated to machine cable linking, which is the
-`Machine` source's own `cable` port), and `$channel:<seat>:<channelName>` (the
-1-based LOCAL seat's own folded value for a declared `channels[]` row—the
-exact per-tick value settled from that seat's drained `CommandSnapshot`,
+`Machine` source's own `cable` port), and `$channel:<seat>|<bodyRef>:<channelName>` (the
+1-based LOCAL seat's or addressed human-occupied body's own folded value for a declared `channels[]` row—the
+exact per-tick value settled from its drained `CommandSnapshot`,
 riding the channel's own native fixed-point domain unchanged, so `1` already
-means "fully pressed/1.0" with no rescale; 0 for a seat outside
-`bodies.localSeats` or one no local seat currently occupies), and
+means "fully pressed/1.0" with no rescale; 0 for an unseated, absent or non-human body), and
 `$pointer:<seat>:<screenIndex>:x|y|on` (the 1-based local seat's pointer ray,
 carried in its intent, mapped in fixed point through a `Simulation` screen's
 row against a one-by-one source by `WorldScreenMappings.Normalized`: `x` and
@@ -3149,9 +3148,9 @@ toward (a rule's `designate`, `body.designate`) clears that body's route:
 every facet reads 0 for the rest of the tick, `arrived` included, until the
 producer reads the new goal on its next stage. A chain of Level rules
 "at stop s and arrived, designate stop s+1" therefore advances one stop per
-arrival, never round the whole loop in one tick. Navigation
-is withheld from presentation projections with the other authoritative AI and
-motion-program declarations.
+arrival, never round the whole loop in one tick. Navigation domains travel on presentation projections so a client seat program
+can plan paths over the delivered world's geometry; authoritative AI producer
+and motion-program declarations remain withheld.
 
 ## The `search` section—what the board would be
 

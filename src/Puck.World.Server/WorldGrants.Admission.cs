@@ -143,7 +143,8 @@ public sealed partial class WorldGrants {
             if (
                 !Host.TransferEscrow.TryMobilityPrincipal(sourceAuthority: sourceAuthority, mobility: in mobility, principal: out var principal) ||
                 (principal.Kind != PrincipalKind.Peer) ||
-                !Host.IsLivePeer(principal: principal)
+                !Host.Population.IsAdmittedPeer(bodyIndex: principal.Index) ||
+                (Host.Population.PeerPrincipal(index: principal.Index) != principal)
             ) {
                 return false;
             }

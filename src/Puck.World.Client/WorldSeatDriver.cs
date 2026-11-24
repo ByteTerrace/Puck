@@ -70,7 +70,9 @@ public sealed class WorldSeatDriver {
     private ulong m_stepStart;
     private ulong m_deadline;
     private string? m_routeWorld;
+    private string? m_routeAuthority;
     private int m_routeIndex = -1;
+    private bool m_routeAdmitted;
     // Whether the chapter plans any path, and the world whose navigation it last started baking.
     private bool m_navigates;
     private string? m_preparedIn;
@@ -92,10 +94,13 @@ public sealed class WorldSeatDriver {
     private FixedQ4816 m_travelled;
     private FixedVector3 m_lastPosition;
     private string? m_tap;
+    private ulong m_tapTick;
+    private string? m_tapAuthority;
     private bool m_driving;
     // Where the body stood when it last moved under a deflected stick, and the authority tick whose delivery showed it.
     private FixedVector3 m_stallOrigin;
     private ulong m_stallTick;
+    private string? m_stallAuthority;
 
     /// <summary>Initializes a new instance of the <see cref="WorldSeatDriver"/> class for one route.</summary>
     /// <param name="route">The route.</param>
@@ -163,8 +168,12 @@ public sealed class WorldSeatDriver {
         Plans = 0;
         m_lines.Clear();
         m_routeWorld = null;
+        m_routeAuthority = null;
         m_routeIndex = -1;
+        m_routeAdmitted = false;
+        m_stallAuthority = null;
         m_preparedIn = null;
+        Read = null;
         m_navigates = chapter.Steps.Any(predicate: static step => step is WorldRouteStep.Go { Direct: false });
         Release();
         NextStep(tick: tick, rateHz: rateHz);
@@ -187,17 +196,22 @@ public sealed class WorldSeatDriver {
 
         Read = read;
         Visit(read: in read, tick: tick);
+        var worldKey = WorldKey(read: in read);
         // A chapter that navigates starts the navigation of each world it enters baking at once, so the walk across a
         // threshold covers the bake its next path waits for.
-        if (m_navigates && !string.Equals(a: m_preparedIn, b: read.World, comparisonType: StringComparison.Ordinal)) {
+        if (m_navigates && !string.Equals(a: m_preparedIn, b: worldKey, comparisonType: StringComparison.Ordinal)) {
             m_senses.Navigation(endpoint: read.Endpoint).Prepare();
-            m_preparedIn = read.World;
+            m_preparedIn = worldKey;
         }
         // A stick held while the body goes nowhere is a wall, as a player meets one. A body that moves, however it is
-        // moved, starts the watch again, and so does an authority whose ticks are not the last one's.
-        if (!m_driving || (read.Body.Tick < m_stallTick) || (Planar(from: m_stallOrigin, to: read.Position) > FixedQ4816.FromDouble(value: StallMetres))) {
+        // moved, starts the watch again, and so does an authority whose ticks are not the last one's or whose input
+        // admission for this seat has not yet settled.
+        var admitted = m_senses.InputAdmitted(slot: m_slot);
+        if (!m_driving || !admitted || !string.Equals(a: m_stallAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal) ||
+            (read.Body.Tick < m_stallTick) || (Planar(from: m_stallOrigin, to: read.Position) > FixedQ4816.FromDouble(value: StallMetres))) {
             m_stallOrigin = read.Position;
             m_stallTick = read.Body.Tick;
+            m_stallAuthority = read.Endpoint.Authority;
         } else if ((read.Body.Tick - m_stallTick) >= StallTicks) {
             Fail(kind: "wall", place: read.Place, reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"the move stick was held across {StallTicks} delivered ticks and the body stayed within {StallMetres:0.##} m of ({Metres(m_stallOrigin.X)}, {Metres(m_stallOrigin.Y)}, {Metres(m_stallOrigin.Z)}), on step {m_step} ({Describe(step: m_chapter.Steps[m_step])})"), tick: tick);
             return;
@@ -290,6 +304,9 @@ public sealed class WorldSeatDriver {
     private static bool Stands(string? world, in WorldSeatSenses.Reading read) =>
         ((world is null) || string.Equals(a: world, b: read.Endpoint.Definition.DocumentId, comparisonType: StringComparison.Ordinal));
 
+    private static string WorldKey(in WorldSeatSenses.Reading read) =>
+        (string.IsNullOrEmpty(value: read.Endpoint.Authority) ? read.World : $"{read.World}\0{read.Endpoint.Authority}");
+
     private void Visit(in WorldSeatSenses.Reading read, ulong tick) {
         var place = ((read.World == WorldDefinitionLoader.BootInstanceName) ? read.Place : $"{read.World}:{read.Place}");
 
@@ -325,6 +342,8 @@ public sealed class WorldSeatDriver {
         m_heading = null;
         m_travelled = FixedQ4816.Zero;
         m_tap = null;
+        m_tapTick = 0UL;
+        m_tapAuthority = null;
         if (m_step >= m_chapter!.Steps.Count) {
             m_phase = Phase.Arrived;
             Release();
@@ -342,6 +361,10 @@ public sealed class WorldSeatDriver {
                 break;
             case WorldRouteStep.PressAction press:
                 m_tap = press.Action;
+                if (Read is { } current) {
+                    m_tapTick = current.Body.Tick;
+                    m_tapAuthority = current.Endpoint.Authority;
+                }
                 break;
         }
     }
@@ -392,7 +415,21 @@ public sealed class WorldSeatDriver {
                 return still;
             }
             case WorldRouteStep.PressAction press: {
-                if (elapsed >= 1UL) {
+                // Hold the tap across LandTicks delivered authority ticks as well as client steps, so a catch-up step or
+                // socket jitter never coalesces a press and its release into one authority tick before an edge-latched
+                // rule reads the held channel.
+                if ((m_tap is not null) && (m_tapAuthority is null)) {
+                    m_tapTick = read.Body.Tick;
+                    m_tapAuthority = read.Endpoint.Authority;
+                } else if (
+                    (m_tap is not null) &&
+                    (elapsed >= LandTicks) &&
+                    (
+                        !string.Equals(a: m_tapAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal) ||
+                        ((read.Body.Tick >= m_tapTick) && ((read.Body.Tick - m_tapTick) >= LandTicks)) ||
+                        (elapsed >= (ulong)Math.Max(val1: LandTicks, val2: (rateHz / 2)))
+                    )
+                ) {
                     m_tap = null;
                 }
                 if ((press.Until is { } until) && Stands(world: press.World, read: in read) && read.Places.Contains(value: until)) {
@@ -536,7 +573,7 @@ public sealed class WorldSeatDriver {
             NextStep(tick: tick, rateHz: rateHz);
             return still;
         }
-        if (m_plannedIn != read.World) {
+        if (m_plannedIn != WorldKey(read: in read)) {
             if (!Plan(go: go, read: in read, tick: tick)) {
                 return still;
             }
@@ -623,7 +660,7 @@ public sealed class WorldSeatDriver {
             return false;
         }
         Plans++;
-        m_plannedIn = read.World;
+        m_plannedIn = WorldKey(read: in read);
         m_corners.Clear();
         m_corner = 0;
         m_firstReach = FixedQ4816.FromDouble(value: 0.4);
@@ -680,13 +717,21 @@ public sealed class WorldSeatDriver {
     }
 
     // Evaluates the program's operations into the seat's controls and submits each one that changed, re-asserting held
-    // sticks as a player does and every held control when the seat's world changed under it.
+    // sticks as a player does and every held control when the seat's world changed under it or its input just settled.
     private void Drive(in WorldSeatSenses.Reading read, in Steer steer, ulong tick, int rateHz) {
-        var crossed = (!string.Equals(a: m_routeWorld, b: read.World, comparisonType: StringComparison.Ordinal) || (m_routeIndex != read.Index));
+        var admitted = m_senses.InputAdmitted(slot: m_slot);
+        var crossed = (
+            !string.Equals(a: m_routeWorld, b: read.World, comparisonType: StringComparison.Ordinal) ||
+            !string.Equals(a: m_routeAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal) ||
+            (m_routeIndex != read.Index) ||
+            (!m_routeAdmitted && admitted)
+        );
         var reassert = (crossed || ((tick - m_lastAssert) >= ReassertTicks));
 
         m_routeWorld = read.World;
+        m_routeAuthority = read.Endpoint.Authority;
         m_routeIndex = read.Index;
+        m_routeAdmitted = admitted;
         if (reassert) {
             m_lastAssert = tick;
         }

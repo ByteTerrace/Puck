@@ -54,7 +54,7 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.ProducerPrefix}<bodyRef>:held|possessed|down",
             $"{WorldRuleFacts.ParkedPrefix}<bodyRef>",
             $"{WorldRuleFacts.LinkPrefix}<adjacencyName>",
-            $"{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>",
+            $"{WorldRuleFacts.ChannelPrefix}<seat>|<bodyRef>:<channelName>",
             $"{WorldRuleFacts.PointerPrefix}<seat>|any:<screenIndex>:x|y|on|press:<channelName>",
             $"{WorldRuleFacts.NearestPrefix}<bodyRef>:<row>",
             $"{WorldRuleFacts.ClockPrefix}<music>:phaseError|beat|bar|beatInBar",
@@ -1083,32 +1083,47 @@ public static partial class WorldFactsVocabulary {
                 );
 
                 var seats = world.Definition.Population.LocalSeats;
-                var suffix = name[WorldRuleFacts.ChannelPrefix.Length..];
-                var separator = suffix.IndexOf(
-                    comparisonType: StringComparison.Ordinal,
-                    value: ':'
-                );
+                var tokens = ((call is not null)
+                    ? call.Texts()
+                    : name[WorldRuleFacts.ChannelPrefix.Length..].Split(separator: ':'));
+                CompiledBodyRef body;
+                string channelName;
 
                 if (
-                    (separator < 0) ||
-                    !int.TryParse(
-                    s: suffix[..separator],
-                    style: NumberStyles.Integer,
-                    provider: CultureInfo.InvariantCulture,
-                    result: out var seat
-                ) ||
-                    (seat < 1) ||
-                    (seat > seats) ||
-                    string.IsNullOrEmpty(value: suffix[(separator + 1)..])
+                    (tokens.Length == 2) &&
+                    int.TryParse(
+                        s: tokens[0],
+                        style: NumberStyles.Integer,
+                        provider: CultureInfo.InvariantCulture,
+                        result: out var seat
+                    )
                 ) {
-                    throw new RuleException(
-                        detail: $"'{name}' does not spell '{WorldRuleFacts.ChannelPrefix}<seat>:<channelName>' with seat in 1..{seats}",
-                        refusal: WorldRuleRefusal.ChannelMalformed,
-                        ruleName: ruleName
-                    );
+                    if ((seat < 1) || (seat > seats) || string.IsNullOrEmpty(value: tokens[1])) {
+                        throw new RuleException(
+                            detail: $"'{name}' does not spell '{WorldRuleFacts.ChannelPrefix}<seat>|<bodyRef>:<channelName>' with seat in 1..{seats}",
+                            refusal: WorldRuleRefusal.ChannelMalformed,
+                            ruleName: ruleName
+                        );
+                    }
+                    body = new CompiledBodyRef(Index: (seat - 1), Kind: CompiledBodyRefKind.Literal, Row: null);
+                    channelName = tokens[1];
+                } else {
+                    var width = WorldFactsCompileContext.BodyRefTokenWidth(start: 0, tokens: tokens);
+                    var validBodyStart = ((tokens.Length > 0) &&
+                        ((RuleBindingTokens.OfReferenceToken(token: tokens[0]) != BoundKey.None) ||
+                        (tokens[0] is "body" or "argmax" or "argmin" or "cell" or "placement")));
+
+                    if (!validBodyStart || (tokens.Length != (width + 1)) || string.IsNullOrEmpty(value: tokens[width])) {
+                        throw new RuleException(
+                            detail: $"'{name}' does not spell '{WorldRuleFacts.ChannelPrefix}<seat>|<bodyRef>:<channelName>' with seat in 1..{seats} or {WorldFactsCompileContext.BodyRefVocabulary}",
+                            refusal: WorldRuleRefusal.ChannelMalformed,
+                            ruleName: ruleName
+                        );
+                    }
+                    body = world.ResolveBodyRef(channel: name, ruleName: ruleName, start: 0, tokens: tokens);
+                    channelName = tokens[width];
                 }
 
-                var channelName = suffix[(separator + 1)..];
                 var channelOrdinal = world.ChannelOrdinal(name: channelName);
 
                 if (channelOrdinal < 0) {
@@ -1120,12 +1135,12 @@ public static partial class WorldFactsVocabulary {
                 }
 
                 var operand = new ChannelOperand(
-                    channelOrdinal: channelOrdinal,
-                    seat: (seat - 1)
+                    body: body,
+                    channelOrdinal: channelOrdinal
                 );
 
                 fact = BodyFact(
-                    bodyA: default,
+                    bodyA: body,
                     bodyB: default,
                     cost: 1L,
                     describe: name,

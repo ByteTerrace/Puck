@@ -119,6 +119,14 @@ admission [
     mode: FederatedAuthority
   }
   visitorAdmissionRow(domain: "*")
+  {
+    algorithm: "ecdsa-p256-sha256"
+    domain: "ef477b67ae7304fc7db5d9cc98c101996ca868c4d586a1f267c295bb3aadeac1"
+    grants []
+    mode: SignsDirectly
+    publicKey: "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEK6YHKsnbnPH91j+oBw15qkyQ/GTa/RqSBxwS/hJYIBfFP8U4Nvp/5CgWRByeGqXPrf9KdJ3NSaqXWIfXpptImw=="
+    subject: "debug"
+  }
 ]
 
 references [
@@ -234,6 +242,30 @@ bodies {
   localSeats: seatPopulation
   networkPlayers: visitorPopulation
   reconnectGraceSeconds: 3
+}
+
+// Extend suit, flight-pack and noclip toggles beyond body 0 to the remaining local seats and admitted visitors.
+for b in range(1, (seatPopulation + visitorPopulation)) {
+  rule $"suit-toggle-body-{b}" {
+    when channel(body, b, suit) >= 1 and fact(body, b, Airborne) == 0
+    mode: Edge
+    setBodyState(key: $"{b}", state: "suit", expression: 1 - bodyState(body, b, suit))
+  }
+  rule $"suit-off-flight-body-{b}" {
+    when bodyState(body, b, suit) == 0 and bodyState(body, b, flightFuel) > 0
+    mode: Level
+    setBodyState(key: $"{b}", state: "flightFuel", expression: 0)
+  }
+  rule $"fly-body-{b}" {
+    when channel(body, b, rise) >= 1 and channel(body, b, jump) == 0 and bodyState(body, b, flightFuel) == 0 and bodyState(body, b, suit) == 1
+    mode: Level
+    setBodyState(key: $"{b}", state: "flightFuel", expression: 1000)
+  }
+  rule $"noclip-toggle-body-{b}" {
+    when channel(body, b, noclip) >= 1
+    mode: Edge
+    setBodyState(key: $"{b}", state: "noclip", expression: 1 - bodyState(body, b, noclip))
+  }
 }
 
 placements {

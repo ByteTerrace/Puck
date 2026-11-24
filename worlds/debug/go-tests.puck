@@ -192,7 +192,7 @@ test "a stone stacked on an occupied point is returned even when the board proje
   when {
     ticks 300
     seat1: world.state.cell.set goIllegal $value 0
-    seat1: body.pose 56.5 10.05 30.6 0 0 0 470
+    seat1: body.pose 56.5 10.05 30.6 0 0 0 480
     ticks 400
   }
   expect {
@@ -215,7 +215,7 @@ test "two stones of the accepted colour keep one point and return the duplicate"
   when {
     ticks 300
     seat1: world.state.cell.set goIllegal $value 0
-    seat1: body.pose 56.5 10.05 30.6 0 0 0 469
+    seat1: body.pose 56.5 10.05 30.6 0 0 0 479
     ticks 400
   }
   expect {
@@ -239,7 +239,7 @@ test "a higher-ordinal wrong-colour stone does not replace or duplicate the acce
   when {
     ticks 300
     seat1: world.state.cell.set goIllegal $value 0
-    seat1: body.pose 56.5 10.05 30.6 0 0 0 289
+    seat1: body.pose 56.5 10.05 30.6 0 0 0 299
     ticks 400
   }
   expect {
@@ -349,7 +349,7 @@ test "a reset drains its deterministic return queue" {
   }
   when {
     ticks 150
-    seat1: body.pose 56.5 10 30.6 0 0 0 470
+    seat1: body.pose 56.5 10 30.6 0 0 0 480
     ticks 150
     seat1: world.state.cell.set goReset $value 1
     ticks 400

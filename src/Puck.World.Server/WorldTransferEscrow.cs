@@ -607,9 +607,9 @@ public sealed partial class WorldTransferEscrow {
         ),
     };
     // The lowest free body in [first, limit) whose kit runs the source, or -1.
-    private int LowestFreeSupporting(bool[] consumed, int first, int limit, IntentSource source) {
+    private int LowestFreeSupporting(bool[] consumed, int first, int limit, IntentSource source, bool remoteHuman = false) {
         for (var slot = first; ((slot < limit) && (slot < consumed.Length)); slot++) {
-            if (!consumed[slot] && m_server.Population.SupportsSource(index: slot, refusal: out _, source: source)) {
+            if (!consumed[slot] && m_server.Population.SupportsSource(index: slot, refusal: out _, remoteHuman: remoteHuman, source: source)) {
                 return slot;
             }
         }
@@ -1891,6 +1891,7 @@ public sealed partial class WorldTransferEscrow {
                 // does, otherwise the lowest free one that does.
                 if (!m_server.Population.SupportsSource(
                     index: slot,
+                    remoteHuman: member.LandsHuman,
                     source: member.Source,
                     refusal: out var sourceRefusal
                 )) {
@@ -1898,6 +1899,7 @@ public sealed partial class WorldTransferEscrow {
                         consumed: consumed,
                         first: firstSlot,
                         limit: seatLimit,
+                        remoteHuman: member.LandsHuman,
                         source: member.Source
                     );
 

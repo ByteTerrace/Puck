@@ -203,16 +203,21 @@ public sealed class LinkStalenessOperand : WorldOperandFact {
 
     public string AdjacencyName { get; }
 }
-/// <summary>A seat's live composition-channel value (<see cref="WorldRuleFacts.ChannelPrefix"/>).</summary>
+/// <summary>A human-occupied body's live composition-channel value (<see cref="WorldRuleFacts.ChannelPrefix"/>).</summary>
 public sealed class ChannelOperand : WorldOperandFact {
-    public ChannelOperand(int seat, int channelOrdinal) : base(CellKind.Fixed) {
-        Seat = seat;
+    public ChannelOperand(CompiledBodyRef body, int channelOrdinal) : base(CellKind.Fixed) {
+        Body = body;
         ChannelOrdinal = channelOrdinal;
     }
 
+    public ChannelOperand(int seat, int channelOrdinal)
+        : this(new CompiledBodyRef(Index: seat, Kind: CompiledBodyRefKind.Literal, Row: null), channelOrdinal) { }
+
+    /// <summary>Gets the compiled body reference.</summary>
+    public CompiledBodyRef Body { get; }
     public int ChannelOrdinal { get; }
-    /// <summary>Gets the zero-based seat.</summary>
-    public int Seat { get; }
+    /// <summary>Gets the zero-based literal body index, or <c>-1</c> when <see cref="Body"/> is dynamic.</summary>
+    public int Seat => ((Body.Kind == CompiledBodyRefKind.Literal) ? Body.Index : -1);
 }
 /// <summary>What a <see cref="WorldRuleFacts.PointerPrefix"/> read reports of a seat's mapped pointer ray.</summary>
 public enum PointerFacet : byte {

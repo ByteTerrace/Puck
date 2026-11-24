@@ -39,7 +39,8 @@ public static class WorldRuleFacts {
     /// resolved by name at compile time and refused by name when the world declares none
     /// (<see cref="WorldRuleRefusal.BodyStateMalformed"/>).</summary>
     public const string BodyStatePrefix = $"${WorldBodyStateReads.ChannelName}:";
-    /// <summary>The prefix; <c>$channel:&lt;seat&gt;:&lt;channelName&gt;</c> reads the 1-based local seat's current value of
+    /// <summary>The prefix; <c>$channel:&lt;seat&gt;|&lt;bodyRef&gt;:&lt;channelName&gt;</c> reads a 1-based local seat's
+    /// or a human-occupied body's current value of
     /// a declared <c>channels[]</c> row as its body integrates it that tick — the drained
     /// <c>CommandSnapshot</c> read folded with co-driving contributions and the admitted held
     /// overlay (the path a held sample such as a probe axis reaches a channel by), the same value <c>body.channels</c>
@@ -47,8 +48,9 @@ public static class WorldRuleFacts {
     /// domain unchanged — a bipolar/unipolar channel's <c>1</c> is already "fully pressed/1.0", so an authored
     /// <c>compareState($channel:1:portal, greaterOrEqual, 1)</c> needs no rescale, unlike <see cref="ParkedPrefix"/>/
     /// <see cref="MachinePrefix"/>'s raw integer counts. Deterministic by construction: every contributor is the
-    /// tick's own replay input. <c>seat</c> is bounds-checked at compile time against <c>population.localSeats</c>;
-    /// <c>channelName</c> against the declared <c>channels[]</c> rows. An unseated/absent seat reads <c>0</c> — the
+    /// tick's own replay input. <c>seat</c> is bounds-checked at compile time against <c>population.localSeats</c>, or
+    /// <c>bodyRef</c> against <c>population.capacity</c>;
+    /// <c>channelName</c> against the declared <c>channels[]</c> rows. An unseated, absent or non-human body reads <c>0</c> — the
     /// convention <see cref="ParkedPrefix"/>/<see cref="MachinePrefix"/>/<see cref="RegionPrefix"/> already set.</summary>
     public const string ChannelPrefix = "$channel:";
     /// <summary>The prefix; <c>$clock:&lt;music&gt;:phaseError</c> reads the signed tick distance from the world's

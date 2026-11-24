@@ -55,6 +55,12 @@ namespace Puck.World;
 // puck.world.projection.v1 — the egress document (see WorldProjection). It rides this same context deliberately:
 // one strictness policy, one enum regime, one Vector3 spelling for both document families.
 [JsonSerializable(typeof(WorldProjectionDocument))]
+[JsonSerializable(typeof(WorldProjectionProvenance))]
+[JsonSerializable(typeof(WorldProjectedInputModes))]
+[JsonSerializable(typeof(WorldProjectedBodyRegister))]
+[JsonSerializable(typeof(IReadOnlyList<WorldProjectedBodyRegister>))]
+[JsonSerializable(typeof(IReadOnlyList<WorldSeatModeFamily>))]
+[JsonSerializable(typeof(StateSpace[]))]
 [JsonSerializable(typeof(WorldPrototypeContent))]
 [JsonSerializable(typeof(WorldProjectedKit))]
 // A projection's timeline travels alone in the delta that re-anchors its state clocks.

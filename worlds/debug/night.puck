@@ -15,6 +15,7 @@ import "suit"
 import "size"
 import "painting-kit"
 import "place-kit"
+import "../standard/visitors"
 
 // The night field draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -26,9 +27,17 @@ metadata {
   description: "A destination of the debug world painting wing: a snowfield under stars with lanterns, a pale crystal and a frame back to the debug world."
 }
 
-// A traveller from the debug world arrives here, and the debug world's window onto the night field observes it whole.
+bodies {
+  capacity: 12
+  localSeats: 4
+  networkPlayers: 8
+  reconnectGraceSeconds: 3
+}
+
+// The debug world's window onto the night field observes it whole as a session; arriving visitors receive the standard visitor row.
 admission [
   {
+    admits: Session
     disclosure: Replica
     domain: "*"
     grants [
@@ -45,6 +54,7 @@ admission [
     ]
     mode: FederatedAuthority
   }
+  visitorAdmissionRow(domain: "*")
 ]
 
 references [

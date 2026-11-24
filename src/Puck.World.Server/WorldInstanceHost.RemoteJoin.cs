@@ -25,11 +25,55 @@ public sealed partial class WorldInstanceHost {
     // Whether this host also listens for incoming connections, in which case its boot world keeps stepping even while no
     // local seat stands in it.
     private bool m_remoteJoinListens;
+    // Host steps completed while the non-listening client's boot world was idle: keeps the host's script/capture clock
+    // monotonic without advancing the idle boot server's own simulation state.
+    private ulong m_idleClientTicks;
+    private ulong m_lastBootInputTick;
 
     /// <summary>How long, in seconds of the destination's time, a joining seat's reservation holds its slot. A host
     /// that joins at boot can take seconds to step its own first ticks, and a reservation that lapsed before its commit
     /// arrived decides nothing, so the join asks for a hold that outlasts a slow start.</summary>
     public const double RemoteJoinHoldSeconds = 60.0;
+
+    /// <summary>Gets the host's completed script tick: the boot authority's completed simulation tick plus any fixed host
+    /// steps completed while an idle non-listening client kept its boot world paused.</summary>
+    /// <param name="bootServer">The boot authority server.</param>
+    /// <returns>The monotonic completed host script tick.</returns>
+    public ulong HostScriptTick(Server.WorldServer bootServer) {
+        ArgumentNullException.ThrowIfNull(argument: bootServer);
+        var nextInput = bootServer.NextInputTick;
+
+        if (nextInput < m_lastBootInputTick) {
+            m_idleClientTicks = 0UL;
+        }
+        m_lastBootInputTick = nextInput;
+        return (((nextInput > 0UL) ? (nextInput - 1UL) : 0UL) + m_idleClientTicks);
+    }
+
+    /// <summary>Advances the host's idle-client script clock by one fixed step when the boot world is withheld solely
+    /// because it is an idle non-listening client launchpad, without stepping the boot authority's simulation.</summary>
+    /// <param name="stepTicks">This call's pump-supplied step width.</param>
+    /// <param name="scriptTick">The completed host script tick after advancing.</param>
+    /// <returns><see langword="true"/> when the host clock advanced over an idle client boot step.</returns>
+    public bool TryAdvanceIdleClientBoot(ulong stepTicks, out ulong scriptTick) {
+        scriptTick = 0UL;
+        if (Boot is not { } boot) {
+            return false;
+        }
+        var rateHz = boot.Server.Configuration.SimulationRateHz;
+
+        if (
+            boot.IsPaused ||
+            !IsIdleClientBoot(boot: boot) ||
+            (rateHz <= 0) ||
+            (stepTicks != Puck.Maths.FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz)))
+        ) {
+            return false;
+        }
+        m_idleClientTicks++;
+        scriptTick = HostScriptTick(bootServer: boot.Server);
+        return true;
+    }
 
     // Whether this host's boot world is a non-listening client launchpad with no work of its own left: its boot party
     // was sent, nobody stands in it, no local seat presents it, and no transfer, forwarding route or custody holds it.
@@ -63,11 +107,27 @@ public sealed partial class WorldInstanceHost {
         return true;
     }
 
+    // Whether a boot-launchpad crossing is still queued or in flight, before commit or refusal has settled it.
+    private bool HasPendingBootJoin(WorldInstance boot) {
+        foreach (var pending in m_pendingTransfers) {
+            if (string.Equals(a: pending.SourceInstance, b: BootInstanceName, comparisonType: StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+        foreach (var inDoubt in m_inDoubtTransfers) {
+            if (string.Equals(a: inDoubt.Transfer.SourceInstance, b: BootInstanceName, comparisonType: StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+        return (HeldCrossingSeats(instance: boot).Count > 0);
+    }
+
     // Whether the boot world withholds opening screen sessions because it is a non-listening client launchpad whose
-    // seats either have not yet been dispatched on their boot join or have already crossed away. If a join refuses and
-    // leaves a seat standing in boot after m_remoteJoinPartySent, this turns false and boot opens its sessions normally.
+    // seats have not yet been dispatched on their boot join, are still crossing, or have already crossed away. If a join
+    // refuses and leaves a seat standing in boot after the crossing settles, this turns false and boot opens its sessions
+    // normally.
     internal bool SuppressesClientBootScreens(WorldInstance boot) =>
-        ((m_remoteJoin is not null) && !m_remoteJoinListens && (!m_remoteJoinPartySent || IsIdleClientBoot(boot: boot)));
+        ((m_remoteJoin is not null) && !m_remoteJoinListens && (!m_remoteJoinPartySent || HasPendingBootJoin(boot: boot) || IsIdleClientBoot(boot: boot)));
 
     // Lets the join send a seat again after its crossing came home because the authority no longer held the
     // reservation: the lease lapsed, which decided nothing about the seat. A reservation the authority refused is not
@@ -98,6 +158,9 @@ public sealed partial class WorldInstanceHost {
         m_remoteJoinListens = listens;
         Array.Clear(array: m_remoteJoinTried);
         m_remoteJoinPartySent = false;
+        if (Boot is { } boot) {
+            SettleScreenSessions(instance: boot, stepped: false);
+        }
     }
 
     // Reads the boot world's active local seats and their generations into the scan's arrays; returns how many.

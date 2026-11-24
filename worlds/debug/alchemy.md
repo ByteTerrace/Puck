@@ -81,9 +81,9 @@ enum order (`Air` = 1 .. `House` = 31), cell 37 is the left hand well, and cell
 34 is the right hand well (seated at the `-Z` edge, the seat's left is `+X`). Cell
 `(column, row)` is centred at `x = 64.51 + 0.14 × column`, `z = 30.32 + 0.14 × row`
 (so cell 37 is `(65.21, 9.905, 30.88)` and cell 34 is `(64.79, 9.905, 30.88)`). Element token
-`e` (`alchemyToken{e}`, `1..31`) is body `503 - e`, below `alchemyCursor` (body
-503), and seat 1 drives all 31 tokens, so posing a token over a hand well drops
-it in: `body.pose 65.21 9.97 30.88 0 0 0 500` drops `Fire` (`alchemyToken3`)
+`e` (`alchemyToken{e}`, `1..31`) is body `513 - e`, below `alchemyCursor` (body
+513), and seat 1 drives all 31 tokens, so posing a token over a hand well drops
+it in: `body.pose 65.21 9.97 30.88 0 0 0 510` drops `Fire` (`alchemyToken3`)
 into the left hand well.
 
 | To | Console line |

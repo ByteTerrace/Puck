@@ -66,12 +66,25 @@ public static class WorldKeyedValues {
     /// <returns>The bound values, including text-screen placeholders.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<WorldBoundValue> BoundOf(WorldDefinition definition) => AuthoredBy(definition: definition).Bound;
+    private sealed class HeldAuthoredValues {
+        public WorldAuthoredValues Values { get; init; }
+    }
+
+    private static readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, HeldAuthoredValues> AuthoredCache = new();
+
     /// <summary>Returns a document's keyed values (<see cref="Of"/>) and bound values (<see cref="BoundOf"/>) from one
-    /// walk of the document.</summary>
+    /// walk of the document, memoized for the immutable definition's lifetime.</summary>
     /// <param name="definition">The document.</param>
     /// <returns>Both lists, each in document order.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static WorldAuthoredValues AuthoredBy(WorldDefinition definition) => Read(definition);
+    public static WorldAuthoredValues AuthoredBy(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        return AuthoredCache.GetValue(
+            key: definition,
+            derive: static candidate => new HeldAuthoredValues { Values = Read(graph: candidate) }
+        ).Values;
+    }
 
     internal static WorldAuthoredValues Read(object graph) {
         var visitor = new Visitor();

@@ -502,6 +502,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
             if (clientSession is not null) {
                 connectionSubject = oracle.AuthorityIdentity;
             }
+            Console.Error.WriteLine(value: $"[world.federation: authority={oracle.AuthorityIdentity} domain={oracle.Domain} publicKey={Convert.ToBase64String(inArray: oracle.PublicKeySubjectPublicKeyInfo)}]");
             authenticator = new Puck.World.Protocol.WorldAttestedAuthenticator(
                 oracle: oracle,
                 // Read on network threads while a tick runs, so it reads the policy the last install published.
@@ -684,6 +685,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     ) {
         CaptureDirectory = parseResult.GetValue(option: captureDirOption),
         CaptureTool = captureTool,
+        ConnectEndpoint = connectTarget,
         ConnectionSubject = connectionSubject,
         Control = parseResult.GetValue(option: controlOption),
         PhysicalDevices = physicalDevices,
@@ -799,14 +801,6 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         return 1;
     }
     batchHost?.Initialize?.Invoke(host);
-    if (connectTarget is { } remoteEndpoint) {
-        // Every local seat crosses, the ones seated now as one party and each later one as it joins.
-        host.Services.GetRequiredService<WorldInstanceHost>().JoinRemote(
-            authority: remoteEndpoint,
-            documentPath: worldSource.SourcePath,
-            listens: (hostSettings.Listen is not null)
-        );
-    }
     // A rendering World compiles its own code in the background, so a first crossing or a first addon write runs compiled
     // code rather than stalling a frame on the JIT; a headless World has no frame to stall.
     if (hostSettings.Presentation != WorldHostPresentation.None) {
