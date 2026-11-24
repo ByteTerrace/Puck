@@ -861,8 +861,12 @@ public sealed partial class WorldBody {
     /// image; same clamps.</summary>
     /// <param name="intent">The producer's fixed-point movement and action image.</param>
     public void StageProducerIntent(in PlayerIntent intent) {
-        InputImagesEdit.Producer = Clamped(intent: in intent);
-        InputImagesEdit.HasProducer = true;
+        var staged = Clamped(intent: in intent);
+
+        if (!InputImages.HasProducer || (InputImages.Producer != staged)) {
+            InputImagesEdit.Producer = staged;
+            InputImagesEdit.HasProducer = true;
+        }
     }
     /// <summary>Clears every intent producer this body owns: drops the whole tape, the staged transient input images,
     /// every in-flight timed press (<c>body.press</c> hold), and any not-yet-materialized argument-less tap staged
