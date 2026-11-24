@@ -30477,6 +30477,14 @@
           },
           "default": null
         },
+        "portalLead": {
+          "description": "How early the world\u0027s portals warm the worlds behind them, in metres of walk, or null for DefaultPortalLead; PortalLead is what a reader resolves through. Finite and non-negative.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
         "nestingDepth": {
           "description": "Gets the authored limit on nested screens, or null for the default limit.",
           "type": [

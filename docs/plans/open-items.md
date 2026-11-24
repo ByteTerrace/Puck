@@ -4870,6 +4870,15 @@ their lane order; this packet keeps the single duplicates and leads.
   volume-domain budgets (`worlds/debug/navigation.puck` and the World Games navigation laws) against
   `FindRoute`'s horizontal heuristic before landing it.
 
+- Two memory-gated queues in the mesh bake, each holding work off the workers until the memory account has room:
+  `SdfMeshPathBake.ResumeParked` (`src/Puck.SdfVm/SdfMeshPathBake.Refusals.cs`: a refused copy into the library
+  parked per bake under its gate, its room reserved in play's allowance, any parked copy that fits starting in any
+  order) and `SdfMeshPathBake.Refinement.Start` (`src/Puck.SdfVm/SdfMeshPathBake.Refinements.cs`: refinements of every
+  bake in one queue, their peaks reserved in the group's authoring workspace, served head of line with one forced job
+  so the bake always progresses). They become one queue: one door that reserves an entry's bytes without waiting,
+  where each entry names its allowance (play or authoring) and its ordering (any, or head of line), so the account's
+  room is given out in one place and a parked copy cannot be starved behind refinements or overtake one unseen.
+
 - Two mirrors of the boot world's snapshot, both hub subscribers copying every
   entry per tick: `WorldClient` and the boot endpoint's `WorldSessionMirror`
   (`WorldAuthorityEndpoint`); and three per-sink redaction scratch buffers

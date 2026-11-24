@@ -148,6 +148,9 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"views.root '{root}' names no views.graphs row.");
         }
+        if ((views.PortalLeadRaw is { } lead) && !(float.IsFinite(f: lead) && (lead >= 0f))) {
+            errors.Add(item: $"views.portalLead {lead} must be a finite, non-negative number of metres.");
+        }
         if (views.BuiltinTransition is { } builtinTransition) {
             RequireViewTransition(
                 errors: errors,

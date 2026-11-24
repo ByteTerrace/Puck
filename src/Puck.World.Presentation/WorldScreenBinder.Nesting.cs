@@ -330,8 +330,14 @@ public sealed partial class WorldScreenBinder {
     /// <remarks>A session's screen stands in its parent's destination, a routed world's in that world, one a camera view
     /// of another world films in the world of the level that films it, and the boot world's in the world every other
     /// world view and every boot camera view renders.</remarks>
-    public WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass) {
+    public WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass) => ResolveGlass(consumer: consumer, glass: out glass, producer: producer, world: out _);
+    /// <inheritdoc/>
+    /// <remarks>Resolves the glass as <see cref="PortalGlass(string, string, out WorldScreen?)"/> does.</remarks>
+    public WorldPortalGlass PortalGlass(string consumer, string producer, out WorldScreen? glass, out WorldDefinition? world) => ResolveGlass(consumer: consumer, glass: out glass, producer: producer, world: out world);
+    // The one resolution of where a consumer's world shows a session's glass, and the definition of that world.
+    private WorldPortalGlass ResolveGlass(string consumer, string producer, out WorldScreen? glass, out WorldDefinition? world) {
         glass = null;
+        world = null;
 
         if (!m_feedsByName.TryGetValue(
             key: producer,
@@ -340,36 +346,38 @@ public sealed partial class WorldScreenBinder {
             return WorldPortalGlass.None;
         }
 
-        var (known, world) = PresentedLevelOf(view: consumer);
+        var (known, level) = PresentedLevelOf(view: consumer);
 
         if (!known && m_feedsByName.TryGetValue(
             key: consumer,
             value: out var parent
         )) {
-            (known, world) = (true, parent.Nested);
+            (known, level) = (true, parent.Nested);
         }
 
         if (!known && (NestedCameraLevel(name: consumer) is { } filmed)) {
-            (known, world) = (true, filmed);
+            (known, level) = (true, filmed);
         }
 
         // A consumer that is no level renders the boot world, when it is one of its views or a camera view of it.
         if (!known) {
-            return ((string.Equals(
+            if (!(string.Equals(
                 a: consumer,
                 b: WorldViewGraphs.WorldInstance,
                 comparisonType: StringComparison.Ordinal
-            ) || (WorldViewNames.ViewOf(instance: consumer) is not null) || m_cameraViews.ContainsKey(key: consumer))
-                ? BootGlass(
-                    glass: out glass,
-                    shown: shown
-                )
-                : WorldPortalGlass.None);
+            ) || (WorldViewNames.ViewOf(instance: consumer) is not null) || m_cameraViews.ContainsKey(key: consumer))) {
+                return WorldPortalGlass.None;
+            }
+            world = BootDefinition();
+            return BootGlass(
+                glass: out glass,
+                shown: shown
+            );
         }
 
         if (
-            (world is null) ||
-            !(world.Children.TryGetValue(
+            (level is null) ||
+            !(level.Children.TryGetValue(
                 key: shown.ScreenIndex,
                 value: out var child
             ) && ReferenceEquals(
@@ -380,7 +388,8 @@ public sealed partial class WorldScreenBinder {
             return WorldPortalGlass.Elsewhere;
         }
 
-        glass = world.RowOf(screen: shown.ScreenIndex);
+        glass = level.RowOf(screen: shown.ScreenIndex);
+        world = level.Definition;
 
         return ((glass is null)
             ? WorldPortalGlass.None
@@ -410,7 +419,9 @@ public sealed partial class WorldScreenBinder {
     public object? ArrivingWorld(string view, string consumer) {
         var residency = ResidencyOfFeed(view: view);
 
-        if ((residency is null) || !residency.MeshesArriving) { return null; }
+        // A world the sight let go of brings no meshes in: nobody sees or nears its glass, and keeping its window
+        // rendering would observe it every frame, so it would never park.
+        if ((residency is null) || !residency.MeshesFirstArriving || residency.SightLetGo) { return null; }
         // The consumer's own render brings the meshes of the world it renders.
         if ((ViewHost is { } host) && ReferenceEquals(objA: ResolveInstanceView(name: consumer, world: host)?.Residency, objB: residency)) { return null; }
 
@@ -419,8 +430,8 @@ public sealed partial class WorldScreenBinder {
     /// <inheritdoc/>
     /// <remarks>Reads the residency the session already renders, as <see cref="ArrivingWorld"/> does; the World's own
     /// residency is always wanted and is left as it is.</remarks>
-    public void Want(string view) {
-        if ((ResidencyOfFeed(view: view) is { } residency) && !ReferenceEquals(objA: residency, objB: ViewHost)) { residency.Want(); }
+    public void Want(string view, string consumer, string why, float metres) {
+        if ((ResidencyOfFeed(view: view) is { } residency) && !ReferenceEquals(objA: residency, objB: ViewHost)) { residency.Want(consumer: consumer, metres: metres, why: why); }
     }
     // The residency a session view renders: the World's own, its endpoint scene's or its own; null for a view no feed
     // names or one whose residency does not exist yet. Creates none.

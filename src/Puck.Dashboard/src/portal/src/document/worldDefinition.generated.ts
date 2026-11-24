@@ -15484,6 +15484,10 @@ export type WorldViewDefaults = {
    */
   framings?: (WorldSeatFraming | null)[] | null;
   /**
+   * How early the world's portals warm the worlds behind them, in metres of walk, or null for DefaultPortalLead; PortalLead is what a reader resolves through. Finite and non-negative.
+   */
+  portalLead?: number | null;
+  /**
    * Gets the authored limit on nested screens, or null for the default limit.
    */
   nestingDepth?: number | null;

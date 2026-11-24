@@ -249,6 +249,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// (<see cref="IsParked"/>) has nothing arriving until a reader wakes it. Read on the frame thread; never
     /// waits.</summary>
     public bool MeshesArriving => (!m_parked && (MeshPathBake.Pending || (m_tables?.MeshesArriving ?? false)));
+    /// <summary>Gets whether the residency's meshes are still making their arrival, which a window rendered out of sight
+    /// exists to bring: a group owes the frame its first mesh or an arrival's first detail over its floor
+    /// (<see cref="SdfMeshPathBake.OwedGroups"/>), or the latest staging held a draw out because its mesh had not landed
+    /// (<see cref="DrawsAwaitMeshes"/>). The bake's ordinary work in play (a tier the demand moved to, a resample) and
+    /// another residency's landing in the shared mesh region owe no arrival, so a world whose view renders only to bring its
+    /// meshes stops rendering once they have come, and can go unobserved and park. A parked residency has nothing arriving.
+    /// Read on the frame thread; never waits.</summary>
+    public bool MeshesFirstArriving => (!m_parked && ((MeshPathBake.OwedGroups > 0) || DrawsAwaitMeshes));
     /// <summary>Gets whether the residency owes work its preparation serves whether or not anything reads it this frame
     /// (its minimum): its meshes are arriving (<see cref="MeshesArriving"/>), whose bake plans and lands through a prepared
     /// frame, or its lighting is settling (<see cref="SdfMeshIrradiance.Settling"/>), whose trace a prepared frame stages,

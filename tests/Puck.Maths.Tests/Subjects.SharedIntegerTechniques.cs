@@ -47,6 +47,7 @@ internal static partial class Subjects {
 
     public static string? MultisetDigestBoundaries() {
         if (MultisetDigest.Empty.Value != 0UL) { return "the empty digest is not zero"; }
+        if (MultisetDigest.Empty.Add(element: 0UL) == MultisetDigest.Empty) { return "a multiset holding zero digests as the empty one"; }
         ulong[] elements = [0UL, 1UL, 1UL, ulong.MaxValue, 0x9E3779B97F4A7C15UL, 42UL];
         var forward = MultisetDigest.Empty;
         var backward = MultisetDigest.Empty;

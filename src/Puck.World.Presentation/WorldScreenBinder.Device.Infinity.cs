@@ -71,12 +71,41 @@ public sealed partial class WorldScreenBinder {
                     _ => false,
                 };
 
-                if (!alive) { m_deadInfinityConsumers.Add(item: name); }
+                if (!alive || (System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: consumer.FittedAt).TotalSeconds >= InfinityConsumerRetireSeconds)) {
+                    m_deadInfinityConsumers.Add(item: name);
+                }
             }
             foreach (var name in m_deadInfinityConsumers) { _ = root.Consumers.Remove(key: name); }
             PruneInfinityIndices(root: root);
         }
         RebuildInfinityOutputs();
+        ReleaseUnreadInfinityResidencies();
+    }
+
+    /// <summary>The seconds a consumer of a sky's infinity layers stands after its target last fitted them: a session,
+    /// routed world or layer that has not rendered its sky for this long no longer reads them, as long as a parked
+    /// residency keeps its lighting (<see cref="SdfWorldResidency.ForgetLightingSeconds"/>).</summary>
+    public const double InfinityConsumerRetireSeconds = SdfWorldResidency.ForgetLightingSeconds;
+
+    // Scratch for the entries the outputs name; the binder runs on the presentation thread alone.
+    private readonly HashSet<InfinityEntry> m_namedInfinityEntries = new(comparer: ReferenceEqualityComparer.Instance);
+
+    // Releases the residency of every layer no output names: one is made the first time its view is resolved
+    // (InfinityResidencyOf), and a layer whose consumers all retired has no view left to render, so its residency would
+    // otherwise stand for as long as the world whose sky lists it, one for every session that ever showed that sky. The
+    // entry stays planned, and makes a residency again when a consumer fits it and its view is next resolved.
+    private void ReleaseUnreadInfinityResidencies() {
+        m_namedInfinityEntries.Clear();
+        foreach (var output in m_infinityOutputs.Values) { _ = m_namedInfinityEntries.Add(item: output.Entry); }
+        foreach (var root in m_infinityRoots.Values) {
+            foreach (var entry in root.Entries.Values) {
+                if ((entry.Residency is not { } residency) || m_namedInfinityEntries.Contains(item: entry)) { continue; }
+                entry.Residency = null;
+                UnregisterViewWork(name: entry.Name);
+                residency.Dispose();
+                m_feedsMoved = true;
+            }
+        }
     }
     // Called for every root several times a frame, so the check that nothing it planned from moved runs apart from
     // the replan, whose closures would otherwise be allocated on every call.
@@ -340,6 +369,8 @@ public sealed partial class WorldScreenBinder {
 
         public uint Height { get; set; }
         public bool Seen { get; set; }
+        // When its target last fitted it (FitInfinity), on the stopwatch: a consumer is made at its first fit.
+        public long FittedAt { get; set; } = System.Diagnostics.Stopwatch.GetTimestamp();
         public QualityTier Tier { get; set; }
         public SdfViewSnapshot Viewer { get; set; }
         public uint Width { get; set; }

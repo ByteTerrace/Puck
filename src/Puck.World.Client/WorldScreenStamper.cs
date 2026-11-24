@@ -14,10 +14,7 @@ public static class WorldScreenStamper {
 
         var unitRight = Vector3.Normalize(value: screen.Right);
         var unitUp = Vector3.Normalize(value: screen.Up);
-        var normal = Vector3.Normalize(value: Vector3.Cross(
-            vector1: unitRight,
-            vector2: unitUp
-        ));
+        var normal = WorldPortalVisibility.FacingOf(glass: screen);
         var center = (screen.Origin - (normal * screen.HalfDepth));
         // Local X/Y/Z = Right/Up/normal, the same basis Text() builds, so the slab's
         // emitted geometry is rotated to match the UV frame ScreenSlab's world-orientation overload stores for it.

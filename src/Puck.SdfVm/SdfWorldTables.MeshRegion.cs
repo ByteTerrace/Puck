@@ -48,11 +48,13 @@ public sealed partial class SdfWorldTables {
     private SdfMeshClaims? m_meshClaims;
 
     /// <summary>Polls retired device objects on the frame thread, including for hidden residencies, and serves what the
-    /// presentation's mesh region owes outside a plan (<see cref="SdfMeshRegionStore.Service"/>).</summary>
+    /// presentation's mesh region owes outside a plan (<see cref="SdfMeshRegionStore.Service"/>), then brings the sets to
+    /// a region buffer another residency replaced, so a residency nothing prepares lets the old one go.</summary>
     internal void ServiceMemoryTrim() {
         ServiceRetirements();
         m_shadows?.Upkeep();
         m_meshStore.Service();
+        BindMeshStore();
     }
 
     /// <summary>Gets whether the latest staged draws name a mesh whose words the store still owes: the mesh lands through
@@ -140,14 +142,20 @@ public sealed partial class SdfWorldTables {
     internal void NoteStoreBuffer() => Interlocked.Increment(location: ref m_meshStoreBuffers);
     private long m_meshStoreBuffers;
     private long m_meshStoreBuffersBound;
+    /// <summary>Gets whether a set of these tables may still name a region buffer the store replaced: the store has
+    /// replaced it since the tables last moved their binding revision for it. The store holds a replaced buffer while any
+    /// residency answers true (<see cref="SdfMeshRegionStore"/>'s retirement), since a view recorded with such a set reads
+    /// the old buffer. Read by the store under its gate.</summary>
+    internal bool NamesReplacedStoreBuffer => (Interlocked.Read(location: ref m_meshStoreBuffers) != Volatile.Read(location: ref m_meshStoreBuffersBound));
 
-    // Brings the sets to the store's buffer where it was replaced since they were last written.
+    // Brings the sets to the store's buffer where it was replaced since they were last written. The revision moves before
+    // the bound count, so the store never finds these tables bound to the new buffer while their sets still stand.
     private void BindMeshStore() {
         var buffers = Interlocked.Read(location: ref m_meshStoreBuffers);
 
         if (buffers == m_meshStoreBuffersBound) { return; }
-        m_meshStoreBuffersBound = buffers;
         m_bindingRevision++;
+        Volatile.Write(location: ref m_meshStoreBuffersBound, value: buffers);
     }
     /// <summary>Adds to the words of the staged draws' meshes the store owes. Called by the store under its gate.</summary>
     /// <param name="delta">The words to add; negative as a mesh lands or a row stops naming it.</param>
@@ -441,7 +449,6 @@ public sealed partial class SdfWorldTables {
         var count = EnsureMeshDrawCapacity(count: draws.Count);
         lock (m_meshStore.Gate) {
             m_currentDrawRows = draws;
-            BindMeshStore();
             var whole = m_drawCursor.Collect(draws.Changes, draws.Serial, draws.Roster, draws.Count,
                 draws.Revision, m_owedDraws, force: !m_meshStaged);
 
@@ -475,6 +482,9 @@ public sealed partial class SdfWorldTables {
                 }
             }
             m_meshStore.Plan(planner: this);
+            // The plan may replace the region's buffer, and the records below are packed from its placements: the sets
+            // these records are read through bind the buffer the plan left, never the one before it.
+            BindMeshStore();
             m_owedDraws.Append(source: m_landedRows);
             var words = (count * SdfMeshRecord.DrawWords);
 

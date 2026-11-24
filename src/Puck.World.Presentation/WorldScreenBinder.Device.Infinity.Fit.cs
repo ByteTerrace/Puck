@@ -115,6 +115,7 @@ public sealed partial class WorldScreenBinder {
         }
         consumer.Target = target;
         consumer.Seen = true;
+        consumer.FittedAt = System.Diagnostics.Stopwatch.GetTimestamp();
         consumer.Viewer = views[index];
         consumer.Width = width;
         consumer.Height = height;
