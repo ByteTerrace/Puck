@@ -118,7 +118,7 @@ public sealed class SdfReactivityDeviceLawTests {
     private sealed class ProbeFactory(SdfWorldPasses inner) : IRenderGraphPackageFactory {
         public IGpuReadbackBuffer? Latest { get; set; }
 
-        public void BeginFrame(in FrameContext context) => inner.BeginFrame(context: in context);
+        public void BeginFrame(in FrameContext context, Puck.Hosting.Jobs.JobPool? jobs) => inner.BeginFrame(context: in context, jobs: jobs);
         public void PrepareRead(string instance, in FrameContext context) => inner.PrepareRead(context: in context, instance: instance);
         public void ReadsPrepared(in FrameContext context, Puck.Hosting.Jobs.JobPool? jobs) => inner.ReadsPrepared(context: in context, jobs: jobs);
         public IShaderPipelineStorageCounter? CounterOf(string instance) => inner.CounterOf(instance: instance);
