@@ -1321,6 +1321,49 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
         DisposeDrainedRetiring();
         ApplyWithdrawals();
         m_captureFootprints = frame.Footprints;
+
+        // The frame's submissions reach the queue together: every submission from the packages' upkeep on joins one batch,
+        // flushed once every render has recorded (IGpuQueueSubmitter.BeginBatch). Whatever must follow deferred work on the
+        // queue splits the batch (a fence wait, a raw queue operation), so opening it this early only gathers the upkeep's
+        // background jobs with the frame's uploads into one hand-over, ahead of the renders.
+        var queue = m_device.Services.QueueSubmitter;
+
+        queue.BeginBatch();
+        try {
+            ProduceFrameBatched(frame: in frame, context: in context, work: in work);
+        } finally {
+            work.Next(HostFrameWorkPart.Flush);
+            using (GpuQueueWork.Attribute(category: GpuQueueCategory.Graph)) { SettleHandOvers(queue: queue); }
+        }
+        Complete();
+        work.Next(HostFrameWorkPart.Pump);
+        if (m_frameLongestRecord >= 0) { RenderRecordWork.Process.Frame(longestRecordTicks: m_frameLongestRecord); }
+
+        // The image the display presents this frame, read back once every node has submitted.
+        ServePresented(presentation: frame.Index);
+
+        // Every reader has submitted before this point. Borrowed-buffer producers may now stand indefinitely;
+        // retire displaced package owners against this actual reader fence, without another producer submission.
+        var submitter = m_frameSubmitter;
+
+        foreach (var node in m_nodes) { node?.RetireAfterConsumers(submitter: submitter); }
+        ArmRetiring(submitter: submitter);
+        // The frame's recordings are all handed to the queue, so a checkpoint now follows every reader of what an owner
+        // retired to the device before it (a released residency's tables).
+        m_device.Services.Retirement.Poll(timeline: queue.Timeline);
+
+        return Shown(
+            image: RootImage(),
+            submitter: submitter
+        );
+    }
+    // The frame's longest record and its submitter, as the batched part of the frame left them.
+    private long m_frameLongestRecord;
+    private ShaderPipelineRenderNode? m_frameSubmitter;
+
+    // The part of a frame inside its submission batch: upkeep and capture, the readers, the pack, the schedule, the
+    // packages' shared work and every render.
+    private void ProduceFrameBatched(in RenderGraphFrame frame, in FrameContext context, in HostFrameWork.PartScope work) {
         // Upkeep and the host's capture, then the lists sealed after the cameras it places, then the frame's readers.
         PackagesBeginFrame(context: in context);
         PrepareReaders(context: in context, frame: in frame);
@@ -1406,19 +1449,17 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
             Schedule = schedule,
         };
 
-        // The frame's renders reach the queue together: every node's submission joins one batch, flushed once they have all
-        // recorded (IGpuQueueSubmitter.BeginBatch), so a frame costs the queue one call rather than one a node.
-        var queue = m_device.Services.QueueSubmitter;
         using var attribution = GpuQueueWork.Attribute(category: GpuQueueCategory.Graph);
 
         work.Next(HostFrameWorkPart.Prepare);
-        queue.BeginBatch();
-        try {
-            // The packages' shared frame work (an SDF residency's upload and pump) is done before any render records, so no
-            // node's recording pays for it; its submissions open the frame's batch, ahead of every render's.
-            PackagesPrepareRenders(context: in context, holdingConvergence: rendering.HoldingConvergence, renders: renders);
+        m_frameLongestRecord = -1L;
+        m_frameSubmitter = null;
+        // The packages' shared frame work (an SDF residency's upload and pump) is done before any render records, so no
+        // node's recording pays for it; its submissions reach the batch ahead of every render's.
+        PackagesPrepareRenders(context: in context, holdingConvergence: rendering.HoldingConvergence, renders: renders);
 
-            work.Next(HostFrameWorkPart.Record);
+        work.Next(HostFrameWorkPart.Record);
+        try {
             RenderWaves(context: in context, frame: in frame, rendering: ref rendering);
 
             ConvertForCapture(
@@ -1428,30 +1469,9 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
                 tick: frame.Tick
             );
         } finally {
-            work.Next(HostFrameWorkPart.Flush);
-            SettleHandOvers(queue: queue);
+            m_frameLongestRecord = rendering.LongestRecord;
+            m_frameSubmitter = rendering.Submitter;
         }
-        Complete();
-        work.Next(HostFrameWorkPart.Pump);
-        if (rendering.LongestRecord >= 0) { RenderRecordWork.Process.Frame(longestRecordTicks: rendering.LongestRecord); }
-
-        // The image the display presents this frame, read back once every node has submitted.
-        ServePresented(presentation: frame.Index);
-
-        // Every reader has submitted before this point. Borrowed-buffer producers may now stand indefinitely;
-        // retire displaced package owners against this actual reader fence, without another producer submission.
-        var submitter = rendering.Submitter;
-
-        foreach (var node in m_nodes) { node?.RetireAfterConsumers(submitter: submitter); }
-        ArmRetiring(submitter: submitter);
-        // The frame's recordings are all handed to the queue, so a checkpoint now follows every reader of what an owner
-        // retired to the device before it (a released residency's tables).
-        m_device.Services.Retirement.Poll(timeline: queue.Timeline);
-
-        return Shown(
-            image: RootImage(),
-            submitter: submitter
-        );
     }
     // The root's latest completed image: a graph root's output, resolved through what it stands for, or an external
     // root's latest output, whose acquisition is released at once, since the surface is valid only

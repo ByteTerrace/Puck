@@ -527,6 +527,12 @@ public static partial class WorldSchema {
             index: XmlDocIndex.Value,
             nested: null
         );
+
+        return (ExportIdentified(run: run, schemaId: SchemaId, title: "Puck world definition (puck.world.definition.v1)", type: typeof(WorldDefinition)), run);
+    }
+    // Exports a type's schema through the world schema's transform, identity first: $schema, $id and title, then the
+    // generated shape.
+    private static JsonObject ExportIdentified(Type type, string schemaId, string title, ExportRun run, JsonSerializerOptions? options = null) {
         var exporterOptions = new JsonSchemaExporterOptions {
             TransformSchemaNode = (context, node) => Transform(
             context: context,
@@ -534,9 +540,9 @@ public static partial class WorldSchema {
             run: run
         ),
         };
-        var schema = WorldJsonContext.Authored.Options.GetJsonSchemaAsNode(
+        var schema = (options ?? WorldJsonContext.Authored.Options).GetJsonSchemaAsNode(
             exporterOptions: exporterOptions,
-            type: typeof(WorldDefinition)
+            type: type
         );
         var root = schema.AsObject();
         var generated = root.ToList();
@@ -548,11 +554,11 @@ public static partial class WorldSchema {
         );
         root.Add(
             propertyName: "$id",
-            value: SchemaId
+            value: schemaId
         );
         root.Add(
             propertyName: "title",
-            value: "Puck world definition (puck.world.definition.v1)"
+            value: title
         );
 
         foreach (var (propertyName, value) in generated) {
@@ -562,7 +568,7 @@ public static partial class WorldSchema {
             );
         }
 
-        return (root, run);
+        return root;
     }
     // Turns the internal "$defs/Name" placeholder every hoist produces into its final, file-aware form: a bare
     // same-document pointer for a reference that itself lives inside common.schema.json, a relative cross-file
@@ -1936,9 +1942,22 @@ public static partial class WorldSchema {
             run: run
         );
 
-        // Fully expand every $ref the exporter itself emitted for a repeated (but non-recursive) type, so duplicate
-        // content the exporter caught and duplicate content it didn't (polymorphic union arms bypass its cache — see
-        // the class doc) are grouped alike, then hoist every repeated shape into common.schema.json.
+        var (reduced, common) = Hoist(
+            merged: merged,
+            run: run,
+            sameDocument: false
+        );
+
+        return Split(
+            reduced: reduced,
+            common: common
+        );
+    }
+    // Fully expands every $ref the exporter itself emitted for a repeated (but non-recursive) type, so duplicate
+    // content the exporter caught and duplicate content it didn't (polymorphic union arms bypass its cache — see the
+    // class doc) are grouped alike, then hoists every repeated shape into one def each. The reduced document references
+    // a def in common.schema.json, or in its own $defs when sameDocument is set.
+    private static (JsonObject Reduced, JsonObject Defs) Hoist(JsonObject merged, ExportRun run, bool sameDocument) {
         var hoist = new HoistPass(
             merged: merged,
             run: run
@@ -1954,9 +1973,8 @@ public static partial class WorldSchema {
             node: hoist.CommonDefs,
             targetDefNames: targetDefNames
         );
-
         FinalizeRefs(
-            insideCommon: false,
+            insideCommon: sameDocument,
             node: reduced
         );
         FinalizeRefs(
@@ -1964,74 +1982,44 @@ public static partial class WorldSchema {
             insideCommon: true
         );
 
-        return Split(
-            reduced: reduced,
-            common: hoist.CommonDefs
-        );
+        return (reduced, hoist.CommonDefs);
     }
 
     /// <summary>Exports the JSON Schema for <see cref="WorldProjectionDocument"/> as one document. Unsplit,
     /// deliberately: the projection has no top-level section a person opens on its own, so the split
-    /// <see cref="WorldDefinition"/> takes buys nothing here.</summary>
+    /// <see cref="WorldDefinition"/> takes buys nothing here. Its repeated shapes are hoisted as the definition's are,
+    /// into the document's own <c>$defs</c>, so a shape every scalar site shares is written once.</summary>
     /// <param name="postProcessPackages">The post-process packages the host offers, applied as in <see cref="Export"/>.</param>
     /// <returns>The generated schema root.</returns>
     public static JsonObject ExportProjection(IReadOnlyList<PostProcessPackageSchema> postProcessPackages) {
         ArgumentNullException.ThrowIfNull(postProcessPackages);
 
-        var nested = new NestedExports();
         var run = new ExportRun(
             index: XmlDocIndex.Value,
-            nested: nested
+            nested: null
         );
-        var exporterOptions = new JsonSchemaExporterOptions {
-            TransformSchemaNode = (context, node) => Transform(
-            context: context,
-            node: node,
-            run: run
-        ),
-        };
-        var schema = WorldJsonContext.Authored.Options.GetJsonSchemaAsNode(
-            exporterOptions: exporterOptions,
-            type: typeof(WorldProjectionDocument)
-        );
-        var root = schema.AsObject();
-        var generated = root.ToList();
+        var root = ExportIdentified(run: run, schemaId: ProjectionSchemaId, title: "Puck world projection (puck.world.projection.v1)", type: typeof(WorldProjectionDocument));
 
-        root.Clear();
-        root.Add(
-            propertyName: "$schema",
-            value: DraftUri
-        );
-        root.Add(
-            propertyName: "$id",
-            value: ProjectionSchemaId
-        );
-        root.Add(
-            propertyName: "title",
-            value: "Puck world projection (puck.world.projection.v1)"
-        );
-
-        foreach (var (propertyName, value) in generated) {
-            root.Add(
-                propertyName: propertyName,
-                value: value
-            );
-        }
-
-        RestoreSkippedPropertyAnnotations(
-            node: root,
-            run: run
-        );
+        ResolveTitleCollisions(typesByNode: run.TypesByNode);
+        ResolveDiscriminatorSplits(run: run);
         ApplyPostProcessPackages(
             packages: postProcessPackages,
             root: root
         );
-        ResolveNestedRefs(
-            nested: nested,
-            root: root
+        RestoreSkippedPropertyAnnotations(
+            node: root,
+            run: run
         );
 
-        return root;
+        var (reduced, defs) = Hoist(
+            merged: root,
+            run: run,
+            sameDocument: true
+        );
+
+        reduced["$defs"] = defs;
+
+        return reduced;
     }
     /// <summary>Exports the JSON Schema for <see cref="WorldCountersReport"/> as one document.</summary>
     /// <returns>The generated schema root.</returns>
@@ -2060,40 +2048,7 @@ public static partial class WorldSchema {
             index: (index ?? XmlDocIndex.Value),
             nested: nested
         );
-        var exporterOptions = new JsonSchemaExporterOptions {
-            TransformSchemaNode = (context, node) => Transform(
-            context: context,
-            node: node,
-            run: run
-        ),
-        };
-        var schema = (options ?? WorldJsonContext.Authored.Options).GetJsonSchemaAsNode(
-            exporterOptions: exporterOptions,
-            type: type
-        );
-        var root = schema.AsObject();
-        var generated = root.ToList();
-
-        root.Clear();
-        root.Add(
-            propertyName: "$schema",
-            value: DraftUri
-        );
-        root.Add(
-            propertyName: "$id",
-            value: schemaId
-        );
-        root.Add(
-            propertyName: "title",
-            value: title
-        );
-
-        foreach (var (propertyName, value) in generated) {
-            root.Add(
-                propertyName: propertyName,
-                value: value
-            );
-        }
+        var root = ExportIdentified(options: options, run: run, schemaId: schemaId, title: title, type: type);
 
         RestoreSkippedPropertyAnnotations(
             node: root,

@@ -277,14 +277,16 @@ public sealed partial class NavigationRuntime {
         return NavigationStatus.Unreachable;
     }
 
-    private int DomainOf(int node) {
-        var index = Array.BinarySearch(array: m_offsets, index: 0, length: m_domains.Length, value: node);
+    private int DomainOf(int node) => DomainOf(offsets: m_offsets, domains: m_domains.Length, node: node);
+    // The domain a runtime node lies in, by the first node of each of the first `domains` domains.
+    private static int DomainOf(int[] offsets, int domains, int node) {
+        var index = Array.BinarySearch(array: offsets, index: 0, length: domains, value: node);
 
         if (index < 0) {
             index = (~index - 1);
         }
         // Equal offsets name empty domains before a non-empty one; the node belongs to the last of them.
-        while (((index + 1) < m_domains.Length) && (m_offsets[(index + 1)] <= node)) {
+        while (((index + 1) < domains) && (offsets[(index + 1)] <= node)) {
             index++;
         }
 

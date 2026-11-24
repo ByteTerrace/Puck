@@ -28,6 +28,13 @@ public sealed class NavigationSearchWork : WorkLedger<ShardedWorkCounterSet> {
     /// <summary>Gets the kind counting goal fields derived: a goal read for the first time, again after the cache dropped
     /// it, or after a live medium it crosses changed.</summary>
     public static WorkKind FieldBuilds { get; } = new(name: "physics.navigation.field-builds", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting goal-field derivations requested ahead of their read, to run off the step
+    /// (<see cref="NavigationRuntime.RequestGoalField"/>).</summary>
+    public static WorkKind FieldRequests { get; } = new(name: "physics.navigation.field-requests", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting goal-field reads that waited for a derivation (<see cref="NavigationRuntime.GoalField"/>):
+    /// one requested ahead and still running, or none requested, which the read derived itself. Each is a step held by a
+    /// derivation.</summary>
+    public static WorkKind FieldWaits { get; } = new(name: "physics.navigation.field-waits", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the cells goal-field derivations settled.</summary>
     public static WorkKind FieldCells { get; } = new(name: "physics.navigation.field-cells", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the steps read from goal fields, one per <see cref="NavigationRuntime.GoalStep"/>.</summary>
@@ -41,7 +48,7 @@ public sealed class NavigationSearchWork : WorkLedger<ShardedWorkCounterSet> {
 
     /// <summary>Initializes a new instance of the <see cref="NavigationSearchWork"/> class, every kind at zero.</summary>
     public NavigationSearchWork() : base(counters: new(
-        kinds: [Searches, SearchExpansions, Routes, RouteExpansions, FieldBuilds, FieldCells, FieldSteps, FieldEvictions],
+        kinds: [Searches, SearchExpansions, Routes, RouteExpansions, FieldBuilds, FieldRequests, FieldWaits, FieldCells, FieldSteps, FieldEvictions],
         name: SourceName
     )) { }
 

@@ -237,7 +237,7 @@ contract says "An anchored light and the screens are no part of the sample"
 Partly true as stated. The root's image is read from its latest output, which a
 withdrawal clears,
 
-`src/Puck.Shaders/Graph/RenderGraphRuntime.cs:1459-1462`
+`src/Puck.Shaders/Graph/RenderGraphRuntime.cs:1479-1482`
 
 ```csharp
     private Surface RootImage() {

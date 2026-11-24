@@ -515,6 +515,11 @@ public sealed partial class WorldPopulation {
         public Puck.Physics.Navigation.NavigationGoalField? PreparedGoalField;
         // The cell the plan located the body on for that field's read.
         public (int Domain, int Cell) PreparedGoalFrom;
+        // The goal the plan located for that read, whose field it requested and resolves once every due body has asked
+        // (ResolveGoalFields), or none.
+        public (int Domain, int Cell, Puck.Physics.Navigation.NavigationCostProfile? Profile) PreparedGoal;
+        // The goal whose field the plan last requested ahead for a body not due to steer (PrefetchGoalField).
+        public FixedVector3? PrefetchedGoal;
         public required int Index { get; init; }
         public required WorldActionStateLane Lane { get; init; }
         // The occupant's implicit procedural rig, separate from its authority-local slot. Explicit authored looks can

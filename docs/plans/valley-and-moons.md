@@ -267,8 +267,9 @@ Left open, in the order they matter to the trip:
     two trips stepped every tick across both crossings. The headless stalls the
     route reported came from elsewhere: the run's first ticks after boot, and a
     city tick every few seconds while the city is resident in the debug world,
-    whose citizens' goal fields derive on the step thread (290 to 400 ms per
-    derivation in `NavigationRuntime.BuildGoalField`, from a sampled trace).
+    whose citizens' goal fields derived on the step thread (290 to 400 ms per
+    derivation, from a sampled trace); they now derive over a route graph and
+    ahead of their read ([frame production](frame-production.md), step 10).
 10. **A re-drive reads the neighbour as it stands.** The tape carries when a
     neighbour delivered, never what it showed (`WorldEventFeed`'s remarks), so
     a re-drive of a tick in which a body met a neighbour's bodies or ground
