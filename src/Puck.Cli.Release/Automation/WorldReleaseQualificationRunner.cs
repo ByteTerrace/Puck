@@ -522,29 +522,16 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
 
         // Compare two imports of the same state, not a capture with a fresh import: restoration deliberately
         // parks sessions and resolves host bookkeeping. Then make both packages import state actually written by B.
-        var a = await LegAsync(
-            forwardSeed,
-            "source-import",
-            aImage,
-            definition,
-            run,
-            cancellationToken,
-            bootstrap: (source is null)
+        // The two legs of each pair import the same seed into their own copies and containers, so they run side by side.
+        var forward = await Task.WhenAll(
+            LegAsync(forwardSeed, "source-import", aImage, definition, run, cancellationToken, bootstrap: (source is null)),
+            LegAsync(forwardSeed, "target-import", bImage, definition, run, cancellationToken, bootstrap: (source is null))
         ).ConfigureAwait(continueOnCapturedContext: false);
+        var (a, b) = (forward[0], forward[1]);
 
         if (a.Failure is { } sourceImportFailure) {
             return WorldReleaseQualificationResult.Failed(failure: sourceImportFailure);
         }
-        var b = await LegAsync(
-            forwardSeed,
-            "target-import",
-            bImage,
-            definition,
-            run,
-            cancellationToken,
-            bootstrap: (source is null)
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
         if (b.Failure is { } targetImportFailure) {
             return WorldReleaseQualificationResult.Failed(failure: targetImportFailure);
         }
@@ -572,27 +559,15 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
             ).ConfigureAwait(continueOnCapturedContext: false);
         }
         var reverseSeedHash = HashTree(directory: reverseSeed);
-        var reverse = await LegAsync(
-            reverseSeed,
-            "source-reverse-import",
-            aImage,
-            definition,
-            run,
-            cancellationToken
+        var backward = await Task.WhenAll(
+            LegAsync(reverseSeed, "source-reverse-import", aImage, definition, run, cancellationToken),
+            LegAsync(reverseSeed, "target-reverse-reference", bImage, definition, run, cancellationToken)
         ).ConfigureAwait(continueOnCapturedContext: false);
+        var (reverse, reference) = (backward[0], backward[1]);
 
         if (reverse.Failure is { } reverseFailure) {
             return WorldReleaseQualificationResult.Failed(failure: reverseFailure);
         }
-        var reference = await LegAsync(
-            reverseSeed,
-            "target-reverse-reference",
-            bImage,
-            definition,
-            run,
-            cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
         if (reference.Failure is { } referenceFailure) {
             return WorldReleaseQualificationResult.Failed(failure: referenceFailure);
         }

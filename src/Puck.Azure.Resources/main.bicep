@@ -405,6 +405,8 @@ param location string = resourceGroup().location
 param worldMcp worldMcpType?
 @description('Whether the world group\'s hosted data (its worlds\' authority roots, checkpoints and journals, and its release record) outlives a deployment. Scratch: each release deployment discards it and starts fresh. Durable: deployments carry it through the release transaction. Declared, never defaulted, because scratch deletes data.')
 param worldSiloHostedData ('durable' | 'scratch')
+@description('The identity of this deployment\'s inputs (the compiled template and every other parameter), derived by puck azure deploy-infrastructure and returned as an output, so a later deployment of identical inputs can reuse this one instead of applying again. Empty when deployed by hand.')
+param inputIdentity string = ''
 param tags tagsType = {}
 param website {
   officialContentBaseUrl: string
@@ -3377,6 +3379,7 @@ output worldSiloStorageEndpoint string = worldSilo.outputs.storageEndpoint
 output worldSiloConfiguration worldSiloConfigType = worldSilo.outputs.deploymentConfiguration
 output worldMcpConfiguration worldMcpConfigurationType? = worldMcp == null ? null : mcp!.outputs.worldMcpConfiguration
 output worldSiloHostedData string = worldSiloHostedData
+output deploymentInputIdentity string = inputIdentity
 output deploymentLocation string = location
 output deploymentLockKind string = lockKind
 output deploymentTags tagsType = tags
