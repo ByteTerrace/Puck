@@ -1079,9 +1079,9 @@ public static partial class WorldDefinitionValidator {
             name: rate.Clock,
             timeline: definition.Timeline
         ) &&
-            clock.IsStateClock
+            clock.IsSourceClock
         ) {
-            errors.Add(item: $"{path} is a rate the tick integrates and may key only on a tick clock; clock '{clock.Name}' reads state row '{clock.State}', whose history the integral would depend on.");
+            errors.Add(item: $"{path} is a rate the tick integrates and may key only on a tick clock; clock '{clock.Name}' reads {((clock.State is { } row) ? $"state row '{row}'" : "where the viewer stands")}, whose history the integral would depend on.");
         }
     }
     // Every value the atmosphere carries within its field's domain, and every colour in its grammar. The kinds are

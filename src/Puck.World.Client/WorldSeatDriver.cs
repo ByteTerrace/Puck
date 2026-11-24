@@ -83,6 +83,8 @@ public sealed class WorldSeatDriver {
     private int m_stuckPlans;
     // A crossing's phase and its distance walked; a press's tap.
     private bool m_pushing;
+    // The documentId of the world a flight started in.
+    private string? m_flownIn;
     private FixedQ4816? m_heading;
     private FixedQ4816 m_travelled;
     private FixedVector3 m_lastPosition;
@@ -247,6 +249,7 @@ public sealed class WorldSeatDriver {
         WorldRouteStep.Line line => $"line {line.Text}",
         WorldRouteStep.Go go => $"go {(go.Place ?? Vector(go.Point))}{((go.World is { } world) ? $" in {world}" : string.Empty)} pace {go.Pace}{(go.Direct ? " direct" : string.Empty)} within {Number(go.Within)}{((go.Corridor is { Count: > 0 } corridor) ? $" corridor {string.Join(separator: ',', values: corridor)}" : string.Empty)}",
         WorldRouteStep.Cross cross => $"cross {Number(cross.HeadingDegrees)}{(cross.Relative ? " relative" : string.Empty)}{((cross.Until is { } until) ? $" until {until}" : string.Empty)} pace {cross.Pace} metres {Number(cross.Metres)}",
+        WorldRouteStep.Fly fly => $"fly {Vector(fly.Point)}{((fly.World is { } world) ? $" in {world}" : string.Empty)}{((fly.Enters is { } enters) ? $" enters {enters}" : string.Empty)}{(fly.Lands ? " lands" : string.Empty)} pace {fly.Pace} within {Number(fly.Within)}",
         WorldRouteStep.Rest rest => $"rest {Number(rest.Seconds)}{((rest.FaceDegrees is { } face) ? $" face {Number(face)}" : string.Empty)}{((rest.LookAt is { } look) ? $" look {Vector(look)}" : string.Empty)}",
         WorldRouteStep.PressAction press => $"press {press.Action}{((press.Until is { } until) ? $" until {until}" : string.Empty)}{((press.World is { } world) ? $" in {world}" : string.Empty)} seconds {Number(press.Seconds)}",
         _ => "unknown",
@@ -265,6 +268,7 @@ public sealed class WorldSeatDriver {
                 WorldSeatProgramOp.Hold hold => $"hold {hold.Source} {string.Join(separator: ',', values: hold.Paces)}",
                 WorldSeatProgramOp.Pulse pulse => $"pulse {pulse.Source} {string.Join(separator: ',', values: pulse.Paces)} every {Number(pulse.PeriodSeconds)}",
                 WorldSeatProgramOp.Tap tap => $"tap {tap.Action} {tap.Source}",
+                WorldSeatProgramOp.Rise rise => $"rise {rise.Source} {rise.Toward} band {Number(rise.Band)} brake {Number(rise.Brake)}",
                 _ => "unknown",
             }).Append(value: '\n');
         }
@@ -274,7 +278,9 @@ public sealed class WorldSeatDriver {
 
     // What the step asks of the controls this tick: a direction to travel (none to stand), whether it ends at a point to
     // stop at and how far that is, the next corner's distance and turn, the facing to turn the camera onto, and the pace.
-    private readonly record struct Steer(bool Moves, FixedQ4816 Dx, FixedQ4816 Dz, FixedQ4816 Stop, FixedQ4816 CornerDistance, FixedQ4816 CornerTurn, bool Faces, FixedQ4816 Facing, string Pace);
+    // A flight adds how far the point stands along the body's own up (negative below it) and the body's delivered speed
+    // along it, which the rise controls read.
+    private readonly record struct Steer(bool Moves, FixedQ4816 Dx, FixedQ4816 Dz, FixedQ4816 Stop, FixedQ4816 CornerDistance, FixedQ4816 CornerTurn, bool Faces, FixedQ4816 Facing, string Pace, FixedQ4816 Rise = default, FixedQ4816 Climb = default);
 
     // Whether the seat stands in the world a step names by its documentId; a step that names none is played wherever
     // the seat stands.
@@ -312,6 +318,7 @@ public sealed class WorldSeatDriver {
         m_plannedIn = null;
         m_stuckPlans = 0;
         m_pushing = false;
+        m_flownIn = null;
         m_heading = null;
         m_travelled = FixedQ4816.Zero;
         m_tap = null;
@@ -397,10 +404,75 @@ public sealed class WorldSeatDriver {
                 return Cross(cross: cross, elapsed: elapsed, rateHz: rateHz, read: in read, still: still, tick: tick);
             case WorldRouteStep.Go go:
                 return Go(go: go, rateHz: rateHz, read: in read, still: still, tick: tick);
+            case WorldRouteStep.Fly fly:
+                return Fly(fly: fly, rateHz: rateHz, read: in read, still: still, tick: tick);
             default:
                 NextStep(tick: tick, rateHz: rateHz);
                 return still;
         }
+    }
+
+    private Steer Fly(WorldRouteStep.Fly fly, in WorldSeatSenses.Reading read, Steer still, ulong tick, int rateHz) {
+        var here = read.Endpoint.Definition.DocumentId;
+
+        // The world the step started in, by its documentId: the point is in its coordinates, and a seam on the way
+        // changes the world under the seat.
+        m_flownIn ??= here;
+        if (!string.Equals(a: here, b: m_flownIn, comparisonType: StringComparison.Ordinal)) {
+            if (string.Equals(a: here, b: fly.Enters, comparisonType: StringComparison.Ordinal)) {
+                NextStep(tick: tick, rateHz: rateHz);
+            } else {
+                Fail(kind: "route", place: read.Place, reason: $"step {m_step} ({Describe(step: fly)}) flew out of '{m_flownIn}' into '{here}' ({read.World})", tick: tick);
+            }
+            return still;
+        }
+        if (!Stands(world: fly.World, read: in read)) {
+            Fail(kind: "route", place: read.Place, reason: $"step {m_step} ({Describe(step: fly)}) is played in the world '{fly.World}', and the seat stands in '{here}' ({read.World})", tick: tick);
+            return still;
+        }
+
+        var offset = (Point(fly.Point) - read.Position);
+
+        if (fly.Lands) {
+            // A rider's own body stands on nothing; the body it rides is the one that lands.
+            var mirror = read.Endpoint.Mirror;
+            var craft = ((mirror.Mount(index: read.Index) is var ridden and >= 0) ? ridden : read.Index);
+
+            if (mirror.Facts(index: craft).HasFlag(flag: Puck.Physics.Motion.BodyFacts.Grounded)) {
+                NextStep(tick: tick, rateHz: rateHz);
+                return still;
+            }
+        } else if (offset.IsWithin(radius: FixedQ4816.FromDouble(value: fly.Within))) {
+            if (fly.Enters is null) {
+                NextStep(tick: tick, rateHz: rateHz);
+            } else {
+                Fail(kind: "route", place: read.Place, reason: $"step {m_step} ({Describe(step: fly)}) reached its point without arriving in '{fly.Enters}'", tick: tick);
+            }
+            return still;
+        }
+
+        // Over the ground toward the point, and the point's height along the body's own up: a craft's rise control
+        // works along the up it stands by, which a round world turns.
+        var bodyUp = System.Numerics.Vector3.Transform(value: System.Numerics.Vector3.UnitY, rotation: read.Body.Orientation);
+        var up = FixedVector3.FromVector3(value: bodyUp);
+        var rise = ((offset.X * up.X) + (offset.Y * up.Y) + (offset.Z * up.Z));
+        var planar = Planar(from: read.Position, to: Point(fly.Point));
+        var steers = (planar > FixedQ4816.FromDouble(value: (fly.Lands ? 0.5 : Math.Min(val1: 0.5, val2: fly.Within))));
+        var dx = (steers ? ((Point(fly.Point).X - read.Position.X) / planar) : FixedQ4816.Zero);
+        var dz = (steers ? ((Point(fly.Point).Z - read.Position.Z) / planar) : FixedQ4816.Zero);
+
+        return still with {
+            Moves = true,
+            Dx = dx,
+            Dz = dz,
+            Stop = offset.Length,
+            CornerDistance = FixedQ4816.MaxValue,
+            Faces = steers,
+            Facing = (steers ? Heading(dx: dx, dz: dz) : default),
+            Pace = fly.Pace,
+            Rise = rise,
+            Climb = FixedQ4816.FromDouble(value: System.Numerics.Vector3.Dot(vector1: read.Body.Velocity, vector2: bodyUp)),
+        };
     }
 
     private Steer Cross(WorldRouteStep.Cross cross, ulong elapsed, in WorldSeatSenses.Reading read, Steer still, ulong tick, int rateHz) {
@@ -687,6 +759,15 @@ public sealed class WorldSeatDriver {
             }
             case WorldSeatProgramOp.Tap tap:
                 return ((m_tap == tap.Action) ? "press" : "release");
+            case WorldSeatProgramOp.Rise rise: {
+                // The height left to the band's edge and the speed toward it, both along the button's own way; the
+                // button is held while a body let go now would still stop short of the edge.
+                var sign = ((rise.Toward == WorldSeatRiseDirection.Up) ? FixedQ4816.One : -FixedQ4816.One);
+                var left = ((steer.Rise * sign) - FixedQ4816.FromDouble(value: rise.Band));
+                var speed = (steer.Climb * sign);
+
+                return ((steer.Moves && (left > FixedQ4816.Zero) && ((speed <= FixedQ4816.Zero) || ((speed * speed) < ((FixedQ4816.FromInteger(value: 2) * FixedQ4816.FromDouble(value: rise.Brake)) * left)))) ? "press" : "release");
+            }
             default:
                 return string.Empty;
         }

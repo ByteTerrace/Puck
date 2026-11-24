@@ -56,6 +56,9 @@ public static partial class WorldDefinitionValidator {
                     case WorldSeatProgramOp.Pulse pulse when ((pulse.Paces is not { Count: > 0 }) || !(pulse.PeriodSeconds > 0f)):
                         errors.Add(item: $"{at} needs paces and periodSeconds above zero.");
                         break;
+                    case WorldSeatProgramOp.Rise rise when (!(rise.Band >= 0f) || !(rise.Brake > 0f) || (rise.Toward is not (WorldSeatRiseDirection.Up or WorldSeatRiseDirection.Down))):
+                        errors.Add(item: $"{at} needs band at least zero, brake above zero and toward Up or Down.");
+                        break;
                     case WorldSeatProgramOp.Tap press when string.IsNullOrWhiteSpace(value: press.Action):
                         errors.Add(item: $"{at}.action is required.");
                         break;
@@ -174,6 +177,19 @@ public static partial class WorldDefinitionValidator {
                             if ((cross.Until is not null) && string.IsNullOrWhiteSpace(value: cross.Until)) {
                                 errors.Add(item: $"{at}.until names no place.");
                             }
+                            break;
+                        case WorldRouteStep.Fly fly:
+                            if ((fly.Point is null) || !float.IsFinite(f: fly.Point.Value.LengthSquared())) {
+                                errors.Add(item: $"{at}.point must be a finite point.");
+                            }
+                            if (!(fly.Within > 0f)) {
+                                errors.Add(item: $"{at}.within must be above zero.");
+                            }
+                            if (fly.Lands && (fly.Enters is not null)) {
+                                errors.Add(item: $"{at} names at most one of lands and enters.");
+                            }
+                            World(world: fly.World);
+                            World(world: fly.Enters);
                             break;
                         case WorldRouteStep.Rest rest:
                             if (!(rest.Seconds > 0f)) {

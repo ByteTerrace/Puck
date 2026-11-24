@@ -21,11 +21,9 @@ let launchBodies = 1
 let launchShipBody = (galleryPopulation + 2 + boardRoomBodies + cardBodies + freeCameraBodies + 1)
 
 // The pad stands on the open floor north-east of the hall, toward the moon's bearing and far enough from the wall
-// under it that the moon shows over the rim, and the ship on it faces that way.
-let launchPad = [84, 86]
-let launchPadTop = 0.35
+// under it that the moon shows over the rim, and the ship on it faces that way (moon-frame.puck's `launchPad`,
+// `launchPadTop` and `launchHeading`, which the trip's route reads too).
 let launchPadRadius = 8
-let launchHeading = 220
 
 
 // Seat 1 may drive the ship.
@@ -49,6 +47,17 @@ adjacencies [
     }
   }
 ]
+
+// How high the viewer stands, as a clock every keyed look can read: zero on the valley floor, the end of its span at
+// the seam and beyond. The sky keys its air, clouds and stars on it (day.puck), so the climb to the seam fades the day
+// into the space the moon's world draws past it.
+exports {
+  reads [altitude]
+}
+
+timeline {
+  clocks [{ name: "altitude", view { to: skySeamAltitude, axis [0, 1, 0] } }]
+}
 
 spawnPoints [
   // Beside the pad, facing the ship with the moon over it.

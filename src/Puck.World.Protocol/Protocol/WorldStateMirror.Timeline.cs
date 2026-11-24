@@ -106,7 +106,7 @@ public sealed partial class WorldStateMirror {
             return WorldKeyResolver.TryPhase(clock: clock, phase: out phase, source: this);
         }
         if (preview.Held || (preview.Rate == 0d)) {
-            if (!clock.IsStateClock) { return TryPhaseAt(clock: clock, phase: out phase, tick: preview.Tick); }
+            if (!clock.IsSourceClock) { return TryPhaseAt(clock: clock, phase: out phase, tick: preview.Tick); }
             phase = preview.Phase;
             return preview.HasPhase;
         }
@@ -123,6 +123,8 @@ public sealed partial class WorldStateMirror {
             phase = (clock.Anchor?.PhaseAt(tick: tick) ?? 0d);
             return (clock.Anchor is not null);
         }
+        // A view clock has no tick to preview at: it reads the viewer wherever the preview stands.
+        if (clock.IsViewClock) { return TryClockPhase(clock: clock, phase: out phase); }
         var binding = WorldPresentationManifest.ClockBinding(clock: clock);
         var slot = SlotOf(binding: in binding, conversion: WorldStateConversion.Number);
 

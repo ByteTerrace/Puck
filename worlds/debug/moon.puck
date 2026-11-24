@@ -21,6 +21,7 @@ import "painting-kit"
 import "place-kit"
 import "moon-frame"
 import "moon-surface"
+import "../standard/skies"
 // A ship that crosses the sky seam is a ship here: the craft register and the selectors that read it.
 import "craft-form"
 
@@ -240,28 +241,59 @@ prototypes {
   }
 }
 
-// Vacuum: a hard sun over a black sky of stars, and no air between the eye and the far crater walls.
+// The day the two worlds share (moon-frame.puck): this world's own row of it, from the same start at the same rate.
+timeline {
+  clocks [{ name: day, state: day, spanSeconds: 24h }]
+}
+
+state {
+  world [
+    {
+      name: "day"
+      kind: "Fixed"
+      value: $"{sharedDayStart / 24}"
+      advance { perSecondNumerator: 1, perSecondDenominator: sharedDaySeconds }
+    }
+  ]
+}
+
+// Vacuum: a hard sun over a black sky of stars, and no air between the eye and the far crater walls. The sun is the
+// valley's, turning with the shared day at full strength all the way round, since no horizon of the valley's hides it
+// here: the ground under it has a day and a night, and the side the valley sees shows a phase.
 render {
   farDistance: 6500
   lighting {
     lights [
       directional(
         name: "key",
-        direction: moonSunDirection,
+        direction: sunDirection(sharedDayStart, sharedSunHeading, sharedNoonElevation),
         color: "#FFF4E2",
         illuminance: 100000lx,
         shadow: always,
         angularRadius: 0.0046
       )
     ]
+    clock: day
+    keys: map(range(0, 24), h => {
+      at: h * 3600
+      lights {
+        key: directional(direction: sunDirection(h, sharedSunHeading, sharedNoonElevation))
+      }
+    })
   }
   sky {
     layers [
-      gradient(name: "void", luminance: 1nit, stops: [
-        { elevation: -1, color: "#02030A" }
-        { elevation: 1, color: "#02030A" }
+      gradient(name: "void", luminance: spaceLuminance, stops: [
+        { elevation: -1, color: spaceColor }
+        { elevation: 1, color: spaceColor }
       ])
-      stars(name: "stars", luminance: moonStarLuminance, density: 90, brightness: 1.3, seed: 7)
+      stars(
+        name: "stars",
+        luminance: spaceStarLuminance,
+        density: spaceStarDensity,
+        brightness: spaceStarBrightness,
+        seed: spaceStarSeed
+      )
       sunDisc(name: "sun", light: 0, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
     ]
   }
