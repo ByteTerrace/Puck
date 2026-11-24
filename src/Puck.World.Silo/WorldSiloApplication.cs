@@ -150,6 +150,23 @@ public static class WorldSiloApplication {
 
             return 1;
         }
+        SiloTelemetry? telemetry = null;
+
+        // The sink is created here, before the host, so the narration writers below can reach it; the logging framework
+        // owns and disposes it as one of its providers.
+        if (definition!.Lifecycle?.Telemetry is { } telemetrySelection) {
+            try {
+                telemetry = new SiloTelemetry(
+                    clock: TimeProvider.System,
+                    sink: extensions.Select<WorldSiloTelemetryProvider>(key: telemetrySelection.Type, purpose: "Silo telemetry").Create(telemetrySelection.Settings)
+                );
+            } catch (Exception error) when ((error is PuckExtensionException or ArgumentException or IOException or UnauthorizedAccessException)) {
+                Console.Error.WriteLine(value: $"[silo] telemetry refused: {error.Message}");
+
+                return 1;
+            }
+            builder.Logging.AddProvider(provider: telemetry);
+        }
         builder.Services.AddSingleton<SiloConsoleTagging>();
         // Registered ahead of AddLauncherHeadlessTerminal's own TryAddSingleton<TextCommandSource> below, so this — every
         // line tagged '[silo] ' — is the one that wins; the desktop's own registration (untagged, tape-recording) is
@@ -227,8 +244,8 @@ public static class WorldSiloApplication {
         }
         // Every stdout/stderr line a silo run writes from here on carries a '[<row>] '/'[silo] ' prefix (SiloConsoleTagging
         // handles verb output directly; this writer catches engine narration written straight to Console.Out/Error).
-        Console.SetOut(newOut: new SiloNarrationWriter(inner: Console.Out));
-        Console.SetError(newError: new SiloNarrationWriter(inner: Console.Error));
+        Console.SetOut(newOut: new SiloNarrationWriter(forward: telemetry is null ? null : telemetry.Narrate, inner: Console.Out));
+        Console.SetError(newError: new SiloNarrationWriter(forward: telemetry is null ? null : telemetry.Narrate, inner: Console.Error));
         var host = builder.Build();
         // The silo's own boot-free WorldInstanceHost carries every row this silo ever admits, so one attach here reaches
         // its cross-row/host-level narration for the run's whole lifetime — each admitted row's own WorldServer.Output

@@ -156,6 +156,13 @@ public static class WorldSiloDefinitionValidator {
                 reason = "lifecycle.observer requires an extension type and object settings";
                 return false;
             }
+            if (
+                (lifecycle.Telemetry is { } telemetry) &&
+                (string.IsNullOrWhiteSpace(value: telemetry.Type) || (telemetry.Settings.ValueKind != JsonValueKind.Object))
+            ) {
+                reason = "lifecycle.telemetry requires an extension type and object settings";
+                return false;
+            }
         }
         var worldIds = new HashSet<string>(comparer: StringComparer.Ordinal);
         var keyFiles = new Dictionary<string, SafeName>(comparer: StringComparer.OrdinalIgnoreCase);
