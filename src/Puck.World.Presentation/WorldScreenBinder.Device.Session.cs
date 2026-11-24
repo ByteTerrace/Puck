@@ -102,21 +102,105 @@ public sealed partial class WorldScreenBinder {
         }
 
         GroupSharedScenes();
+        m_overlays.Clear();
+        m_overlaidMirrors.Clear();
         foreach (var feed in m_feeds) {
-            // Only the endpoint of the instance the session observes, and only on the authority's proof.
+            // Only the endpoint of the instance the session observes, and only on the authority's proof: a session
+            // handed the whole scene, or all of it but the placements its disclosure varies, which only the boot world's
+            // own residency can draw for its audience alone.
             var endpoint = feed.Observation?.Window;
-            var home = (
-                (endpoint is not null) &&
-                WorldDefinitionLoader.IsBootInstance(name: feed.InstanceName)
-            );
+            var boot = ((endpoint is not null) && WorldDefinitionLoader.IsBootInstance(name: feed.InstanceName));
+            var whole = (feed.Observation?.Proof is { SharesAuthority: true });
+            var audience = ((boot && !whole) ? OverlayAudienceOf(feed: feed, presenter: presenter) : (byte)0);
+            var home = (boot && (whole || (audience != 0)));
+            var joins = ((whole && !home) ? endpoint : null);
 
             feed.Home = home;
+            feed.Audience = audience;
             feed.Route.Settle(
-                endpoint: (home ? null : endpoint),
+                endpoint: joins,
                 presenter: presenter,
-                shared: ((endpoint is null) ? SharedSceneOf(feed: feed) : null)
+                shared: ((home || (joins is not null)) ? null : SharedSceneOf(feed: feed))
             );
         }
+        // An audience no feed shows any more is let go, and is handed to another viewer only once no copy carries it.
+        foreach (var mirror in m_audiences.Keys.Where(predicate: mirror => !m_overlaidMirrors.Contains(item: mirror)).ToArray()) { m_audiences.Remove(key: mirror); m_narratedOverlays.Remove(key: mirror); }
+        presenter.SetAudienceOverlays(overlays: m_overlays);
+    }
+    // The view audience each session mirror a home view draws for holds while a feed shows it, the overlays this frame
+    // hands the World's scene, and the mirrors they came from.
+    private readonly Dictionary<WorldSessionMirror, byte> m_audiences = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly List<WorldAudienceOverlay> m_overlays = [];
+    private readonly HashSet<WorldSessionMirror> m_overlaidMirrors = new(comparer: ReferenceEqualityComparer.Instance);
+    private byte m_nextAudience = 1;
+    // What the operator was last told of each overlay: the document counted, its varying placements, and whether any copy
+    // carries its audience.
+    private readonly Dictionary<WorldSessionMirror, (WorldDefinition? Delivered, int Count, bool Carried)> m_narratedOverlays = new(comparer: ReferenceEqualityComparer.Instance);
+    // The latest refusal of each document judged for overlays (WorldRigidAssets.AudienceRefusal), by instance, and the
+    // refusal last narrated.
+    private readonly Puck.Abstractions.CodeDerivedTable<WorldDefinition, AudienceVerdict> m_audienceRefusals = new();
+    private string? m_narratedAudienceRefusal;
+
+    // The audience a feed of the boot world, handed all of its scene but the placements its disclosure varies, draws the
+    // World's residency for: its mirror's, allocated round the audiences no other mirror holds and no copy still carries,
+    // or zero when the World's residency cannot draw its varying placements as copies for it alone (a varying row the
+    // catalog does not copy, in the World's document or the session's) or every audience is taken. The feed's overlay
+    // (its mirror's document) joins this frame's list.
+    private byte OverlayAudienceOf(SessionFeed feed, WorldFramePresenter presenter) {
+        var mirror = feed.Mirror;
+
+        if ((BootDefinition() is not { } host) || (mirror.Definition is not { } delivered)) { return 0; }
+        var refusal = (AudienceRefusalOf(rows: host, host: host) ?? AudienceRefusalOf(rows: delivered, host: host));
+
+        if (refusal is not null) {
+            if (!string.Equals(a: refusal, b: m_narratedAudienceRefusal, comparisonType: StringComparison.Ordinal)) {
+                m_narratedAudienceRefusal = refusal;
+                Console.Error.WriteLine(value: $"[world.screen: session {feed.ScreenIndex} draws its own scene: the World's residency cannot draw its disclosed placements for it alone ({refusal})]");
+            }
+            return 0;
+        }
+        if (!m_audiences.TryGetValue(key: mirror, value: out var audience)) {
+            audience = 0;
+            for (var tries = 0; (tries < SdfMeshAudience.MaxViewAudience); tries++) {
+                var candidate = m_nextAudience;
+
+                m_nextAudience = ((m_nextAudience >= SdfMeshAudience.MaxViewAudience) ? (byte)1 : (byte)(m_nextAudience + 1));
+                if (!m_audiences.ContainsValue(value: candidate) && !presenter.CarriesAudience(viewAudience: candidate)) { audience = candidate; break; }
+            }
+            if (audience == 0) { return 0; }
+            m_audiences[mirror] = audience;
+        }
+        var carried = presenter.CarriesAudience(viewAudience: audience);
+        if (!m_narratedOverlays.TryGetValue(key: mirror, value: out var narrated) || !ReferenceEquals(objA: narrated.Delivered, objB: delivered) || (narrated.Carried != carried)) {
+            var count = (ReferenceEquals(objA: narrated.Delivered, objB: delivered) ? narrated.Count : VaryingCount(rows: delivered, host: host));
+
+            m_narratedOverlays[mirror] = (delivered, count, carried);
+            if ((narrated.Delivered is null) || (narrated.Count != count) || (narrated.Carried != carried)) {
+                Console.Error.WriteLine(value: $"[world.screen: session {feed.ScreenIndex} draws the World's residency for audience {audience}, with the {count} placements its disclosure varies as its session is dealt them ({(carried ? "drawn" : "none drawn yet")})]");
+            }
+        }
+        if (m_overlaidMirrors.Add(item: mirror)) { m_overlays.Add(item: new WorldAudienceOverlay(Audience: audience, Definition: delivered)); }
+        return audience;
+    }
+    // A document's refusal for overlays, judged once a document instance and the World's document it copies from.
+    private string? AudienceRefusalOf(WorldDefinition rows, WorldDefinition host) {
+        return m_audienceRefusals.GetValue(
+            derive: static (rows, host) => new AudienceVerdict(Host: host, Refusal: WorldRigidAssets.AudienceRefusal(creations: host, riding: true, rows: rows)),
+            holds: static (verdict, _, host) => ReferenceEquals(objA: verdict.Host, objB: host),
+            key: rows,
+            state: host
+        ).Refusal;
+    }
+    private sealed record AudienceVerdict(WorldDefinition Host, string? Refusal);
+    // How many of a delivered document's placements the disclosure varies, for the operator's account of an overlay.
+    private static int VaryingCount(WorldDefinition rows, WorldDefinition host) {
+        var byId = WorldPlacementIndex.ById(placements: rows.Placements);
+        var count = 0;
+
+        foreach (var placement in rows.Placements) {
+            if (WorldPlacementAudiences.Varies(definition: host, placement: placement, placementsById: byId)) { count++; }
+        }
+        return count;
     }
     // The install side of a narrowing (ContentAccess). A session's own frame source and the residency that renders it
     // hold, and their background work (program builds, bakes, probe traces) was submitted over, content delivered under
@@ -151,6 +235,8 @@ public sealed partial class WorldScreenBinder {
                 Camera: camera,
                 Region: new NormalizedRect(Height: 1f, Width: 1f, X: 0f, Y: 0f)
             ) {
+                // The disclosure a home view draws the World's residency for; zero for every other feed.
+                Audience = feed.Audience,
                 Quality = (Settings?.NestedViewQuality(view: feed.RegistrationName) ?? default),
                 // A window shows the luminance beyond its glass, which the view looking through it exposes.
                 Unexposed = (feed.Projection == WorldScreenProjection.Window),

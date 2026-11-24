@@ -301,10 +301,14 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
         var standing = (m_prepared && revision.SequenceEqual(other: m_preparedRevision) && (m_preparedPresentation == m_continuum.PresentationRevision) && (m_preparedCode == Puck.Abstractions.CodeRevision.Current) && !m_census.TryTakeMove());
         var holdingMoved = (m_preparedHolding != m_client.HoldingRevision);
 
-        if (standing && !holdingMoved) { return; }
+        var overlaysMoved = (m_preparedOverlays != m_overlaysRevision);
+
+        if (standing && !holdingMoved && !overlaysMoved) { return; }
         revision.CopyTo(destination: m_preparedRevision);
         m_prepared = true;
         m_preparedHolding = m_client.HoldingRevision;
+        m_preparedOverlays = m_overlaysRevision;
+        standing &= !overlaysMoved;
         m_preparedPresentation = m_continuum.PresentationRevision;
         m_preparedCode = Puck.Abstractions.CodeRevision.Current;
         // A delivery that moved holdings alone, on rows the rigid catalog copies, moves those copies and nothing else.
@@ -314,6 +318,35 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     }
     // The holding revision the latest reconcile read (WorldClient.HoldingRevision).
     private int m_preparedHolding;
+    // The audience overlays the static copies place (SetAudienceOverlays), their revision, and the revision the latest
+    // reconcile read.
+    private WorldAudienceOverlay[] m_overlays = [];
+    private int m_overlaysRevision;
+    private int m_preparedOverlays;
+
+    /// <summary>Sets the audiences the world's own scene draws beside its own viewers (<see cref="WorldAudienceOverlay"/>):
+    /// the next frame's reconcile places each overlay's varying placements as copies drawn for its audience alone. A list
+    /// equal to the current one, audience by audience and document by instance, changes nothing.</summary>
+    /// <param name="overlays">The overlays, each audience once.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="overlays"/> is <see langword="null"/>.</exception>
+    public void SetAudienceOverlays(IReadOnlyList<WorldAudienceOverlay> overlays) {
+        ArgumentNullException.ThrowIfNull(argument: overlays);
+
+        if (overlays.Count == m_overlays.Length) {
+            var same = true;
+
+            for (var index = 0; (same && (index < overlays.Count)); index++) {
+                same = ((overlays[index].Audience == m_overlays[index].Audience) && ReferenceEquals(objA: overlays[index].Definition, objB: m_overlays[index].Definition));
+            }
+            if (same) { return; }
+        }
+        m_overlays = [.. overlays];
+        m_overlaysRevision++;
+    }
+    /// <summary>Gets whether a copy the scene placed is drawn for a view audience (<see cref="WorldRigidAssets.CarriesAudience"/>).</summary>
+    /// <param name="viewAudience">The view audience, one or more.</param>
+    /// <returns>Whether a copy carries it.</returns>
+    public bool CarriesAudience(byte viewAudience) => m_animator.Rigid.CarriesAudience(viewAudience: viewAudience);
 
     private void ReconcileStamps() {
         var definition = m_client.Definition;
@@ -325,7 +358,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
             }
         }
         m_catalog.ObserveArticulation(m_presentedStamps);
-        m_animator.Rigid.ReconcileStatic(definition, definition.Placements, riding: true);
+        m_animator.Rigid.ReconcileStatic(definition, definition.Placements, riding: true, overlays: m_overlays);
         m_animator.Reconcile(
             placementFrames: definition.PlacementFrames,
             looks: definition.Looks,

@@ -149,6 +149,8 @@ public sealed partial class WorldScreenBinder {
             );
 
             for (var index = first; (index < views.Count); index++) {
+                // A camera the session's level shows films the World's residency for the session's disclosure too.
+                views[index] = (views[index] with { Audience = feed.Audience });
                 m_hostLevels.Add(item: level);
             }
         }

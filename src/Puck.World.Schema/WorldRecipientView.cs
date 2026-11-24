@@ -70,6 +70,11 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     /// <summary>Gets the first row a scene reads that this view does not read whole, by name, or <see langword="null"/>
     /// when it reads every one whole: an operator's account of why a stream's scene differs from a whole reader's.</summary>
     public string? FirstSceneRowWithheld => Observes ? images.FirstSceneRowWithheld(this) : null;
+    /// <summary>Gets whether this view reads whole every row a scene reads by name (<see cref="WorldSceneInputs"/>), so
+    /// its scene differs from a whole reader's at most in the placements its disclosure varies
+    /// (<see cref="WorldPlacementAudiences.Varies"/>): the rows its placements alone read are the only ones it may be
+    /// withheld. <see langword="false"/> for a view that does not observe at <see cref="WorldDisclosureTier.Replica"/>.</summary>
+    public bool ReadsSceneInputsWhole => (Observes && (ceiling == WorldDisclosureTier.Replica)) && images.ReadsSceneInputsWhole(this);
     /// <summary>Admits a transient derived from a whole row under a stable audience.</summary>
     /// <param name="row">The row's catalog ordinal.</param>
     /// <returns><see langword="true"/> when the row is carried whole at this ceiling and no audience on its path

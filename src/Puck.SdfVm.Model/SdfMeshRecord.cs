@@ -54,6 +54,9 @@ public static class SdfMeshRecord {
     /// <summary>The selection flag for a box held in the draw's frame slot's frame: a draw riding its slot, whose world
     /// box every reader derives from the slot's row as its vertices are (<c>sdfSelectionBox</c>, <c>SdfMeshBox.Ridden</c>).</summary>
     public const uint SlotBoxFlag = 32u;
+    /// <summary>The bit of the selection flags word (<see cref="SelectionWord"/> + 3) the draw's audience tag starts at
+    /// (<see cref="SdfMeshAudience"/>, eight bits): the views that may select the draw.</summary>
+    public const int AudienceShift = 8;
     /// <summary>The first of two words: the absolute word of the mesh's shared level table, then its coarser level count.
     /// Each level, zero included, stores its first triangle, vertex count and error as three words.</summary>
     public const int LevelTableWord = 32;
