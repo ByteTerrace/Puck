@@ -465,7 +465,7 @@ public sealed class WorldSeatDriver {
             Moves = true,
             Dx = dx,
             Dz = dz,
-            Stop = offset.Length,
+            Stop = planar,
             CornerDistance = FixedQ4816.MaxValue,
             Faces = steers,
             Facing = (steers ? Heading(dx: dx, dz: dz) : default),
