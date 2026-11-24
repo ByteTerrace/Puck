@@ -420,11 +420,9 @@ public sealed partial class WorldInstanceHost {
                 path: documentPath,
                 resolved: out var expectedPath
             ) ||
-                !resolved.TryResolveCanonicalSourcePath(resolved: out var actualPath) ||
-                !string.Equals(
-                a: expectedPath,
-                b: actualPath,
-                comparisonType: PuckPaths.Comparison
+                !AnswersForDocument(
+                canonicalDocumentPath: expectedPath,
+                instance: resolved
             )
             ) {
                 reason = $"'{resolvedName}' is already running from '{resolved.SourcePath}', not the document this destination names ('{documentPath}') — a stable-named destination must resolve the same document everywhere it is authored";
@@ -543,11 +541,45 @@ public sealed partial class WorldInstanceHost {
             reason: out reason
         );
     }
+    private static bool AnswersForDocument(WorldInstance instance, string canonicalDocumentPath) {
+        if (!instance.TryResolveCanonicalSourcePath(resolved: out var actualPath)) {
+            return false;
+        }
+        if (string.Equals(
+            a: canonicalDocumentPath,
+            b: actualPath,
+            comparisonType: PuckPaths.Comparison
+        )) {
+            return true;
+        }
+        if (
+            !string.Equals(
+                a: WorldDocumentPaths.DirectoryOf(documentPath: canonicalDocumentPath),
+                b: WorldDocumentPaths.DirectoryOf(documentPath: actualPath),
+                comparisonType: PuckPaths.Comparison
+            ) ||
+            (instance.Server.Definition.DocumentId is not { Length: > 0 } documentId)
+        ) {
+            return false;
+        }
+
+        var carrier = Path.GetFileName(path: canonicalDocumentPath);
+
+        return (WorldDocumentName.IsSourceFile(path: carrier) || WorldDocumentName.IsDocumentFile(path: carrier)) &&
+            string.Equals(
+                a: WorldDocumentName.OfCarrierFile(path: carrier),
+                b: documentId,
+                comparisonType: StringComparison.Ordinal
+            );
+    }
+
     // The "return means home" origin scan: every running instance's own resolved document path against the
     // destination's, through the same WorldFileOrigin.TryResolveCanonicalPath probes ResolveByStableName's name-collision
-    // fence already uses, so a spelling difference alone never false-refuses or false-matches. Names order
-    // (ordinal) for determinism; a stopped instance is invisible by construction (removed from m_instances
-    // by TryRetire already). Two or more matches is reported ambiguous rather than adopting one arbitrarily.
+    // fence already uses, so a spelling difference alone never false-refuses or false-matches. When no running
+    // instance carries the exact canonical path, a staged delta in the same directory whose composed definition holds
+    // the target document's id (such as a benchmark pair's basis delta over the world's entry) answers for it. Names
+    // order (ordinal) for determinism; a stopped instance is invisible by construction (removed from m_instances by
+    // TryRetire already). Two or more matches is reported ambiguous rather than adopting one arbitrarily.
     private bool TryFindRunningInstanceByOrigin(string documentPath, out string matchedName, out IReadOnlyList<string>? ambiguous) {
         matchedName = string.Empty;
         ambiguous = null;
@@ -574,6 +606,16 @@ public sealed partial class WorldInstanceHost {
             }
 
             (matches ??= new List<string>()).Add(item: name);
+        }
+
+        if (matches is not { Count: > 0 }) {
+            foreach (var name in Names) {
+                if (!AnswersForDocument(canonicalDocumentPath: targetPath, instance: m_instances[name])) {
+                    continue;
+                }
+
+                (matches ??= new List<string>()).Add(item: name);
+            }
         }
 
         if (matches is not { Count: > 0 }) {
@@ -714,11 +756,9 @@ public sealed partial class WorldInstanceHost {
                 value: out var running
             ) &&
                 (running.Server.Definition.Host.Authority is not { Length: > 0 }) &&
-                running.TryResolveCanonicalSourcePath(resolved: out var runningPath) &&
-                string.Equals(
-                a: runningPath,
-                b: resolvedPath,
-                comparisonType: PuckPaths.Comparison
+                AnswersForDocument(
+                canonicalDocumentPath: resolvedPath,
+                instance: running
             )
             ) {
                 authority = LocalPeerCall(local: running);

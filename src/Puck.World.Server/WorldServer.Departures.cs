@@ -82,6 +82,9 @@ public sealed partial class WorldServer {
         )) {
             return null;
         }
+        if (peer is { } departedPeer) {
+            m_tick.ClearDepartedFederatedIntent(index: slot, principal: departedPeer.Identity);
+        }
 
         // Dissolving a departing member's rows is administration, symmetric with the admission mint and the rollback
         // re-grant: the rows may belong to a peer principal while the member travels under a different one.

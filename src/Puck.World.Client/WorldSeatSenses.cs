@@ -97,6 +97,7 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
     public bool TryRead(int slot, out Reading reading) {
         reading = default;
         if (!TryBody(body: out var body, route: out var route, slot: slot) ||
+            (!route.Endpoint.ClockOwnedHere && ReferenceEquals(objA: route.Endpoint.Definition, objB: WorldProjection.Undisclosed)) ||
             !client.TrySeatLook(slot: slot, yaw: out var yaw, yawPerTick: out var perTick)) {
             return false;
         }

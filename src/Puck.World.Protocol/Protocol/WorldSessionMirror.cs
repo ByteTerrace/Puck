@@ -390,6 +390,9 @@ public sealed class WorldSessionMirror : IClientSink {
     /// ended from an accepted cut, generation step, first bind or close until the mirror has dropped what it held, and
     /// after a close.</summary>
     public Puck.Abstractions.Presentation.DeliverySpan DeliverySpan => m_ingress.DeliverySpan;
+    /// <summary>Gets a value indicating whether an open spanned stream has delivered its current non-undisclosed
+    /// document to this mirror (as opposed to an unbound route seed or an opening cut).</summary>
+    public bool HasStreamDelivery => ((m_ingress.Span is { Stream: not 0UL, Closed: false }) && Document.Version.IsDelivered && !ReferenceEquals(objA: Document.Definition, objB: WorldProjection.Undisclosed));
     /// <summary>Gets the number of records the mirror's ingress dropped: a record of another stream, of an earlier
     /// generation, or not ahead of the last record it took.</summary>
     public long IngressRefusals => m_ingress.Refusals;

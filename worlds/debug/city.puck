@@ -394,14 +394,14 @@ placements {
     prototype: "place"
     position [0, 1.5, -50]
     region {
-      halfExtents [40, 3, 40]
+      halfExtents [46, 3, 50]
     }
   }
   placement "place-city-terraces" {
     prototype: "place"
-    position [-98, 1.5, -80]
+    position [-98, 1.5, -82.5]
     region {
-      halfExtents [52, 8, 120]
+      halfExtents [52, 8, 122.5]
     }
   }
   placement "place-city-works" {
@@ -413,9 +413,9 @@ placements {
   }
   placement "place-city-quay" {
     prototype: "place"
-    position [52, 1.5, -152]
+    position [52, 1.5, -152.5]
     region {
-      halfExtents [98, 8, 53]
+      halfExtents [98, 8, 52.5]
     }
   }
   placement "place-city-arrival" {

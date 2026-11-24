@@ -96,6 +96,7 @@ public sealed partial class WorldBenchmarkCommandModule {
 
         var endpoint = route.Endpoint;
         var delivered = endpoint.Mirror.TryReadBody(body: out var body, index: route.EntityIndex);
+        var ready = (delivered && (body.Generation == route.Entity.Generation) && (endpoint.ClockOwnedHere || (endpoint.Mirror.HasStreamDelivery && !ReferenceEquals(objA: endpoint.Definition, objB: WorldProjection.Undisclosed))));
 
         return new JsonObject {
             ["endpoint"] = endpoint.Identity,
@@ -104,8 +105,8 @@ public sealed partial class WorldBenchmarkCommandModule {
             ["seat"] = (slot + 1),
             ["body"] = route.EntityIndex,
             ["generation"] = route.Entity.Generation,
-            ["bodyDelivered"] = (delivered && (body.Generation == route.Entity.Generation)),
-            ["deliveredAtTick"] = (delivered ? body.Tick : null),
+            ["bodyDelivered"] = ready,
+            ["deliveredAtTick"] = (ready ? body.Tick : null),
         };
     }
 
