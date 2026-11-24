@@ -361,7 +361,7 @@ public sealed partial class RenderGraphRuntime {
         var factories = m_packages.Factories;
 
         for (var index = 0; (index < factories.Count); index++) {
-            factories[index].BeginFrame(context: in context);
+            factories[index].BeginFrame(context: in context, jobs: m_jobs);
         }
         RefreshPackageFragments();
     }

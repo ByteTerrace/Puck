@@ -419,7 +419,9 @@ public interface IRenderGraphPackageFactory {
     /// <summary>Starts a produced frame. The runtime calls it on the frame thread once a frame, before it asks any package
     /// whether an instance is unchanged and before any instance renders.</summary>
     /// <param name="context">The host's frame context of the frame being produced.</param>
-    void BeginFrame(in FrameContext context) { }
+    /// <param name="jobs">The pool the frame's forks run on, or <see langword="null"/> for a host with none, whose
+    /// factories do the work on the frame thread.</param>
+    void BeginFrame(in FrameContext context, Puck.Hosting.Jobs.JobPool? jobs) { }
     /// <summary>Prepares what an instance one of whose passes runs the factory's package reads this frame (an SDF view's
     /// captured frame, which <see cref="ReadsPrepared"/> packs), before the runtime asks whether the instance is
     /// unchanged and before the frame is scheduled. The runtime calls it on the frame thread once a frame for each instance something reads this frame (a
