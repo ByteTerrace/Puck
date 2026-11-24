@@ -63,8 +63,7 @@ one.
   shape change delivers the whole definition to every sink
   (`WorldDocument.DeliverPending`), and for every view that is not a replica
   the cursor serializes and hashes the whole document
-  (`WorldDeliveryCursor.DeliverDefinition`) and embeds audio inline
-  (`WorldAssetRowLoader.EmbedAudio`). The 2060's one reading, taken before
+  (`WorldDeliveryCursor.DeliverDefinition`). The 2060's one reading, taken before
   its device table applied, read `simulate` at p50 42 ms with single steps up
   to 3.4 s on a cold boot and p50 30 ms warm at the stage (two to three steps
   an iteration). What those steps spend their time on was not traced.

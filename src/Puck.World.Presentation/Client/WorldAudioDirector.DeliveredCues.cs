@@ -52,14 +52,19 @@ public sealed partial class WorldAudioDirector {
             var definition = mirror.Definition;
             if (!ReferenceEquals(definition, m_routedAudioDefinition)) {
                 m_routedAudioDefinition = definition;
+                // A routed world's rows are read by pin, so only the rows whose content this process holds are played.
                 ReconcileDefinition(definition with {
-                    PatchesRaw = [.. definition.Patches.Where(patch => WorldAssetRowLoader.IsEmbeddedAudio(patch.Source))],
-                    TunesRaw = [.. definition.Tunes.Where(tune => WorldAssetRowLoader.IsEmbeddedAudio(tune.Source))],
+                    PatchesRaw = [.. definition.Patches.Where(patch => Playable(definition, patch.Hash))],
+                    TunesRaw = [.. definition.Tunes.Where(tune => Playable(definition, tune.Hash))],
                 });
             }
             while (mirror.AudioCueFrames.TryTake(out var tick)) { PresentDeliveredCues(definition, tick); }
         }
     }
+
+    // Whether a row of a delivered world can be loaded: a document with a directory reads its own files, and one with
+    // none reads by pin.
+    private static bool Playable(WorldDefinition definition, string hash) => ((definition.DocumentDirectory is not null) || WorldAssetRowLoader.IsHeld(hash: hash));
 
     // A local delivery serves every seat, so a cue is heard only when the listener's seat may be told it; a routed or
     // remote delivery was already admitted for its one recipient. Every definition reaching here passed a validating
@@ -71,7 +76,7 @@ public sealed partial class WorldAudioDirector {
         }
 
         var score = definition.Music is { Count: > 0 } music &&
-            (m_routedAudio is null || WorldAssetRowLoader.IsEmbeddedAudio(music[0].Source)) ? music[0] : null;
+            (m_routedAudio is null || Playable(definition, music[0].Hash)) ? music[0] : null;
         if (!string.Equals(score?.Hash, m_deliveredScoreHash, StringComparison.Ordinal)) {
             m_deliveredScoreHash = score?.Hash;
             m_deliveredMusic = score is not null && WorldAssetRowLoader.TryLoadMusic(definition.DocumentDirectory, score, out var document, out _)

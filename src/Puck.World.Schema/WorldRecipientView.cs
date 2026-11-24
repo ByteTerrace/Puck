@@ -186,6 +186,12 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     /// <summary>The recipient's physical field regions.</summary>
     public IReadOnlyList<WorldFieldsSection> FieldRegions => Observes
         ? WorldStateDisclosure.FieldProjection(Source, Arena, recipient, Unrestricted) : [];
+    /// <summary>Returns the document this recipient is disclosed at the replica tier, as its delivery cursor delivers
+    /// it: the document a fetch by a member's digest, or by a pin the document names, is answered against. It changes
+    /// no delivery cursor.</summary>
+    /// <returns>The disclosed document, or <see langword="null"/> for a recipient that observes nothing or is
+    /// delivered below the replica tier.</returns>
+    public WorldDefinition? Replica() => ((Observes && (Ceiling == WorldDisclosureTier.Replica)) ? images.Definition(this) : null);
     /// <summary>A one-off presentation projection. It changes no delivery cursor.</summary>
     public WorldProjectionDocument? Project(WorldClockAnchorLedger? anchors = null, int sequence = 0, Puck.Assets.ContentAddressedStore? content = null) => !Observes ? null :
         WorldProjection.Compose(Source, WorldDisclosureTier.Presentation, authority, sequence, Arena, time(),

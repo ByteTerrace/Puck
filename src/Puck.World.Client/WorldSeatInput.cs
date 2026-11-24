@@ -102,6 +102,10 @@ public sealed class WorldSeatInput {
         }
     }
 
+    /// <summary>Gets whether the producer holds input it has not published: an event, a displacement or a return to
+    /// neutral a device made since the last batch. A seat of an authority in another process sends such input at once,
+    /// where it otherwise sends one batch for each tick that authority delivers.</summary>
+    public bool HoldsUnpublished => !m_producer.IsQuiescent;
     /// <summary>The authority-published mapping; it is never selected from presentation context.</summary>
     public WorldChannelTable Channels => m_producer.Mapping.Channels;
     /// <summary>Whether the authority has acknowledged this exact source registry.</summary>

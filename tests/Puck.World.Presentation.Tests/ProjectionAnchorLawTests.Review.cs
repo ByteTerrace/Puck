@@ -147,7 +147,6 @@ public sealed partial class ProjectionAnchorLawTests {
         var work = new WorldProjectionWork();
         using var attributed = WorldProjectionWork.Attribute(work: work);
         var sink = new WorldFederationProjectionSink(
-            authority: "boot",
             disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
             server: fixture.Server,
             tier: WorldDisclosureTier.Presentation
@@ -180,7 +179,6 @@ public sealed partial class ProjectionAnchorLawTests {
     public void A_sink_reads_its_live_view_rather_than_an_uninstalled_definition_argument() {
         using var fixture = Fixtures.FreshServer(definition: Document(row: Row(raw: 0L)));
         var sink = new WorldFederationProjectionSink(
-            authority: "boot",
             disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
             server: fixture.Server,
             tier: WorldDisclosureTier.Presentation
@@ -522,7 +520,6 @@ public sealed partial class ProjectionAnchorLawTests {
         var keyframe = harness.History.KeyframeTicks[0];
         var joined = server.Time.EngineTick;
         var sink = new WorldFederationProjectionSink(
-            authority: "boot",
             disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 1f)),
             server: server,
             tier: WorldDisclosureTier.Presentation

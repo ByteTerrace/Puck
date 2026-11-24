@@ -55,6 +55,22 @@ public sealed class WorldProjectionWork : WorkLedger<WorkCounterSet> {
     public static WorkKind PrototypeFetches { get; } = Registry.Declare(name: "world.projection.prototype-fetches", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the canonical prototype body bytes delivered by fetches.</summary>
     public static WorkKind PrototypeBytes { get; } = Registry.Declare(name: "world.projection.prototype-bytes", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting replica documents sent as manifests (<see cref="WorldDocumentManifest"/>).</summary>
+    public static WorkKind Manifests { get; } = Registry.Declare(name: "world.projection.manifests", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the bytes of every manifest sent, the members it carries inline included.</summary>
+    public static WorkKind ManifestBytes { get; } = Registry.Declare(name: "world.projection.manifest-bytes", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the member bytes manifests carried inline: what disclosure and the running world
+    /// changed from the sender's source, which no recipient's package holds.</summary>
+    public static WorkKind ManifestInlineBytes { get; } = Registry.Declare(name: "world.projection.manifest-inline-bytes", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the members a recipient, assembling a manifest, already held under the digest
+    /// the manifest names.</summary>
+    public static WorkKind ManifestMembersHeld { get; } = Registry.Declare(name: "world.projection.manifest-members-held", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the members a recipient read inline from a manifest.</summary>
+    public static WorkKind ManifestMembersInline { get; } = Registry.Declare(name: "world.projection.manifest-members-inline", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the members a recipient read from its store or fetched by digest.</summary>
+    public static WorkKind ManifestMembersFetched { get; } = Registry.Declare(name: "world.projection.manifest-members-fetched", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the bytes of the members <see cref="ManifestMembersFetched"/> counts.</summary>
+    public static WorkKind ManifestFetchedBytes { get; } = Registry.Declare(name: "world.projection.manifest-fetched-bytes", unit: "bytes", workClass: WorkClass.Pacing);
 
     /// <summary>Gets the ledger's kinds, in the order a report lists them.</summary>
     public static ReadOnlySpan<WorkKind> Kinds => Registry.Kinds;

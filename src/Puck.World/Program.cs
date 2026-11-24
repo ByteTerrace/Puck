@@ -495,7 +495,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
                     subject: federationSubject,
                     validity: Puck.World.Protocol.WorldAttestedAuthenticator.MaximumClaimAge
                 ),
-                trustEntries: () => (admissionServer?.Definition ?? worldSource.Definition).Admission
+                // Read on network threads while a tick runs, so it reads the policy the last install published.
+                trustEntries: () => ((admissionServer is { } trusted) ? trusted.AdmissionPolicy : worldSource.Definition.Admission)
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or ArgumentException)) {
             Console.Error.WriteLine(value: $"--federation-key-file could not be read: {exception.Message}");

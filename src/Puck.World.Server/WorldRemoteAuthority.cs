@@ -372,9 +372,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         var answer = await target.AnswerAsync(credential.SourceAuthority, WorldFederationRequest.Route,
             WorldFederationCodec.EncodeRouteCredential(credential.SourceAuthority, in mobility)).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
         if (answer.Kind != WorldFederationResponse.Route) { return (null, answer.Describe()); }
-        var traveler = new WorldTravelerObservation(credential.SourceAuthority, mobility);
-        return WorldFederationCodec.TryDecodeRoute(answer.Body.Span, out var route, out var failure,
-            pin => target.FetchPrototype(pin, traveler), target.FetchedContent) ? (route, string.Empty) : (null, failure.ToString());
+        return WorldFederationCodec.TryDecodeRoute(answer.Body.Span, target.Definition, out var route, out var failure) ? (route, string.Empty) : (null, failure.ToString());
     }
 
     public bool TryForwardIntent(int bodyIndex, in IntentSubmission submission, out string reason) {
@@ -680,7 +678,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         // generation of this one, starts from a whole projection again.
         byte[]? Fetch(ContentPin pin) => upstream.FetchPrototype(pin: pin, traveler: ((m_submissionCredential is { } credential)
             ? new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility) : null));
-        var hold = new WorldProjectionHold(content: upstream.FetchedContent, fetch: Fetch);
+        var hold = new WorldProjectionHold(basis: () => Definition, content: upstream.FetchedContent, fetch: Fetch);
         WorldDefinition? replica = null;
         WorldDocumentVersion replicaVersion = default;
         // The session's one door: every record it reads, a route included, passes this ingress on its stamp before
@@ -732,10 +730,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         !Admits(record: frame.Body.Span, stamp: out _, body: out var routeBody, failure: out _) ||
                         !WorldFederationCodec.TryDecodeRoute(
                         routeBody,
+                        Definition,
                         out var route,
-                        out _,
-                        fetch: Fetch,
-                        content: upstream.FetchedContent
+                        out _
                     )
                     ) {
                         return false;
@@ -749,7 +746,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         }
                         // The ended span's projection goes with it: the generation the cut opens starts from its whole
                         // projection, which nothing of the ended span can complete.
-                        hold = new WorldProjectionHold(content: upstream.FetchedContent, fetch: Fetch);
+                        hold = new WorldProjectionHold(basis: () => Definition, content: upstream.FetchedContent, fetch: Fetch);
                         bodies = new WorldSnapshotReceiver();
                         replica = null;
                         replicaVersion = default;
@@ -983,10 +980,6 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 changed &&
                 (m_submissionCredential is { } credential)
             ) { ResendLastIntent(credential: in credential); }
-            Volatile.Write(
-                location: ref m_definition,
-                value: route.Definition
-            );
             Volatile.Write(
                 location: ref m_authority,
                 value: route.Entity.Authority
@@ -1278,8 +1271,6 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
 
         if (
             !WorldFederationCodec.TryDecodeReservationReply(
-            content: FetchedContent,
-            fetch: pin => FetchPrototype(pin: pin, traveler: null),
             body: answer.Body.Span,
             reply: out var decoded,
             failure: out var failure

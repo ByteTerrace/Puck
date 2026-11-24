@@ -311,78 +311,70 @@ public static partial class WorldDefinitionValidator {
             Violations: [.. violations]
         );
     }
-    /// <summary>Validates the audio rows a delivered document carries before anything plays them: every patch, tune and
-    /// score must carry its canonical content inline, and that content must load, pass its family's validation (a
-    /// score's cross-references and when tokens included) and match its pin. The audio rows of a document received from
-    /// another process are untrusted, so a recipient hydrates them only through this door.</summary>
+    /// <summary>Validates the audio rows a delivered document carries before anything plays them. A delivered row is
+    /// its pin: content this process holds under the pin must load, pass its family's validation (a score's
+    /// cross-references and when tokens included) and canonicalize to the pin. Content it does not hold is not a
+    /// refusal, since a missing sound must not refuse a world: the row's reader finds nothing under the pin and says
+    /// so. The audio rows of a document received from another process are untrusted, so a recipient hydrates them only
+    /// through this door.</summary>
     /// <param name="definition">The delivered document.</param>
     /// <param name="reason">The refusal naming the first bad row, or empty when every row is valid.</param>
-    /// <returns><see langword="true"/> when every audio row is valid.</returns>
+    /// <returns><see langword="true"/> when every audio row this process holds is valid.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
     public static bool TryValidateDeliveredAudio(WorldDefinition definition, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        var tuneIds = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var patchIds = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var errors = new List<string>();
 
-        foreach (var tune in definition.Tunes) {
-            if (!DeliveredAsset(tune, WorldAssetRowLoader.AudioFamily.Tune, "tunes", static row => row.Name, static row => row.Source, static row => row.Hash,
-                row => CheckTune(documentDirectory: null, tune: row), out reason)) { return false; }
-            _ = tuneIds.Add(item: tune.Name);
-        }
-        foreach (var patch in definition.Patches) {
-            if (!DeliveredAsset(patch, WorldAssetRowLoader.AudioFamily.Patch, "patches", static row => row.Name, static row => row.Source, static row => row.Hash,
-                row => CheckPatch(documentDirectory: null, patch: row), out reason)) { return false; }
-            _ = patchIds.Add(item: patch.Name);
-        }
-        foreach (var score in (definition.Music ?? [])) {
-            if (!DeliveredAsset(score, WorldAssetRowLoader.AudioFamily.Music, "music", static row => row.Name, static row => row.Source, static row => row.Hash,
-                row => CheckMusic(documentDirectory: null, patchIds: patchIds, row: row, tuneIds: tuneIds), out reason)) { return false; }
-        }
-        reason = string.Empty;
+        ValidateAudioRows(definition: definition, delivered: true, errors: errors, patchIds: out _, tuneIds: out _);
+        reason = ((errors.Count == 0) ? string.Empty : errors[0]);
 
-        return true;
+        return (errors.Count == 0);
     }
-    // One delivered audio row: inline content that this process already validated for its pin passes; anything else is
-    // loaded and checked as the authoring validator checks it, then remembered by pin.
-    private static bool DeliveredAsset<TRow>(TRow? row, WorldAssetRowLoader.AudioFamily family, string section, Func<TRow, string> name, Func<TRow, string> source, Func<TRow, string> hash, Func<TRow, AssetCheck?> check, out string reason) where TRow : class {
-        if (row is null) {
-            reason = $"{section} carries an empty row.";
+    // The audio asset rows: tunes and patches first, since a score names both. In a delivered document a row is read by
+    // its pin (WorldAssetRowLoader), and one whose content this process does not hold passes unchecked.
+    private static void ValidateAudioRows(WorldDefinition definition, bool delivered, List<string> errors, out HashSet<string> tuneIds, out HashSet<string> patchIds) {
+        var directory = (delivered ? null : definition.DocumentDirectory);
+        var tunes = ValidateAssets(
+            rows: definition.Tunes,
+            section: "tunes",
+            id: static tune => tune.Name,
+            hash: static tune => tune.Hash,
+            check: Held<WorldTune>(delivered: delivered, hash: static tune => tune.Hash, check: tune => CheckTune(documentDirectory: directory, tune: tune)),
+            errors: errors
+        );
+        var patches = ValidateAssets(
+            rows: definition.Patches,
+            section: "patches",
+            id: static patch => patch.Name,
+            hash: static patch => patch.Hash,
+            check: Held<WorldPatch>(delivered: delivered, hash: static patch => patch.Hash, check: patch => CheckPatch(documentDirectory: directory, patch: patch)),
+            errors: errors
+        );
 
-            return false;
-        }
-
-        var rowName = name(row);
-        var rowSource = source(row);
-        var rowHash = hash(row);
-
-        if (!WorldAssetRowLoader.IsEmbeddedAudio(source: rowSource)) {
-            reason = $"{section}['{rowName}'] does not carry its content inline; a delivered audio row never names a path.";
-
-            return false;
-        }
-        if (!WorldAssetRowLoader.IsKnownEmbedding(family: family, hash: rowHash, source: rowSource)) {
-            if (check(row) is not { } result) {
-                reason = $"{section}['{rowName}'] carries no document.";
-
-                return false;
-            }
-            if (result.Violations.Length > 0) {
-                reason = $"{section}['{rowName}'].{result.Violations[0].Path}: {result.Violations[0].Message}";
-
-                return false;
-            }
-            if (!string.Equals(a: result.CanonicalHash, b: rowHash, comparisonType: StringComparison.Ordinal)) {
-                reason = $"{section}['{rowName}'] content does not match its pin '{rowHash}'.";
-
-                return false;
-            }
-            WorldAssetRowLoader.RememberEmbedding(family: family, hash: rowHash, source: rowSource);
-        }
-        reason = string.Empty;
-
-        return true;
+        patchIds = patches;
+        tuneIds = tunes;
+        // Music validates right beside tunes/patches: the same asset-row shape, optional (null = none).
+        _ = ValidateOptionalAssets(
+            rows: definition.Music,
+            section: "music",
+            id: static row => row.Name,
+            hash: static row => row.Hash,
+            check: Held<WorldMusicRow>(delivered: delivered, hash: static row => row.Hash, check: row => CheckMusic(
+                documentDirectory: directory,
+                patchIds: patches,
+                row: row,
+                tuneIds: tunes
+            )),
+            errors: errors
+        );
     }
+    // In a delivered document, a row whose pinned content this process does not hold answers as its own pin with no
+    // violation; every other row is checked.
+    private static Func<T, AssetCheck?> Held<T>(bool delivered, Func<T, string> hash, Func<T, AssetCheck?> check) =>
+        (delivered
+            ? row => (WorldAssetRowLoader.IsHeld(hash: hash(row)) ? check(row) : new AssetCheck(CanonicalHash: hash(row), Violations: []))
+            : check);
     private static AssetCheck? CheckTune(string? documentDirectory, WorldTune tune) => CheckCanonicalAsset<WorldTune, AudioDocument>(
         documentDirectory: documentDirectory,
         canonicalize: AudioCanonicalizer.Canonicalize,
@@ -881,7 +873,7 @@ public static partial class WorldDefinitionValidator {
     // overload needs (BrowserErrorPaths, the ratchet test) without a second walk of the whole document. deferredSink
     // carries ValidateAdmission's platform-deferred notices (see TrustListEntry.ValidateShape/ValidateKeyMaterial) —
     // never populated when throwOnErrors is true, since none of those callers read it.
-    private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation, bool throwOnErrors, ICollection<string>? errorSink, ICollection<string>? deferredSink, IMachineValidationCatalog? machines = null, bool proveCensusOutcomes = true) {
+    private static WorldRuleCompilation? ValidateCore(WorldDefinition definition, IWorldNeighbourResolver? neighbours, bool validateAdjacencyClaims, bool retainCompilation, bool throwOnErrors, ICollection<string>? errorSink, ICollection<string>? deferredSink, IMachineValidationCatalog? machines = null, bool proveCensusOutcomes = true, bool delivered = false) {
         ArgumentNullException.ThrowIfNull(definition);
 
         var run = new WorldValidationRun {
@@ -889,6 +881,7 @@ public static partial class WorldDefinitionValidator {
             Deferred = deferredSink,
             Machines = machines,
             Neighbours = neighbours,
+            Delivered = delivered,
             ProveCensusOutcomes = proveCensusOutcomes,
             RetainCompilation = retainCompilation,
             ValidateAdjacencyClaims = validateAdjacencyClaims,
@@ -1073,47 +1066,19 @@ public static partial class WorldDefinitionValidator {
 
         // The audio asset sections come FIRST among the row sets: emission facets on scene rows/placements and the
         // speaker rows below all resolve against the tune/patch id sets.
-        var tuneIds = ValidateAssets(
-            rows: definition.Tunes,
-            section: "tunes",
-            id: static tune => tune.Name,
-            hash: static tune => tune.Hash,
-            check: tune => CheckTune(documentDirectory: definition.DocumentDirectory, tune: tune),
-            errors: errors
-        );
-        var patchIds = ValidateAssets(
-            rows: definition.Patches,
-            section: "patches",
-            id: static patch => patch.Name,
-            hash: static patch => patch.Hash,
-            check: patch => CheckPatch(documentDirectory: definition.DocumentDirectory, patch: patch),
-            errors: errors
-        );
+        ValidateAudioRows(definition: definition, delivered: run.Delivered, errors: errors, patchIds: out var patchIds, tuneIds: out var tuneIds);
 
-        // Music validates right beside tunes/patches — the same asset-row shape, optional (null = none) rather
-        // than required, since a required section would refuse every world checked in before this arc.
-        _ = ValidateOptionalAssets(
-            rows: definition.Music,
-            section: "music",
-            id: static row => row.Name,
-            hash: static row => row.Hash,
-            check: row => CheckMusic(
-                documentDirectory: definition.DocumentDirectory,
-                patchIds: patchIds,
-                row: row,
-                tuneIds: tuneIds
-            ),
-            errors: errors
-        );
-
-        _ = ValidateOptionalAssets(
-            rows: definition.Tables,
-            section: "tables",
-            id: static row => row.Name,
-            hash: static row => row.Hash,
-            check: row => CheckTable(documentDirectory: definition.DocumentDirectory, row: row),
-            errors: errors
-        );
+        // Only rules read a table, and a recipient compiles no rules of a document it was delivered.
+        if (!run.Delivered) {
+            _ = ValidateOptionalAssets(
+                rows: definition.Tables,
+                section: "tables",
+                id: static row => row.Name,
+                hash: static row => row.Hash,
+                check: row => CheckTable(documentDirectory: definition.DocumentDirectory, row: row),
+                errors: errors
+            );
+        }
 
         // The one-live-score ceiling: WorldServer's constructor reads only music[0], so a second authored row would
         // validate cleanly and boot silently truncated.
@@ -1315,6 +1280,7 @@ public static partial class WorldDefinitionValidator {
             stateRows: stateRows
         );
         ValidateIdentityVoiceProfile(
+            delivered: run.Delivered,
             identity: definition.Identity,
             patchIds: patchIds,
             errors: errors,
@@ -1337,19 +1303,21 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
         WorldFactsCompileContext? ruleContext = null;
-        var compiledRules = ValidateRules(
+        // A recipient runs no rule of a world it presents, and a disclosed document may carry a rule beside a cell
+        // its recipient is not sent, so a delivered document's rules, groups and interactions are not compiled.
+        var compiledRules = (run.Delivered ? [] : ValidateRules(
             rules: definition.Rules,
             definition: definition,
             errors: errors,
             context: ref ruleContext
-        );
+        ));
 
-        var compiledGroups = ValidateRuleGroups(
+        var compiledGroups = (run.Delivered ? [] : ValidateRuleGroups(
             context: ref ruleContext,
             definition: definition,
             errors: errors,
             rules: compiledRules
-        );
+        ));
 
         ValidateCellSets(
             definition: definition,
@@ -1364,12 +1332,12 @@ public static partial class WorldDefinitionValidator {
             stateRows: stateRows,
             errors: errors
         );
-        var compiledInteractions = ValidateInteractions(
+        var compiledInteractions = (run.Delivered ? [] : ValidateInteractions(
             interactions: definition.Interactions,
             definition: definition,
             errors: errors,
             context: ref ruleContext
-        );
+        ));
         (WorldRuleWorkBudget Budget, IReadOnlyList<Puck.State.Rules.RuleWorkContributor> Contributors)? work = null;
 
         if (errors.Count == 0) {
@@ -1415,8 +1383,10 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"state: visibility and retained keys bring the arena to {((arenaLayout.Bytes + visibilityBytes) + definition.StateCatalog.Keys.Bytes)} bytes, past the {ArenaCapacity.MaxBytes}-byte ceiling.");
             }
         }
+        // A search is the authority's work over cells its recipient may not be sent, as its rules are.
         if (
             (errors.Count == 0) &&
+            !run.Delivered &&
             (work is { } admitted)
         ) {
             ValidateSearch(
@@ -2059,11 +2029,32 @@ public static partial class WorldDefinitionValidator {
         return valid;
     }
 
-    private static bool TryValidateLocallyCore(WorldDefinition definition, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation) {
+    /// <summary>Validates a document another process delivered, as what its recipient presents. It runs the checks
+    /// of <see cref="TryValidateLocally(WorldDefinition, out string)"/> with three differences. Content the document
+    /// names by pin is checked when this process holds it, and is otherwise left for its reader to report. No file
+    /// the document names is opened, since a path from another process is a label. Its rules, rule groups, interactions
+    /// and tables are not compiled, since a recipient runs no rule of a world it presents and a disclosed document may
+    /// carry a rule beside a cell its recipient was not sent.</summary>
+    /// <param name="definition">The delivered document, which has no directory.</param>
+    /// <param name="reason">The failure reason, or empty on success.</param>
+    /// <returns>Whether the document is one this process may present.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="definition"/> has a directory, so it was not
+    /// delivered.</exception>
+    public static bool TryValidateDelivered(WorldDefinition definition, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+        if (definition.DocumentDirectory is not null) {
+            throw new ArgumentException(message: "A delivered document has no directory.", paramName: nameof(definition));
+        }
+
+        return TryValidateLocallyCore(definition, out reason, out _, retainCompilation: false, delivered: true);
+    }
+    private static bool TryValidateLocallyCore(WorldDefinition definition, out string reason, out WorldRuleCompilation? compilation, bool retainCompilation, bool delivered = false) {
         compilation = null;
         try {
             compilation = ValidateCore(
                 definition: definition,
+                delivered: delivered,
                 neighbours: null,
                 retainCompilation: retainCompilation,
                 validateAdjacencyClaims: false

@@ -1406,9 +1406,13 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             )) {
                 continue;
             }
+            // One batch for each tick the authority delivered, so a stalled stream does not queue copies of a held
+            // input. An authority in another process delivers less often than the host steps, so a seat whose devices
+            // moved since its last batch sends at once: the movement would otherwise wait for the next delivery.
             if (
                 (m_lastSubmissionEpoch[slot] == route.Epoch) &&
-                (m_lastSubmissionTick[slot] >= tick)
+                (m_lastSubmissionTick[slot] >= tick) &&
+                (endpoint.ClockOwnedHere || (seat.Input is not { Admitted: true, HoldsUnpublished: true }))
             ) {
                 continue;
             }

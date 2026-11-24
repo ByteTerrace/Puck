@@ -20,7 +20,7 @@ public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output
                     new StateCell(CellName.Parse("secret"), CellValue.Int(7), Visibility: new StateVisibility(Readers: ["seat1"]))]);
             using var fixture = Fixtures.FreshServer(Fixtures.BuildDocument() with { StateRaw = new WorldStateSection(World: [row]) });
             var current = true;
-            var sink = new WorldFederationProjectionSink(tier, fixture.Server.AuthorityIdentity,
+            var sink = new WorldFederationProjectionSink(tier,
                 () => new WorldSinkDisclosure(new WorldObserverDisclosure(UpdateSeconds: 0f), -1),
                 server: fixture.Server, recipient: Principal.Peer(4, 1), isCurrent: () => current);
             using var attached = fixture.Server.AttachSink(sink);
@@ -65,7 +65,6 @@ public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output
     public void AChangedAuthorityRouteDetachesWithoutWaitingForTheWire() {
         var current = true;
         var sink = new WorldFederationProjectionSink(
-            authority: "authority/one",
             disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
             isCurrent: () => current,
             tier: WorldDisclosureTier.Replica
@@ -87,7 +86,6 @@ public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output
     [Fact]
     public void ABackpressureDetachIsNarratedAsADetachNotAFault() {
         var sink = new WorldFederationProjectionSink(
-            authority: "authority/one",
             disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
             tier: WorldDisclosureTier.Replica
         );
@@ -155,7 +153,6 @@ public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output
             Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)
         );
         var sink = new WorldFederationProjectionSink(
-            authority: "authority/one",
             disclosure: () => disclosure,
             tier: WorldDisclosureTier.Replica
         );
@@ -256,7 +253,7 @@ public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output
         rows[1] = rows[1] with { State = state };
 
         for (var i = 0; i < Sessions; i++) {
-            var sink = new WorldFederationProjectionSink(WorldDisclosureTier.Replica, "interest", () => policy);
+            var sink = new WorldFederationProjectionSink(WorldDisclosureTier.Replica, () => policy);
             leases[i] = hub.Subscribe(sink);
             receivers[i] = new();
             wires[i] = new();

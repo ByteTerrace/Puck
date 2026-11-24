@@ -135,6 +135,7 @@ public static partial class WorldDefinitionValidator {
                 definition: run.Definition,
                 errors: run.Errors,
                 hud: run.Definition.Hud,
+                delivered: run.Delivered,
                 isIdentityScope: (run.Definition.Identity is not null),
                 stateRows: DeclaredStateRows(definition: run.Definition)
             )
@@ -262,16 +263,19 @@ public static partial class WorldDefinitionValidator {
     /// <param name="neighbours">The resolver a proof of an adjacency claim reads, or <see langword="null"/> when none
     /// is reachable, which refuses an authored claim the proof reaches.</param>
     /// <param name="machines">The machine catalog, or <see langword="null"/> to defer provider checks.</param>
+    /// <param name="delivered">Whether <paramref name="after"/> came from another process, so the units the change
+    /// reaches are judged as a delivery (<see cref="TryValidateDelivered"/>).</param>
     /// <returns><see langword="true"/> when every unit the change reaches is valid.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="before"/> or <paramref name="after"/> is
     /// <see langword="null"/>.</exception>
     public static bool TryValidateChange(WorldDefinition before, WorldDefinition after, out string reason, out WorldRuleCompilation? compilation,
-        bool retainCompilation = false, bool proveNeighbours = false, IWorldNeighbourResolver? neighbours = null, IMachineValidationCatalog? machines = null) {
+        bool retainCompilation = false, bool proveNeighbours = false, IWorldNeighbourResolver? neighbours = null, IMachineValidationCatalog? machines = null, bool delivered = false) {
         ArgumentNullException.ThrowIfNull(argument: before);
         ArgumentNullException.ThrowIfNull(argument: after);
 
         var run = new WorldValidationRun {
             Definition = after,
+            Delivered = delivered,
             Machines = machines,
             Neighbours = neighbours,
             RetainCompilation = retainCompilation,

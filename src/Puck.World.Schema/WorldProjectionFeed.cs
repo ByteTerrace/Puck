@@ -379,8 +379,27 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
 /// delivery replaces and a delta merges into, and the definition hydrated from it.</summary>
 /// <param name="content">The recipient content cache, or the shared store.</param>
 /// <param name="fetch">The authorized fetch door for objects absent from the cache.</param>
-public sealed class WorldProjectionHold(ContentAddressedStore? content = null, Func<ContentPin, byte[]?>? fetch = null) {
+/// <param name="basis">Reads the document the recipient holds for the sender's world, which a replica's manifest is
+/// assembled over: its own copy of the world, then each document the stream delivered; <see langword="null"/> assembles
+/// every manifest whole.</param>
+public sealed class WorldProjectionHold(ContentAddressedStore? content = null, Func<ContentPin, byte[]?>? fetch = null, Func<WorldDefinition?>? basis = null) {
     private JsonObject? m_tree;
+
+    /// <summary>Assembles the document a replica's manifest names over the document the recipient holds
+    /// (<see cref="WorldDocumentManifest.TryAssemble"/>).</summary>
+    /// <param name="manifest">The manifest's bytes.</param>
+    /// <param name="definition">The assembled, validated document on success.</param>
+    /// <param name="reason">The named refusal, or empty on success.</param>
+    /// <returns><see langword="true"/> when the manifest assembled into a document this process may present.</returns>
+    public bool TryHoldReplica(ReadOnlySpan<byte> manifest, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out string reason) =>
+        WorldDocumentManifest.TryAssemble(
+            basis: basis?.Invoke(),
+            definition: out definition,
+            held: assembled => WorldContentIndex.Fetch(definition: assembled, fetch: fetch, held: content),
+            manifest: manifest,
+            reason: out reason,
+            resolve: WorldDocumentManifest.Resolve(content: content, fetch: fetch)
+        );
 
     /// <summary>Gets the definition hydrated from the projection held, or <see langword="null"/> before the first
     /// whole projection.</summary>

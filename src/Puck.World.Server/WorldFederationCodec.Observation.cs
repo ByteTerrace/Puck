@@ -102,7 +102,20 @@ public static class WorldProjectionPrototypeFetch {
             }
             try {
                 var store = (content ?? WorldProjectionContent.Shared);
-                var projection = server.DeliveryView(recipient, ceiling).Project(content: store)!;
+                var view = server.DeliveryView(recipient, ceiling);
+
+                // A replica's recipient is delivered the document itself, as a manifest: it may fetch a member of the
+                // document it is disclosed now, by the member's digest, or content that document names by pin.
+                if (view.Replica() is { } disclosed) {
+                    if (WorldDocumentManifest.TryMember(definition: disclosed, pin: pin, value: out var member)) {
+                        return member.ToArray();
+                    }
+                    if (WorldContentIndex.Names(definition: disclosed, maximumBytes: out var pinnedBytes, pin: pin) &&
+                        WorldProjectionContent.Resolver.TryRead(content: out var pinned, maximumBytes: pinnedBytes, pin: pin)) {
+                        return pinned.ToArray();
+                    }
+                }
+                var projection = view.Project(content: store)!;
 
                 if (projection.Creations.Any(predicate: reference => (reference.Content == pin.ToString()))) {
                     return (store.TryGet(content: out var body, pin: pin) ? body : null);

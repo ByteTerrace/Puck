@@ -229,6 +229,11 @@ public sealed partial class WorldBenchmarkCommandModule {
             ["durationTicks"] = chapter.Duration,
             ["status"] = ((chapter.EndIndex >= 0) ? "ended" : ((chapter.BeginIndex >= 0) ? "unfinished" : "unreached")),
             ["arrival"] = ((chapter.EndIndex < 0) ? "unmeasured" : (chapter.Driven ? (chapter.Arrived ? "arrived" : "failed") : (!read ? "unmeasured" : ((failed.Count > 0) ? "off course" : "arrived")))),
+            ["seats"] = ((chapter.Seats.Count == 0) ? null : new JsonArray([.. chapter.Seats.Select(selector: static seat => (JsonNode)new JsonObject {
+                ["seat"] = (seat.Seat + 1),
+                ["arrival"] = (seat.Arrived ? "arrived" : "failed"),
+                ["failure"] = seat.Failure,
+            })])),
             ["arrivalFailed"] = Strings(values: failed),
             ["arrivalUnjudged"] = Strings(values: unjudged),
             ["pose"] = chapter.EndPose?.Answer,

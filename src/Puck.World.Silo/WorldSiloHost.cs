@@ -1346,7 +1346,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
 
             if (!TryBuildFederationIdentity(
                 definition: definition,
-                trustEntries: () => server.Definition.Admission,
+                trustEntries: () => server.AdmissionPolicy,
                 federation: out var federation,
                 reason: out var federationReason,
                 worldRow: worldRow

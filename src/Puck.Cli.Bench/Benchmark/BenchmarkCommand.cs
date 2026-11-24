@@ -40,7 +40,7 @@ public static partial class BenchmarkCommand {
     private const string PlayingPrefix = "[world.benchmark: playing";
     // What world.benchmark answers for a route the running document does not author, and for a seat count it cannot play.
     private const string NoRouteMarker = "names no route of the running world";
-    private const string SeatsMarker = "waits on the multi-seat client";
+    private const string SeatsMarker = " seats needs seat ";
     private static readonly TimeSpan BootTimeout = TimeSpan.FromSeconds(seconds: 120);
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(seconds: 1);
     private static readonly TimeSpan ProgressInterval = TimeSpan.FromSeconds(seconds: 15);
@@ -63,7 +63,7 @@ public static partial class BenchmarkCommand {
         public readonly Option<string[]> Backends = new("--backend") { AllowMultipleArgumentsPerToken = true, Description = "Windowed graphics backends to play on, each in its own fresh World: directx and vulkan. Omitted plays both on Windows and vulkan elsewhere. Ignored with --headless." };
         public readonly Option<bool> Headless = new("--headless") { Description = "Play without a window or renderer: the arrival, state hash and host iterations are reported and every reading that needs a renderer is absent." };
         public readonly Option<string?> Remote = new("--remote") { Description = "Play against a remote authority: local starts a listening World on this machine from a staged copy of the world (its own federation key, admitting one remote player) and boots the measured World with --connect to it; an ip:port connects to an authority already listening there. Omitted plays with the authority in process." };
-        public readonly Option<int> Seats = CliOptions.Count("--seats", $"Play the route on this many seats of one client at once (1..{MaxSeats}, default 1). A World that cannot yet seat them reports the leg unrun with its reason.", 1, 1, MaxSeats);
+        public readonly Option<int> Seats = CliOptions.Count("--seats", $"Play the route on this many seats of one client at once (1..{MaxSeats}, default 1): the world is staged with that many local seats seated at boot, and every seat walks the route in one world, its own or the remote authority's. A world that cannot seat them reports the leg unrun with its reason.", 1, 1, MaxSeats);
         public readonly Option<int?> At = CliOptions.OptionalCount<int>("--at", "The tick the run is armed at: its first chapter's first line lands at this tick, or four ticks after the boot when that is later. Omitted starts four ticks after the boot.", 1);
         public readonly Option<int> Loops = CliOptions.Count("--loops", $"Play the route this many times from one boot, each loop from the state the one before left (1..{MaxLoops}, default 1). Reported as cold (the first), warm (the second) and steady (the rest).", 1, 1, MaxLoops);
         public readonly Option<string> Profile = new("--profile") { DefaultValueFactory = _ => "auto", Description = "The device profile the run plays under, applied before the first chapter (`world.device-profile`): a name of the world's render.devices, auto (the one matching the adapter, the default) or none. Its quality table, memory bars and frame bar are the run's conditions, and the report names them." };
@@ -95,9 +95,9 @@ public static partial class BenchmarkCommand {
         options.Command.Detail($"""
             Without --route it runs the standing set, one World per leg: the debug route on each backend, then the moon round
             trip in the same World (reported unrun, with the reason, until the world authors a `moon` route); the debug route
-            against a listening World started on this machine (--remote local); and the debug route on four seats (reported
-            unrun until the World seats four players on one client). With --route it plays that route on each backend, in
-            process or against --remote, on --seats seats.
+            against a listening World started on this machine (--remote local); and the debug route on four seats of one
+            client against such a World. With --route it plays that route on each backend, in process or against --remote,
+            on --seats seats.
             Each World boots paused before its first tick, waits for the renderer with authority held, applies the device
             profile, arms the route at the named tick and resumes, so every line of a fresh run lands on the same absolute tick
             from the boot image. A client of a remote authority boots running, since a paused boot commits no transfer, waits
@@ -372,7 +372,7 @@ public static partial class BenchmarkCommand {
             new Play(Name: MoonRoute, Route: MoonRoute, WaitsOn: "the world authors no `moon` route: the round trip (the pad, the sky seam, a landing on the moon and back) plays here once it does"),
         ], Remote: null, Seats: 1)),
         new Leg(Backend: backends[0], Name: "remote", Plays: [new Play(Name: "remote", Route: DebugRoute)], Remote: "local", Seats: 1),
-        new Leg(Backend: backends[0], Name: "four-seat", Plays: [new Play(Name: "four-seat", Route: DebugRoute)], Remote: null, Seats: MaxSeats),
+        new Leg(Backend: backends[0], Name: "four-seat", Plays: [new Play(Name: "four-seat", Route: DebugRoute)], Remote: "local", Seats: MaxSeats),
     ];
 
     // The backends to play on: none for a headless run (one World, no device), the ones named, or both on Windows and
@@ -419,19 +419,23 @@ public static partial class BenchmarkCommand {
         SweepWorld? authority = null;
 
         try {
-            if (leg.Remote == "local") {
-                pair = RemotePair.Stage(directory: Path.Combine(directory, "remote"), world: world);
-                authority = BootAuthority(build: build, budget: budget, directory: Path.Combine(directory, "authority"), pair: pair, timeout: timeout);
+            var local = (leg.Remote == "local");
+
+            if (local || (leg.Seats > 1)) {
+                pair = RemotePair.Stage(directory: Path.Combine(directory, "remote"), pair: local, seats: leg.Seats, world: world);
+            }
+            if (local) {
+                authority = BootAuthority(build: build, budget: budget, directory: Path.Combine(directory, "authority"), pair: pair!, timeout: timeout);
             }
 
-            var connect = (pair?.Endpoint ?? leg.Remote);
+            var connect = (local ? pair!.Endpoint : leg.Remote);
             var request = new WorldLaunchRequest(Verb, build.Path) {
                 Arguments = [
                     // A client of a remote authority runs from its boot: a paused boot commits no transfer.
                     .. ((connect is null) ? new[] { "--paused" } : ["--connect", connect]),
                     .. SizeArguments(options: options, parse: parse, shape: shape),
                     .. (parse.GetValue(options.Cache) is { } cache ? new[] { "--cache-dir", Path.GetFullPath(cache) } : []),
-                    .. ((pair is not null) ? new[] { "--federation-key-file", pair.KeyFile } : []),
+                    .. (local ? new[] { "--federation-key-file", pair!.KeyFile } : []),
                     .. ((parse.GetValue(options.Uncapped) && (shape == WorldShape.Windowed)) ? new[] { "--present-mode", "immediate" } : [])],
                 Backend = leg.Backend,
                 ExitAfterSeconds = WorldLaunch.Backstop(TimeSpan.FromSeconds(Allowance(timeout) * leg.Plays.Count)),

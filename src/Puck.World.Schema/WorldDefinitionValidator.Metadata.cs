@@ -628,7 +628,7 @@ public static partial class WorldDefinitionValidator {
     // elements within their panel), rect sanity, WorldHudLayer.Replace refused for a seat panel, the closed
     // HudBindingVocabulary — including whether a state.<name> binding resolves against the state rows validated just
     // before this call — and (for a Frame element) the shared ValidateFrameSource gate against definition/cameras.
-    private static void ValidateHud(WorldDefinition definition, HashSet<string> cameras, WorldHudSection hud, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool isIdentityScope, List<string> errors) {
+    private static void ValidateHud(WorldDefinition definition, HashSet<string> cameras, WorldHudSection hud, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool isIdentityScope, List<string> errors, bool delivered = false) {
         if (hud is null) {
             errors.Add(item: "hud is required.");
 
@@ -638,13 +638,14 @@ public static partial class WorldDefinitionValidator {
         ValidateHudCore(
             cameras: cameras,
             definition: definition,
+            delivered: delivered,
             errors: errors,
             hud: hud,
             isIdentityScope: isIdentityScope,
             stateRows: stateRows
         );
     }
-    private static void ValidateHudCore(WorldDefinition definition, HashSet<string> cameras, WorldHudSection hud, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool isIdentityScope, List<string> errors) {
+    private static void ValidateHudCore(WorldDefinition definition, HashSet<string> cameras, WorldHudSection hud, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool isIdentityScope, List<string> errors, bool delivered) {
         var panels = hud.Panels;
         var maxElements = (isIdentityScope
             ? WorldHudCapacity.MaxElementsPerSeatPanel
@@ -784,7 +785,7 @@ public static partial class WorldDefinitionValidator {
                     if (element.Kind != WorldHudElementKind.Text) {
                         errors.Add(item: $"{voicePath} is only available on Text elements.");
                     }
-                    ValidateVoiceProfile(voice, definition.Patches.Select(selector: row => row.Name).ToHashSet(comparer: StringComparer.Ordinal), voicePath, true, errors, definition.DocumentDirectory);
+                    ValidateVoiceProfile(voice, definition.Patches.Select(selector: row => row.Name).ToHashSet(comparer: StringComparer.Ordinal), voicePath, true, errors, definition.DocumentDirectory, delivered);
                 }
                 if (element.Kind != WorldHudElementKind.Frame) {
                     continue;
@@ -840,20 +841,22 @@ public static partial class WorldDefinitionValidator {
     // posture ValidateIdentityMotionState takes for its two state-slot fields. patchIds is the same asset-row id
     // set every other patchId reference (speaker sources, emission facets, cue rows, embellishments) resolves
     // against, computed once before row validation runs (see this file's caller).
-    private static void ValidateIdentityVoiceProfile(WorldIdentityDefinition? identity, HashSet<string> patchIds, List<string> errors, string? documentDirectory) {
+    private static void ValidateIdentityVoiceProfile(WorldIdentityDefinition? identity, HashSet<string> patchIds, List<string> errors, string? documentDirectory, bool delivered) {
         if (identity?.Voice is not { } voice) {
             return;
         }
 
-        ValidateVoiceProfile(documentDirectory: documentDirectory, errors: errors, patchIds: patchIds, path: "identity.voice", required: false, voice: voice);
+        ValidateVoiceProfile(delivered: delivered, documentDirectory: documentDirectory, errors: errors, patchIds: patchIds, path: "identity.voice", required: false, voice: voice);
     }
-    private static void ValidateVoiceProfile(WorldVoiceProfile voice, HashSet<string> patchIds, string path, bool required, List<string> errors, string? documentDirectory) {
+    // A delivered document's sample set is a path another process authored, which is never opened: its voice is checked
+    // when its reader loads it.
+    private static void ValidateVoiceProfile(WorldVoiceProfile voice, HashSet<string> patchIds, string path, bool required, List<string> errors, string? documentDirectory, bool delivered) {
         if (required && (((voice.PatchId is null) && (voice.SampleSet is null)) || (voice.CadenceTicks is null))) {
             errors.Add(item: $"{path} requires patchId or sampleSet, and cadenceTicks.");
         }
         if (voice.SampleSet is { } sampleSet) {
             if (voice.PatchId is not null) { errors.Add(item: $"{path} must choose patchId or sampleSet, not both."); }
-            if (!WorldVoiceSampleLoader.TryLoad(documentDirectory: documentDirectory, error: out var sampleError, rate: out _, samples: out _, source: sampleSet)) {
+            if (!delivered && !WorldVoiceSampleLoader.TryLoad(documentDirectory: documentDirectory, error: out var sampleError, rate: out _, samples: out _, source: sampleSet)) {
                 errors.Add(item: $"{path}: {sampleError}");
             }
         }
@@ -1242,7 +1245,7 @@ public static partial class WorldDefinitionValidator {
             (seatSpawns is not { Count: var count }) ||
             (count != localSeats)
         ) {
-            errors.Add(item: $"bodies.seatSpawns must contain exactly {localSeats} spawn-point names.");
+            errors.Add(item: $"bodies.seatSpawns must contain between 1 and {localSeats} spawn-point names: one for each local seat, the last name serving every seat past the list.");
 
             return;
         }

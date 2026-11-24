@@ -160,6 +160,8 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         public (long Peak, long Budget, long Beyond) Device { get; set; }
         // A route chapter's outcome, copied from the seat driver as it ends.
         public bool Arrived { get; set; }
+        // On a run of several seats, each further seat's outcome: its slot, whether it arrived and why it did not.
+        public IReadOnlyList<(int Seat, bool Arrived, string? Failure)> Seats { get; set; } = [];
         public string? Failure { get; set; }
         public string? FailureKind { get; set; }
         public ulong FailureTick { get; set; }
@@ -214,6 +216,10 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
     private int m_runSerial;
     // A route run: the seat driver, the simulation rate it reads seconds in, and the chapter it is playing.
     private Puck.World.Client.WorldSeatDriver? m_driver;
+    // The seats a route run plays on, and the drivers of the seats after the route's own: each plays the route's
+    // chapters on its own seat, through that seat's ingress, beside the route's seat, whose driver the report reads.
+    private int m_seatCount = 1;
+    private readonly List<Puck.World.Client.WorldSeatDriver> m_companions = [];
     private int m_rateHz;
     private Chapter? m_goalChapter;
     // A route run waiting for its seat's navigation to bake, off the tick, before it arms; and what that wait took, which
@@ -270,6 +276,19 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             if (seatRouter.TryRoute(slot: (route.Seat - 1)) is not { } seat) {
                 return CommandResult.Error(output: $"[world.benchmark: seat {route.Seat} is routed to no authority, so the route '{reference}' has no world to play in]");
             }
+            // A run on several seats plays the route on the route's own seat and on each seat after it, all in one world.
+            for (var extra = 1; (extra < m_seatCount); extra++) {
+                var slot = ((route.Seat - 1) + extra);
+
+                if ((slot >= WorldBodiesLimits.LocalSeatCount) || (seatRouter.TryRoute(slot: slot) is not { } other)) {
+                    return CommandResult.Error(output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.benchmark: the route '{reference}' on {m_seatCount} seats needs seat {slot + 1} seated, and it is routed to no authority: the world seats it at boot (bodies.seatActivation) or a player joins it first]"));
+                }
+                // Each travelling seat holds its own stream of the authority today, so the world is told by its
+                // authority, not by the endpoint.
+                if (!string.Equals(a: other.Endpoint.Authority, b: seat.Endpoint.Authority, comparisonType: StringComparison.Ordinal)) {
+                    return CommandResult.Error(output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.benchmark: the route '{reference}' on {m_seatCount} seats plays in one world, and seat {slot + 1} is routed to '{other.Endpoint.Authority}' while seat {route.Seat} is routed to '{seat.Endpoint.Authority}']"));
+                }
+            }
 
             // The paths are planned over the document the seat's authority delivered, which bakes off the pump first.
             var endpoint = seat.Endpoint;
@@ -279,6 +298,10 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
                 return Prepare(at: at, budget: budget, context: context, endpoint: endpoint, loops: loops, output: output, prefix: prefix, reference: reference, session: session, timeout: timeout);
             }
             return RunRoute(at: at, budget: budget, loops: loops, output: output, prefix: prefix, route: route, session: context.TextSession, timeout: timeout);
+        }
+
+        if (m_seatCount > 1) {
+            return CommandResult.Error(output: $"[world.benchmark: only a route of the running world plays on several seats, and '{reference}' names none]");
         }
 
         var path = (File.Exists(path: reference) ? Path.GetFullPath(path: reference) : Path.GetFullPath(path: reference, basePath: WorldDocumentPaths.DirectoryOf(documentPath: source.SourcePath)));
@@ -336,6 +359,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         m_programs.Clear();
         m_programs.AddRange(collection: programs);
         m_driver = null;
+        m_companions.Clear();
         m_goalChapter = null;
         m_chapters.Clear();
         m_signals.Clear();
@@ -438,8 +462,14 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         m_raw.Clear();
         m_loops = loops;
         m_rateHz = server.Definition.SimulationRateHz;
-        m_driver = new Puck.World.Client.WorldSeatDriver(program: program, route: route, senses: senses, submit: text => {
-            var line = script.SubmitSeat(router: router, slot: slot, text: text);
+        m_driver = Driver(seat: slot);
+        m_companions.Clear();
+        for (var extra = 1; (extra < m_seatCount); extra++) {
+            m_companions.Add(item: Driver(seat: (slot + extra)));
+        }
+
+        Puck.World.Client.WorldSeatDriver Driver(int seat) => new(program: program, route: (route with { Seat = (seat + 1) }), senses: senses, submit: text => {
+            var line = script.SubmitSeat(router: router, slot: seat, text: text);
 
             return () => line.Outcome;
         });
@@ -453,6 +483,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             m_chapters.Clear();
             m_raw.Clear();
             m_driver = null;
+            m_companions.Clear();
             return CommandResult.Error(output: $"[world.benchmark: {refusal.Message}]");
         }
         script.Ticked += OnTicked;
@@ -488,13 +519,27 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             chapter.Endpoint = seatRouter?.TryRoute(slot: driver.Seat)?.Endpoint;
             chapter.DeliveryAtBegin = (chapter.Endpoint?.Mirror.DeliveryWork ?? default);
             driver.Begin(chapter: chapter.Program.Goals!, rateHz: m_rateHz, tick: tick);
+            foreach (var companion in m_companions) {
+                companion.Begin(chapter: chapter.Program.Goals!, rateHz: m_rateHz, tick: tick);
+            }
             return;
         }
-        if ((tick < chapter.Start) || driver.Ended) {
+        if (tick < chapter.Start) {
             return;
         }
 
-        driver.Advance(rateHz: m_rateHz, tick: tick);
+        // The chapter plays until every seat's driver has ended, each within the chapter's own time limit.
+        if (!driver.Ended) {
+            driver.Advance(rateHz: m_rateHz, tick: tick);
+        }
+        var ended = driver.Ended;
+
+        foreach (var companion in m_companions) {
+            if (!companion.Ended) {
+                companion.Advance(rateHz: m_rateHz, tick: tick);
+            }
+            ended &= companion.Ended;
+        }
 
         var next = (tick + 1UL);
         var index = m_chapters.IndexOf(item: chapter);
@@ -506,7 +551,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         }
 
         try {
-            if (!driver.Ended) {
+            if (!ended) {
                 if (((next - chapter.Start) % SampleTicks) == 0UL) {
                     if (read is not null) {
                         chapter.Samples.Add(item: read);
@@ -520,6 +565,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
             chapter.Duration = (int)(next - chapter.Start);
             chapter.Arrived = driver.Arrived;
+            chapter.Seats = [.. m_companions.Select(selector: static companion => (companion.Seat, companion.Arrived, companion.Failure))];
             chapter.Failure = driver.Failure;
             chapter.FailureKind = driver.FailureKind;
             chapter.FailureTick = driver.FailureTick;
@@ -924,6 +970,11 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             foreach (var release in (m_driver?.TakeReleases() ?? [])) {
                 _ = script.ArmSeat(line: out _, router: router, slot: (m_programs[0].Body), text: release, tick: (script.CompletedTick + 1UL));
             }
+            foreach (var companion in m_companions) {
+                foreach (var release in companion.TakeReleases()) {
+                    _ = script.ArmSeat(line: out _, router: router, slot: companion.Seat, text: release, tick: (script.CompletedTick + 1UL));
+                }
+            }
         }
         if (m_lockstepAtEntry) {
             pacing?.SetTickLocked(locked: true);
@@ -1174,11 +1225,9 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
                     }
                 }
 
-                if (seats > 1) {
-                    return CommandResult.Error(output: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[world.benchmark: a route played on {seats} seats of one client needs one seat driver per seat against one authority, which this World does not run yet; it waits on the multi-seat client (docs/plans/open-items.md, a multi-seat client)]"));
-                }
                 if (!m_running && (m_preparing is null) && (m_finishOwed is null)) {
                     m_budgetSource = budgetSource;
+                    m_seatCount = seats;
                 }
 
                 return Run(at: at, budget: budget, context: context, loops: loops, output: output, prefix: prefix, reference: args[1].ToString(), timeout: timeout);

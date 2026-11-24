@@ -653,10 +653,7 @@ public sealed partial class WorldInstanceHost {
             return;
         }
 
-        if (
-            (reservation.BodyIndices.Count != members.Length) ||
-            (reservation.DestinationDefinition is null)
-        ) {
+        if (reservation.BodyIndices.Count != members.Length) {
             try {
                 targetAuthority.Abort(
                     sourceAuthority: sourceAuthority,
@@ -667,7 +664,7 @@ public sealed partial class WorldInstanceHost {
                 // if this best-effort abort cannot reach the peer.
             }
 
-            var malformedReason = $"'{targetName}' returned a malformed accepted reservation (expected {members.Length} body indices and a destination definition)";
+            var malformedReason = $"'{targetName}' returned a malformed accepted reservation (expected {members.Length} body indices)";
 
             if (m_narration.HasNarrationSink) {
                 m_narration.Narrate(
@@ -690,7 +687,9 @@ public sealed partial class WorldInstanceHost {
         }
 
         var reservedSlots = reservation.BodyIndices.ToArray();
-        var destinationDefinition = reservation.DestinationDefinition;
+        // A destination in this process answers with its live document. A remote one sends none: a mapped arrival is
+        // resolved against the copy of its document this host holds, and the destination places the traveller itself.
+        var destinationDefinition = (reservation.DestinationDefinition ?? targetAuthority.Definition);
 
         // Whole-transfer ALL-OR-NOTHING across SOURCE-side authorization too (destination standing was just proven
         // by the reservation above): pre-check every member's own LEAVE standing — Drive over its own body under

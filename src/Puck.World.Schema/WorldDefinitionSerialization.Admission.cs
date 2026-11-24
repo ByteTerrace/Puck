@@ -32,10 +32,36 @@ public static partial class WorldDefinitionSerialization {
         }
     }
 
-    private static WorldDefinition ParseEmbedded(byte[] utf8Json, string? documentDirectory) {
+    /// <summary>Deserializes a document another process delivered. It is read as untrusted input
+    /// (<see cref="WorldJsonContext.Untrusted"/>), it has no directory, so no path it names is ever opened, and it is
+    /// validated as a delivery (<see cref="WorldDefinitionValidator.TryValidateDelivered"/>).</summary>
+    /// <param name="utf8Json">The delivered document's bytes.</param>
+    /// <param name="held">Runs between the parse and the validation with the parsed document, so content it names by
+    /// pin can be fetched before its rows are checked; <see langword="null"/> to fetch nothing.</param>
+    /// <returns>The deserialized, validated definition.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="utf8Json"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException">The bytes are not a document this process may present.</exception>
+    public static WorldDefinition DeserializeDelivered(byte[] utf8Json, Action<WorldDefinition>? held = null) {
+        ArgumentNullException.ThrowIfNull(argument: utf8Json);
+
+        try {
+            var definition = ParseEmbedded(context: WorldJsonContext.Untrusted, documentDirectory: null, utf8Json: utf8Json);
+
+            held?.Invoke(obj: definition);
+            if (!WorldDefinitionValidator.TryValidateDelivered(definition: definition, reason: out var reason)) {
+                throw new InvalidOperationException(message: reason);
+            }
+
+            return definition;
+        } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
+            throw InvalidEmbedded(exception: exception);
+        }
+    }
+
+    private static WorldDefinition ParseEmbedded(byte[] utf8Json, string? documentDirectory, WorldJsonContext? context = null) {
         WorldBootWork.Count(kind: WorldBootWork.Parses);
 
-        var definition = ((JsonSerializer.Deserialize(utf8Json: utf8Json, jsonTypeInfo: WorldJsonContext.Authored.WorldDefinition)
+        var definition = ((JsonSerializer.Deserialize(utf8Json: utf8Json, jsonTypeInfo: (context ?? WorldJsonContext.Authored).WorldDefinition)
             ?? throw new InvalidDataException(message: "the embedded world definition deserialized to null.")) with { DocumentDirectory = documentDirectory });
 
         if (!WorldStateDocumentValues.TryResolve(definition: definition, reason: out var reason, resolved: out var resolved)) {

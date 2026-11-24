@@ -75,7 +75,6 @@ internal static class WorldTravelerProjection {
             // The live body policy at every delivery, as every other projection reads it: a policy edit reaches the next
             // delivery, and one that turns redacting cuts this stream.
             sink = new(
-                authority: server.AuthorityIdentity,
                 disclosure: () => view.Bodies,
                 isCurrent: Current,
                 recipient: principal,
