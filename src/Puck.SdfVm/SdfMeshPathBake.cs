@@ -1078,7 +1078,7 @@ public sealed partial class SdfMeshPathBake {
                         continue;
                     }
 
-                    var peak = Math.Max(val1: PeakOf(final: group.Final!, fineSamples: 0), val2: group.PeakFloor);
+                    var peak = Math.Max(val1: SampledPeakOf(final: group.Final!), val2: group.PeakFloor);
 
                     // The account's host pool paces admission: its budget, and the machine's free memory as the
                     // account reads it.
@@ -2297,6 +2297,10 @@ public sealed partial class SdfMeshPathBake {
     // materials, slots and points, and the crossing and gradient rounds' points. An upper estimate of the sum of those
     // buffers, so an admitted group's charges stay within its reservation.
     private const long WorkspaceBytesPerSample = 96;
+
+    // What a final lattice holds while its slabs are sampled, before Prepare builds anything from them: a value and a
+    // material a sample (FinalLattice's two buffers).
+    private static long SampledPeakOf(FinalLattice final) => checked(((long)final.Lattice.Samples) * (sizeof(float) + sizeof(int)));
 
     // Let detected sheets use a finer split when a part's ordinary grid still leaves room above the bake's fine spacing.
     // A finer virtual grid also subdivides transition cells, so keep a lattice already near that spacing on its own grid.
