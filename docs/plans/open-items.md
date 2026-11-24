@@ -2512,6 +2512,19 @@ Owner: rendering (GPU leg, the lead scheduling the GPU) · medium · Next: one
 draw identity, which visibility's V1 and V2 build on; then Vulkan's crossing
 frame and the pixel-pass gap at locked clocks.
 
+- [high] **A split of the open submission batch mid-frame can re-arm an
+  outstanding fence.** A shadow entry built during a residency's upload created
+  a timestamp heap through `DirectXDeviceContext.CommandQueueHandle`, whose read
+  splits the open batch; the split's owner fence (`GpuSubmissionBatch.Split`,
+  the last deferred fence) threw "A submission is already outstanding on this
+  fence" in `GpuBatchedSubmissionFence.ArmBehind`, and the D3D12 World stopped
+  (`gallery.go shape-superellipsoid-8` after a cold bake on 144b1dd5fc). The
+  heap path now reads `SubmissionQueueHandle`, which submits nothing, but every
+  other `CommandQueueHandle` reader that can run while a frame's batch is open
+  (mapped buffers, exportable images) can still reach the same throw. Find why
+  the owner was already armed or aliased, and make a mid-batch split safe or
+  have the door refuse it while recording. GPU lifetimes are a review-only
+  hazard class.
 - [high] **One screen row of the main view is unwritten at some window
   sizes.** At 1600 by 900 on Direct3D 12 (RTX 4070), a one-pixel row at about
   y 488 across the left 77% of the frame reads no hit in the visibility buffer
