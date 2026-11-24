@@ -1926,7 +1926,9 @@ Built with it:
   against 4.7 to 6.3 GB; the working set was 8.4 to 8.6 GB against 8.3 to
   8.9 GB. The device pool's peak did not fall (4.37 GB against 4.29 GB): the
   shared scene parked while no window showed it, so its device storage was
-  never what set the peak. Vulkan's reading is in the commit that lands this.
+  never what set the peak. On Vulkan, `world.benchmark run debug loops 2` on
+  this head listed no shared session scene either, lost no device, and gave
+  route peaks of 3.96 GB and 4.18 GB with 20 over-limit grants at the end.
 
 - **One grouping a content** (the former step 2). The census above found the
   programs group alike, and the board keyed by shape alone now leads them:
