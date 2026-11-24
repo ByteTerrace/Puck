@@ -533,7 +533,10 @@ records the options weighed.
   judged the row by (`m_judged`), for a standalone row or a rigid slot (one box its pose carries, decided in
   `SdfWorldTables.JudgeMotionSlot`); any other slot is a union that can hide motion, and owes both ends whenever it
   moves. A slot judged rigid that is not would let its casters drift a texel unseen, so a new member kind of a slot
-  (a second carry, a fixed member) must leave `rigid` false. A passed change goes to each entry, which judges the row against its `Footprint` from
+  (a second carry, a fixed member) must leave `rigid` false. With every motion scope met, a rigid slot is not placed
+  at all while its pose change bounds its box's displacement from the shadows' judged box (`TryJudged`) under
+  `StillDisplacement` (`CarriedBound.Displacement`, counted in `sdf.residency.motion.rows-spared`); its judged pose
+  follows `m_judged`, so a new writer of `m_judged` for a slot key must leave a box `TryJudged` answers truthfully. A passed change goes to each entry, which judges the row against its `Footprint` from
   where it last drew it (`MoveTexels`) and owes at most `MaxRectangles` merged rectangles (`OwedRects`); a redraw under
   way also owes its own layers (`m_pending`), handed over when it lands. An upload takes the owed rectangles whose
   expected vertices (the entry's measured vertices a rectangle texel) fit `RectangleVertices`, at least one, and the
