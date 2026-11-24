@@ -75,15 +75,8 @@ public sealed class WorldContinuum(WorldClient client, WorldSeatAuthorityRouter 
 
         return false;
     }
-    private bool PresentsApart(string name) {
-        foreach (var adjacency in (m_client.Definition.Adjacencies ?? [])) {
-            if (string.Equals(a: adjacency.Name.Value, b: name, comparisonType: StringComparison.Ordinal)) {
-                return (adjacency.Presentation == WorldAdjacencyPresentation.Apart);
-            }
-        }
-
-        return false;
-    }
+    private bool PresentsApart(string name) =>
+        (WorldDefinitionRows.FindAdjacency(adjacencies: m_client.Definition.Adjacencies, name: name)?.Presentation == WorldAdjacencyPresentation.Apart);
     private float ProjectionScore(int? seatSlot, string projectionName, Vector3 position) {
         if (seatSlot is not { } slot) {
             return 0f;
