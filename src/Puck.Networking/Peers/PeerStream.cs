@@ -16,6 +16,9 @@ public sealed class PeerStream : Stream {
 
     private readonly Channel<(PeerEvent Event, long ReleaseTimestamp)>? m_arrivals;
     private readonly Task? m_arrivalPump;
+    // Stops the arrival pump at disposal: its write into the bounded arrival queue would otherwise wait forever for a
+    // reader that disposal has ended.
+    private readonly CancellationTokenSource? m_arrivalStop;
     private readonly PeerLink m_link;
     private readonly PeerStreamPacer? m_readPacer;
     private readonly PeerStreamPacer? m_writePacer;
@@ -57,7 +60,8 @@ public sealed class PeerStream : Stream {
                 SingleReader = true,
                 SingleWriter = true,
             });
-            m_arrivalPump = Task.Run(function: PumpArrivalsAsync);
+            m_arrivalStop = new CancellationTokenSource();
+            m_arrivalPump = Task.Run(function: () => PumpArrivalsAsync(ct: m_arrivalStop.Token));
         }
     }
 
@@ -74,9 +78,9 @@ public sealed class PeerStream : Stream {
     /// <inheritdoc/>
     public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
 
-    private async Task PumpArrivalsAsync() {
+    private async Task PumpArrivalsAsync(CancellationToken ct) {
         try {
-            while (await m_link.Events.WaitToReadAsync().ConfigureAwait(continueOnCapturedContext: false)) {
+            while (await m_link.Events.WaitToReadAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)) {
                 while (m_link.Events.TryRead(item: out var next)) {
                     var releaseTimestamp = 0L;
 
@@ -89,7 +93,7 @@ public sealed class PeerStream : Stream {
                     } else if (m_readPacer is not null) {
                         releaseTimestamp = m_readPacer.CurrentFloorTimestamp;
                     }
-                    await m_arrivals!.Writer.WriteAsync(item: (next, releaseTimestamp)).ConfigureAwait(continueOnCapturedContext: false);
+                    await m_arrivals!.Writer.WriteAsync(item: (next, releaseTimestamp), cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false);
                 }
             }
         } catch (Exception exception) when ((exception is OperationCanceledException or ChannelClosedException or ObjectDisposedException)) {
@@ -168,7 +172,9 @@ public sealed class PeerStream : Stream {
         ) == 0) {
             await m_link.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
             if (m_arrivalPump is not null) {
-                try { await m_arrivalPump.ConfigureAwait(continueOnCapturedContext: false); } catch { }
+                await m_arrivalStop!.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
+                await m_arrivalPump.ConfigureAwait(continueOnCapturedContext: false);
+                m_arrivalStop.Dispose();
             }
         }
         GC.SuppressFinalize(obj: this);
@@ -286,7 +292,7 @@ public sealed class PeerStream : Stream {
                 buffer = buffer[count..];
             }
         } catch {
-            if (started) { await m_link.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false); }
+            if (started) { await DisposeAsync().ConfigureAwait(continueOnCapturedContext: false); }
             throw;
         } finally { m_writeGate.Release(); }
     }

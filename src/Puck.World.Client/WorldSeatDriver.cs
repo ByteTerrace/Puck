@@ -141,7 +141,9 @@ public sealed class WorldSeatDriver {
     private int m_posePreGeneration;
     private int m_posePreEpoch;
     private bool m_driving;
-    private bool m_docking;
+    // The planar speed, in metres per second, the move stick last asked of the body (its walking speed for an
+    // unslowed stick), which decides whether a held stick is pushing hard enough to judge a wall.
+    private FixedQ4816 m_commandedSpeed;
     private bool m_yielding;
     private int m_yieldLeaderIndex = -1;
     private ulong m_yieldStartBodyTick;
@@ -336,20 +338,20 @@ public sealed class WorldSeatDriver {
         }
         // A stick held while the body goes nowhere is a wall, as a player meets one. A body that moves, however it is
         // moved, starts the watch again, and so does an authority whose ticks are not the last one's or whose input
-        // admission or initial push for this seat has not yet been answered.
+        // admission or initial push for this seat has not yet been answered, and so does a stick held so gently (a
+        // remote approach easing onto its goal) that the speed it asks for would not carry the body past the watch's
+        // distance in the watch's ticks.
         var admitted = m_senses.InputAdmitted(slot: m_slot);
         var moveAnswered = (admitted && m_senses.MoveInputAnswered(slot: m_slot, bodyTick: read.Body.Tick));
         var scale = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.05), y: m_senses.BodyScale(reading: in read));
         var stallThreshold = (FixedQ4816.FromDouble(value: StallMetres) * scale);
-        var stallLimit = (read.Endpoint.ClockOwnedHere
-            ? ((ulong)StallTicks)
-            : (((ulong)StallTicks) + (m_docking ? 15UL : 0UL) + Math.Min(val1: 20UL, val2: m_senses.MoveLagTicks(slot: m_slot, bodyTick: read.Body.Tick))));
-        if (!m_driving || m_yielding || !moveAnswered || !string.Equals(a: m_stallAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal) ||
+        var watched = ((m_commandedSpeed * FixedQ4816.FromDouble(value: ((double)StallTicks / rateHz))) >= (stallThreshold * FixedQ4816.FromInteger(value: 2)));
+        if (!m_driving || !watched || m_yielding || !moveAnswered || !string.Equals(a: m_stallAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal) ||
             (read.Body.Tick < m_stallTick) || (Planar(from: m_stallOrigin, to: read.Position) > stallThreshold)) {
             m_stallOrigin = read.Position;
             m_stallTick = read.Body.Tick;
             m_stallAuthority = read.Endpoint.Authority;
-        } else if ((read.Body.Tick - m_stallTick) >= stallLimit) {
+        } else if ((read.Body.Tick - m_stallTick) >= StallTicks) {
             Fail(kind: "wall", place: read.Place, reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"the move stick was held across {StallTicks} delivered ticks and the body stayed within {((double)stallThreshold):0.###} m of ({Metres(m_stallOrigin.X)}, {Metres(m_stallOrigin.Y)}, {Metres(m_stallOrigin.Z)}), on step {m_step} ({Describe(step: m_chapter.Steps[m_step])})"), tick: tick);
             return;
         }
@@ -393,7 +395,7 @@ public sealed class WorldSeatDriver {
             Submit(text: line);
         }
         m_driving = false;
-        m_docking = false;
+        m_commandedSpeed = FixedQ4816.Zero;
     }
 
     /// <summary>Describes a step canonically, every member named, the text a chapter's identity hashes.</summary>
@@ -1579,9 +1581,8 @@ public sealed class WorldSeatDriver {
         if (reassert) {
             m_lastAssert = tick;
         }
-        var driveScale = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.05), y: m_senses.BodyScale(reading: in read));
         m_driving = false;
-        m_docking = (!read.Endpoint.ClockOwnedHere && steer.Moves && (steer.Stop < driveScale));
+        m_commandedSpeed = FixedQ4816.Zero;
 
         // The seat turns its camera by this tick's look before it composes this tick's move, so the move is framed
         // against the facing the turn leaves, unless third-person movement holds a latched camera frame yaw.
@@ -1611,82 +1612,33 @@ public sealed class WorldSeatDriver {
     }
 
     private string Evaluate(WorldSeatProgramOp operation, in WorldSeatSenses.Reading read, in Steer steer, FixedQ4816 facing, ulong tick, int rateHz) {
-        var scale = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.05), y: m_senses.BodyScale(reading: in read));
-        var lagTicks = Math.Clamp(value: m_senses.MoveLagTicks(slot: m_slot, bodyTick: read.Body.Tick), min: 4UL, max: 30UL);
-        var lag = (read.Endpoint.ClockOwnedHere
-            ? FixedQ4816.Zero
-            : FixedQ4816.FromDouble(value: ((double)lagTicks / rateHz)));
-
         switch (operation) {
             case WorldSeatProgramOp.Move move: {
                 if (!steer.Moves) {
                     return "0 0";
                 }
 
-                // Slow for a sharp corner, or to stop at a final point, against the speed the body was delivered at
-                // and any round-trip pipeline lag between this reading and when a release reaches the authority.
-                var speed = read.PlanarSpeed;
-                var brake = FixedQ4816.FromDouble(value: move.Brake);
-                var bTau = (brake * lag);
-                var allowed = FixedQ4816.MaxValue;
-
-                if ((steer.CornerDistance != FixedQ4816.MaxValue) && (steer.CornerTurn > FixedQ4816.FromDegrees(degrees: move.CornerDegrees))) {
-                    var cornerRate = ((!read.Endpoint.ClockOwnedHere && (steer.CornerTurn > FixedQ4816.FromDegrees(degrees: 60.0)))
-                        ? Math.Min(val1: move.CornerSpeed, val2: 2.2)
-                        : move.CornerSpeed);
-                    var corner = (FixedQ4816.FromDouble(value: cornerRate) * scale);
-                    var cornerAllowed = (FixedQ4816.Sqrt(value: (((bTau * bTau) + (corner * corner)) + ((FixedQ4816.FromInteger(value: 2) * brake) * steer.CornerDistance))) - bTau);
-
-                    if (!read.Endpoint.ClockOwnedHere && (steer.CornerTurn > FixedQ4816.FromDegrees(degrees: 45.0)) && (steer.CornerDistance < (FixedQ4816.FromDouble(value: 5.0) * scale))) {
-                        var cornerDamped = FixedQ4816.Max(
-                            x: (FixedQ4816.FromDouble(value: 0.85) * scale),
-                            y: (FixedQ4816.FromDouble(value: 0.55) * steer.CornerDistance)
-                        );
-
-                        cornerAllowed = FixedQ4816.Min(x: cornerAllowed, y: cornerDamped);
-                    }
-                    allowed = cornerAllowed;
-                }
-                if (steer.Stop != FixedQ4816.MaxValue) {
-                    var stopAllowed = (FixedQ4816.Sqrt(value: ((bTau * bTau) + ((FixedQ4816.FromInteger(value: 2) * brake) * steer.Stop))) - bTau);
-
-                    if (!read.Endpoint.ClockOwnedHere) {
-                        var knee = (FixedQ4816.FromDouble(value: 3.5) * scale);
-                        var damped = ((steer.Stop <= knee)
-                            ? (FixedQ4816.FromDouble(value: 0.80) * steer.Stop)
-                            : ((FixedQ4816.FromDouble(value: 2.80) * scale) + (FixedQ4816.FromDouble(value: 0.90) * (steer.Stop - knee))));
-
-                        stopAllowed = FixedQ4816.Min(x: stopAllowed, y: damped);
-                    }
-                    allowed = FixedQ4816.Min(x: allowed, y: stopAllowed);
-                }
-
-                if (
-                    !read.Endpoint.ClockOwnedHere &&
-                    (allowed != FixedQ4816.MaxValue) &&
-                    (speed > (allowed + (FixedQ4816.FromDouble(value: 0.60) * scale))) &&
-                    (speed > (FixedQ4816.FromDouble(value: 1.40) * scale))
-                ) {
-                    return "0 0";
-                }
-
+                var walking = WalkingSpeed(read: in read);
                 var magnitude = FixedQ4816.One;
-                var floor = (read.Endpoint.ClockOwnedHere
-                    ? FixedQ4816.FromDouble(value: move.Least)
-                    : ((steer.Stop < (FixedQ4816.FromDouble(value: 0.50) * scale)) ? FixedQ4816.FromDouble(value: 0.12) : FixedQ4816.FromDouble(value: move.Least)));
 
-                if ((allowed != FixedQ4816.MaxValue) && (speed > allowed)) {
-                    magnitude = FixedQ4816.Max(x: floor, y: (allowed / speed));
-                }
-                if (!read.Endpoint.ClockOwnedHere && (allowed != FixedQ4816.MaxValue)) {
-                    var refWalkSpeed = (FixedQ4816.FromInteger(value: 4) * scale);
-                    var approach = FixedQ4816.Clamp(
-                        value: (allowed / refWalkSpeed),
-                        minimum: floor,
-                        maximum: FixedQ4816.One
-                    );
+                if (read.Endpoint.ClockOwnedHere) {
+                    // Slow for a sharp corner, or to stop at a final point, against the speed the body was delivered at.
+                    var allowed = AllowedSpeed(move: move, read: in read, steer: in steer);
 
-                    magnitude = FixedQ4816.Min(x: magnitude, y: approach);
+                    if ((allowed != FixedQ4816.MaxValue) && (read.PlanarSpeed > allowed)) {
+                        magnitude = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: move.Least), y: (allowed / read.PlanarSpeed));
+                    }
+                    m_commandedSpeed = walking;
+                } else {
+                    // A remote authority applies a stick a control lag after it is sent: the stick asks for the speed
+                    // itself, never a fraction of a delivered speed that is already a lag old, so a body at rest beside
+                    // its goal is not sent off at full deflection.
+                    var allowed = AllowedSpeed(move: move, read: in read, steer: in steer);
+
+                    if (allowed < walking) {
+                        magnitude = (allowed / walking);
+                    }
+                    m_commandedSpeed = FixedQ4816.Min(x: allowed, y: walking);
                 }
 
                 // The stick that makes intent composition's rotation by the facing yield the world direction.
@@ -1702,12 +1654,12 @@ public sealed class WorldSeatDriver {
                 return ((deflection == FixedQ4816.Zero) ? "0 0" : $"{Number(deflection)} 0");
             }
             case WorldSeatProgramOp.Hold hold:
-                return ((steer.Moves && CanSprint(lag: lag, read: in read, scale: scale, steer: in steer) && hold.Paces.Contains(value: steer.Pace)) ? "press" : "release");
+                return ((steer.Moves && CanSprint(read: in read, steer: in steer) && hold.Paces.Contains(value: steer.Pace)) ? "press" : "release");
             case WorldSeatProgramOp.Pulse pulse: {
                 var period = Math.Max(val1: 2UL, val2: (ulong)Math.Round(a: (pulse.PeriodSeconds * rateHz)));
                 var pulseElapsed = (read.Endpoint.ClockOwnedHere ? (tick - m_stepStart) : (m_authorityTicks - m_stepAuthorityStart));
 
-                return ((steer.Moves && CanSprint(lag: lag, read: in read, scale: scale, steer: in steer) && pulse.Paces.Contains(value: steer.Pace) && ((pulseElapsed % period) == 0UL)) ? "press" : "release");
+                return ((steer.Moves && CanSprint(read: in read, steer: in steer) && pulse.Paces.Contains(value: steer.Pace) && ((pulseElapsed % period) == 0UL)) ? "press" : "release");
             }
             case WorldSeatProgramOp.Tap tap:
                 return ((m_tap == tap.Action) ? "press" : "release");
@@ -1744,28 +1696,61 @@ public sealed class WorldSeatDriver {
         return FixedQ4816.FromDouble(value: Math.Round(value: (double)deflection, digits: 4, mode: MidpointRounding.AwayFromZero));
     }
 
-    private static bool CanSprint(in WorldSeatSenses.Reading read, in Steer steer, FixedQ4816 scale, FixedQ4816 lag) {
+    // Whether a run or a dash may be held: always against a local clock; against a remote one only while the speed the
+    // step allows is at least twice a walk, so a stop or corner a lag ahead is never met running.
+    private bool CanSprint(in WorldSeatSenses.Reading read, in Steer steer) {
         if (read.Endpoint.ClockOwnedHere) {
             return true;
         }
         if (steer.HoldWalk) {
             return false;
         }
-        if (steer.Stop < FixedQ4816.Max(x: (FixedQ4816.FromDouble(value: 15.0) * scale), y: ((FixedQ4816.FromInteger(value: 14) * scale) * lag))) {
-            return false;
-        }
-        if (
-            (steer.CornerDistance != FixedQ4816.MaxValue) &&
-            (steer.CornerTurn > FixedQ4816.FromDegrees(degrees: 40.0)) &&
-            (steer.CornerDistance < FixedQ4816.Max(x: (FixedQ4816.FromDouble(value: 14.0) * scale), y: ((FixedQ4816.FromInteger(value: 14) * scale) * lag)))
-        ) {
-            return false;
-        }
-        if (steer.Faces && (FixedQ4816.Abs(value: FixedQ4816.WrapAngle(radians: (steer.Facing - read.Yaw))) > FixedQ4816.FromDegrees(degrees: 35.0))) {
-            return false;
+        foreach (var operation in m_program.Operations) {
+            if (operation is WorldSeatProgramOp.Move move) {
+                return (AllowedSpeed(move: move, read: in read, steer: in steer) >= (WalkingSpeed(read: in read) * FixedQ4816.FromInteger(value: 2)));
+            }
         }
 
         return true;
+    }
+
+    // The body's walking speed at full deflection, in metres per second: its kit's authored speed at its live scale.
+    private FixedQ4816 WalkingSpeed(in WorldSeatSenses.Reading read) {
+        var kits = read.Endpoint.Definition.Kits;
+        var speed = ((read.Body.Kit < kits.Count) ? kits[read.Body.Kit].Motion.Speed.Value : 5f);
+
+        return (FixedQ4816.FromDouble(value: Math.Max(val1: speed, val2: 0.1f)) * FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.05), y: m_senses.BodyScale(reading: in read)));
+    }
+
+    // The fastest planar speed, in metres per second, the step lets the body hold now: braking at the program's rate
+    // it still slows to the corner's speed before a sharp corner and stops at a final point. Against a remote clock the
+    // braking starts a control lag (the authority ticks between sending input and seeing it answered) late, and near a
+    // stop the speed is also held to half the speed that closes the distance left in one lag, so a late or bunched
+    // delivery overshoots by less than the distance it had to cover and the approach converges whatever the lag.
+    // MaxValue when nothing ahead limits it.
+    private FixedQ4816 AllowedSpeed(WorldSeatProgramOp.Move move, in WorldSeatSenses.Reading read, in Steer steer) {
+        var brake = FixedQ4816.FromDouble(value: move.Brake);
+        var lag = (read.Endpoint.ClockOwnedHere
+            ? FixedQ4816.Zero
+            : FixedQ4816.FromDouble(value: ((double)Math.Clamp(value: m_senses.MoveLagTicks(slot: m_slot, bodyTick: read.Body.Tick), min: 2UL, max: 90UL) / read.Endpoint.Definition.SimulationRateHz)));
+        var late = (brake * lag);
+        var allowed = FixedQ4816.MaxValue;
+
+        if ((steer.CornerDistance != FixedQ4816.MaxValue) && (steer.CornerTurn > FixedQ4816.FromDegrees(degrees: move.CornerDegrees))) {
+            var corner = (FixedQ4816.FromDouble(value: move.CornerSpeed) * FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.05), y: m_senses.BodyScale(reading: in read)));
+
+            allowed = (FixedQ4816.Sqrt(value: (((late * late) + (corner * corner)) + ((FixedQ4816.FromInteger(value: 2) * brake) * steer.CornerDistance))) - late);
+        }
+        if (steer.Stop != FixedQ4816.MaxValue) {
+            var stop = (FixedQ4816.Sqrt(value: ((late * late) + ((FixedQ4816.FromInteger(value: 2) * brake) * steer.Stop))) - late);
+
+            if (lag > FixedQ4816.Zero) {
+                stop = FixedQ4816.Min(x: stop, y: (steer.Stop / (lag * FixedQ4816.FromInteger(value: 2))));
+            }
+            allowed = FixedQ4816.Min(x: allowed, y: stop);
+        }
+
+        return allowed;
     }
 
     private Func<string> Submit(string text) {
