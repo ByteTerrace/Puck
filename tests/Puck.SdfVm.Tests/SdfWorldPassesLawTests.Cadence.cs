@@ -185,7 +185,7 @@ public sealed partial class SdfWorldPassesLawTests {
         Assert.Equal(expected: new[] { SdfWorldPackage.Parts.Surface, SdfWorldPackage.Parts.ViewsProbes, SdfWorldPackage.Parts.Views,
             SdfWorldPackage.Parts.Sky, SdfWorldPackage.Parts.Composite, SdfWorldPackage.Display }, actual: Executed(work: CadenceWork(rig: rig)));
     }
-    // A sky layer samples only a screen the world declares (SdfWorldResidency.DeclareScreens), so a panorama naming a
+    // A sky layer samples only a screen the world declares (SdfWorldResidency.DeclaredScreens), so a panorama naming a
     // screen no world declares reads no image, and the still view stands.
     [Fact]
     public void ASkyLayerNamingAnUndeclaredScreenLeavesTheStillViewStanding() {

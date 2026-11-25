@@ -1045,6 +1045,13 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
         SdfQueryWork.ProcessWork.Count(kind: SdfQueryWork.Gradients);
         gradient = FixedVector3.Zero;
 
+        // One forward-mode walk of the point's region answers the exact gradient wherever its reader covers the tape
+        // (SdfFieldEvaluator.Gradient.cs); the taps answer everywhere else.
+        if (TryWalkedGradient(gradient: out var walked, position: position) && (walked != FixedVector3.Zero)) {
+            gradient = walked;
+            return true;
+        }
+
         var step = ((epsilon > FixedQ4816.Zero)
             ? epsilon
             : GradientEpsilon

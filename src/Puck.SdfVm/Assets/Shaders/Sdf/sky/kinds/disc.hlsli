@@ -22,11 +22,11 @@ float4 sdfSkyDiscLayer(SdfSkyDisc disc, SdfSkyLayer layer, SdfSkySample sample) 
         return float4((disc.Color * disc.Intensity), pow(saturate(cosine), disc.Exponent));
     }
 #ifdef SDF_SKY_SCREENS
-    if ((cosine <= 0.0) || (disc.Screen >= (int)SDF_MAX_SCREEN_SURFACES)) {
+    if ((cosine <= 0.0) || (sdfScreenSlot(disc.Screen) == SdfNoScreenSlot)) {
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 
-    uint screen = (uint)disc.Screen;
+    uint screen = sdfScreenSlot(disc.Screen);
     ScreenMappingData mapping = worldScreenMapping(screen);
 
     if (mapping.state.x == 0.0) {

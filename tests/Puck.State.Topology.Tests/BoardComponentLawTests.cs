@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Numerics;
 using Puck.Abstractions.Counting;
 using Xunit;
@@ -385,11 +386,13 @@ public sealed class BoardComponentLawTests {
         Assert.Equal(expected, BoardQueries.Evaluate(query, values, 0L, source: 6));
 
         values[6] = 2L;
-        var cleared = new int[values.Length];
+        var cleared = new ulong[BitWords.WordsFor(members: values.Length)];
         var count = BoardQueries.FindEnclosed(topology, values, 6, 1L, 1L, boundaryLower, 0L, cleared, new ArenaScratch());
+        var members = new List<int>();
 
+        foreach (var cell in BitWords.Members(words: cleared)) { members.Add(item: cell); }
         Assert.Equal(expected, count);
-        Assert.Equal(expected == 0 ? Array.Empty<int>() : [0, 1], cleared[..count].Order().ToArray());
+        Assert.Equal(expected == 0 ? Array.Empty<int>() : [0, 1], members.ToArray());
     }
     [Fact]
     public void NineteenByNineteenEnclosureUsesTheGeneralBoardPath() {
@@ -438,9 +441,10 @@ public sealed class BoardComponentLawTests {
             )
         );
         values[placement] = 2L;
-        var cleared = new int[values.Length];
+        var cleared = new ulong[BitWords.WordsFor(members: values.Length)];
         Assert.Equal(1, BoardQueries.FindEnclosed(topology, values, placement, 1L, 1L, 0L, 0L, cleared, new ArenaScratch()));
-        Assert.Equal(centre, cleared[0]);
+        Assert.True(BitWords.Contains(words: cleared, index: centre));
+        Assert.Equal(1, BitWords.Count(words: cleared));
     }
     [Fact]
     public void TheBudgetBoundsTheFloodAndReadsMinusTwoWhenItRunsOut() {

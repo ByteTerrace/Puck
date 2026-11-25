@@ -75,13 +75,16 @@ public static class SdfMeshBakeBlock {
         WriteUInt32(block: block, offset: 32, value: ((uint)lattice.Dims.X));
         WriteUInt32(block: block, offset: 36, value: ((uint)lattice.Dims.Y));
         WriteUInt32(block: block, offset: 40, value: ((uint)lattice.Dims.Z));
-        // The lattice's mode in the low two bits (three samples the point table with gradients, two without, zero a
-        // grid), a slab's first plane of its final lattice above them, and, in the high half, the run of instances a
-        // static selector names.
+        // The lattice's mode in the low two bits (three samples the point table with gradients, two without, one a block
+        // slab, zero a grid), above them a slab's first plane of its final lattice or a block slab's block depth, and, in
+        // the high half, the run of instances a static selector names.
         if ((lattice.Slab >= MaxSlabPlanes) || (((uint)lattice.Instances) > ushort.MaxValue)) {
             throw new ArgumentException(message: $"A bake lattice names its first plane in 14 bits and its instance run in 16; this one names plane {lattice.Slab} and {lattice.Instances} instances.", paramName: nameof(lattice));
         }
-        WriteUInt32(block: block, offset: 44, value: (lattice.Points.IsEmpty ? 0u : (lattice.Gradients ? 3u : 2u)) | (((uint)Math.Max(val1: 0, val2: lattice.Slab)) << 2) | (((uint)lattice.Instances) << 16));
+        var (mode, plane) = (!lattice.Points.IsEmpty ? ((lattice.Gradients ? 3u : 2u), 0u)
+            : !lattice.Blocks.IsEmpty ? (1u, ((uint)lattice.BlockDepth))
+            : (0u, ((uint)Math.Max(val1: 0, val2: lattice.Slab))));
+        WriteUInt32(block: block, offset: 44, value: mode | (plane << 2) | (((uint)lattice.Instances) << 16));
 
         WriteUInt32(block: block, offset: 48, value: ((uint)poseBase));
         WriteUInt32(block: block, offset: 52, value: ((uint)poseFirst));

@@ -32,8 +32,8 @@
 #include "sdf-views-probes.hlsli"
 #include "sdf-views-filter.hlsli"
 
-#if SDF_SHADE_TILE_LIGHT_WORDS != 5
-#error A tile's light masks are the four words of a light mask and a screen mask.
+#if SDF_SHADE_TILE_LIGHT_WORDS != 8
+#error A tile's light masks are the four words of a light mask and the four of a screen mask.
 #endif
 
 #if defined(SDF_VIEWS_BINNED)
@@ -46,7 +46,7 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
     uint word = sdfShadeTileLightsWord(p.viewIndex, sdfShadeTileOf(p.pixel));
 
     masks.lights = uint4(sdfShadeTiles[word], sdfShadeTiles[word + 1u], sdfShadeTiles[word + 2u], sdfShadeTiles[word + 3u]);
-    masks.screens = sdfShadeTiles[word + 4u];
+    masks.screens = uint4(sdfShadeTiles[word + 4u], sdfShadeTiles[word + 5u], sdfShadeTiles[word + 6u], sdfShadeTiles[word + 7u]);
 #endif
     return masks;
 }
@@ -55,8 +55,8 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
 groupshared uint sdfViewsLightDepths[2];
 // The two boxes in ordered bits (puckOrderedFromFloat): the near hits' low corner and high corner, then the far hits'.
 groupshared uint sdfViewsLightBoxes[12];
-// The tile's light mask words, then its screen mask.
-groupshared uint sdfViewsLightTile[5];
+// The tile's light mask words, then its screen mask words.
+groupshared uint sdfViewsLightTile[8];
 // The lights of the tile's mask the volume traced, and the traced lights the probes about some shaded pixel of the tile
 // see.
 groupshared uint sdfViewsLightTraced[SDF_MESH_IRRADIANCE_LIGHT_WORDS];
@@ -135,7 +135,7 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
     if (lane < 12u) {
         sdfViewsLightBoxes[lane] = (((lane % 6u) < 3u) ? PuckOrderedHighest : PuckOrderedLowest);
     }
-    if (lane < 5u) {
+    if (lane < 8u) {
         sdfViewsLightTile[lane] = 0u;
     }
     if (lane < SDF_MESH_IRRADIANCE_LIGHT_WORDS) {
@@ -205,17 +205,21 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
             }
         }
 
-        // A screen a lane: the walk's own bound, its luminance and its face (sdfLightNext's screen half). Whether its
-        // source is bound is the walk's to ask: a source binds without moving the lighting the filter pass stands on.
-        if (lane < sdfScreenLightCount()) {
-            if (any(sdfScreenLights[lane].rgb > 0.0)) {
-                ScreenSurfaceData surface = worldScreenSurface(lane);
+        // A screen a lane, striding by the group's lanes: the walk's own bound, its luminance and its face (sdfLightNext's
+        // screen half). Whether its source is bound is the walk's to ask: a source binds without moving the lighting the
+        // filter pass stands on.
+        uint screens = sdfScreenLightCount();
+
+        [loop]
+        for (uint screen = lane; (screen < screens); screen += (SDF_VISIBILITY_GROUP_EDGE * SDF_VISIBILITY_GROUP_EDGE)) {
+            if (any(sdfScreenLights[screen].rgb > 0.0)) {
+                ScreenSurfaceData surface = worldScreenSurface(screen);
                 float3 origin = surface.origin.xyz;
                 float3 facing = normalize(cross(surface.right.xyz, surface.up.xyz));
 
                 if ((nearHeld && sdfViewsScreenFacesBox(origin, facing, surface.origin.w, nearLow, nearHigh))
                     || (farHeld && sdfViewsScreenFacesBox(origin, facing, surface.origin.w, farLow, farHigh))) {
-                    InterlockedOr(sdfViewsLightTile[4], (1u << lane));
+                    InterlockedOr(sdfViewsLightTile[4u + (screen / 32u)], (1u << (screen % 32u)));
                 }
             }
         }
@@ -252,7 +256,7 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
 
     masks.lights = (uint4(sdfViewsLightTile[0], sdfViewsLightTile[1], sdfViewsLightTile[2], sdfViewsLightTile[3])
         & ~(traced & ~uint4(sdfViewsLightSeen[0], sdfViewsLightSeen[1], sdfViewsLightSeen[2], sdfViewsLightSeen[3])));
-    masks.screens = sdfViewsLightTile[4];
+    masks.screens = uint4(sdfViewsLightTile[4], sdfViewsLightTile[5], sdfViewsLightTile[6], sdfViewsLightTile[7]);
 
     return masks;
 }

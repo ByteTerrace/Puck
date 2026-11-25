@@ -235,7 +235,6 @@ public sealed partial record WorldCostReport(
                 plans: out _,
                 reason: out var searchReason,
                 rules: rules,
-                recurringWork: budget.WorkUnitsPerTick,
                 scores: out _
             )) {
                 issues.Add(item: $"Search planning issue: {searchReason}");

@@ -463,11 +463,11 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="worldOrigin">The front face's world-space center.</param>
     /// <param name="worldRight">The unit world-space axis the UV's U increases along (the slab's local +X, in world space).</param>
     /// <param name="worldUp">The unit world-space axis the UV's V increases against — V = 0 at the top (the slab's local +Y, in world space).</param>
-    /// <param name="screenIndex">The screen source slot in the range 0 through <see cref="MaxScreenSurfaces"/> − 1.</param>
+    /// <param name="screenIndex">The screen's identity, 0 through <see cref="MaxScreenIdentities"/> − 1, unique in the program.</param>
     /// <param name="blend">The blend operator against the field accumulated so far.</param>
     /// <param name="smooth">The smooth-blend radius (meaningful only for a smooth <paramref name="blend"/>).</param>
-    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside the supported range, this
-    /// program has already declared <see cref="MaxScreenSurfaces"/> screen surfaces, a slab dimension is not finite and
+    /// <exception cref="ArgumentException"><paramref name="screenIndex"/> is already declared.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screenIndex"/> is outside the supported range, a slab dimension is not finite and
     /// non-negative, the sampled face's X or Y half-extent is not positive, <paramref name="worldOrigin"/> is not
     /// finite, <paramref name="worldRight"/>/
     /// <paramref name="worldUp"/> is not finite or has zero length, <paramref name="worldRight"/> and
@@ -539,7 +539,7 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="worldUp">The unit world-space axis the UV's V increases against — V = 0 at the top.</param>
     /// <param name="halfWidth">The face's half-width, in world units.</param>
     /// <param name="halfHeight">The face's half-height, in world units.</param>
-    /// <param name="screenIndex">The screen source slot in the range 0 through <see cref="MaxScreenSurfaces"/> − 1.</param>
+    /// <param name="screenIndex">The screen's identity, 0 through <see cref="MaxScreenIdentities"/> − 1, unique in the program.</param>
     /// <returns>This builder.</returns>
     /// <exception cref="ArgumentOutOfRangeException">A half-extent is not positive and finite, or the frame or index is
     /// refused as <see cref="ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/> refuses
@@ -599,18 +599,18 @@ public sealed partial class SdfProgramBuilder {
 
         if (
             (screenIndex < 0) ||
-            (screenIndex >= MaxScreenSurfaces)
+            (screenIndex >= MaxScreenIdentities)
         ) {
             throw new ArgumentOutOfRangeException(
                 paramName: nameof(screenIndex),
-                message: $"A screen index must be 0..{(MaxScreenSurfaces - 1)}."
+                message: $"A screen index must be 0..{(MaxScreenIdentities - 1)}."
             );
         }
 
-        if (m_screenSurfaces.Count >= MaxScreenSurfaces) {
-            throw new ArgumentOutOfRangeException(
+        if (!m_screenIndices.Add(item: screenIndex)) {
+            throw new ArgumentException(
                 paramName: nameof(screenIndex),
-                message: $"A program may declare at most {MaxScreenSurfaces} screen surfaces."
+                message: $"Screen index {screenIndex} is already declared; the screen tables are keyed by index."
             );
         }
 
@@ -630,7 +630,7 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="round">The corner-rounding radius.</param>
     /// <param name="worldOrigin">The front face's world-space center.</param>
     /// <param name="worldOrientation">The static slab orientation in world space.</param>
-    /// <param name="screenIndex">The screen source slot in the range 0 through <see cref="MaxScreenSurfaces"/> − 1.</param>
+    /// <param name="screenIndex">The screen's identity, 0 through <see cref="MaxScreenIdentities"/> − 1, unique in the program.</param>
     /// <param name="blend">The blend operator against the field accumulated so far.</param>
     /// <param name="smooth">The smooth-blend radius.</param>
     /// <returns>This builder.</returns>

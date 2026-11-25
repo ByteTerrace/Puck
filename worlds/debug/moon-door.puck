@@ -1,14 +1,17 @@
-// The moon door: the painting wing's moon painting (paintings.puck), a door a player opens in play onto the moon and
-// that the moon must agree to. Each world owns the door that stands in it. A press of the context button on the step
+// The moon door: the painting wing's moon painting (paintings.puck) and a standing frame on the launch field, two doors a
+// player opens in play onto the moon and that the moon must agree to. Each world owns the door that stands in it. A press of the context button on the step
 // before the painting offers the moon a pairing (`moonDoorOffer`) and binds the door to its opener (`moonDoorPass`, the
 // door's gate); the moon follows the offer (moon.puck's `doorOffer`) and its own rules decide whether to open its
 // socket (`moonSocket`), a frame on its pad, for a lease of its own length. This world follows the socket back
 // (`moonSocketOpen`), and the door opens, its curtain drawn aside, only while both stand: the offer, which lapses after
 // `moonDoorLease`, and the moon's granted socket. Walking in lands the opener at the socket on the moon, under the
 // moon's own gravity and light; walking back through the socket lands before the painting. Nothing either world says
-// moves anything in the other: each reads the other's published row.
+// moves anything in the other: each reads the other's published row. The frame on the launch field is the same door in
+// the open valley: a press on the ground before it makes the same offer, and while the door stands open walking through
+// it lands at the same socket. A shut door holds no session onto the moon, so its glass shows nothing past it.
 
 import "../standard/bounds"
+import "moon-frame"
 import "painting-kit"
 import "shapes"
 
@@ -17,6 +20,16 @@ import "shapes"
 let moonDoorX = 66
 let moonDoorWall = 12.6
 let moonDoorStep = { x0: 65, x1: 67, z0: 12.7, z1: 14.2, y0: -0.5, y1: 1 }
+// The valley door stands on the launch field east of the pad (moon-frame.puck's `launchPad`), its glass facing +Z toward
+// the pad's side of the field, and its step is the ground before the glass.
+let valleyDoorX = (launchPad[0] + 16)
+let valleyDoorZ = (launchPad[1] - 8)
+let valleyDoorStep = { x0: (valleyDoorX - 1), x1: (valleyDoorX + 1), z0: (valleyDoorZ + 0.1), z1: (valleyDoorZ + 1.6), y0: -0.5, y1: 1.5 }
+// Each door's step and the suffix its offer rules carry.
+let moonDoorSteps = [
+  { name: "", step: moonDoorStep }
+  { name: "valley-", step: valleyDoorStep }
+]
 // How long an offer stands before it lapses, unless the opener presses again.
 let moonDoorLease = 45s
 let curtainStates = [
@@ -36,22 +49,24 @@ state {
   ]
 }
 
-// A press on the step offers the pairing, binds the door to the presser and starts the lease. A seat opens it; a visitor
-// walks through a door its host opened.
-for b in range(0, seatPopulation) {
-  let suffix = ((b == 0) ? "" : $"-{b}")
-  rule $"moon-door-offer{suffix}" {
-    when (channel(body, b, interact) >= 1 and
-      bodyPosition(body, b, x) > moonDoorStep.x0 and
-      bodyPosition(body, b, x) < moonDoorStep.x1 and
-      bodyPosition(body, b, z) > moonDoorStep.z0 and
-      bodyPosition(body, b, z) < moonDoorStep.z1 and
-      bodyPosition(body, b, y) > moonDoorStep.y0 and
-      bodyPosition(body, b, y) < moonDoorStep.y1)
-    mode: Edge
-    moonDoorOffer = 1
-    moonDoorPass[$"{b}"] = 1
-    schedule moonDoorUntil in moonDoorLease
+// A press on either door's step offers the pairing, binds the door to the presser and starts the lease, a seat's or a
+// visitor's.
+for door in moonDoorSteps {
+  for b in range(0, (seatPopulation + visitorPopulation)) {
+    let suffix = ((b == 0) ? "" : $"-{b}")
+    rule $"moon-door-{door.name}offer{suffix}" {
+      when (channel(body, b, interact) >= 1 and
+        bodyPosition(body, b, x) > door.step.x0 and
+        bodyPosition(body, b, x) < door.step.x1 and
+        bodyPosition(body, b, z) > door.step.z0 and
+        bodyPosition(body, b, z) < door.step.z1 and
+        bodyPosition(body, b, y) > door.step.y0 and
+        bodyPosition(body, b, y) < door.step.y1)
+      mode: Edge
+      moonDoorOffer = 1
+      moonDoorPass[$"{b}"] = 1
+      schedule moonDoorUntil in moonDoorLease
+    }
   }
 }
 
@@ -60,7 +75,7 @@ rule "moon-door-lapse" {
   when moonDoorOffer == 1 and $tick >= moonDoorUntil
   mode: Edge
   moonDoorOffer = 0
-  for b in range(0, seatPopulation) {
+  for b in range(0, (seatPopulation + visitorPopulation)) {
     moonDoorPass[$"{b}"] = 0
   }
 }
@@ -105,6 +120,33 @@ placements {
     ]
   }
 
+  // The valley door: a standing frame whose glass reaches the ground, the same door as the painting's.
+  placement "moon-door-valley" {
+    prototype: "moon-door-valley"
+    position [valleyDoorX, 0.05, valleyDoorZ]
+    faceSources [
+      {
+        face: "glass"
+        filter: linear
+        portal {
+          arrival: "mapped"
+          counterpart: "moon-socket/glass"
+          destination: "moon"
+          travel: "body"
+          open: state(state: moonDoorOpen, comparison: Equal, value: 1)
+          gate { state: "moonDoorPass", comparison: Equal, value: 1 }
+        }
+        source {
+          $type: "session"
+          destination: "moon"
+          fallback: "#CFC8BC"
+          projection: window
+          ripple: true
+        }
+      }
+    ]
+  }
+
   // The curtain: drawn across the canvas while the door is shut, gathered at its left while it is open.
   placement "moon-door-curtain" {
     prototype: "moon-door-curtain-shut"
@@ -119,6 +161,12 @@ placements {
 }
 
 prototypes {
+  prototype "moon-door-valley" {
+    document {
+      arrivalFrame(color: "#C9A43A", roughness: 0.4, specular: 0.4, post: 0.12)
+    }
+  }
+
   for curtain in curtainStates {
     prototype $"moon-door-curtain-{curtain.name}" {
       document {

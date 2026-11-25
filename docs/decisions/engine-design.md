@@ -583,6 +583,30 @@ independently of its host, a library served under "a content pin grants no
 access", and an arriving creation priced against the receiving world's budget
 by the receiver's own measurement, never a shipped number.
 
+## A field formula lowers once per carrier
+
+The field's shared formulas (`SdfFieldFormulas`, in the closed expression
+language of `SdfFormula`) are one tree that every reader of the field
+evaluates over its own number system: fixed point for the query evaluator,
+floats for the kernels, double lanes for the wide reader, duals (a value with
+its derivatives) for gradients, and next intervals for bounds and jets for
+curvature. Each number system is a carrier: the tree is rendered over the
+carrier's types and functions, as a rename of the fixed reader's text where the
+carrier's operations keep the fixed carriers' names, or through a library of
+rules where a node needs one (a dual's chain rule, its activity analysis). A
+new evaluation of the field is a new carrier, never a hand-written copy of the
+formulas, and one carrier class serves every target that evaluates over it:
+the bake kernel's `SdfDual` and the evaluator's `FixedGradient` come from one
+dual emitter.
+
+Options weighed: a generic method per formula over operator interfaces would
+emit one body, but a guard means something different per carrier (a lane mask
+selects, an interval joins both branches, a bool returns), a constant operand
+would be lifted into the carrier on every call, and the fixed reader's code
+would rest on the JIT specialising every instantiation. Rendering per carrier
+keeps every reader monomorphic with its constants plain, at one emitter branch
+per carrier class. Recorded in [the efficiency plan](../plans/efficiency.md#5-one-lowering-over-a-carrier).
+
 ## A derived product is a cache, never the truth
 
 A baked mesh, an irradiance volume, a compiled shader or any other product

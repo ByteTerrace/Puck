@@ -67,7 +67,7 @@ static const uint GlassFrostTaps = 8u;
 static const float GlassFrostMaxPixels = 24.0;
 // The scatter a fully frosted glass spreads light over, as a fraction of the distance behind it.
 static const float GlassFrostSpread = 0.25;
-static const float GlassGoldenAngle = 2.39996323;
+#include "Shared/low-discrepancy.hlsli"
 
 // Projects a world point into the render grid of `view`, whose lens row carries this sample's jitter, as
 // cameraRayDirection maps a pixel to its ray: continuous coordinates with the first pixel's centre at (0.5, 0.5) and
@@ -486,7 +486,7 @@ void sdfGlassPixel(uint2 pixel) {
             [unroll]
             for (uint tap = 0u; (tap < GlassFrostTaps); tap++) {
                 float reach = (sqrt((float(tap) + 0.5) / float(GlassFrostTaps)) * radius);
-                float angle = ((float(tap) * GlassGoldenAngle) + rotation);
+                float angle = ((float(tap) * PuckGoldenAngle) + rotation);
 
                 through += sdfGlassLitAt((at + (float2(cos(angle), sin(angle)) * reach)), extent);
             }

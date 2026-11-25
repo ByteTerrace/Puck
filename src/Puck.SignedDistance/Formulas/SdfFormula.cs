@@ -252,21 +252,39 @@ internal class SdfFormula {
     }
 
     // === The dual reader ===============================================================================================
-    // A fourth lowering, for the bake's gradient walk (SDF_FIELD_DUAL): each formula again as an HLSL overload of the
-    // same name whose walk-state inputs (the point, the running and candidate distances) are duals, values carried with
-    // their derivatives along the sample's world axes (field/sdf-dual.hlsli). Activity is forward: a node is active when
+    // A fourth lowering, for gradients: each formula again as an overload of the same name whose walk-state inputs (the
+    // point, the running and candidate distances) are duals, values carried with their derivatives along the sample's world
+    // axes. It has two targets, as the plain reader does: the bake's gradient walk (SDF_FIELD_DUAL, field/sdf-dual.hlsli's
+    // SdfDual carriers and sdfd functions) and the query evaluator's (Puck.Maths' FixedGradient carriers and FixedGradients'
+    // functions of the same names, which the contact gradient reads in one walk). Activity is forward: a node is active when
     // it reads an active input, except where its derivative is zero everywhere it is defined (a rounding, a comparison),
     // and an active node lowers to the dual library's function of its operation while an inactive one keeps the plain
-    // reader's text. A helper is emitted once for each pattern of active arguments its callers pass, as an overload.
+    // reader's text. A helper is emitted once for each pattern of active arguments its callers pass, as an overload. A node
+    // the fixed-point target has no dual of (a loop the kernels carry as a primitive: the cell noise, the ellipse's root, a
+    // power whose exponent varies) leaves the formula without a fixed-point dual, and its readers there take the stencil.
     private static readonly string[] DualStates = ["p", "current", "candidate", "distance"];
 
-    internal static string EmitAllDual(params SdfFormula[] formulas) {
+    // A formula whose fixed-point dual would need a node that target has no dual of.
+    private sealed class DualUncovered(SdfFormulaOp op) : Exception($"Field formula operation {op} has no fixed-point dual.");
+
+    internal static string EmitAllDual(params SdfFormula[] formulas) => EmitAllDual(covered: out _, formulas: formulas, shader: true);
+
+    // The fixed-point duals of the formulas that have one, and which they are.
+    internal static string EmitAllFixedDual(out HashSet<SdfFormula> covered, params SdfFormula[] formulas) => EmitAllDual(covered: out covered, formulas: formulas, shader: false);
+
+    private static string EmitAllDual(bool shader, out HashSet<SdfFormula> covered, SdfFormula[] formulas) {
         var written = new HashSet<string>();
         var output = new StringBuilder();
+
+        covered = [];
         foreach (var formula in formulas) {
             if (formula.Result == SdfFormulaType.Condition) { continue; }
-            var mask = formula.Parameters(shader: true).Select(static parameter => parameter.Bound && DualStates.Contains(parameter.Shader)).ToArray();
-            if (mask.Any(static active => active) && formula.ResultActive(mask)) { formula.EmitDual(mask, written, output); }
+            var mask = formula.Parameters(shader: shader).Select(parameter => parameter.Bound && DualStates.Contains(shader ? parameter.Shader : parameter.Fixed)).ToArray();
+            if (!mask.Any(static active => active) || !formula.ResultActive(mask: mask, shader: shader)) { continue; }
+            try {
+                formula.EmitDual(mask: mask, output: output, shader: shader, written: written);
+                _ = covered.Add(formula);
+            } catch (DualUncovered) when (!shader) { }
         }
         return output.ToString().TrimEnd() + "\n";
     }
@@ -274,17 +292,21 @@ internal class SdfFormula {
     private static bool Differentiable(SdfFormulaType type) =>
         type is SdfFormulaType.Scalar or SdfFormulaType.Vector2 or SdfFormulaType.Vector3;
 
-    private static string DualTypeName(SdfFormulaType type) => type switch {
-        SdfFormulaType.Scalar => "SdfDual",
-        SdfFormulaType.Vector2 => "SdfDual2",
-        SdfFormulaType.Vector3 => "SdfDual3",
+    private static string DualTypeName(SdfFormulaType type, bool shader) => type switch {
+        SdfFormulaType.Scalar => shader ? "SdfDual" : "FixedGradient",
+        SdfFormulaType.Vector2 => shader ? "SdfDual2" : "FixedGradient2",
+        SdfFormulaType.Vector3 => shader ? "SdfDual3" : "FixedGradient3",
         _ => throw new ArgumentOutOfRangeException(nameof(type)),
     };
 
+    // A dual library function by its kernel name (sdfdAdd), on the fixed-point target FixedGradients' method of the rest
+    // of that name (FixedGradients.Add).
+    private static string DualFunction(string name, bool shader) => shader ? name : "FixedGradients." + name.Substring(4);
+
     // Which named values a pattern of active parameters makes active, step by step.
-    private Dictionary<string, bool> DualNames(bool[] mask) {
+    private Dictionary<string, bool> DualNames(bool[] mask, bool shader) {
         var names = new Dictionary<string, bool>();
-        var parameters = Parameters(shader: true).ToArray();
+        var parameters = Parameters(shader: shader).ToArray();
         for (var index = 0; index < parameters.Length; index++) { names[parameters[index].Name] = mask[index] && Differentiable(parameters[index].Type); }
         foreach (var step in m_steps) {
             if (step.Name is { } name) { names[name] = Active(step.Value, names); }
@@ -292,8 +314,8 @@ internal class SdfFormula {
         return names;
     }
 
-    private bool ResultActive(bool[] mask) {
-        var names = DualNames(mask);
+    private bool ResultActive(bool[] mask, bool shader) {
+        var names = DualNames(mask: mask, shader: shader);
         return m_steps.Any(step => step.Name is null && Active(step.Value, names));
     }
 
@@ -301,47 +323,57 @@ internal class SdfFormula {
         SdfFormulaOp.Name => names.TryGetValue(node.Text, out var active) && active,
         SdfFormulaOp.Literal or SdfFormulaOp.Constant or SdfFormulaOp.Round or SdfFormulaOp.Floor => false,
         SdfFormulaOp.Equal or SdfFormulaOp.Less or SdfFormulaOp.LessEqual or SdfFormulaOp.Greater or SdfFormulaOp.GreaterEqual or SdfFormulaOp.And => false,
-        SdfFormulaOp.Call => node.Function!.ResultActive(node.Inputs.Select(input => Active(input, names)).ToArray()),
+        // The call's arguments are named by the callee's parameters, which are the same on both targets.
+        SdfFormulaOp.Call => node.Function!.ResultActive(mask: node.Inputs.Select(input => Active(input, names)).ToArray(), shader: true),
         _ => node.Inputs.Any(input => Active(input, names)),
     };
 
-    private void EmitDual(bool[] mask, HashSet<string> written, StringBuilder output) {
-        if (!written.Add(Name + "/" + string.Concat(mask.Select(static active => active ? '1' : '0')))) { return; }
-        var names = DualNames(mask);
-        var body = new StringBuilder();
-        var parameters = Parameters(shader: true).ToArray();
-        var arguments = parameters.Select((parameter, index) => (names[parameter.Name] ? DualTypeName(parameter.Type) : TypeName(parameter.Type, shader: true)) + " " + parameter.Name);
-        body.Append(DualTypeName(Result)).Append(' ').Append(Call(Name, arguments)).Append(" {\n");
-        foreach (var step in m_steps) {
-            body.Append("    ");
-            if (step.When is { } condition) {
-                body.Append("if (").Append(DualValue(condition, names, written, output)).Append(") { return ").Append(DualLift(step.Value, names, written, output)).Append("; }\n");
-            } else if (step.Name is { } name) {
-                var active = names[name];
-                body.Append(active ? DualTypeName(step.Value.Type) : TypeName(step.Value.Type, shader: true)).Append(' ').Append(name).Append(" = ")
-                    .Append(active ? Dual(step.Value, names, written, output) : DualValue(step.Value, names, written, output)).Append(";\n");
-            } else {
-                body.Append("return ").Append(DualLift(step.Value, names, written, output)).Append(";\n");
+    private void EmitDual(bool[] mask, HashSet<string> written, StringBuilder output, bool shader) {
+        var key = Name + "/" + string.Concat(mask.Select(static active => active ? '1' : '0'));
+        if (!written.Add(key)) { return; }
+        try {
+            var names = DualNames(mask: mask, shader: shader);
+            var body = new StringBuilder();
+            var parameters = Parameters(shader: shader).ToArray();
+            var arguments = parameters.Select((parameter, index) => (names[parameter.Name] ? DualTypeName(parameter.Type, shader) : TypeName(parameter.Type, shader)) + " " + parameter.Name);
+            var indent = shader ? "" : "    ";
+            if (!shader && UsesPower) { arguments = arguments.Concat(["ref PowerWork powerWork"]); }
+            body.Append(indent).Append(shader ? "" : "private static ").Append(DualTypeName(Result, shader)).Append(' ').Append(Call(NameIn(shader), arguments)).Append(" {\n");
+            if (!shader && UsesPower) { body.Append(indent).Append("    var memo = CurrentPowerMemo();\n"); }
+            foreach (var step in m_steps) {
+                body.Append(indent).Append("    ");
+                if (step.When is { } condition) {
+                    body.Append("if (").Append(DualValue(condition, names, written, output, shader)).Append(") { return ").Append(DualLift(step.Value, names, written, output, shader)).Append("; }\n");
+                } else if (step.Name is { } name) {
+                    var active = names[name];
+                    body.Append(active ? DualTypeName(step.Value.Type, shader) : TypeName(step.Value.Type, shader)).Append(' ').Append(name).Append(" = ")
+                        .Append(active ? Dual(step.Value, names, written, output, shader) : DualValue(step.Value, names, written, output, shader)).Append(";\n");
+                } else {
+                    body.Append("return ").Append(DualLift(step.Value, names, written, output, shader)).Append(";\n");
+                }
             }
+            output.Append(body.Append(indent).Append("}\n")).Append('\n');
+        } catch (DualUncovered) {
+            _ = written.Remove(key);
+            throw;
         }
-        output.Append(body.Append("}\n")).Append('\n');
     }
 
     // The plain value of a node: an active node's dual value, else the plain reader's text over its inputs' values.
-    private static string DualValue(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) =>
+    private static string DualValue(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output, bool shader) =>
         Active(node, names)
-            ? Dual(node, names, written, output) + ".v"
-            : Render(node, shader: true, input => DualValue(input, names, written, output));
+            ? Dual(node, names, written, output, shader) + (shader ? ".v" : ".Value")
+            : Render(node, shader, input => DualValue(input, names, written, output, shader));
 
     // A node as a dual whether active or not: an inactive value lifts to a constant.
-    private static string DualLift(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) =>
-        Active(node, names) ? Dual(node, names, written, output) : $"sdfdLift({DualValue(node, names, written, output)})";
+    private static string DualLift(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output, bool shader) =>
+        Active(node, names) ? Dual(node, names, written, output, shader) : $"{DualFunction("sdfdLift", shader)}({DualValue(node, names, written, output, shader)})";
 
     // An active node as the dual library's call; an inactive operand passes its plain value to the mixed overloads.
-    private static string Dual(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) {
-        string Operand(int index) => Active(node.Inputs[index], names) ? Dual(node.Inputs[index], names, written, output) : DualValue(node.Inputs[index], names, written, output);
-        string Lifted(int index) => DualLift(node.Inputs[index], names, written, output);
-        string Value(int index) => DualValue(node.Inputs[index], names, written, output);
+    private static string Dual(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output, bool shader) {
+        string Operand(int index) => Active(node.Inputs[index], names) ? Dual(node.Inputs[index], names, written, output, shader) : DualValue(node.Inputs[index], names, written, output, shader);
+        string Lifted(int index) => DualLift(node.Inputs[index], names, written, output, shader);
+        string Value(int index) => DualValue(node.Inputs[index], names, written, output, shader);
         bool ActiveAt(int index) => Active(node.Inputs[index], names);
         string Constants(int from) {
             for (var index = from; index < node.Inputs.Length; index++) {
@@ -349,7 +381,9 @@ internal class SdfFormula {
             }
             return string.Concat(Enumerable.Range(from, node.Inputs.Length - from).Select(index => ", " + Value(index)));
         }
-        string Function(string name, params string[] operands) => name + "(" + string.Join(", ", operands) + ")";
+        string Function(string name, params string[] operands) => DualFunction(name, shader) + "(" + string.Join(", ", operands) + ")";
+        // A primitive of each reader whose dual only the kernels carry.
+        string KernelOnly(string text) => shader ? text : throw new DualUncovered(node.Op);
         return node.Op switch {
             SdfFormulaOp.Name => node.Text,
             SdfFormulaOp.Add => Function("sdfdAdd", Operand(0), Operand(1)),
@@ -373,28 +407,37 @@ internal class SdfFormula {
             SdfFormulaOp.Lerp => Function("sdfdLerp", Lifted(0), Lifted(1), Lifted(2)),
             SdfFormulaOp.SegmentParameter => ActiveAt(1) ? Function("sdfdSegmentParameter", Lifted(0), Lifted(1)) : Function("sdfdSegmentParameter", Lifted(0), Value(1)),
             SdfFormulaOp.MinLength => Function("sdfdMinLength", Lifted(0), Lifted(1)),
-            // The shader's |p| · (min(r) · 1/r).
-            SdfFormulaOp.ScaledRatio => Function("sdfdMultiply", Operand(0), (ActiveAt(1) || ActiveAt(3)) ? Function("sdfdMultiply", Operand(1), Operand(3)) : $"({Value(1)} * {Value(3)})"),
-            SdfFormulaOp.Power => ActiveAt(1) ? Function("sdfdPower", Lifted(0), Lifted(1)) : Function("sdfdPower", Lifted(0), Value(1)),
+            // The shader's |p| · (min(r) · 1/r); the fixed carrier's widened product rounded once, with its constant slope.
+            SdfFormulaOp.ScaledRatio => shader
+                ? Function("sdfdMultiply", Operand(0), (ActiveAt(1) || ActiveAt(3)) ? Function("sdfdMultiply", Operand(1), Operand(3)) : $"({Value(1)} * {Value(3)})")
+                : (ActiveAt(1) || ActiveAt(2)) ? throw new DualUncovered(node.Op) : $"SuperellipsoidScaledRatioGradient({Lifted(0)}, {Value(1)}, {Value(2)})",
+            // The fixed carrier's power reads the evaluator's exact power memo, as the plain reader's does.
+            SdfFormulaOp.Power => shader
+                ? (ActiveAt(1) ? Function("sdfdPower", Lifted(0), Lifted(1)) : Function("sdfdPower", Lifted(0), Value(1)))
+                : ActiveAt(1) ? throw new DualUncovered(node.Op) : $"PowerGradient(memo, {Lifted(0)}, {Value(1)}, ref powerWork)",
             SdfFormulaOp.FiniteOr => Function("sdfdFiniteOr", Lifted(0), Lifted(1)),
             SdfFormulaOp.Select => Function("sdfdSelect", Value(0), Lifted(1), Lifted(2)),
             SdfFormulaOp.Smoothstep => ActiveAt(0) || ActiveAt(1)
                 ? throw new InvalidOperationException("A field formula's smoothstep edges have no derivative.")
                 : Function("sdfdSmoothstep", Value(0), Value(1), Lifted(2)),
-            SdfFormulaOp.RotateInverse => "sdfdRotateInverse(" + Lifted(0) + Constants(1) + ")",
-            SdfFormulaOp.Ellipse2D => "sdfEllipse2D(" + Lifted(0) + ", float2(" + Constants(1).Substring(2) + "))",
-            SdfFormulaOp.Fbm3 => "sdfFbm3(" + Lifted(0) + Constants(1) + ")",
-            SdfFormulaOp.CellDistance => "sdfCellDistance(" + Lifted(0) + Constants(1) + ")",
-            SdfFormulaOp.Call => DualCall(node, names, written, output),
+            SdfFormulaOp.RotateInverse => DualFunction("sdfdRotateInverse", shader) + "(" + Lifted(0) + Constants(1) + ")",
+            SdfFormulaOp.Ellipse2D => KernelOnly("sdfEllipse2D(" + Lifted(0) + ", float2(" + Constants(1).Substring(2) + "))"),
+            SdfFormulaOp.Fbm3 => shader
+                ? "sdfFbm3(" + Lifted(0) + Constants(1) + ")"
+                : (ActiveAt(1) || ActiveAt(2) || ActiveAt(3) || ActiveAt(4)) ? throw new DualUncovered(node.Op) : $"Pcg3dLatticeNoise.Fbm3(q: {Lifted(0)}, seed: {Value(1)}, octaves: ((int){Value(2)}), gain: {Value(3)}, lacunarity: {Value(4)})",
+            SdfFormulaOp.CellDistance => KernelOnly("sdfCellDistance(" + Lifted(0) + Constants(1) + ")"),
+            SdfFormulaOp.Call => DualCall(node, names, written, output, shader),
             _ => throw new InvalidOperationException($"Field formula operation {node.Op} has no dual lowering."),
         };
     }
 
-    private static string DualCall(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output) {
+    private static string DualCall(SdfFormulaNode node, Dictionary<string, bool> names, HashSet<string> written, StringBuilder output, bool shader) {
         var mask = node.Inputs.Select(input => Active(input, names)).ToArray();
-        node.Function!.EmitDual(mask, written, output);
-        return Call(node.Function.Name, node.Inputs.Select((input, index) =>
-            mask[index] ? Dual(input, names, written, output) : DualValue(input, names, written, output)));
+        var function = node.Function!;
+        function.EmitDual(mask: mask, output: output, shader: shader, written: written);
+        return Call(function.NameIn(shader), node.Inputs.Select((input, index) =>
+            mask[index] ? Dual(input, names, written, output, shader) : DualValue(input, names, written, output, shader))
+            .Concat(!shader && function.UsesPower ? ["ref powerWork"] : []));
     }
 
     protected SdfFormulaNode Invoke(params ISdfFormulaValue[] arguments) {

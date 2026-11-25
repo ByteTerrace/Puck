@@ -440,6 +440,7 @@ public sealed partial class WorldInstanceHost {
         var closed = ((portal.Open is WorldPlacementResponseCondition.StateCondition open) && !open.Holds(arena: server.Arena, definition: server.Configuration, engineTick: server.CompletedEngineTicks, tick: server.CompletedTick));
 
         population.PortalClosures.Set(closed: closed, face: face.Face, placementId: placement.Id);
+        instance.PortalClosures = population.PortalClosures;
         if (closed) {
             for (var seat = 0; (seat < population.Capacity); seat++) {
                 if (occupancy.Holds(seat: seat)) {

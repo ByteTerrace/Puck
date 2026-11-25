@@ -155,7 +155,7 @@
       ],
       "properties": {
         "authoringHeadroomScreens": {
-          "description": "Boot-consumed. The extra screen slots the probe reserves, bounded by the engine\u0027s MaxScreenSurfaces ceiling.",
+          "description": "Boot-consumed. The extra screen indices the probe reserves, bounded only by the screen index\u0027s format (MaxScreenIdentities).",
           "type": "integer"
         },
         "authoringHeadroomInstances": {

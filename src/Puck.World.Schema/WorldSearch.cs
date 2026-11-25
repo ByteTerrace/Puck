@@ -136,7 +136,7 @@ public sealed record WorldSearchChance([property: DocumentName(WorldNameKind.Sta
 /// nothing.</param>
 /// <param name="Counts">An integer row keyed by the tokens receiving, per token, how many candidates it accepted;
 /// unlike <paramref name="Legal"/>, works for a board of any size.</param>
-/// <param name="Nodes">The relocations judged per tick, at most what the work sheet leaves; absent derives that.</param>
+/// <param name="Nodes">The relocations judged per tick, at most what the job's step allowance admits; absent derives that.</param>
 /// <param name="Depth">How many plies the job searches ahead; the depth-one walk this section always ran. A depth
 /// past one asks what the position is worth after the ply, not merely whether it is legal, and requires
 /// <paramref name="Score"/>.</param>
@@ -1525,14 +1525,13 @@ public static class WorldSearchCompilation {
     /// <param name="reason">Why planning refused, or empty on success.</param>
     public static bool TryPlanAll(WorldRuleCompilation compilation, out SearchPlan[] plans, out CompiledRule[][] judges, out CompiledExpressionToken[]?[] scores, out string reason) {
         ArgumentNullException.ThrowIfNull(compilation);
-        // A world with no jobs need not evaluate its heuristic sheet at startup.
-        return TryPlanAll(compilation.Definition, compilation.Rules, out plans, out judges, out scores, out reason,
-            recurringWork: ((compilation.Definition.Search.Rows.Count == 0) ? RuleWork.Zero : compilation.WorkBudget.WorkUnitsPerTick));
+        return TryPlanAll(compilation.Definition, compilation.Rules, out plans, out judges, out scores, out reason);
     }
 
-    // Every job's plan against the compiled rules and the tick's work sheet, which the caller supplies from the one
-    // computation admission runs.
-    internal static bool TryPlanAll(WorldDefinition definition, CompiledRule[] rules, out SearchPlan[] plans, out CompiledRule[][] judges, out CompiledExpressionToken[]?[] scores, out string reason, RuleWork recurringWork) {
+    // Every job's plan against the compiled rules. Each job is priced against the search lane
+    // (SearchCapacity.MaxWorkUnitsPerStep) less its own per-tick upkeep, never against what the rules' sheet or
+    // another job leaves, so no other rule or job changes whether one job is admitted.
+    internal static bool TryPlanAll(WorldDefinition definition, CompiledRule[] rules, out SearchPlan[] plans, out CompiledRule[][] judges, out CompiledExpressionToken[]?[] scores, out string reason) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: rules);
 
@@ -1550,14 +1549,6 @@ public static class WorldSearchCompilation {
 
         var context = WorldFactsCompiler.Context(definition: definition);
         var frame = JudgeRules(rules: rules);
-        var sheet = recurringWork;
-
-        // A sheet no number bounds leaves no allowance to divide, and says why.
-        if (!sheet.IsKnown) {
-            reason = $"search has no work allowance: the rules' work per tick is {sheet}";
-
-            return false;
-        }
 
         var resolvedPlans = new ArenaSearchPlan[rows.Count];
 
@@ -1609,33 +1600,26 @@ public static class WorldSearchCompilation {
             }
         }
 
-        var outputs = new HashSet<int>();
-
-        foreach (var resolved in resolvedPlans) {
-            outputs.UnionWith(resolved.Outputs());
-        }
-        var positions = new long[plans.Length];
-        var upkeep = 0L;
-        for (var index = 0; index < plans.Length; index++) {
+        for (var index = 0; (index < plans.Length); index++) {
+            var plan = plans[index];
             var resolved = resolvedPlans[index];
             var keyRows = resolved.Dependencies(RuleDataflow.KeyRows(judges[index], scores[index]));
-            // Every tick checks every job, and a completed job checks again immediately before landing.
-            var disclosure = RuleCompiler.DisclosureCost(keyRows, resolved.Outputs(), context) * 2L;
-            if (!disclosure.IsKnown) { reason = $"search '{plans[index].Name}' has unbounded audience checks"; return false; }
-            upkeep = Puck.Maths.BinaryIntegerFunctions.AddSaturating(upkeep, disclosure.Units);
+            var outputs = resolved.Outputs();
+            // Every tick checks the job's audience, and a completed job checks again immediately before landing; every
+            // tick also stamps the rows its key folds that it does not write itself.
+            var disclosure = RuleCompiler.DisclosureCost(keyRows, outputs, context) * 2L;
+            if (!disclosure.IsKnown) { reason = $"search '{plan.Name}' has unbounded audience checks"; return false; }
+            var upkeep = disclosure.Units;
+            var position = 0L;
             foreach (var ordinal in keyRows) {
-                positions[index] = Puck.Maths.BinaryIntegerFunctions.AddSaturating(positions[index], context.RowCapacity(ordinal));
+                position = Puck.Maths.BinaryIntegerFunctions.AddSaturating(position, context.RowCapacity(ordinal));
                 if (!outputs.Contains(ordinal)) {
                     upkeep = Puck.Maths.BinaryIntegerFunctions.AddSaturating(upkeep, context.RowCapacity(ordinal));
                 }
             }
-        }
-        var allowance = Math.Max(val1: 0L, val2: (Math.Max(val1: 0L, val2: (RuleCapacity.MaxWorkUnitsPerTick - sheet.Units)) - upkeep));
+            var allowance = Math.Max(val1: 0L, val2: (SearchCapacity.MaxWorkUnitsPerStep - upkeep));
 
-        for (var index = 0; (index < plans.Length); index++) {
-            var plan = plans[index];
-
-            if (!TryPrice(definition, rows[index], plan.Work.Judge, allowance, positions[index], context,
+            if (!TryPrice(definition, rows[index], plan.Work.Judge, allowance, position, context,
                 plan.Shapes, plan.CellCount, (plan.Chance?.CellCount ?? 0), scores[index], out var work, out reason)) {
                 var priced = resolvedPlans[index].Dependencies(RuleDataflow.KeyRows(judges[index], scores[index]))
                     .Append(resolvedPlans[index].TokensOrdinal).Append(resolvedPlans[index].ScoresOrdinal);

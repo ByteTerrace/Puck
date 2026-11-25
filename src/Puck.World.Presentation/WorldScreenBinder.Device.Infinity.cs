@@ -461,7 +461,7 @@ public sealed partial class WorldScreenBinder {
     private readonly record struct InfinityOutput(InfinityEntry Entry, int Index);
     private readonly record struct InfinityContent(SdfFarProduct? Far, WorldSessionMirror Mirror, object? Hosted, InfinityViewSpec Spec, string Prototypes, int ScreenDepth);
     private sealed class InfinityScreenSources(InfinityEntry entry) : ISdfScreenSources {
-        public IReadOnlyList<int> Screens => AllScreens;
+        public IReadOnlyList<int> Screens => ScreensOf(definition: entry.Mirror.Definition);
 
         public bool Emits(int screen) => WorldScreenBinder.Emits(entry.Screens, screen);
         public float LuminanceOf(int screen) => WorldScreenBinder.LuminanceOf(row: entry.Screens?.RowOf(screen: screen));

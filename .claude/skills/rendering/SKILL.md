@@ -295,8 +295,20 @@ a motion slot; the lattice frame and instance selector are independent. Use
 `boundInSlotFrame` for rest-pose offsets on a moving owner's slot; a world-axis
 offset would move the bake's box away from the geometry when that owner starts turned. A skin
 past 255 members throws before queuing, instead of attaching excess members
-to the root. Volume overflow is explicit. Scope depth is 4, screen bindings 32,
-and derived faces follow authored screen indices. `SDF_MAX_INSTANCES` bounds
+to the root. Volume overflow is explicit. Scope depth is 4, and derived faces
+follow authored screen indices. A program declares any number of screens: a
+screen's index is its identity (the material id carries it), and a residency
+holds one of `SdfProgramBuilder.MaxScreenSurfaces` slots for each screen that is
+resident now (`SdfWorldTables.SettleScreenSlots`, the one door, nearest first;
+past the slots a screen shades as one with no source, never refused). Every
+per-screen table and kernel read goes through the slot (`SlotOfScreen` on the
+host, `sdfScreenSlot` in the kernels, which reads the identity-to-slot map in
+the mapping table's tail); never index a table by identity. Every set of
+resident screens (bound, emitting, sampled, a tile's lit screens) is one
+`UInt128` slot mask walked by its set bits through `BitWords`, and the kernels
+read it as a `uint4`, as they read the light mask: never loop over every slot,
+and never add a `uint` screen mask. A screen's glyph grid claims its run from
+the shared cell pool (`SdfWorldTables.MaxScreenDecalScreens`). `SDF_MAX_INSTANCES` bounds
 one bake program, not a per-world render budget.
 
 ## Moving blends
@@ -1445,7 +1457,15 @@ double precision, one point a lane). A node added to `SdfFormulaOp` states all
 three in `SdfFormula.Render`; the wide form is the fixed form's text unless the
 node says otherwise, so a new fixed carrier call needs the same member on the
 evaluator's `Wide` carriers. The wide reader refuses a tape that holds an op
-without a formula and the fixed-point gradient answers instead.
+without a formula and the fixed-point gradient answers instead. The dual reader
+lowers every formula a fourth way, for two targets from one emitter
+(`SdfFormula.EmitAllDual`, `EmitAllFixedDual`): the bake's `SdfDual` overloads and
+the query evaluator's `FixedGradient` ones (Puck.Maths' `FixedGradients` names
+each function as `field/sdf-dual.hlsli` does), which
+`TryFieldGradient` walks once over the point's tape or the culled stream (`SdfFieldEvaluator.Gradient.cs`).
+A node with no fixed-point dual (a varying exponent, the ellipse's root, the cell noise)
+leaves its formula without one, and a tape that reaches it takes the six taps.
+A new dual rule goes in both libraries ([the decision](../../../docs/decisions/engine-design.md#a-field-formula-lowers-once-per-carrier)).
 
 `ShaderDeclarations` regenerates the field switch includes and operand readers
 under `Assets/Shaders/Sdf/isa/`, and `SdfIsaHlsl` stamps both the field and whole

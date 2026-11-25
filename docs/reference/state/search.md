@@ -424,10 +424,13 @@ full replay, and one unit (`SearchWork.Minimum`), and names the sum it needs.
 Such a job would otherwise stop making progress the first time its scopes ran
 that deep.
 
-In Puck.World, the document compiler derives these prices. It takes what
-`RuleCapacity.MaxWorkUnitsPerTick` leaves after the rules' own work sheet, subtracts
-every job's worst-case input-stamp fold (the dependency rows below), and the rest
-is every job's allowance. Position-key prices likewise fold only that job's
+In Puck.World, the document compiler derives these prices. A tick's search work
+is a lane of its own, apart from the rules' sheet under
+`RuleCapacity.MaxWorkUnitsPerTick`: each job's allowance is
+`SearchCapacity.MaxWorkUnitsPerStep` less that job's own worst-case audience
+checks and input-stamp fold (the dependency rows below). Nothing another rule or
+job declares enters it, so adding a rule or a job never refuses an unrelated
+search; the tick's total is the sheet, one step and every job's upkeep. Position-key prices likewise fold only that job's
 plan and judge dependency rows, so another table's unrelated state adds no key
 cost. Shared input rows are charged once per job that stamps them:
 `ArenaSearch.Step` advances one job a step, of those with work to do (enabled,
@@ -633,7 +636,7 @@ whether it reads the clock, and `TryAdmit` decides admission.
   its ordinal among the installed jobs selects, so no two jobs share a draw
   sequence. A host calling the library directly can pass its own seed to
   `ArenaSearchPlan.TryResolve`.
-- A job whose judge rules price past what the work sheet leaves can't be planned.
+- A job whose restart, full replay and one unit price past its step lane can't be planned.
 
 For the numeric ceilings (`SearchCapacity`), see the table in
 [Limits and capacities](limits.md).

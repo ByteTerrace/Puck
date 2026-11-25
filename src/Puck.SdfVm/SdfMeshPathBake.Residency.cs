@@ -572,6 +572,9 @@ public sealed partial class SdfMeshPathBake {
                     if ((WorkQueue.Count + AnswerQueue.Count) > 0) { continue; }
                     IdleWorkers++;
                 }
+                // The jobs this worker ran freed their native workspace into its own heap, which only this thread can
+                // give back to the allocator's arenas.
+                Puck.Hosting.Jobs.MemoryAccount.Shared.ReturnThreadMemory();
                 _ = WorkWake.WaitOne();
                 lock (WorkGate) {
                     IdleWorkers--;

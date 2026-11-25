@@ -19,7 +19,7 @@ namespace Puck.SignedDistance;
 /// half-extent).</param>
 /// <param name="HalfHeight">The finite, positive half-extent along <paramref name="Up"/> (matches the slab's local Y
 /// half-extent).</param>
-/// <param name="ScreenIndex">The screen source slot (0 through <see cref="SdfProgramBuilder.MaxScreenSurfaces"/> − 1,
+/// <param name="ScreenIndex">The screen's identity (0 through <see cref="SdfProgramBuilder.MaxScreenIdentities"/> − 1,
 /// see <c>Puck.SdfVm.SdfWorldTables.SetScreenBound</c>) this
 /// surface samples when a source is bound.</param>
 public readonly record struct SdfScreenSurface(

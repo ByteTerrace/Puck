@@ -55,14 +55,11 @@ public sealed partial class SdfWorldPasses {
             images.List = reads;
             Observe(images: images, latch: in latch, reads: reads);
         }
-        Span<bool> screens = stackalloc bool[SdfWorldTables.MaxScreenSurfaces];
-
-        MarkSampled(entry: entry, frame: frame, screens: screens, sky: (sampled == ExternalReads.Sky), tables: tables, view: view, views: (part == SdfWorldPackage.Parts.Views));
+        var screens = MarkSampled(entry: entry, frame: frame, sky: (sampled == ExternalReads.Sky), tables: tables, view: view, views: (part == SdfWorldPackage.Parts.Views));
         var hash = Fnv1aHash.Create();
 
-        for (var screen = 0; (screen < screens.Length); screen++) {
-            if (!screens[screen]) { continue; }
-            if (!Fold(hash: ref hash, images: images, read: view.Residency.ScreenRead(reads: reads, screen: screen, view: view.View))) { return null; }
+        foreach (var screen in BitWords.Members(mask: screens)) {
+            if (!Fold(hash: ref hash, images: images, read: view.Residency.ScreenRead(reads: reads, screen: tables.ScreenOfSlot(slot: screen), view: view.View))) { return null; }
         }
         if (sampled == ExternalReads.Sky) {
             foreach (var binding in (frame.Views[Math.Min(val1: view.View, val2: (frame.Views.Count - 1))].SkyViews ?? [])) {
@@ -82,16 +79,15 @@ public sealed partial class SdfWorldPasses {
     // SdfWorldResidency.DeclareScreens), only those a sky layer names for the sky and the composite, and only those whose
     // face the mesh scope's cull keeps for the views pass, whose scope holds the cull its mesh pass draws this frame
     // (MotionOf, asked first).
-    private static void MarkSampled(Entry entry, SdfWorldView view, SdfFrame frame, SdfWorldTables tables, Span<bool> screens, bool sky, bool views) {
-        Span<bool> named = stackalloc bool[SdfWorldTables.MaxScreenSurfaces];
+    private static UInt128 MarkSampled(Entry entry, SdfWorldView view, SdfFrame frame, SdfWorldTables tables, bool sky, bool views) {
+        var screens = (sky ? tables.SlotsOfSky(sky: frame.Sky) : tables.ResidentScreens);
 
-        view.Residency.DeclareScreens(declared: screens);
-        if (sky) { frame.Sky.MarkScreens(screens: named); }
-        var faces = (views ? entry.DrawnOf(scope: DrawScope.Mesh, tables: tables).Motion : null);
-
-        for (var screen = 0; (screen < screens.Length); screen++) {
-            screens[screen] &= ((!sky || named[screen]) && ((faces is null) || tables.ScreenFaceShows(scope: faces, screen: screen)));
+        if ((views ? entry.DrawnOf(scope: DrawScope.Mesh, tables: tables).Motion : null) is { } faces) {
+            foreach (var screen in BitWords.Members(mask: screens)) {
+                if (!tables.ScreenFaceShows(scope: faces, screen: screen)) { screens &= ~BitWords.Bit(index: screen); }
+            }
         }
+        return screens;
     }
     // Whether every image of another instance the view's passes sample stands this frame with the publication its latest
     // render sampled (RenderGraphReadStands), so the whole view may stand while a screen shows a source: the screens the
@@ -100,13 +96,11 @@ public sealed partial class SdfWorldPasses {
     private bool ReadsStand(Entry entry, SdfWorldView view, SdfWorldTables tables, in RenderGraphReadStands stands) {
         var frame = view.Residency.Frame!;
         var images = entry.Reads;
-        Span<bool> views = stackalloc bool[SdfWorldTables.MaxScreenSurfaces];
-        Span<bool> sky = stackalloc bool[SdfWorldTables.MaxScreenSurfaces];
+        var sampled = (MarkSampled(entry: entry, frame: frame, sky: false, tables: tables, view: view, views: true) |
+            MarkSampled(entry: entry, frame: frame, sky: true, tables: tables, view: view, views: false));
 
-        MarkSampled(entry: entry, frame: frame, screens: views, sky: false, tables: tables, view: view, views: true);
-        MarkSampled(entry: entry, frame: frame, screens: sky, sky: true, tables: tables, view: view, views: false);
-        for (var screen = 0; (screen < views.Length); screen++) {
-            if ((views[screen] || sky[screen]) && (view.Residency.ScreenProducerOf(screen: screen, view: view.View) is { } producer) && !Stands(producer: producer, stands: in stands)) { return false; }
+        foreach (var screen in BitWords.Members(mask: sampled)) {
+            if ((view.Residency.ScreenProducerOf(screen: tables.ScreenOfSlot(slot: screen), view: view.View) is { } producer) && !Stands(producer: producer, stands: in stands)) { return false; }
         }
         foreach (var binding in (frame.Views[Math.Min(val1: view.View, val2: (frame.Views.Count - 1))].SkyViews ?? [])) {
             if ((binding.Producer is { } producer) && !Stands(producer: producer, stands: in stands)) { return false; }

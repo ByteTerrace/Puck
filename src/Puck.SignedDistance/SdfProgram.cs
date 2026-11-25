@@ -115,9 +115,13 @@ public sealed partial class SdfProgram {
     // The field's words (FieldWords), written by the constructor and never after, so a program that takes another
     // appearance (WithAppearance) shares them.
     private readonly uint[] m_words;
-    // The appearance section (ShadingWords), sized by the constructor, packed by Of, and replaced only on a fresh copy
-    // that takes another appearance (WithAppearance).
-    private uint[] m_appearanceWords;
+    // The appearance section (ShadingWords), m_appearanceWordCount words: allocated and packed by Of, replaced only on a
+    // fresh copy that takes another appearance (WithAppearance). A program the constructor alone made (an excerpt, which
+    // carries no appearance) holds none until a reader asks for its words, which are then zero: an excerpt is sized by
+    // the whole world's outline, and a long-lived one (a skinned bake group's source) would otherwise hold that many
+    // zero words for nothing.
+    private uint[]? m_appearanceWords;
+    private readonly int m_appearanceWordCount;
 
     /// <summary>Gets the content identity of the pixels the program's <see cref="SdfShapeType.Glyph"/> shapes sample: the
     /// value of the one atlas image's hash their builder laid them out against
@@ -312,7 +316,7 @@ public sealed partial class SdfProgram {
 
         InstructionCount = instructionCount;
         m_words = new uint[checked((materialOffsetVectors * WordsPerVector))];
-        m_appearanceWords = new uint[checked((appearance.Vectors * WordsPerVector))];
+        m_appearanceWordCount = checked((appearance.Vectors * WordsPerVector));
 
         // PATCH every ConvexPolygon instruction's Data0.x (its host-emitted placeholder is 0f) to the real packed
         // (table offset, vertex count) it will carry — BEFORE the instruction-header loop below packs m_instructions
@@ -462,7 +466,7 @@ public sealed partial class SdfProgram {
     /// <summary>Gets the appearance section, the stream's tail after <see cref="FieldWords"/>, starting at word
     /// <c>FieldWords.Length</c>: the material and paint tables, values that shade a surface and never change the field,
     /// the instruction stream or any bound. Every vector offset it holds is absolute in the whole stream.</summary>
-    public ReadOnlySpan<uint> ShadingWords => m_appearanceWords;
+    public ReadOnlySpan<uint> ShadingWords => AppearanceSection();
     /// <summary>Gets the stream's field prefix: every word the field interpreter reads (the header, the instruction
     /// headers and data, the bound tables, the directories, the rigid plan, the side tables and the part programs), up to
     /// the header's material offset. Its only appearance-derived words are the header's material count and material
@@ -473,14 +477,26 @@ public sealed partial class SdfProgram {
     public ReadOnlySpan<uint> FieldWords => m_words;
     /// <summary>Gets the packed stream's length in 32-bit words: <see cref="FieldWords"/> then
     /// <see cref="ShadingWords"/>, as the device holds them.</summary>
-    public int WordCount => (m_words.Length + m_appearanceWords.Length);
+    public int WordCount => (m_words.Length + m_appearanceWordCount);
 
     /// <summary>Copies the packed stream, <see cref="FieldWords"/> then <see cref="ShadingWords"/>, into a destination.</summary>
     /// <param name="destination">The destination, at least <see cref="WordCount"/> words.</param>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is shorter than <see cref="WordCount"/>.</exception>
     public void CopyWordsTo(Span<uint> destination) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(value: destination.Length, other: WordCount, paramName: nameof(destination));
         m_words.CopyTo(destination: destination);
-        m_appearanceWords.CopyTo(destination: destination[m_words.Length..]);
+        if (m_appearanceWords is { } section) {
+            section.CopyTo(destination: destination[m_words.Length..]);
+        } else {
+            destination.Slice(start: m_words.Length, length: m_appearanceWordCount).Clear();
+        }
+    }
+    // The appearance section, allocated on first use for a program that carries none (m_appearanceWords).
+    private uint[] AppearanceSection() {
+        if (m_appearanceWords is { } section) { return section; }
+
+        _ = Interlocked.CompareExchange(location1: ref m_appearanceWords, value: new uint[m_appearanceWordCount], comparand: null);
+        return m_appearanceWords;
     }
     /// <summary>Returns a new array of the packed stream, <see cref="FieldWords"/> then <see cref="ShadingWords"/>: the
     /// words the device holds, for a reader that needs them whole.</summary>

@@ -2,6 +2,7 @@ using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.Shaders;
 using Puck.SignedDistance;
 
@@ -40,7 +41,7 @@ public sealed partial class SdfWorldTables {
     internal bool SkyEnvironmentHasImages => SdfSkyEnvironmentRefresh.HasImages(block: m_skyRecord[0], layers: m_skyLayerRecords);
     internal bool SkyEnvironmentOwes => (m_skyEnvironment.Owes || m_skyEnvironment.Forced);
     internal bool SkyEnvironmentCanRecord => m_skyEnvironment.CanRecord;
-    internal ReadOnlySpan<bool> SkyEnvironmentScreens => m_skyEnvironment.Screens;
+    internal UInt128 SkyEnvironmentScreens => m_skyEnvironment.Screens;
 
     private void PrepareSkyEnvironment(bool physical) => m_skyEnvironment.Prepare(physical: physical);
 
@@ -121,8 +122,8 @@ public sealed partial class SdfWorldTables {
         public IGpuBuffer Coefficients { get; }
         public IGpuBuffer Map { get; }
 
-        // The screens a lit panorama layer reads.
-        public bool[] Screens => m_watch.Screens;
+        // The screens a lit panorama layer reads, a bit a screen.
+        public UInt128 Screens => m_watch.Screens;
 
         public EnvironmentPublication Publication { get; }
         // Whether the latest observation read a source with unfilled external content.
@@ -158,27 +159,28 @@ public sealed partial class SdfWorldTables {
                 ref var layer = ref layers[index];
 
                 if ((layer.Kind != SdfSkyLayerKind.Panorama) || (layer.Opacity <= 0f) || !SdfSkyEnvironment.IsLit(layer: layer)) { continue; }
-                var screen = SdfSky.PayloadOf<SdfSkyPanorama>(layer: ref layer).Screen;
+                var slot = m_tables.SlotOfScreen(screen: SdfSky.PayloadOf<SdfSkyPanorama>(layer: ref layer).Screen);
 
-                if (((uint)screen) < MaxScreenSurfaces) { m_watch.Read(screen: screen); }
+                if (slot >= 0) { m_watch.Read(screen: slot); }
             }
-            for (var screen = 0; (screen < Screens.Length); screen++) {
-                if (!Screens[screen]) { continue; }
+            foreach (var slot in BitWords.Members(mask: Screens)) {
+                var screen = m_tables.m_screenOfSlot[slot];
+
                 // A residency projects one canonical panorama, independent of the consuming camera's fit.
                 if ((residency.ScreenSources is { } sources) && sources.Screens.Contains(value: screen) &&
                     (residency.ScreenRead(reads: reads, screen: screen, view: view) is var read and >= 0) && (reads is not null)) {
                     var input = reads[read];
 
                     if (input.TryRead(latch: in latch, read: out var resolved) && (resolved.ImageViewHandle != 0)) {
-                        m_watch.Observe(publication: resolved.Publication, screen: screen, tainted: input.Label.External);
+                        m_watch.Observe(publication: resolved.Publication, screen: slot, tainted: input.Label.External);
                         if (!resolved.Publication.IsPublished()) { known = false; }
                     } else {
-                        m_watch.Observe(publication: default, screen: screen, tainted: false);
+                        m_watch.Observe(publication: default, screen: slot, tainted: false);
                     }
                 }
             }
             CanRecord &= (known || Forced);
-            Owes = m_refresh.Owes(block: m_tables.m_skyRecord[0], layers: layers, physical: m_physical, imageChanged: ((m_watch.ChangedScreens() != 0u) || !known || Forced));
+            Owes = m_refresh.Owes(block: m_tables.m_skyRecord[0], layers: layers, physical: m_physical, imageChanged: ((m_watch.ChangedScreens() != UInt128.Zero) || !known || Forced));
             return known;
         }
         public long Publish() {
