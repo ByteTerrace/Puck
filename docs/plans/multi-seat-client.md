@@ -521,14 +521,15 @@ seed derived from the run's, so a failure under a schedule reproduces.
   same loop that reads them, so a stalled write stopped reads, the authority's
   queue for that subscriber filled, and the authority detached the observer.
   The acknowledgement is cumulative (the latest stream stamp), so the client
-  now keeps only the latest and writes it from its own task
+  keeps only the latest and writes it from its own task
   (`WorldRemoteAuthority`'s observation loop). The authority's per-subscriber
   bound (`WorldFederationProjectionSink.PendingDeliveryLimit`) holds seconds of
-  deliveries rather than a quarter of one. A traveller's stream also ended
-  whenever the authority's document changed, by comparing whole serialized
-  projections at every delivery; the feed already sends such a change as a
-  delta, so the comparison is gone. Prototype fetches move to their own lane,
-  so a large fetch no longer queues a seat's input behind it.
+  deliveries, not a fraction of one. A traveller's stream also ended whenever
+  the authority's document changed, found by comparing whole serialized
+  projections at every delivery; the feed sends such a change as a delta, so
+  the stream no longer compares them. Prototype fetches take their own lane
+  (`WorldFederationLane.Content`), so a large fetch never queues a seat's input
+  behind it.
 - *A refused control line, and a pose that did not land.* A remote seat's
   `body.pose spawn:<id>` is resolved by the authority that declares the spawn
   (`WorldCommand.PoseSpawn`), not by the client's copy of a document it may
@@ -542,12 +543,20 @@ seed derived from the run's, so a failure under a schedule reproduces.
 - *A tight step that never settled.* Against a remote clock the stick scaled a
   delivered speed that was already a lag old, under a floor of a fifth of a
   walk, so a body at rest beside a 10 cm goal was sent off at full deflection
-  and oscillated about it. The stick now asks for an absolute speed: the
-  braking curve started a measured control lag late, and near a stop half the
-  speed that closes the remaining distance in one lag, so each overshoot is
-  smaller than the distance it had to cover and the approach converges at any
-  lag. The step lands once the body is inside its goal with the release
-  answered and the body at rest.
+  and oscillated about it. The stick asks for an absolute speed instead. Toward
+  a stop that speed follows the braking curve started a measured control lag
+  late, and is at most half the speed that closes the remaining distance in one
+  lag, so each overshoot is smaller than the distance it had to cover and the
+  approach converges at any lag. A corner plans against the latest lag rather
+  than the longest, since a turn taken late only widens it; braking for every
+  corner against the longest lag left a narrow lane walked at a crawl, and not
+  braking at all bounced the body between its walls.
+  A stop plans against the longest round trip met lately, decaying eight
+  ticks each second, since a burst after a held delivery is random. Running
+  raises only the top speed the stick's speed is asked against, so a held run
+  never outruns a stop; a dash, whose burst cannot be taken back, waits for
+  room to stop from twice a run. The step lands once the body is inside its
+  goal with the release answered and the body at rest.
 - *A chapter's clock.* A chapter's time limit counts the authority ticks
   delivered for the seat's body, so a slow delivery spends none of it; the
   client's own ticks bound it only as a backstop several times longer.
