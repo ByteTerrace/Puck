@@ -44,7 +44,7 @@ own program, through the taped mutation door every submission uses
 | # | Interaction | State | Check |
 |---|---|---|---|
 | 1 | A world reads another's published value | Built: followed rows; the moon's `day` follows the debug world's | `world.state.cell.set day $value 0.75` on the debug world; `world.state day instance:<moon>` reads 0.75 within a tick; `follows-tests.puck --reproduce` passes |
-| 2 | A door onto another world opened in play | Built in part: `portal.open`, `portal.gate`, a door bound to its opener, the far world's socket and a lease on each side, all on followed rows; two doors share the rows, the moon painting in the painting wing and a standing frame on the launch field (`moon-door-valley`); a shut door holds no session | A press on either door's step: `moonDoorOffer` 1, the moon's `moonSocket` 1, `moonDoorOpen` 1; walking in lands the seat at the moon's socket (`body.where` names `instance:…moon`, grounded on the pad); a closed door holds the body at the wall |
+| 2 | A door onto another world opened in play | Built in part: `portal.open`, `portal.gate`, a door bound to its opener, the far world's socket and a lease on each side, all on followed rows, authored as the standard's agreement template (`worlds/standard/agreement.puck`); two doors, the moon painting in the painting wing (`moonDoor`) and a standing frame on the launch field (`valleyDoor`), each with its own socket on the moon; a shut door holds no session | `worlds/debug/moon-door-tests.puck --reproduce`: a press on a door's step gives `<door>Offer` 1, the moon's `<door>Grant` 1 and `<door>Open` 1; walking in lands the seat at that door's socket on the moon; a closed door holds the body at the wall |
 | 3 | A body across a joined seam keeps its own looks | Not built | A seat crossing a joined ground seam is drawn with its creation look in the boot scene (a capture), and the neighbour's bodies inside the band are drawn as themselves |
 | 4 | Crossing pre-start | Not built; the window's second residency is the RTX 2060 memory lane's | `world.residency` before and after a crossing names no residency created on the crossing frame; the crossing frames' produce in a quiet window |
 | 5 | Acting across worlds | Built: the moon beacon switch beside the moon painting lights the moon's beacon by the moon's own rule | A seat's press at the switch: debug `moonBeacon` 1, the moon's `moonBeacon` 1 and `beaconPower` 40000; a capture through the moon painting or on the moon's pad shows the lit lamp |
@@ -79,12 +79,14 @@ steps 1, 11 and 12, without the moving door frames step 1 also names:
   `WorldInstanceHost.SettleScreenSessions`): the owner's observation through
   its glass closes when the door shuts and opens again when it opens, so a shut
   door keeps only its screen slot.
-- The pairing is authored in rows (moon-door.puck, moon.puck): the opener's
-  press writes `moonDoorOffer`, the opener's `moonDoorPass` cell and the source's
-  lease deadline; the moon follows the offer and its rule grants its socket
-  under its own lease and its own refusal row (`socketRefuses`); the debug world
-  follows the socket back, and the door opens only while both stand. Each world
-  owns the door that stands in it, and either lease lapses on its own clock.
+- The pairing is an agreement between the two worlds, each owning its half
+  (`worlds/standard/agreement.puck`; moon-door.puck, moon.puck): the opener's
+  press writes `<door>Offer`, the opener's `<door>Pass` cell and the offer's
+  lease deadline; the moon follows the offer and its rule grants the door's
+  socket under its own lease and its own refusal row (`<door>Refuses`); the
+  debug world follows the grant back, and the door opens (`<door>Open`) only
+  while both stand. Each world owns the door that stands in it, and either
+  lease lapses on its own clock.
 
 A world declares any number of screens, and a door's glass holds a slot only
 while it is resident
@@ -93,16 +95,9 @@ so the valley door is the debug world's thirty-third screen and many more fit.
 
 Left in this interaction, in order:
 
-1. **The valley door's way home.** The moon's socket names the painting as its
-   counterpart (moon.puck), so walking back out of the socket lands before the
-   painting even when the traveller came in by the valley frame. A second socket
-   on the moon, or a counterpart chosen by the door the traveller came through,
-   gives each door its own way home; the socket is the moon's document, so the
-   change is the `crossworld` lane's. *Check:* walking back out of the socket
-   after entering by the valley frame lands before the valley frame.
-2. **Pooled doors on bodies** (live door frames), so a door is posed where a
+1. **Pooled doors on bodies** (live door frames), so a door is posed where a
    player aims rather than standing where an author put it.
-3. **The door lease across two processes**
+2. **The door lease across two processes**
    ([step 13](portals-in-play.md#build-order)): a followed row already reads a
    remote leader through the remote-capable observation; the kill-mid-lease
    scenarios are owed.

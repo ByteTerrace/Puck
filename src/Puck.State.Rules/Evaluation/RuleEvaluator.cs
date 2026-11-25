@@ -680,11 +680,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         var firings = 0;
 
         foreach (var key in m_eachKeyScratch) {
-            var eachBinding = new LatchKey(
-                Left: key.Ordinal,
-                Right: -1,
-                LeftGeneration: (rule.Iteration?.Generation(host: m_host, key: key) ?? 0)
-            );
+            var eachBinding = SweepLatchKey(key: key, rule: rule);
 
             // A sweep that has spent its firings leaves its remaining bindings as they stand, so an open edge waits for
             // the tick that reaches it instead of being closed by the sweep's end.

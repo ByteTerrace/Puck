@@ -60,6 +60,10 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
                 PlacementId: placementId
             );
         }
+        if (reference.Call is { Channel: WorldPlayerIteration.Channel, Count: 0 }) {
+            Needs.Add(facet: FacetRef.Of<IWorldPlayers>());
+            return WorldPlayerIteration.For(definition: Definition);
+        }
         if (reference.Call is not { Channel: "inputEvents" } call) { return null; }
         if (call.Count < 1) { throw new RuleException(WorldRuleRefusal.ChannelMalformed, ruleName, "inputEvents expects one input owner"); }
         var owner = WorldFactsVocabulary.CompileInputOwner(string.Join(':', call.Texts()), this, ruleName);

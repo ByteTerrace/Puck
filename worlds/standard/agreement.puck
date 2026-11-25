@@ -1,0 +1,95 @@
+// An agreement between two worlds, each owning its half: one world offers, the other grants, and the agreement stands
+// only while both do. No world writes the other's state: each half publishes the row it owns, follows the other's
+// (a state row's `follows`), and decides by its own rules what the other's row means for it. A door onto another world
+// is one (the debug world's moon doors, worlds/debug/moon-door.puck and worlds/debug/moon.puck); so is a trade, a
+// duel's challenge or any handshake across worlds. A module library: it hands its importers templates and emits no
+// document.
+//
+// Both halves share the agreement's `name`, which prefixes every row and rule, so the rows that follow one another
+// carry one name in both worlds:
+//
+//   <name>Offer        the offer: 1 while it stands. The offering world's own; the granting world follows it.
+//   <name>Until        the tick the offer lapses at, unless offered again (offering world).
+//   <name>Pass         whom the agreement admits, keyed by body index: each party who made the offer (offering world).
+//   <name>Grant        the grant: 1 while it stands. The granting world's own; the offering world follows it.
+//   <name>GrantUntil   the tick the grant lapses at (granting world).
+//   <name>Refuses      the granting world's own say: while it reads 1, no offer is granted (granting world).
+//   <name>Open         1 while the offer and the grant both stand: what the agreement's effect reads, such as a door's
+//                      `portal.open` (offering world).
+//
+// Each lease runs on its own world's clock, so a half whose partner falls silent frees itself: a grant lapses though
+// the offer never withdraws, and an offer lapses though the grant never answers.
+
+// The offering world's half. `partner` is the destination the granting world is reached through; `admits` is how many
+// parties the agreement can admit at once (its `Pass` row's capacity). The offer itself is made by `offerAgreement`,
+// spliced into the importer's own rule, whose gate says who offers and when.
+template agreementOffers(name, partner, admits = 16) {
+  state {
+    world [
+      { name: $"{name}Offer", kind: "Int", value: 0, min: 0, max: 1 }
+      { name: $"{name}Until", kind: "Int", value: 0 }
+      { name: $"{name}Pass", kind: "Int", capacity: admits }
+      { name: $"{name}Grant", kind: "Int", value: 0, min: 0, max: 1, follows { destination: partner } }
+      { name: $"{name}Open", kind: "Int", value: 0, min: 0, max: 1 }
+    ]
+  }
+
+  // The offer lapses at its lease's end.
+  rule $"{name}-lapse" {
+    when $"{name}Offer" == 1 and $tick >= $"{name}Until"
+    mode: Edge
+    $"{name}Offer" = 0
+  }
+  // With the offer gone, nobody holds a pass.
+  rule $"{name}-pass-lapse" {
+    when $"{name}Offer" == 0 and $"{name}Pass"[$each] == 1
+    forEach: $"{name}Pass"
+    remove $"{name}Pass"[$each]
+  }
+  // The agreement stands while this world offers and the partner grants.
+  rule $"{name}-opens" {
+    when $"{name}Offer" == 1 and $"{name}Grant" == 1
+    mode: Edge
+    $"{name}Open" = 1
+  }
+  rule $"{name}-closes" {
+    when $"{name}Offer" == 0 or $"{name}Grant" == 0
+    mode: Edge
+    $"{name}Open" = 0
+  }
+}
+
+// The offer, made by the party a rule binds to `$each` (a sweep's binding, such as `forEach: region(step)`): it stands
+// for `lease` from this tick, offered afresh by each party who makes it, and admits that party.
+rule template offerAgreement(name, lease) {
+  $"{name}Offer" = 1
+  $"{name}Pass"[$each] = 1
+  schedule $"{name}Until" in lease
+}
+
+// The granting world's half. `partner` is the destination the offering world is reached through; `lease` is how long
+// this world grants an offer before its grant lapses on its own, offer or no offer.
+template agreementGrants(name, partner, lease) {
+  state {
+    world [
+      { name: $"{name}Offer", kind: "Int", value: 0, min: 0, max: 1, follows { destination: partner } }
+      { name: $"{name}Grant", kind: "Int", value: 0, min: 0, max: 1 }
+      { name: $"{name}GrantUntil", kind: "Int", value: 0 }
+      { name: $"{name}Refuses", kind: "Int", value: 0, min: 0, max: 1 }
+    ]
+  }
+
+  // An offer is granted unless this world refuses, for a lease it counts itself.
+  rule $"{name}-grants" {
+    when $"{name}Offer" == 1 and $"{name}Refuses" == 0
+    mode: Edge
+    $"{name}Grant" = 1
+    schedule $"{name}GrantUntil" in lease
+  }
+  // The grant ends with the offer, with this world's refusal, or at its own lease's end.
+  rule $"{name}-withdraws" {
+    when $"{name}Grant" == 1 and ($"{name}Offer" == 0 or $"{name}Refuses" == 1 or $tick >= $"{name}GrantUntil")
+    mode: Edge
+    $"{name}Grant" = 0
+  }
+}

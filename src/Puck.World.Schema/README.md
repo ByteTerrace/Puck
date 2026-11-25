@@ -272,7 +272,8 @@ expression's row—spells `$zones[<index>]` with an infix key as the index
 (`game[from]`, `$each`, `$local:<name>`, an expression), so one authored rule
 serves every pile of a game; `forEach: "$zones"` visits the table's own
 indices (`forEach: "$bodies"` visits every live body in ascending index order,
-the facet `ILiveBodies` the world rule host serves), and an evaluation whose live index selects no entry reads its gate
+the facet `ILiveBodies` the world rule host serves, and `forEach: "$players"`
+every body a player holds, `IWorldPlayers`), and an evaluation whose live index selects no entry reads its gate
 closed (the table's gaps say which piles the rule is for; `world.rule.trace`
 lists what each spelling selected). `$zone:<ordered-zone>:first|last` selects
 an endpoint's original string key from the active store; an empty zone's
@@ -2921,10 +2922,9 @@ replaces the sequence and rows and keeps the authored `select`;
 `world.population` echoes each assignment's selector and `world.looks` the
 bodies each look holds. The debug world's suit toggle
 (`worlds/debug/suit.puck`) selects both by a `suit` register, which the garden
-and the night field declare too. The toggle is one rule per local seat
-(`worlds/debug/suit-toggle.puck`): a rule reads a seat as a literal checked
-against `bodies.localSeats`, so `suit.puck` instantiates seat 1 and a world
-seating more bodies instantiates one `suitToggle(seat, index)` for each more.
+and the night field declare too. The toggle is one rule over every player's
+body (`forEach: $players`, `WorldPlayerIteration`), so a second seat or an
+admitted visitor flips its own register with no further rule.
 
 ### Body sleep
 

@@ -716,7 +716,7 @@ suited Moth walking from the same kit flying. Flight eligibility follows the
 existing flight-fuel register through the selector's zero/positive partition,
 not the camera page, a shadow mode register or an enumeration of every fuel
 value. The `rise` action remains eligible in a suited walking state: the Moth's
-existing `fly-1` rule uses it to start flight. The out-of-suit pilot has no such
+existing `fly` rule uses it to start flight. The out-of-suit pilot has no such
 action except while noclip is active. All form changes below remain subject to
 their existing mutation gates.
 

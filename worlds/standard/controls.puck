@@ -506,7 +506,7 @@ bindingOverlays [
                   "gamepad.buttonNorth"
                 ]
               }
-              // Fly while held (Left Ctrl, M, the right stick's press): rise without jump, which the `fly-1` rule reads as
+              // Fly while held (Left Ctrl, M, the right stick's press): rise without jump, which the `fly` rule reads as
               // switching flight mode on, so she takes off and climbs, and letting go hovers. The View page's right stick
               // press (controls.puck) is autofly.
               {

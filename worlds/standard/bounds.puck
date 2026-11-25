@@ -1,5 +1,10 @@
-// Boxes given their bounds, for shells, furniture and frames built from boxes. A module library: it hands its
-// importers templates and emits no document.
+// Boxes given their bounds, for shells, furniture and frames built from boxes, and for regions. A module library: it
+// hands its importers functions and templates and emits no document.
+
+// The centre and the half-extents of a box given its bounds `{ x0, x1, y0, y1, z0, z1 }`, as a region's placement
+// position and its `halfExtents` spell it.
+function boundsCentre(box) = [((box.x0 + box.x1) / 2), ((box.y0 + box.y1) / 2), ((box.z0 + box.z1) / 2)]
+function boundsHalf(box) = [((box.x1 - box.x0) / 2), ((box.y1 - box.y0) / 2), ((box.z1 - box.z0) / 2)]
 
 // One box given its world bounds, for a creation standing at the origin with no yaw: the author frame is turned 180
 // degrees about up from the world's, so the row negates x and z. `bevel` chamfers it (0 leaves the box's own fillet).

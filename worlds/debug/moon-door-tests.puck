@@ -1,0 +1,127 @@
+// The moon doors (moon-door.puck, moon.puck), each scenario booted in the whole debug world:
+// `puck test worlds/debug/moon-door-tests.puck --reproduce`. Each door is an agreement between the two worlds
+// (../standard/agreement.puck): a press on its step offers, the moon follows the offer and grants it by its own rule,
+// this world follows the grant back, and the door opens only while both stand. The rows carry the door's agreement
+// name: `moonDoor` for the painting in the painting wing, `valleyDoor` for the frame on the launch field. A headless
+// seat's camera faces -Z, so W walks her -Z, into either door's glass from its step. `moon { … }` is judged in the moon
+// instance the crossing reaches, so what she is there reads there: the painting's door lands her at the socket on the
+// pad's east rim (x 7), the valley frame's at the socket on its west rim (x -7).
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+// Keep same-world portals in this fixture's boot instance instead of opening another live debug world.
+documentId: "debug"
+import "stopped-machines"
+
+test "a press on the painting's step opens its door for the seat that pressed" {
+  when {
+    ticks 10
+    seat1: body.pose 66 0.1 13.6 0 0 0 0
+    ticks 10
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    ticks 30
+  }
+  expect {
+    moonDoorOffer == 1
+    moonDoorPass[0] == 1
+    moonDoorGrant == 1
+    moonDoorOpen == 1
+    valleyDoorOffer == 0
+    valleyDoorOpen == 0
+  }
+}
+
+test "walking through the painting's open door lands at its socket on the moon" {
+  when {
+    ticks 10
+    seat1: body.pose 66 0.1 13.6 0 0 0 0
+    ticks 10
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    ticks 30
+    seat1: player.signal keyboard.w press
+    ticks 90
+    seat1: player.signal keyboard.w release
+    ticks 30
+  }
+  expect {
+    moon {
+      moonDoorGrant == 1
+      bodyPosition(body, 0, x) > 4
+    }
+  }
+}
+
+test "walking through the valley frame's open door lands at its own socket on the moon" {
+  when {
+    ticks 10
+    seat1: body.pose 100 0.3 78.9 0 0 0 0
+    ticks 10
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    ticks 30
+    seat1: player.signal keyboard.w press
+    ticks 90
+    seat1: player.signal keyboard.w release
+    ticks 30
+  }
+  expect {
+    moon {
+      valleyDoorGrant == 1
+      bodyPosition(body, 0, x) < -4
+    }
+  }
+}
+
+test "a door stays shut for a press off its step" {
+  when {
+    ticks 10
+    seat1: body.pose 66 0.1 16 0 0 0 0
+    ticks 10
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    ticks 30
+  }
+  expect {
+    moonDoorOffer == 0
+    moonDoorOpen == 0
+  }
+}
+
+// The beacon switch beside the painting (moon-beacon.puck): a press in its reach flips the row the moon follows.
+test "a press in the beacon switch's reach lights the moon's beacon" {
+  when {
+    ticks 10
+    seat1: body.pose 63.9 0.1 13.3 0 0 0 0
+    ticks 10
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    ticks 10
+  }
+  expect {
+    moonBeacon == 1
+  }
+}
+
+test "the offer lapses at its lease's end, and with it the door and the pass" {
+  when {
+    ticks 10
+    seat1: body.pose 66 0.1 13.6 0 0 0 0
+    ticks 10
+    seat1: player.signal keyboard.e press
+    ticks 2
+    seat1: player.signal keyboard.e release
+    ticks 2760
+  }
+  expect {
+    moonDoorOffer == 0
+    moonDoorOpen == 0
+    moonDoorGrant == 0
+  }
+}

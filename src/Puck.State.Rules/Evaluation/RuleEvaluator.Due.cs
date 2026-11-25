@@ -98,9 +98,9 @@ public sealed partial class RuleEvaluator {
             list.MarkNamed(name: traced);
         }
     }
-    // One visit of a body sweep the list holds per body: every live body when the rule is due in full (a row or the
-    // whole roster it reads moved, or its list was just built), otherwise only the bodies due. Each binding still
-    // passes the version door, so a due body whose own facts did not move keeps its verdict.
+    // One visit of a body sweep the list holds per body: every body the sweep binds when the rule is due in full (a row,
+    // the set or the whole roster it reads moved, or its list was just built), otherwise only the bodies due. Each
+    // binding still passes the version door, so a due body whose own facts did not move keeps its verdict.
     private bool SweepBodies(int index, RuleDueList list, ulong stepTicks, out bool whole) {
         var state = list.States[index];
         var latch = list.Latch;
@@ -112,8 +112,7 @@ public sealed partial class RuleEvaluator {
 
         state.Spent.Visits++;
         state.Spent.Sweeps++;
-        m_dueLive.Clear();
-        ((ILiveBodies)m_host).CollectLiveBodies(into: m_dueLive);
+        CollectSweptBodies(into: m_dueLive, rule: list.Rules[index]);
         list.SnapshotLive(index: index, live: m_dueLive);
         latch.BeginSweep();
 
@@ -138,6 +137,37 @@ public sealed partial class RuleEvaluator {
 
         return applied;
     }
+    // The bodies a body sweep binds now, in ascending index order: the live bodies for `forEach: $bodies`, or the body
+    // index each key of a body-binding iteration spells (RuleIteration.BindsBodies). An in-place sweep binds the same
+    // keys through EachKeys, so the scheduled and the in-place sweep judge one set.
+    internal void CollectSweptBodies(CompiledRule rule, List<int> into) {
+        into.Clear();
+        if (rule.Iteration is not { BindsBodies: true } iteration) {
+            ((ILiveBodies)m_host).CollectLiveBodies(into: into);
+
+            return;
+        }
+        m_sweptKeyScratch.Clear();
+        iteration.Collect(host: m_host, into: m_sweptKeyScratch);
+
+        var keys = m_host.Arena.Keys;
+
+        foreach (var key in m_sweptKeyScratch) {
+            if (keys.TryCandidateIndex(index: out var body, key: key)) {
+                into.Add(item: body);
+            }
+        }
+    }
+
+    private readonly List<CellKey> m_sweptKeyScratch = [];
+
+    // The latch entry of one binding of a keyed sweep, the one every path that judges or forgets a binding names: the
+    // bound key, with the lifetime a host iteration gives it (RuleIteration.Generation).
+    internal LatchKey SweepLatchKey(CompiledRule rule, CellKey key) => new(
+        Left: key.Ordinal,
+        Right: -1,
+        LeftGeneration: (rule.Iteration?.Generation(host: m_host, key: key) ?? 0)
+    );
     // One binding of a keyed sweep the list holds per binding (a body's index, or a row sweep's snapshot position),
     // judged under its key. A verdict that must be judged again keeps the binding due; a binding a partial sweep
     // could not evaluate is closed exactly as a full sweep's end closes it; and a firing's moves are drained at once,
@@ -145,7 +175,7 @@ public sealed partial class RuleEvaluator {
     private bool SweepBinding(RuleDueList list, int index, int binding, CellKey key, bool full, ulong stepTicks) {
         var state = list.States[index];
         var latch = list.Latch;
-        var bound = new LatchKey(Left: key.Ordinal, Right: -1);
+        var bound = SweepLatchKey(key: key, rule: list.Rules[index]);
         var firingsRun = m_firingsRun;
 
         list.ClearBinding(binding: binding, index: index);

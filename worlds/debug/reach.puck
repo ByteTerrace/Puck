@@ -1,0 +1,35 @@
+// A reach: the floor before a plate, a button or a door, where a press of the context button acts. It is a region
+// (place-kit.puck's `place` carries it), so the rule a press fires is one rule over whoever stands there,
+// `forEach: region(id)`, and costs the bodies in reach rather than one copy of the rule for every seat and visitor.
+// A module library: it hands its importers a template and a function and emits no document; an importer composes
+// place-kit.puck for the carrier.
+//
+//   placements {
+//     reach(id: "lamp-reach", box: { x0: 1, x1: 2, y0: -0.5, y1: 1, z0: 3, z1: 4 })
+//   }
+//   rule "lamp" {
+//     when pressing()
+//     mode: Edge
+//     forEach: region("lamp-reach")
+//     lamp = 1 - lamp
+//   }
+
+import "../standard/bounds"
+
+// The bodies the work sheet prices a reach's press rule at: two players reaching for one plate at once.
+let reachCapacity = 2
+
+// The reach `id` over a box given its world bounds.
+template reach(id, box, capacity = reachCapacity) {
+  placement id {
+    prototype: "place"
+    position: boundsCentre(box)
+    region {
+      halfExtents: boundsHalf(box)
+      capacity: capacity
+    }
+  }
+}
+
+// Whether the body a reach's sweep binds presses the context button; a body no player holds reads no channel.
+function pressing() = channel(each, interact) >= 1

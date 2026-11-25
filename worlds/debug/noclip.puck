@@ -132,10 +132,17 @@ kits {
 // Keeps every body's `form` the suit register plus two while noclip is on, and 4 on a craft. Rules run before the
 // tick's kit selection, so a toggle moves her kit the tick it lands.
 rule "noclip-form" {
-  when bodyState(each, form) != ((bodyState(each, craft) * 4) + ((1 - bodyState(each, craft)) * (bodyState(each, suit) + 2 * bodyState(each, noclip))))
+  when bodyState(each, form) != (
+    (bodyState(each, craft) * 4) +
+    ((1 - bodyState(each, craft)) * (bodyState(each, suit) + 2 * bodyState(each, noclip)))
+  )
   mode: Level
   forEach: $bodies
-  setBodyState(key: $each, state: "form", expression: (bodyState(each, craft) * 4) + ((1 - bodyState(each, craft)) * (bodyState(each, suit) + 2 * bodyState(each, noclip))))
+  setBodyState(
+    key: $each,
+    state: "form",
+    expression: (bodyState(each, craft) * 4) + ((1 - bodyState(each, craft)) * (bodyState(each, suit) + 2 * bodyState(each, noclip)))
+  )
 }
 
 // In the suit, noclip holds flight mode on, so she wears her flight pose while she flies through things and hovers
@@ -147,18 +154,14 @@ rule "noclip-flight" {
   setBodyState(key: $each, state: "flightFuel", expression: 1000)
 }
 
-// One seat's noclip toggle: the noclip channel of the 1-based local `seat` flips the register of that seat's own body,
-// the 0-based `index`, wherever she is. A rule reads a seat as a literal, so a world that seats more bodies
-// instantiates one toggle for each more, as suit-tests.puck does the suit's.
-template noclipToggle(seat, index) {
-  rule $"noclip-toggle-{seat}" {
-    when channel(seat, noclip) >= 1
-    mode: Edge
-    setBodyState(key: $"{index}", state: "noclip", expression: 1 - bodyState(body, index, noclip))
-  }
+// The noclip toggle: a player's noclip channel flips the register of that player's own body, wherever she is. One rule
+// over every player's body, a seat's or a visitor's.
+rule "noclip-toggle" {
+  when channel(each, noclip) >= 1
+  mode: Edge
+  forEach: $players
+  setBodyState(key: $each, state: "noclip", expression: 1 - bodyState(each, noclip))
 }
-
-noclipToggle(seat: 1, index: 0)
 
 bindingOverlays [
   {

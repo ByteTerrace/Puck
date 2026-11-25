@@ -588,8 +588,10 @@ and a region interaction follows the event feed's occupancy for its placement.
 Both follow carrier membership and pool instance lifetimes. When due, each visits
 pairs in its original order. Decisions, rules with live rows or a `maxFirings`,
 and sweeps over a set no version names are due every tick. A
-`forEach: region(placement)` sweep is due when the region's occupants change or
-something its bindings read moves, and then sweeps the occupants.
+`forEach: region(placement)` sweep is due in full when the region's occupants
+change, and a `forEach: $players` sweep for the body that joined or left the
+players; otherwise either is due for the occupant or player whose own fact or
+cell moved, as a body sweep is (`RuleIteration.BindsBodies`).
 
 A keyed sweep is due **per binding**. A schedule records how the judgement
 reaches each row it reads (`RowReach`): the cell under the key bound to
@@ -598,7 +600,10 @@ cell `row[k]` then marks only binding `k` of a rule that reads the row as
 `row[$each]`, a move of another literal cell marks nothing, and only a move
 of a cell every binding may read, or a change to the row's members or order,
 marks the rule in full. A host fact read for the body bound to `$each` marks
-that body's binding the same way. A rule over a thousand keys of which one
+that body's binding the same way, and in a sweep whose keys are bodies it marks
+nothing for a body outside the set the sweep last bound: that body has no
+binding until the set itself moves, which reaches the sweep through the set's
+own schedule. A rule over a thousand keys of which one
 changed judges one binding. A row sweep judges its due keys in cell order over
 the keys the row held at its last full sweep, which stand while the row's
 structure does (`StateArena.RowStructureVersion`), so the order and the set

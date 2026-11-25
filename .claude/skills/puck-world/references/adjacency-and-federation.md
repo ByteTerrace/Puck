@@ -723,8 +723,14 @@ value. `world.counters world.federation` counts reads and adoptions;
 
 A door's `portal.open` and `portal.gate` (`WorldPlacementPortal.Open`,
 `WorldPortalGate`) are read in `ScanPortalFace`; a closed door's opening is a
-wall again through `WorldPopulation.PortalClosures`. The debug world's moon
-door pairs two such doors on followed rows (moon-door.puck, moon.puck).
+wall again through `WorldPopulation.PortalClosures`. A handshake across two
+worlds is the standard's agreement template (`worlds/standard/agreement.puck`):
+`agreementOffers` is the offering world's half (offer, lease, pass, the
+partner's followed grant, open), `offerAgreement` the rule template a press
+splices in, and `agreementGrants` the granting world's half (followed offer,
+grant under its own lease, refusal row). The debug world's moon doors are two
+agreements, `moonDoor` and `valleyDoor` (moon-door.puck, moon.puck), each with
+its own socket on the moon.
 
 ## Federation transport
 

@@ -88,7 +88,7 @@ rule).
 
 Out of flight mode, letting go of Space while still rising cuts the jump short.
 In flight mode, releasing Space holds altitude. Fly is rise pressed without
-jump, which the `fly-1` rule reads as switching flight mode on, so Space and
+jump, which the `fly` rule reads as switching flight mode on, so Space and
 South, which press both, stay a jump; `body.press rise` from the console flies
 too. The run toggle, autorun and autofly latch the run, forward and rise
 channels on the input side: the simulation reads them as held, and a second

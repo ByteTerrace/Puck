@@ -400,11 +400,14 @@ world follows it, and the other world's own rules decide what it does there. A
 door opened onto another world is two doors paired this way: the source offers
 in a row, the destination grants in a row of its own under its own lease and
 refusal, each follows the other, and each door opens only while both stand.
-Several frames may stand for one pairing (the debug world's moon painting and
-its valley frame share the offer, the pass and the socket), and a door that
-stands shut holds no session onto the far world: its owner's observation
-through the glass closes with the door and opens with it, so a shut door costs
-its registration alone.
+That pairing is authored once, as the standard's agreement template
+(`worlds/standard/agreement.puck`): an agreement between two worlds, each owning
+its half, which a door, a trade or any other handshake across worlds imports
+under its own name. The debug world's moon painting and its valley frame are
+two agreements, each with its own socket on the moon, so each door's way home
+leads back to it. A door that stands shut holds no session onto the far world:
+its owner's observation through the glass closes with the door and opens with
+it, so a shut door costs its registration alone.
 
 **Options weighed.**
 
@@ -439,7 +442,7 @@ one boundary.
 
 **Evidence.** [Cross-world interaction](../plans/cross-world.md);
 [portals in play, section 4](../plans/portals-in-play.md#4-a-door-onto-another-world-opened-in-play);
-`worlds/debug/follows-tests.puck`.
+`worlds/debug/follows-tests.puck`; `worlds/debug/moon-door-tests.puck`.
 
 ## The tables
 

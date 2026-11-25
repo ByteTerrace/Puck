@@ -5,7 +5,8 @@
 // lit beacon shows through the painting's glass and to anyone standing on the moon.
 
 import "../standard/bounds"
-import "shapes"
+import "place-kit"
+import "reach"
 
 // The plate stands on the wing's south wall, left of the moon painting as a viewer facing the painting sees it, its
 // face toward +Z; the reach box is the floor before it.
@@ -23,24 +24,18 @@ state {
   ]
 }
 
-// A press of the context button inside the reach box flips the switch, a seat's or a visitor's; the edge fires once a
-// press.
-for b in range(0, (seatPopulation + visitorPopulation)) {
-  let suffix = ((b == 0) ? "" : $"-{b}")
-  rule $"moon-beacon-switch{suffix}" {
-    when (channel(body, b, interact) >= 1 and
-      bodyPosition(body, b, x) > beaconReach.x0 and
-      bodyPosition(body, b, x) < beaconReach.x1 and
-      bodyPosition(body, b, z) > beaconReach.z0 and
-      bodyPosition(body, b, z) < beaconReach.z1 and
-      bodyPosition(body, b, y) > beaconReach.y0 and
-      bodyPosition(body, b, y) < beaconReach.y1)
-    mode: Edge
-    moonBeacon = 1 - moonBeacon
-  }
+// A press of the context button in the reach flips the switch, a seat's or a visitor's: one rule over whoever stands
+// there, whose edge fires once a press.
+rule "moon-beacon-switch" {
+  when pressing()
+  mode: Edge
+  forEach: region("moon-beacon-reach")
+  moonBeacon = 1 - moonBeacon
 }
 
 placements {
+  reach(id: "moon-beacon-reach", box: beaconReach)
+
   placement "moon-beacon-switch" {
     prototype: "moon-beacon-switch-off"
     position [0, 0.05, 0]
@@ -66,9 +61,36 @@ prototypes {
           { color: "#3A3F47", roughness: 0.6, specular: 0.15 }
           { color: state.indicator, roughness: 0.4, emissive: state.glow }
         ]
-        boundsBox(label: "plate", x0: (beaconPlateX - 0.13), x1: (beaconPlateX + 0.13), y0: 1.1, y1: 1.46, z0: beaconPlateZ, z1: (beaconPlateZ + 0.04), slot: 0)
-        boundsBox(label: "rocker", x0: (beaconPlateX - 0.035), x1: (beaconPlateX + 0.035), y0: 1.24, y1: 1.32, z0: (beaconPlateZ + 0.04), z1: (beaconPlateZ + 0.09), slot: 1)
-        boundsBox(label: "indicator", x0: (beaconPlateX - 0.02), x1: (beaconPlateX + 0.02), y0: 1.39, y1: 1.42, z0: (beaconPlateZ + 0.04), z1: (beaconPlateZ + 0.055), slot: 2)
+        boundsBox(
+          label: "plate",
+          x0: (beaconPlateX - 0.13),
+          x1: (beaconPlateX + 0.13),
+          y0: 1.1,
+          y1: 1.46,
+          z0: beaconPlateZ,
+          z1: (beaconPlateZ + 0.04),
+          slot: 0
+        )
+        boundsBox(
+          label: "rocker",
+          x0: (beaconPlateX - 0.035),
+          x1: (beaconPlateX + 0.035),
+          y0: 1.24,
+          y1: 1.32,
+          z0: (beaconPlateZ + 0.04),
+          z1: (beaconPlateZ + 0.09),
+          slot: 1
+        )
+        boundsBox(
+          label: "indicator",
+          x0: (beaconPlateX - 0.02),
+          x1: (beaconPlateX + 0.02),
+          y0: 1.39,
+          y1: 1.42,
+          z0: (beaconPlateZ + 0.04),
+          z1: (beaconPlateZ + 0.055),
+          slot: 2
+        )
       }
     }
   }

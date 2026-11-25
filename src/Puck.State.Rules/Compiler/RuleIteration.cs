@@ -15,6 +15,12 @@ public abstract record RuleIteration(int Capacity) {
     /// changes rather than as swept every tick.</summary>
     public virtual bool Versioned => false;
 
+    /// <summary>Gets a value indicating whether every key the sweep binds is a body's index key (the key
+    /// <see cref="CellKeyTable.TryResolveIndex"/> gives that index), bound in ascending index order. A due list then
+    /// visits such a sweep per body, as it visits <c>forEach: $bodies</c>: a move of one body's fact, or of the cell a
+    /// body's key names, reaches that body's binding alone, and only a move of the set itself
+    /// (<see cref="TrySchedule"/>) reaches every binding.</summary>
+    public virtual bool BindsBodies => false;
     /// <summary>Distinguishes successive lifetimes which reuse a bounded key.</summary>
     public abstract long Generation(IEffectHost host, CellKey key);
     /// <summary>Names the rows and host facts whose versions move whenever the set of keys a sweep binds changes, so

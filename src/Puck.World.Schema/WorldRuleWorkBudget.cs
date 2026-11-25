@@ -475,7 +475,9 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                         ? $"forEach inputEvents, the events one step admits={events.StepCapacity} (of {events.HistoryCapacity} retained){firings}"
                         : ((rule.Iteration is WorldRegionIteration occupants)
                             ? $"forEach region occupants, {RegionSweepCapacity(definition: definition, placementId: occupants.PlacementId).Terms}{firings}"
-                            : "no forEach — priced once"))))
+                            : ((rule.Iteration is WorldPlayerIteration players)
+                                ? $"forEach {WorldPlayerIteration.Spelling} players={players.Players} (localSeats + networkPlayers){firings}"
+                                : "no forEach — priced once")))))
         );
     }
     /// <summary>Returns the work units an expression costs against a document.</summary>

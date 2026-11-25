@@ -30,7 +30,7 @@ test "noclip switched off inside the cube, she steps out beside it onto the grou
 }
 
 // Out of the suit, entering noclip changes her flight family; a rise held from before must not be released by a
-// transient flight-mode flip on the way (suit.puck gates `fly-1` by the suit).
+// transient flight-mode flip on the way (suit.puck gates `fly` by the suit).
 test "out of the suit, noclip flies her" {
   when {
     ticks 30

@@ -3118,7 +3118,7 @@ P1 last. The plan owns the feature end to end; these are the defects it does not
   the surface) with its values in the standard package. Seen at
   (-65.6, -0.8, 27.8).
 - [medium] Swimming switched the Moth into flight mode with `flightFuel` at
-  1000, though `fly-1` needs rise without jump; suspected, jump reads zero for
+  1000, though `fly` needs rise without jump; suspected, jump reads zero for
   a tick across the hold change. `body.hold` also kept answering `hold=swim`
   on the grass afterwards.
 - [medium] The carved channel's acceptance gaps: at stage 1 the river is so

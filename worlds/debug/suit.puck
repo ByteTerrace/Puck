@@ -14,7 +14,6 @@ import "../standard/kits"
 
 import "avatars/moth-pilot"
 import "pad-kit"
-import "suit-toggle"
 
 // The cell her look's hold pose reads, which a world's rules set to have her hold the handheld (devices.puck's brick).
 exports {
@@ -132,21 +131,35 @@ looks {
   ]
 }
 
-// A press flips the suit once while she stands; a press in the air fires only if it is still held when she lands. The
-// toggle is one rule per local seat (suit-toggle.puck): every Moth world seats one.
-suitToggle(seat: 1, index: 0)
+// A press flips the suit once while she stands; a press in the air fires only if it is still held when she lands. One
+// rule over every player's body, a seat's or a visitor's.
+rule "suit-toggle" {
+  when channel(each, suit) >= 1 and fact(each, Airborne) == 0
+  mode: Edge
+  forEach: $players
+  setBodyState(key: $each, state: "suit", expression: 1 - bodyState(each, suit))
+}
+
+// Out of the suit she has no flight pack, so flight mode she wore when the suit came off ends (the flight switch below
+// is gated by the suit, so no press starts it), and she puts the suit back on standing.
+rule "suit-off-flight" {
+  when bodyState(each, suit) == 0 and bodyState(each, flightFuel) > 0
+  mode: Level
+  forEach: $players
+  setBodyState(key: $each, state: "flightFuel", expression: 0)
+}
 
 // The basis's flight switch, in the suit only: out of it she has no flight pack. Each change of the flight input family
 // releases a held rise, which a noclip climb out of the suit (noclip.puck) holds, so out of the suit the press must not
-// switch flight mode on even for the tick before the toggle's `suit-off-flight` would switch it off again.
-rule "fly-1" {
-  when channel(1, rise) >= 1 and channel(1, jump) == 0 and bodyState(body, 0, flightFuel) == 0 and bodyState(
-      body,
-      0,
+// switch flight mode on even for the tick before `suit-off-flight` would switch it off again.
+rule "fly" {
+  when channel(each, rise) >= 1 and channel(each, jump) == 0 and bodyState(each, flightFuel) == 0 and bodyState(
+      each,
       suit
     ) == 1
   mode: Level
-  setBodyState(key: 0, state: "flightFuel", expression: 1000)
+  forEach: $players
+  setBodyState(key: $each, state: "flightFuel", expression: 1000)
 }
 
 // The basis's flight pose, raised only in the suit: out of it she has no wings to deploy.

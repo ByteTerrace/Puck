@@ -126,7 +126,11 @@ A document's `schema:` field selects its vocabulary, never the filename.
   `rule` inside a rule-body `for` is **PUCK114**; write the condition in the
   rule's own `when`, or in an `if` inside the loop.
 - **A sweep source is a row, a reserved word or a call.** `forEach: hand`
-  sweeps a keyed row's keys and `forEach: $bodies` the live bodies. A reserved
+  sweeps a keyed row's keys, `forEach: $bodies` the live bodies and
+  `forEach: $players` the bodies players hold (a seat's or a visitor's), so a
+  rule about every member of a set is one rule, never a compile-time `for` that
+  copies it per seat, visitor or body index
+  ([the decision](../../../docs/decisions/state-and-language.md#rules-over-sets)). A reserved
   channel that takes arguments is written as a call, as a gate's fact is:
   `forEach: region(crossing.approach)` sweeps the bodies inside a placement's
   region and `forEach: inputEvents(seat)` a step's input events. Each argument

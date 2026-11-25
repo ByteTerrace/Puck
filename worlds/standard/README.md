@@ -9,6 +9,15 @@ readings; importing worlds can override its `benchmark` panel by id.
 [paths.puck](paths.puck) supplies reusable quadratic corridor masks for paving and
 scenery exclusions. It is a pure authoring library; a world owns its routes and widths.
 
+[agreement.puck](agreement.puck) is an agreement between two worlds, each owning
+its half: `agreementOffers` in the offering world (the offer and its lease, whom
+it admits, the partner's grant it follows, and whether the agreement stands),
+`offerAgreement` the rule template the offering rule splices in, and
+`agreementGrants` in the granting world (the offer it follows, its grant under
+its own lease, and its refusal row). A door onto another world, a trade or any
+handshake across worlds imports it under a name of its own; the debug world's
+moon doors are two (`../debug/moon-door.puck`, `../debug/moon.puck`).
+
 The standard is an optional authored design package. The engine supplies input,
 layout, camera and motion mechanisms; these documents supply their design.
 

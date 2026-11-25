@@ -30,7 +30,7 @@ Every rule has a name and at least one effect. The rest is optional:
 | Locals | Values computed once per evaluation, in declared order. The gate and every effect can read them. The ones the gate reads, directly or through another local, are computed before the gate; the rest only when the evaluation fires. A local is never stored; it lives for one evaluation. | `price` |
 | Gate | The predicate that must hold. A rule with no gate always holds. | `coins >= price` |
 | Mode | Whether a holding gate fires on every evaluation (`Level`, the default) or only when it opens (`Edge`). | `Edge` |
-| Iteration | `forEach: row` evaluates the rule once per key of a keyed row, `forEach: $zones` once per entry of the rule's zone table, `forEach: $bodies` once per live body, in Puck.World `forEach: region(placement)` once per body inside a placement's region, and `rule name for each x in pool` once per live pool instance. `maxFirings: n` ends an iterating sweep once `n` bindings have fired. | none |
+| Iteration | `forEach: row` evaluates the rule once per key of a keyed row, `forEach: $zones` once per entry of the rule's zone table, `forEach: $bodies` once per live body, in Puck.World `forEach: $players` once per body a player holds and `forEach: region(placement)` once per body inside a placement's region, and `rule name for each x in pool` once per live pool instance. `maxFirings: n` ends an iterating sweep once `n` bindings have fired. | none |
 | Effects | The ordered changes the rule attempts when it fires. | two assignments |
 | Zones | A table of ordered piles the rule can select from at runtime. | none |
 
@@ -770,6 +770,24 @@ participant reference bound to that body. A body-keyed effect takes it as
 that holds no bodies refuses the rule at admission by the facet it lacks
 (`ILiveBodies`). A decision cannot iterate it; a decision's `forEach` names a
 keyed row.
+
+In Puck.World, `forEach: $players` sweeps the bodies players hold: a local
+seat's active body and each admitted visitor's, wherever admission placed it,
+in ascending body-index order, with `$each` and `each` bound as a body sweep
+binds them. It is priced at the players the document admits
+(`bodies.localSeats` plus `bodies.networkPlayers`), so a rule about what any
+player does (a toggle, a flight switch) is one rule, never one copy a seat:
+
+```puck
+rule "noclip-toggle" {
+  when channel(each, noclip) >= 1
+  mode: Edge
+  forEach: $players
+  setBodyState(key: $each, state: "noclip", expression: 1 - bodyState(each, noclip))
+}
+```
+
+A decision cannot iterate it.
 
 In Puck.World, `forEach: region(placement)` sweeps a place instead of a
 population: the rule evaluates once per body inside the named placement's
