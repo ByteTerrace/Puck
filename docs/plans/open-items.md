@@ -3195,6 +3195,14 @@ Owner: a specialist a step, the design reviewed · ordinary, and ahead of
 cross doors · Next: [the plan](portals-in-play.md#build-order)'s step 1, live
 door frames. Nothing of the plan is built.
 
+- [high] **Flight does not arm after a crossing.** In `worlds/debug/suit-tests.puck`, the
+  scenarios that cross suited into the garden and that come home suited press flight after the
+  crossing, and the press never sets `flightFuel` (`bodyState(body, 0, flightFuel) > 0` and then
+  `bodyPosition(body, 0, y) > 1` fail; the garden's own claim is never evaluated). It fails the same
+  way before the rules-over-sets change, with the old literal-seat rules restored and with the
+  per-body visit filter forced on, so the cause sits on the press path after a transfer: the flight
+  toggle in `worlds/standard/abilities.puck` sets `flightPress`, and its `onFact` Grounded/Airborne
+  actions set `flightFuel`. Check: both scenarios pass under `--reproduce`.
 - [medium] A door on a row whose position reads a state cell fires where the
   row first stood: the face catalog caches its frame (`WorldFaceCatalog`).
   Step 1 fixes it, and its lane first writes the scenario that fails today.
