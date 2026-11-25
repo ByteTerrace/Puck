@@ -76,30 +76,6 @@ public sealed partial class WorldCompileSession {
         return ReadPersisted(key: ("composition\0" + key), read: ReadImage);
     }
 
-    // The compile cache's build guard can answer whether this build has already walked its layer code. The layer
-    // entries use the result of the walk, allowing another build with the same shaping code to share them.
-    string IWorldCompositionStore.GetLayerCodeHash(Func<string> derive) {
-        if (Volatile.Read(location: ref m_state.LayerCodeHash) is { } held) { return held; }
-        lock (m_state.PersistLock) {
-            if (m_state.LayerCodeHash is { } existing) { return existing; }
-            const string Key = "composition-layer-code";
-            var hash = ReadPersisted(key: Key, read: static reader => {
-                var value = reader.ReadString();
-
-                return Puck.Abstractions.ContentDigest.IsLowerHexDigits(length: 32, text: value)
-                    ? value : throw new InvalidDataException(message: "Invalid composition layer code hash.");
-            });
-            if (hash is null) {
-                hash = derive();
-                var derived = hash;
-
-                ScheduleCompositionWrite(() => WritePersisted(key: Key, write: writer => writer.Write(value: derived)));
-            }
-            Volatile.Write(location: ref m_state.LayerCodeHash, value: hash);
-            return hash;
-        }
-    }
-
     // The layer key already carries the reached code and input digests. Use the same envelope and retention
     // as the compile cache without adding the assembly identity of its transport to the layer's name.
     private const string CompositionLayerIdentity = "composition-layer";

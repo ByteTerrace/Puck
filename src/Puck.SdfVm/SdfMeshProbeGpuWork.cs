@@ -21,11 +21,14 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     private readonly Queue<Job> m_pending = new();
     // The measured GPU cost of each kind's unit (UnitsOf), indexed by JobKind: what TryTake charges a job and what sizes
     // trace, relight and selection jobs to the live frame allowance. Complete measures them on the recording
-    // thread; the coordinator reads them as it cuts jobs.
+    // thread; the coordinator reads them as it cuts jobs. A trace, relight or selection job holds hundreds of probes' rays
+    // or tests of many costs, so its rate follows the mean (SdfGpuWorkRate's rise of Fall): sized for the costliest job
+    // seen, every job priced its allowance and measured a fraction of it, and the work took a third of the share it was
+    // granted. A camera sample is a handful of probes, sized for its costly ones.
     private readonly SdfGpuWorkRate[] m_rates = [
-        new(priorSecondsPerUnit: SdfMeshProbeDepth.HitCount * 1e-8),
-        new(priorSecondsPerUnit: 1e-8),
-        new(priorSecondsPerUnit: 1e-8),
+        new(priorSecondsPerUnit: SdfMeshProbeDepth.HitCount * 1e-8, rise: SdfGpuWorkRate.Fall),
+        new(priorSecondsPerUnit: 1e-8, rise: SdfGpuWorkRate.Fall),
+        new(priorSecondsPerUnit: 1e-8, rise: SdfGpuWorkRate.Fall),
         new(priorSecondsPerUnit: SdfMeshProbeDepth.HitCount * 1e-8),
     ];
     // The coordinator's window (Run): the parts of one call it has submitted and not yet read, oldest

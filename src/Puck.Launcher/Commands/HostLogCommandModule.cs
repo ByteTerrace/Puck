@@ -21,7 +21,7 @@ internal sealed class HostLogCommandModule(HostLog log) : ICommandModule {
         yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Host,
             bindability: CommandBindability.Unbindable,
-            description: $"Reads the recent lines this World wrote to stdout and stderr (bake lines, refusals, narration, pacing), each as #<seq> t<tick> out|err <line>, where tick is the one the World had completed when the line was written (t- before the first). {HostLogForms.Spelling}: last answers the newest n matching lines (default {DefaultLast}); since only lines after a sequence (the header's next since reads on from this read); ticks only lines written at those ticks, either end optional; category only lines whose leading tag ([sdf.mesh-bake] …, [world.wait: …]) starts with the prefix; stream only one stream; text only lines containing the word, or the quoted words, ignoring case. Clauses combine in any order. The World holds its newest {HostLog.Capacity} lines and {HostLog.CharacterBudget} characters, evicting the oldest; command answers reach the session that asked and are not held, refusals are.",
+            description: $"Reads the recent lines this World wrote to stdout and stderr (bake lines, refusals, narration, pacing), each as #<seq> t<tick> +<seconds>s out|err <line>, where tick is the one the World had completed when the line was written (t- before the first) and seconds are counted from the process's start, so a wait shows as the gap between two lines. {HostLogForms.Spelling}: last answers the newest n matching lines (default {DefaultLast}); since only lines after a sequence (the header's next since reads on from this read); ticks only lines written at those ticks, either end optional; category only lines whose leading tag ([sdf.mesh-bake] …, [world.wait: …]) starts with the prefix; stream only one stream; text only lines containing the word, or the quoted words, ignoring case. Clauses combine in any order. The World holds its newest {HostLog.Capacity} lines and {HostLog.CharacterBudget} characters, evicting the oldest; command answers reach the session that asked and are not held, refusals are.",
             forms: HostLogForms,
             handler: (_, args) => {
                 var query = new HostLogQuery { Last = DefaultLast };
@@ -95,7 +95,7 @@ internal sealed class HostLogCommandModule(HostLog log) : ICommandModule {
 
         foreach (var line in read.Lines) {
             _ = builder.Append(value: '\n');
-            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"#{line.Sequence} t{((line.Tick is { } tick) ? tick.ToString(provider: CultureInfo.InvariantCulture) : "-")} {((line.Stream == HostLogStream.Output) ? "out" : "err")} {line.Text}");
+            _ = builder.Append(provider: CultureInfo.InvariantCulture, handler: $"#{line.Sequence} t{((line.Tick is { } tick) ? tick.ToString(provider: CultureInfo.InvariantCulture) : "-")} +{line.Seconds:0.000}s {((line.Stream == HostLogStream.Output) ? "out" : "err")} {line.Text}");
         }
 
         return builder.ToString();

@@ -464,6 +464,32 @@ public sealed class SdfResidencySelectorLawTests {
         Assert.Equal(expected: 1L, actual: new SdfGpuWorkAllowance(Queued: false, Seconds: (0.1 * allowance)).UnitsWithin(most: 100L, rate: rate));
     }
     [Fact]
+    public void AJobEnteredBeforeAFramesSubmissionsNoLongerCountsAgainstTheNextFrame() {
+        var budget = new SdfGpuWorkBudget(time: VirtualClock.ForDevice());
+        var reader = budget.Join(name: "reader");
+        var allowance = budget.FrameAllowanceSeconds;
+        var first = budget.ChargeGpu(seconds: allowance);
+
+        Assert.Equal(expected: 0.0, actual: budget.AllowanceOf(turn: reader).Seconds, precision: 12);
+
+        // The frame submitted after the job runs behind it; the next frame's allowance is whole again, but while the job is
+        // in flight a job past the allowance waits.
+        budget.FramePassed();
+        var next = budget.AllowanceOf(turn: reader);
+
+        Assert.Equal(expected: new SdfGpuWorkAllowance(Queued: true, Seconds: allowance), actual: next);
+        Assert.False(condition: next.Admits(seconds: (2.0 * allowance)));
+        Assert.Equal(expected: 0.0, actual: budget.QueuedSeconds);
+
+        // A job entered before the frame leaves the in-flight count alone of the next frame's: the second job's room stands.
+        var second = budget.ChargeGpu(seconds: (0.5 * allowance));
+
+        budget.Leave(charge: first);
+        Assert.Equal(expected: (0.5 * allowance), actual: budget.QueuedSeconds, precision: 12);
+        budget.Leave(charge: second);
+        Assert.Equal(expected: new SdfGpuWorkAllowance(Queued: false, Seconds: allowance), actual: budget.AllowanceOf(turn: reader));
+    }
+    [Fact]
     public void AFrameIsCountedMissedBehindBackgroundWorkOnlyWhenThatWorkAndItsOwnTimeOverrunItsPeriod() {
         const double Period = (1.0 / 60.0);
         var budget = new SdfGpuWorkBudget(time: VirtualClock.ForDevice());

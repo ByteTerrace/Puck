@@ -32,6 +32,11 @@ public static class CodeRevision {
 
     /// <summary>Gets the number of metadata updates applied to this process.</summary>
     public static int Current => Volatile.Read(location: ref Applications);
+    /// <summary>Gets the <see cref="System.Diagnostics.Stopwatch"/> timestamp at which the runtime began applying the latest
+    /// update, or zero before the first: the edit an edit loop times a hot reload from.</summary>
+    public static long AppliedAt => Volatile.Read(location: ref AppliedTimestamp);
+
+    private static long AppliedTimestamp;
 
     /// <summary>Returns the applied identity of the code a product reads: empty while no update applied to this process
     /// changed a type <paramref name="reads"/> selects; otherwise a token unique to this process and the latest update
@@ -57,16 +62,6 @@ public static class CodeRevision {
 
         return string.Empty;
     }
-    /// <summary>Returns the applied identity (<see cref="AppliedTo"/>) of the code in the named assemblies.</summary>
-    /// <param name="assemblies">The simple names of the assemblies the product's code lives in.</param>
-    /// <returns>The applied identity, or empty.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="assemblies"/> is <see langword="null"/>.</exception>
-    public static string AppliedToAssemblies(IReadOnlySet<string> assemblies) {
-        ArgumentNullException.ThrowIfNull(argument: assemblies);
-
-        return AppliedTo(reads: type => assemblies.Contains(item: (type.Assembly.GetName().Name ?? string.Empty)));
-    }
-
     private static bool Reads(Func<Type, bool> reads, Type type) {
         for (var candidate = type; (candidate is not null); candidate = candidate.DeclaringType) {
             if (reads(arg: candidate)) {
@@ -88,6 +83,7 @@ public static class CodeRevision {
             var revision = (Applications + 1);
 
             Volatile.Write(location: ref Updates, value: [.. Updates, new Update(Revision: revision, Types: updatedTypes)]);
+            Volatile.Write(location: ref AppliedTimestamp, value: System.Diagnostics.Stopwatch.GetTimestamp());
             Volatile.Write(location: ref Applications, value: revision);
         }
     }

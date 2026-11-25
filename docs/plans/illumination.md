@@ -519,13 +519,21 @@ Six steps run in order:
    result stays a function of its inputs.
    - *Deadline admission.* Built: the jobs queued ahead of one frame together
      fit one frame allowance. The service's one take hands every client what
-     is left of the live allowance after the charged jobs still in flight on
-     the presentation's queue (`SdfGpuWorkBudget.AllowanceOf`; no bound for a held
-     frame), and while work is queued a client takes no job priced past it, so
-     neither `SdfGpuWork.SlotCount` allowance-sized jobs nor credit banked over
-     a long gap (`SdfGpuWorkBudget.MostBankSeconds` times the share) queue more
-     than an allowance ahead of a frame. A job with nothing queued runs
-     whatever its price. The probe coordinator still cuts queries to the whole
+     is left of the live allowance after the charged jobs entered since the
+     latest frame's submissions and still in flight
+     (`SdfGpuWorkBudget.AllowanceOf`; no bound for a held frame). A job entered
+     before a frame's submissions runs ahead of that frame, which the next frame
+     waits behind anyway, so the presentation marks each frame's submissions
+     (`SdfGpuWorkBudget.FramePassed`) and such a job stops counting against the
+     next frame; counting every job in flight held the work to one allowance per
+     round trip through the queue, two or three frames. While work is queued a
+     client takes no job priced past what is left, so neither
+     `SdfGpuWork.SlotCount` allowance-sized jobs nor credit banked over a long
+     gap (`SdfGpuWorkBudget.MostBankSeconds` times the share) queue more than an
+     allowance ahead of a frame. A job with nothing in flight at all runs
+     whatever its price. The probe service's trace, relight and selection rates
+     follow the mean of their measurements, since each job mixes hundreds of
+     probes of many costs. The probe coordinator still cuts queries to the whole
      allowance, so a query waits for an empty queue; cutting it to what is left
      needs the coordinator to know the queue when it cuts.
    - *Controller and overload order.* Dynamic resolution reads the root views'

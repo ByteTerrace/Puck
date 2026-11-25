@@ -20,7 +20,9 @@ public enum HostLogStream {
 /// <c>world.wait</c> for <c>[world.wait: …]</c>); an indented continuation line carries the tag of the line before it,
 /// and an untagged line carries none.</param>
 /// <param name="Text">The line, without its terminator, cut at <see cref="HostLog.MaxLineCharacters"/>.</param>
-public readonly record struct HostLogLine(long Sequence, ulong? Tick, HostLogStream Stream, string Category, string Text);
+/// <param name="Seconds">The seconds from the process's start (<see cref="Puck.Abstractions.ProcessClock"/>) to the line's
+/// write, so a wait shows as the gap between two lines.</param>
+public readonly record struct HostLogLine(long Sequence, ulong? Tick, HostLogStream Stream, string Category, string Text, double Seconds);
 /// <summary>What a <see cref="HostLog.Read"/> selects. Every member narrows; none set reads the newest
 /// <see cref="Last"/> lines.</summary>
 public sealed record HostLogQuery {
@@ -91,7 +93,7 @@ public sealed class HostLog(int capacity = HostLog.Capacity, int characterBudget
     private Func<ulong>? m_tick;
 
     // One held line: its characters are m_text's Length from Start, wrapping at its end.
-    private readonly record struct Entry(long Sequence, ulong? Tick, HostLogStream Stream, string Category, int Start, int Length);
+    private readonly record struct Entry(long Sequence, ulong? Tick, HostLogStream Stream, string Category, int Start, int Length, long Timestamp);
 
     /// <summary>Gets the line capacity.</summary>
     public int LineCapacity => m_ring.Length;
@@ -176,7 +178,8 @@ public sealed class HostLog(int capacity = HostLog.Capacity, int characterBudget
                     Sequence: entry.Sequence,
                     Stream: entry.Stream,
                     Text: (text ?? TextOf(entry: entry)),
-                    Tick: entry.Tick
+                    Tick: entry.Tick,
+                    Seconds: Puck.Abstractions.ProcessClock.SecondsAt(timestamp: entry.Timestamp)
                 ));
             }
 
@@ -260,6 +263,7 @@ public sealed class HostLog(int capacity = HostLog.Capacity, int characterBudget
 
         var held = (line.Length + markerLength);
         var tick = Volatile.Read(location: ref m_tick)?.Invoke();
+        var timestamp = System.Diagnostics.Stopwatch.GetTimestamp();
 
         lock (m_gate) {
             var slot = (int)stream;
@@ -286,7 +290,8 @@ public sealed class HostLog(int capacity = HostLog.Capacity, int characterBudget
                 Sequence: ++m_sequence,
                 Start: start,
                 Stream: stream,
-                Tick: tick
+                Tick: tick,
+                Timestamp: timestamp
             );
             m_count++;
             m_characters += held;

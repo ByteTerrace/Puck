@@ -93,7 +93,7 @@ half of these rules on every command, with no exemptions.
 | [`puck azure`](../development/ci.md#azure-production-deployment) | build, deploy, publish, and verify Puck's Azure production; run from the repository root. |
 | [`puck baselines`](#puck-baselinestest-baselines) | records a committed test baseline (the browser parity hashes) from a fresh run of the test that holds it, or checks it with `--check`. |
 | [`puck benchmark`](#puck-benchmarkthe-route-benchmark) | plays a route (the `test` blocks of a `.puck` source) through a fresh paused World in real time on each backend and reports every chapter's frame statistics, hitches, GPU passes and counters; `--against` and `compare` compare reports and refuse unlike runs by name. |
-| [`puck bench`](#puck-benchthe-puckmaths-microscope) | measurement lanes: `puck bench kernels` is the on-demand micro-benchmark microscope over the Maths, SDF, and state kernels, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` measures the server tick path, `puck bench startup` measures real-process world readiness, and `puck bench state-evidence` replays the cost schedule's instruction evidence or, with `--capture`, compiles the pinned reference lowerings and walks each kernel's maximum permitted path afresh. |
+| [`puck bench`](#puck-benchthe-puckmaths-microscope) | measurement lanes: `puck bench kernels` is the on-demand micro-benchmark microscope over the Maths, SDF, and state kernels, built on [BenchmarkDotNet](https://github.com/dotnet/BenchmarkDotNet); `puck bench world` measures the server tick path, `puck bench startup` measures real-process world readiness, `puck bench loops` times the edit loops (boot, a `.puck` edit, its revert and a restart), and `puck bench state-evidence` replays the cost schedule's instruction evidence or, with `--capture`, compiles the pinned reference lowerings and walks each kernel's maximum permitted path afresh. |
 | [`puck branding`](#puck-brandingmaintained-assets) | synchronize and check canonical product marks, icons, palette tokens, and their consumers. |
 | [`puck bundle`](#automation-commands) | create and verify deployment artifact manifests. |
 | [`puck canary`](#puck-canaryreal-world-behavioral-proofs) | bounded positive-and-discriminating proofs run against one exact Release build of the real `Puck.World`. |
@@ -3756,6 +3756,35 @@ every sample of every world; `--json` prints the report. This is process-cold st
 disk, driver, and shader caches are retained. Measure cold-cache behavior
 separately and label it explicitly. Use a quiet machine and repeat discrepant
 measurements before treating a difference as an improvement.
+
+---
+
+### `puck bench loops`
+
+Times the edit loops of [the iteration plan](../plans/iteration.md#how-each-is-measured)
+in a windowed World, alone on the GPU, each edit class as its own figure. The
+World runs on a private copy of the repository's `worlds` directory under
+`--output` (default `artifacts/loops`), refreshed file by file so an unchanged
+file keeps its write time and the compile cache stays warm between runs; the
+checkout is never edited. Each round boots the World and waits for the boot
+loop to settle, turns the source watch off, applies the `.puck` edit to the
+copy and reloads, reverts it and reloads, quits, and boots a second process
+over the same caches, which is the restart a C# edit outside hot reload costs
+less the World's build:
+
+```sh
+puck bench loops
+puck bench loops --samples 3 --backend vulkan
+puck bench loops debug --edit "debug/debug.puck|color: \"#E8B341\"|color: \"#41B3E8\""
+```
+
+Every figure is the World's own `[world.iteration]` line, so the metrics are
+`<class>.<stage>` in seconds: `boot`, `edit`, `revert` and `restart` by
+`first`, `frame`, `shaded`, `shown`, `meshes` and `lit`, each as median, p10 and
+p90 over `--samples` rounds, with each loop's whole line under `rows`. A hot-reload
+edit is the World's own `hot-reload` loop when it runs under `dotnet watch`; the
+verb does not drive one. A loop that does not settle within `--timeout-seconds`
+fails the round and the run exits 1.
 
 ---
 

@@ -46,8 +46,6 @@ public sealed class CodeRevisionLawTests {
         Assert.EndsWith(expectedEndString: $".{CodeRevision.Current}", actualString: applied);
         // The token is the process's: a later update keeps it and moves only the revision.
         Assert.Equal(expected: touched[..touched.IndexOf(value: '.', comparisonType: StringComparison.Ordinal)], actual: applied[..applied.IndexOf(value: '.', comparisonType: StringComparison.Ordinal)]);
-        Assert.Equal(expected: applied, actual: CodeRevision.AppliedToAssemblies(assemblies: new HashSet<string>(collection: [typeof(Read).Assembly.GetName().Name!])));
-        Assert.Equal(expected: string.Empty, actual: CodeRevision.AppliedToAssemblies(assemblies: new HashSet<string>(collection: ["Puck.Nowhere"])));
     }
     [Fact]
     public void AnUpdateTheRuntimeDidNotNameTouchesEverything() {
@@ -77,6 +75,5 @@ public sealed class CodeRevisionLawTests {
         Assert.Throws<ArgumentNullException>(testCode: () => table.TryGetValue(key: null!, value: out _));
         Assert.Throws<ArgumentNullException>(testCode: () => table.AddOrUpdate(key: null!, value: "x"));
         Assert.Throws<ArgumentNullException>(testCode: () => CodeRevision.AppliedTo(reads: null!));
-        Assert.Throws<ArgumentNullException>(testCode: () => CodeRevision.AppliedToAssemblies(assemblies: null!));
     }
 }
