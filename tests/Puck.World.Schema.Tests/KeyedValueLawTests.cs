@@ -17,6 +17,9 @@ public sealed class KeyedValueLawTests {
         clock: "day",
         keys: [.. keys.Select(selector: static key => new WorldKey<T>(At: key.At, Ease: key.Ease, Value: key.Value))]
     );
+    private static WorldKeyTrack<BindableScalar> Track(params (double At, float Value, WorldEase Ease)[] keys) => Track<BindableScalar>(
+        keys: [.. keys.Select(selector: static key => (key.At, ((BindableScalar)key.Value), key.Ease))]
+    );
     private static WorldDefinition Definition(WorldRenderSky? sky = null, WorldRenderLighting? lighting = null) => new(
         RenderRaw: new WorldRenderDefaults(Lighting: lighting, Sky: sky),
         StateRaw: new WorldStateSection(World: [new WorldStateRow(
@@ -75,10 +78,16 @@ public sealed class KeyedValueLawTests {
             (0d, (350f * degree), WorldEase.Linear),
             (12d, (10f * degree), WorldEase.Linear)
         );
-        var middle = WorldKeyResolver.Angle(
+        var (from, to, t) = WorldKeyResolver.Locate(
             phase: 0.25d,
             span: 24d,
             track: track
+        );
+        var middle = WorldKeyResolver.Blend(
+            angle: true,
+            from: (track.Keys[from].Value.Literal ?? 0f),
+            t: t,
+            to: (track.Keys[to].Value.Literal ?? 0f)
         );
 
         // From 350° to 10° passes 0°: halfway reads a whole turn, which is 0°, never 180°.
@@ -190,9 +199,9 @@ public sealed class KeyedValueLawTests {
     }
     [Fact]
     public void A_key_on_an_undeclared_clock_or_out_of_order_is_refused_by_name() {
-        var keyed = new WorldRenderSkyLayer.SunDisc(Intensity: new BindableScalar(keys: new WorldKeyTrack<float>(
+        var keyed = new WorldRenderSkyLayer.SunDisc(Intensity: new BindableScalar(keys: new WorldKeyTrack<BindableScalar>(
             clock: "night",
-            keys: [new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f)]
+            keys: [new WorldKey<BindableScalar>(At: 0d, Ease: WorldEase.Linear, Value: 0f)]
         )));
 
         Assert.Contains(
@@ -333,7 +342,7 @@ public sealed class KeyedValueLawTests {
 
         Assert.Equal(
             expected: tick.Integrate(modulus: 64d, ratePerSecond: 0.75d),
-            actual: WorldKeyResolver.Integrate(clock: clock, modulus: 64d, tick: tick, track: new WorldKeyTrack<float>(clock: "day", keys: [new WorldKey<float>(At: 17d, Ease: WorldEase.Smooth, Value: 0.75f)])),
+            actual: WorldKeyResolver.Integrate(clock: clock, modulus: 64d, tick: tick, track: new WorldKeyTrack<BindableScalar>(clock: "day", keys: [new WorldKey<BindableScalar>(At: 17d, Ease: WorldEase.Smooth, Value: 0.75f)])),
             precision: 6
         );
     }

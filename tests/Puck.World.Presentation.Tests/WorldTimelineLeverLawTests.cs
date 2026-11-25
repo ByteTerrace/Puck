@@ -97,7 +97,7 @@ public sealed class WorldTimelineLeverLawTests {
     [Fact]
     public void KeyedRatesUseTheScrubbedTickAndDeliveriesIgnoreThePreview() {
         var mirror = ClientFixtures.StateMirror(Definition());
-        var rate = new BindableScalar(keys: new WorldKeyTrack<float>(clock: "day", keys: [new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 2f)]));
+        var rate = new BindableScalar(keys: new WorldKeyTrack<BindableScalar>(clock: "day", keys: [new WorldKey<BindableScalar>(At: 0d, Ease: WorldEase.Linear, Value: 2f)]));
 
         Control(mirror, "day", WorldTimelineOperation.At, tick: 12600UL);
         Assert.Equal(0.5d, mirror.Integrate(modulus: 100d, rate: in rate));

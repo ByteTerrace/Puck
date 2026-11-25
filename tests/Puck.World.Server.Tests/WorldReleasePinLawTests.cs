@@ -18,7 +18,7 @@ public sealed class WorldReleasePinLawTests {
         c: 'a',
         count: 40
     ),
-        EngineImageDigest = ("sha256:" + new string(
+        Engine = ("sha256/" + new string(
         c: 'b',
         count: 64
     )),
@@ -65,7 +65,7 @@ public sealed class WorldReleasePinLawTests {
     [Fact]
     public void UppercaseImageDigestIsRefused() {
         Assert.False(condition: WorldReleaseManifest.TryValidate(
-            manifest: Manifest() with { EngineImageDigest = $"sha256:{Upper}" },
+            manifest: Manifest() with { Engine = $"sha256/{Upper}" },
             reason: out var reason
         ));
         Assert.Contains(

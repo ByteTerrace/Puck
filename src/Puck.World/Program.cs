@@ -353,7 +353,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         meshes: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "meshes") : Path.Join(path1: cacheRoot, path2: "meshes")),
         pipelines: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "pipelines") : Path.Join(path1: cacheRoot, path2: "pipelines"))
     ) {
-        // A player's build ships its meshes and never bakes one the store holds another tier of; a producer or a check
+        // A player's build starts from the meshes its channel shipped and bakes what they lack; a producer or a check
         // boot of a folder not yet marked complete names its policy.
         MeshPolicy = (parseResult.GetValue(option: meshCacheOption) ?? (runsAsPlayer ? Puck.SdfVm.SdfMeshCachePolicy.Stored : Puck.SdfVm.SdfMeshCachePolicy.Demand)),
     };
@@ -746,9 +746,9 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
 
         services.AddSingleton(implementationInstance: recordingSource);
     }
-    // A player's build never bakes; if one ever does, its authoring work degrades under the play bar instead of drawing on
-    // headroom the player never offered. Anywhere else (a checkout, a player folder's own baking boots) authoring draws on
-    // the machine's headroom.
+    // A player's build bakes what its shipped caches lack on the play bar, degrading (a bake deferred, a coarser rung drawn
+    // meanwhile) instead of drawing on headroom the player never offered. Anywhere else (a checkout, a player folder's own
+    // baking boots) authoring draws on the machine's headroom.
     Puck.Hosting.Jobs.MemoryAccount.Shared.SetAuthoringOnPlayBar(onPlayBar: (runsAsPlayer || (caches.MeshPolicy == Puck.SdfVm.SdfMeshCachePolicy.Stored)));
     // A reclaim returns the native allocator's unused pages with the collector's (MemoryAccount.Reclaims).
     Puck.Hosting.Jobs.MemoryAccount.Shared.ReclaimRequested += static () => (Puck.Memory.Allocator.Current as Puck.Abstractions.Memory.IAllocatorStatistics)?.Collect();

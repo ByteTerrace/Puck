@@ -1004,7 +1004,7 @@ public static partial class WorldDefinitionValidator {
                 value: out var producerProgram
             ) ||
                 (producerProgram.Target is not BodyTargetSource.Navigated navigated) ||
-                (definition.Navigation.Rows.FirstOrDefault(predicate: domain => string.Equals(
+                (WorldNavigationDomains.Of(definition: definition).FirstOrDefault(predicate: domain => string.Equals(
                 a: domain.Name,
                 b: navigated.Domain,
                 comparisonType: StringComparison.Ordinal

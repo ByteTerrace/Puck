@@ -181,17 +181,16 @@ Built by this feature:
   product, both from the same meshes. A view of a world no residency here holds draws it whole until a product is
   built from that view's own residency, then swaps to it.
 
-- A value that follows two clocks (`WorldKeyTrack.With`, `WorldKeyCombine`): a keyed scalar joins a second track on
-  another clock by adding, multiplying, or taking the greater or lesser of the two, and keys with a combine join over a
-  section's keys on the same field rather than replace them (`WorldRenderKeys`). The valley's exposure floor is the
-  greater of the day's floor and a floor that rises with `altitude` to the moon's, its key fades with height, and its
-  meter's dark cut (`render.exposure.low`, now bindable) rises to the moon's seven tenths, so a black sky never pulls the
-  meter down (hall.puck). One star field answers both the night and the height (`day.puck`'s `starsByHeight`). The
-  invariant is that every reader resolves a chained track through one path, `WorldStateMirror`'s keyed read, and every
-  clock the chain names is noted for re-resolution (`WorldEnvironmentResolve.NoteKeys`, `WorldThemeResolve`); the
-  validator judges every link's clock and times as a keyed value of its own (`WorldKeyedValues`) and the chain's reach
-  against the field's domain (`WorldKeyResolver.Extremes`). A rate and an ordered set refuse a second track, since
-  neither has a sound reading of one.
+- A value that follows several clocks: a keyed scalar's key may hold keys of its own on another clock
+  (`BindableScalar`, `IWorldKeyTrack.NestedAt`), so the value is a table over every clock its keys nest, and a member
+  that keys a field itself keeps its keys over a section's keys on that field (`WorldRenderKeys`). The valley's exposure
+  floor and key are keyed on `altitude`, their ground keys holding the day's keys and their seam key the moon's, and
+  its meter's dark cut (`render.exposure.low`) rises to the moon's seven tenths, so a black sky never pulls the meter
+  down (hall.puck). One star field answers both the night and the height (`day.puck`'s `starsByHeight`). The invariant
+  is that every reader resolves a nested key through one path, `WorldStateMirror`'s keyed read, and every clock the
+  keys nest is noted for re-resolution (`WorldClockReads.Note`); the validator judges every nested track's clock and
+  times as a keyed value of its own (`WorldKeyedValues`) and every literal it holds against the field's domain. A rate
+  and an ordered set refuse nested keys, since neither has a sound reading of two clocks.
 
 - A held pace climbs as it travels (`WorldBody.VerticalThrust`): a hold's thrust reads the kit's resolved move speed
   with its held pace, as its travel and a medium's thrust already did, so the ship's boost lifts it at four times its
@@ -236,7 +235,7 @@ Left open, in the order they matter to the trip:
    so writing `day` in the valley moves the moon's sun on the next tick, and
    writing it on the moon is refused. The night crossing no longer lights the
    ship in one frame: the valley's sun rises with height to the moon's full
-   strength (hall.puck's `key` light, a second track on `altitude`).
+   strength (hall.puck's `key` light, keyed on `altitude` with the day's sun in its ground keys).
 5. **A crossing turns a body about up only.** `WorldFrameIsometry` and the
    adjacency validator admit a yaw, so the two worlds' axes agree and the side of
    the moon that faces the valley has its up pointing down in the shared frame.

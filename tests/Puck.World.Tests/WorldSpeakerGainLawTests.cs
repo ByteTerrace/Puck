@@ -86,8 +86,8 @@ public sealed class WorldSpeakerGainLawTests {
         var definition = (Fixtures.BuildDocument() with {
             TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock("level", State: "phase")]),
             SpeakersRaw = [new WorldSpeaker.Fixed("signal", new DocumentVector3(x: 0, y: 0, z: 0),
-                new WorldSpeakerFeed(new WorldSpeakerSource.None(), "mix", new BindableScalar(keys: new WorldKeyTrack<float>(
-                    clock: "level", keys: [new WorldKey<float>(At: 0, Ease: WorldEase.Linear, Value: 0), new WorldKey<float>(At: 0.5, Ease: WorldEase.Linear, Value: 1)]))),
+                new WorldSpeakerFeed(new WorldSpeakerSource.None(), "mix", new BindableScalar(keys: new WorldKeyTrack<BindableScalar>(
+                    clock: "level", keys: [new WorldKey<BindableScalar>(At: 0, Ease: WorldEase.Linear, Value: 0), new WorldKey<BindableScalar>(At: 0.5, Ease: WorldEase.Linear, Value: 1)]))),
                 new WorldSpeakerAttenuation(Radius: 8f, Curve: null))],
         }).WithWorldState(rows: [StateFixtures.FixedSlot(name: "phase", rawBits: 16384)]);
 

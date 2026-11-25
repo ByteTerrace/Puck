@@ -22,10 +22,10 @@ public sealed class ShadowFrameLawTests {
         RenderRaw = new WorldRenderDefaults(ShadowLights: slots, Lighting: new WorldRenderLighting(Lights: lights)),
         TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: "day", PeriodSeconds: 1d)]),
     };
-    private static BindableScalar Weights(float start, float quarter, float half) => new(keys: new WorldKeyTrack<float>(clock: "day", keys: [
-        new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: start),
-        new WorldKey<float>(At: 0.25d, Ease: WorldEase.Linear, Value: quarter),
-        new WorldKey<float>(At: 0.5d, Ease: WorldEase.Linear, Value: half),
+    private static BindableScalar Weights(float start, float quarter, float half) => new(keys: new WorldKeyTrack<BindableScalar>(clock: "day", keys: [
+        new WorldKey<BindableScalar>(At: 0d, Ease: WorldEase.Linear, Value: start),
+        new WorldKey<BindableScalar>(At: 0.25d, Ease: WorldEase.Linear, Value: quarter),
+        new WorldKey<BindableScalar>(At: 0.5d, Ease: WorldEase.Linear, Value: half),
     ]));
     private static WorldShadowSlot[] Slots(WorldEnvironmentResolve resolver, ulong tick) {
         var slots = new WorldShadowSlot[WorldShadowAllocator.MaxSlots];

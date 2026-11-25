@@ -54,9 +54,9 @@ public sealed class KeyedValueResolutionLawTests {
     }
     [Fact]
     public void The_environment_resolves_again_only_when_a_clock_a_key_reads_moves() {
-        var keyed = TickClockFog(density: new BindableScalar(keys: new WorldKeyTrack<float>(clock: "day", keys: [
-            new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
-            new WorldKey<float>(At: 0.5d, Ease: WorldEase.Linear, Value: 0.1f),
+        var keyed = TickClockFog(density: new BindableScalar(keys: new WorldKeyTrack<BindableScalar>(clock: "day", keys: [
+            new WorldKey<BindableScalar>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
+            new WorldKey<BindableScalar>(At: 0.5d, Ease: WorldEase.Linear, Value: 0.1f),
         ])));
         var mirror = ClientFixtures.StateMirror(definition: keyed);
         var environment = new WorldEnvironmentResolve(domains: new WorldValueDomainGuard());

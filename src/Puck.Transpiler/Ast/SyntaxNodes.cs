@@ -614,6 +614,28 @@ public sealed partial record UnaryExpressionNode(
     Line,
     Column
 );
+/// <summary>A value with its unit annotated, as <c>let reach: m = 3</c> writes it: a bare number is read in the unit,
+/// and a value that already carries a dimension must carry the unit's. It exists only at compile time and lowers to
+/// the number in the field's own unit.</summary>
+/// <param name="Value">The annotated value.</param>
+/// <param name="Unit">The unit as written (<c>m</c>, <c>m/s</c>, <c>m/s^2</c>).</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed partial record UnitAnnotationNode(
+    ExpressionNode Value,
+    string Unit,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : ExpressionNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary><c>for item in sequence { … }</c>, or <c>for (item, index) in sequence { … }</c> — a COMPILE-TIME
 /// expansion whose body statements are emitted once per element, in place. Distinct from a cartridge rule's
 /// <c>repeat</c>, which is a loop the machine itself runs.</summary>

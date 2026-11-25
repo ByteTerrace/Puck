@@ -92,8 +92,8 @@ public sealed class DeliveryReviewLawTests {
                 Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Fixed(0))])]),
             TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: "day", State: "phase")]),
             RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(
-                Density: new BindableScalar(keys: new WorldKeyTrack<float>(clock: "day", keys: [
-                    new WorldKey<float>(At: 0, Value: 0, Ease: WorldEase.Linear), new WorldKey<float>(At: 0.5, Value: 0.1f, Ease: WorldEase.Linear)])))))
+                Density: new BindableScalar(keys: new WorldKeyTrack<BindableScalar>(clock: "day", keys: [
+                    new WorldKey<BindableScalar>(At: 0, Value: 0, Ease: WorldEase.Linear), new WorldKey<BindableScalar>(At: 0.5, Value: 0.1f, Ease: WorldEase.Linear)])))))
         };
         using var fixture = Fixtures.FreshServer(document);
         var images = new WorldDisclosureImages();

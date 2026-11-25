@@ -306,11 +306,14 @@ puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
 puck world prepare <primary-world> --output <directory>
 puck world player <package> --output <directory> [--extension <project>...] [--backend directx vulkan] [--target [profile@]WIDTHxHEIGHT...] [--no-bake] [--bake-seconds <seconds>] [--channel-url <url> [--channel-name <name>]]
+puck world host build <package> --output <directory> [--extension <project>...] [--tls-front]
+puck world host fetch <signed tree> --to <install root> [--source <url|directory>]
+puck world host install | serve --silo <file> [--mcp <file>] [--extensions-dir <directory>] | tls --machine <file> | guard <request> | probe | request <method> <path> [--timeout <seconds>]
 puck world caches produce <player folder> [--output <directory>] [--host <installed-host> | --to <directory>]
 puck world caches status <world> --store <url|directory> [--backend directx vulkan] [--build <directory>]
 puck world caches fetch <player folder> --store <url|directory> [--notes <file>] [--wait <minutes>]
 puck channel push --tree <tree> --channel <name> --sequence <n> [--host <installed-host> | --to <directory> --signing-key <file>] [--validity-days <days>]
-puck world release prepare <package-directory> --silo <silo.json> [--output <manifest>] --label <label> --source-revision <sha> --engine-image-digest <sha256:digest> --persistence-contract <name> --peer-protocol-contract <name>
+puck world release prepare <package-directory> --silo <silo.json> [--output <manifest>] --label <label> --source-revision <sha> --engine <sha256/payload-identity> --persistence-contract <name> --peer-protocol-contract <name>
 puck world release status [group-file] [--json] [--host <installed-host>]
 puck world release finalize [--host <installed-host>]
 puck world release resume [--host <installed-host>]
@@ -319,8 +322,8 @@ puck world release rollback [--operation <id>] [--host <installed-host>]
 puck world release checkpoint [--request <guid>] [--host <installed-host>]
 puck world release restore <recovery-point> [--operation <guid>] [--discard-progress] [--host <installed-host>]
 puck azure prepare-world-release [--output <package-directory>]
-puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-image <image> --target-image <image> --output <evidence-directory> [--steps <count>] [--document-directory <asset-layout>]
-puck world release rehearse [<package-directory>] (--silo <path> | --image <reference>) [--extensions-dir <directory>] [--document-directory <directory>] [--mode scratch|durable] [--output <directory>] [--timeout <seconds>]
+puck world release qualify <source-manifest> <target-manifest> <fixture-directory> --source-engine <install root> --target-engine <install root> --output <evidence-directory> [--steps <count>] [--document-directory <asset-layout>]
+puck world release rehearse [<package-directory>] (--silo <path> | --install <install root>) [--extensions-dir <directory>] [--document-directory <directory>] [--mode scratch|durable] [--output <directory>] [--timeout <seconds>]
 puck world probe <host> <port> <public-key-file>
 puck wasm build
 ```
@@ -349,7 +352,7 @@ including hidden files.
 `world prepare` uses the engine's composer and validator to package a primary
 world (its `.puck` source or `.world.json` document) and the neighbours it
 references under canonical hosted file names; no reference may leave the primary
-world's directory. The silo image and the Azure release prepare the debug world,
+world's directory. The host release and the Azure release prepare the debug world,
 `worlds/debug/debug.puck`, which production hosts as `debug`. It
 rebases provider-declared asset paths from nested documents to the common worlds
 directory; the image retains the neighbouring asset directories. `world probe` checks
@@ -599,34 +602,35 @@ The bootstrap waits for private health; only the coordinator opens admission.
 These checks do not retract an Azure operation already accepted by the service;
 full cloud interruption acceptance testing remains required.
 
-`world release qualify` runs four isolated Docker legs over a marked, coherent
+`world release qualify` runs four isolated legs over a marked, coherent
 offline fixture: both packages import the source state, then both import the
 candidate's saved continuation. Complete checkpoint hashes must agree for each
 pair of imports, and every leg must advance simulation and save successfully.
 For metadata changes, both manifests must sit at their package roots with their
 declared files present. The command retains and verifies those exact package
 bytes, applies the deployment publisher to a disposable forward copy, and makes
-both images import it. It then reverses the authored delta over B's saved
+both engines import it. It then reverses the authored delta over B's saved
 continuation before both reverse imports. The transition decodes the fixture's
 saved definitions beside `--document-directory`, the local copy of the asset
 layout the hosting silo resolves its documents' relative paths against; omit it
 for documents that author none. Evidence retains the original seed,
 both transformed copies and their hashes; the source fixture stays intact.
-The runner resolves each image against its manifest digest, uses that immutable
-image identity, disables container networking, and mounts only a fresh fixture
-copy. On a Linux host each leg runs as the runner's own user and group, which
-owns the fixture copy it mounts. It retains the copied state and evidence under
-a unique output directory.
+The runner resolves each `--source-engine` and `--target-engine` install root
+against its manifest's `engine` (the installed version's payload identity) and runs
+each leg as a process of that install's own CLI, from its version directory, over a
+fresh fixture copy whose silo document names only paths inside the copy and a
+directory store. It retains the copied state and evidence under a unique output
+directory.
 Equal contract labels or an operator-authored receipt cannot replace these runs.
 A pair that ran and failed a leg's claim exits 1 and names the claim: a packaged
 engine that exited nonzero (with the end of its standard error and output) or
 overran its five-minute limit, a missing or
 incomplete report, lost receipts, or two imports that disagree. A run that cannot
 exercise the pair exits 2: unreadable manifests, an unsupported pair, an unmarked
-or mismatched fixture, an image that is not the release's, or a container engine
-that cannot inspect or start an image. Neither writes a receipt.
+or mismatched fixture, an install that does not hold the release's engine, or an
+engine that cannot start. Neither writes a receipt.
 
-Each image emits `puck.world.qualification-exercise.v1`: it inventories every
+Each engine emits `puck.world.qualification-exercise.v1`: it inventories every
 captured receipt before activation, looks up each original decision after import
 and continuation, and checks duplicate and conflicting retries after draining.
 Retries must leave the authority root unchanged. The runner independently computes
@@ -648,7 +652,7 @@ Rollback and restore remain hosted maintenance operations
 until their coordinator can perform the corresponding guarded storage and
 admission transitions.
 
-`world release rehearse [<package-directory>] (--silo <path> | --image <reference>) [--extensions-dir <directory>] [--document-directory <directory>] [--mode scratch|durable] [--output <directory>] [--timeout <seconds>]`
+`world release rehearse [<package-directory>] (--silo <path> | --install <install root>) [--extensions-dir <directory>] [--document-directory <directory>] [--mode scratch|durable] [--output <directory>] [--timeout <seconds>]`
 rehearses a deployment on this machine, against a local directory store, in the
 path a deployment group's hosted-data policy selects. `scratch` (the default)
 rehearses the replace deployment: the coordinator's bootstrap transaction from
@@ -668,11 +672,28 @@ operation. Every silo of one rehearsal signs with the same keys. A failure print
 the private health reason and the last silo's own lines. The argument is a
 release package, or a `puck world prepare` output, which is packaged first under
 one generated owner.
-`--silo` names a built `Puck.World.Silo.dll` or its executable; the release's
-machine providers must be installed where the silo looks (`--extensions-dir`).
-`--image` runs the same verb inside a world-silo image, with its CLI, silo,
-extensions and asset layout and no network; without an argument it rehearses the
-image's own composed worlds. Qualification is not part of a rehearsal.
+`--silo` names a built `Puck.World.Silo.dll`, its executable, or a host release's
+`puck` (run as `puck world host serve`); the release's machine providers must be
+installed where the silo looks (`--extensions-dir`). `--install` runs the same verb
+through an installed host release's own CLI, silo, extensions and asset layout;
+without an argument it rehearses the release's own composed worlds. Qualification
+is not part of a rehearsal.
+
+`world host build <package> --output <directory>` assembles a host release for this
+machine's runtime: the CLI (which carries the silo) published self-contained at the
+root, the stub and installer in `launcher/`, each `--extension` in
+`extensions/<name>/`, the package copied into `worlds/` with its composed hosted
+worlds beside it, and, with `--tls-front`, Caddy's pinned Linux release at
+`tls/caddy`. `puck publish --app puck.world.host --channel server` turns it into a
+release. `world host fetch <signed tree> --to <install root>` installs the tree's
+payload for this runtime exactly as a hosting machine does: the installer the
+payload carries, fetched by its pin, installs the signed manifest by its pin; it
+prints the installed version's directory. The other `world host` verbs are what a
+hosting machine runs from its install: `install` (its bootstrap, as root, with the
+protected bootstrap on standard input), `serve` and `tls` (its services), and
+`guard`, `probe` and `request` (the guest commands a deploying controller sends);
+[the decision](../decisions/runtime-and-delivery.md#hosting-machines) describes
+them.
 
 Azure credentials, deployment ordering, and access restoration belong to
 [`puck azure`](../development/ci.md#azure-production-deployment), which reaches these
@@ -3846,9 +3867,12 @@ puck registry --check       regenerate in memory and compare against the file on
 puck registry -h / --help   this text
 ```
 
-Both modes report each unclassified text position. A property declares its module name
-kind and spelling, takes its binding from its type, or identifies its literal or local
-meaning. Run `puck schema` and rebuild after changing a declaration. Exit codes: **0** wrote or matched, **1**
+Both modes report each unclassified text position, naming the member and the annotation
+that classifies it. A property declares its module name kind and spelling, takes its binding
+from its type, or identifies its literal or local meaning. This verb walks the compiled
+model; after a model edit, `puck schema --bootstrap` writes this file with every other
+generated product from the source model, so there is no rebuild between the edit and the
+regeneration. Exit codes: **0** wrote or matched, **1**
 drift or an uncovered member, **2** usage error or missing repository root.
 
 ## `puck verbs`—console verb catalog
@@ -4310,13 +4334,19 @@ The same run writes the engine's model shape,
 `WorldDefinition` with its members, `$type` arms and element type, as the
 serializer's resolver describes it. The walks that read the model without
 serializing it read this table, so a process never describes a type at run
-time.
+time. It also writes the name registry (`docs/world-name-registry.md`, the page
+[`puck registry`](#puck-registryworld-name-registry) checks) from the same
+reflected table, so one run leaves every generated product of a model edit
+consistent. A text member with no `[DocumentName]` or `[DocumentText]` refuses
+the whole run before anything is written, naming the member and the annotation.
+A build of `Puck.World.Schema` whose model table lacks a public property fails
+with `PUCKSCHEMA001`, naming `puck schema --bootstrap`.
 
 ```text
 puck schema                          write the checked-in root, sections, common.schema.json,
                                      projection, silo, counters-report, release-profile and
-                                     frame-graph schemas, the portal's TypeScript, and the
-                                     engine's model shape
+                                     frame-graph schemas, the portal's TypeScript, the
+                                     engine's model shape, and the world name registry
 puck schema --check                  regenerate in memory and compare EVERY file against
                                      what's on disk; also catches a stale orphan section no
                                      current model produces; exit 1 on any drift
@@ -4328,8 +4358,9 @@ puck schema --bootstrap              build a private schema-only CLI from the cu
 puck schema -h / --help              this text
 ```
 
-When a model rename leaves `WorldModelShape.generated.cs` referring to a removed
-member, run `schema --bootstrap` from an existing CLI copy. It builds the current
+After any edit to a document-model type, and when a rename leaves
+`WorldModelShape.generated.cs` referring to a removed member, run `schema --bootstrap`
+from an existing CLI copy. It builds the current
 source with `PuckSchemaBootstrap=true`, excluding only that generated table,
 using a private artifacts directory for the whole build closure. The temporary
 CLI accepts only `schema`; a model-table read refuses explicitly. It runs the

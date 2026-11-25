@@ -128,11 +128,14 @@ public static class DocumentScalars {
         var integers = new long[function.Arity];
         var allIntegers = true;
 
+        // A trigonometric function's argument is an angle in radians, whatever field the call's value fills.
+        var argumentKey = ((call.Name is "sine" or "cosine") ? DocumentDimensions.AngleArgument : fieldKey);
+
         for (var index = 0; (index < function.Arity); ++index) {
             var lowered = DocumentLowering.EvaluateValue(
                 expr: call.Arguments[index].Value,
                 scope: scope,
-                fieldKey: fieldKey
+                fieldKey: argumentKey
             );
 
             allIntegers &= DocumentNumbers.TryInteger(

@@ -139,9 +139,22 @@ A document's `schema:` field selects its vocabulary, never the filename.
   name is that row, as are `$"hand{s}"`, a module instance's `alias.row` and a
   `$zones[index]` selector; `claim` and `for each` take a binding holding the
   pool's name. `deal count from a to b` reads its count as a value.
-- Units (`s ms min h m cm mm hz % pct deg rad`) convert in the core; a unit on
-  a field the vocabulary does not dimension is **PUCK024**, an inadmissible
-  unit **PUCK025**.
+- **Units are checked dimensions.** Suffixes (`m cm mm s ms min h hz deg rad %
+  pct lx lm cd nit K`) and compounds written against the digits (`8m/s`,
+  `9.8m/s^2`) give a value a dimension, and `let reach: m = 3` annotates one
+  (a bare number is read in the unit). `DocumentDimensions.CheckField` infers
+  each expression a field receives from its syntax (products multiply; sums,
+  comparisons, choices and `minimum`/`maximum`/`clamp` must agree; `sine` and
+  `cosine` take an angle; a bare number is free; anything else is unknown and
+  never refused). A proven wrong dimension for the field is **PUCK025**, a
+  dimension in a field the vocabulary does not dimension **PUCK024**, two
+  dimensions meeting where they must agree **PUCK137**. A unit converts where
+  it is written (`UnitConversion`, the one table); only an angle depends on its
+  field (degrees in a degrees field, radians elsewhere)
+  ([dsl reference](../../../docs/reference/dsl.md#units-and-dimensions)).
+- **A scalar's key may nest keys on another clock**, so a value following two
+  inputs is a table written where it is used; there is no `combine`/`with`
+  ([dsl reference](../../../docs/reference/dsl.md#values-keyed-on-clocks)).
 - Strings: plain `"..."`, interpolated `$"...{expr}..."`, raw `"""..."""`, raw
   interpolated `$"""..."""`. An interpolated string computes a name, key,
   number or text, never an expression (**PUCK112**). Backquote a name the bare
@@ -314,6 +327,16 @@ puck test <path-or-dir>               # boots each test block headless, one verd
 - `puck embed lock <path>` resolves authored `embed(...)` text into committed
   `.embeddings.json` lock files.
 - `puck vocabulary [--check]` regenerates the world vocabulary page.
+- **Adding a member to a world document type** (a property of `WorldDefinition` or anything it reaches) is
+  one annotation and one command. A `string`, `CellName`, `StateChannelRef` or `ExpressionProgram` member
+  carries `[DocumentName(kind, role)]` when its text spells a name the document resolves, or
+  `[DocumentText("what the text is")]` when it is literal or local text. Then
+  `puck schema --bootstrap` regenerates every generated product from the source model without waiting
+  for a rebuild: the JSON schemas, the portal's TypeScript, `WorldModelShape.generated.cs` and
+  `docs/world-name-registry.md`. A member that lacks its annotation refuses the whole run before anything
+  is written, naming the member and the fix. Rebuild afterwards. Until then a build of
+  `Puck.World.Schema` fails with `PUCKSCHEMA001`, which names this command. `puck schema --check` and
+  `puck registry --check` verify the tree; stage the regenerated files, since a check holds them to the index.
 
 **Source and generated documents.** The owner's ruling treats cartridge JSON
 twins as derived caches, never committed or byte-compared against a saved copy.

@@ -45,12 +45,34 @@ public static partial class DocumentLowering {
         scope: scope
     );
 
+    [ThreadStatic]
+    private static bool EvaluatingField;
+    [ThreadStatic]
+    private static string? EvaluatedField;
+
     // Evaluates an expression and says whether the result is owned: a value this evaluation built from nothing any
     // binding, cache, builtin or vocabulary holds, so it can go into output as it stands. Everything else is
-    // borrowed, and output takes a copy.
+    // borrowed, and output takes a copy. An expression entered for another field than the one being evaluated (the
+    // value a field receives, not a part of it) has its dimension checked first, once (DocumentDimensions.CheckField).
     private static JsonNode? Evaluate(ExpressionNode expr, DocumentScope scope, string? fieldKey, out bool owned) {
         ArgumentNullException.ThrowIfNull(expr);
         ArgumentNullException.ThrowIfNull(scope);
+
+        var (outerInField, outerField) = (EvaluatingField, EvaluatedField);
+
+        if (!outerInField || !string.Equals(a: outerField, b: fieldKey, comparisonType: StringComparison.Ordinal)) {
+            DocumentDimensions.CheckField(expression: expr, fieldKey: fieldKey, scope: scope);
+        }
+
+        (EvaluatingField, EvaluatedField) = (true, fieldKey);
+
+        try {
+            return EvaluateInField(expr: expr, fieldKey: fieldKey, owned: out owned, scope: scope);
+        } finally {
+            (EvaluatingField, EvaluatedField) = (outerInField, outerField);
+        }
+    }
+    private static JsonNode? EvaluateInField(ExpressionNode expr, DocumentScope scope, string? fieldKey, out bool owned) {
         using var evaluation = scope.Budget.Enter(span: expr.Span);
 
         owned = false;
@@ -70,6 +92,25 @@ public static partial class DocumentLowering {
                     lit: lit,
                     scope: scope
                 );
+
+            case UnitAnnotationNode annotated: {
+                    var value = Evaluate(expr: annotated.Value, fieldKey: fieldKey, owned: out owned, scope: scope);
+
+                    if (!DocumentDimensions.ReadsInUnit(annotation: annotated, scope: scope) || !TryReadNumber(node: value, number: out var number)) {
+                        return value;
+                    }
+
+                    owned = true;
+
+                    return LowerUnitLiteral(
+                        authored: (DocumentNumbers.TryExact(node: value, number: out var exact) ? exact : null),
+                        fieldKey: fieldKey,
+                        numVal: number,
+                        scope: scope,
+                        span: annotated.Span,
+                        unit: annotated.Unit
+                    );
+                }
 
             case InterpolatedStringNode interpolated: {
                     var built = new System.Text.StringBuilder();
@@ -558,7 +599,11 @@ public static partial class DocumentLowering {
         var locals = new Dictionary<string, JsonNode?>(comparer: StringComparer.Ordinal);
 
         for (var at = 0; (at < bound.Length); at++) {
-            locals[function.Parameters[at].Name] = EvaluateValue(expr: ((bound[at] >= 0) ? call.Arguments[bound[at]].Value : function.Parameters[at].DefaultValue!), fieldKey: null, scope: scope);
+            var argument = ((bound[at] >= 0) ? call.Arguments[bound[at]].Value : function.Parameters[at].DefaultValue!);
+            var value = EvaluateValue(expr: argument, fieldKey: DocumentDimensions.ArgumentPosition, scope: scope);
+
+            DocumentDimensions.Carry(argument: argument, scope: scope, value: value);
+            locals[function.Parameters[at].Name] = value;
         }
         var functionSource = DocumentScope.DefinitionPathOf(value: function);
         var useSite = ((functionSource is not null)
@@ -1287,58 +1332,29 @@ public static partial class DocumentLowering {
         }
         return JsonValue.Create(value: numVal);
     }
-    // Every unit is checked against the vocabulary's field-dimension table, `%`/`pct` included: a field the table
-    // does not cover is PUCK024, a unit the field's own dimension does not accept is PUCK025. No unit converts
-    // outside the table, so a suffix can never silently change a value the table says nothing about.
+    // A number with a unit lowers to its value in the canonical units: metres, seconds, lumens, candela, kelvin, and an
+    // angle in degrees where the field holds degrees and in radians everywhere else. Whether the value's dimension
+    // belongs in its field is DocumentDimensions' judgement, made on the whole expression the field receives, so a
+    // unit here only converts; a unit no suffix spells is refused.
     private static JsonNode LowerUnitLiteral(double numVal, decimal? authored, string unit, string? fieldKey, SourceSpan span, DocumentScope scope) {
-        var dimension = ((fieldKey is null)
-            ? UnitDimension.None
-            : scope.Vocabulary.ClassifyField(fieldKey: fieldKey)
-        );
+        if (!UnitConversion.TryRead(
+            degrees: (DocumentDimensions.Classify(fieldKey: fieldKey, scope: scope) == UnitDimension.Degrees),
+            unit: unit,
+            value: out var read
+        )) {
+            DocumentDimensions.ReportUnknownUnit(scope: scope, span: span, unit: unit);
 
-        if (
-            (authored is { } exact) &&
-            UnitConversion.TryConvertExact(
-                converted: out var scaled,
-                dimension: dimension,
-                unit: unit,
-                value: exact
-            )
-        ) {
+            return JsonValue.Create(value: numVal);
+        }
+
+        if ((authored is { } exact) && (read.Exact is { } worth) && UnitConversion.TryScaleExact(scaled: out var scaled, value: exact, worth: worth)) {
             return DocumentNumberSpelling.ExactNode(number: scaled);
         }
-        if (UnitConversion.TryConvert(
-            converted: out var converted,
-            dimension: dimension,
-            numericValue: numVal,
-            unit: unit
-        )) {
-            return NumberNode(
-                span: span,
-                value: converted
-            );
-        }
 
-        if (dimension == UnitDimension.None) {
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.UnitOnUnknownField,
-                message: $"'{(fieldKey ?? "this field")}' admits no unit — remove the '{unit}' suffix",
-                span: span
-            );
-        } else {
-            var accepted = string.Join(
-                separator: "/",
-                values: UnitConversion.AcceptedUnits(dimension: dimension)
-            );
-
-            scope.Diagnostics.ReportError(
-                code: PuckDiagnosticCodes.UnitNotAdmitted,
-                message: $"'{fieldKey}' accepts {accepted}, not '{unit}'",
-                span: span
-            );
-        }
-
-        return JsonValue.Create(value: numVal);
+        return NumberNode(
+            span: span,
+            value: UnitConversion.Scale(crossesAngleUnits: (read.Exact is null), factor: read.Factor, value: numVal)
+        );
     }
     // A block whose bare NAME is a template parameter takes the bound value as its name, so one template can declare a
     // differently named row per invocation. A quoted name is a literal and is never looked up.

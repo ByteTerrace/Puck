@@ -7,7 +7,7 @@ namespace Puck.Cli.Azure;
 public static partial class AzureCommand {
     private static async Task PublishContainerAsync(string archive, string commit, string output, string registry, string repository) {
         if (
-            (repository is not ("web-actors" or "world-silo")) ||
+            (repository != "web-actors") ||
             !Regex.IsMatch(
             input: commit,
             pattern: CommitPattern
@@ -128,21 +128,19 @@ public static partial class AzureCommand {
             path: "artifacts/release-source.json",
             value: new JsonObject { ["commit"] = commit, ["runId"] = Environment.GetEnvironmentVariable(variable: "GITHUB_RUN_ID") }
         );
-        foreach (var repository in new[] { "web-actors", "world-silo" }) {
-            await PublishContainerAsync(
-                archive: Path.Combine(
-                    path1: artifacts,
-                    path2: $"azure-{repository}/image.tar.gz"
-                ),
-                commit: commit,
-                output: $"artifacts/{repository}.digest",
-                registry: ResourceName(
-                    "containerRegistry",
-                    "name"
-                ),
-                repository: repository
-            );
-        }
+        await PublishContainerAsync(
+            archive: Path.Combine(
+                path1: artifacts,
+                path2: "azure-web-actors/image.tar.gz"
+            ),
+            commit: commit,
+            output: "artifacts/web-actors.digest",
+            registry: ResourceName(
+                "containerRegistry",
+                "name"
+            ),
+            repository: "web-actors"
+        );
         var configuration = CliFiles.ReadJson(path: "artifacts/azure/configuration.json");
         var outputs = Outputs();
 

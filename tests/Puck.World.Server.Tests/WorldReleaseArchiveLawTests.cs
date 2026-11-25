@@ -27,7 +27,7 @@ public sealed class WorldReleaseArchiveLawTests {
             c: 'a',
             count: 40
         ),
-            EngineImageDigest = ("sha256:" + new string(
+            Engine = ("sha256/" + new string(
             c: 'a',
             count: 64
         )),

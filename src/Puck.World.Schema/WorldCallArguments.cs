@@ -174,6 +174,8 @@ public static class WorldCallArguments {
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, FrozenDictionary<string, MemberMetadata>> Members = new();
     // The position a keyed value's keys fill (WorldKeyTrackJson's key object).
     private static readonly Type KeyPosition = typeof(WorldKey<>);
+    // The position a scalar's keys fill, whose value is a scalar of its own.
+    private static readonly Type ScalarKeyPosition = typeof(WorldKey<BindableScalar>);
 
     private static MemberMetadata? FindMember(Type owner, string member) => Members.GetOrAdd(
         key: WorldNameRegistry.Unwrap(type: owner),
@@ -182,25 +184,27 @@ public static class WorldCallArguments {
     private static FrozenDictionary<string, MemberMetadata> BuildMembers(Type owner) {
         // A value keyed on a clock names its clock, a timeline name written bare, and its keys' position says a key's
         // ease is one word of WorldEase; a converter-backed bindable carries no members the serializer describes.
+        // A scalar's key holds a scalar, which may be keys of its own on another clock, so its keys' position names
+        // the scalar as its value's type.
         if (WorldKeyedValues.IsKeyable(type: owner)) {
-            var keyed = new Dictionary<string, MemberMetadata>(comparer: StringComparer.Ordinal) {
+            var nests = ((owner == typeof(BindableScalar)) || (owner == typeof(BindableAngle)));
+
+            return new Dictionary<string, MemberMetadata>(comparer: StringComparer.Ordinal) {
                 ["clock"] = new MemberMetadata(Choices: null, Form: WorldArgumentForm.Name, Type: typeof(string)),
-                ["keys"] = new MemberMetadata(Choices: null, Form: WorldArgumentForm.Unclassified, Type: KeyPosition),
-            };
-
-            // A scalar's keys may join a second track of the same form, by a combine.
-            if ((owner == typeof(BindableScalar)) || (owner == typeof(BindableAngle))) {
-                keyed["combine"] = new MemberMetadata(Choices: Enum.GetNames<WorldKeyCombine>().ToFrozenSet(comparer: StringComparer.OrdinalIgnoreCase), Form: WorldArgumentForm.Choice, Type: typeof(WorldKeyCombine));
-                keyed["with"] = new MemberMetadata(Choices: null, Form: WorldArgumentForm.Unclassified, Type: owner);
-            }
-
-            return keyed.ToFrozenDictionary(comparer: StringComparer.Ordinal);
+                ["keys"] = new MemberMetadata(Choices: null, Form: WorldArgumentForm.Unclassified, Type: (nests ? ScalarKeyPosition : KeyPosition)),
+            }.ToFrozenDictionary(comparer: StringComparer.Ordinal);
         }
 
-        if (owner == KeyPosition) {
-            return new Dictionary<string, MemberMetadata>(comparer: StringComparer.Ordinal) {
+        if ((owner == KeyPosition) || (owner == ScalarKeyPosition)) {
+            var key = new Dictionary<string, MemberMetadata>(comparer: StringComparer.Ordinal) {
                 ["ease"] = new MemberMetadata(Choices: Enum.GetNames<WorldEase>().ToFrozenSet(comparer: StringComparer.OrdinalIgnoreCase), Form: WorldArgumentForm.Choice, Type: typeof(WorldEase)),
-            }.ToFrozenDictionary(comparer: StringComparer.Ordinal);
+            };
+
+            if (owner == ScalarKeyPosition) {
+                key["value"] = new MemberMetadata(Choices: null, Form: WorldArgumentForm.Unclassified, Type: typeof(BindableScalar));
+            }
+
+            return key.ToFrozenDictionary(comparer: StringComparer.Ordinal);
         }
 
         if (WorldModelShape.Of(type: owner) is not { Described: true } shape) {

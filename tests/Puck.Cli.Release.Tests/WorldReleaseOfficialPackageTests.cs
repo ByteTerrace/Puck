@@ -141,7 +141,7 @@ public sealed class WorldReleaseOfficialPackageTests {
                 },
             },
         };
-        var image = ("example.azurecr.io/world-silo@sha256:" + new string(
+        var image = ("sha256/" + new string(
             c: 'b',
             count: 64
         ));
@@ -278,67 +278,6 @@ public sealed class WorldReleaseOfficialPackageTests {
             index,
             classic,
             new JsonObject { ["manifests"] = new JsonArray() }
-        ));
-    }
-    [InlineData("example.azurecr.io/world-silo:latest")]
-    [InlineData("example.azurecr.io/world-silo@sha256:abc")]
-    [InlineData("example.azurecr.io/../world@sha256:")]
-    [InlineData("example.azurecr.io.evil.test/world@sha256:")]
-    [Theory]
-    public void RegistryProtectionCannotFallBackToATagOrAnotherHost(string image) {
-        Assert.Throws<InvalidDataException>(testCode: () => AzureCommand.ParseWorldReleaseImage(image: image));
-    }
-    [InlineData(false, false, true, false)]
-    [InlineData(true, false, true, true)]
-    [InlineData(false, true, true, true)]
-    [InlineData(false, false, false, true)]
-    [Theory]
-    public void RegistryReadbackMustProveTheExactDigestIsRetainedAndReadable(bool delete, bool write, bool read, bool refuses) {
-        var digest = ("sha256:" + new string(
-            c: 'b',
-            count: 64
-        ));
-        var image = AzureCommand.ParseWorldReleaseImage(image: ("example.azurecr.io/world-silo@" + digest));
-
-        Assert.Equal(
-            actual: image.Server,
-            expected: "example.azurecr.io"
-        );
-        Assert.Equal(
-            "example-dnslabel.azurecr.io",
-            AzureCommand.ParseWorldReleaseImage(image: ("example-dnslabel.azurecr.io/world-silo@" + digest)).Server
-        );
-        Assert.Equal(
-            actual: image.Reference,
-            expected: ("world-silo@" + digest)
-        );
-        var result = new JsonObject {
-            ["digest"] = digest,
-            ["changeableAttributes"] = new JsonObject {
-                ["deleteEnabled"] = delete,
-                ["writeEnabled"] = write,
-                ["readEnabled"] = read,
-            },
-        };
-
-        if (refuses) {
-            Assert.Throws<InvalidDataException>(testCode: () => AzureCommand.ValidateRetainedWorldReleaseImage(
-            digest: digest,
-            retained: result
-        ));
-        } else {
-            AzureCommand.ValidateRetainedWorldReleaseImage(
-            digest: digest,
-            retained: result
-        );
-        }
-        result["digest"] = ("sha256:" + new string(
-            c: 'c',
-            count: 64
-        ));
-        Assert.Throws<InvalidDataException>(testCode: () => AzureCommand.ValidateRetainedWorldReleaseImage(
-            digest: digest,
-            retained: result
         ));
     }
 }

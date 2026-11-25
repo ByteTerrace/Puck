@@ -133,10 +133,15 @@ public static class PuckDiagnosticCodes {
     /// <summary>PUCK045: a template or <c>for</c> nested past the expansion ceiling — what a template that invokes
     /// itself looks like from inside the expander.</summary>
     public const string TemplateExpansionTooDeep = "PUCK045";
-    /// <summary>A unit suffix the field's own dimension does not admit.</summary>
+    /// <summary>A value whose physical dimension is not the field's (metres squared in a length, seconds in an angle),
+    /// or a unit no suffix spells.</summary>
     public const string UnitNotAdmitted = "PUCK025";
-    /// <summary>A unit suffix on a field the dimension table does not cover.</summary>
+    /// <summary>A value carrying a physical dimension in a field the dimension table does not cover.</summary>
     public const string UnitOnUnknownField = "PUCK024";
+    /// <summary>PUCK137: an expression that joins two physical dimensions where they must agree: a sum or difference,
+    /// a comparison, a choice's two arms, a <c>minimum</c>'s arguments, a trigonometric function's angle, or a
+    /// <c>let</c>'s value against its unit annotation.</summary>
+    public const string DimensionMismatch = "PUCK137";
     /// <summary>A kind annotation naming something other than an admitted cell kind.</summary>
     public const string UnknownKindAnnotation = "PUCK005";
     /// <summary>A <c>shape</c> naming an unrecognized primitive type.</summary>

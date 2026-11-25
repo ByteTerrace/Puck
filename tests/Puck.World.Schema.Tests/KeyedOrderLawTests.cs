@@ -17,9 +17,9 @@ public sealed class KeyedOrderLawTests {
         ? string.Empty
         : reason
     );
-    private static BindableScalar Keyed(params (double At, float Value, WorldEase Ease)[] keys) => new(keys: new WorldKeyTrack<float>(
+    private static BindableScalar Keyed(params (double At, float Value, WorldEase Ease)[] keys) => new(keys: new WorldKeyTrack<BindableScalar>(
         clock: "day",
-        keys: [.. keys.Select(selector: static key => new WorldKey<float>(At: key.At, Ease: key.Ease, Value: key.Value))]
+        keys: [.. keys.Select(selector: static key => new WorldKey<BindableScalar>(At: key.At, Ease: key.Ease, Value: key.Value))]
     ));
     private static WorldRenderSky Gradient(params BindableScalar[] elevations) => new(Layers: [new WorldRenderSkyLayer.Gradient(Stops: [
         .. elevations.Select(selector: static (elevation, index) => new WorldRenderSkyStop(

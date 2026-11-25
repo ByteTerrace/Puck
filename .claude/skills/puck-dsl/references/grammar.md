@@ -137,11 +137,16 @@ appears in an expression, so it is never mistaken for a machine or state name.
 
 ## Units
 
-`deg rad s ms min h m mm cm hz % pct` — what each is worth (the conversion
-arithmetic) lives in the core; *which* field of a given vocabulary is
-dimensioned is that vocabulary's own table. A unit suffix on a field the table
-doesn't cover is **PUCK024**; a unit the field's own dimension doesn't admit is
-**PUCK025**. `schedule <row> in <delay>` takes any value expression the call
+`m cm mm s ms min h hz deg rad % pct lx lm cd nit K`, and compounds joined by
+`/` and raised by `^` against the digits (`8m/s`, `9.8m/s^2`); `let x: unit = v`
+annotates a value's unit. What each is worth lives in the core
+(`UnitConversion`); *which* field of a given vocabulary is dimensioned is that
+vocabulary's own table. The dimension of each expression a field receives is
+checked (`DocumentDimensions`): a value proven to carry another dimension than
+its field's is **PUCK025**, one carrying a dimension into a field the table
+doesn't cover **PUCK024**, two dimensions meeting where they must agree (a sum,
+a comparison, a trigonometric argument, an annotation) **PUCK137**.
+`schedule <row> in <delay>` takes any value expression the call
 form's `delaySeconds` argument takes (a number with or without a unit, a name, a
 template parameter, arithmetic), converts it against that same field, and lowers
 to the same effect as `scheduleState(state: <row>, delaySeconds: <delay>)`.

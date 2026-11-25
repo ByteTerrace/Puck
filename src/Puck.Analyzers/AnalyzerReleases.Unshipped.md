@@ -29,3 +29,4 @@ CACHE001 | Puck.Caches | Error | CodeDerivedCacheAnalyzer, [Documentation not pr
 PUCKFIELD002 | Puck.Field | Error | SdfFieldCatalogueGenerator, [Documentation not provided]
 PUCKFIELD003 | Puck.Field | Error | SdfFieldCatalogueGenerator, [Documentation not provided]
 PUCKSYNTAX001 | Puck.Syntax | Error | SyntaxChildrenGenerator, [Documentation not provided]
+PUCKSCHEMA001 | Puck.Schema | Error | ModelShapeAnalyzer, [Documentation not provided]
