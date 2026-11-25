@@ -183,6 +183,32 @@ public sealed partial class SdfMeshPathBake {
         }
         return null;
     }
+    // The stored rung a bake that bakes what its demand asks (SdfMeshCachePolicy.Demand) takes in place of a tier the
+    // library and the store lack, so a boot over a store an earlier run warmed bakes only what no rung of the shape
+    // answers: for a finer tier (a retier, a first detail, an arrival, drawn being int.MaxValue for one drawing
+    // nothing), the nearest stored rung finer still, which shows every detail the demand asks; for a coarser tier (the
+    // budget's), the nearest stored rung between the tier drawn and the one asked, which still gives back bytes. Null for
+    // live geometry, a tier the store holds, any other policy, or a shape the store holds no such rung of, which bakes.
+    private Group? DemandRung(Group planned, UInt128 identity, int drawn) {
+        if ((Library.Policy != SdfMeshCachePolicy.Demand) || planned.Live || (Library.Disk is not { } disk) || Stores(group: planned, identity: identity) ||
+            (planned.Dynamic && disk.Holds(geometry: SdfMeshLibrary.FormGeometry(form: planned.Form), identity: identity))) { return null; }
+
+        var last = ((planned.Tier < drawn) ? planned.FinestTier : (drawn + 1));
+
+        for (var tier = (planned.Tier - 1); (tier >= last); tier--) {
+            if (RungOf(group: planned, tier: tier) is not { } rung) { continue; }
+            if (!Stores(group: rung, identity: identity)) {
+                rung.Retired = true;
+                continue;
+            }
+            Library.Cache.Count(kind: SdfMeshCache.RungsTaken);
+            rung.FirstDetailOwed = planned.FirstDetailOwed;
+            rung.DemandPixel = planned.DemandPixel;
+            rung.DemandedTier = planned.DemandedTier;
+            return rung;
+        }
+        return null;
+    }
     // Starts, for each geometry a done group draws, the next rung of its ladder the store lacks, coarsest first, at most
     // SdfMeshTier.MaxInFlight at once; true while any ladder still has a rung to look at or in flight. A rung bakes in
     // its group's place as a tier's replacement does, drawing the group's mesh meanwhile, and gives the place back when

@@ -126,6 +126,52 @@ public sealed partial class SdfMeshPathBake {
     private static bool PlansFloor(Group? old, SdfMeshBakeGroup planned, HashSet<UInt128> shapes) => (Arrives(old: old) || NewShape(planned: planned, shapes: shapes));
     private static bool NewShape(SdfMeshBakeGroup planned, HashSet<UInt128> shapes) => ((planned.Dynamic || !planned.Geometry.ReadsSlots) && !shapes.Contains(item: planned.Shape));
 
+    // What a group the bake holds at a selector stands at, for a plan of a new program: its shape, the tier it stands at
+    // (a ladder's rung being filled stands in for the group it replaces, whose tier that is), and whether it still owes
+    // its first detail; null for a group that arrives (Arrives), which plans as an arrival does.
+    private readonly record struct HeldTier(UInt128 Shape, int Tier, bool FirstDetailOwed);
+
+    private static HeldTiers HeldTiersOf(IEnumerable<Group> groups) {
+        var held = new HeldTiers();
+
+        foreach (var old in groups) {
+            if (old.Failed || Arrives(old: old)) { continue; }
+
+            var standing = ((old.Fill && (old.Replaces is { } replaced)) ? replaced : old);
+
+            held.Add(held: new HeldTier(FirstDetailOwed: standing.FirstDetailOwed, Shape: old.Shape, Tier: standing.Tier), selector: old.Selector);
+        }
+        return held;
+    }
+    // The tiers the groups a bake holds stand at, for a plan of a new program: by selector, and by shape for a group whose
+    // selector moved (a static group's selector is its first instance, which every instance a program gains or loses
+    // before it moves).
+    private sealed class HeldTiers {
+        private readonly Dictionary<int, HeldTier> m_bySelector = [];
+        private readonly Dictionary<UInt128, HeldTier> m_byShape = [];
+
+        public void Add(int selector, HeldTier held) {
+            m_bySelector[selector] = held;
+            // Of several groups of one shape, the finest tier answers: the detail some view of that shape already shows.
+            if (!m_byShape.TryGetValue(key: held.Shape, value: out var other) || (held.Tier < other.Tier)) { m_byShape[held.Shape] = held; }
+        }
+        public HeldTier? Of(SdfMeshBakeGroup group) =>
+            ((m_bySelector.TryGetValue(key: group.Selector, value: out var held) && (held.Shape == group.Shape)) || m_byShape.TryGetValue(key: group.Shape, value: out held)) ? held : null;
+    }
+    // The tier a plan of a new program asks of each group: the tier a group the bake held with the planned group's shape
+    // stands at, and otherwise what `demanded` asks. A new program moves no demand, so a restart keeps every tier and
+    // leaves each move of detail to the tier decisions (Retier, StartFirsts), which keep a finer tier the demand no
+    // longer asks while the budget allows and look in the store before they bake: a plan at each group's demanded tier
+    // would ask, at every change of the program, whatever tier the demand named at that frame.
+    private Func<SdfMeshBakeGroup, int> KeepingHeldTiers(Func<SdfMeshBakeGroup, int> demanded, HeldTiers held) {
+        if (PlannedTier is { } planned) { return planned; }
+        return group => {
+            if (held.Of(group: group) is not { } standing) { return demanded(arg: group); }
+            if (standing.FirstDetailOwed) { ((Group)group).FirstDetailOwed = true; }
+            return standing.Tier;
+        };
+    }
+
     /// <summary>Gets the tier every plan of this bake asks for each group in place of the one its demand points ask
     /// (<see cref="SdfMeshTier"/>), held to the rungs that change the group's mesh; <see langword="null"/>, a residency's
     /// bake, plans by demand. An offline bake with no view (the mesh audit) sets it, since no demand point would plan
@@ -811,6 +857,15 @@ public sealed partial class SdfMeshPathBake {
             old.RetierRefused = true;
             group.Retired = true;
             return TierStart.None;
+        }
+        // A bake that bakes its demand takes a stored rung that answers the tier asked before it bakes one the store lacks.
+        if (DemandRung(drawn: old.Tier, identity: Identity.Value, planned: group) is { } rung) {
+            rung.FirstDetail = group.FirstDetail;
+            rung.RetierDeltaBytes = group.RetierDeltaBytes;
+            rung.OwedFrames = group.OwedFrames;
+            rung.InheritLive(from: old);
+            group.Retired = true;
+            group = rung;
         }
         SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.TierStarts);
         group.TakeDemandBox();

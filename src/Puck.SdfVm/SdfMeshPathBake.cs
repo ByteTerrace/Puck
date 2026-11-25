@@ -1504,10 +1504,12 @@ public sealed partial class SdfMeshPathBake {
         // every other selector, and every group of another shape, arrives and plans its floor first, as the restart
         // that adopts this plan decides from the same groups (Arrives).
         HashSet<int> drawing;
+        HeldTiers held;
         HashSet<UInt128> shapes;
 
         using (EnterGate(site: BakeGate.Read)) {
             drawing = [.. m_groups.Where(predicate: static group => !Arrives(old: group)).Select(selector: static group => group.Selector)];
+            held = HeldTiersOf(groups: m_groups);
             shapes = [.. m_groups.Select(selector: static group => group.Shape)];
         }
 
@@ -1515,7 +1517,10 @@ public sealed partial class SdfMeshPathBake {
             create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
             farDistance: farDistance,
             program: program,
-            tier: Tiers(arrives: group => (!drawing.Contains(item: group.Selector) || NewShape(planned: group, shapes: shapes)), copies: false, transforms: transforms),
+            tier: KeepingHeldTiers(
+                demanded: Tiers(arrives: group => (!drawing.Contains(item: group.Selector) || NewShape(planned: group, shapes: shapes)), copies: false, transforms: transforms),
+                held: held
+            ),
             transforms: transforms
         );
 
@@ -1588,6 +1593,9 @@ public sealed partial class SdfMeshPathBake {
         m_doneThrough = 0;
         // A slice samples one program and set: a new one takes every lattice again.
         m_slice?.Reset();
+        // Read before the rungs being filled stand down below: such a rung stands at its group's own tier.
+        var held = HeldTiersOf(groups: previous.Values);
+
         // A successor waits on a group of the previous program; this program's plan is made at the frame's set already.
         foreach (var old in previous.Values) {
             old.Successor = null;
@@ -1599,11 +1607,14 @@ public sealed partial class SdfMeshPathBake {
         // A new program takes the plan a build already made off the frame's thread (PlanAhead), with each group this restart
         // cannot keep that read the transforms or a moved field planned again at the frame's; otherwise the whole plan.
         var shapes = previous.Values.Select(selector: static group => group.Shape).ToHashSet();
-        var tiers = Tiers(arrives: group => PlansFloor(old: previous.GetValueOrDefault(key: group.Selector), planned: group, shapes: shapes), transforms: frame.DynamicTransforms);
+        var tiers = KeepingHeldTiers(
+            demanded: Tiers(arrives: group => PlansFloor(old: previous.GetValueOrDefault(key: group.Selector), planned: group, shapes: shapes), transforms: frame.DynamicTransforms),
+            held: held
+        );
 
         if (plan is not null) {
             // A group that read a transform is planned again unless the previous program keeps it; a static group that
-            // read none is planned again only when the frame's demand moved its tier.
+            // read none is planned again only when its plan's tier is not the one the restart asks (KeepingHeldTiers).
             _ = SdfMeshBakeGroup.Refresh(
                 create: static (selector, dynamic) => new Group(dynamic: dynamic, selector: selector),
                 farDistance: frame.FarDistance,
@@ -1807,7 +1818,8 @@ public sealed partial class SdfMeshPathBake {
 
         // A bake that draws stored rungs alone puts the nearest stored rung of the group's ladder in its place, and
         // places that rung as it would any plan.
-        if (StoredRung(identity: identity, planned: group) is { } rung) {
+        // A bake that bakes its demand puts a finer stored rung there instead of baking a tier the store lacks.
+        if ((StoredRung(identity: identity, planned: group) ?? DemandRung(drawn: int.MaxValue, identity: identity, planned: group)) is { } rung) {
             group.Retired = true;
             return Place(group: rung, identity: identity, index: index, leaders: leaders, old: old, started: ref started);
         }
@@ -1913,6 +1925,22 @@ public sealed partial class SdfMeshPathBake {
     // lattice's edge, and no coarse lattice, which would step over features thinner than its cells, narrows it. Geometry
     // the library's store kept from an earlier run loads from disk off the frame's thread instead, and bakes only when the
     // store refuses its entry; true when it loads.
+    // Counts a group that reaches a lattice because neither the library nor its store held its geometry, and names why
+    // its tier was asked; live geometry is counted apart and named by nothing, since no store holds it.
+    private void CountBaked(Group group, bool loadMissed) {
+        if (group.Live) {
+            Library.Cache.Count(kind: SdfMeshCache.LiveBaked);
+            return;
+        }
+        Library.Cache.Count(kind: SdfMeshCache.GroupsBaked);
+
+        var why = (group.Fill ? "fill"
+            : group.Evicted ? "evict"
+            : (group.Replaces is { } replaced) ? (group.FirstDetail ? "first-detail" : (group.Tier < replaced.Tier) ? "finer" : (group.Tier > replaced.Tier) ? "coarser" : "rebake")
+            : "arrival");
+
+        SdfMeshBakeReport.BakeBegun(drawn: (group.Replaces?.Tier ?? -1), group: group, loadMissed: loadMissed, residency: Residency, why: why);
+    }
     private bool Begin(Group group) {
         group.Allocator = Library.Allocator;
         group.TakeDemandBox();
@@ -1937,7 +1965,7 @@ public sealed partial class SdfMeshPathBake {
             // A dynamic group whose form the store holds a mesh of, baked at another pose, loads that mesh, as one the
             // library holds is taken (Place): its skin carries each member through its own slot.
             if (!HoldsForm(group: group)) {
-                Library.Cache.Count(kind: (group.Live ? SdfMeshCache.LiveBaked : SdfMeshCache.GroupsBaked));
+                CountBaked(group: group, loadMissed: false);
                 return false;
             }
             group.LoadsForm = true;
@@ -2839,7 +2867,7 @@ public sealed partial class SdfMeshPathBake {
             if (!loaded) {
                 group.LoadsForm = false;
                 group.Next = group.Deferred;
-                Library.Cache.Count(kind: (group.Live ? SdfMeshCache.LiveBaked : SdfMeshCache.GroupsBaked));
+                CountBaked(group: group, loadMissed: true);
                 return;
             }
             m_accounts.Loaded++;
