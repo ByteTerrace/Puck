@@ -9,21 +9,16 @@ namespace Puck.Cli.Registry;
 // and `puck architecture --map` establish. Both modes report unclassified text positions in the document model.
 // Exit 0 wrote or matched, 1 check found drift or an uncovered member, 2 usage error or missing repository root.
 public static class RegistryCommand {
-    private const string RelativePath = "docs/world-name-registry.md";
+    /// <summary>The checked-in registry, which `puck schema` writes beside the schemas it generates from the same model.</summary>
+    public const string RelativePath = "docs/world-name-registry.md";
 
     private static int Run(bool check) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repositoryRoot)) {
             return 2;
         }
 
-        var uncovered = WorldNameRegistry.Uncovered;
-
-        if (uncovered.Count > 0) {
-            Console.Error.WriteLine(value: $"registry: {uncovered.Count} unclassified document member(s):");
-
-            foreach (var member in uncovered) {
-                Console.Error.WriteLine(value: $"  {member}");
-            }
+        if (WorldNameRegistry.Live.DescribeUncovered() is { } uncovered) {
+            Console.Error.WriteLine(value: $"registry: {uncovered}");
 
             return 1;
         }
@@ -51,9 +46,10 @@ public static class RegistryCommand {
         field, or dynamics name, with the role it carries the name in. WorldModuleNamespace
         reads the same registry to prefix an aliased import's names at compose time.
 
-        Both modes exit 1 for an unclassified text position. Declare the referenced namespace and
-        spelling on the property, or identify its literal or local meaning. Run puck schema
-        after changing the model, then rebuild before regenerating the registry.
+        Both modes exit 1 for an unclassified text position, naming the member and the annotation
+        that classifies it. This verb reads the compiled model, so after a model edit run
+        `puck schema --bootstrap`, which regenerates every generated file from the source model,
+        this registry included, without a rebuild in between.
 
         Written to: docs/world-name-registry.md.
         """,
