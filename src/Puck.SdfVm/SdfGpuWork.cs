@@ -1187,19 +1187,23 @@ public sealed class SdfGpuWork : IDisposable {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: bytes, other: source.SizeBytes);
         if (bytes > int.MaxValue) { throw new ArgumentOutOfRangeException(paramName: nameof(bytes), message: "A background GPU job copies back at most 2 GiB."); }
 
-        var readback = ReserveReadback(bytes: bytes, slot: slot);
+        var readback = ReserveReadback(bytes: Math.Max(val1: bytes, val2: sizeof(uint)), slot: slot);
 
         target.Consumed = true;
 
-        GpuReadbackCopy.Record(
-            commandBuffer: commandBuffer,
-            destination: readback,
-            recorder: m_gpu.Recorder,
-            sizeBytes: bytes,
-            source: source,
-            sourceAccess: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.CopyWrite),
-            sourceStage: (GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader | GpuStage.Transfer)
-        );
+        // A job with nothing to copy back (a batch whose lattices owe no output words) still completes through its
+        // readback, empty: the device refuses a zero-length copy, so none is recorded.
+        if (bytes != 0) {
+            GpuReadbackCopy.Record(
+                commandBuffer: commandBuffer,
+                destination: readback,
+                recorder: m_gpu.Recorder,
+                sizeBytes: bytes,
+                source: source,
+                sourceAccess: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.CopyWrite),
+                sourceStage: (GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader | GpuStage.Transfer)
+            );
+        }
         target.Readback = readback;
         target.ReadbackBytes = bytes;
         target.Copied = true;
