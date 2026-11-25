@@ -48,6 +48,11 @@ public static class SdfMeshCache {
     /// <summary>Counts each rung a <see cref="SdfMeshCachePolicy.Stored"/> bake asked that the store lacked, which another
     /// rung of the shape drew in place of.</summary>
     public static readonly WorkKind RungsMissed = new(name: "sdf.mesh-cache.rungs-missed", unit: "groups", workClass: WorkClass.Pacing);
+    /// <summary>Counts each rung of <see cref="RungsMissed"/> asked by a sampled field's reader whose field the world
+    /// then moved past the snapshot that geometry was planned at: a field state the world passed through, which no cache
+    /// made beforehand holds the ladder of, as no cache holds live geometry's (<see cref="LiveBaked"/>). The misses a
+    /// whole cache answers for are <see cref="RungsMissed"/> less these.</summary>
+    public static readonly WorkKind RungsMissedLive = new(name: "sdf.mesh-cache.rungs-missed-live", unit: "groups", workClass: WorkClass.Pacing);
     /// <summary>Counts each stored entry a <see cref="SdfMeshCachePolicy.Stored"/> bake could not read because the
     /// account had no room for it: a tier's replacement then keeps what it draws, and a group with nothing to draw reads
     /// again later. A device whose memory bar is under what its view demands counts these while it bakes nothing.</summary>
@@ -55,7 +60,7 @@ public static class SdfMeshCache {
     /// <summary>Counts each rung a <see cref="SdfMeshCachePolicy.Ladder"/> bake baked beyond the one its demand asked.</summary>
     public static readonly WorkKind RungsFilled = new(name: "sdf.mesh-cache.rungs-filled", unit: "groups", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [Dispatches, LiveDispatches, GroupsBaked, LiveBaked, RungsMissed, LoadsDeclined, RungsFilled];
+    private static readonly WorkKind[] DeclaredKinds = [Dispatches, LiveDispatches, GroupsBaked, LiveBaked, RungsMissed, RungsMissedLive, LoadsDeclined, RungsFilled];
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// library exists.</summary>

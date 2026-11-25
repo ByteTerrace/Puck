@@ -32,6 +32,7 @@ public sealed partial class SdfMeshPathBake {
         if (resampled) {
             m_sampled = sampled;
             m_resamples++;
+            ReclassifyReaderMisses(sampled: sampled);
             // A slice samples every baked handle.
             m_slice?.Reset();
         }
