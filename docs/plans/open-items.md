@@ -3195,14 +3195,6 @@ Owner: a specialist a step, the design reviewed · ordinary, and ahead of
 cross doors · Next: [the plan](portals-in-play.md#build-order)'s step 1, live
 door frames. Nothing of the plan is built.
 
-- [high] **Flight does not arm after a crossing.** In `worlds/debug/suit-tests.puck`, the
-  scenarios that cross suited into the garden and that come home suited press flight after the
-  crossing, and the press never sets `flightFuel` (`bodyState(body, 0, flightFuel) > 0` and then
-  `bodyPosition(body, 0, y) > 1` fail; the garden's own claim is never evaluated). It fails the same
-  way before the rules-over-sets change, with the old literal-seat rules restored and with the
-  per-body visit filter forced on, so the cause sits on the press path after a transfer: the flight
-  toggle in `worlds/standard/abilities.puck` sets `flightPress`, and its `onFact` Grounded/Airborne
-  actions set `flightFuel`. Check: both scenarios pass under `--reproduce`.
 - [medium] A door on a row whose position reads a state cell fires where the
   row first stood: the face catalog caches its frame (`WorldFaceCatalog`).
   Step 1 fixes it, and its lane first writes the scenario that fails today.
@@ -3223,6 +3215,17 @@ An item below that tunes today's codec waits behind that plan's steps.
 
 Federation and transfers:
 
+- [medium] A body that crosses a seam waits on the source's clock. An adjacency arrival fences the
+  body's next ordinary step behind the source's consumed engine tick (`WorldBody.ApplyContinuumTrajectory`,
+  checked in `WorldBody.TryBeginOrdinaryAdvance`), which assumes both instances' engine clocks agree. In a
+  paced headless debug World that sheds steps (`world.rate` read `shed 144`), the boot world's clock lagged
+  the moon's: the ship coming home from the moon (`moon-seam-tests.puck`'s round trip, played by
+  `world.at`) arrived with a fence 60,480 engine ticks (36 ticks) ahead of the boot world's step and hung
+  in the air, pilot aboard, until the boot world caught up; on one run it was still hung 128 ticks after
+  arriving. Unpaced (`puck test`) the clocks agree and the trip passes. Decide which clock a crossing
+  hands over (one shared timeline whose shedding every instance follows, or a fence mapped into the
+  destination's clock). Check: the round trip played paced on a loaded World resumes the ship's descent on
+  the tick after it lands.
 - [medium] What the durable crossing left: the source learns a commit's
   answer one pool hop late, where it could map it synchronously; an arrival
   that completes asynchronously can land twice; and a row retiring with an
