@@ -264,6 +264,26 @@ public sealed class MemoryAccount {
     /// <summary>Raised by a reclaim (<see cref="Reclaims"/>) after the runtime's collection, outside the account's
     /// lock: the host's native allocator gives its unused pages back here.</summary>
     public event Action? ReclaimRequested;
+    /// <summary>Raised on the calling thread by <see cref="ReturnThreadMemory"/>: the host's native allocator gives back
+    /// the free pages the calling thread's own heap holds, which no other thread's collection reaches.</summary>
+    public event Action? ThreadMemoryReturnRequested;
+    /// <summary>Gets the shortest time between two returns of one thread's free native memory
+    /// (<see cref="ReturnThreadMemory"/>), in <see cref="Stopwatch"/> ticks.</summary>
+    public static long ThreadReturnInterval { get; } = (Stopwatch.Frequency / 2L);
+    [ThreadStatic]
+    private static long ThreadReturnedAt;
+    /// <summary>Asks the host's native allocator to give back the free pages the calling thread's heap holds, at most
+    /// once every <see cref="ThreadReturnInterval"/> per thread: what a worker whose work allocated native workspace (a
+    /// bake's) calls as it goes idle. An allocator that keeps a heap per thread (mimalloc) returns a thread's emptied
+    /// pages to its arenas only on that thread, so an idle worker would otherwise hold its last job's freed workspace
+    /// committed and resident for as long as it waits.</summary>
+    public void ReturnThreadMemory() {
+        var now = Stopwatch.GetTimestamp();
+
+        if ((ThreadReturnedAt != 0L) && ((now - ThreadReturnedAt) < ThreadReturnInterval)) { return; }
+        ThreadReturnedAt = now;
+        ThreadMemoryReturnRequested?.Invoke();
+    }
 
     private readonly Action m_reclaim;
     private long m_reclaimAt;
