@@ -1,6 +1,5 @@
 using System.Buffers;
 using System.Numerics;
-using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
 using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
@@ -269,7 +268,7 @@ public sealed partial class SdfMeshPathBake {
             var fill = float.NaN;
 
             count++;
-            if (evaluator.TryDistanceBounds(lower: Fixed(point: low), upper: Fixed(point: high), distance: out var bounds) && !bounds.IsUnbounded) {
+            if (evaluator.TryDistanceBounds(lower: SdfMeshAudit.Fixed(point: low), upper: SdfMeshAudit.Fixed(point: high), distance: out var bounds) && !bounds.IsUnbounded) {
                 var lower = ((float)((double)bounds.Lower));
                 var upper = ((float)((double)bounds.Upper));
 
@@ -294,7 +293,6 @@ public sealed partial class SdfMeshPathBake {
         return blocks;
     }
 
-    private static FixedPosition Fixed(Vector3 point) => FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point));
 
     // The next slab of a bounded final lattice: whole layers of blocks from the plane its last slab ended at, the sampled
     // blocks of as many layers as LatticeTaps takes (at least one sampled block), and every later layer when none of them
