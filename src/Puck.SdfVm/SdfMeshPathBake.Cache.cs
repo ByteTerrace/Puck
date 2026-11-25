@@ -2,13 +2,15 @@ namespace Puck.SdfVm;
 
 // What the bake does about a rung of a group's tier ladder its library's store lacks (SdfMeshCachePolicy).
 //
-// Invariant, under SdfMeshCachePolicy.Stored: a group starts a lattice only when the store holds no rung of its shape.
-// Two doors lead a group to a lattice, and each asks the store first: Place, for a group arriving with a plan
-// (StoredRung puts the nearest stored rung in its place), and StartReplacement, for a group drawing one tier and
-// asked another (it keeps what it draws). Begin and Load count every group that reaches a lattice past them
-// (SdfMeshCache.GroupsBaked), so a path that got around the doors shows in the count rather than passing unseen.
-// Live geometry (Group.Live: a group that reads an operand, or planned again as a sampled field it reads moved) is outside
-// the invariant, since the world makes it as it runs: it bakes under every policy and is counted apart.
+// Invariant, under SdfMeshCachePolicy.Stored: a group arriving draws a stored rung of its shape before anything bakes,
+// whenever the store holds one, and a rung the store lacks bakes only through a tier decision, so under the budget. Two
+// doors lead a group to a lattice, and each asks the store first: Place, for a group arriving with a plan (StoredRung
+// puts the nearest stored rung in its place), and StartReplacement, for a group drawing one tier and asked another
+// (DemandRung takes a stored rung that answers the tier asked; past it, a rung missed is counted and bakes). Begin and
+// Load count every group that reaches a lattice past them (SdfMeshCache.GroupsBaked), and CountRungMissed every rung a
+// shipped cache lacked, so what the cache did not carry shows in the counts.
+// Live geometry (Group.Live: a group that reads an operand, or planned again as a sampled field it reads moved) is
+// made as the world runs: it bakes under every policy and is counted apart.
 //
 // Invariant, under SdfMeshCachePolicy.Ladder: the bake's detail is not settled (DetailSettled) while any geometry a
 // listed group draws has a rung between its finest and coarsest tiers that the store lacks. FillLadders is the one
@@ -153,10 +155,10 @@ public sealed partial class SdfMeshPathBake {
 
         return (ReferenceEquals(objA: plans[0], objB: group) ? null : plans[0]);
     }
-    // The nearest rung of a planned group's ladder the store holds, coarser first, for a bake that draws stored rungs
-    // alone and a group whose own rung the store lacks; null for any other bake, a group whose rung is held, or a shape
-    // the store holds no rung of, which bakes. The rung answered holds the demand the plan asked, so it is asked again
-    // only when the demand names another tier, except a floor planned on arrival, which still owes its detail.
+    // The nearest rung of a planned group's ladder the store holds, coarser first, for a bake that starts from its stored
+    // rungs and a group whose own rung the store lacks; null for any other bake, a group whose rung is held, or a shape
+    // the store holds no rung of, which bakes. The rung answered draws at once, a warm start, and the tier decisions then
+    // ask the plan's tier as they ask any group's demand (Retier), baking it under the budget if the store lacks it.
     private Group? StoredRung(Group planned, UInt128 identity) {
         if ((Library.Policy != SdfMeshCachePolicy.Stored) || planned.Live || Stores(group: planned, identity: identity)) { return null; }
         for (var step = 1; (step <= SdfMeshTier.Last); step++) {
@@ -173,25 +175,24 @@ public sealed partial class SdfMeshPathBake {
                 CountRungMissed(asked: planned, drawn: rung.Tier, first: false);
                 rung.FirstDetailOwed = planned.FirstDetailOwed;
                 rung.DemandPixel = planned.DemandPixel;
-                if (!planned.FirstDetailOwed) {
-                    rung.DemandedTier = planned.Tier;
-                    rung.RetierRefused = true;
-                }
                 return rung;
             }
         }
         return null;
     }
-    // The stored rung a bake that bakes what its demand asks (SdfMeshCachePolicy.Demand) takes in place of a tier the
-    // library and the store lack, so a boot over a store an earlier run warmed bakes only what no rung of the shape
-    // answers. For a finer tier (a retier, a first detail, an arrival, drawn being int.MaxValue for one drawing nothing)
-    // it is the nearest stored rung finer still, which shows every detail the demand asks. For a coarser tier, which only
-    // the region's budget asks (its spare groups and its bias), it is the nearest stored rung between the tier drawn and
-    // the one asked, else the nearest coarser than the one asked: the budget gives detail up to free bytes, and any
-    // stored rung coarser than the tier drawn frees them without a bake. Null for live geometry, a tier the store holds,
-    // any other policy, or a shape the store holds no such rung of, which bakes.
+    // The stored rung a bake that bakes what its demand asks (SdfMeshCachePolicy.Demand, and Stored past its warm start)
+    // takes in place of a tier the library and the store lack, so a boot over a store an earlier run warmed bakes only
+    // what no rung of the shape answers. For a finer tier (a retier, a first detail, an arrival, drawn being int.MaxValue
+    // for one drawing nothing) it is the nearest stored rung finer still, which shows every detail the demand asks. A
+    // first detail with none takes the stored rung nearest the tier asked between it and the floor it raises: the first
+    // detail is the arrival's own step, outside the budget, so whatever it would bake past the store is left to the
+    // tier decisions, which ask the rest as an owed finer tier under the budget. For a coarser tier, which only the
+    // region's budget asks (its spare groups and its bias), it is the nearest stored rung between the tier drawn and the
+    // one asked, else the nearest coarser than the one asked: the budget gives detail up to free bytes, and any stored
+    // rung coarser than the tier drawn frees them without a bake. Null for live geometry, a tier the store holds, a ladder
+    // bake, or a shape the store holds no such rung of, which bakes.
     private Group? DemandRung(Group planned, UInt128 identity, int drawn) {
-        if ((Library.Policy != SdfMeshCachePolicy.Demand) || planned.Live || (Library.Disk is not { } disk) || Stores(group: planned, identity: identity) ||
+        if ((Library.Policy == SdfMeshCachePolicy.Ladder) || planned.Live || (Library.Disk is not { } disk) || Stores(group: planned, identity: identity) ||
             (planned.Dynamic && disk.Holds(geometry: SdfMeshLibrary.FormGeometry(form: planned.Form), identity: identity))) { return null; }
 
         var finer = (planned.Tier < drawn);
@@ -199,7 +200,13 @@ public sealed partial class SdfMeshPathBake {
         for (var tier = (planned.Tier - 1); (tier >= (finer ? planned.FinestTier : (drawn + 1))); tier--) {
             if (StoredRungAt(identity: identity, planned: planned, tier: tier) is { } rung) { return rung; }
         }
-        if (finer) { return null; }
+        if (finer) {
+            if (!planned.FirstDetail) { return null; }
+            for (var tier = (planned.Tier + 1); (tier < drawn); tier++) {
+                if (StoredRungAt(identity: identity, planned: planned, tier: tier) is { } rung) { return rung; }
+            }
+            return null;
+        }
         for (var tier = (planned.Tier + 1); (tier <= planned.CoarsestTier); tier++) {
             if (StoredRungAt(identity: identity, planned: planned, tier: tier) is { } rung) { return rung; }
         }

@@ -101,6 +101,21 @@ public sealed unsafe class OwnedBuffer<T> : MemoryManager<T> where T : unmanaged
         Reserve(capacity: capacity);
     }
 
+    /// <summary>Creates a buffer of exactly <paramref name="length"/> elements, allocated once at that size.</summary>
+    /// <param name="allocator">The native allocator, or null for storage rented from <see cref="RentedArrays"/>.</param>
+    /// <param name="length">The buffer's length.</param>
+    /// <param name="clear">Whether the elements are zeroed; otherwise they are unspecified.</param>
+    /// <param name="observer">The owning lifecycle's byte observer, or null for unmetered storage.</param>
+    /// <returns>The buffer, which the caller disposes.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
+    /// <exception cref="HostMemoryRefusedException">The observer refused the storage; nothing is allocated.</exception>
+    public static OwnedBuffer<T> OfLength(IAllocator? allocator, int length, bool clear, IAllocationObserver? observer = null) {
+        var buffer = new OwnedBuffer<T>(allocator: allocator, capacity: length, observer: observer);
+
+        buffer.Resize(clear: clear, length: length);
+        return buffer;
+    }
+
     // The row this buffer's native charges name; rented storage is charged by RentedArrays, which names its own.
     private const MemoryBacking NativeBacking = MemoryBacking.NativeAllocator;
 

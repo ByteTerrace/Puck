@@ -14,12 +14,11 @@ public enum SdfMeshCachePolicy : byte {
     /// what the producer of a whole cache does, so a later boot that draws only stored rungs
     /// (<see cref="Stored"/>) finds whichever one its own demand, window size or memory budget asks.</summary>
     Ladder,
-    /// <summary>Draws stored rungs alone: a rung the store lacks is never baked while it holds another rung of the same
-    /// shape, which draws in its place (a group arriving takes the nearest stored rung, coarser first, and a group
-    /// already drawing keeps what it draws), and a stored entry the account has no room to read is never baked instead.
-    /// Only a shape the store holds no rung of bakes, since nothing else can draw it, and geometry the world makes as it
-    /// runs (an operand's or a sampled field's reader, planned again as its input moves). What a build that ships its
-    /// cache runs.</summary>
+    /// <summary>Starts from stored rungs, a shipped cache being a warm start: a group arriving draws the nearest stored
+    /// rung of its shape, coarser first, before anything bakes, and a rung the store lacks is counted
+    /// (<see cref="SdfMeshCache.RungsMissed"/>) and baked by the tier decisions as <see cref="Demand"/> bakes it, under
+    /// the budget and on the memory the process plays in. A stored entry the account has no room to read is never baked
+    /// instead. What a player's build runs.</summary>
     Stored,
 }
 /// <summary>
@@ -46,7 +45,7 @@ public static class SdfMeshCache {
     /// it, and it bakes under every policy.</summary>
     public static readonly WorkKind LiveBaked = new(name: "sdf.mesh-cache.live-baked", unit: "groups", workClass: WorkClass.Pacing);
     /// <summary>Counts each rung a <see cref="SdfMeshCachePolicy.Stored"/> bake asked that the store lacked, which another
-    /// rung of the shape drew in place of.</summary>
+    /// rung of the shape drew in place of until a stored rung or a bake answered it.</summary>
     public static readonly WorkKind RungsMissed = new(name: "sdf.mesh-cache.rungs-missed", unit: "groups", workClass: WorkClass.Pacing);
     /// <summary>Counts each rung of <see cref="RungsMissed"/> asked by a sampled field's reader whose field the world
     /// then moved past the snapshot that geometry was planned at: a field state the world passed through, which no cache

@@ -844,9 +844,12 @@ regardless.
 `DocumentNameAttribute`. `DocumentTextAttribute` identifies literal text and names that
 belong to another vocabulary. Bindable values carry their state binding through their
 type. The schema generator embeds these classifications in `WorldModelShape`, including
-the converter-backed expression instruction arms. After changing the model, run `puck schema`,
-rebuild, and run `puck registry` to regenerate [the name positions](../../docs/world-name-registry.md).
-`puck registry --check` reports unclassified text and checks the generated reference.
+the converter-backed expression instruction arms. After changing the model, run `puck schema --bootstrap`,
+which regenerates the schemas, the model table and [the name positions](../../docs/world-name-registry.md)
+from the source model in one run, then rebuild. A text member with no classification refuses that run,
+naming the member and the annotation, and a build of this project whose model table lacks a public
+property fails with `PUCKSCHEMA001`. `puck registry --check` reports unclassified text and checks the
+generated reference against the compiled model.
 `WorldModuleNamespace.cs` reads the same registry at compose time: an import
 entry carrying `as` qualifies every name its fragment declares by the alias,
 `<alias>$<name>` (`GeneratedName.Qualify`, the generated spelling no author

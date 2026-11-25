@@ -500,7 +500,7 @@ all three as a player's does, so the fill stays a boot. Its cost is the bake's,
 not the visits': in a Vulkan fill of the debug world the spawn's whole-world
 ladder took nearly all of the boot and the places after it a few minutes,
 so a smaller fill comes from fewer tiers or fewer sets, not fewer places
-([open items](../plans/open-items.md#the-player-build-never-bakes)).
+([open items](../plans/open-items.md#the-player-builds-cache-sets)).
 
 **Complete means checked as a player runs it.** `puck world player` boots each
 backend and target under the stored policy on the target's device profile,

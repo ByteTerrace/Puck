@@ -6,9 +6,16 @@ meters each view's image (`SdfExposure.Meter`, the composite's histogram), never
 adaptation still reads the volume's gather at each surface.
 
 `host.memory owners 0` reports the trace hierarchy under `sdf.mesh-gi.trace-scene`,
-the arrays used to build it under `sdf.mesh-gi.scene-build`, and the CPU probe
-volume under `sdf.mesh-gi.volume`. A geometry reused by two scenes keeps one
-charge until its last scene releases it. A host refusal leaves the installed
+the arrays used to build it under `sdf.mesh-gi.scene-build`, the CPU probe
+volume under `sdf.mesh-gi.volume`, the probe caches' tables under
+`sdf.mesh-gi.probe-cache`, and the hit and light blocks their entries name (with
+a batch's passing hit words and a rewrite's snapshot) under
+`sdf.mesh-gi.probe-blocks`. With the residency's mesh library allocator (the
+World's), the volume's words, the blocks and each geometry's copies of its mesh
+level live in native storage in the native-allocator row, freed through the
+volume's reader epochs (`SdfMeshIrradiance`'s `m_blocks`) or the geometry's last
+release; the hierarchy's nodes and the caches' tables stay managed. A geometry
+reused by two scenes keeps one charge until its last scene releases it. A host refusal leaves the installed
 scene available and the volume retries on its scene-build cadence. The GPU
 upload retries its refused chunk before publishing the new root.
 
