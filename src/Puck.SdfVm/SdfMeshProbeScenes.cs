@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Threading.Channels;
@@ -237,7 +238,7 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
 
         var chunk = m_region.MappedChunkBytes;
         var size = m_region.ByteCount;
-        var chunks = ((int)((size + (chunk - 1)) / chunk));
+        var chunks = ((int)size.CeilingDivide(divisor: chunk));
         var chunkWords = (chunk / sizeof(uint));
 
         if (m_covered.Length < chunks) { m_covered = new bool[chunks]; }

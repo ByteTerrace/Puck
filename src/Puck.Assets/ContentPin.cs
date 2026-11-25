@@ -112,10 +112,7 @@ public readonly record struct ContentPin {
     /// <param name="pin">When this method returns <see langword="true"/>, the parsed pin.</param>
     /// <returns><see langword="true"/> when <paramref name="hex"/> is exactly 64 lowercase hexadecimal digits.</returns>
     public static bool TryParseHex(ReadOnlySpan<char> hex, out ContentPin pin) {
-        if (
-            (hex.Length != HexLength) ||
-            (hex.IndexOfAnyExcept(values: "0123456789abcdef") >= 0)
-        ) {
+        if (!ContentDigest.IsLowerHexDigits(length: HexLength, text: hex)) {
             pin = default;
             return false;
         }

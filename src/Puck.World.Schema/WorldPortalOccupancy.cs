@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 namespace Puck.World;
 
 /// <summary>
@@ -112,9 +113,7 @@ public sealed class WorldPortalOccupancy {
     private bool Add((string PlacementId, string FaceName, int Seat) key) {
         if (!m_inside.Add(item: key)) { return false; }
         if (key.Seat >= 0) {
-            if (key.Seat >= m_seatRows.Length) {
-                Array.Resize(array: ref m_seatRows, newSize: Math.Max(val1: (key.Seat + 1), val2: (m_seatRows.Length * 2)));
-            }
+            ArrayCapacity.EnsureLength(array: ref m_seatRows, required: (key.Seat + 1));
             m_seatRows[key.Seat]++;
         }
         return true;

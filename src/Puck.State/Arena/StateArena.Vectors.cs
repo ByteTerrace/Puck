@@ -1,3 +1,4 @@
+using Puck.Maths;
 namespace Puck.State;
 
 public sealed partial class StateArena {
@@ -19,7 +20,7 @@ public sealed partial class StateArena {
             rowOrdinal: rowOrdinal,
             slot: out var slot
         ) &&
-            Bit(
+            BitWords.Contains(
             index: slot,
             words: m_presence
         )

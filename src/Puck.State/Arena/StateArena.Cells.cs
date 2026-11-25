@@ -19,7 +19,7 @@ public sealed partial class StateArena {
             case RowShape.Ordered:
                 return ((int)m_memberCounts[rowOrdinal]);
             case RowShape.Slot:
-                return (Bit(
+                return (BitWords.Contains(
                     index: layout.CellStart,
                     words: m_presence
                 )
@@ -67,7 +67,7 @@ public sealed partial class StateArena {
             rowOrdinal: rowOrdinal,
             slot: out var slot
         ) &&
-            Bit(
+            BitWords.Contains(
             index: slot,
             words: m_presence
         )
@@ -99,7 +99,7 @@ public sealed partial class StateArena {
             rowOrdinal: rowOrdinal
         ) &&
             (((uint)position) < ((uint)HashCellExtent(layout: layout))) &&
-            Bit(
+            BitWords.Contains(
             index: CellSlotAt(layout: layout, position: position),
             words: m_presence
         )
@@ -256,7 +256,7 @@ public sealed partial class StateArena {
             if (
                 (layout.Shape == RowShape.Lattice) &&
                 (((uint)position) < ((uint)HashCellExtent(layout: layout))) &&
-                Bit(
+                BitWords.Contains(
                 index: CellSlotAt(layout: layout, position: position),
                 words: m_presence
             )
@@ -366,7 +366,7 @@ public sealed partial class StateArena {
         }
 
         var row = DocumentRow(rowOrdinal: rowOrdinal);
-        var present = Bit(
+        var present = BitWords.Contains(
             index: slot,
             words: m_presence
         );

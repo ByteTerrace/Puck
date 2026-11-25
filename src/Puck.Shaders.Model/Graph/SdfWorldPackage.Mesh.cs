@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
@@ -110,8 +112,8 @@ public static partial class SdfWorldPackage {
     /// <param name="side">The allocated cascade width in texels.</param>
     /// <returns>The number of 32-bit words in the bitmap.</returns>
     public static uint ShadowOpticalBitmapWords(uint side) {
-        var tiles = (side + ShadowOpticalTileEdge - 1) / ShadowOpticalTileEdge;
-        return (tiles * tiles + 31) / 32;
+        var tiles = side.CeilingDivide(divisor: ShadowOpticalTileEdge);
+        return (tiles * tiles).CeilingDivide(divisor: 32U);
     }
 
     /// <summary>Each cascade's signed optical depth to its first opaque receiver and nearest glass entry.</summary>

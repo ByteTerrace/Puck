@@ -33,6 +33,7 @@ corrected in the same change.
 |---|---|---|
 | A native window, its events and its surface | `INativeWindow`, `INativeWindowFactory`, `INativeWindowBackend`; `Win32NativeWindow`, `WaylandNativeWindow`, `XcbNativeWindow`; `ConfiguredNativeWindow` as the headless stand-in | [neutral README](../../../src/Puck.Platform/README.md#what-lives-here) |
 | Which display kind to open on Linux | `NativeDisplayEnvironment`, `NativeDisplayKindSelector` (environment variables only) | [neutral README](../../../src/Puck.Platform/README.md#what-lives-here) |
+| A SetupAPI device interface's path and owning device (the two-call detail read) | `DeviceInterfaceDetail.TryRead` in `src/Puck.Platform.Windows/Interop/`, used by HID enumeration and the EDID reader | [Windows README](../../../src/Puck.Platform.Windows/README.md#contents) |
 | Variable refresh range, display timing, colour space, keeping the display awake | `IDisplayTimingInfo` on `Win32NativeWindow` (`Win32NativeWindow.Vrr.cs`), `EdidVariableRefreshParser`, `Win32DisplayColorSpaceProbe`, the display power request in `Win32NativeWindow.DisplayPower.cs` | [host pacing](../../../docs/reference/hosting.md#host-pacing) |
 | Wait until a deadline without spinning or raising timer resolution, or until an event ends the wait early | `IPrecisionWaiter`: `Win32PrecisionWaiter` over `Win32HighResolutionWaitableTimer` (`AddWindowsPrecisionWaiter`) or `LinuxPrecisionWaiter` over `clock_nanosleep` (`AddLinuxPrecisionWaiter`), one container singleton the World's composition root registers for every shape and the Linux silo registers for its pacer, consumed by `HostWaits.Until` and by `HostWaits.Pace`, the pacer's serviced wait, which sleeps on the timer and the pump thread's wake in one operating-system wait | [below](#play-nice-with-the-host) |
 | Unmanaged memory | `IAllocator`, `MimallocAllocator`, registered by `AddPuckAllocator` | [neutral README](../../../src/Puck.Platform/README.md#what-lives-here) |
@@ -136,10 +137,6 @@ process-wide timer resolution. In this area that means:
   audio-capture or clipboard backend**, and its windows hold no display
   request (Wayland's idle inhibit, X11's screensaver suspend). Windowed
   Wayland and XCB behaviour has not been run on real Linux hardware.
-- **Duplicates recorded in the refactoring packet:** camera plane validation
-  and L8/BGRA packing (`Win32FaceAuthenticationCameraGraph.cs` beside
-  `CameraFramePacking`)
-  ([refactoring campaign](../../../docs/plans/open-items.md#refactoring-campaign)).
 - A reading taken while the compositor is not composing still looks like a
   slow frame ([open items](../../../docs/plans/open-items.md)).
 

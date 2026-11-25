@@ -1,9 +1,8 @@
-using System.Buffers;
 using System.Globalization;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Puck.Input.Hid;
+using Puck.Platform.Windows.Interop;
 using Windows.Win32;
 using Windows.Win32.Devices.DeviceAndDriverInstallation;
 using Windows.Win32.Devices.HumanInterfaceDevice;
@@ -231,58 +230,6 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
 
         return fileStream;
     }
-    [SupportedOSPlatform(platformName: "windows5.0")]
-    private unsafe static string GetPath(
-        SafeHandle deviceInfoSet,
-        in SP_DEVICE_INTERFACE_DATA deviceInterfaceData,
-        out WIN32_ERROR errorCode
-    ) {
-        var deviceInfoData = new SP_DEVINFO_DATA { cbSize = ((uint)sizeof(SP_DEVINFO_DATA)) };
-        var devicePath = string.Empty;
-
-        _ = PInvoke.SetupDiGetDeviceInterfaceDetail(
-            DeviceInfoData: ref deviceInfoData,
-            DeviceInfoSet: deviceInfoSet,
-            DeviceInterfaceData: in deviceInterfaceData,
-            DeviceInterfaceDetailData: default,
-            RequiredSize: out var deviceInterfaceDetailDataSize
-        );
-        errorCode = ((WIN32_ERROR)Marshal.GetLastPInvokeError());
-
-        if (WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER == errorCode) {
-            var deviceInterfaceDetailDataBuffer = ArrayPool<byte>.Shared.Rent(minimumLength: ((int)deviceInterfaceDetailDataSize));
-
-            try {
-                var deviceInterfaceDetail = deviceInterfaceDetailDataBuffer.AsSpan(
-                    length: ((int)deviceInterfaceDetailDataSize),
-                    start: 0
-                );
-
-                MemoryMarshal.Write(
-                    destination: deviceInterfaceDetail,
-                    value: ((uint)sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W))
-                );
-
-                if (!PInvoke.SetupDiGetDeviceInterfaceDetail(
-                    DeviceInfoSet: deviceInfoSet,
-                    DeviceInterfaceData: in deviceInterfaceData,
-                    DeviceInterfaceDetailData: deviceInterfaceDetail
-                )) {
-                    errorCode = ((WIN32_ERROR)Marshal.GetLastPInvokeError());
-                } else {
-                    fixed (byte* pDeviceInterfaceDetail = deviceInterfaceDetail) {
-                        devicePath = new string(value: MemoryMarshal.CreateReadOnlySpanFromNullTerminated(value: ((char*)Unsafe.AsPointer(value: ref ((SP_DEVICE_INTERFACE_DETAIL_DATA_W*)pDeviceInterfaceDetail)->DevicePath.e0))));
-                    }
-
-                    errorCode = WIN32_ERROR.NO_ERROR;
-                }
-            } finally {
-                ArrayPool<byte>.Shared.Return(array: deviceInterfaceDetailDataBuffer);
-            }
-        }
-
-        return devicePath;
-    }
 
     /// <summary>
     /// Enumerates present HID device interfaces as lightweight <see cref="HidDeviceInfo"/> records (path +
@@ -332,11 +279,7 @@ internal sealed class Win32HumanInterfaceDevice : IHidDevice, IEquatable<Win32Hu
                 break;
             }
 
-            var devicePath = GetPath(
-                deviceInfoSet: deviceInfoSet,
-                deviceInterfaceData: in deviceInterfaceData,
-                errorCode: out var pathErrorCode
-            );
+            _ = DeviceInterfaceDetail.TryRead(deviceInfoData: out _, deviceInfoSet: deviceInfoSet, devicePath: out var devicePath, error: out var pathErrorCode, interfaceData: in deviceInterfaceData);
 
             if (
                 (pathErrorCode == WIN32_ERROR.NO_ERROR) &&

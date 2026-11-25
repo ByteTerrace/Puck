@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using System.Diagnostics;
 using System.Globalization;
 
@@ -66,7 +67,7 @@ internal static class ProcessMarks {
                 continue;
             }
             if (!prune) { continue; }
-            try { File.Delete(path: file); } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) { }
+            _ = FileRemoval.TryDelete(path: file);
         }
 
         return marked;

@@ -543,7 +543,7 @@ public sealed class WorldOwnedWorldSync {
                 Detail: $"local write failed — {WorldDocumentLabel.Failure(exception: exception)}"
             );
         } finally {
-            try { File.Delete(path: probePath); } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) { }
+            _ = FileRemoval.TryDelete(path: probePath);
         }
     }
     // A basis link's first-contact rule cannot be a wedge the way an owned world's can: two owned worlds can share

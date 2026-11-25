@@ -71,18 +71,6 @@ public sealed class BakedWorldQuery : IWorldQuery {
     /// <summary>Gets the widest radius <see cref="Overlap"/> and <see cref="SphereCast"/> accept against this
     /// artifact — <see cref="MaxRadiusCells"/> of its own cells, saturating at the scalar carrier.</summary>
     public FixedQ4816 MaxRadius => FixedQ4816.FromRawBits(value: long.CreateSaturating(value: (((Int128)MaxRadiusCells) * m_artifact.CellSizeRaw)));
-
-    // Saturating raw addition: a sum overflows exactly when both addends share a sign the sum does not.
-    private static long AddRawSaturating(long left, long right) {
-        var sum = unchecked((left + right));
-
-        return ((((left ^ sum) & (right ^ sum)) < 0L)
-            ? ((left < 0L)
-                ? long.MinValue
-                : long.MaxValue)
-            : sum
-        );
-    }
     // The exact clamp-to-solid Euclidean test, run against both layers in one walk: a blocked cell is the cell box
     // extruded through every Y, and an authored ground is the same box's half-space at or below its height. Each
     // squared term is spent against a running budget rather than summed, so no product can exceed the widened
@@ -99,12 +87,12 @@ public sealed class BakedWorldQuery : IWorldQuery {
         // the disc provably covers is blocked whether or not the center itself is on the grid.
         if (!TryColumnSpan(
             first: out var firstColumn,
-            highRaw: AddRawSaturating(
+            highRaw: BinaryIntegerFunctions.AddSaturating(
                 left: center.X.Value,
                 right: radiusRaw
             ),
             last: out var lastColumn,
-            lowRaw: SubtractRawSaturating(
+            lowRaw: BinaryIntegerFunctions.SubtractSaturating(
                 left: center.X.Value,
                 right: radiusRaw
             )
@@ -114,12 +102,12 @@ public sealed class BakedWorldQuery : IWorldQuery {
 
         if (!TryRowSpan(
             first: out var firstRow,
-            highRaw: AddRawSaturating(
+            highRaw: BinaryIntegerFunctions.AddSaturating(
                 left: center.Z.Value,
                 right: radiusRaw
             ),
             last: out var lastRow,
-            lowRaw: SubtractRawSaturating(
+            lowRaw: BinaryIntegerFunctions.SubtractSaturating(
                 left: center.Z.Value,
                 right: radiusRaw
             )
@@ -213,21 +201,21 @@ public sealed class BakedWorldQuery : IWorldQuery {
     private RayHit BuildHit(in Contact contact, in Sweep sweep) {
         var cellMinXRaw = ColumnMinXRaw(column: contact.Column);
         var cellMinZRaw = RowMinZRaw(row: contact.Row);
-        var centerXRaw = AddRawSaturating(
+        var centerXRaw = BinaryIntegerFunctions.AddSaturating(
             left: sweep.OriginXRaw,
             right: ScaleRawSaturating(
                 scaleRaw: contact.DistanceRaw,
                 valueRaw: sweep.DirectionXRaw
             )
         );
-        var centerYRaw = AddRawSaturating(
+        var centerYRaw = BinaryIntegerFunctions.AddSaturating(
             left: sweep.OriginYRaw,
             right: ScaleRawSaturating(
                 scaleRaw: contact.DistanceRaw,
                 valueRaw: sweep.DirectionYRaw
             )
         );
-        var centerZRaw = AddRawSaturating(
+        var centerZRaw = BinaryIntegerFunctions.AddSaturating(
             left: sweep.OriginZRaw,
             right: ScaleRawSaturating(
                 scaleRaw: contact.DistanceRaw,
@@ -408,7 +396,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
         );
         var nearRaw = DivideRawDirected(
             denominatorRaw: directionRaw,
-            numeratorRaw: SubtractRawSaturating(
+            numeratorRaw: BinaryIntegerFunctions.SubtractSaturating(
                 left: nearBoundRaw,
                 right: originRaw
             ),
@@ -416,7 +404,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
         );
         var farRaw = DivideRawDirected(
             denominatorRaw: directionRaw,
-            numeratorRaw: SubtractRawSaturating(
+            numeratorRaw: BinaryIntegerFunctions.SubtractSaturating(
                 left: farBoundRaw,
                 right: originRaw
             ),
@@ -447,14 +435,14 @@ public sealed class BakedWorldQuery : IWorldQuery {
         // Both coordinates are linear in the sweep parameter, so the Z the sweep can reach inside this column is
         // bounded by its values at the window's two ends, dilated by the radius. One tick of slack absorbs the
         // rounding of the two scaled endpoints.
-        var windowMinZRaw = AddRawSaturating(
+        var windowMinZRaw = BinaryIntegerFunctions.AddSaturating(
             left: sweep.OriginZRaw,
             right: ScaleRawSaturating(
                 scaleRaw: windowEnterRaw,
                 valueRaw: sweep.DirectionZRaw
             )
         );
-        var windowMaxZRaw = AddRawSaturating(
+        var windowMaxZRaw = BinaryIntegerFunctions.AddSaturating(
             left: sweep.OriginZRaw,
             right: ScaleRawSaturating(
                 scaleRaw: windowExitRaw,
@@ -468,12 +456,12 @@ public sealed class BakedWorldQuery : IWorldQuery {
 
         if (!TryRowSpan(
             first: out var firstRow,
-            highRaw: AddRawSaturating(
+            highRaw: BinaryIntegerFunctions.AddSaturating(
                 left: windowMaxZRaw,
                 right: sweep.PaddedRadiusRaw
             ),
             last: out var lastRow,
-            lowRaw: SubtractRawSaturating(
+            lowRaw: BinaryIntegerFunctions.SubtractSaturating(
                 left: windowMinZRaw,
                 right: sweep.PaddedRadiusRaw
             )
@@ -506,11 +494,11 @@ public sealed class BakedWorldQuery : IWorldQuery {
                 directionRaw: sweep.DirectionZRaw,
                 enterRaw: ref enterRaw,
                 exitRaw: ref exitRaw,
-                highRaw: AddRawSaturating(
+                highRaw: BinaryIntegerFunctions.AddSaturating(
                     left: RowMaxZRaw(row: row),
                     right: sweep.RadiusRaw
                 ),
-                lowRaw: SubtractRawSaturating(
+                lowRaw: BinaryIntegerFunctions.SubtractSaturating(
                     left: cellMinZRaw,
                     right: sweep.RadiusRaw
                 ),
@@ -542,7 +530,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
                 directionRaw: sweep.DirectionYRaw,
                 enterRaw: ref groundEnterRaw,
                 exitRaw: ref groundExitRaw,
-                highRaw: AddRawSaturating(
+                highRaw: BinaryIntegerFunctions.AddSaturating(
                     left: heightRaw,
                     right: sweep.RadiusRaw
                 ),
@@ -558,18 +546,6 @@ public sealed class BakedWorldQuery : IWorldQuery {
                 );
             }
         }
-    }
-    // Saturating raw subtraction: a difference overflows exactly when the operands differ in sign and the result
-    // takes the subtrahend's.
-    private static long SubtractRawSaturating(long left, long right) {
-        var difference = unchecked((left - right));
-
-        return ((((left ^ right) & (left ^ difference)) < 0L)
-            ? ((left < 0L)
-                ? long.MinValue
-                : long.MaxValue)
-            : difference
-        );
     }
     private bool TryCellIndex(FixedQ4816 x, FixedQ4816 z, out int cellIndex) {
         cellIndex = -1;
@@ -617,11 +593,11 @@ public sealed class BakedWorldQuery : IWorldQuery {
             directionRaw: sweep.DirectionXRaw,
             enterRaw: ref enterRaw,
             exitRaw: ref exitRaw,
-            highRaw: AddRawSaturating(
+            highRaw: BinaryIntegerFunctions.AddSaturating(
                 left: ColumnMaxXRaw(column: column),
                 right: sweep.RadiusRaw
             ),
-            lowRaw: SubtractRawSaturating(
+            lowRaw: BinaryIntegerFunctions.SubtractSaturating(
                 left: cellMinXRaw,
                 right: sweep.RadiusRaw
             ),
@@ -736,7 +712,7 @@ public sealed class BakedWorldQuery : IWorldQuery {
         return !March(
             dir: delta,
             hit: out _,
-            maxDist: FixedQ4816.FromRawBits(value: AddRawSaturating(
+            maxDist: FixedQ4816.FromRawBits(value: BinaryIntegerFunctions.AddSaturating(
                 left: reach.Value,
                 right: ((reach.Value >> 14) + 64L)
             )),
@@ -877,11 +853,11 @@ public sealed class BakedWorldQuery : IWorldQuery {
         public readonly long RadiusRaw;
 
         public Sweep(FixedVector3 origin, FixedVector3 direction, long maxDistanceRaw, long radiusRaw) {
-            var paddedRadiusRaw = AddRawSaturating(
+            var paddedRadiusRaw = BinaryIntegerFunctions.AddSaturating(
                 left: radiusRaw,
                 right: 1L
             );
-            var endXRaw = AddRawSaturating(
+            var endXRaw = BinaryIntegerFunctions.AddSaturating(
                 left: origin.X.Value,
                 right: ScaleRawSaturating(
                     scaleRaw: maxDistanceRaw,
@@ -893,14 +869,14 @@ public sealed class BakedWorldQuery : IWorldQuery {
             DirectionYRaw = direction.Y.Value;
             DirectionZRaw = direction.Z.Value;
             MaxDistanceRaw = maxDistanceRaw;
-            MaxXRaw = AddRawSaturating(
+            MaxXRaw = BinaryIntegerFunctions.AddSaturating(
                 left: Math.Max(
                     val1: origin.X.Value,
                     val2: endXRaw
                 ),
                 right: paddedRadiusRaw
             );
-            MinXRaw = SubtractRawSaturating(
+            MinXRaw = BinaryIntegerFunctions.SubtractSaturating(
                 left: Math.Min(
                     val1: origin.X.Value,
                     val2: endXRaw

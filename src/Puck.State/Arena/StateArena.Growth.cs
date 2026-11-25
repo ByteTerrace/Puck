@@ -110,7 +110,7 @@ public sealed partial class StateArena {
             m_numbers.AsSpan(start: source.CellStart, length: count).CopyTo(destination: numbers.AsSpan(start: target.CellStart));
             m_memberKeys.AsSpan(start: source.CellStart, length: count).CopyTo(destination: keys.AsSpan(start: target.CellStart));
             for (var position = 0; position < count; position++) {
-                SetBit(words: presence, index: target.CellStart + position, value: Bit(words: m_presence, index: source.CellStart + position));
+                SetBit(words: presence, index: target.CellStart + position, value: BitWords.Contains(words: m_presence, index: source.CellStart + position));
             }
             if (source.Dimensions > 0) {
                 m_vectors.AsSpan(start: source.VectorByteStart, length: count * source.Dimensions).CopyTo(destination: vectors.AsSpan(start: target.VectorByteStart));

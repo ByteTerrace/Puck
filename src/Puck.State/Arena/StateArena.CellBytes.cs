@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Buffers;
 using System.Runtime.InteropServices;
 using Puck.Assets;
@@ -25,7 +26,7 @@ public sealed partial class StateArena {
     /// <param name="slot">A storage slot <see cref="TryNextCellSlot"/> or
     /// <see cref="TryCellSlot"/> answered.</param>
     /// <returns><see langword="true"/> when the slot holds a value.</returns>
-    public bool SlotHoldsValue(int slot) => ((((uint)slot) < ((uint)m_layout.CellSlotCount)) && Bit(index: slot, words: m_presence));
+    public bool SlotHoldsValue(int slot) => ((((uint)slot) < ((uint)m_layout.CellSlotCount)) && BitWords.Contains(index: slot, words: m_presence));
     /// <summary>Returns whether the arena stores a row's cells in its columns. A row it does not store (a host-owned
     /// row, whose facet owns its values) holds no cell here: <see cref="TryNextCell"/> visits none and
     /// <see cref="ToRow"/> answers the declaration.</summary>
@@ -66,7 +67,7 @@ public sealed partial class StateArena {
 
         writer.WriteCodeUnits(value: (named ? name.Value : string.Empty));
         writer.WriteByte(value: ((byte)(
-            (Bit(index: slot, words: m_presence) ? CellHolds : 0) | (clock ? CellClock : 0) | ((stamp is not null) ? CellStamp : 0) |
+            (BitWords.Contains(index: slot, words: m_presence) ? CellHolds : 0) | (clock ? CellClock : 0) | ((stamp is not null) ? CellStamp : 0) |
             ((visibility is not null) ? CellVisibility : 0) | (declares ? CellTrait : 0))));
         writer.WriteByte(value: ((byte)layout.Kind));
         switch (layout.Kind) {

@@ -93,18 +93,13 @@ public static class PngEncoder {
             type: "IHDR"
         );
     }
-    private static byte[] ZlibCompress(byte[] data) {
-        using var buffer = new MemoryStream();
+    // The bound GetMaxCompressedLength gives always holds the compressed bytes, so the one-shot compress cannot refuse.
+    private static ReadOnlySpan<byte> ZlibCompress(byte[] data) {
+        var buffer = new byte[ZLibEncoder.GetMaxCompressedLength(inputLength: data.Length)];
 
-        using (var zlib = new ZLibStream(
-            compressionLevel: CompressionLevel.Optimal,
-            leaveOpen: true,
-            stream: buffer
-        )) {
-            zlib.Write(buffer: data);
-        }
-
-        return buffer.ToArray();
+        return (ZLibEncoder.TryCompress(bytesWritten: out var written, destination: buffer, source: data)
+            ? buffer.AsSpan(length: written, start: 0)
+            : throw new InvalidOperationException(message: "zlib refused a destination of its own maximum compressed length."));
     }
 
     /// <summary>Writes tightly packed 8-bit RGBA pixels to a PNG file.</summary>
@@ -246,10 +241,7 @@ public static class PngEncoder {
                     destination: frameData.AsSpan(start: 0),
                     value: sequenceNumber++
                 );
-                compressed.CopyTo(
-                    array: frameData,
-                    index: 4
-                );
+                compressed.CopyTo(destination: frameData.AsSpan(start: 4));
                 WriteChunk(
                     data: frameData,
                     stream: stream,

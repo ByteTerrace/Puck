@@ -986,16 +986,12 @@ public sealed partial class CommandRegistry {
     /// wire-native tokenizer uses.</summary>
     /// <param name="line">The command line.</param>
     /// <returns>The leading verb, or an empty span for a blank line.</returns>
-    private static ReadOnlySpan<char> LeadingVerb(ReadOnlySpan<char> line) {
+    internal static ReadOnlySpan<char> LeadingVerb(ReadOnlySpan<char> line) {
         line = line.TrimStart();
 
-        for (var index = 0; (index < line.Length); index++) {
-            if (char.IsWhiteSpace(c: line[index])) {
-                return line[..index];
-            }
-        }
+        var end = line.IndexOfAnyWhiteSpace();
 
-        return line;
+        return ((end < 0) ? line : line[..end]);
     }
     // Whether the verb token is one of the command's spellings VERBATIM — its name or one of its aliases. A verb that
     // already matches ordinally needs no substitution, and an alias must not be rewritten to the canonical name when
@@ -1425,27 +1421,11 @@ public sealed partial class CommandRegistry {
         var count = 0;
         var index = 0;
 
-        while (index < line.Length) {
-            while (
-                (index < line.Length) &&
-                char.IsWhiteSpace(c: line[index])
-            ) {
-                index++;
-            }
+        while (line[index..].IndexOfAnyExceptWhiteSpace() is var skip and >= 0) {
+            var start = (index + skip);
+            var length = line[start..].IndexOfAnyWhiteSpace();
 
-            if (index >= line.Length) {
-                break;
-            }
-
-            var start = index;
-
-            while (
-                (index < line.Length) &&
-                !char.IsWhiteSpace(c: line[index])
-            ) {
-                index++;
-            }
-
+            index = ((length < 0) ? line.Length : (start + length));
             if (count >= tokens.Length) {
                 return -1;
             }

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using System.Globalization;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -229,7 +230,7 @@ public sealed partial class SdfWorldTables {
         m_overlaysChanged = !m_overlayRows.SequenceEqual(second: m_previousOverlayRows);
 
         void Mark(int slot, byte mark, bool set) {
-            if (slot >= m_slotReaderMarks.Length) { Array.Resize(array: ref m_slotReaderMarks, newSize: Math.Max(val1: (slot + 1), val2: (m_slotReaderMarks.Length * 2))); }
+            ArrayCapacity.EnsureLength(array: ref m_slotReaderMarks, required: (slot + 1));
             m_slotReaderMarks[slot] = (set ? ((byte)(m_slotReaderMarks[slot] | mark)) : ((byte)(m_slotReaderMarks[slot] & ~mark)));
         }
     }

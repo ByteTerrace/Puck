@@ -10,9 +10,9 @@ namespace Puck.World;
 public static class WorldCommandArguments {
     // THE ONE TOKEN RULE this reconstruction reads by, so both of its ends and the tokenizer that counted the line's
     // tokens agree about where a token begins. A token ends at the first whitespace OUTSIDE a double-quoted run:
-    // whitespace by CATEGORY (scanned rather than looked up, because char.IsWhiteSpace is a Unicode category test and
-    // not a listed set — the rule CommandRegistry's wire tokenizer splits on), and the quote toggle because a quoted
-    // line reaches the handler through System.CommandLine's splitter, for which `"x y"` is one token.
+    // whitespace as char.IsWhiteSpace answers it (the set CommandRegistry's wire tokenizer splits on), and the quote
+    // toggle because a quoted line reaches the handler through System.CommandLine's splitter, for which `"x y"` is one
+    // token.
     //
     // Answers the separator's index, or -1 when the token runs to the end of the span and nothing follows it.
     private static int EndOfToken(ReadOnlySpan<char> span) {
@@ -41,17 +41,8 @@ public static class WorldCommandArguments {
         var index = 0;
         var start = -1;
 
-        while (index < span.Length) {
-            while (
-                (index < span.Length) &&
-                char.IsWhiteSpace(c: span[index])
-            ) {
-                index++;
-            }
-
-            if (index >= span.Length) {
-                break;
-            }
+        while (span[index..].IndexOfAnyExceptWhiteSpace() is var skip and >= 0) {
+            index += skip;
 
             var separator = EndOfToken(span: span[index..]);
 

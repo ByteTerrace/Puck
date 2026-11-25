@@ -315,13 +315,7 @@ public sealed class AuthoredCommandLine {
             return false;
         }
 
-        var verbEnd = 0;
-
-        while ((verbEnd < trimmed.Length) && !char.IsWhiteSpace(c: trimmed[verbEnd])) {
-            verbEnd++;
-        }
-
-        var verb = trimmed[..verbEnd];
+        var verb = CommandRegistry.LeadingVerb(line: trimmed).ToString();
 
         if (verb.AsSpan().IndexOfAny(values: "{}\"") >= 0) {
             reason = $"'{trimmed}' starts with '{verb}'; the verb is literal text, never a placeholder or a quoted token";

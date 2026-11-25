@@ -713,19 +713,8 @@ public sealed partial class WorldDocument {
 
                 return true;
             case WorldMutation.UpsertTune m: {
-                    if (!TryVerifyReferencedAsset<WorldTune, Puck.Assets.Documents.AudioDocument>(
-                        documentDirectory: current.DocumentDirectory,
-                        row: m.Tune,
-                        id: m.Tune.Name,
-                        hash: m.Tune.Hash,
-                        kind: Puck.Assets.Documents.AssetRowFamilies.Tune,
-                        tryLoad: WorldAssetRowLoader.TryLoadTune,
-                        canonicalize: static (document, source) => Puck.Assets.Documents.AudioCanonicalizer.Canonicalize(
-                            document: document,
-                            source: source
-                        ),
-                        reason: out reason
-                    )) {
+                    if (!TryVerifyReferencedAsset(documentDirectory: current.DocumentDirectory, family: Puck.Assets.Documents.AssetRowFamilies.Tune,
+                        hash: m.Tune.Hash, name: m.Tune.Name, reason: out reason, source: m.Tune.Source)) {
                         candidate = current;
 
                         return false;
@@ -773,19 +762,8 @@ public sealed partial class WorldDocument {
                     return true;
                 }
             case WorldMutation.UpsertPatch m: {
-                    if (!TryVerifyReferencedAsset<WorldPatch, Puck.Assets.Documents.SynthPatchDocument>(
-                        documentDirectory: current.DocumentDirectory,
-                        row: m.Patch,
-                        id: m.Patch.Name,
-                        hash: m.Patch.Hash,
-                        kind: Puck.Assets.Documents.AssetRowFamilies.Patch,
-                        tryLoad: WorldAssetRowLoader.TryLoadPatch,
-                        canonicalize: static (document, source) => Puck.Assets.Documents.SynthPatchCanonicalizer.Canonicalize(
-                            document: document,
-                            source: source
-                        ),
-                        reason: out reason
-                    )) {
+                    if (!TryVerifyReferencedAsset(documentDirectory: current.DocumentDirectory, family: Puck.Assets.Documents.AssetRowFamilies.Patch,
+                        hash: m.Patch.Hash, name: m.Patch.Name, reason: out reason, source: m.Patch.Source)) {
                         candidate = current;
 
                         return false;

@@ -20,6 +20,7 @@ Build architecture, compiler identities, candidate installation and admission ro
 | Decide whether a directory contains a path by file identity (a "must not contain" refusal) | `ConfinedDirectory.Contains` in `src/Puck.Confinement/ConfinedDirectory.cs`; `PuckPaths.IsWithin` fails open for aliases |
 | Remove an owned directory tree without following descendant links | `ConfinedDirectory.RemoveTree` in `src/Puck.Confinement/ConfinedDirectory.cs` |
 | Walk, open, read or delete below a held directory without following links (every component opened relative to its parent's handle) | `ConfinedDirectory.Walk`, `Descend`, `OpenRead`, `DeleteFile` in `src/Puck.Confinement/ConfinedDirectory.cs` |
+| Delete a file the caller can leave behind (held open, read-only, pending delete), learning whether it is gone and why not | `FileRemoval.TryDelete` in `src/Puck.Confinement/FileRemoval.cs`; never a private `try { File.Delete } catch { }` |
 | Stage, flush, publish or discard complete replacement files | `AtomicFile`, including `PendingWrite`, in `src/Puck.Confinement/AtomicFile.cs` |
 | Tell a live writer's staged temporary from an abandoned one (the writer's claim in its name, never its age) | `AtomicFile.IsAbandoned` in `src/Puck.Confinement/AtomicFile.cs` |
 | Hold a cache directory to a bound, listing and deleting only beneath it | `CacheRetention` in `src/Puck.Abstractions/CacheRetention.cs` |
