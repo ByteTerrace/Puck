@@ -77,3 +77,11 @@ jobs:
 
             Do not edit files, push, rerun or cancel workflows.
     timeout-minutes: 30
+      # The action reports only "result is_error:true"; its own execution record names the cause (a refused
+      # federation exchange, a model the service account lacks). Every run since this workflow was added failed that
+      # way within one turn and at no cost, so print the record when it fails.
+      - if: failure()
+        name: Print Claude's execution record
+        run: |
+          record="${RUNNER_TEMP}/claude-execution-output.json"
+          if [ -f "$record" ]; then tail -c 4000 "$record"; else echo "no execution record at $record"; fi
