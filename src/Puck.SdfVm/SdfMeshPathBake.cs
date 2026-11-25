@@ -2423,6 +2423,14 @@ public sealed partial class SdfMeshPathBake {
             if (!GroupList.Holds(group: group)) { return; }
             final.Answered = 0;
             if (refined) { m_accounts.RefinedCells += final.Sampled!.MeasuredCells; }
+            // A refined lattice whose fine samples left no cell crossed has neither crossings nor gradients to answer:
+            // it contours at once (to nothing), since a chunk of no points is no request.
+            if (points.Length == 0) {
+                group.Next = null;
+                group.Contouring = true;
+                ScheduleContour(group: group, lattice: final.Sampled!);
+                return;
+            }
             group.Next = FinalChunk(final: final, group: group);
         }
     }
