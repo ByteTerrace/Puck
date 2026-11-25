@@ -6,9 +6,14 @@ using Puck.SignedDistance;
 namespace Puck.SdfVm;
 
 public sealed partial class SdfMeshPathBake {
-    // The replacements in flight, each with the index it was placed at: a settle rebake (Rebake) or a finer tier (Retier).
-    // The replaced group draws until the replacement lands and its words stand in the mesh region (FinishReplacements).
-    private readonly List<(Group Group, int Index)> m_replacing = [];
+    // The replacements in flight: a settle rebake (Rebake), a finer tier (Retier) or a ladder's rung (FillLadders). The
+    // replaced group draws until the replacement lands and its words stand in the mesh region (FinishReplacements).
+    //
+    // Invariant: a listed group with a group it replaces (Group.Replaces) is on this list. StartReplacement is the one
+    // writer of Replaces and adds the group here; FinishReplacements finds each one at the place the group list records for
+    // it (Group.Index), never at the index it was started at, since a restart that keeps a replacement mid-bake sets it at
+    // its new program's index; one left standing off this list is finished by nothing and holds a ladder bake forever.
+    private readonly List<Group> m_replacing = [];
 
     // The groups whose demanded tier is finer than the one they draw, as of the latest frame, the worst owed error among
     // them in display pixels and the longest owed interval in frames; the worst of each since the bake started; and the
@@ -212,9 +217,10 @@ public sealed partial class SdfMeshPathBake {
     // whose replacement meshed nothing: the one step every tier's replacement (Retier) ends in. Under the gate.
     private void FinishReplacements() {
         for (var at = (m_replacing.Count - 1); (at >= 0); at--) {
-            var (group, index) = m_replacing[at];
+            var group = m_replacing[at];
+            var index = group.Index;
 
-            if ((index >= m_groups.Count) || !ReferenceEquals(objA: m_groups[index], objB: group) || (group.Replaces is not { } replaced)) {
+            if (!GroupList.Holds(group: group) || (group.Replaces is not { } replaced)) {
                 m_replacing.RemoveAt(index: at);
                 continue;
             }
@@ -309,7 +315,7 @@ public sealed partial class SdfMeshPathBake {
         // The rungs a ladder bake fills are outside the budget and the draws: they land in the store alone.
         var fills = 0;
 
-        foreach (var (group, _) in m_replacing) {
+        foreach (var group in m_replacing) {
             if (group.Fill) {
                 fills++;
                 continue;
@@ -574,9 +580,9 @@ public sealed partial class SdfMeshPathBake {
         }
         PublishTiers(frame: frame);
         // A ladder bake's detail is settled once every drawn geometry's other rungs stand in the store too.
-        var filling = ((Library.Policy == SdfMeshCachePolicy.Ladder) && FillLadders(fills: fills));
+        var ladders = ((Library.Policy == SdfMeshCachePolicy.Ladder) ? FillLadders(fills: fills) : default);
 
-        Volatile.Write(location: ref m_filling, value: (filling ? 1 : 0));
+        Volatile.Write(location: ref m_filling, value: (ladders.Holds ? 1 : 0));
         Volatile.Write(location: ref m_decidedAt, value: System.Diagnostics.Stopwatch.GetTimestamp());
 
         var hold = new DetailHold(
@@ -590,7 +596,7 @@ public sealed partial class SdfMeshPathBake {
             Over: over,
             Spares: (spare.Count + sparesWaiting + coarsening),
             Bias: bias,
-            Filling: filling
+            Ladders: ladders
         );
 
         m_detailHold = hold;
@@ -671,8 +677,8 @@ public sealed partial class SdfMeshPathBake {
     // tier started this decision, replacements still baking or landing ahead of the draws, owed finer tiers waiting their
     // hold, first details in flight or owed, a budget that presses on something it can still coarsen (over its budget,
     // with spare groups or the bias short of its most), and a ladder still being filled.
-    private readonly record struct DetailHold(bool Replaced, int InFlight, int Landing, int OwedWaiting, int FirstsInFlight, int FirstsOwed, bool Pressing, bool Over, int Spares, int Bias, bool Filling) {
-        public bool Holds => (Replaced || (InFlight > 0) || (Landing > 0) || (OwedWaiting > 0) || (FirstsInFlight > 0) || (FirstsOwed > 0) || Pressing || Filling);
+    private readonly record struct DetailHold(bool Replaced, int InFlight, int Landing, int OwedWaiting, int FirstsInFlight, int FirstsOwed, bool Pressing, bool Over, int Spares, int Bias, LadderHold Ladders) {
+        public bool Holds => (Replaced || (InFlight > 0) || (Landing > 0) || (OwedWaiting > 0) || (FirstsInFlight > 0) || (FirstsOwed > 0) || Pressing || Ladders.Holds);
 
         public override string ToString() {
             var parts = new List<string>();
@@ -684,7 +690,7 @@ public sealed partial class SdfMeshPathBake {
             if (FirstsInFlight > 0) { parts.Add(item: $"{FirstsInFlight} first detail(s) in flight"); }
             if (FirstsOwed > 0) { parts.Add(item: $"{FirstsOwed} first detail(s) owed"); }
             if (Pressing) { parts.Add(item: $"the budget presses (over={(Over ? 1 : 0)} spares={Spares} bias={Bias}/{SdfMeshTier.MaxBias})"); }
-            if (Filling) { parts.Add(item: "a ladder is still filling"); }
+            if (Ladders.Holds) { parts.Add(item: $"a ladder is still filling ({Ladders})"); }
             return string.Join(separator: ", ", values: parts);
         }
     }
@@ -798,8 +804,7 @@ public sealed partial class SdfMeshPathBake {
         // stored rung to lack: its tiers bake as its steps do, and a tier of a live group is live.
         group.InheritLive(from: old);
         if ((Library.Policy == SdfMeshCachePolicy.Stored) && !group.Live && !Stores(group: group, identity: Identity.Value)) {
-            Library.Cache.Count(kind: SdfMeshCache.RungsMissed);
-            SdfMeshBakeReport.RungMissed(drawn: old.Tier, first: group.FirstDetail, group: group, residency: Residency);
+            CountRungMissed(asked: group, drawn: old.Tier, first: group.FirstDetail);
             old.RetierRefused = true;
             group.Retired = true;
             return TierStart.None;
@@ -808,7 +813,7 @@ public sealed partial class SdfMeshPathBake {
         group.TakeDemandBox();
         group.Replaces = old;
         Replace(group: group, index: index);
-        m_replacing.Add(item: (group, index));
+        m_replacing.Add(item: group);
         group.Identity = Identity.Value;
         ShowReplaced(group: group, old: old);
         // The mesh of the geometry, or for a dynamic group the latest of its form, baked at another pose, as an

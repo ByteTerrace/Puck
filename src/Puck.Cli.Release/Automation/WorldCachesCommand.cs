@@ -86,7 +86,7 @@ public static class WorldCachesCommand {
 
     private static IReadOnlyList<string> Backends(JsonNode record) =>
         [.. (record["backends"]?.AsArray() ?? []).Select(selector: static node => (string?)node).OfType<string>()];
-    private static bool TryIdentity(string folder, string backend, out UInt128 identity, out string? why) {
+    internal static bool TryIdentity(string folder, string backend, out UInt128 identity, out string? why) {
         identity = default;
         if (!CliWorldDocuments.TryExtension(backend: backend, extension: out var extension, verb: Verb)) { why = $"names the unknown backend {backend}"; return false; }
         try {
@@ -98,7 +98,7 @@ public static class WorldCachesCommand {
             return false;
         }
     }
-    private static string SetDirectory(string folder, UInt128 identity) => Path.Combine(path1: folder, path2: PlayerBuildLayout.CacheDirectoryName, path3: PlayerBuildLayout.MeshesDirectoryName, path4: identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture));
+    internal static string SetDirectory(string folder, UInt128 identity) => Path.Combine(path1: folder, path2: PlayerBuildLayout.CacheDirectoryName, path3: PlayerBuildLayout.MeshesDirectoryName, path4: identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture));
     private static string SetPrefix(UInt128 identity) => $"{PlayerBuildLayout.CacheDirectoryName}/{PlayerBuildLayout.MeshesDirectoryName}/{identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture)}/";
 
     private static async Task<int> ProduceAsync(string folder, string output, bool push, CancellationToken cancellationToken) {

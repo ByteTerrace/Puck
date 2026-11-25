@@ -459,6 +459,13 @@ internal static class SdfMeshBakeReport {
 
         Say(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] rung-missed residency={residency} group={group.Selector} {(group.Dynamic ? "dynamic" : "static")} shape={group.Shape:x32} geometry={group.Sealed.Hash:x32} reads={((reads.Length == 0) ? "none" : reads)} {(first ? "first-detail" : "plan")} asked={group.Tier} drawn={drawn} tiers={group.FinestTier}-{group.CoarsestTier}"));
     }
+    /// <summary>Writes the line for the tiers missed of a sampled field's reader geometry that its field then moved past
+    /// (<see cref="SdfMeshCache.RungsMissedLive"/>): its earlier <c>rung-missed</c> lines name live geometry.</summary>
+    /// <param name="residency">The residency's name.</param>
+    /// <param name="geometry">The reader's geometry, as its <c>rung-missed</c> lines name it.</param>
+    /// <param name="misses">The tiers missed of it.</param>
+    public static void RungsMissedLive(string residency, SdfMeshGeometry geometry, int misses) =>
+        Say(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] rung-missed-live residency={residency} geometry={geometry.Hash:x32} misses={misses}"));
     /// <summary>Writes the line for a group whose store entry the store refused.</summary>
     /// <param name="selector">The group's selector.</param>
     /// <param name="refusal">Why.</param>
