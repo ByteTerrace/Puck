@@ -275,8 +275,9 @@ public sealed partial class WorldInstanceHost {
     }
     // Opens one declared session: resolves its destination through the observation door, then observes it through the
     // destination's own admission. A refusal that leaves a destination this resolution started with nobody in it stops
-    // that instance again.
-    private WorldObservationSession OpenScreenSession(WorldInstance owner, WorldObservationSite site, WorldScreenSource.Session source) {
+    // that instance again. A destination still inside its own tick (another row of the wave) cannot admit an observer
+    // now: the open answers null and the settle asks again after the destination's tick.
+    private WorldObservationSession? OpenScreenSession(WorldInstance owner, WorldObservationSite site, WorldScreenSource.Session source) {
         // Only a presentation reads a session's mirror; in a host that presents nothing the destination still runs
         // and discloses, and the mirror drops what it is sent.
         var session = new WorldObservationSession(
@@ -297,6 +298,10 @@ public sealed partial class WorldInstanceHost {
             NarrateScreenSession(text: $"[world.screen: {owner.Name} session {site} refused ({reason})]");
 
             return session;
+        }
+
+        if (!resolved.IsNewGeneration && (target!.Server.Tick.PendingReason is not null)) {
+            return null;
         }
 
         session.GenerationId = resolved.GenerationId;
@@ -584,18 +589,21 @@ public sealed partial class WorldInstanceHost {
                 }
             }
 
+            var deferred = false;
+
             foreach (var (screen, source) in declared) {
                 if (!owned.Rows.ContainsKey(key: screen)) {
-                    owned.Rows[screen] = OpenScreenSession(
-                        owner: instance,
-                        site: screen,
-                        source: source
-                    );
-                    changed = true;
+                    if (OpenScreenSession(owner: instance, site: screen, source: source) is { } opened) {
+                        owned.Rows[screen] = opened;
+                        changed = true;
+                    } else {
+                        deferred = true;
+                    }
                 }
             }
 
-            owned = (definition, closed, owned.Rows);
+            // A deferred open leaves the reconciliation owed, so the next settle opens it.
+            owned = (deferred ? null : definition, closed, owned.Rows);
             m_screenSessions[instance.Name] = owned;
         } else if (!ReferenceEquals(objA: definition, objB: owned.Reconciled)) {
             owned = (definition, closed, owned.Rows);
