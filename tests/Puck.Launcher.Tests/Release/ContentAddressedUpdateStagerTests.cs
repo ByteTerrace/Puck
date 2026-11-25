@@ -44,7 +44,7 @@ public sealed class ContentAddressedUpdateStagerTests : IDisposable {
         var file = new ReleasePayloadFile(
             Path: "shared.dll",
             Hash: hash,
-            Size: content.Length
+            Size: content.Length, Executable: false
         );
 
         var first = await stager.StageAsync(
@@ -122,7 +122,7 @@ public sealed class ContentAddressedUpdateStagerTests : IDisposable {
             file: new ReleasePayloadFile(
                 Path: "a.dll",
                 Hash: wrongHash,
-                Size: content.Length
+                Size: content.Length, Executable: false
             )
         );
 
@@ -150,7 +150,7 @@ public sealed class ContentAddressedUpdateStagerTests : IDisposable {
             cacheRoot: m_root.RootPath
         );
         var escapedFile = Path.Combine(path1: m_root.RootPath, path2: "escaped.dll");
-        var file = new ReleasePayloadFile(Path: "a.dll", Hash: hash, Size: content.Length);
+        var file = new ReleasePayloadFile(Path: "a.dll", Hash: hash, Size: content.Length, Executable: false);
         var candidates = new[] {
             ManifestFor(file: file, version: "2.0.0+/../../escaped"),
             ManifestFor(version: "2.0.0", file: file with { Path = escapedFile }),
@@ -175,7 +175,7 @@ public sealed class ContentAddressedUpdateStagerTests : IDisposable {
         File.WriteAllText(path: ContentAddressedStore.ObjectPath(root: cache.Root, pin: pin), contents: "corrupt");
         var source = new RecordingReleaseSource(files: new Dictionary<string, byte[]> { [pin.ToString()] = content });
         var stager = new ContentAddressedUpdateStager(source: source, cache: cache, cacheRoot: m_root.RootPath);
-        var manifest = ManifestFor(version: "1.0.1", file: new ReleasePayloadFile(Path: "app.dll", Hash: pin.ToString(), Size: content.Length));
+        var manifest = ManifestFor(version: "1.0.1", file: new ReleasePayloadFile(Path: "app.dll", Hash: pin.ToString(), Size: content.Length, Executable: false));
         var refused = await stager.StageAsync(manifest: manifest, rid: "win-x64", cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.False(condition: refused.Staged);

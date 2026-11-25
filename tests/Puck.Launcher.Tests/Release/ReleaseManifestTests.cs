@@ -25,7 +25,7 @@ public sealed class ReleaseManifestTests {
                             c: '0',
                             count: 64
                         )}",
-                        Size: 1024
+                        Size: 1024, Executable: false
                     ),
                 new ReleasePayloadFile(
                         Path: "Puck.World.dll",
@@ -33,7 +33,7 @@ public sealed class ReleaseManifestTests {
                             c: '1',
                             count: 64
                         )}",
-                        Size: 2048
+                        Size: 2048, Executable: false
                     ),
             ]
             ),
@@ -90,7 +90,7 @@ public sealed class ReleaseManifestTests {
                             c: '2',
                             count: 64
                         )}",
-                        Size: 1
+                        Size: 1, Executable: false
                     ),
                     new ReleasePayloadFile(
                         Path: "a.dll",
@@ -98,7 +98,7 @@ public sealed class ReleaseManifestTests {
                             c: '3',
                             count: 64
                         )}",
-                        Size: 1
+                        Size: 1, Executable: false
                     ),
                 ]
             ),
@@ -111,7 +111,7 @@ public sealed class ReleaseManifestTests {
                             c: '4',
                             count: 64
                         )}",
-                        Size: 1
+                        Size: 1, Executable: false
                     ),
                 ]
             ),
@@ -188,7 +188,7 @@ public sealed class ReleaseManifestTests {
                 Files: [new ReleasePayloadFile(
                         Hash: "not-a-hash",
                         Path: "a.dll",
-                        Size: 1
+                        Size: 1, Executable: false
                     )]
             )],
         };
@@ -212,7 +212,7 @@ public sealed class ReleaseManifestTests {
                 Files: [new ReleasePayloadFile(
                         Hash: hash!,
                         Path: "a.dll",
-                        Size: 1
+                        Size: 1, Executable: false
                     )]
             )],
         };

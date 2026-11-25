@@ -12,6 +12,59 @@ public sealed class PublishRoundTripTests : IDisposable {
     private readonly TempStagingRoot m_root = new();
 
     public void Dispose() => m_root.Dispose();
+    // A published tree's executable files keep their mode through the signed manifest and the stager: the flag is read
+    // from the tree, the signature covers it, a manifest without it does not parse, and a staged file takes its mode.
+    [Fact]
+    public async Task PublishedExecutable_IsSigned_AndStagedExecutable() {
+        var input = Path.Combine(path1: m_root.RootPath, path2: "built");
+        var tool = Path.Combine(path1: input, path2: "tls/caddy");
+        var library = Path.Combine(path1: input, path2: "app.dll");
+
+        _ = Directory.CreateDirectory(path: Path.GetDirectoryName(path: tool)!);
+        File.WriteAllBytes(bytes: [0x7F, (byte)'E', (byte)'L', (byte)'F', 2, 1, 1], path: tool);
+        File.WriteAllBytes(bytes: "library"u8.ToArray(), path: library);
+        if (!OperatingSystem.IsWindows()) {
+            File.SetUnixFileMode(mode: UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, path: tool);
+            File.SetUnixFileMode(mode: UnixFileMode.UserRead | UnixFileMode.UserWrite, path: library);
+        }
+        var fixture = new ReleaseChainFixture();
+        var sourceRoot = Path.Combine(path1: m_root.RootPath, path2: "channel");
+        var source = new DirectoryReleaseSource(root: sourceRoot);
+
+        _ = source.Publish(input, UpdateService.CurrentRid(), new ReleaseManifest(App: "puck.world", Channel: "stable", MinimumSupported: null, Notes: null, Payloads: [],
+            Revoked: null, Rollout: new ReleaseRollout(Percent: 100), Schema: ReleaseManifest.CurrentSchema, Signature: null, StateGeneration: 1, Version: "1.0.1"),
+            sign: manifest => fixture.Sign(document: manifest, notAfter: (ReleaseChainFixture.Epoch + 3600), notBefore: ReleaseChainFixture.Epoch, sequence: 1));
+        var bytes = (await source.TryGetLatestManifestAsync(cancellationToken: TestContext.Current.CancellationToken, channel: "stable")).ManifestBytes;
+        var parsed = System.Text.Json.JsonSerializer.Deserialize<ReleaseManifest>(options: Puck.Assets.Documents.DocumentJsonOptions.Shared, utf8Json: bytes)!;
+        var files = parsed.Payloads[0].Files.ToDictionary(keySelector: static file => file.Path);
+
+        Assert.True(condition: files["tls/caddy"].Executable);
+        Assert.False(condition: files["app.dll"].Executable);
+
+        AttestationReleaseVerifier Verifier() => new(codec: fixture.Codec, sequenceStore: new InMemoryReleaseSequenceStore(),
+            trustList: fixture.BuildTrustList(replayHorizon: TimeSpan.FromDays(days: 30)));
+        var now = DateTimeOffset.FromUnixTimeSeconds(seconds: ReleaseChainFixture.Epoch);
+        var tampered = parsed with { Payloads = [parsed.Payloads[0] with { Files = [.. parsed.Payloads[0].Files.Select(selector: static file => file with { Executable = true })] }] };
+        var refused = Verifier().Verify(advanceSequence: false, installedVersion: "1.0.0", manifest: tampered, now: now);
+
+        Assert.False(condition: refused.Accepted);
+        Assert.True(condition: Verifier().Verify(advanceSequence: false, installedVersion: "1.0.0", manifest: parsed, now: now).Accepted);
+
+        var json = System.Text.Json.Nodes.JsonNode.Parse(utf8Json: bytes)!;
+
+        _ = json["payloads"]![0]!["files"]![0]!.AsObject().Remove(propertyName: "executable");
+        _ = Assert.Throws<System.Text.Json.JsonException>(testCode: () => System.Text.Json.JsonSerializer.Deserialize<ReleaseManifest>(
+            json: json.ToJsonString(), options: Puck.Assets.Documents.DocumentJsonOptions.Shared));
+
+        var installRoot = Path.Combine(path1: m_root.RootPath, path2: "install");
+        var stager = new ContentAddressedUpdateStager(cache: new ContentAddressedStore(root: Path.Combine(path1: installRoot, path2: "objects")), cacheRoot: installRoot, source: source);
+        var staged = await stager.StageAsync(cancellationToken: TestContext.Current.CancellationToken, manifest: parsed, rid: UpdateService.CurrentRid());
+
+        Assert.True(condition: staged.Staged, userMessage: staged.RefusalReason);
+        foreach (var file in parsed.Payloads[0].Files) {
+            Assert.True(condition: ReleaseFileMode.Matches(file: file, path: Path.Combine(path1: staged.StagedPath!, path2: file.Path)), userMessage: file.Path);
+        }
+    }
     [Fact]
     public async Task UnsignedDryRunTree_VerifiesOnceSigned_ByAThrowawayChain() {
         // The exact walk PublishCommand performs: hash each payload file into the same objects/ tree
@@ -28,7 +81,7 @@ public sealed class PublishRoundTripTests : IDisposable {
                     Files: [new ReleasePayloadFile(
                             Hash: hash.ToString(),
                             Path: "Puck.World.exe",
-                            Size: fileBytes.Length
+                            Size: fileBytes.Length, Executable: false
                         )],
                     Rid: "win-x64"
                 )],

@@ -305,7 +305,7 @@ puck docs build [--output <directory>] [--site <path>]
 puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
 puck world prepare <primary-world> --output <directory>
-puck world player <package> --output <directory> [--extension <project>...] [--backend directx vulkan] [--target [profile@]WIDTHxHEIGHT...] [--no-bake] [--bake-seconds <seconds>] [--channel-url <url> [--channel-name <name>]]
+puck world player <package> --output <directory> [--extension <project>...] [--sign-in <file>] [--backend directx vulkan] [--target [profile@]WIDTHxHEIGHT...] [--no-bake] [--bake-seconds <seconds>] [--channel-url <url> [--channel-name <name>]]
 puck world host build <package> --output <directory> [--extension <project>...] [--tls-front]
 puck world host fetch <signed tree> --to <install root> [--source <url|directory>]
 puck world host install | serve --silo <file> [--mcp <file>] [--extensions-dir <directory>] | tls --machine <file> | guard <request> | probe | request <method> <path> [--timeout <seconds>]
@@ -369,12 +369,18 @@ engine can derive, for a player executable directory; the artifact producer
 runs it on the published World.
 
 `world player` assembles the folder a consumer machine runs, one that never builds
-from source, compiles a cartridge or cold-bakes. It builds `Puck.World` in Release
+from source, compiles a cartridge or cold-bakes. It publishes each `--extension` project into
+`extensions/<name>/`, where the host discovers it (a hosted authority's sign-in
+provider is one). `--sign-in` names the sign-in configuration the deployment the
+build is for publishes (its `world-authentication.json`): the verb ships it in the
+folder under that name, records its provider and the extension that contributes it
+under `signIn` in `player.json`, and refuses the folder (exit 1) unless the folder's
+extensions, or the engine's own, provide that sign-in, selected as a booting World
+selects it. A player of the build then joins with
+`--connect <host:port> --authentication-config-file world-authentication.json`. The verb then builds `Puck.World` in Release
 with SPIR-V under the build lease and publishes it self-contained for this
 machine's runtime; publishes the stub and the installer (`Puck.Launcher.Setup`)
-self-contained, one file each, into `launcher/`; publishes each `--extension` project into
-`extensions/<name>/`, where the host discovers it (a hosted authority's sign-in
-provider is one); compiles the package's parent directory into `worlds/` as
+self-contained, one file each, into `launcher/`; compiles the package's parent directory into `worlds/` as
 `compile --tree` does; and exports the package's specialized shading kernels into
 `derived/` as `world prepare` does, prewarms the AGB BIOS and Rust addon guests
 those worlds reference there (so a world that references them needs the toolchains

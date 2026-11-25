@@ -43,7 +43,7 @@ public sealed class HttpReleaseSourceTests {
 
     [Fact]
     public async Task ManifestWithoutContentLength_IsBoundedBeforeBufferingTheBody() {
-        using var body = new UnseekableBody(content: new byte[2 * 1024 * 1024]);
+        using var body = new UnseekableBody(content: new byte[2 * ReleaseSourceReader.MaximumManifestBytes]);
         using var client = new HttpClient(handler: new ResponseHandler(content: new StreamContent(content: body)));
         var source = new HttpReleaseSource(httpClient: client, baseUri: new Uri(uriString: "https://unused.invalid/releases/"));
 
@@ -52,6 +52,6 @@ public sealed class HttpReleaseSourceTests {
         Assert.False(condition: result.Found);
         Assert.Empty(collection: result.ManifestBytes);
         Assert.Contains(expectedSubstring: "byte limit", actualString: result.RefusalReason!);
-        Assert.True(condition: body.BytesRead <= 1024 * 1024 + 1);
+        Assert.True(condition: body.BytesRead <= ReleaseSourceReader.MaximumManifestBytes + 1);
     }
 }

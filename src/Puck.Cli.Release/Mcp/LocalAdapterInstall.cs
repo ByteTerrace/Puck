@@ -86,10 +86,7 @@ internal static class LocalAdapterInstall {
             }
         }
         foreach (var file in files) {
-            var target = Path.Combine(path1: install, path2: file);
-
-            AtomicFile.DeleteReplacedBackups(path: target);
-            if (AtomicFile.WriteAllBytesIfChanged(bytes: File.ReadAllBytes(path: Path.Combine(path1: build, path2: file)), path: target)) {
+            if (AtomicFile.CopyIfChanged(destination: Path.Combine(path1: install, path2: file), source: Path.Combine(path1: build, path2: file))) {
                 Console.Error.WriteLine(value: $"puck-mcp: installed {file} from {build}");
             }
         }

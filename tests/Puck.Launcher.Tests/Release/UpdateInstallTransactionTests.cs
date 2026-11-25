@@ -76,7 +76,7 @@ public sealed partial class UpdateInstallTransactionTests : IDisposable {
 
         return m_fixture.Sign(
             document: new ReleaseManifest(App: "puck.world", Channel: "stable", MinimumSupported: minimumSupported, Notes: notes,
-                Payloads: [new ReleasePayload(Rid: UpdateService.CurrentRid(), Files: [new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: bytes).ToString(), Size: bytes.Length)])],
+                Payloads: [new ReleasePayload(Rid: UpdateService.CurrentRid(), Files: [new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: bytes).ToString(), Size: bytes.Length, Executable: false)])],
                 Revoked: revoked, Rollout: new ReleaseRollout(Percent: rollout), Schema: ReleaseManifest.CurrentSchema,
                 Signature: null, StateGeneration: stateGeneration, Version: version),
             notBefore: ReleaseChainFixture.Epoch, notAfter: (ReleaseChainFixture.Epoch + 3600), sequence: sequence);

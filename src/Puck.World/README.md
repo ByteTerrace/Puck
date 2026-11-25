@@ -357,8 +357,17 @@ omitting the key disables federation by name while leaving ordinary admitted
 peer listening available. `puck canary` creates a run-scoped key for every
 runner-owned authority pair.
 
-**Hosted Puck.** Sign in with a ByteTerrace API Users account and use the
-generated authentication configuration from the deployed [Puck world release](../../docs/development/ci.md#azure-production-deployment):
+**Hosted Puck.** Sign in with a ByteTerrace API Users account. An install from
+the [player channel](../../docs/development/ci.md#the-player-channel) carries the
+deployment's sign-in and its provider, so from the install:
+
+```text
+Puck.Launcher.Stub.exe --world worlds/debug --cache-dir cache --connect play.puck.byteterrace.com:7825 --authentication-config-file world-authentication.json
+```
+
+A source build uses the generated authentication configuration from the deployed
+[Puck world release](../../docs/development/ci.md#azure-production-deployment)
+and needs the provider installed in its `extensions/` directory:
 
 ```text
 dotnet run --project src/Puck.World -c Release -- --connect play.puck.byteterrace.com:7825 --authentication-config-file /path/to/world-authentication.json

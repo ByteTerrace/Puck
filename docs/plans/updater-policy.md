@@ -115,22 +115,18 @@ retirement uses, returns no record for it, and the pruner gives it no allowance.
 ### Payload identity (`PayloadPin`)
 
 `ReleasePayloadIdentity.Of` (in `Puck.Launcher.Release`, the only producer)
-computes `ContentPin.Compute` over the UTF-8 text
-
-```text
-puck.release.payload-identity.v1\n
-rid:<payload.Rid>\n
-stateGeneration:<manifest.StateGeneration>\n
-file:<path>\t<hash>\t<size>\n   (one line per file, ordered by path, ordinal)
-```
+computes a content pin over a canonical text: its schema line
+(`ReleasePayloadIdentity.Schema`), the RID, the state generation, and one
+tab-separated line per file, ordered by path (ordinal), naming its path, hash,
+size and executable flag.
 
 The manifest validator refuses control characters in a path
 (`PortablePath.IsRelative`), so the tab and newline separators are
 unambiguous. Rollout, notes, channel, `MinimumSupported`, `Revoked`, the version
 label, the archive and the signature are excluded: re-signing, advancing a
 rollout or relabelling identical files yields the same pin; changing any file's
-bytes, path or size, adding or removing a file or changing the generation
-yields another. The pin includes the RID, so a pin names one RID's payload and
+bytes, path, size or executable flag, adding or removing a file or changing the
+generation yields another. The pin includes the RID, so a pin names one RID's payload and
 the policy compares pins alone.
 
 ### Reading the record

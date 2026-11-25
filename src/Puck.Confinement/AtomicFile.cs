@@ -359,6 +359,30 @@ public static class AtomicFile {
         WriteAllBytes(path: path, bytes: bytes);
         return true;
     }
+    /// <summary>Copies a file over a destination that a running process may have mapped: the destination's replaced
+    /// backups are deleted first (<see cref="DeleteReplacedBackups"/>), then it is atomically replaced only when its bytes
+    /// differ. On Unix the destination takes the source's mode, so an executable stays executable; a destination whose
+    /// bytes already match has only its mode corrected.</summary>
+    /// <param name="source">The file to copy.</param>
+    /// <param name="destination">The destination file; a missing parent directory is created.</param>
+    /// <returns>Whether the destination's bytes or mode changed.</returns>
+    /// <exception cref="IOException">The source cannot be read, or the destination cannot be replaced.</exception>
+    /// <exception cref="UnauthorizedAccessException">The caller may not read the source or replace the destination.</exception>
+    public static bool CopyIfChanged(string source, string destination) {
+        var bytes = File.ReadAllBytes(path: source);
+
+        _ = DeleteReplacedBackups(path: destination);
+        if (OperatingSystem.IsWindows()) { return WriteAllBytesIfChanged(bytes: bytes, path: destination); }
+        var mode = File.GetUnixFileMode(path: source);
+
+        if (!FileContent.Equals(expected: bytes, path: destination)) {
+            WriteAllBytes(bytes: bytes, path: destination, unixCreateMode: mode);
+            return true;
+        }
+        if (File.GetUnixFileMode(path: destination) == mode) { return false; }
+        File.SetUnixFileMode(mode: mode, path: destination);
+        return true;
+    }
     /// <summary>Reads every byte of a file that another thread or process may be renaming into place at the same
     /// moment. A rename holds the file open with delete access until it completes, including after the name has
     /// moved, and Windows refuses an open that does not share delete access while it does, so

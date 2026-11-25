@@ -535,7 +535,11 @@ the deployment's world extensions, and the TLS front when the deployment
 exposes the MCP front. `puck publish --channel server` and `puck channel push`
 turn it into a signed `puck.release.manifest.v1` release on the deployment's
 `server` channel, beside the `player` channel and under the same root key
-(`WorldHostLayout` holds every name).
+(`WorldHostLayout` holds every name). The manifest records which files are
+executable, read from the published tree, and the signature covers that flag
+like every byte; the stager creates each installed file with the mode its
+record names, and the applier refuses one whose mode disagrees
+(`ReleaseFileMode`), so Caddy, the CLI and the stub run from a Linux install.
 
 **The engine is the host release's payload identity.** A world release's
 manifest names its engine as `engine`, the `ReleasePayloadIdentity` of the
@@ -713,6 +717,47 @@ documents are not touched. The public `world-authentication.json` the release
 publishes names the same sign-in and the primary world's transport key
 (`remoteKeyHash`), which a player passes to
 `--authentication-config-file` with `--connect`.
+
+**A player build carries its deployment's sign-in and the provider that reads
+it.** The deployment names its players' sign-in in its own configuration, and
+that provider lives in its provider project as an installed extension, never in
+the engine (AGENTS.md, "Puck is provider-independent"; PUCKARCH009). The
+release's `player` job therefore assembles the channel's build with the
+provider's project (`--extension`) and the sign-in file the deploy just wrote
+(`--sign-in`). `puck world player` ships the file as `world-authentication.json`
+beside the engine (`PlayerBuildLayout.SignInName`), records the provider and the
+extension that contributes it under `signIn` in `player.json`, and the signed
+channel delivers both, so an installed player joins with
+`--connect <host:port> --authentication-config-file world-authentication.json`
+and fetches nothing by hand. The engine stays provider-neutral: only the folder,
+which a deployment's own job assembles for its own channel, carries a provider.
+The file pins the primary world's transport key, whose vault secret is stable;
+the channel publishes after every deploy, so a rotated key reaches players with
+the next release.
+
+The invariant is that a player build which ships a sign-in can select its
+provider. One door enforces it: `WorldPlayerCommand` composes the folder's
+extensions directory with the engine's own extension, as a host composes it
+(`WorldSiloApplication.ComposeExtensions`), and selects the provider through
+the one reader of the file (`WorldConnectionAuthentication.ReadSignIn`,
+`WorldSignInConfiguration.Provider`), which the booting World also uses. A
+sign-in the folder cannot select refuses the build before the engine is
+published, naming the installed sign-ins. The guarantee stops at the provider's
+own sign-in: `azure.api-users` still needs the player to hold an ambient Azure
+sign-in in the deployment's tenant, as a member of its user group.
+
+Options weighed:
+- The deployment publishes the sign-in file and its provider as separate
+  content the launcher installs by pin. The launcher installs releases, not
+  loose content, so this is a second delivery path, with its own pin and
+  update policy, for two files a signed release of the deployment's own
+  channel already carries.
+- The deployment offers a sign-in the build already ships (`puck.accounts`).
+  Its issuer would have to list every player's public key, and nothing enrols
+  one; it would also replace the deployment's own admission policy (group
+  membership) with the engine's.
+- Building the provider into the player's engine. It puts a provider in the
+  engine's closure, which provider independence and PUCKARCH009 refuse.
 
 **Rotation and custody.** Deleting the secret rotates the root at the next
 release. Every player is vouched for again at their next sign-in, and no world
