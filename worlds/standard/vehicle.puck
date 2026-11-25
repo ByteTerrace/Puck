@@ -95,8 +95,10 @@ let vehicleProfile = { name: "vehicle", exclude ["pavement"] }
 // The `route` target register, the `vehicle` producer that routes over `domain` (any domain of the road network) under
 // the navigation `profile` (a world lists `vehicleProfile` to name "vehicle"; none pays one everywhere) and the
 // `vehicle` kit that drives at `speed` metres a second under `shaping`. `routes` adds curve route programs to its
-// producers, each name mapped to `vehicleRouteSteering`.
-template vehicleDesign(domain, speed = 8, shaping = walkerMotion.shaping, routes = {}, profile = null) {
+// producers, each name mapped to `vehicleRouteSteering`. A vehicle steps and steers on every tick while a player is
+// within `farBeyond` metres of it; farther than that from every player, and in a town nobody walks, it updates at
+// `farMotionSeconds` and `farSteeringSeconds`, still driving its route at its own speed.
+template vehicleDesign(domain, speed = 8, shaping = walkerMotion.shaping, routes = {}, profile = null, farBeyond = 70, farMotionSeconds = 0.5, farSteeringSeconds = 1) {
   targetRegisters [
     { name: "route", maximumRange: 1000, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
   ]
@@ -117,6 +119,13 @@ template vehicleDesign(domain, speed = 8, shaping = walkerMotion.shaping, routes
       bodyContact: Overlap
       bodyMotionProgram: "walk"
       collider: capsule(endpoint: [0, 0.4, 0], radius: 0.9)
+      autonomy {
+        far {
+          beyond: farBeyond
+          motionSeconds: farMotionSeconds
+          steeringSeconds: farSteeringSeconds
+        }
+      }
       motion: walkerMotion with { shaping: shaping, speed { value: speed } }
       producers: ({ vehicle: vehicleSteering } with routes)
     }
