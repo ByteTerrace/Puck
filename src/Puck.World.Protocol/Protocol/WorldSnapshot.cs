@@ -141,6 +141,8 @@ public readonly record struct EntitySnapshot(
 /// <param name="MusicSenses">The ambient score conditions disclosed to this recipient, one bit per
 /// <c>Puck.Audio.Simulation.MusicSenseFamily</c>.</param>
 /// <param name="InputAnswers">The last input the authority answered for each owner, disclosed only to that owner.</param>
+/// <param name="OwnBodies">The exact continuation of each remote owner's own body after this tick, disclosed only to
+/// that owner, which predicts its body from it.</param>
 /// <remarks>Machine engagement pads do not ride this snapshot: <c>Server.WorldEngagement.FoldTick</c>'s per-screen
 /// pad fold is read directly by <c>Server.WorldMachineHost.Advance</c> (in <c>Puck.World.Machines</c>) inside <c>WorldServer.Step</c>, in-process,
 /// since machine stepping runs server-side and needs no wire lane to a presentation-side consumer.</remarks>
@@ -158,7 +160,8 @@ public readonly record struct WorldSnapshot(
     ReadOnlyMemory<WorldGameplayCue> Cues = default,
     byte MusicBoundary = 0,
     byte MusicSenses = 0,
-    ReadOnlyMemory<WorldInputAnswer> InputAnswers = default
+    ReadOnlyMemory<WorldInputAnswer> InputAnswers = default,
+    ReadOnlyMemory<WorldOwnBody> OwnBodies = default
 ) {
     /// <summary>Finds an entity incarnation in this snapshot's own delivered body table.</summary>
     public bool TryFindEntity(int body, int generation, out EntitySnapshot entity) {

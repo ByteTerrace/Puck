@@ -40,3 +40,14 @@ public readonly record struct WorldInputPublication(Principal Owner, int Body, i
 /// epoch.</param>
 /// <param name="Tick">The simulation tick that batch was answered in.</param>
 public readonly record struct WorldInputAnswer(Principal Owner, ulong Epoch, uint Sequence, ulong Tick) : IWorldOwnedRecord;
+/// <summary>The exact continuation of the body an owner drives, as the authority held it after a tick: what a client
+/// restores its prediction of its own body from before replaying the input the authority had not yet taken. Disclosed
+/// only to its owner.</summary>
+/// <param name="Owner">The input owner whose body it is.</param>
+/// <param name="Tick">The simulation tick the continuation was captured after.</param>
+/// <param name="EngineTick">The engine-tick boundary that tick completed at, where the body's next step starts.</param>
+/// <param name="Body">The body's 0-based index at the authority.</param>
+/// <param name="Generation">The body slot's activation generation.</param>
+/// <param name="Entry">The body's population entry in the authority checkpoint's own entry encoding; the memory is
+/// immutable.</param>
+public readonly record struct WorldOwnBody(Principal Owner, ulong Tick, ulong EngineTick, int Body, int Generation, ReadOnlyMemory<byte> Entry) : IWorldOwnedRecord;

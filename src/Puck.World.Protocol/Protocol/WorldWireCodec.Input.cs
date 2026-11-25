@@ -105,6 +105,42 @@ public static partial class WorldWireCodec {
         return answers;
     }
 
+    /// <summary>Writes the owner-filtered own-body continuations accompanying a snapshot.</summary>
+    /// <param name="writer">The writer.</param>
+    /// <param name="bodies">The continuations, at most one an owner.</param>
+    /// <returns><see langword="false"/> when a continuation cannot be written within wire bounds.</returns>
+    public static bool TryWriteOwnBodies(WireWriter writer, ReadOnlySpan<WorldOwnBody> bodies) {
+        if (bodies.Length > ushort.MaxValue) { return false; }
+        writer.WriteUInt16(value: ((ushort)bodies.Length));
+        foreach (var body in bodies) {
+            if (!TryWritePrincipal(writer, body.Owner) || (body.Entry.Length > WireLimits.MaxDocumentBytes)) { return false; }
+            writer.WriteUInt64(value: body.Tick); writer.WriteUInt64(value: body.EngineTick); writer.WriteInt32(value: body.Body); writer.WriteInt32(value: body.Generation);
+            writer.WriteBlock(value: body.Entry.Span);
+        }
+        return true;
+    }
+    /// <summary>Reads bounded own-body continuations, checking the count against remaining bytes before allocation.</summary>
+    /// <param name="reader">The reader.</param>
+    /// <returns>The continuations.</returns>
+    public static WorldOwnBody[] ReadOwnBodies(ref WireReader reader) {
+        var count = reader.ReadUInt16();
+
+        if ((((long)count) * 21) > reader.Remaining) { reader.Fail(detail: "own body count exceeds payload", refusal: WireRefusal.CountOutOfRange); return []; }
+        var bodies = ((count == 0) ? [] : new WorldOwnBody[count]);
+
+        for (var index = 0; ((index < bodies.Length) && !reader.Failed); index++) {
+            var owner = ReadPrincipal(ref reader);
+            var tick = reader.ReadUInt64();
+            var engineTick = reader.ReadUInt64();
+            var body = reader.ReadInt32();
+            var generation = reader.ReadInt32();
+            var entry = reader.ReadBlock(field: "own body entry", maxBytes: WireLimits.MaxDocumentBytes);
+
+            bodies[index] = new(Body: body, EngineTick: engineTick, Entry: entry, Generation: generation, Owner: owner, Tick: tick);
+        }
+        return bodies;
+    }
+
     private const int ContributionBytes = 22;
     private const int InputEventBytes = 39;
     private const int MaximumInputBytes = (((37 + 256) + 48) + (ushort.MaxValue * (ContributionBytes + InputEventBytes)));

@@ -565,7 +565,7 @@ seed derived from the run's, so a failure under a schedule reproduces.
 
 | Invariant | Enforced by | Where it stops |
 |---|---|---|
-| A route step is judged from authority state the client was delivered | `WorldSeatDriver` reads the body only through `WorldSeatSenses`, which reads the delivered mirror and the authority's input answers | The client-tick backstop still ends a chapter whose authority never delivers |
+| A route chapter is judged from authority state the client was delivered | `WorldSeatDriver` reads the body only through `WorldSeatSenses`, which reads the delivered mirror and the authority's input answers; it steers from `WorldSeatSenses.Predict` and judges walls, the corridor and its clock from the delivered reading | The client-tick backstop still ends a chapter whose authority never delivers |
 | A delivery is never refused for a slow acknowledgement | The acknowledgement is one latest-stamp slot written by its own task; the read loop never writes | A consumer behind by more than the subscriber bound is still detached and re-primes |
 | A remote spawn names the authority's own row | `PoseSpawn` is resolved in `WorldDocument.ApplyCommand` against the authority's definition | A spawn neither world declares is refused by name |
 | A jittered run reproduces | Each stream's schedule is a `Pcg32XshRr` stream from the run seed, the side and the stream's ordinal | Ordinals follow connection order, which the host's scheduling decides |
@@ -582,6 +582,95 @@ terrace lane and at the lift's door. The structural answer is a seat that
 steers from its own predicted body, the client running its sent input ahead
 of the last delivery and correcting to it, so its control loop no longer
 holds the round trip; lengthening the chapter's limit would only hide it.
+[Decision 9](#decision-9-a-remote-seat-predicts-its-own-body) builds it.
+
+## Decision 9: a remote seat predicts its own body
+
+**What must be decided.** How a seat whose authority is a network away moves
+as soon as its input changes, without a second implementation of motion and
+without the authority giving up its say.
+
+**Options.**
+
+1. *Extrapolate the delivered pose.* Carry the last delivered position forward
+   at its delivered velocity, bent by the stick. Cheap, and a second motion
+   model: it walks through walls the step would stop at, and every kit's
+   program (a dash, a glide, a ship's thrust) would need its own copy.
+2. *Run the authority's own body step on the client, from the authority's exact
+   continuation.* The strict school of
+   [replication's decision 7](replication.md#decision-7-the-seats-own-body):
+   the authority sends the body's owner the exact state of its body after a
+   tick; the client restores it and steps it again through the input the
+   authority had not yet taken.
+3. *Lengthen the route's limits.* Hides the lag; a player still feels it.
+
+**Ruling: the authority's own step, from its exact continuation.** Puck's step
+is deterministic and fixed point, so a client that holds the same continuation
+and replays the same input reaches the same body bit for bit, and a correction
+is a real divergence, never rounding.
+
+**The design.**
+
+- *The continuation.* After every tick the authority captures, for each remote
+  human, the body's population entry (the sections
+  `WorldPopulationEntryCheckpoint.VisitSections` orders and its registers) and
+  the poses of the world's attached solids, encoded by the checkpoint's own
+  entry codec (`WorldAuthorityCheckpointCodec.EncodeOwnBody`). It rides the
+  snapshot as `WorldOwnBody`, an owner-scoped record beside `WorldInputAnswer`,
+  so the federation sink discloses each to its owner alone
+  (`WorldOwnedRecords.ForOwner`) and every other sink drops it.
+- *The predictor.* The composition root, which can reach the step, holds one
+  private `WorldPopulation` per seat with its own arena (`WorldSeatPrediction`),
+  built from the client's own copy of the document the seat's authority runs.
+  The step's code is content the client ships; the presentation-tier document
+  an authority delivers withholds it (`bodyMotionPrograms`, kits' actions, the
+  state rows a field reaction reads), so a population cannot be built from that
+  alone. Today the client resolves its boot document by `documentId`; a world it
+  reaches only through a crossing (the garden, the city, the moon) is not yet
+  predicted, and resolving those from the package by pin, as creations already
+  are, is the next step. It restores the
+  continuation into a local seat slot (`WorldPopulation.RestorePredicted`, the
+  body half of a checkpoint restore shared with `WorldPopulation.Restore`) and
+  steps it with `WorldPopulation.AdvanceSeats`.
+- *The input.* The client keeps every batch a remote seat sends, timed on its
+  own seat clock (`WorldClient.SeatClockSeconds`, the simulated time the seat
+  views have advanced through, which runs on through a stalled delivery). An
+  answer names the authority tick a batch was taken at; less that batch's send
+  time it gives the offset from the seat clock to the authority tick an input
+  sent now lands at. A prediction steps from the continuation's tick to that
+  tick, taking at each tick the batches sent by then, folded and written through
+  the same doors the authority uses (`WorldAcceptedInput.Fold`,
+  `WorldBody.TakeOwnerInput`), and holding the last one, its relative movement
+  spent, on a tick with none, as `WorldTick.ApplyFederatedIntents` does.
+- *What reads it.* A route's seat driver steers from the predicted body
+  (`WorldSeatSenses.Predict`), so a corner is turned and a stop is braked for
+  as a local seat does; walls, the corridor and the chapter's clock are still
+  judged from the delivery. What is predicted is the seat's own body: a body
+  riding another (a mount) is not predicted, and neither is anything the seat
+  does not drive.
+
+**The invariant.** Equal step code, an equal continuation and equal input give
+an equal body. **What enforces it:** the client project cannot name the step,
+so the only prediction there is runs the one step behind
+`IWorldSeatPrediction`, implemented in the composition root with no motion code
+of its own; and the input reaches the predicted body only through the fold and
+the owner-input write the authority uses. **Where it stops:** the step also
+reads what lies outside the body. The static ground, gravity, kits and motion
+programs come from the delivered document and the moving solids' poses from the
+continuation, so they are exact at its tick; another body, a moving solid's
+motion after that tick and a rule's write to the body's registers are not
+predicted, and show as a correction at the next delivery. When the round trip
+outgrows `WorldSeatPrediction.MaxSteps` the seat steers from the delivery.
+
+**Attacks it closes.** A prediction writes nothing an authority or the
+delivered mirror reads: its population and arena are its own. A client that
+predicts wrongly, or lies about its prediction, gains nothing, since the
+authority steps the body from the input alone.
+
+**Cost.** Bytes: one encoded entry per remote seat per delivery. Work: one
+restore and up to a round trip of steps of one body per seat per client tick.
+The digest-first form of replication's decision 7 (send eight bytes while the
+client's digest matches) is the step that cuts the bytes.
 
 ## The steps
 

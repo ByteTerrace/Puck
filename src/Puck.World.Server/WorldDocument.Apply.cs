@@ -910,6 +910,7 @@ public sealed partial class WorldDocument {
             EngineTick: Host.CompletedEngineTicks,
             Inputs: Host.Input.Publish(),
             InputAnswers: Host.Input.Answers(),
+            OwnBodies: Host.Population.CaptureOwnBodies(engineTick: Host.CompletedEngineTicks, tick: tick),
             SolidScales: Host.Population.SolidScales()
         );
     }

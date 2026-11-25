@@ -356,8 +356,11 @@ public sealed partial class WorldPopulation {
     /// receives its <see cref="WorldBody"/> when activated.</summary>
     /// <param name="definition">The world definition supplying the kit rows, producer parameters, and the profileless
     /// locomotion feel.</param>
+    /// <param name="fields">Whether the population installs the document's field lattices. A client's prediction of its
+    /// own body builds from a document an authority disclosed, whose field reactions may read rows withheld from it, and
+    /// installs none: a predicted body meets no field's resistance.</param>
     /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public WorldPopulation(WorldDefinition definition) {
+    public WorldPopulation(WorldDefinition definition, bool fields = true) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
         m_entries = new Entry[definition.Population.Capacity];
@@ -379,7 +382,7 @@ public sealed partial class WorldPopulation {
 
         // The field lattices are their own product, installed again by every full install; the population's build
         // reads the installed lattices, not the state section they compile from.
-        InstallFields(definition: definition);
+        if (fields) { InstallFields(definition: definition); }
 
         // Recorded as Rebuild records its own build, so the population answers what it was built from whichever door
         // built it.

@@ -725,20 +725,7 @@ public sealed partial class WorldTick {
             return new(InputRefusal: reason, Permission: verdict);
         }
         if (!remote) { _ = m_inputRefused.Clear(key: submission.EntityIndex); }
-        var table = Host.Population.InputCatalog.Mappings[input.Mapping].Channels;
-        var target = body.Channels;
-        var movement = input.Image with { Channels = default };
-        var held = default(PlayerIntent);
-        var remap = table.RemapTo(target: target);
-
-        for (var ordinal = 0; (ordinal < ChannelLimits.MaxChannels); ordinal++) {
-            var destination = remap[ordinal];
-
-            if (destination < 0) { continue; }
-            if (table.Shape(ordinal: ordinal) == ChannelShape.Relative) { movement = movement.WithRelative(ordinal: destination, value: input.Image.Channels.Relative(ordinal: ordinal)); } else if (table.IsRole(ordinal: ordinal)) { movement = movement.WithChannel(ordinal: destination, value: target.Quantize(ordinal: destination, value: submission.Intent[ordinal])); } else { held = held.WithChannel(ordinal: destination, value: input.Image[ordinal]); }
-        }
-        var applied = new WorldAcceptedInput(submission.Tick, submission.EntityIndex, movement, submission.Principal,
-            held, submission.MeasuredHoldTicks);
+        var applied = WorldAcceptedInput.Fold(mapping: Host.Population.InputCatalog.Mappings[input.Mapping].Channels, submission: in submission, target: body.Channels);
 
         foreach (var scope in Host.ScopedReplaySpan) { scope.Observe(intent: in submission); }
         ApplyAcceptedBodyInput(applied: in applied, body: body);
@@ -760,10 +747,7 @@ public sealed partial class WorldTick {
                 entityIndex: bodyIndex,
                 principal: applied.Principal
             );
-            var submitted = body.MergeSubmittedRelative(incoming: applied.Intent);
-
-            body.SubmitIntent(intent: submitted);
-            body.SetHeldChannels(channels: applied.HeldChannels);
+            var submitted = body.TakeOwnerInput(applied: in applied);
 
             if (isOwningParticipant) {
                 // This tick's `h` and its held-device image — never the ladder's winner (a tape still outranks the

@@ -301,7 +301,7 @@ public sealed partial class WorldOutputHub {
 
                 try {
                     var delivered = subscription.Disclosure.IsFull ? snapshot : snapshot with {
-                        Entries = m_interest.Project(subscription.Disclosure), Inputs = default, InputAnswers = default,
+                        Entries = m_interest.Project(subscription.Disclosure), Inputs = default, InputAnswers = default, OwnBodies = default,
                     };
                     if (subscription.Present is { } present) { delivered = present(delivered); }
                     if (subscription.Route.ObservesInterest && subscription.Disclosure.IsFull && subscription.Present is null) {

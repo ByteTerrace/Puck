@@ -22,7 +22,8 @@ namespace Puck.World.Client;
 /// <param name="client">The presentation client whose seat views hold the cameras' facings.</param>
 /// <param name="navigation">Compiles the navigation one delivered document describes, given the navigation compiled
 /// from the document's earlier revision or <see langword="null"/>.</param>
-public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient client, Func<WorldDefinition, IWorldSeatNavigation?, IWorldSeatNavigation> navigation) {
+/// <param name="prediction">Predicts a remote seat's own body, or <see langword="null"/> on a host that predicts none.</param>
+public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient client, Func<WorldDefinition, IWorldSeatNavigation?, IWorldSeatNavigation> navigation, IWorldSeatPrediction? prediction = null) {
     /// <summary>One seat's body this tick, as its client was delivered it.</summary>
     /// <param name="Endpoint">The authority the seat is routed to.</param>
     /// <param name="Index">The body's 0-based index in that authority.</param>
@@ -33,9 +34,14 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
     /// <param name="YawPerTick">The yaw one tick of full look deflection turns the camera by, in radians.</param>
     /// <param name="LatchedMoveYaw">The latched yaw the seat's move stick is framed against while held in third-person or
     /// free-look, or <see langword="null"/> when stick movement follows the live look yaw.</param>
-    public readonly record struct Reading(WorldAuthorityEndpoint Endpoint, int Index, WorldDeliveredBody Body, FixedVector3 Position, IReadOnlyList<string> Places, FixedQ4816 Yaw, FixedQ4816 YawPerTick, FixedQ4816? LatchedMoveYaw = null) {
+    /// <param name="Predicted">Whether the body's pose is the seat's prediction of it (<see cref="Predict"/>) rather than
+    /// the latest delivery's; its ticks, generation and epochs stay the delivery's either way.</param>
+    public readonly record struct Reading(WorldAuthorityEndpoint Endpoint, int Index, WorldDeliveredBody Body, FixedVector3 Position, IReadOnlyList<string> Places, FixedQ4816 Yaw, FixedQ4816 YawPerTick, FixedQ4816? LatchedMoveYaw = null, bool Predicted = false) {
         /// <summary>Gets the innermost place the body stands in, or <c>none</c>.</summary>
         public string Place => ((Places.Count == 0) ? "none" : Places[0]);
+        /// <summary>Gets whether the body's pose is current for the input the seat sends now: its authority runs in this
+        /// process, or the pose is the seat's prediction. A seat steering from such a pose steers as a local one does.</summary>
+        public bool SteersLocally => (Endpoint.ClockOwnedHere || Predicted);
         /// <summary>Gets the body's delivered planar speed, in metres per second.</summary>
         public FixedQ4816 PlanarSpeed {
             get {
@@ -128,6 +134,37 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
         cache.NavigationDefinition = definition;
         cache.NavigationRevision = document.NavigationRevision;
         return document.LastNavigation;
+    }
+    /// <summary>Describes a seat's latest prediction, or that this host predicts none.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <returns>A one-line reading.</returns>
+    public string DescribePrediction(int slot) => (prediction?.Describe(slot: slot) ?? "off(this host predicts no body)");
+    /// <summary>Returns the seat's reading with its body posed where the seat predicts it now (<see cref="IWorldSeatPrediction"/>):
+    /// what a remote seat steers from, so its control loop does not hold the round trip. Walls, corridors and a chapter's
+    /// clock stay judged from the delivered reading.</summary>
+    /// <param name="reading">The seat's delivered reading this tick.</param>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <returns>The predicted reading, or <paramref name="reading"/> when the seat's body is not predicted at the authority
+    /// and index it read.</returns>
+    public Reading Predict(in Reading reading, int slot) {
+        if ((prediction is not { } predictor) || !predictor.TryPredict(body: out var body, slot: slot) ||
+            !ReferenceEquals(objA: body.Endpoint, objB: reading.Endpoint) || (body.Index != reading.Index)) {
+            return reading;
+        }
+
+        var position = body.Position.ToVector3();
+        var step = reading.Body.StepSeconds;
+
+        return reading with {
+            Body = reading.Body with {
+                Orientation = body.Orientation.ToQuaternion(),
+                Position = position,
+                PreviousPosition = ((step > 0f) ? (position - (body.Velocity.ToVector3() * step)) : position),
+            },
+            Places = PlacesAt(endpoint: reading.Endpoint, point: body.Position),
+            Position = body.Position,
+            Predicted = true,
+        };
     }
     /// <summary>Reports whether a seat's input source registry is admitted by its routed authority.</summary>
     public bool InputAdmitted(int slot) => client.IsSeatInputAdmitted(slot: slot);

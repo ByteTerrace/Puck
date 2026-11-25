@@ -99,7 +99,7 @@ public sealed partial class WorldDocument {
                     route.DeliverSnapshot(snapshot: in primer, stream: WorldStreamStamp.Unspanned);
                 } else {
                     var frame = WorldInterestFrame.ForPrimer(primer);
-                    var redacted = primer with { Entries = frame.Project(disclosure), Inputs = default, InputAnswers = default };
+                    var redacted = primer with { Entries = frame.Project(disclosure), Inputs = default, InputAnswers = default, OwnBodies = default };
 
                     route.DeliverSnapshot(snapshot: in redacted, stream: WorldStreamStamp.Unspanned);
                 }

@@ -509,6 +509,7 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
                 SolidScales = m_scales.Filter(m_view, redacted.SolidScales),
                 Inputs = WorldOwnedRecords.ForOwner(redacted.Inputs, m_observation.Session, ref m_inputDisclosure),
                 InputAnswers = WorldOwnedRecords.ForOwner(redacted.InputAnswers, m_observation.Session, ref m_answerDisclosure),
+                OwnBodies = default,
             };
             // A cut the rows or the body policy decided primes the observer alone, and this snapshot completes it: its
             // rows are advanced again against the generation's whole document, so every observation the document owes

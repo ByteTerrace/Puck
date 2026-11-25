@@ -308,6 +308,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
 
     private WorldInputPublication[] m_inputDisclosure = [];
     private WorldInputAnswer[] m_answerDisclosure = [];
+    private WorldOwnBody[] m_ownBodyDisclosure = [];
 
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         DeliverSnapshot(snapshot, WorldInterestFrame.ForPrimer(snapshot));
@@ -355,6 +356,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
         projected = projected with {
             Inputs = ((recipient is { } inputOwner) ? WorldOwnedRecords.ForOwner(projected.Inputs, inputOwner, ref m_inputDisclosure) : default),
             InputAnswers = ((recipient is { } answerOwner) ? WorldOwnedRecords.ForOwner(projected.InputAnswers, answerOwner, ref m_answerDisclosure) : default),
+            OwnBodies = ((recipient is { } bodyOwner) ? WorldOwnedRecords.ForOwner(projected.OwnBodies, bodyOwner, ref m_ownBodyDisclosure) : default),
         };
         if (AnnounceCut()) {
             PrimeAfterCut();

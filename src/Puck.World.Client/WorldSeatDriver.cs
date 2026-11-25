@@ -77,6 +77,8 @@ public sealed class WorldSeatDriver {
     private ulong m_stepAuthorityStart;
     private ulong m_deadline;
     private ulong m_authorityTicks;
+    // The chapter's ticks steered from a predicted body.
+    private ulong m_predictedTicks;
     private ulong m_authorityBudget;
     private ulong m_lastBodyTick;
     private string? m_lastBodyAuthority;
@@ -201,6 +203,11 @@ public sealed class WorldSeatDriver {
     public int StepReached => m_step;
     /// <summary>Gets the times the chapter planned a path.</summary>
     public int Plans { get; private set; }
+    /// <summary>Gets the authority ticks the chapter has been delivered for the seat's body: its clock, which a slow delivery
+    /// spends none of.</summary>
+    public ulong AuthorityTicks => m_authorityTicks;
+    /// <summary>Gets the client ticks the chapter steered from a predicted body.</summary>
+    public ulong PredictedTicks => m_predictedTicks;
     /// <summary>Gets the control lines the seat's ingress refused.</summary>
     public int Refused => m_lines.Count(predicate: static outcome => outcome() is "refused" or "faulted");
     /// <summary>Gets the control lines submitted.</summary>
@@ -229,6 +236,7 @@ public sealed class WorldSeatDriver {
         m_chapterStart = tick;
         m_authorityBudget = (ulong)Math.Ceiling(a: (chapter.TimeoutSeconds * rateHz));
         m_authorityTicks = 0UL;
+        m_predictedTicks = 0UL;
         m_lastBodyAuthority = null;
         m_lastBodyTick = 0UL;
         m_noBody = false;
@@ -370,13 +378,21 @@ public sealed class WorldSeatDriver {
             return;
         }
 
-        var steer = Step(read: in read, tick: tick, rateHz: rateHz);
+        // A remote seat steers from where it predicts its body, as a player steers the body they see; walls, the corridor
+        // and the chapter's clock were judged above from what the authority delivered.
+        var steered = m_senses.Predict(reading: in read, slot: m_slot);
+
+        if (steered.Predicted) {
+            m_predictedTicks++;
+        }
+
+        var steer = Step(read: in steered, tick: tick, rateHz: rateHz);
 
         if (m_phase != Phase.Running) {
             return;
         }
 
-        Drive(read: in read, steer: in steer, tick: tick, rateHz: rateHz);
+        Drive(read: in steered, steer: in steer, tick: tick, rateHz: rateHz);
     }
 
     /// <summary>Gets the lines that let go every control the driver holds, each a <c>player.signal</c> line, in the
@@ -902,7 +918,7 @@ public sealed class WorldSeatDriver {
         m_lastPosition = read.Position;
 
         var crossLagTicks = Math.Clamp(value: Math.Max(val1: 10UL, val2: m_senses.MoveLagTicks(slot: m_slot, bodyTick: read.Body.Tick)), min: 10UL, max: 20UL);
-        var inFlight = (read.Endpoint.ClockOwnedHere
+        var inFlight = (read.SteersLocally
             ? FixedQ4816.Zero
             : (read.PlanarSpeed * FixedQ4816.FromDouble(value: ((double)crossLagTicks / rateHz))));
         var targetMetres = FixedQ4816.FromDouble(value: cross.Metres);
@@ -1072,7 +1088,7 @@ public sealed class WorldSeatDriver {
         // Pass the corners already reached: within reach of one, swept across it during a bunched delivery, or past it
         // along the segment that leads to it.
         var reachScale = FixedQ4816.Min(x: FixedQ4816.One, y: scale);
-        var reach = (read.Endpoint.ClockOwnedHere
+        var reach = (read.SteersLocally
             ? FixedQ4816.FromDouble(value: 0.4)
             : (FixedQ4816.FromDouble(value: 0.50) * reachScale));
         var goCarryEpoch = read.Endpoint.Mirror.Carries.Epoch(index: read.Index);
@@ -1103,7 +1119,7 @@ public sealed class WorldSeatDriver {
             var passedAlongSegment = (
                 hasSegment &&
                 (FixedVector3.Dot(left: along, right: past) >= FixedQ4816.Zero) &&
-                (read.Endpoint.ClockOwnedHere || (
+                (read.SteersLocally || (
                     (Planar(from: read.Position, to: corner) <= FixedQ4816.Max(x: cornerReach, y: (FixedQ4816.FromDouble(value: 0.65) * reachScale))) &&
                     (Stray(from: from, to: corner, point: read.Position) <= (FixedQ4816.FromDouble(value: 0.45) * reachScale))
                 ))
@@ -1162,7 +1178,7 @@ public sealed class WorldSeatDriver {
         } else if (!moveAnswered) {
             m_progressTick = m_authorityTicks;
         }
-        var strayLimit = FixedQ4816.FromDouble(value: (read.Endpoint.ClockOwnedHere ? StrayMetres : 1.6));
+        var strayLimit = FixedQ4816.FromDouble(value: (read.SteersLocally ? StrayMetres : 1.6));
         var strayFrom = ((m_corner > 0) ? m_corners[(m_corner - 1)] : m_planStart);
         if (
             !planned &&
@@ -1190,7 +1206,7 @@ public sealed class WorldSeatDriver {
 
             turn = FixedQ4816.Abs(value: FixedQ4816.WrapAngle(radians: (Heading(dx: (next.X - target.X), dz: (next.Z - target.Z)) - facing)));
             // Near a corner the camera already looks along the next leg, as a player looks where they turn.
-            if (read.Endpoint.ClockOwnedHere && (distance < FixedQ4816.One)) {
+            if (read.SteersLocally && (distance < FixedQ4816.One)) {
                 facing = Heading(dx: (next.X - read.Position.X), dz: (next.Z - read.Position.Z));
             }
         }
@@ -1206,12 +1222,12 @@ public sealed class WorldSeatDriver {
             for (var index = m_corner; (index < (m_corners.Count - 1)); index++) {
                 remaining += Planar(from: m_corners[index], to: m_corners[(index + 1)]);
             }
-            var margin = (read.Endpoint.ClockOwnedHere
+            var margin = (read.SteersLocally
                 ? (effectiveWithin / FixedQ4816.FromInteger(value: 2))
                 : FixedQ4816.Zero);
             stop = FixedQ4816.Max(x: FixedQ4816.Zero, y: (remaining - margin));
         } else if (
-            !read.Endpoint.ClockOwnedHere &&
+            !read.SteersLocally &&
             (go.Place is { } goalPlace) &&
             m_senses.TryPlaceShape(endpoint: read.Endpoint, placementId: goalPlace, shape: out var goalShape) &&
             !goalShape.Contains(point: (goalShape.Center + new FixedVector3(X: FixedQ4816.FromInteger(value: 2), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero))) &&
@@ -1494,6 +1510,8 @@ public sealed class WorldSeatDriver {
 
         var scale = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.05), y: m_senses.BodyScale(reading: in read));
         var reachScale = FixedQ4816.Min(x: FixedQ4816.One, y: scale);
+        // The corridor is judged from the delivered body, which a remote seat sees a lag late, whether or not it steers
+        // from a prediction.
         var corridorMargin = (read.Endpoint.ClockOwnedHere
             ? m_margin
             : FixedQ4816.Max(x: m_margin, y: (FixedQ4816.FromDouble(value: 0.45) * reachScale)));
@@ -1510,7 +1528,7 @@ public sealed class WorldSeatDriver {
             return false;
         }
         if (plan.StartsOnCell) {
-            m_firstReach = (read.Endpoint.ClockOwnedHere
+            m_firstReach = (read.SteersLocally
                 ? FixedQ4816.FromDouble(value: 0.1)
                 : (FixedQ4816.FromDouble(value: (stuck ? 0.15 : 0.55)) * reachScale));
         }
@@ -1627,7 +1645,7 @@ public sealed class WorldSeatDriver {
                 var walking = WalkingSpeed(read: in read);
                 var magnitude = FixedQ4816.One;
 
-                if (read.Endpoint.ClockOwnedHere) {
+                if (read.SteersLocally) {
                     // Slow for a sharp corner, or to stop at a final point, against the speed the body was delivered at.
                     var allowed = AllowedSpeed(move: move, read: in read, steer: in steer);
 
@@ -1661,7 +1679,7 @@ public sealed class WorldSeatDriver {
                 return ((deflection == FixedQ4816.Zero) ? "0 0" : $"{Number(deflection)} 0");
             }
             case WorldSeatProgramOp.Hold hold:
-                return ((steer.Moves && hold.Paces.Contains(value: steer.Pace) && (read.Endpoint.ClockOwnedHere || Running(read: in read, steer: in steer))) ? "press" : "release");
+                return ((steer.Moves && hold.Paces.Contains(value: steer.Pace) && (read.SteersLocally || Running(read: in read, steer: in steer))) ? "press" : "release");
             case WorldSeatProgramOp.Pulse pulse: {
                 var period = Math.Max(val1: 2UL, val2: (ulong)Math.Round(a: (pulse.PeriodSeconds * rateHz)));
                 var pulseElapsed = (read.Endpoint.ClockOwnedHere ? (tick - m_stepStart) : (m_authorityTicks - m_stepAuthorityStart));
@@ -1721,7 +1739,7 @@ public sealed class WorldSeatDriver {
     // Whether a dash may be pulsed: always against a local clock; against a remote one only while the step allows at
     // least twice the running speed, since a dash's burst cannot be taken back a lag later.
     private bool CanDash(in WorldSeatSenses.Reading read, in Steer steer) =>
-        (read.Endpoint.ClockOwnedHere || (!steer.HoldWalk && (ProgramAllowedSpeed(read: in read, steer: in steer) >= (RunningSpeed(read: in read) * FixedQ4816.FromInteger(value: 2)))));
+        (read.SteersLocally || (!steer.HoldWalk && (ProgramAllowedSpeed(read: in read, steer: in steer) >= (RunningSpeed(read: in read) * FixedQ4816.FromInteger(value: 2)))));
 
     private FixedQ4816 ProgramAllowedSpeed(in WorldSeatSenses.Reading read, in Steer steer) {
         foreach (var operation in m_program.Operations) {
@@ -1782,7 +1800,7 @@ public sealed class WorldSeatDriver {
     // converges whatever the lag. MaxValue when nothing ahead limits it.
     private FixedQ4816 AllowedSpeed(WorldSeatProgramOp.Move move, in WorldSeatSenses.Reading read, in Steer steer) {
         var brake = FixedQ4816.FromDouble(value: move.Brake);
-        var (turnLag, lag) = (read.Endpoint.ClockOwnedHere ? (FixedQ4816.Zero, FixedQ4816.Zero) : ControlLag(read: in read));
+        var (turnLag, lag) = (read.SteersLocally ? (FixedQ4816.Zero, FixedQ4816.Zero) : ControlLag(read: in read));
         var late = (brake * lag);
         var allowed = FixedQ4816.MaxValue;
 
