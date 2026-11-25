@@ -221,7 +221,12 @@ public sealed class SdfMeshStore {
     /// as 32 hexadecimal digits.</summary>
     /// <param name="identity">The bake's identity.</param>
     /// <returns>The directory's absolute path; it exists only once the identity's first entry is written.</returns>
-    public string SetDirectoryOf(UInt128 identity) => Path.Combine(path1: Directory, path2: identity.ToString(format: "x32", provider: null));
+    public string SetDirectoryOf(UInt128 identity) => Path.Combine(path1: Directory, path2: SetNameOf(identity: identity));
+    /// <summary>Returns the name of the directory an identity's set is kept in, relative to the store's directory: the
+    /// identity as 32 hexadecimal digits. A player build's mesh store and its cache sets name sets the same way.</summary>
+    /// <param name="identity">The bake's identity.</param>
+    /// <returns>The directory's name.</returns>
+    public static string SetNameOf(UInt128 identity) => identity.ToString(format: "x32", provider: System.Globalization.CultureInfo.InvariantCulture);
     /// <summary>Pins an identity's set against every process's eviction for the rest of this process
     /// (<see cref="Puck.Abstractions.CacheRetention.HoldSet"/>): a library that publishes meshes whose parts it restores
     /// from the set (<see cref="SdfMeshLibrary.TryLoad"/>) holds it, so another World's writes cannot evict what this one
@@ -665,7 +670,7 @@ public sealed class SdfMeshStore {
         var set = new EntrySet();
 
         if (!m_entrySets.TryAdd((identity, extension), set)) { return m_entrySets[(identity, extension)]; }
-        var directory = Path.Combine(IsFinishedKind(extension: extension) ? Directory : IntermediateDirectory, identity.ToString(format: "x32", provider: null));
+        var directory = Path.Combine(IsFinishedKind(extension: extension) ? Directory : IntermediateDirectory, SetNameOf(identity: identity));
 
         // A cold store has no directory, which one look settles; a directory is listed on the pool, and the set answers
         // "may hold" until the listing stands.

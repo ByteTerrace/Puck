@@ -104,7 +104,7 @@ public static class WorldCachesCommand {
         return command;
     }
 
-    private static string Hex(UInt128 identity) => identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture);
+    private static string Hex(UInt128 identity) => Puck.SdfVm.SdfMeshStore.SetNameOf(identity: identity);
     private static IReadOnlyList<string> Backends(JsonNode record) =>
         [.. (record["backends"]?.AsArray() ?? []).Select(selector: static node => (string?)node).OfType<string>()];
     internal static bool TryIdentity(string folder, string backend, out UInt128 identity, out string? why) {
