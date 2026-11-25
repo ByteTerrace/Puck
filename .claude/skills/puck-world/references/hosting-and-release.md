@@ -161,7 +161,7 @@ The contribution kinds, each registered by an extension method on
 | `IMachineEngine`, `IMachineContentProvider` | engine id | `AddMachineEngine` | every host's `WorldMachineCatalog.From` |
 | `WorldStorageProvider` | store `type` | `AddStorage` | the silo document's `store`; World's `--storage-config-file` |
 | `WorldSiloRetirementProvider` | observer `type` | `AddRetirement` | the silo's `lifecycle.observer` |
-| `WorldAuthenticationProvider` | `type` | `AddAuthentication` | silo row admission; World's `--authentication-config-file` |
+| `WorldSignInProvider` | `type` | `AddSignIn` | an issuer's `signIn` (the silo document's `issuer`, World's `--issuer-config-file`); World's `--authentication-config-file` |
 | `WorldExtensionProviderType`, `WorldExtensionEmbeddingProviderType` | provider `type` | `AddOperation`, `AddEmbedding` | the extension configuration's `providers` |
 | `WorldParticipantType` | participant `type` | `AddParticipant` | the extension configuration's `participants` |
 | `ChatClientProvider` | provider name | `AddChatClient` | an `agent.harness` participant's `provider` |
@@ -477,9 +477,17 @@ laws when changing this seam. Pumped addons and applied screen operations use th
 ordinary authority checkpoint. Unsupported guest resources refuse mounting; live
 coupled links and enabled machine rewind history still refuse capture rather than
 being omitted from a qualification fixture.
-`--authentication-config-file` selects an installed client provider and server
-key pin; no token belongs in world content or checkpoints. Azure's provider
-validates ByteTerrace API membership, while generic protocol code sees only the
-verified session namespace. Run the real client against the deployed endpoint
-for admission, authoritative interaction, and reconnect evidence; a QUIC key
-probe alone does not prove these. `docs/development/ci.md` owns Azure deployment policy.
+`--authentication-config-file` selects an installed sign-in provider and the
+authority's transport key pin; the run's own key is vouched for by the
+authority's issuer (`WorldAttestationIssuer`, the silo document's `issuer`, a
+World's `--issuer-config-file`), and every world the host runs trusts the
+issuer's root without writing it into the document
+([decision](../../../../docs/decisions/worlds-and-federation.md#players-are-admitted-through-their-hosts-issuer)).
+No token belongs in world content or checkpoints, and no world verifies one:
+Azure's provider validates ByteTerrace API membership at the issuer only. Prove
+the flow locally with `puck benchmark --headless --route debug --remote issued`
+(an authority with an issuer and the engine's `puck.accounts` sign-in, and a
+client that pins no key in the document). Run the real client against the
+deployed endpoint for admission, authoritative interaction, and reconnect
+evidence; a QUIC key probe alone does not prove these. `docs/development/ci.md`
+owns Azure deployment policy.

@@ -61,6 +61,9 @@ public enum WorldFederationRequest : byte {
     CustodyQuery = 17,
     /// <summary>Tell a companion's title authority that the authenticated custodian settled its hop.</summary>
     HopSettled = 18,
+    /// <summary>Ask the destination's issuer, in place of authenticating, to vouch for the client's own per-run key
+    /// after a sign-in (<see cref="WorldFederationCodec.EncodeIssuance"/>).</summary>
+    Issue = 19,
 }
 /// <summary>The federation response kinds an authority writes back.</summary>
 public enum WorldFederationResponse : byte {
@@ -117,6 +120,8 @@ public enum WorldFederationResponse : byte {
     SnapshotDelta = 20,
     /// <summary>Changed creation and shade rows over the replica definition already held.</summary>
     PresentationRows = 21,
+    /// <summary>The issuer's two bindings vouching for the client's key (<see cref="WorldFederationCodec.EncodeIssued"/>).</summary>
+    Issued = 22,
 }
 /// <summary>The stable names a federation authority refuses under. A refusal frame's text always opens with one of
 /// these, so a peer and a read-back can both count refusals by name rather than by sentence.</summary>
@@ -158,6 +163,9 @@ public enum WorldFederationRefusal : byte {
 
     /// <summary>The persistent lane to this peer is not carrying traffic.</summary>
     LaneUnavailable,
+
+    /// <summary>This authority runs no issuer, or its issuer refused the sign-in or the key's proof of possession.</summary>
+    IssuanceRefused,
 }
 /// <summary>
 /// The one authority-to-authority codec. It carries the same frame grammar, bounded reader, and named refusal
@@ -1094,6 +1102,7 @@ public static partial class WorldFederationCodec {
         WorldFederationRequest.IntentStream => 0,
         WorldFederationRequest.IntentStreamHandoff => 0,
         WorldFederationRequest.Authenticate => ((MaxProofBytes + MaxChallengeBytes) + (2 * sizeof(int))),
+        WorldFederationRequest.Issue => (((MaxProofBytes + AttestationResourceLimits.SubjectPublicKeyInfoBytes) + AttestationResourceLimits.SignatureBytes) + (3 * sizeof(int))),
         WorldFederationRequest.Abort => (2 * WireLimits.MaxStringBytes),
         WorldFederationRequest.Status => (2 * WireLimits.MaxStringBytes),
         WorldFederationRequest.HopQuery => MaxFrameBytes,
@@ -1123,6 +1132,7 @@ public static partial class WorldFederationCodec {
         WorldFederationResponse.CustodyReply => sizeof(byte),
         WorldFederationResponse.HopSettledAck => sizeof(byte),
         WorldFederationResponse.Challenge => MaxChallengeBytes,
+        WorldFederationResponse.Issued => ((2 * AttestationResourceLimits.AttestationBytes) + (2 * sizeof(int))),
         WorldFederationResponse.Refusal => WireLimits.MaxStringBytes,
         WorldFederationResponse.Commit => (2 * WireLimits.MaxStringBytes),
         // A primer's cells may take WorldFieldCapacity.MaxSnapshotBytes and the rest of the frame is the population,

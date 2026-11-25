@@ -410,9 +410,10 @@ exits without sending `SessionRequest.Leave`.
   `transfer 0 was already leased or answered here`, and two clients booting the
   same world package (even with distinct keys!) or sharing a pair key minted
   identical `sourceAuthority` strings and colliding incarnations.
-- `EntraWorldAuthenticator` already mints a per-process `Guid` (`m_session`) and
-  verifies `<oid:D>/<session:N>`, retaining that identity across socket
-  reconnects within one run while isolating separate runs and windows.
+- A signed-in player's client (`IssuedKeySigningOracle`) mints a per-process
+  session and authenticates as `<issuer domain>/<subject>/<session>`, retaining
+  that identity across socket reconnects within one run while isolating separate
+  runs and windows.
 - On `WorldPeerHost`, a transferred federated human (`IsRemoteHuman &&
   IsAuthorityTransferred`) was retired only on an explicit forwarded
   `SessionRequest.Leave`; a client that exited or crashed closed its
@@ -439,8 +440,8 @@ exits without sending `SessionRequest.Leave`.
    `FederatedAuthority` rows match world peers unchanged. A non-listening client
    mints one 128-bit session id at process boot, signs `challenge || session`
    under its key in `LocalKeySigningOracle`, and authenticates as
-   `<domain>/<subject>/<session>` in `WorldAttestedAuthenticator` (matching
-   `<oid>/<session>` in `EntraWorldAuthenticator`). Transport reconnects within
+   `<domain>/<subject>/<session>` in `WorldAttestedAuthenticator`, whose domain
+   is the direct key's or the issuer root's fingerprint. Transport reconnects within
    that run keep the same identity, so in-doubt commit recovery,
    `ObserveTraveler` and `IntentStream` resume seamlessly. When all active
    traveller streams (`ObserveTraveler` and `IntentStream`) for a live local
@@ -452,8 +453,8 @@ exits without sending `SessionRequest.Leave`.
    both the body and its `WorldTransferEscrow` mobility admission.
 
 **Ruling: per-run session-qualified client authority identity with
-stream-liveness grace.** It aligns key-attested clients with
-`EntraWorldAuthenticator`, requires no durable crossing log on disposable client
+stream-liveness grace.** It gives key-attested and signed-in clients one
+namespace shape, requires no durable crossing log on disposable client
 installs, isolates both sequential rejoins and concurrent clients sharing a
 document namespace or key, and reclaims abandoned slots deterministically on the
 authority's tick.

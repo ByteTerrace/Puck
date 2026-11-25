@@ -151,8 +151,9 @@ a row whose retirement of superseded objects failed report the retention failure
 storage outage does not trigger VM replacement. Both refuse during retirement.
 `release.closedGroupRewind` enforces a fixed inventory of pinned worlds under the
 group owner. Internal transfers remain available; remote transfers, outbound
-federation connections, and issued federation claims are refused. The selected
-player-authentication extension still accepts ordinary player connections.
+federation connections, and issued federation claims are refused. The silo's issuer
+still vouches for players, and its rows trust only the issuer's root while the
+group is closed.
 The first coherent capture records a durable boundary pin in every root. Later
 activations must enforce that same boundary. `ExportReleaseFixtureAsync` then
 retains a rewindable point with a capture time and complete receipt provenance.

@@ -361,9 +361,9 @@ nothing **[opened]**.
 Signers in world code: `LocalKeySigningOracle` (the only `ISigningOracle`
 implementation in `src/`) signs the federation identity claim, and
 `PeerIdentity.SignClaim` signs the transport handshake
-(`src/Puck.World.Protocol/Codecs/ISigningOracle.cs:27`, `src/Puck.Networking/Peers/PeerIdentity.cs:145`)
+(`src/Puck.World.Protocol/Codecs/ISigningOracle.cs@bf4f360bb4:27`, `src/Puck.Networking/Peers/PeerIdentity.cs:145`)
 **[opened]**. The interface describes a remote-issuer shape that nothing in
-`src/` implements **[opened]** (`src/Puck.World.Protocol/Codecs/ISigningOracle.cs:7-12`):
+`src/` implements **[opened]** (`src/Puck.World.Protocol/Codecs/ISigningOracle.cs@bf4f360bb4:7-12`):
 
 ```csharp
 /// Signs a federation-identity claim over a challenge nonce. <see cref="WorldAttestedAuthenticator"/> never
@@ -380,7 +380,7 @@ Verifiers in world code, from a search for `VerifyChain(` outside
 | Verifier | Purpose | Where |
 |---|---|---|
 | `WorldAttestedAuthenticator.VerifyAsync` | federation identity proof | `src/Puck.World.Protocol/Codecs/WorldAttestedAuthenticator.cs:79-150` |
-| `WorldAdmissionDoor.TryAdmit` | interactive peer admission (`puck.world.tcp-admission`) | `src/Puck.World.Schema/WorldAdmissionDoor.cs:115-196` |
+| `WorldAdmissionDoor.TryAdmit` | interactive peer admission (`puck.world.tcp-admission`) | `src/Puck.World.Schema/WorldAdmissionDoor.cs@bf4f360bb4:115-196` |
 | `WorldCounterpartAttestationProtocol.TryVerify` | a counterpart's border terms | `src/Puck.World.Schema/WorldCounterpartAttestation.cs:232-321` |
 | `PeerAuthenticator`, `PeerLink` | transport peer identity | `src/Puck.Networking/Peers/PeerAuthenticator.cs:97`, `src/Puck.Networking/Peers/PeerLink.cs:275` |
 
@@ -388,7 +388,7 @@ Verifiers in world code, from a search for `VerifyChain(` outside
 writes one: `HandshakeWireFormat.WriteHelloIdentityAsync` has no caller outside
 its definition (`src/Puck.Networking/HandshakeWireFormat.cs:240`), and the
 purpose string `puck.world.tcp-admission` appears only at its declaration
-(`src/Puck.World.Schema/WorldAdmissionDoor.cs:401`) **[opened]**. No fact,
+(`src/Puck.World.Schema/WorldAdmissionDoor.cs@bf4f360bb4:401`) **[opened]**. No fact,
 record, projection or arrival is signed anywhere **[inference]** from the
 signer list.
 
@@ -423,7 +423,7 @@ sites above.
 
 **API users on the Azure path.** `EntraWorldAuthenticator` sends the user's
 Entra access token as the proof **[opened]**
-(`src/Puck.World.Azure/EntraWorldAuthenticator.cs:137-141`):
+(`src/Puck.World.Azure/EntraWorldAuthenticator.cs@bf4f360bb4:137-141`):
 
 ```csharp
     public byte[] Prove(ReadOnlySpan<byte> challenge) {
@@ -435,7 +435,7 @@ Entra access token as the proof **[opened]**
 
 The server validates issuer, audience, signature and lifetime with no clock
 skew, requires the configured tenant, group and scope, and names the source
-`"{oid}/{session}"` **[opened]** (`src/Puck.World.Azure/EntraWorldAuthenticator.cs:202-221`):
+`"{oid}/{session}"` **[opened]** (`src/Puck.World.Azure/EntraWorldAuthenticator.cs@bf4f360bb4:202-221`):
 
 ```csharp
             if (
@@ -454,7 +454,7 @@ skew, requires the configured tenant, group and scope, and names the source
 The token is echoed beside the challenge, not signed over it, so the proof is
 a bearer credential for the token's lifetime **[inference]** from the
 `Prove` concatenation. The client caches the token until two minutes before
-expiry (`src/Puck.World.Azure/EntraWorldAuthenticator.cs:85`), and the session
+expiry (`src/Puck.World.Azure/EntraWorldAuthenticator.cs@bf4f360bb4:85`), and the session
 segment is a per-process GUID the client mints (`:31`) **[opened]**. The token
 lifetime is Entra's policy and is not in this repository **[unverified]**. The
 deployed silo selects this provider with one group **[opened]**
@@ -511,7 +511,7 @@ reference's owner (`src/Puck.World.Azure/WorldApiCounterpartResolver.cs:31-34`,
 
 The admission door's trust list sets no per-entry, root-binding or
 subject-binding age ceiling and no replay horizon **[opened]**
-(`src/Puck.World.Schema/WorldAdmissionDoor.cs:88-94`; each entry is built with `MaximumAge: null` by `WorldAdmissionDoor.TrustEntry`):
+(`src/Puck.World.Schema/WorldAdmissionDoor.cs@bf4f360bb4:88-94`; each entry is built with `MaximumAge: null` by `WorldAdmissionDoor.TrustEntry`):
 
 ```csharp
         return new TrustList(
@@ -640,7 +640,7 @@ are matched by the silo's control sessions only
 (`WorldAdmissionDoor.TryMatchOAuthEntry`, called from `src/Puck.World.Silo/SiloControlSessionHost.cs:16`)
 **[opened]**. `WorldAdmissionDoor.TryAdmitArrival` maps an authenticated
 namespace to grants by an exact row, else the `*` row
-(`src/Puck.World.Schema/WorldAdmissionDoor.cs:206-260`) **[opened]**. Because
+(`src/Puck.World.Schema/WorldAdmissionDoor.cs@bf4f360bb4:206-260`) **[opened]**. Because
 the Entra session segment is minted per process, only a `*` row can admit an
 API user's arrivals **[inference]**.
 

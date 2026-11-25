@@ -99,7 +99,7 @@ printf '%s' '__SILO_DOCUMENT__' | base64 -d >/etc/puck/silo.json
 PUCK_FEDERATION_KEYS="$federation_keys" python3 - <<'KEYS'
 import base64, json, os, pathlib
 for name, encoded in json.loads(os.environ['PUCK_FEDERATION_KEYS']).items():
-    if '/' in name or '\\' in name or not name.startswith('federation') or not name.endswith('.pk8'):
+    if '/' in name or '\\' in name or not (name.startswith('federation') or name == 'issuer.pk8') or not name.endswith('.pk8'):
         raise ValueError('invalid retained signing-key filename')
     path = pathlib.Path('/etc/puck') / name
     path.write_bytes(base64.b64decode(encoded, validate=True))

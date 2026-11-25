@@ -2068,12 +2068,19 @@ bounded wire writer. Production nonces are
 32 random bytes; each decoded nonce has a 256-byte ceiling, and both peers enforce
 the authenticator's exact `ChallengeBytes` width before proving it.
 
-An Entra client authenticates its destination through its explicitly configured
-transport-key pin before presenting its bearer credential. That pin can replace
-the reciprocal attestation proof for this client. A verifier-only Entra server
-has no remote pin; its outbound federation still requires the ordinary
-destination proof. A server without a signing oracle can admit a pinned client,
-but cannot authenticate itself to an unpinned one.
+A signed-in player's client (`WorldAttestedAuthenticator` with a
+`remoteKeyHash`) authenticates its destination by that transport-key pin, which
+replaces the reciprocal attestation proof for this client; every other client
+verifies the destination's proof against its own trust rows. A server without a
+signing oracle can admit a pinned client, but cannot authenticate itself to an
+unpinned one.
+
+An `Issue` request takes the authentication's place on a fresh federation
+connection: the host's `WorldAttestationIssuer` checks the client key's
+signature over `WorldFederationCodec.BindIssuanceChallenge` (the federation
+challenge bound to both transport keys and the key being vouched for), then the
+sign-in credential, and answers `Issued` with its two bindings or
+`IssuanceRefused`. The connection authenticates nothing and closes.
 
 Two ingress disciplines meet in this class, and which one applies is decided by
 what the frame is:

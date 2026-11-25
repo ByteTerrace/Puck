@@ -542,7 +542,7 @@ painting`, `the city painting` and `the lift`) with `topology.kind` equal to
 | The driver against a second process | Built. A headless pair on `worlds/minimal` (`--route walk`, one seat and `--seats 4`) arrives with `run.json`'s `topology.kind` `remote` and `bodyDelivered` true |
 | The debug world against a second process | Built. A headless pair on `worlds/debug` (`--route debug --remote local --headless`) arrives in all seven chapters at `Presentation` disclosure |
 | `puck benchmark` starts the pair | Built. `BenchmarkCommand.Remote.Stage` stages the delta and key, boots the companion, and waits until the seat's routed mirror holds both its body and its opening document before arming the route |
-| The Azure deployment | The lead's run, once the debug world can be delivered and the deployed document admits a remote player |
+| The Azure deployment | The lead's run with the deployment's `world-authentication.json` (`--remote <ip:port> --authentication-config-file`), once the debug world can be delivered; a player signs in at the silo's issuer, and `--remote issued` is the same flow on one machine |
 
 ### Where a run starts
 

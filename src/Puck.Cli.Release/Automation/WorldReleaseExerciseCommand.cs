@@ -82,7 +82,8 @@ public static class WorldReleaseExerciseCommand {
         if (
             (definition.Release is not null) ||
             (definition.Store.Type != "directory") ||
-            definition.Worlds.Any(predicate: row => (!row.Pinned || (row.Federation.Authentication is not null))) ||
+            (definition.Issuer is not null) ||
+            definition.Worlds.Any(predicate: static row => !row.Pinned) ||
             (definition.Worlds.Select(selector: row => row.Owner).Distinct().Count() != 1)
         ) {
             throw new InvalidDataException(message: "qualification requires a local single-owner pinned inventory without production release or authentication configuration");

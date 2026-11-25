@@ -3191,8 +3191,11 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   wildcard arrival row admitting one remote player, and a row pinning the pair's own federation key), boots it as a
   listening authority headless, boots the measured World with `--connect` to it, and waits on `world.benchmark topology`
   until the seat's body is delivered by the remote authority; a reservation the authority refuses ends the wait at once
-  with its line, and the staged document is removed when the leg ends. `--remote <ip:port>` connects to an authority
-  already listening. A client of a remote authority boots running, since a paused boot commits no transfer, so its runs
+  with its line, and the staged document is removed when the leg ends. `--remote issued` stages the same authority
+  without the key row and runs it with an issuer (`--issuer-config-file`, a fresh root and one `puck.accounts`
+  account), and the measured World signs in through it with `--authentication-config-file` and holds no key the
+  document pins, as a hosted world's player does. `--remote <ip:port>` connects to an authority already listening,
+  signing in with `--authentication-config-file <file>` (a deployment's `world-authentication.json`). A client of a remote authority boots running, since a paused boot commits no transfer, so its runs
   are `attached`. `--seats <n>` plays the route on that many seats of one client (`world.benchmark run ... seats <n>`).
 - **Player builds.** `--world-artifact` names any World build: a player install's self-contained `Puck.World.dll` is
   started through its own host (`WorldLaunchRequest.SelfContainedHost`), with `--world` and `--cache-dir` naming the

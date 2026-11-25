@@ -78,6 +78,7 @@ public sealed class WorldPeerHost : IDisposable {
     public const int RouteLookupAttempts = 25;
 
     private readonly IAuthenticator m_authenticator;
+    private readonly WorldAttestationIssuer? m_issuer;
     private readonly WorldPeerNetwork m_network;
     private readonly bool m_ownsNetwork;
     private readonly WorldServer m_server;
@@ -134,10 +135,13 @@ public sealed class WorldPeerHost : IDisposable {
     /// <param name="transportHandshakeTimeout">The wall-clock bound on each QUIC/TLS handshake when this host owns its
     /// network; <see langword="null"/> is <see cref="QuicPeerTransport.DefaultHandshakeTimeout"/>. A supplied
     /// <paramref name="network"/> carries its own.</param>
+    /// <param name="issuer">The host's attestation issuer, which answers a client's issuance request in place of
+    /// authentication, or <see langword="null"/> when this host vouches for no one. Owned by the caller.</param>
     /// <exception cref="ArgumentNullException"><paramref name="server"/> or <paramref name="authenticator"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="timeProvider"/> is not the supplied
     /// <paramref name="network"/>'s clock.</exception>
-    public WorldPeerHost(WorldServer server, IAuthenticator authenticator, WorldPeerNetwork? network = null, TimeProvider? timeProvider = null, TimeSpan? transportHandshakeTimeout = null) {
+    public WorldPeerHost(WorldServer server, IAuthenticator authenticator, WorldPeerNetwork? network = null, TimeProvider? timeProvider = null, TimeSpan? transportHandshakeTimeout = null,
+        WorldAttestationIssuer? issuer = null) {
         if (
             (network is not null) &&
             (timeProvider is not null) &&
@@ -159,6 +163,7 @@ public sealed class WorldPeerHost : IDisposable {
         m_server = server;
         m_server.PeerDisconnected += ClosePeer;
         m_authenticator = authenticator;
+        m_issuer = issuer;
         m_network = (network ?? new WorldPeerNetwork(
             timeProvider: m_timeProvider,
             transportHandshakeTimeout: transportHandshakeTimeout
@@ -456,6 +461,19 @@ public sealed class WorldPeerHost : IDisposable {
                     ct: handshakeCt,
                     stream: stream
                 ).ConfigureAwait(continueOnCapturedContext: false);
+
+                // An issuance request takes the authentication's place: the client has no vouched identity yet and
+                // asks for one, so the exchange ends with the issuer's answer and authenticates nothing.
+                if (authentication.Ok && (authentication.Kind == ((byte)WorldFederationRequest.Issue))) {
+                    await ServeIssuanceAsync(
+                        body: authentication.Body,
+                        challenge: federationChallenge,
+                        clientKeyHash: client.Link.RemoteId.KeyHash,
+                        ct: handshakeCt,
+                        stream: stream
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                    return;
+                }
 
                 // The authenticated identity below is DERIVED from the verified proof, never taken from anything
                 // the peer's own bytes claimed — WorldFederationCodec's authentication leaf carries no source-
@@ -2063,6 +2081,41 @@ public sealed class WorldPeerHost : IDisposable {
         payload = decoded;
 
         return true;
+    }
+    // Answers one issuance request with the issuer's bindings or a named refusal. The issuer checks the key's proof
+    // of possession over the transport-bound challenge before it asks the sign-in provider anything.
+    private async Task ServeIssuanceAsync(Stream stream, byte[] challenge, ReadOnlyMemory<byte> body, string clientKeyHash, CancellationToken ct) {
+        if (m_issuer is null) {
+            await WriteFederationRefusal(ct: ct, detail: "this authority runs no issuer", refusal: WorldFederationRefusal.IssuanceRefused, stream: stream).ConfigureAwait(false);
+            return;
+        }
+        if (!WorldFederationCodec.TryDecodeIssuance(body: body.Span, credential: out var credential, failure: out var failure, possession: out var possession, subjectPublicKeyInfo: out var subjectKey)) {
+            await WriteFederationRefusal(ct: ct, detail: $"malformed issuance request ({failure})", refusal: WorldFederationRefusal.FrameMalformed, stream: stream).ConfigureAwait(false);
+            return;
+        }
+        var issued = await m_issuer.IssueAsync(
+            boundChallenge: WorldFederationCodec.BindIssuanceChallenge(
+                challenge: challenge,
+                clientKeyHash: clientKeyHash,
+                serverKeyHash: m_network.Peer.Id.KeyHash,
+                subjectPublicKeyInfo: subjectKey
+            ),
+            cancellationToken: ct,
+            credential: credential,
+            possession: possession,
+            subjectPublicKeyInfo: subjectKey
+        ).ConfigureAwait(false);
+
+        if (issued is not { } bindings) {
+            await WriteFederationRefusal(ct: ct, detail: "the sign-in or the key's proof of possession did not verify", refusal: WorldFederationRefusal.IssuanceRefused, stream: stream).ConfigureAwait(false);
+            return;
+        }
+        await WorldFederationCodec.WriteResponseAsync(
+            body: WorldFederationCodec.EncodeIssued(rootBinding: bindings.RootBinding, subjectBinding: bindings.SubjectBinding),
+            ct: ct,
+            kind: WorldFederationResponse.Issued,
+            stream: stream
+        ).ConfigureAwait(false);
     }
     private Task WriteFederationRefusal(Stream stream, WorldFederationRefusal refusal, string detail, CancellationToken ct) {
         Interlocked.Increment(location: ref m_federationRefusals[((int)refusal)]);

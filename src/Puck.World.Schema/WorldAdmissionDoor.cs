@@ -71,7 +71,7 @@ public static class WorldAdmissionDoor {
         Reach: NoReach,
         MaximumAge: null
     );
-    private static TrustList BuildTrustList(IReadOnlyList<WorldAdmissionEntry> entries, TimeSpan? defaultMaximumAge) {
+    private static TrustList BuildTrustList(IReadOnlyList<WorldAdmissionEntry> entries, TimeSpan? defaultMaximumAge, TimeSpan? rootBindingMaximumAge, TimeSpan? subjectBindingMaximumAge) {
         var list = new List<TrustListEntry>(capacity: entries.Count);
 
         foreach (var entry in entries) {
@@ -94,8 +94,8 @@ public static class WorldAdmissionDoor {
 
         return new TrustList(
             defaultMaximumAge: defaultMaximumAge,
-            defaultRootBindingMaximumAge: null,
-            defaultSubjectBindingMaximumAge: null,
+            defaultRootBindingMaximumAge: rootBindingMaximumAge,
+            defaultSubjectBindingMaximumAge: subjectBindingMaximumAge,
             entries: list,
             replayAcceptanceHorizon: null
         );
@@ -324,9 +324,10 @@ public static class WorldAdmissionDoor {
         return WorldAdmissionRefusal.NoArrivalAuthority;
     }
 
-    // Parses a session-qualified client authority (`<64-hex-domain>/<subject>/<32-hex-session>` from
-    // WorldAttestedAuthenticator or `<uuid>/<32-hex-session>` from EntraWorldAuthenticator) so a FederatedAuthority row
-    // naming the underlying principal or subject still matches while preserving the per-run sourceAuthority on the verdict.
+    // Parses a session-qualified client authority (`<64-hex-domain>/<subject>/<32-hex-session>`, which
+    // WorldAttestedAuthenticator derives from a session-bound claim, the domain being a direct key's or an issuer root's
+    // fingerprint) so a FederatedAuthority row naming the domain or the subject still matches while preserving the
+    // per-run sourceAuthority on the verdict.
     private static bool TrySplitClientSession(string sourceAuthority, out string keyDomain, out string keySubject) {
         keyDomain = string.Empty;
         keySubject = string.Empty;
@@ -349,10 +350,6 @@ public static class WorldAdmissionDoor {
             keySubject = prefix[65..].ToString();
             return true;
         }
-        if ((firstSlash < 0) && Guid.TryParseExact(input: prefix, format: "D", result: out _)) {
-            keyDomain = prefix.ToString();
-            return true;
-        }
         return false;
     }
     /// <summary>Builds the trust list this world's key-bearing admission entries form, refusing by name rather than
@@ -364,8 +361,14 @@ public static class WorldAdmissionDoor {
     /// <param name="defaultMaximumAge">The verifier-side maximum claim age applied to every entry that does not
     /// override it, or <see langword="null"/> for no ceiling beyond the issuer's own signed window (the connection
     /// door's own posture — a fresh per-connection nonce already bounds replay independent of claim age).</param>
+    /// <param name="rootBindingMaximumAge">The verifier-side maximum age of a vouching root's binding of an issuing key,
+    /// or <see langword="null"/> to inherit <paramref name="defaultMaximumAge"/> (the attestation library's rule, so a
+    /// claim ceiling never silently disappears from the bindings).</param>
+    /// <param name="subjectBindingMaximumAge">The verifier-side maximum age of an issuing key's binding of a subject
+    /// key, or <see langword="null"/> to inherit <paramref name="defaultMaximumAge"/>.</param>
     /// <returns><see langword="true"/> when the entries form a valid trust list with at least one key-bearing row.</returns>
-    public static bool TryBuildTrustList(IReadOnlyList<WorldAdmissionEntry>? entries, out TrustList? trustList, out string reason, TimeSpan? defaultMaximumAge = null) {
+    public static bool TryBuildTrustList(IReadOnlyList<WorldAdmissionEntry>? entries, out TrustList? trustList, out string reason, TimeSpan? defaultMaximumAge = null,
+        TimeSpan? rootBindingMaximumAge = null, TimeSpan? subjectBindingMaximumAge = null) {
         trustList = null;
 
         if (
@@ -380,7 +383,9 @@ public static class WorldAdmissionDoor {
         try {
             trustList = BuildTrustList(
                 defaultMaximumAge: defaultMaximumAge,
-                entries: rows
+                entries: rows,
+                rootBindingMaximumAge: rootBindingMaximumAge,
+                subjectBindingMaximumAge: subjectBindingMaximumAge
             );
         } catch (Exception exception) when ((exception is FormatException or ArgumentException or CryptographicException)) {
             reason = $"this world's authored admission entries do not form a valid trust list: {exception.Message}";

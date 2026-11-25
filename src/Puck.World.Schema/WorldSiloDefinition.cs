@@ -8,9 +8,24 @@ namespace Puck.World;
 /// shape this design refuses — the validator names that collision.</summary>
 /// <param name="KeyFile">The path to the PKCS#8 private-key file this row signs its outbound federation claims and
 /// its own door's admission challenges with.</param>
-public sealed record WorldSiloFederation(string KeyFile) {
-    /// <summary>Optional installed connection-identity provider, layered over this world's own federation credentials.</summary>
-    public WorldSiloExtension? Authentication { get; init; }
+public sealed record WorldSiloFederation(string KeyFile);
+/// <summary>The attestation issuer a host runs: the root key that vouches for the host's issuing keys, the sign-in
+/// provider a player proves who they are to, and how long a player's issued key stays vouched for. Host state, never
+/// published inside a world document. Every world the host runs trusts this root for the namespaces it vouches for,
+/// and a world's own <c>admission</c> rows still decide what such an arrival is admitted as. A silo document names it
+/// as <c>issuer</c>; a local World reads the same shape through <c>--issuer-config-file</c>.</summary>
+/// <param name="KeyFile">The path to the root's PKCS#8 P-256 private-key file. Its public key's SHA-256 fingerprint
+/// is the domain every vouched player namespace names.</param>
+/// <param name="SignIn">The installed sign-in provider a player presents a credential from, and its settings.</param>
+/// <param name="SubjectValiditySeconds">How long a player's issued key binding stays valid before the client asks for
+/// another; at most <see cref="MaximumSubjectValiditySeconds"/>, the verifier's own ceiling.</param>
+public sealed record WorldIssuerConfiguration(string KeyFile, WorldSiloExtension SignIn, int SubjectValiditySeconds = WorldIssuerConfiguration.DefaultSubjectValiditySeconds) {
+    /// <summary>The issued key binding's lifetime when the configuration names none: one hour, so a sign-in the
+    /// provider stops vouching for stops admitting within the hour.</summary>
+    public const int DefaultSubjectValiditySeconds = 3600;
+    /// <summary>The longest issued key binding a verifier accepts (<c>WorldAttestedAuthenticator</c>'s subject-binding
+    /// ceiling): one day.</summary>
+    public const int MaximumSubjectValiditySeconds = 86400;
 }
 /// <summary>One world this silo activates. Its own <c>host.authority</c> (read from its definition after load) is
 /// the subject its federation key signs as — never this silo's own identity.</summary>
@@ -108,6 +123,8 @@ public sealed record WorldSiloLifecycle(
 /// <c>puck world prepare</c> wrote the composed documents into, inside the authored asset layout the image ships. A
 /// relative value resolves against the silo's working directory. <see langword="null"/> gives hosted documents no
 /// directory, and a relative path one authors is refused by name.</param>
+/// <param name="Issuer">The attestation issuer this silo runs for players, or <see langword="null"/> when it vouches for
+/// no one and admits only the keys its worlds' documents pin.</param>
 public sealed record WorldSiloDefinition(
     IReadOnlyList<WorldSiloWorldRow> Worlds,
     WorldSiloDoors Doors,
@@ -116,7 +133,8 @@ public sealed record WorldSiloDefinition(
     WorldSiloClustering Clustering,
     WorldSiloLifecycle? Lifecycle = null,
     WorldSiloReleaseManagement? Release = null,
-    string? DocumentDirectory = null
+    string? DocumentDirectory = null,
+    WorldIssuerConfiguration? Issuer = null
 ) {
     /// <summary>The document schema tag every well-formed <c>puck.silo.configuration.v1</c> document carries.</summary>
     public const string SchemaVersion = "puck.silo.configuration.v1";

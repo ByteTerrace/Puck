@@ -788,7 +788,8 @@ from the dialect answers that one request `LaneUnavailable` and the worker
 serves the next. A lane inside its backoff window answers every request
 immediately with `LaneUnavailable` without touching a socket, which is what
 keeps a closed edge from stalling the source's tick. A run that holds no
-federation signing identity (no `--federation-key-file`) never opens a lane, an
+federation signing identity (neither `--federation-key-file` nor a sign-in through
+`--authentication-config-file`, whose run key the authority's issuer vouches for) never opens a lane, an
 observer session, or an intent stream: every request is answered
 `LaneUnavailable` naming that, with one stderr line per authority. An
 authenticator that verifies but cannot prove (trust entries, no signing oracle)
@@ -853,7 +854,9 @@ travellers, derived diagonal peers, and cross-authority contact-pair settling
 are not exercised either.
 
 For federation transport changes, both sides need the same
-`--federation-key-file`; inspect both stdout and stderr. Authentication must
+`--federation-key-file`, or the authority runs an issuer (`--issuer-config-file`)
+and the client signs in through it (`--authentication-config-file`), as
+`puck benchmark --remote issued` stages; inspect both stdout and stderr. Authentication must
 precede observe, reserve, commit, status, intent, and submission operations.
 Omitting the federation key disables federation by name without changing the
 ordinary admitted-player socket.

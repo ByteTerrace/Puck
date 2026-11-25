@@ -440,7 +440,7 @@ That supplies a useful pure-verification boundary, not a reason to omit
 revocation data. [Attestation reference][p5]
 
 **[opened]** `WorldAdmissionDoor.BuildTrustList`,
-`src/Puck.World.Schema/WorldAdmissionDoor.cs:87`, passes `MaximumAge: null` for
+`src/Puck.World.Schema/WorldAdmissionDoor.cs@bf4f360bb4:87`, passes `MaximumAge: null` for
 entries and null default binding ages at lines 93 and 94. This read verifies
 those parameters, not platform issuance lifetimes or every revocation-related
 path. Lane E owns that broader audit. [Admission source][p6]

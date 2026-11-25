@@ -126,25 +126,25 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     private bool m_ready;
     private Puck.Abstractions.HostResourceUnavailableException? m_hostUnavailable;
 
-    private readonly Func<WorldSiloExtension, Puck.Networking.IAuthenticator, TimeProvider, Puck.Networking.IAuthenticator>? m_authentication;
+    private readonly WorldAttestationIssuer? m_issuer;
 
     /// <summary>Initializes the silo host over a validated document and its resolved blob store.</summary>
     /// <param name="definition">The validated silo document.</param>
     /// <param name="blobStore">The composed blob store.</param>
     /// <param name="storageTarget">The target supplied by the selected persistence extension.</param>
     /// <param name="routing">Where every admitted row's own tagged console session is registered and retired.</param>
-    /// <param name="authentication">The composition root's installed authentication-provider resolver, handed the
-    /// silo's clock for the provider it builds.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     /// <param name="machineCatalog">The immutable machine catalog selected by this silo host.</param>
     /// <param name="contentAdmissionPolicy">The captured host policy for machine content; defaults to the open local policy.</param>
     /// <param name="timeProvider">The silo's one clock (<see cref="Clock"/>); <see langword="null"/> is
     /// <see cref="TimeProvider.System"/>.</param>
     /// <param name="extensions">The silo's composed extensions, from which a row's <c>extensions</c> configuration
-    /// selects its providers and participants; <see langword="null"/> is an empty set.</param>
+    /// selects its providers and participants and the document's <c>issuer</c> selects its sign-in provider;
+    /// <see langword="null"/> is an empty set.</param>
+    /// <exception cref="Puck.Abstractions.PuckExtensionException">The issuer names a sign-in provider that is not installed.</exception>
+    /// <exception cref="ArgumentException">The issuer's root key or sign-in settings are refused.</exception>
     public WorldSiloHost(WorldSiloDefinition definition, IObjectBlobStore blobStore, SiloConsoleRouting routing, ObjectStorageTarget storageTarget, WorldMachineCatalog? machineCatalog = null,
-        Func<WorldSiloExtension, Puck.Networking.IAuthenticator, TimeProvider, Puck.Networking.IAuthenticator>? authentication = null, IMachineContentAdmissionPolicy? contentAdmissionPolicy = null,
-        TimeProvider? timeProvider = null, Puck.Abstractions.PuckExtensionSet? extensions = null) {
+        IMachineContentAdmissionPolicy? contentAdmissionPolicy = null, TimeProvider? timeProvider = null, Puck.Abstractions.PuckExtensionSet? extensions = null) {
         ArgumentNullException.ThrowIfNull(argument: definition);
         ArgumentNullException.ThrowIfNull(argument: blobStore);
         ArgumentNullException.ThrowIfNull(argument: routing);
@@ -157,8 +157,11 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
         m_machineCatalog = machineCatalog;
         m_contentAdmissionPolicy = (contentAdmissionPolicy ?? MachineContentAdmissionPolicy.Open(assetAdmission: MachineAssetAdmission.Allow));
         m_catalogFingerprint = machineCatalog.CompositionFingerprint;
-        m_authentication = authentication;
         m_extensions = (extensions ?? Puck.Abstractions.PuckExtensionSet.Compose(extensions: []));
+        m_issuer = ((definition.Issuer is { } issuer)
+            ? WorldAttestationIssuer.Load(clock: m_clock, configuration: issuer, extensions: m_extensions)
+            : null
+        );
         m_blobStore = blobStore;
         m_routing = routing;
         m_storageTarget = storageTarget;
@@ -796,21 +799,24 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 key.Dispose();
             }
 
+            // A closed rewind group admits players and no other authority: it trusts only the issuer's root, and signs
+            // as no one. Otherwise the row trusts its document's key-bearing rows and the issuer's root together.
             federation = new WorldFederationIdentity(
-                Authenticator: WrapAuthentication(
-                    worldRow,
-                    new WorldAttestedAuthenticator(
-                        oracle: (ClosedGroupRewind
-                ? null
-                : new LocalKeySigningOracle(
-                                key: key,
-                                subject: subject,
-                                validity: WorldAttestedAuthenticator.MaximumClaimAge
-                            )),
-                        trustEntries: (ClosedGroupRewind
-                ? null
-                : trustEntries)
-                    )
+                Authenticator: new WorldAttestedAuthenticator(
+                    oracle: (ClosedGroupRewind
+                        ? null
+                        : new LocalKeySigningOracle(
+                            key: key,
+                            subject: subject,
+                            validity: WorldAttestedAuthenticator.MaximumClaimAge
+                        )),
+                    trustEntries: ((m_issuer is { } issuer)
+                        ? (ClosedGroupRewind
+                            ? () => issuer.Trust(policy: null)
+                            : () => issuer.Trust(policy: trustEntries()))
+                        : (ClosedGroupRewind
+                            ? null
+                            : trustEntries))
                 ),
                 Subject: subject,
                 Network: new WorldPeerNetwork(
@@ -832,15 +838,6 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
     private static string FederationSubject(WorldDefinition definition, SafeName world) =>
         definition.Host.AuthorityNamespace ?? world.Value;
 
-    private Puck.Networking.IAuthenticator WrapAuthentication(WorldSiloWorldRow row, Puck.Networking.IAuthenticator federation) =>
-        ((row.Federation.Authentication is { } selection)
-            ? (m_authentication ?? throw new InvalidOperationException(message: "No authentication provider registry is installed."))(
-                selection,
-                federation,
-                m_clock
-            )
-            : federation
-        );
 
     /// <inheritdoc/>
     public Task<bool> ActivateAsync(WorldAuthorityIdentity identity, CancellationToken ct) {
@@ -1373,6 +1370,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             );
             var door = new WorldPeerHost(
                 authenticator: federation.Authenticator,
+                issuer: m_issuer,
                 network: federation.Network,
                 server: server,
                 timeProvider: m_clock

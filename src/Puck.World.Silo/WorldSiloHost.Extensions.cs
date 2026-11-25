@@ -116,5 +116,6 @@ public sealed partial class WorldSiloHost : IAsyncDisposable {
             }
         }
         await DisposeExtensionsAsync(runtimes: runtimes).ConfigureAwait(continueOnCapturedContext: false);
+        m_issuer?.Dispose();
     }
 }

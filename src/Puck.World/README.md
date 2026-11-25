@@ -364,15 +364,31 @@ generated authentication configuration from the deployed [Puck world release](..
 dotnet run --project src/Puck.World -c Release -- --connect play.puck.byteterrace.com:7825 --authentication-config-file /path/to/world-authentication.json
 ```
 
-The installed authentication extension acquires the API token and checks the
-server's pinned key before sending it. Do not combine this client configuration
-with a federation private key. The primary world admits sixteen network players
-and gives disconnected seats sixty seconds of reconnect grace. Connections in
-one process share a session namespace; starting a new process creates a fresh
-traveller namespace. Cross-process body recovery is a separate travel concern.
-The [Azure authentication provider](../Puck.World.Azure/README.md#silo-hosting)
+The run generates a key it never stores, signs in through the installed
+provider the configuration names, and asks the authority's issuer to vouch for
+that key, presenting the sign-in credential only once the authority's transport
+key matches the configuration's `remoteKeyHash`. Every federation proof after
+that is the run's own signature, carried with the issuer's two bindings; the
+issuer is asked again before the binding ends. Do not combine this client
+configuration with a federation private key. A refused sign-in ends the boot
+with `[world.authentication: configuration refused: …]` naming the issuer's
+answer. The primary world admits sixteen network players and gives disconnected
+seats sixty seconds of reconnect grace. Connections in one process share a
+session namespace, `<issuer domain>/<subject>/<session>`; starting a new process
+creates a fresh traveller namespace. Cross-process body recovery is a separate
+travel concern. The [Azure sign-in provider](../Puck.World.Azure/README.md#silo-hosting)
 owns token validation and group membership policy; those concepts stay outside
-the engine.
+the engine, and the
+[issuer decision](../../docs/decisions/worlds-and-federation.md#players-are-admitted-through-their-hosts-issuer)
+owns the trust model.
+
+**Hosting players yourself.** A listening World runs an issuer with
+`--issuer-config-file <issuer.json>` beside `--federation-key-file`: `keyFile`
+(the root's PKCS#8 P-256 key), `signIn` (an installed provider's `type` and
+`settings`) and optionally `subjectValiditySeconds`. The engine's own
+`puck.accounts` provider lists the accounts the host vouches for, each a subject
+and its base64 public key; a player's configuration names `subject` and the
+account's `keyFile`.
 
 **Branding.** `host.title` and `host.icon` are the window's caption and its
 icon. Both are durable document fields with no CLI reflection, so a world

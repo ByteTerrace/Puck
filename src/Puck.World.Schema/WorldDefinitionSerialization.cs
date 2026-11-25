@@ -348,6 +348,8 @@ namespace Puck.World;
 // never embedded in or referenced from a world document), sharing this context's strictness and naming policy so
 // its own JSON Schema generation rides the same exporter machinery as every world-document family.
 [JsonSerializable(typeof(WorldSiloDefinition))]
+// A local World's issuer configuration (--issuer-config-file), the same shape as the silo document's issuer member.
+[JsonSerializable(typeof(WorldIssuerConfiguration))]
 // The counters report (puck.counters.report.v1) — the document `puck counters` writes and compares, sharing this
 // context's strictness so a foreign or damaged report is refused by name, and its schema rides the same exporter.
 [JsonSerializable(typeof(WorldCountersReport))]
@@ -513,6 +515,8 @@ public sealed class WorldJsonContext : IJsonTypeInfoResolver {
     public JsonTypeInfo<Puck.Abstractions.Gpu.GpuDeviceIdentity> GpuDeviceIdentity => For<Puck.Abstractions.Gpu.GpuDeviceIdentity>();
     /// <summary>Gets the type info for <see cref="WorldSiloDefinition"/>.</summary>
     public JsonTypeInfo<WorldSiloDefinition> WorldSiloDefinition => For<WorldSiloDefinition>();
+    /// <summary>Gets the type info for <see cref="WorldIssuerConfiguration"/>.</summary>
+    public JsonTypeInfo<WorldIssuerConfiguration> WorldIssuerConfiguration => For<WorldIssuerConfiguration>();
     /// <summary>Gets the type info for <see cref="WorldSpawnPoint"/> arrays.</summary>
     public JsonTypeInfo<WorldSpawnPoint[]> WorldSpawnPointArray => For<WorldSpawnPoint[]>();
     /// <summary>Gets the type info for <see cref="WorldSpeaker"/>.</summary>

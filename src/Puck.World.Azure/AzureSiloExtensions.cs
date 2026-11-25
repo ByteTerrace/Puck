@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Azure.Identity;
 using Puck.Storage.Azure;
 using Puck.World.Server;
 
@@ -7,33 +6,20 @@ namespace Puck.World.Azure;
 
 /// <summary>Azure implementations available for explicit silo composition; registration performs no cloud access.</summary>
 public static class AzureSiloExtensions {
-    /// <summary>Gets the API user admission extension; only clients acquire delegated credentials.</summary>
-    public static WorldAuthenticationProvider Authentication { get; } = new(
+    /// <summary>Gets the API user sign-in an issuer checks a player against; only clients acquire delegated
+    /// credentials.</summary>
+    public static WorldSignInProvider SignIn { get; } = new(
         "azure.api-users",
-        (settings, federation, clock) => new EntraWorldAuthenticator(
+        static (settings, clock) => new EntraSignIn(
             settings,
             client: false,
-            federation: federation,
             timeProvider: clock
         ),
-        (settings, clock) => {
-            var client = new EntraWorldAuthenticator(
-                settings,
-                client: true,
-                timeProvider: clock
-            );
-
-            // The host's contract is provider-neutral: a credential the provider cannot obtain is an invalid
-            // configuration, reported as one, never as this provider's own exception type.
-            try {
-                return (client, client.UserIdentity());
-            } catch (AuthenticationFailedException error) {
-                throw new InvalidOperationException(
-                    innerException: error,
-                    message: $"azure.api-users could not obtain a user token: {error.Message}"
-                );
-            }
-        }
+        static (settings, clock) => new EntraSignIn(
+            settings,
+            client: true,
+            timeProvider: clock
+        )
     );
     /// <summary>Gets the Blob persistence provider. Settings name exactly one of <c>accountUrl</c> (an HTTPS service URI
     /// the ambient identity authenticates to) or <c>connectionString</c> (a development or emulator account whose key

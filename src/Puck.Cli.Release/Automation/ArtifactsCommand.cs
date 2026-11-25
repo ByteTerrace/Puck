@@ -398,7 +398,7 @@ public static class ArtifactsCommand {
 
         Directory.CreateDirectory(path: Results);
         foreach (var (project, testClass) in new[] {
-            ("Puck.World.Azure.Tests", "EntraWorldAuthenticatorTests"),
+            ("Puck.World.Azure.Tests", "EntraSignInTests"),
             ("Puck.World.Schema.Tests", "WorldSiloDefinitionLawTests"),
             ("Puck.World.Silo.Tests", "WorldSiloLifecycleLawTests"),
             ("Puck.World.Silo.Tests", "WorldReleaseCutoverLawTests"),

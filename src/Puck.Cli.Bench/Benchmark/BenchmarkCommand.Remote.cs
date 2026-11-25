@@ -15,6 +15,8 @@ public static partial class BenchmarkCommand {
     // The namespace the staged pair's authority and client share: the client names it as the authority it expects at the
     // endpoint, and the authority's admission pins the pair's key under it.
     private const string PairNamespace = "benchmark-pair";
+    // The one account an issuing pair's authority lists and its client signs in as.
+    private const string AccountSubject = "benchmark";
 
     /// <summary>A world staged for a leg: a delta over the world's entry. For a remote authority and its client on one
     /// machine it names the pair's namespace, admits one remote player for each seat and pins the pair's own federation
@@ -26,7 +28,10 @@ public static partial class BenchmarkCommand {
     /// pair.</param>
     /// <param name="Endpoint">The loopback endpoint a pair's authority listens on and its client connects to, or empty
     /// for a leg with no pair.</param>
-    private sealed record RemotePair(string Document, string KeyFile, string Endpoint) : IDisposable {
+    /// <param name="IssuerFile">The issuer configuration an issuing pair's authority runs, or empty when the client
+    /// shares the authority's key instead.</param>
+    /// <param name="AuthenticationFile">The sign-in configuration an issuing pair's client joins with, or empty.</param>
+    private sealed record RemotePair(string Document, string KeyFile, string Endpoint, string IssuerFile = "", string AuthenticationFile = "") : IDisposable {
         /// <summary>Removes the staged delta.</summary>
         public void Dispose() {
             try {
@@ -42,9 +47,12 @@ public static partial class BenchmarkCommand {
         /// <param name="seats">The local seats the staged world seats at boot; one stages none beyond the world's
         /// own.</param>
         /// <param name="pair">Whether the leg plays against a listening authority started on this machine.</param>
+        /// <param name="issued">Whether the pair's client signs in through the authority's issuer, as a hosted world's
+        /// player does, rather than sharing the authority's key: the authority runs an issuer with the engine's account
+        /// sign-in, and the staged document pins no key, so only the issuer's vouching admits the client.</param>
         /// <returns>The staged world, whose disposal removes the delta it wrote beside the world's entry.</returns>
         /// <exception cref="InvalidOperationException">The world's package names no entry this verb can stage over.</exception>
-        public static RemotePair Stage(string directory, string world, int seats = 1, bool pair = true) {
+        public static RemotePair Stage(string directory, string world, int seats = 1, bool pair = true, bool issued = false) {
             _ = Directory.CreateDirectory(path: directory);
 
             if (!CliWorldDocuments.TryLoad(path: world, definition: out var basisDefinition, fullPath: out var full, reason: out var reason)) {
@@ -116,13 +124,15 @@ public static partial class BenchmarkCommand {
                         Disclosure: WorldDisclosureTier.Presentation,
                         Admits: WorldAdmissionArrival.Visitor));
                 }
-                entries.Add(item: new WorldAdmissionEntry(
-                    Domain: identity.Domain,
-                    Mode: WorldAdmissionTrustMode.SignsDirectly,
-                    Grants: [],
-                    Subject: subject,
-                    Algorithm: "ecdsa-p256-sha256",
-                    PublicKey: identity.PublicKeyBase64));
+                if (!issued) {
+                    entries.Add(item: new WorldAdmissionEntry(
+                        Domain: identity.Domain,
+                        Mode: WorldAdmissionTrustMode.SignsDirectly,
+                        Grants: [],
+                        Subject: subject,
+                        Algorithm: "ecdsa-p256-sha256",
+                        PublicKey: identity.PublicKeyBase64));
+                }
                 delta["admission"] = JsonSerializer.SerializeToNode(
                     value: (IReadOnlyList<WorldAdmissionEntry>)entries,
                     jsonTypeInfo: WorldJsonContext.Default.For<IReadOnlyList<WorldAdmissionEntry>>());
@@ -135,7 +145,39 @@ public static partial class BenchmarkCommand {
 
             File.WriteAllText(path: document, contents: (comment + printed), encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
 
+            if (pair && issued) {
+                var (issuerFile, authenticationFile) = StageIssuer(directory: directory, transportKey: identity.PublicKeyBase64);
+
+                return new RemotePair(Document: document, Endpoint: endpoint, KeyFile: key, IssuerFile: issuerFile, AuthenticationFile: authenticationFile);
+            }
             return new RemotePair(Document: document, Endpoint: (pair ? endpoint : string.Empty), KeyFile: (pair ? key : string.Empty));
+        }
+        // Writes the issuing pair's two configurations: the authority's issuer (a fresh root and one account the engine's
+        // account sign-in lists) and the client's sign-in as that account, pinned to the authority's transport key.
+        private static (string IssuerFile, string AuthenticationFile) StageIssuer(string directory, string transportKey) {
+            var root = CanaryCommand.GenerateFederationIdentity();
+            var account = CanaryCommand.GenerateFederationIdentity();
+            var rootFile = Path.Combine(path1: directory, path2: "issuer-root.key");
+            var accountFile = Path.Combine(path1: directory, path2: "account.key");
+            var issuerFile = Path.Combine(path1: directory, path2: "issuer.json");
+            var authenticationFile = Path.Combine(path1: directory, path2: "authentication.json");
+            var signIn = Puck.World.Server.WorldAccountSignIn.Provider.Type;
+
+            File.WriteAllBytes(path: rootFile, bytes: root.Pkcs8);
+            File.WriteAllBytes(path: accountFile, bytes: account.Pkcs8);
+            CliFiles.WriteJson(path: issuerFile, value: new JsonObject {
+                ["keyFile"] = PuckPaths.Slashed(path: rootFile),
+                ["signIn"] = new JsonObject {
+                    ["type"] = signIn,
+                    ["settings"] = new JsonObject { ["accounts"] = new JsonObject { [AccountSubject] = account.PublicKeyBase64 } },
+                },
+            });
+            CliFiles.WriteJson(path: authenticationFile, value: new JsonObject {
+                ["type"] = signIn,
+                ["settings"] = new JsonObject { ["subject"] = AccountSubject, ["keyFile"] = PuckPaths.Slashed(path: accountFile) },
+                ["remoteKeyHash"] = Puck.Attestation.KeyId.ComputeKeyHash(subjectPublicKeyInfo: Convert.FromBase64String(s: transportKey)),
+            });
+            return (issuerFile, authenticationFile);
         }
     }
 
@@ -144,7 +186,9 @@ public static partial class BenchmarkCommand {
         _ = Directory.CreateDirectory(path: directory);
 
         var request = new WorldLaunchRequest(Verb, build.Path) {
-            Arguments = ["--listen", pair.Endpoint, "--federation-key-file", pair.KeyFile],
+            Arguments = [
+                "--listen", pair.Endpoint, "--federation-key-file", pair.KeyFile,
+                .. ((pair.IssuerFile.Length > 0) ? new[] { "--issuer-config-file", pair.IssuerFile } : [])],
             ExitAfterSeconds = WorldLaunch.Backstop(TimeSpan.FromSeconds(Allowance(timeout))),
             Shape = WorldShape.Headless,
             StateDirectory = Path.Combine(directory, "state"),
