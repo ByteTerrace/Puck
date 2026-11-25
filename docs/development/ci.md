@@ -715,11 +715,12 @@ hosted Windows runner, and nothing waits on it:
    folder: the self-contained engine, the launcher (stub and installer), the
    compiled package, the shading kernels and prepared cartridges, and one
    headless boot's device-free caches.
-2. `puck world caches fetch` takes each backend's mesh cache set whose bake
-   identity equals this build's from its GitHub prerelease
-   (`caches/<backend>-<identity>`), verifies every content pin, unpacks it
-   into `cache/meshes` and checks that the set was produced for the groups this
-   release's world plans. While a backend has no matching set, or its set was
+2. `puck world caches fetch --store "$PLAYER_CHANNEL_URL"` reads each
+   backend's mesh cache set whose bake identity equals this build's from the
+   channel's own store (`caches/<backend>-<identity>/manifest.json`, read
+   anonymously through the deployment's edge), checks that the set was produced
+   for the groups this release's world plans, then takes every mesh into
+   `cache/meshes`, each verified against its content pin. While a backend has no matching set, or its set was
    produced for another world, the step looks again each minute for 45 minutes
    (`--wait`), so a set the GPU machine finishes after the push still ships.
    After that it fails: the job summary names the backend, the identity and
@@ -731,14 +732,14 @@ hosted Windows runner, and nothing waits on it:
 4. `puck channel push --host azure` signs the manifest with the channel root
    key from the deployment vault (created there on first use), writes
    `trust.json` beside it, and copies the objects the container lacks before
-   the manifest. The version is `0.1.<run number>` and the replay sequence the
-   run number.
+   the manifest; the meshes are already there, as the cache set's objects. The
+   version is `0.1.<run number>` and the replay sequence the run number.
 
 The cache sets come from a machine with a GPU. On the lead machine:
 
 ```sh
 puck world player worlds/debug --output <folder> --target rtx2060@1920x1080 --target rtx4070@2560x1440
-puck world caches produce <folder> --push
+puck world caches produce <folder> --host azure
 ```
 
 `world player` fills the store with every detail tier of what the world's
@@ -757,18 +758,40 @@ the first group that holds). When a check misses, `incomplete` and the check's
 stood at, the residency, the geometry and the tiers asked and drawn. Find the
 geometry's group in the fill's `player-logs/` by that hash.
 
-`--push` uses `gh` with the developer's own login to create the prerelease when
-it is missing and replace its `cache-set.zip` and its `cache-set.json`, the
-set's record. The next release whose build has the same mesh bake identity, and
-whose world plans the groups the set was produced for, ships the set. A change
-to the bake's code or to a world document therefore needs a fresh
-`produce --push` before the push to `main` that should reach players. Every
-Azure run says early whether one is needed: its `player-caches` job runs
-`puck world caches status worlds/debug --build artifacts/world` over the run's
-own World build, which reads each backend's identity and the world's plan with
-no device and downloads only the matching record. A missing or stale set is a
-warning on the run's page and in its summary, with the commands above; it holds
-nothing. Locally, `puck channel push --to
+`produce` stages every mesh as a content-addressed object and each set's
+manifest in the folder's `player-caches/`, then `--host azure` writes them into
+the deployment's official content under `releases/`, copying only the objects
+the container lacks and each manifest last. It runs from the repository root
+with the Azure extension installed (`dotnet publish src/Puck.Cli.Azure -c
+Release -o extensions/Puck.Cli.Azure`), signs in as the Azure CLI's account, and
+reads the deployment's outputs from `artifacts/production-outputs.json` or,
+where no deploy left that file, from the platform deployment itself through the
+Azure CLI's current subscription. That account needs write access to the
+official-content container, which the workflow's identity cannot grant to a
+user, so the owner grants it once, scoped as the publishing identity's is but to
+the channel tree (`<container>` is the deployment output
+`officialContentContainerName`; the condition is the publisher's
+`officialContentPublisherCondition` with `public/puck/official/releases` in
+place of `public/puck/official`):
+
+```sh
+az role assignment create --assignee-object-id <account object id> --assignee-principal-type User \
+  --role "Storage Blob Data Contributor" --condition-version 2.0 --condition "<condition>" \
+  --scope /subscriptions/<subscription>/resourceGroups/byteterrace/providers/Microsoft.Storage/storageAccounts/bytrcstp001/blobServices/default/containers/<container>
+```
+
+The next release whose build has the same mesh bake identity, and whose world
+plans the groups the set was produced for, ships the set. A change to the bake's
+code or to a world document therefore needs a fresh `produce` before the push to
+`main` that should reach players; it uploads only the meshes whose bytes
+changed. Every Azure run says early whether one is needed: its `player-caches`
+job runs `puck world caches status worlds/debug --build artifacts/world --store
+"$PLAYER_CHANNEL_URL"` over the run's own World build, which reads each
+backend's identity and the world's plan with no device and reads only the
+matching manifest. A missing or stale set is a warning on the run's page and in
+its summary, with the commands above; it holds nothing. `produce --to
+<directory>` writes a local store instead, which `status` and `fetch` read with
+`--store <directory>`. Locally, `puck channel push --to
 <directory> --signing-key <file>` mirrors a channel instead, which `puck official
 serve --tree <directory>` serves over HTTP for the installer to test against.
 

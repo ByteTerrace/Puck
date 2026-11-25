@@ -306,9 +306,9 @@ puck bundle create <directory> <commit>
 puck bundle verify <directory> <commit>
 puck world prepare <primary-world> --output <directory>
 puck world player <package> --output <directory> [--extension <project>...] [--backend directx vulkan] [--target [profile@]WIDTHxHEIGHT...] [--no-bake] [--bake-seconds <seconds>] [--channel-url <url> [--channel-name <name>]]
-puck world caches produce <player folder> [--output <directory>] [--push]
-puck world caches status <world> [--backend directx vulkan] [--build <directory>]
-puck world caches fetch <player folder> [--notes <file>] [--from <directory>] [--wait <minutes>]
+puck world caches produce <player folder> [--output <directory>] [--host <installed-host> | --to <directory>]
+puck world caches status <world> --store <url|directory> [--backend directx vulkan] [--build <directory>]
+puck world caches fetch <player folder> --store <url|directory> [--notes <file>] [--wait <minutes>]
 puck channel push --tree <tree> --channel <name> --sequence <n> [--host <installed-host> | --to <directory> --signing-key <file>] [--validity-days <days>]
 puck world release prepare <package-directory> --silo <silo.json> [--output <manifest>] --label <label> --source-revision <sha> --engine-image-digest <sha256:digest> --persistence-contract <name> --peer-protocol-contract <name>
 puck world release status [group-file] [--json] [--host <installed-host>]
@@ -428,34 +428,44 @@ from `<url>/<channel-name>/<rid>/` and installs the channel's newest release.
 
 `world caches` carries a baked mesh store from a machine with a GPU to a release
 built without one ([the player channel](../decisions/runtime-and-delivery.md#the-player-channel)).
-`produce` reads a complete player folder's backends from `player.json`, computes
-each backend's mesh bake identity from the folder's own build (as `mesh identity
---build` does), and packs that identity's mesh set into
-`<output>/<backend>-<identity>/cache-set.zip` with a `cache-set.json` listing every
-file's content pin and the hashes of the groups the folder's world plans
-(`plan`), and writes the same record beside the archive; `--push` runs `gh` to
-create the prerelease `caches/<backend>-<identity>` when it is missing and
-replace its two assets, the archive first. `status` answers, with no device and
-without downloading a set, whether a release of a build would find whole sets:
-it computes each backend's identity from `--build` (absent, the tool's own
-build), plans the world argument offline, downloads only each matching
-release's `cache-set.json` and compares its plan. It names each backend that
-lacks a whole set and what to run in the job summary and as a warning
+The sets live in a release channel's tree, the store `channel push` writes: each
+mesh is an object named by its content pin (`objects/sha256/…`, the objects every
+release on the channel shares), and each set is one manifest,
+`caches/<backend>-<identity>/manifest.json`, listing every mesh's file name,
+content pin and size with the hashes of the groups the folder's world planned
+(`plan`). `produce` reads a complete player folder's backends from
+`player.json`, computes each backend's mesh bake identity from the folder's own
+build (as `mesh identity --build` does), and stages that identity's meshes and
+manifest as such a tree in `--output` (absent, the folder's `player-caches/`).
+With `--host <installed-host>` it then writes the tree through that channel host,
+or with `--to <directory>` into a local tree: every object the store lacks
+first, the manifests last, so a reader that finds a manifest finds its meshes.
+The Azure host writes into the deployment's official content, signed in as the
+Azure CLI's account, which needs write access there
+([CI](../development/ci.md#the-player-channel)); run it from the repository
+root. `status` answers, with no device and without downloading a mesh, whether a
+release of a build would find whole sets in `--store` (an `https` URL of a
+channel tree, or a directory): it computes each backend's identity from
+`--build` (absent, the tool's own build), plans the world argument offline,
+reads only each matching manifest and compares its plan. It names each backend
+that lacks a whole set and what to run in the job summary and as a warning
 annotation, and exits 1; CI runs it on every Azure run, holding nothing. `fetch`
-computes the same identities for a folder built with `--no-bake`, downloads each
-matching asset with `gh`, refuses an archive whose record names another backend
-or identity, lists an entry outside the set or holds a file whose bytes miss its
-pin, and unpacks a verified set into `cache/meshes/<identity>/`. It then plans
-the folder's own world offline and compares it with the set's recorded plan. A
-backend with no matching set, a set whose record holds no plan, or a set
-produced for other groups holds the channel's publish; `--wait <minutes>` first
-looks again each minute until that long has passed, so a set the GPU machine is
-still producing is taken when it lands. A held publish writes why and
-what to run into the job summary, `--notes` and the folder's `README.md`, and
-exits 1. It records each backend's outcome under `caches` in `player.json`;
-when every backend is whole, `--notes` writes a release-notes line naming each
-set. Exit 0 every backend whole, 1 a set was held or a download or archive
-failed, 2 an invalid folder.
+computes the same identities for a folder built with `--no-bake`, reads each
+matching manifest from `--store`, refuses one that names another backend or
+identity or lists an entry that is not one mesh file of the set, plans the
+folder's own world offline and compares it with the set's recorded plan before
+taking any mesh. It then keeps each mesh `cache/meshes/<identity>/` already holds
+with its pin's bytes and fetches the rest, many at a time, each verified against
+its pin; only when all have verified do they move in, and the files the set does
+not list leave. A backend with no matching set, a set whose manifest holds no
+plan, or a set produced for other groups holds the channel's publish; `--wait
+<minutes>` first looks again each minute until that long has passed, so a set
+the GPU machine is still producing is taken when it lands. A held publish writes
+why and what to run into the job summary, `--notes` and the folder's
+`README.md`, and exits 1. It records each backend's outcome under `caches` in
+`player.json`; when every backend is whole, `--notes` writes a release-notes
+line naming each set. Exit 0 every backend whole, 1 a set was held, a manifest
+was damaged or a mesh could not be fetched, 2 an invalid folder.
 
 `channel push` signs the release a `puck publish` tree holds and writes the tree
 through a channel host: a deployment provider's installed host (`--host`, which

@@ -887,8 +887,9 @@ whose check boots did not settle with no tier missed.
 - [high] Both backends' fills and all four target checks
   (`rtx2060@1920x1080`, `rtx4070@2560x1440`) have run complete on the RTX
   4070, settling at every authored place with no tier missed but live ones.
-  Owed: that set pushed (`puck world caches produce <folder> --push`, the
-  lead's), then the 2060 itself, at rest and over the route, reading
+  Owed: that set written to the deployment's storage (`puck world caches
+  produce <folder> --host azure`, the lead's, once the producing account can
+  write there), then the 2060 itself, at rest and over the route, reading
   `world.counters sdf.mesh-cache` at the end. Check:
   `rungs-missed` less `rungs-missed-live` is zero and every group baked is
   geometry a rule made. A check that does not settle names what holds each
@@ -3975,17 +3976,24 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
-- [high] **A player downloads about 5.8 GB of baked meshes, as two monolithic
-  archives.** The first complete player folder (identity 57751461...) produced
-  2.9 GB sets per backend: 11,612 and 11,533 meshes. The sets now upload as 1 GiB
-  parts, past GitHub's 2 GiB asset limit. The structure is the problem, though.
-  Each release re-uploads every mesh. The two backends' sets are separate. A
-  player pays the whole debug world's ladder up front. Next: a content-addressed
-  set store (objects by mesh identity, shared across releases and backends,
-  where the channel's object store already copies only what a container lacks),
-  and a set sized to what each target asks rather than the full ladder. Weigh
-  both against Puck's own premise: a mesh is a cache of a document a player could
-  derive.
+- [high] **A player downloads about 5.8 GB of baked meshes up front.** The
+  first complete player folder produced 2.9 GB sets per backend: 11,612 and
+  11,533 meshes, none byte-identical across the two backends. The sets are now
+  content-addressed objects in the channel's own store
+  ([the decision](../decisions/runtime-and-delivery.md#the-player-channel)), so
+  a release uploads and an install downloads only the meshes whose bytes
+  changed, but a first install still pays the whole debug world's ladder, both
+  backends' sets included. Next: a set sized to what each target asks rather
+  than the full ladder, and an install that takes only its own backend's set.
+  Weigh both against Puck's own premise: a mesh is a cache of a document a
+  player could derive.
+- [high] **The producing account cannot yet write the channel's store.**
+  `puck world caches produce --host azure` from the lead machine signs in as
+  the owner's Azure CLI account, which holds no data role on the
+  official-content container (azcopy: 403 `AuthorizationPermissionMismatch`).
+  Next: the owner grants it once
+  ([CI](../development/ci.md#the-player-channel) has the command); a GPU runner
+  in CI would write under the publishing identity, which already can.
 - [high, M1] **The release after the first replace deploy.** The first
   replace deploy succeeded
   ([the decision](../decisions/runtime-and-delivery.md#releases)). Next: a

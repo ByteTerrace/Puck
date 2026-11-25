@@ -79,7 +79,7 @@ public sealed class HttpReleaseSource(HttpClient httpClient, Uri baseUri) : IRel
 
         var manifestUri = new Uri(
             baseUri: m_baseUri,
-            relativeUri: $"{channel}/manifest.json"
+            relativeUri: $"{channel}/{ChannelSubscription.ManifestFileName}"
         );
 
         try {

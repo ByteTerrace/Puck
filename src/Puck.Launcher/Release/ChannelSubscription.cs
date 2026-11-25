@@ -19,6 +19,9 @@ public sealed record ChannelSubscription(string Source, string Channel, ReleaseT
     /// <summary>The name, inside a channel's directory, of the trust anchor a publisher writes beside its manifest
     /// (<c>&lt;source&gt;/&lt;channel&gt;/trust.json</c>), which a first install pins.</summary>
     public const string TrustFileName = "trust.json";
+    /// <summary>The name, inside a channel's directory, of the document a source reads as the channel's latest
+    /// (<c>&lt;source&gt;/&lt;channel&gt;/manifest.json</c>, <see cref="IReleaseSource.TryGetLatestManifestAsync"/>).</summary>
+    public const string ManifestFileName = "manifest.json";
 
     private static readonly JsonSerializerOptions Json = new(defaults: JsonSerializerDefaults.Web) { WriteIndented = true };
 
@@ -34,9 +37,14 @@ public sealed record ChannelSubscription(string Source, string Channel, ReleaseT
     /// <summary>Builds the release source this subscription names.</summary>
     /// <param name="httpClient">The client an HTTP source fetches through; the caller owns its lifetime.</param>
     /// <returns>The source.</returns>
-    public IReleaseSource ToReleaseSource(HttpClient httpClient) => (IsHttp
-        ? new HttpReleaseSource(baseUri: new Uri(uriString: Source), httpClient: httpClient)
-        : new DirectoryReleaseSource(root: Source));
+    public IReleaseSource ToReleaseSource(HttpClient httpClient) => OpenSource(httpClient: httpClient, source: Source);
+    /// <summary>Builds the release source a channel tree's root names.</summary>
+    /// <param name="source">The tree's root: an <c>http</c> or <c>https</c> URL, or a directory.</param>
+    /// <param name="httpClient">The client an HTTP source fetches through; the caller owns its lifetime.</param>
+    /// <returns>An <see cref="HttpReleaseSource"/> for a URL, otherwise a <see cref="DirectoryReleaseSource"/>.</returns>
+    public static IReleaseSource OpenSource(string source, HttpClient httpClient) => (IsHttpSource(source: source)
+        ? new HttpReleaseSource(baseUri: new Uri(uriString: source), httpClient: httpClient)
+        : new DirectoryReleaseSource(root: source));
     /// <summary>Writes the subscription into an install root, replacing the one it held.</summary>
     /// <param name="installRoot">The install root.</param>
     public void Write(string installRoot) {

@@ -79,8 +79,8 @@ The owner's rulings set what this path must do. The RTX 2060 machine is a
 consumer release target: it installs and updates each release from the player
 channel and runs only what a player runs, so it never builds from source,
 compiles a cartridge or cold-bakes. The lead machine produces the prewarmed
-mesh caches, the lead creates the cache-set tags and prereleases, and CI
-releases what is pushed
+mesh caches and writes them into the deployment's storage, and CI releases what
+is written
 ([the decision](../decisions/runtime-and-delivery.md#the-player-channel)).
 
 **What exists.** `puck world player <package> --output <folder>` assembles the
@@ -99,11 +99,12 @@ boot that warms only the device-free caches. The launcher's stub and installer
 (`Puck.Launcher.Setup`) go in the folder's `launcher/`.
 
 A hosted runner has no GPU, so the meshes travel separately. The lead machine
-bakes a player folder and runs `puck world caches produce --push`, which packs
-each backend's mesh set into a cache set named by the build's mesh bake
-identity (`MeshBuildIdentity`). After each deploy, the `player` job assembles
-the folder with `--no-bake`, takes the cache set whose identity equals its
-build's (`puck world caches fetch`, which verifies every file's content pin),
+bakes a player folder and runs `puck world caches produce --host azure`, which
+writes each backend's meshes into the channel's own store as content-addressed
+objects with a set manifest named by the build's mesh bake identity
+(`MeshBuildIdentity`). After each deploy, the `player` job assembles the folder
+with `--no-bake`, takes the set whose identity equals its build's (`puck world
+caches fetch`, which verifies every mesh against its content pin),
 writes the release tree with `puck publish` and signs and uploads it with
 `puck channel push` under the channel host's root key (`ReleaseChannelHost`).
 An install pins its channel (`ChannelSubscription`), and a World running from
