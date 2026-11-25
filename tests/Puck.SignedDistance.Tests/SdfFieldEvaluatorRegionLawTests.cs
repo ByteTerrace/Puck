@@ -60,10 +60,13 @@ public sealed class SdfFieldEvaluatorRegionLawTests {
                 Assert.Equal(actual: actualMaterial, expected: expectedMaterial);
             }
 
+            // Each gradient is one forward-mode walk, the regional one of its tape and the plain one of the culled stream,
+            // where both cover the field: wherever the plain one answers, the regional one does and points the same way.
             var hasGradient = plain.TryFieldGradient(gradient: out var expectedGradient, position: point);
+            var walked = regional.TryFieldGradient(gradient: out var actualGradient, position: point);
 
-            Assert.Equal(actual: regional.TryFieldGradient(gradient: out var actualGradient, position: point), expected: hasGradient);
-            Assert.Equal(actual: actualGradient, expected: expectedGradient);
+            if (hasGradient) { Assert.True(condition: walked, userMessage: $"no regional gradient at {point}"); }
+            if (hasGradient) { Assert.True(condition: (FixedVector3.Dot(left: actualGradient, right: expectedGradient) >= FixedQ4816.Zero), userMessage: $"{actualGradient} against {expectedGradient} at {point}"); }
         }
     }
 
@@ -299,5 +302,46 @@ public sealed class SdfFieldEvaluatorRegionLawTests {
         _ = builder.Translate(offset: new Vector3(x: -192f, y: 8f, z: 8f)).Sphere(material: second, radius: 1f);
 
         AssertSame(points: Lattice(high: new Vector3(value: 10f), low: new Vector3(value: 6f), steps: 6).Concat(second: Lattice(high: new Vector3(x: 102f, y: 2f, z: 2f), low: new Vector3(x: 98f, y: -2f, z: -2f), steps: 4)), program: builder.Build());
+    }
+    // The one-walk gradient is the field's derivative: at points where the field is smooth over the stencil's span, the
+    // central differences a centimetre apart agree with it to a small angle, through rotations, scales, folds and blends.
+    [Fact]
+    public void TheWalkedGradientIsTheFieldsDerivativeWhereTheFieldIsSmooth() {
+        var builder = new SdfProgramBuilder();
+        var stone = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: -2f, z: 0f)).Rotate(rotation: Quaternion.CreateFromYawPitchRoll(yaw: 0.4f, pitch: 0.2f, roll: 0.1f)).Box(halfExtents: new Vector3(x: 6f, y: 1f, z: 5f), material: stone, round: 0.25f);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 1f, y: 0.5f, z: 0f)).Sphere(blend: SdfBlendOp.SmoothUnion, material: stone, radius: 0.75f, smooth: 0.3f);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: -2f, y: 0f, z: 1f)).Capsule(endpoint: new Vector3(x: 0.5f, y: 1.5f, z: 0.25f), material: stone, radius: 0.3f);
+
+        var program = builder.Build();
+        var plain = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact);
+        var regional = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact, regional: true);
+        var near = FixedQ4816.FromDouble(value: 0.9995);
+        var step = FixedQ4816.FromDouble(value: 0.01);
+
+        // Central differences of the point walk, six taps a centimetre apart.
+        bool TryDifferenced(FixedPosition point, out FixedVector3 gradient) {
+            FixedQ4816 Tap(FixedVector3 offset) => (plain.TryDistance(distance: out var value, material: out _, position: (point + offset)) ? value : FixedQ4816.MaxValue);
+            var x = (Tap(offset: new FixedVector3(X: step, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)) - Tap(offset: new FixedVector3(X: -step, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)));
+            var y = (Tap(offset: new FixedVector3(X: FixedQ4816.Zero, Y: step, Z: FixedQ4816.Zero)) - Tap(offset: new FixedVector3(X: FixedQ4816.Zero, Y: -step, Z: FixedQ4816.Zero)));
+            var z = (Tap(offset: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: step)) - Tap(offset: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: -step)));
+
+            gradient = new FixedVector3(X: x, Y: y, Z: z).Normalize();
+            return (gradient != FixedVector3.Zero);
+        }
+        var compared = 0;
+
+        foreach (var point in Lattice(high: new Vector3(x: 3f, y: 2f, z: 3f), low: new Vector3(x: -3f, y: -1.5f, z: -2f), steps: 6)) {
+            for (var walk = 0; (walk < Walks); walk++) { _ = regional.TryDistance(distance: out _, material: out _, position: point); }
+            if (!TryDifferenced(gradient: out var differenced, point: point) || !regional.TryFieldGradient(gradient: out var walked, position: point)) { continue; }
+            Assert.True(condition: plain.TryFieldGradient(gradient: out var culled, position: point));
+            Assert.True(condition: (FixedVector3.Dot(left: culled, right: walked) >= near), userMessage: $"{culled} against {walked} at {point}");
+            // A point whose stencil straddles a crease or a blend's edge reads a blend of two slopes; elsewhere the two agree.
+            if (FixedVector3.Dot(left: walked, right: differenced) < FixedQ4816.FromDouble(value: 0.9)) { continue; }
+            compared++;
+            Assert.True(condition: (FixedVector3.Dot(left: walked, right: differenced) >= near), userMessage: $"{walked} against {differenced} at {point}");
+        }
+        Assert.True(condition: (compared > 100), userMessage: $"{compared} points compared");
     }
 }

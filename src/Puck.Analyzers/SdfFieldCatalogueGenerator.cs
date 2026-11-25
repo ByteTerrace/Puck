@@ -246,6 +246,34 @@ public sealed class SdfFieldCatalogueGenerator : IIncrementalGenerator {
             var lowered = held.Select(static item => item.Formula).ToArray();
             source.Append(wide ? SdfFormula.EmitAllWide(lowered) : SdfFormula.EmitAll(false, lowered));
         }
+
+        // The gradient reader's side: each formula's fixed-point dual (SdfFormula's dual lowering over FixedGradient), and
+        // a dispatch over the entries that have one; an entry without one answers DualUncovered, and the walk that met it
+        // takes the stencil.
+        var duals = SdfFormula.EmitAllFixedDual(out var covered, formulas.Select(static item => item.Formula).Distinct().ToArray());
+        void DualSwitch(string signature, string subject, string property, string fallback, Func<SdfFormula, bool>? admits = null) {
+            source.AppendLine($"    private static {signature} => {subject} switch {{");
+            foreach (var (entry, _, formula) in formulas.Where(item => item.Property == property && covered.Contains(item.Formula) && admits?.Invoke(item.Formula) != false)) {
+                source.AppendLine($"        {discriminator}.{entry.Name} => {formula.Dispatch(shader: false)},");
+            }
+            source.AppendLine($"        _ => {fallback},");
+            source.AppendLine("    };");
+        }
+        switch (discriminator) {
+            case "SdfShapeType":
+                DualSwitch("FixedGradient EvaluateShape(in CompiledInstruction instruction, FixedGradient3 p, ref PowerWork powerWork)", "((SdfShapeType)instruction.Shape)", "Formula", "DualUncovered()");
+                break;
+            case "SdfBlendOp":
+                DualSwitch("FixedGradient BlendShape(FixedGradient current, FixedGradient candidate, uint blend, FixedQ4816 smoothRadius, FixedQ4816 operand)", "((SdfBlendOp)blend)", "Formula", "DualUncovered()");
+                break;
+            case "SdfOp":
+                DualSwitch("FixedGradient3 MapPoint(in CompiledInstruction instruction, FixedGradient3 p)", "instruction.Op", "Formula", "DualUncoveredPoint()",
+                    static formula => formula.ResultType == SdfFormulaType.Vector3);
+                DualSwitch("FixedGradient EditField(in CompiledInstruction instruction, FixedGradient3 p, FixedGradient distance)", "instruction.Op", "Formula", "DualUncovered()",
+                    static formula => formula.ResultType == SdfFormulaType.Scalar && !formula.FixedState("weight").Any());
+                break;
+        }
+        source.Append(duals);
         source.AppendLine("}");
         context.AddSource(catalogue + ".Formulas.g.cs", source.ToString());
     }
