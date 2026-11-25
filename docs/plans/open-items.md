@@ -893,6 +893,16 @@ whose check boots did not settle with no tier missed.
   geometry a rule made. A check that does not settle names what holds each
   bake in `player.json`'s `unsettled` (`SdfMeshPathBake.DescribeUnsettled`),
   and one that misses names each tier in its `missed` list.
+- [high] The Direct3D 12 fill wedges at the `launch` spawn point after its
+  spawn settles: a screen session (`session$18`) records a view of the parked
+  garden residency (`routed$6~global6~garden`), `SdfWorldResidency.Staged`
+  refuses it ("has no tables to render ... building (28 of 28 pipelines
+  created)"), the render graph stops committing frames, and the console stops
+  answering, so `world.wait bakes` never returns. The residency's parking
+  invariant (`SdfWorldResidency.Parking.cs`) says no schedule records a view
+  of a parked residency; this one does. Owner: residency, with frame
+  production. Check: a Direct3D 12 ladder boot of the debug world posed at
+  `hero`, `stage`, then `launch` keeps answering `world.wait bakes`.
 - [medium] One cache set for both backends would halve the fill and the
   shipped bytes: the mesh bake identity hashes each backend's kernel bytecode
   (`SdfMeshBakeIdentity`), so the same HLSL compiled to DXIL and to SPIR-V
