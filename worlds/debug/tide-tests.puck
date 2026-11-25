@@ -1,7 +1,8 @@
 // A tide by itself: a world with no pull of its own (one weightless area) and one far mass, 400 m along +Z. Two
 // rigid marbles float high over the floor, one 40 m toward the mass from the tide's origin and one 40 m to the side.
 // The far mass's whole pull moves the world and is never felt; what is felt is its difference across the world: the
-// marble toward the mass drifts on toward it, and the one to the side is drawn in toward the line.
+// marble toward the mass drifts on toward it, and the one to the side is drawn in toward the line. A walker posed
+// beside them drifts the same way.
 // `puck test worlds/debug/tide-tests.puck --reproduce`.
 
 schema: "puck.world.definition.v1"
@@ -107,18 +108,41 @@ prototypes {
   }
 }
 
+// The marbles take the bodies after the eight seats in placement-name order, not the order the loop writes them:
+// body 8 is `marble-aside` (home 40 m along +X) and body 9 is `marble-toward` (home 40 m along +Z), as `body.where`
+// reads them back.
+//
 // The tensor of a mass of 200,000 (20 at 100 m) 400 m off is 0.00625 a second squared along the line to it and half
-// that, inward, across it. Over ten seconds the marble 40 m toward the mass gains about 14 m and the one to the side
-// loses about 6.
+// that, inward, across it; `world.gravity` reads it as tensor=(-0.003125, 0, 0, -0.003125, 0, 0.00625). The marbles
+// also carry the piece kit's linear damping, 0.05 a second, so each offset follows x'' = k x - 0.05 x'. Over ten
+// seconds that takes the marble toward the mass from 40 m to about 51.2 m (53.3 undamped) and the one to the side
+// from 40 m to about 34.8 m (33.9 undamped); the bounds hold the damped answer and exclude both the undamped one and
+// a tide applied with the wrong sign or axis.
 test "a far mass stretches a world along the line to it and squeezes it across" {
   when {
     ticks 300
   }
   expect {
-    bodyPosition(body, 8, z) > 50
-    bodyPosition(body, 8, z) < 58
-    bodyPosition(body, 9, x) < 36
-    bodyPosition(body, 9, x) > 31
+    bodyPosition(body, 9, z) > 50.5
+    bodyPosition(body, 9, z) < 52
+    bodyPosition(body, 8, x) < 35.4
+    bodyPosition(body, 8, x) > 34.2
+  }
+}
+
+// A walker feels the tide as a marble does, along the line to the mass, though the tide is far too faint to turn her
+// up: posed where the marble toward the mass floats, she drifts with it, a little further for carrying no damping
+// (40 m to about 53.3 m in ten seconds), and neither rises nor sinks along her own up.
+test "a far mass draws a walker along the line to it" {
+  when {
+    seat1: body.pose 0 60 40 0 0 0
+    ticks 300
+  }
+  expect {
+    bodyPosition(body, 0, z) > 52.5
+    bodyPosition(body, 0, z) < 54
+    bodyPosition(body, 0, y) > 59.9
+    bodyPosition(body, 0, y) < 60.1
   }
 }
 
@@ -129,7 +153,9 @@ test "a mass that has gone raises no tide" {
     ticks 300
   }
   expect {
-    bodyPosition(body, 8, z) > 39.9
-    bodyPosition(body, 8, z) < 40.1
+    bodyPosition(body, 9, z) > 39.9
+    bodyPosition(body, 9, z) < 40.1
+    bodyPosition(body, 8, x) > 39.9
+    bodyPosition(body, 8, x) < 40.1
   }
 }

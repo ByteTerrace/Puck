@@ -216,7 +216,7 @@ public sealed partial class WorldBody {
         var (yaw, pitch, roll) = EulerRadians();
         var home = m_home.ToVector3();
         var position = m_position.ToVector3();
-        var planarVelocity = (m_planarVelocity + m_overlayVelocity).ToVector3();
+        var planarVelocity = ((m_planarVelocity + m_overlayVelocity) + m_ballisticTangent).ToVector3();
         var timerSuffix = string.Join(separator: ",", values: m_actionStateDefinitions.Select(selector: (definition, slot) => (definition, slot))
             .Where(predicate: item => (item.definition.Kind == ActionStateKind.Timer))
             .Select(selector: item => FormattableString.Invariant(formattable: $"{item.definition.Name}:{((double)FixedTickConversion.SecondsOf(ratePerSecond: FixedTickConversion.TicksPerSecond, ticks: StateTimer(slot: item.slot))):0.###}")));
@@ -722,6 +722,7 @@ public sealed partial class WorldBody {
     public void SetArrivalVelocity(FixedVector3 planarVelocity, FixedQ4816 verticalVelocity) {
         m_planarVelocity = planarVelocity;
         m_verticalVelocity = verticalVelocity;
+        ClearBallisticTangent();
     }
     /// <summary>Sets the entity's named body motion program as an authoritative pose switch.</summary>
     /// <param name="programName">The declared program name.</param>

@@ -394,10 +394,7 @@ public sealed partial class WorldBody {
     // Whether a held surface row has been outlived by the body simply standing: the contact resolve has stood the
     // body on something walkable and the body has stopped pulling itself along the face. A body still driving up a
     // face keeps holding it however close the ground is, which is what lets a hold be taken at a wall's foot.
-    private bool HoldOutlivedByStanding(in FixedBodyHold hold, in PlayerIntent intent) => (m_grounded && (PlanarIntent(intent: in intent).Forward <= FixedQ4816.Zero) && (hold.Bond == BodyHoldBond.Surface) && (m_holdNormal != FixedVector3.Zero) && (FixedVector3.Dot(
-        left: m_holdNormal,
-        right: FixedVector3.UnitY
-    ) < m_walkableThreshold));
+    private bool HoldOutlivedByStanding(in FixedBodyHold hold, in PlayerIntent intent) => (m_grounded && (PlanarIntent(intent: in intent).Forward <= FixedQ4816.Zero) && (hold.Bond == BodyHoldBond.Surface) && (m_holdNormal != FixedVector3.Zero) && !WalkableUnderHoldUp(normal: m_holdNormal));
     // The ResolveHold operation. What the body is actively driving into outranks what it happens to be resting on,
     // so the drive pass runs first. Otherwise the ordered list decides, first match wins, with the row already held
     // evaluated by whether its own face is still there rather than by a fresh take — so the list order is a
@@ -577,6 +574,7 @@ public sealed partial class WorldBody {
             m_planarVelocity = FixedVector3.Zero;
             m_verticalVelocity = FixedQ4816.Zero;
             m_verticalVelocityAccumulator.Reset();
+            ClearBallisticTangent();
             scratch.NextPosition = m_position;
         }
         if (held.Speed > FixedQ4816.Zero) {
@@ -953,6 +951,7 @@ public sealed partial class WorldBody {
                 if (hold.Lift >= FixedQ4816.One) {
                     // Full lift owns the vertical channel: whatever contact folded into it (a glance off a walkable
                     // face) bleeds back to rest instead of carrying the body away forever.
+                    ClearBallisticTangent();
                     ApplyHoldGravityDecay(
                         hold: in hold,
                         scratch: ref scratch
@@ -973,6 +972,7 @@ public sealed partial class WorldBody {
                     m_verticalVelocity = FixedQ4816.Zero;
                     m_verticalVelocityAccumulator.Reset();
                 }
+                ClearBallisticTangent();
 
                 break;
             default:
@@ -982,6 +982,7 @@ public sealed partial class WorldBody {
             // A medium holds by displacement whatever its kind says about gravity, so its law runs alongside rather
             // than instead of the kind switch above (a medium row ordinarily authors kind None), and folds the
             // row's own thrust into its drift before the convergence runs rather than through ApplyHoldThrust below.
+            ClearBallisticTangent();
             ApplyMedium(
                 hold: in hold,
                 scratch: ref scratch
@@ -1000,18 +1001,31 @@ public sealed partial class WorldBody {
     // cancels the rest; one is the unscaled arc. m_scale (the body's own geometric scale, distinct from `scale`)
     // multiplies both the acceleration and the terminal speed, so a shrunk body falls proportionally slower and
     // settles under proportionally less overshoot than its own tiny collider skin margin.
+    //
+    // A solved field is applied as the vector it is. Its component against the body's up drives the vertical channel,
+    // signed, so a field that has come to pull toward the body's head lifts it off its ground the way a jump does; the
+    // rest fills an airborne body's ballistic tangent. The two sum to the field, so a body falls along the field
+    // whatever way its up points, and a field too faint to turn the up (a tide) still moves the body as it pulls.
     private void ApplyHoldGravity(in FixedBodyHold hold, FixedQ4816 scale, ulong stepTicks) {
         var rising = (m_verticalVelocity > FixedQ4816.Zero);
         var gravity = (rising
             ? hold.Gravity.Rise
             : hold.Gravity.Fall
         );
+        var tangent = FixedVector3.Zero;
 
-        if (TrySolvedGravityMagnitude(magnitude: out var solved)) {
-            gravity = solved;
+        if (TrySolvedGravity(acceleration: out var field)) {
+            var along = FixedVector3.Dot(
+                left: field,
+                right: m_up
+            );
+
+            gravity = -along;
+            tangent = (field - (m_up * along));
 
             if (
                 rising &&
+                (gravity > FixedQ4816.Zero) &&
                 (hold.Gravity.Fall > FixedQ4816.Zero)
             ) {
                 gravity = ((gravity * hold.Gravity.Rise) / hold.Gravity.Fall);
@@ -1031,6 +1045,22 @@ public sealed partial class WorldBody {
         } else {
             m_verticalVelocity = acceleratedVelocity;
         }
+
+        if ((gravity < FixedQ4816.Zero) && (m_verticalVelocity > FixedQ4816.Zero)) {
+            m_grounded = false;
+        }
+        if (!m_grounded && (tangent != FixedVector3.Zero) && m_bodyMotionProgram.OwnsVerticalContactState) {
+            m_ballisticTangent += m_ballisticTangentAccumulator.Integrate(
+                elapsedTicks: stepTicks,
+                ratePerSecond: ((tangent * scale) * m_scale)
+            );
+        }
+    }
+    // Ends the ballistic tangent where something other than the field owns the body's motion: the ground, a hold that
+    // owns the vertical channel, a teleport, a move that owns the translation.
+    private void ClearBallisticTangent() {
+        m_ballisticTangent = FixedVector3.Zero;
+        m_ballisticTangentAccumulator.Reset();
     }
     // A full-lift row owns the vertical channel outright, bleeding whatever it carries back toward rest at the
     // row's own Rise rate (a symmetric bleed, not the asymmetric arc) rather than integrating gravity onto it.
@@ -1314,11 +1344,14 @@ public sealed partial class WorldBody {
             return false;
         }
 
-        return (FixedVector3.Dot(
-            left: m_holdNormal,
-            right: FixedVector3.UnitY
-        ) < m_walkableThreshold);
+        return !WalkableUnderHoldUp(normal: m_holdNormal);
     }
+    // Whether a face is ground by the world's walkable threshold, measured from HoldGravityUp as every hold cone is, so
+    // a ceiling a turned-over field stands the body on is a floor here too.
+    private bool WalkableUnderHoldUp(FixedVector3 normal) => (FixedVector3.Dot(
+        left: normal,
+        right: HoldGravityUp
+    ) >= m_walkableThreshold);
     // Whether the body is holding itself up with no surface at all — the published Unsupported fact.
     private bool HoldsFree() => (TryCurrentHold(hold: out var hold) && (hold.Bond == BodyHoldBond.Free) && (hold.Lift > FixedQ4816.Zero));
     // The commanded WORLD move direction, unit length, or false when nothing is commanded. Reads the world-frame

@@ -1280,6 +1280,13 @@ silently pitch the body. A live collision rebuild installs the new policy
 beside the new provider; the adoption rule is authoritative on the next step,
 and a defined new ambient direction reseats the held axis then.
 
+Under a solved field a support grounds a body only where the field presses the
+body onto it within the walkable slope (`WorldBody.FieldHoldsOn`), so a floor a
+field turned over or across is slid off rather than stood on. A kit body takes
+the field as a vector: the component along its up drives the vertical channel,
+and an airborne body keeps the rest as a ballistic tangent that the drive does
+not shape and a turn of the up does not move (`ApplyHoldGravity`, `SetUp`).
+
 A grounded walker projects velocity onto its support and follows downward surfaces
 within `motion.groundSnap` (0.3 m by default, scaled with the body). Jump and
 launch operations release support. `FixedStepUp.TrySnap` supplies the same landing

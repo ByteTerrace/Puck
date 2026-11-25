@@ -12,7 +12,7 @@ public sealed partial class WorldBody {
     public double DiagnosticSnapReach => ((double)GroundSnap);
     /// <summary>Whether the solved normal velocity is within one fixed-point unit of rest.</summary>
     public bool DiagnosticSettled => ((DiagnosticSupport is { } support) &&
-        (FixedQ4816.Abs(value: FixedVector3.Dot(left: (IsRigid ? m_rigidVelocity : (m_planarVelocity + (m_up * m_verticalVelocity))),
+        (FixedQ4816.Abs(value: FixedVector3.Dot(left: (IsRigid ? m_rigidVelocity : ComposedVelocity()),
             right: support.Push.Normal)) <= FixedQ4816.Epsilon));
 
     // Position/planar contact response applies to ANY collider-bearing body regardless of body motion program — a flying
@@ -91,7 +91,12 @@ public sealed partial class WorldBody {
                 contactResolution = snapped.Resolution with { ObstructionNormal = contactResolution.ObstructionNormal };
             }
 
-            m_grounded = contactResolution.Grounded;
+            // The contact measured walkability against the body's own up; ground is also what the field presses the
+            // body onto. A floor the field has turned away from is slid along, not stood on.
+            m_grounded = (
+                contactResolution.Grounded &&
+                ((contactResolution.GroundNormal == FixedVector3.Zero) || FieldHoldsOn(normal: contactResolution.GroundNormal))
+            );
             DiagnosticSupport = contactResolution.Support;
             if (m_grounded && m_bodyMotionProgram.OwnsVerticalContactState && !HoldOwnsVerticalChannel) {
                 resolvedVelocity = resolvedVelocity.RejectFrom(unitAxis: contactResolution.GroundNormal);
@@ -180,7 +185,18 @@ public sealed partial class WorldBody {
                 right: scratch.Up
             );
 
-            m_planarVelocity = (resolvedVelocity - (scratch.Up * resolvedNormal));
+            // The ballistic tangent keeps what the contact left of it, and the planar channel the rest of the
+            // resolved velocity across the up. Ground ends it: its motion along the surface becomes the drive's.
+            if (m_grounded) {
+                ClearBallisticTangent();
+            } else if (m_ballisticTangent != FixedVector3.Zero) {
+                m_ballisticTangent = m_ballisticTangent
+                    .LimitAlong(maximum: FixedQ4816.Zero, unitAxis: -contactResolution.ObstructionNormal)
+                    .LimitAlong(maximum: FixedQ4816.Zero, unitAxis: -contactResolution.GroundNormal)
+                    .RejectFrom(unitAxis: scratch.Up);
+            }
+
+            m_planarVelocity = ((resolvedVelocity - (scratch.Up * resolvedNormal)) - m_ballisticTangent);
 
             // The direct term is one tick of authored input, not persistent motion state. Never fold contact's
             // clipped drive into the ballistic channel: holding down against a floor would otherwise store an equal
@@ -411,13 +427,13 @@ public sealed partial class WorldBody {
                 up: in up, velocity: ref velocity, volumes: volumes));
 
     // A walking body's velocity in world space: its planar velocity, tangent to the body's own up, plus its vertical
-    // velocity along that up, the frame it integrates in (IntegratePlanarAndVerticalVelocity). Every write that moves
-    // the velocity in world space composes it here and splits it back with SplitVelocity, so none splits it against
-    // world Y, which differs from the body's up wherever the field or the surface tilts it.
-    private FixedVector3 ComposedVelocity() => (m_planarVelocity + (m_up * m_verticalVelocity));
-    // Splits a world-space velocity into the planar and vertical channels against the body's own up. A vertical velocity
-    // that changes starts its rate remainder afresh only when the caller says so; the paths that never reset it keep
-    // their remainder as before.
+    // velocity along that up and its ballistic tangent, the frame it integrates in (IntegratePlanarAndVerticalVelocity).
+    // Every write that moves the velocity in world space composes it here and splits it back with SplitVelocity, so
+    // none splits it against world Y, which differs from the body's up wherever the field or the surface tilts it.
+    private FixedVector3 ComposedVelocity() => ((m_planarVelocity + (m_up * m_verticalVelocity)) + m_ballisticTangent);
+    // Splits a world-space velocity into the planar and vertical channels against the body's own up, handing the
+    // ballistic tangent to the planar channel. A vertical velocity that changes starts its rate remainder afresh only
+    // when the caller says so; the paths that never reset it keep their remainder as before.
     private void SplitVelocity(FixedVector3 velocity, bool resetVerticalRemainder) {
         var vertical = FixedVector3.Dot(
             left: velocity,
@@ -425,6 +441,7 @@ public sealed partial class WorldBody {
         );
 
         m_planarVelocity = velocity.RejectFrom(unitAxis: m_up);
+        ClearBallisticTangent();
 
         if (m_verticalVelocity != vertical) {
             m_verticalVelocity = vertical;

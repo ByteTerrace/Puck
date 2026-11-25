@@ -105,6 +105,7 @@ public sealed partial class WorldBody {
             m_planarVelocity = FixedVector3.Zero;
             m_verticalVelocity = FixedQ4816.Zero;
             m_verticalVelocityAccumulator.Reset();
+            ClearBallisticTangent();
             m_grounded = false;
         }
         if (!FixedVector3.TryAdd(scratch.NextPosition, sample.Displacement, out var nextPosition)

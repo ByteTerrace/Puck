@@ -256,6 +256,8 @@ public sealed partial class WorldBody {
         m_planarVelocity = (m_planarVelocity * scale);
         m_verticalVelocity = (m_verticalVelocity * scale);
         m_verticalVelocityAccumulator.Reset();
+        m_ballisticTangent = (m_ballisticTangent * scale);
+        m_ballisticTangentAccumulator.Reset();
         ClearTether();
         WriteTetherModeState();
     }

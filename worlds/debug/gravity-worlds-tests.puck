@@ -29,7 +29,8 @@ test "a seat walks through the galaxy painting and stands on a planetoid" {
 }
 
 // Through the globe painting on the wing's west wall (a sideways walk for a headless seat), then the lever's turn is
-// written in the debug world: a second later the bottle world's pull points west, and she lies against its west wall.
+// written in the debug world: a second later the bottle world's pull points west, the floor she stood on is a wall, and
+// she falls to the west wall and stands on it, its inner face seven metres west of the room's middle.
 test "a lever in the debug world turns over a seat in the bottle world" {
   when {
     seat1: body.pose 54.4 0.05 18 90 0 0
@@ -43,7 +44,7 @@ test "a lever in the debug world turns over a seat in the bottle world" {
     globeTurn == 1
     globePullX == -14
     globe {
-      pullX == -14 and pullY == 0 and bodyPosition(body, 0, x) < -5
+      pullX == -14 and pullY == 0 and fact(body, 0, Grounded) == 1 and bodyPosition(body, 0, x) < -6.5
     }
   }
 }

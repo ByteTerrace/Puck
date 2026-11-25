@@ -59,12 +59,17 @@ subject names them:
   reads nonzero, and one found off its orbit closes on it at `joinSpeed`; the
   field holds no state a checkpoint needs. `tides` are far masses reduced to one
   tensor a solve at `tideOrigin` (`WorldGravityTides`), added to every body by
-  its offset from that origin and never as a whole pull; a kit body takes the
-  field's magnitude along its own up, so a tide too faint to turn it (under a
-  metre a second squared) moves it along the up it has, while a rigid body
-  takes the vector. A grounded body under `GradientDerivedUp` keeps its
-  surface's up until the field pulls it off that surface
-  (`WorldBody.StandsBySurface`); a turned-over area does not yet lift a standing body ([left open](../../../../docs/plans/cross-world.md#left-open)).
+  its offset from that origin and never as a whole pull. Kit and rigid bodies
+  both take the field as a vector: a kit body's vertical channel takes the
+  field's component along its up and its ballistic tangent the rest
+  (`WorldBody.ApplyHoldGravity`), so a tide too faint to turn its up still
+  moves it along the line the tensor gives. Ground is a surface the field
+  presses the body onto within `maxSlopeDegrees` (`WorldBody.FieldHoldsOn`):
+  a grounded body under `GradientDerivedUp` keeps its surface's up while that
+  holds (`WorldBody.StandsBySurface`), and a field turned over or across
+  under its feet carries it off, turning, to the surface the field now holds
+  it on (`galaxy-tests.puck`'s turnover, `gravity-worlds-tests.puck`'s bottle
+  world).
 - **`Portals`** (`WorldPortals.cs`) — `WorldPortalsSection(WorldPortalDefaults
   PortalDefaults)`, whose `travel` is `Party` (the traveling seat's whole
   active local-seat party) or `Body` (one seat). It is the world-scope default
