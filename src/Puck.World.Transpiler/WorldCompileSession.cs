@@ -29,11 +29,12 @@ namespace Puck.World.Transpiler;
 /// </para>
 /// <para>
 /// Held compiles live in memory for the session and, once <see cref="Persist"/> names a directory, in that directory
-/// too, so a later process compiles nothing an earlier one already compiled. An entry belongs to one compiler build:
-/// the identity of every non-framework assembly the compiler loads, with any hot-reload update applied to one of them
-/// (<see cref="Puck.Abstractions.CodeRevision.AppliedTo"/>), is part of the entry's name and is recorded inside it, so a
-/// rebuilt or hot-reloaded compiler never reads an older one's output, and builds that share a directory (an editor's
-/// <c>puck lsp</c>, a candidate CLI, the game) keep their own entries rather than overwriting each other's. A read
+/// too, so a later process compiles nothing an earlier one already compiled. An entry belongs to the code that wrote it:
+/// the identity of the code the compiler reaches (<see cref="Puck.Assets.CodeClosure"/>), with any hot-reload update
+/// applied to it (<see cref="Puck.Abstractions.CodeRevision.AppliedTo"/>), is part of the entry's name and is recorded
+/// inside it, so a compiler whose code changed never reads an older one's output, a build that changed only code no
+/// compile runs reads every entry, and builds that share a directory (an editor's <c>puck lsp</c>, a candidate CLI, the
+/// game) keep their own entries rather than overwriting each other's. A read
 /// that serves an entry stamps it as used, and a write keeps the directory within <see cref="MaxPersistedEntries"/>
 /// entries and <see cref="MaxPersistedBytes"/> bytes, least recently used out
 /// (<see cref="Puck.Abstractions.CacheRetention"/>), and also removes the temporary files an interrupted write left
@@ -46,9 +47,12 @@ namespace Puck.World.Transpiler;
 /// </summary>
 public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorldDocumentSource {
     /// <summary>The most entries the persistent directory keeps; writing one more removes the least recently used.</summary>
-    public const int MaxPersistedEntries = 1024;
-    /// <summary>The most bytes the persistent directory's entries hold between them.</summary>
-    public const long MaxPersistedBytes = (256L << 20);
+    public const int MaxPersistedEntries = 16384;
+    /// <summary>The most bytes the persistent directory's entries hold between them. One boot of a world the size of the
+    /// debug world writes about a quarter of a gibibyte of compiles, compositions and layers, so the bound holds several
+    /// code identities' sets at once (the builds and checkouts a development machine runs side by side); a bound under one
+    /// boot's set evicts that boot's own entries and the next boot compiles every source again.</summary>
+    public const long MaxPersistedBytes = (4L << 30);
     /// <summary>The most editor buffers whose latest compile a session holds; holding one more forgets the least recently used.</summary>
     public const int MaxHeldBuffers = 64;
 
@@ -106,16 +110,60 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
     /// <summary>Gets the parses this session's import walks read every library through.</summary>
     public PuckSourceTable Sources => m_state.Sources;
 
-    // The pin over every Puck module the compiler reaches, with the update applied to any of them folded in
-    // (CodeRevision.AppliedTo): a product of the parser or compiler is valid only under the identity it was written by.
+    // The identity a product of the parser or compiler is keyed by, in memory and on disk: the normalized IL and layouts
+    // reachable from the compile's own code (CompilerCode), with an update applied to any of it folded in
+    // (CodeRevision.AppliedTo). A product is valid only under the identity it was written by, and an engine edit no
+    // compile runs (a renderer, a physics solver, the World's client) leaves it standing, so the restart after such an edit
+    // compiles nothing.
     internal static string CompilerIdentity {
         get {
-            var (built, modules) = Identity.Value;
-            var applied = Puck.Abstractions.CodeRevision.AppliedToAssemblies(assemblies: modules);
+            if (Puck.Abstractions.CodeRevision.Current == 0) { return CompilerCodeHash(); }
 
-            return ((applied.Length == 0) ? built : ContentPin.OfText(text: $"{built}\n{applied}").Hex);
+            var code = CompilerCode.Value;
+            var hash = code.Hash.ToString(format: "x32");
+            var applied = Puck.Abstractions.CodeRevision.AppliedTo(reads: code.Reads);
+
+            return ((applied.Length == 0) ? hash : ContentPin.OfText(text: $"{hash}\n{applied}").Hex);
         }
     }
+    // The compile's code: every method and layout the compiler, the import index and this session's own persistence reach.
+    private static readonly Lazy<CodeClosure> CompilerCode = new(valueFactory: static () => CodeClosure.Of(
+        directory: AppContext.BaseDirectory,
+        roots: [
+            ("Puck.World.Transpiler", "Puck.World.Transpiler.WorldCompiler", null),
+            ("Puck.World.Transpiler", "Puck.World.Transpiler.WorldCompileSession", null),
+            ("Puck.World.Transpiler", "Puck.World.Transpiler.Composition.WorldSourceIndex", null),
+        ],
+        stopTypes: new HashSet<string>(collection: [typeof(CodeClosure).FullName!], comparer: StringComparer.Ordinal)
+    ));
+    private static string? HeldCompilerCodeHash;
+    // The compile's code hash in a build that applied no update. The walk reads every reached assembly's metadata, so a
+    // build walks it once: the shared session persists the hash under the build's own identity (BuildIdentity) and every
+    // later boot of the same build reads it back.
+    private static string CompilerCodeHash() {
+        if (Volatile.Read(location: ref HeldCompilerCodeHash) is { } held) { return held; }
+
+        const string Key = "compiler-code";
+        var session = Shared;
+        var hash = session.ReadPersisted(identity: BuildIdentity, key: Key, read: static reader => {
+            var value = reader.ReadString();
+
+            return Puck.Abstractions.ContentDigest.IsLowerHexDigits(length: 32, text: value)
+                ? value : throw new InvalidDataException(message: "Invalid compiler code hash.");
+        });
+
+        if (hash is null) {
+            var derived = CompilerCode.Value.Hash.ToString(format: "x32");
+
+            session.WritePersisted(identity: BuildIdentity, key: Key, write: writer => writer.Write(value: derived));
+            hash = derived;
+        }
+        _ = Interlocked.CompareExchange(location1: ref HeldCompilerCodeHash, value: hash, comparand: null);
+        return Volatile.Read(location: ref HeldCompilerCodeHash)!;
+    }
+    // The pin over every Puck module the compiler's assembly references: the guard the build's own walk of the compiler's
+    // code is persisted under, never the key of a compile.
+    private static string BuildIdentity => BuildPin.Value;
 
     // The identity walks the compiler's reference graph from its own assembly. In a trimmed application a reference
     // the trimmer removed is code the compile cannot run, so its load failing and entering the identity as absent is
@@ -125,7 +173,7 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
         checkId: "IL2026",
         Justification = "A reference the trimmer removed cannot run, and its failed load enters the identity as absent."
     )]
-    private static (string Built, IReadOnlySet<string> Modules) ComputeCompilerIdentity() {
+    private static string ComputeBuildPin() {
         var modules = new SortedDictionary<string, Guid>(comparer: StringComparer.Ordinal);
         foreach (var (name, assembly) in AssemblyReach.Of(
             root: typeof(WorldCompiler).Assembly,
@@ -140,7 +188,7 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
             _ = text.Append(value: name).Append(value: '=').Append(value: version.ToString(format: "N")).Append(value: ';');
         }
 
-        return (ContentPin.OfText(text: text).Hex, modules.Keys.ToHashSet(comparer: StringComparer.Ordinal));
+        return ContentPin.OfText(text: text).Hex;
     }
     private static bool IsFramework(string? name) => (
         (name is null) ||
@@ -573,5 +621,5 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
             writer.Write(buffer: world.Json);
         }
     }
-    private static readonly Lazy<(string Built, IReadOnlySet<string> Modules)> Identity = new(valueFactory: ComputeCompilerIdentity);
+    private static readonly Lazy<string> BuildPin = new(valueFactory: ComputeBuildPin);
 }

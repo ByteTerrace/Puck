@@ -185,7 +185,7 @@ code now works this way:
 | Cache | Holds | Keyed on | What goes wrong |
 |---|---|---|---|
 | Held declarations (`WorldSourceIndex`) | What each source declares it emits | The digest of the source's bytes; on disk, also the compiler's identity | Fine as a table. The reads that feed it are the cost above |
-| Held compiles (`WorldCompileSession.TryCompile`, in memory and under the `compilations` directory) | One source's documents and every file fact its compile read | The compiler's identity, the source's full path, and whether tests are lowered. Served only while every recorded input re-reads the same | The path is in the key, so two checkouts holding the same bytes share nothing. The identity is the build identity of every non-framework assembly the compiler references (`WorldCompileSession.CompilerIdentity`), so any rebuild of any of them empties the cache. A source is compiled twice when one caller wants tests and another does not |
+| Held compiles (`WorldCompileSession.TryCompile`, in memory and under the `compilations` directory) | One source's documents and every file fact its compile read | The compiler's identity, the source's full path, and whether tests are lowered. Served only while every recorded input re-reads the same | The path is in the key, so two checkouts holding the same bytes share nothing. The identity is the code the compiler reaches (`WorldCompileSession.CompilerIdentity`, a `CodeClosure`), so an engine edit no compile runs keeps every entry. A source is compiled twice when one caller wants tests and another does not |
 | Held compositions (`WorldDefinitionFileSource.HoldComposedImage`, persisted through `IWorldCompositionStore`) | A whole composed document, its input facts, and references to its shaped layers | The resolved path, the machine catalog's fingerprint and the source type. Every input must still hold to serve the whole image | The debug root's image is 26 MiB and is written again for each compiler build, off the thread that composed it |
 | Shaped composition layers (`WorldDefinitionFileSource.LayerKey`) | A layer's shaped bytes, root member ranges, and export walk | Its input document digest, paths used in relocation, import alias, machine catalog and reached shaping code | Layer entries share the compile cache's retention bound. A miss shapes the layer again |
 | Compiled worlds (`CompiledWorldCache`, `.puckb`) | The drawn definition, assets and curves, as chunks | A file named for the document's path; each chunk by the code that derives it (`CompiledWorldChunks.EngineBuild`, a closure over the methods the producers reach) and its recorded inputs | Keyed by reached code, which is the right identity, but one chunk covers the whole definition, so one row's change derives it all again |
@@ -875,10 +875,11 @@ stage order is in [the duplicates](#duplicates-to-remove).
    composition store now persists layers by their inputs and the code
    that shapes them. It keeps the result of the code walk for the same build,
    so a warm process can name layers on its first reload without repeating
-   the walk. The composed image still uses a path index. Held compiles
-   are still keyed by the compiler's assembly build identities and the
-   source's full path (`WorldCompileSession.CompilerIdentity`).
-   The reached code comes from the walker the compiled world's chunks and the
+   the walk. The composed image still uses a path index. Held compiles are
+   keyed by the code the compiler reaches (`WorldCompileSession.CompilerIdentity`,
+   a `CodeClosure` over the compiler, the import index and the session, walked
+   once a build and persisted under the build's own identity) and still by the
+   source's full path. The reached code comes from the walker the compiled world's chunks and the
    bake's stage keys already share (`CodeClosure`), never a third. *Check:* two
    checkouts at one commit share every entry (hits counted, no misses), and an
    edit to a renderer file misses no compile.
@@ -959,8 +960,6 @@ are removed by the step named or carried by a verification request.
 
 - `puck decompile` writes a source the compiler refuses when the document
   holds a shading program. Step 8 fixes it.
-- `WorldCompileSession.CompilerIdentity` uses assembly build identities, which
-  the puck-world skill rules out as a derivation key. Step 6 fixes it.
 - The browser engine's README measures a debug world two orders of magnitude
   smaller than today's. The World Studio verification request refreshes it.
 

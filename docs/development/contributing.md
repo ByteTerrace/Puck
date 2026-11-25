@@ -451,9 +451,10 @@ two things, and the watch output says which:
   next frame, so an edit to that code shows without a reload. A persisted
   product folds `CodeRevision.AppliedTo` into its identity: empty until an
   update touches a type the product reads, then a token unique to the process
-  and that update. The compile cache and its source declarations (the
-  compiler's modules), the compiled world (the engine build's modules) and the
-  mesh store (the types the bake's closure declares members of) key what a
+  and that update. The compile cache and its source declarations (the code the
+  compiler reaches, `CodeClosure`), the compiled world (the engine build's
+  modules) and the mesh store (the types the bake's closure declares members
+  of) key what a
   hot-reloaded process reads and writes apart from the build's own entries,
   which an update elsewhere leaves standing; the entries it writes are orphans
   the stores' retention trims. Simulation state and installed shader pipelines
