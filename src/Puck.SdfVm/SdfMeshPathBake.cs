@@ -2605,6 +2605,12 @@ public sealed partial class SdfMeshPathBake {
         Account(group: group, since: started, stage: BakeStage.Split);
         group.Contour = contour;
         group.Cut = cut;
+        // A contour whose cut samples no point (one material, no boundary to place) meshes now, as Advance does once its
+        // rounds are spent: a round of no points would be a lattice of no samples, whose dispatch copies nothing back.
+        if (points == 0) {
+            Build(group: group);
+            return;
+        }
         StagePoints(group: group, count: points);
         using (EnterGate(site: BakeGate.Split)) {
             group.Contouring = false;
