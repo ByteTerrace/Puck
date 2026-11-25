@@ -64,6 +64,13 @@ public static partial class SdfFieldOps {
         return resources;
     }
 
+    /// <summary>Returns whether an instruction changes the materials the shapes after it read: a render warp whose
+    /// material holds a stride it adds per cell (a polar repeat's, a wallpaper fold's or a cell jitter's).</summary>
+    /// <param name="instruction">The instruction.</param>
+    /// <returns><see langword="true"/> when a point read after the instruction can carry a material no shape holds.</returns>
+    public static bool TexturesMaterials(SdfInstruction instruction) =>
+        ((PointOf(value: instruction.Op) == SdfPointAction.RenderWarp) && (instruction.Material != 0u));
+
     [SdfFieldEntry(0)]
     private sealed class ResetPoint : Entry {
         public override SdfShaderAction Shader => new(

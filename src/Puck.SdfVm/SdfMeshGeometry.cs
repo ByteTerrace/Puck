@@ -79,6 +79,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
     private UInt128 m_sealedForm;
 
     private readonly List<int> m_materials = [];
+    // Whether a point of the field can read a material m_materials does not hold (MaterialsClosed).
+    private bool m_materialsOpen;
 
     // Made by the first kept pose: most static groups keep none.
     private SortedDictionary<int, DynamicTransform>? m_poses;
@@ -234,6 +236,11 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
 
     /// <summary>Gets the materials the appended instances' shapes carry, in the order the geometry numbers them.</summary>
     public IReadOnlyList<int> Materials => m_materials;
+    /// <summary>Gets whether every point of the geometry's field reads one of <see cref="Materials"/>: no shape was
+    /// appended from the world's segments (<see cref="AppendInstruction"/>), whose materials the geometry does not number,
+    /// and no render warp adds a cell's stride to the materials after it (a polar repeat's, a wallpaper fold's or a cell
+    /// jitter's, which carry the stride in their material).</summary>
+    public bool MaterialsClosed => !m_materialsOpen;
     /// <summary>Gets each slot the appended instructions read, with its pose in the group's frame and its lanes as the
     /// geometry hashed them, rounded: the group's own slot at the identity, any other slot where it stood in the frame the
     /// geometry was appended from. A slot the frame held no transform for is absent.</summary>
@@ -430,7 +437,10 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         ArgumentNullException.ThrowIfNull(argument: transforms);
         ArgumentNullException.ThrowIfNull(argument: sampled);
 
-        Append(index: index, instruction: program.Instructions[index], ownSlot: -1, program: program, sampled: sampled, transforms: transforms);
+        var instruction = program.Instructions[index];
+
+        m_materialsOpen |= (instruction.Op == SdfOp.ShapeBlend);
+        Append(index: index, instruction: instruction, ownSlot: -1, program: program, sampled: sampled, transforms: transforms);
     }
 
     // Appends an instruction: a transform into the group's own slot by that role and into another slot with that slot's
@@ -440,6 +450,8 @@ public sealed class SdfMeshGeometryBuilder(bool dynamic) {
         // A glyph's instruction holds its cell's UVs; the pixels under them are the program's one bound atlas, keyed once a
         // group by their content, and so is the stroke the bake's lettering stroke rule takes its glyphs to have.
         var resources = SdfFieldOps.ResourcesOf(instruction: instruction);
+
+        m_materialsOpen |= SdfFieldOps.TexturesMaterials(instruction: instruction);
 
         if ((instruction.Op == SdfOp.ShapeBlend) && (program.ShapeStepScaleAt(instructionIndex: index) is < 1f and var scale)) {
             Hash(fact: Fact.ShapeStepScale, source: MemoryMarshal.AsBytes(new ReadOnlySpan<float>(in scale)));
