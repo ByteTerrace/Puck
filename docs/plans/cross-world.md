@@ -208,10 +208,14 @@ its surface now gives that up back to a field that has come to pull it off the
 surface (`StandsBySurface` in `WorldBody`), which is the first open item below.
 
 What has run: `galaxy-tests.puck` (a drop onto home's side, two launches, the
-turnover's switch, the pebble's orbit and its return to the rails). What is
-authored and has not run: `tide-tests.puck` and `gravity-worlds-tests.puck`
-(the two crossings, the lever and the sun's delays), so mechanisms 6 and 7,
-the bottle world and the sun are built and unproven until they do.
+turnover's switch, the pebble's orbit and its return to the rails), and, in a
+headless debug world driven over its console, the sun's switch (the moon's
+received light reads dark while the valley's still reads full, then both) and
+the bottle world's lever (the debug world's vector changes at once and the
+bottle world's a second later). What is authored and has not run:
+`tide-tests.puck` and `gravity-worlds-tests.puck`, so the tide (mechanism 7),
+a walk through either new painting and both scenarios' reproduction are
+unproven until they do.
 
 ### The toy worlds
 

@@ -98,7 +98,7 @@ public sealed partial class WorldAdjacencyFields {
         state.Narrated = null;
 
         if (follows.DelaySeconds > 0m) {
-            AdoptDelayed(server: server, definition: definition, name: name, follows: follows, mirror: mirror, leaderRow: leaderRow, state: state, tick: tick, leaderTick: leaderTick, leader: leader);
+            AdoptDelayed(server: server, definition: definition, name: name, follows: follows, mirror: mirror, leaderRow: leaderRow, state: state, tick: tick, leaderTick: leaderTick, leader: leader, advances: (next.Raw != leader.Raw));
             return;
         }
 
@@ -136,13 +136,15 @@ public sealed partial class WorldAdjacencyFields {
     // the leader holding it, and values arrive in the order the leader wrote them. Both hold here and nowhere else:
     // an observed write joins the back of the line with its arrival tick, and only the front of the line is ever
     // written. A write is told from the row's own advance by reading the latest delivery back at the tick of the last
-    // observation: the leader's trait is exact, so the two read alike unless something wrote the row since.
-    private void AdoptDelayed(WorldServer server, WorldDefinition definition, string name, WorldStateFollow follows, WorldSessionMirror mirror, string leaderRow, FollowState state, ulong tick, long leaderTick, CellValue leader) {
+    // observation: the leader's trait is exact, so the two read alike unless something wrote the row since. A row the
+    // leader holds still is compared exactly, as an undelayed follow compares it (a switch from one to zero is one raw
+    // unit); one that advances is allowed the unit its raw accumulation floors by.
+    private void AdoptDelayed(WorldServer server, WorldDefinition definition, string name, WorldStateFollow follows, WorldSessionMirror mirror, string leaderRow, FollowState state, ulong tick, long leaderTick, CellValue leader, bool advances) {
         var inFlight = (state.InFlight ??= new Queue<(ulong DueTick, long Raw)>());
         var written = (
             !state.Observed ||
             !TryReadLeader(mirror: mirror, row: leaderRow, tick: state.ObservedLeaderTick, value: out var line) ||
-            (Math.Abs(value: (line.Raw - state.ObservedRaw)) > 1L)
+            (Math.Abs(value: (line.Raw - state.ObservedRaw)) > (advances ? 1L : 0L))
         );
 
         if (written) {
