@@ -754,9 +754,9 @@ public static class WorldPlayerCommand {
             caches; without it the boot uses the per-user caches and bakes every mesh again. `--backend directx` or
             `--backend vulkan` picks the backend (each has its own baked meshes), and `--width`/`--height` set the window.
             The store holds every detail tier of every mesh the world's authored places draw, and the build was checked
-            for {{baked}}; the profile follows the adapter's name. A player's build never bakes a mesh the store holds
-            another tier of: where a tier is missing it draws the nearest stored one. Only a shape the store holds no
-            tier of bakes, into `cache/`.
+            for {{baked}}; the profile follows the adapter's name. The store is a warm start: where a tier is missing
+            the build draws the nearest stored one at once and bakes the missing tier into `cache/` on the memory it
+            plays in.
 
             ## Attach to a remote authority
 
