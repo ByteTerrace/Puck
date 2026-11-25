@@ -170,8 +170,7 @@ public sealed partial class SdfMeshPathBake {
                     rung.Retired = true;
                     continue;
                 }
-                Library.Cache.Count(kind: SdfMeshCache.RungsMissed);
-                SdfMeshBakeReport.RungMissed(drawn: rung.Tier, first: false, group: planned, residency: Residency);
+                CountRungMissed(asked: planned, drawn: rung.Tier, first: false);
                 rung.FirstDetailOwed = planned.FirstDetailOwed;
                 rung.DemandPixel = planned.DemandPixel;
                 if (!planned.FirstDetailOwed) {
@@ -220,11 +219,51 @@ public sealed partial class SdfMeshPathBake {
         rung.DemandedTier = planned.DemandedTier;
         return rung;
     }
+    // What keeps a ladder bake's ladders from full, as its latest tier decision found it (FillLadders): the rungs in
+    // flight, the ladders with a rung still to bake, the groups not yet drawing their own tier (still landing, or a
+    // replacement or first detail standing in their place), and the first group that holds, by its state.
+    private readonly record struct LadderHold(int InFlight, int Owed, int Waiting, string? First) {
+        public bool Holds => ((InFlight > 0) || (Owed > 0) || (Waiting > 0));
+
+        public override string ToString() => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{InFlight} rung(s) in flight, {Owed} ladder(s) with a rung to bake, {Waiting} group(s) not yet drawing their own tier{((First is null) ? string.Empty : $"; first: {First}")}");
+    }
+
+    // The rungs a stored-only bake missed for each geometry of a sampled field's reader, with the geometry that hashed
+    // the snapshots, until the field moves past them (ReclassifyReaderMisses). Under the gate.
+    private readonly Dictionary<SdfMeshGeometry, (SdfMeshGeometryBuilder Geometry, int Misses)> m_readerMisses = [];
+
+    // Counts and reports a rung a stored-only bake asked that the store lacked, which the drawn tier stands in for: the one
+    // place RungsMissed is counted, so every miss of a sampled field's reader is on the record its field's move reads.
+    // Under the gate.
+    private void CountRungMissed(Group asked, int drawn, bool first) {
+        Library.Cache.Count(kind: SdfMeshCache.RungsMissed);
+        SdfMeshBakeReport.RungMissed(drawn: drawn, first: first, group: asked, residency: Residency);
+        if (!asked.Geometry.ReadsSampled) { return; }
+        m_readerMisses[asked.Sealed] = (asked.Geometry, (m_readerMisses.TryGetValue(key: asked.Sealed, value: out var held) ? (held.Misses + 1) : 1));
+    }
+    // Moves to RungsMissedLive the misses of every reader geometry whose snapshots the frame's sampled set no longer holds:
+    // the world moved the field past the state they were planned at, which makes that geometry live. Under the gate, on
+    // the frame's thread, when the sampled set moved (Revisit).
+    private void ReclassifyReaderMisses(Puck.SignedDistance.SdfSampledSet sampled) {
+        if (m_readerMisses.Count == 0) { return; }
+
+        List<SdfMeshGeometry>? moved = null;
+
+        foreach (var (geometry, (builder, misses)) in m_readerMisses) {
+            if (builder.SampledMatches(sampled: sampled)) { continue; }
+            Library.Cache.Add(amount: misses, kind: SdfMeshCache.RungsMissedLive);
+            SdfMeshBakeReport.RungsMissedLive(geometry: geometry, misses: misses, residency: Residency);
+            (moved ??= []).Add(item: geometry);
+        }
+        foreach (var geometry in (moved ?? [])) { _ = m_readerMisses.Remove(key: geometry); }
+    }
+
     // Starts, for each geometry a done group draws, the next rung of its ladder the store lacks, coarsest first, at most
-    // SdfMeshTier.MaxInFlight at once; true while any ladder still has a rung to look at or in flight. A rung bakes in
-    // its group's place as a tier's replacement does, drawing the group's mesh meanwhile, and gives the place back when
-    // it is done (FinishFill). Under the gate, on the frame's thread, at a tier decision.
-    private bool FillLadders(int fills) {
+    // SdfMeshTier.MaxInFlight at once, and answers what still holds the ladders. A rung bakes in its group's place as a
+    // tier's replacement does, drawing the group's mesh meanwhile, and gives the place back when it is done
+    // (FinishFill); one that left the list unfinished is let go and its rung looked at again. Under the gate, on the
+    // frame's thread, at a tier decision.
+    private LadderHold FillLadders(int fills) {
         var identity = Identity.Value;
 
         if (identity != m_laddersIdentity) {
@@ -232,24 +271,31 @@ public sealed partial class SdfMeshPathBake {
             m_laddersIdentity = identity;
         }
 
-        var unfinished = (fills > 0);
+        var owed = 0;
+        var waiting = 0;
+        string? first = null;
 
         for (var index = 0; (index < m_groups.Count); index++) {
             var group = m_groups[index];
 
             // Live geometry takes another shape at each step of its input, so its other rungs are no later boot's to find.
-            if (group.Retired || group.Failed || group.Live || (Selection is not null)) { continue; }
+            // A rung being filled stands in its group's place and is counted among the fills.
+            if (group.Retired || group.Failed || group.Live || group.Fill || (Selection is not null)) { continue; }
             // A group still landing, or one a replacement stands in for, is walked once it draws its own tier.
             if (!group.Done || (group.Replaces is not null) || group.Ahead || group.FirstDetailOwed) {
-                unfinished = true;
+                waiting++;
+                first ??= group.State();
                 continue;
             }
             if (!m_ladders.TryGetValue(key: group.Sealed, value: out var ladder)) { m_ladders.Add(key: group.Sealed, value: ladder = new Ladder { Next = group.CoarsestTier }); }
             if (ladder.Next < group.FinestTier) { continue; }
-            unfinished = true;
-            if (ladder.Filling is { Retired: false, Fill: true }) { continue; }
+            if (ladder.Filling is { Retired: false, Fill: true, Listed: true }) { continue; }
             ladder.Filling = null;
-            if (fills >= SdfMeshTier.MaxInFlight) { break; }
+            if (fills >= SdfMeshTier.MaxInFlight) {
+                owed++;
+                first ??= group.State();
+                continue;
+            }
             while (ladder.Next >= group.FinestTier) {
                 var tier = ladder.Next;
 
@@ -274,7 +320,7 @@ public sealed partial class SdfMeshPathBake {
                 break;
             }
         }
-        return unfinished;
+        return new LadderHold(First: first, InFlight: fills, Owed: owed, Waiting: waiting);
     }
     // Gives a filled rung's place back to the group it stood in for, which drew throughout, and moves that geometry's
     // ladder past the rung whatever it meshed: a surface is in the store, and nothing or a failure is not baked twice.

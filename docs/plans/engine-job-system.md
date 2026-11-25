@@ -1505,7 +1505,7 @@ harness (T0: `--workers` and `puck test --workers`), snapshot partitions (T1),
 GPU culling in the indirect path (R2), J1's foreground classes (`Frame` and
 `Tick` forks side by side) and the pose pack's fork
 (`WorldCreationInstances.PackTransforms`: a serial pass decides each
-registration, the full poses fork one partition a registration, a serial pass
+registration, the full poses fork a run of registrations a partition, a serial pass
 settles them in pool order; a rig that reads another body poses after the
 fork; `sdf.creations.registrations.forked` counts the forked poses).
 

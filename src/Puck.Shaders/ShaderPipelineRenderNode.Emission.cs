@@ -87,6 +87,9 @@ public sealed partial class ShaderPipelineRenderNode {
         public nint List;
         // The list's place among the frame's further lists, or -1 for the slot's first list.
         public int Extra;
+        // Whether the lane begins its list: a further list the walk took but did not begin, rather than the serial list
+        // before the run, which the lane continues.
+        public bool Begins;
         public bool Emitted;
         public long Ticks;
         public ExceptionDispatchInfo? Error;
@@ -167,10 +170,19 @@ public sealed partial class ShaderPipelineRenderNode {
         m_serialList = list;
         return list;
     }
-    // Takes the slot's next further command pool, creating it the first time a frame needs this many lists, and begins
-    // its list. The further lists are begun uncounted: how many a frame takes follows the lanes' measured weights, which
-    // the ledger's deterministic counts must not, so render.record.lists counts them instead.
+    // Takes the slot's next further command pool and begins its list, for the walk's own serial list.
     private (nint List, int Extra) BeginExtraList(int slot) {
+        var (list, extra) = TakeExtraList(slot: slot);
+
+        m_device.Services.Recorder.BeginCommandBuffer(commandBufferHandle: list);
+        m_recording.MarkOpen(extra: extra);
+        return (list, extra);
+    }
+    // Takes the slot's next further command pool, creating it the first time a frame needs this many lists, leaving its
+    // list unbegun: a lane that records into it begins it on its own thread (EmitLane), so the walk spends no reset on
+    // it. The further lists are begun uncounted: how many a frame takes follows the lanes' measured weights, which the
+    // ledger's deterministic counts must not, so render.record.lists counts them instead.
+    private (nint List, int Extra) TakeExtraList(int slot) {
         var lists = m_slots[slot].Lists;
         var extra = m_recording.ExtraCount;
 
@@ -180,8 +192,7 @@ public sealed partial class ShaderPipelineRenderNode {
 
         var list = lists[extra].CommandBufferHandle;
 
-        m_device.Services.Recorder.BeginCommandBuffer(commandBufferHandle: list);
-        m_recording.OpenExtra(list: list);
+        m_recording.TakeExtra(list: list);
         return (list, extra);
     }
     // Queues an emitter pass, decided by DecidePackage, into the run the walk is in, opening one after a serial list.
@@ -334,14 +345,14 @@ public sealed partial class ShaderPipelineRenderNode {
             }
             if (last) { stop = end; }
 
-            var (list, extra) = ((lane == 0) ? (segment.List, segment.Extra) : BeginExtraList(slot: slot));
+            var (list, extra) = ((lane == 0) ? (segment.List, segment.Extra) : TakeExtraList(slot: slot));
 
             commands.Add(item: list);
-            AddLane(count: (stop - first), extra: extra, first: first, list: list);
+            AddLane(begins: (lane != 0), count: (stop - first), extra: extra, first: first, list: list);
             first = stop;
         }
     }
-    private void AddLane(int first, int count, nint list, int extra) {
+    private void AddLane(int first, int count, nint list, int extra, bool begins) {
         if (m_laneCount == m_lanes.Count) { m_lanes.Add(item: new EmissionLane()); }
 
         var lane = m_lanes[m_laneCount++];
@@ -350,6 +361,7 @@ public sealed partial class ShaderPipelineRenderNode {
         lane.Count = count;
         lane.List = list;
         lane.Extra = extra;
+        lane.Begins = begins;
         lane.Emitted = false;
         lane.Ticks = 0L;
         lane.Error = null;
@@ -380,6 +392,17 @@ public sealed partial class ShaderPipelineRenderNode {
         var slot = m_open.Job.Slot;
         var recorder = m_gpu.Recorder;
 
+        if (held.Begins) {
+            // A list the lane never began is not open, so neither an end below nor an abandonment touches it.
+            try {
+                m_device.Services.Recorder.BeginCommandBuffer(commandBufferHandle: held.List);
+                m_recording.MarkOpen(extra: held.Extra);
+            } catch (Exception error) {
+                held.Error = ExceptionDispatchInfo.Capture(source: error);
+                held.Ticks = (Stopwatch.GetTimestamp() - started);
+                return;
+            }
+        }
         try {
             for (var at = held.First; (at < (held.First + held.Count)); at++) {
                 var begun = Stopwatch.GetTimestamp();

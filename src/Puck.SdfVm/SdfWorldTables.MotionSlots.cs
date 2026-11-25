@@ -114,14 +114,92 @@ public sealed partial class SdfWorldTables {
         }
     }
 
-    // One door for a slot's scopes and shadows. Both sides enclose every live member under the corresponding pose
-    // and roster. An unbounded member or a missing pose keeps the whole side unbounded.
-    private void JudgeMotionSlot(int slot, SlotMotion motion) {
+    // A slot's judgement in two halves, the one door for a slot's scopes and shadows. Decide places the slot's boxes and
+    // reads only the slot's own motion, the frame's poses, the draw records and the shadows' judged boxes, none of which
+    // a judgement writes, so the moved slots of a staging decide side by side as the partitions of one fork. Settle hands
+    // each decided change to the scopes and the shadows (NoteMotion), which every slot shares, so the slots settle on the
+    // packing thread in the order they were collected, as one loop judged them before.
+    private struct SlotJudgement {
+        public int Slot;
+        public SlotMotion Motion;
+        public MotionBound Before;
+        public MotionBound After;
+        public DynamicTransform Pose;
+        public bool HasPose;
+        public bool PoseChanged;
+        public bool Dirty;
+        public bool Rigid;
+        public bool Spared;
+    }
+
+    private SlotJudgement[] m_judgements = [];
+    private int m_judgementCount;
+    private SlotJudges? m_slotJudges;
+
+    /// <summary>Gets or sets the pool the tables' pack forks its slot judgements across, or <see langword="null"/> to
+    /// judge them on the packing thread. The residency sets it as it begins a pack (<see cref="SdfWorldResidency"/>).</summary>
+    internal Puck.Hosting.Jobs.JobPool? Jobs { get; set; }
+
+    // The moved slots a partition decides: enough that a fork pays for its wake, few enough that a staging of a few
+    // thousand slots spreads across the workers.
+    private const int JudgementsPerPartition = 128;
+
+    // Adds a slot to the staging's judgements once a staging, in the order the loops reach it.
+    private void CollectMotionSlot(int slot, SlotMotion motion) {
         if (motion.Staging == m_motionStaging) { return; }
         motion.Staging = m_motionStaging;
+        Puck.Abstractions.Memory.ArrayCapacity.EnsureLength(array: ref m_judgements, required: (m_judgementCount + 1));
+        m_judgements[m_judgementCount++] = new SlotJudgement { Motion = motion, Slot = slot };
+    }
+
+    // Decides every collected slot, side by side where the pool allows, then settles them in order.
+    private void JudgeMotionSlots() {
+        var count = m_judgementCount;
+
+        if (count == 0) { return; }
+        // Every entry past the count is written whole by the next collection before anything reads it, so the array is
+        // never cleared; the slot motions it still names are the tables' own.
+        m_judgementCount = 0;
+        var partitions = Puck.Hosting.Jobs.PartitionRuns.Count(count: count, run: JudgementsPerPartition);
+
+        if ((partitions > 1) && (Jobs is { Serial: false } pool)) {
+            var judges = (m_slotJudges ??= new SlotJudges(owner: this));
+
+            judges.Count = count;
+            pool.Fork(body: judges, jobClass: Puck.Hosting.Jobs.JobClass.Frame, partitions: partitions);
+        } else {
+            for (var index = 0; (index < count); index++) { DecideMotionSlot(judgement: ref m_judgements[index]); }
+        }
+        var spared = 0L;
+
+        for (var index = 0; (index < count); index++) {
+            if (m_judgements[index].Spared) { spared++; } else { SettleMotionSlot(judgement: in m_judgements[index]); }
+        }
+        SdfResidencyWork.ProcessWork.Add(kind: SdfResidencyWork.MotionRowsSpared, amount: spared);
+    }
+
+    private sealed class SlotJudges(SdfWorldTables owner) : Puck.Hosting.Jobs.IJobPartitions {
+        public int Count;
+
+        public void Run(int partition) {
+            var (start, end) = Puck.Hosting.Jobs.PartitionRuns.Of(count: Count, partition: partition, run: JudgementsPerPartition);
+
+            for (var index = start; (index < end); index++) {
+                owner.DecideMotionSlot(judgement: ref owner.m_judgements[index]);
+            }
+        }
+    }
+
+    // The first half: places the slot's boxes under its pose and roster, both sides enclosing every live member, or spares
+    // a rigid slot whose move the shadows would take as costing nothing. An unbounded member or a missing pose keeps the
+    // whole side unbounded. Writes only the slot's own motion and its judgement.
+    private void DecideMotionSlot(ref SlotJudgement judgement) {
+        var slot = judgement.Slot;
+        var motion = judgement.Motion;
         var dirty = motion.Dirty;
-        var hasPose = slot < m_motionTransforms.Count;
-        var pose = hasPose ? m_motionTransforms[slot] : default;
+        var poses = m_motionTransforms;
+        var hasPose = slot < poses.Count;
+        var pose = hasPose ? poses[slot] : default;
         var poseChanged = (hasPose != motion.HasPose) ||
             (hasPose && ((pose.Position != motion.Pose.Position) || (pose.Orientation != motion.Pose.Orientation)));
 
@@ -129,7 +207,8 @@ public sealed partial class SdfWorldTables {
         // member) is a function of its pose alone. An unmoved one is the box it was; a moved one whose pose change
         // bounds its box's displacement from the box the shadows last judged it by under their finest texel is a
         // change Moved would take as costing nothing, so neither is placed. Moved measures against its judged box,
-        // never the previous placement, so the drift gathers until it passes the texel.
+        // never the previous placement, so the drift gathers until it passes the texel. The open scope count is read as
+        // the staging's judgements began, so a scope that a settle meets spares nothing more until the next staging.
         if (!dirty && (m_motionOpen == 0) && hasPose && motion.HasPose && !motion.Fixed.Live && (motion.Carried.Count == 1)) {
             var spared = !poseChanged || (m_shadows is null) ||
                 (motion.HasJudgedPose && m_shadows.TryJudged(key: slot, box: out _) &&
@@ -138,7 +217,7 @@ public sealed partial class SdfWorldTables {
             if (spared) {
                 motion.PreviousStale |= poseChanged;
                 motion.Pose = pose;
-                SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.MotionRowsSpared);
+                judgement.Spared = true;
                 return;
             }
         }
@@ -159,23 +238,32 @@ public sealed partial class SdfWorldTables {
         }
         // Both sides are one box carried by the slot's pose alone, with no member added or gone between them: every caster
         // point then moves with the box, so the box's displacement bounds the shadow's, as it does a standalone row's.
-        var rigid = !dirty && motion.HasPose && hasPose && !motion.Fixed.Live && (motion.Carried.Count == 1);
-
+        judgement.Rigid = !dirty && motion.HasPose && hasPose && !motion.Fixed.Live && (motion.Carried.Count == 1);
         (motion.Dirty, motion.Previous, motion.Pose, motion.HasPose) = (false, after, pose, hasPose);
+        (judgement.Before, judgement.After, judgement.Pose, judgement.HasPose, judgement.PoseChanged, judgement.Dirty) = (before, after, pose, hasPose, poseChanged, dirty);
+    }
+
+    // The second half, on the packing thread in collection order: hands the decided change to the scopes and the
+    // shadows, then lets the judged pose follow the shadows' judged box.
+    private void SettleMotionSlot(in SlotJudgement judgement) {
+        var slot = judgement.Slot;
+        var motion = judgement.Motion;
+        var (before, after) = (judgement.Before, judgement.After);
+
         if (!after.Live) { m_slotMotion[slot] = null; }
         if (!before.Live && !after.Live) { return; }
 
         SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.MotionRows);
         NoteMotion(cause: SdfMotionCause.Slot, row: slot, wasLive: before.Live, before: in before.Box, wasGlass: before.Glass,
-            isLive: after.Live, after: in after.Box, isGlass: after.Glass, affectsShadows: dirty || poseChanged, rigid: rigid);
+            isLive: after.Live, after: in after.Box, isGlass: after.Glass, affectsShadows: judgement.Dirty || judgement.PoseChanged, rigid: judgement.Rigid);
 
         // The judged pose follows the shadows' judged box: taken when Moved judged this one carried box, kept while
         // Moved left an earlier one standing (it measured within a texel of it), and dropped when the shadows hold none
         // or the slot's box is no single carried box.
-        if (!hasPose || motion.Fixed.Live || (motion.Carried.Count != 1) || (m_shadows is null) || !m_shadows.TryJudged(key: slot, box: out var judged)) {
+        if (!judgement.HasPose || motion.Fixed.Live || (motion.Carried.Count != 1) || (m_shadows is null) || !m_shadows.TryJudged(key: slot, box: out var judged)) {
             motion.HasJudgedPose = false;
         } else if ((after.Box is { } placed) && judged.Equals(placed)) {
-            (motion.JudgedPose, motion.HasJudgedPose) = (pose, true);
+            (motion.JudgedPose, motion.HasJudgedPose) = (judgement.Pose, true);
         }
     }
     // The displacement under which a slot is left unplaced: a tenth under the shadows' own bound, less the float error
@@ -199,14 +287,15 @@ public sealed partial class SdfWorldTables {
             m_lastMotionSlotCount = count;
         }
         foreach (var slot in m_dirtyMotionSlots) {
-            if (m_slotMotion[slot] is { } dirty) { JudgeMotionSlot(slot, dirty); }
+            if (m_slotMotion[slot] is { } dirty) { CollectMotionSlot(slot, dirty); }
         }
         m_dirtyMotionSlots.Clear();
-        NoteMovedSlots(m_changedTransforms);
-        NoteMovedSlots(m_reseatedTransforms);
+        CollectMovedSlots(m_changedTransforms);
+        CollectMovedSlots(m_reseatedTransforms);
+        JudgeMotionSlots();
     }
 
-    private void NoteMovedSlots(GpuUploadRuns slots) {
+    private void CollectMovedSlots(GpuUploadRuns slots) {
         for (var run = 0; run < slots.Count; run++) {
             var first = slots.Start(run);
             var end = Math.Min(m_packedTransformCount, first + slots.Length(run));
@@ -219,7 +308,7 @@ public sealed partial class SdfWorldTables {
                         }
                     }
                 }
-                if ((slot < m_slotMotion.Length) && (m_slotMotion[slot] is { } motion)) { JudgeMotionSlot(slot, motion); }
+                if ((slot < m_slotMotion.Length) && (m_slotMotion[slot] is { } motion)) { CollectMotionSlot(slot, motion); }
             }
         }
     }

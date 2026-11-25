@@ -626,9 +626,9 @@ public sealed partial class SdfMeshPathBake {
         }
         PublishTiers(frame: frame);
         // A ladder bake's detail is settled once every drawn geometry's other rungs stand in the store too.
-        var filling = ((Library.Policy == SdfMeshCachePolicy.Ladder) && FillLadders(fills: fills));
+        var ladders = ((Library.Policy == SdfMeshCachePolicy.Ladder) ? FillLadders(fills: fills) : default);
 
-        Volatile.Write(location: ref m_filling, value: (filling ? 1 : 0));
+        Volatile.Write(location: ref m_filling, value: (ladders.Holds ? 1 : 0));
         Volatile.Write(location: ref m_decidedAt, value: System.Diagnostics.Stopwatch.GetTimestamp());
 
         var hold = new DetailHold(
@@ -642,7 +642,7 @@ public sealed partial class SdfMeshPathBake {
             Over: over,
             Spares: (spare.Count + sparesWaiting + coarsening),
             Bias: bias,
-            Filling: filling
+            Ladders: ladders
         );
 
         m_detailHold = hold;
@@ -723,8 +723,8 @@ public sealed partial class SdfMeshPathBake {
     // tier started this decision, replacements still baking or landing ahead of the draws, owed finer tiers waiting their
     // hold, first details in flight or owed, a budget that presses on something it can still coarsen (over its budget,
     // with spare groups or the bias short of its most), and a ladder still being filled.
-    private readonly record struct DetailHold(bool Replaced, int InFlight, int Landing, int OwedWaiting, int FirstsInFlight, int FirstsOwed, bool Pressing, bool Over, int Spares, int Bias, bool Filling) {
-        public bool Holds => (Replaced || (InFlight > 0) || (Landing > 0) || (OwedWaiting > 0) || (FirstsInFlight > 0) || (FirstsOwed > 0) || Pressing || Filling);
+    private readonly record struct DetailHold(bool Replaced, int InFlight, int Landing, int OwedWaiting, int FirstsInFlight, int FirstsOwed, bool Pressing, bool Over, int Spares, int Bias, LadderHold Ladders) {
+        public bool Holds => (Replaced || (InFlight > 0) || (Landing > 0) || (OwedWaiting > 0) || (FirstsInFlight > 0) || (FirstsOwed > 0) || Pressing || Ladders.Holds);
 
         public override string ToString() {
             var parts = new List<string>();
@@ -736,7 +736,7 @@ public sealed partial class SdfMeshPathBake {
             if (FirstsInFlight > 0) { parts.Add(item: $"{FirstsInFlight} first detail(s) in flight"); }
             if (FirstsOwed > 0) { parts.Add(item: $"{FirstsOwed} first detail(s) owed"); }
             if (Pressing) { parts.Add(item: $"the budget presses (over={(Over ? 1 : 0)} spares={Spares} bias={Bias}/{SdfMeshTier.MaxBias})"); }
-            if (Filling) { parts.Add(item: "a ladder is still filling"); }
+            if (Ladders.Holds) { parts.Add(item: $"a ladder is still filling ({Ladders})"); }
             return string.Join(separator: ", ", values: parts);
         }
     }
@@ -852,8 +852,7 @@ public sealed partial class SdfMeshPathBake {
         // stored rung to lack: its tiers bake as its steps do, and a tier of a live group is live.
         group.InheritLive(from: old);
         if ((Library.Policy == SdfMeshCachePolicy.Stored) && !group.Live && !Stores(group: group, identity: Identity.Value)) {
-            Library.Cache.Count(kind: SdfMeshCache.RungsMissed);
-            SdfMeshBakeReport.RungMissed(drawn: old.Tier, first: group.FirstDetail, group: group, residency: Residency);
+            CountRungMissed(asked: group, drawn: old.Tier, first: group.FirstDetail);
             old.RetierRefused = true;
             group.Retired = true;
             return TierStart.None;

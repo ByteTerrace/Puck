@@ -1597,7 +1597,12 @@ laws exercise that boundary.
   tier's replacement does, its product never takes the draws (`Group.Fill`,
   `Draw`), and the group it stood in for takes the place back
   (`FinishFill`). The detail is not settled while a ladder is unfinished, so
-  `world.wait bakes` waits for all of them. A residency besides the world's own
+  `world.wait bakes` waits for all of them, and the hold names the rungs in
+  flight, the ladders owed and the first group holding (`LadderHold`). Every
+  replacement, a rung included, is finished at the place the group list records
+  for it (`Group.Index`): a restart that keeps a replacement mid-bake sets it at
+  the new program's index, and one left standing off `m_replacing` would hold a
+  ladder forever. A residency besides the world's own
   holds the wait while it owes a group or is between rungs (`Filling`) and a
   view draws it (`SdfMeshPathBake.Driven`: its GPU work asked it for a lattice
   within a second); one no view draws lands nothing, so it holds no wait.
@@ -1626,10 +1631,15 @@ laws exercise that boundary.
   groups baking and how many are live, and the latest tier decision's hold),
   and `puck world player` records that reason per place. `world.counters sdf.mesh-cache` (`SdfMeshCache`) is the
   reading: `dispatches` and the `live-dispatches` among them, `groups-baked`
-  and `live-baked`, `rungs-missed`, `loads-declined` and `rungs-filled`. A boot
+  and `live-baked`, `rungs-missed` and the `rungs-missed-live` among them,
+  `loads-declined` and `rungs-filled`. A rung is missed at one door
+  (`CountRungMissed`), which names it (`[sdf.mesh-bake] rung-missed`); a sampled
+  field's reader asked at a snapshot the world then moves past
+  (`ReclassifyReaderMisses`, on `Revisit`'s resample) is live geometry, and its
+  misses move to `rungs-missed-live` with a `rung-missed-live` line. A boot
   of a whole cache under `Stored` dispatches only live lattices, bakes no other
-  group and misses no rung, which is what `puck world player`'s check boots
-  require.
+  group and misses no rung but live ones, which is what `puck world player`'s
+  check boots require.
 - **A dynamic group's mesh is stored under its form too.** Its geometry holds
   its other slots' poses, which no later run stands in again, so
   `SdfMeshLibrary.Store` writes the mesh a second time under

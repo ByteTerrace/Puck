@@ -91,9 +91,12 @@ public static class WorldPlayerCommand {
             With --no-bake, one headless boot fills everything but the meshes. A consumer starts the folder with --world
             worlds/<package> --cache-dir cache; `puck publish` turns it into a release and the installer installs that.
             Writes player.json first as incomplete and last with the commit, runtime, backends, targets and each boot's
-            reading (places, settled, dispatches, groupsBaked, tiersMissed, loadsDeclined, tiersFilled, loaded), and prints
-            each part's size. The record says complete only when every boot settled at every place and every check
-            dispatched no lattice, baked no group and missed no tier; otherwise it lists why under incomplete, and
+            reading (places, settled, dispatches, groupsBaked, tiersMissed, tiersMissedLive, loadsDeclined, tiersFilled,
+            loaded, and missed: each tier a check asked that the fill did not produce, with the place, residency,
+            geometry and tiers asked and drawn), and prints each part's size. Before the fill it removes every mesh set
+            but this build's own from cache/meshes. The record says complete only when every boot settled at every place,
+            each backend's set still stands after the fills, and every check dispatched no lattice, baked no group and
+            missed no tier but a moved field's (live geometry); otherwise it lists why under incomplete, and
             `puck world caches produce` refuses the folder. Each boot's logs are in player-logs/. Exit 0 wrote a whole
             player build, 1 a step failed or the build is not complete, 2 invalid arguments.
             """);
@@ -195,6 +198,7 @@ public static class WorldPlayerCommand {
                 // whatever the window or the device's memory would have demanded, so no boot per target is needed to
                 // cover a target's tiers. It runs on this adapter's own profile, at the largest target's window.
                 var widest = targets.MaxBy(keySelector: static target => (((long)target.Width) * target.Height))!;
+                var sets = KeepOwnMeshSets(backends: backends, output: output);
 
                 foreach (var backend in backends) {
                     var key = $"fill {WorldBackendTokens.Token(backend: backend)}";
@@ -202,6 +206,13 @@ public static class WorldPlayerCommand {
 
                     verified[key] = reading.ToJson();
                     incomplete.AddRange(collection: reading.Unsettled.Select(selector: place => $"{key}: not settled at {place}"));
+                }
+                // The store keeps the writer's own set whole and evicts others past its bound, so a later backend's fill
+                // can take an earlier one's set: each must still stand before its checks mean anything.
+                foreach (var (backend, set) in sets) {
+                    if (!Directory.Exists(path: set) || !Directory.EnumerateFiles(path: set).Any()) {
+                        incomplete.Add(item: $"fill {WorldBackendTokens.Token(backend: backend)}: its mesh set {Path.GetFileName(path: set)} is not in the store, which a later fill evicted past the store's bound");
+                    }
                 }
                 // Then each backend and target boots as a player's build does, drawing stored tiers alone, on the target's
                 // profile and window, and stands at the same places: a whole cache settles everywhere with no lattice
@@ -213,7 +224,7 @@ public static class WorldPlayerCommand {
 
                         verified[key] = reading.ToJson();
                         incomplete.AddRange(collection: reading.Unsettled.Select(selector: place => $"{key}: not settled at {place}"));
-                        if (!reading.Hits) { incomplete.Add(item: $"{key}: the cache missed ({reading.Describe()})"); }
+                        if (!reading.Hits) { incomplete.Add(item: $"{key}: the cache missed ({reading.Describe()}){((reading.Missed.Count > 0) ? $"; the fill did not produce {reading.DescribeMissed(count: 4)}" : string.Empty)}"); }
                     }
                 }
             } else {
@@ -248,6 +259,33 @@ public static class WorldPlayerCommand {
         }
     }
 
+    // Removes from the folder's mesh store every set but this build's own, one a backend by its mesh bake identity, and
+    // answers each backend's set directory. A rerun keeps cache/, and an earlier build's sets ship nothing but count
+    // against the store's bound, which evicts whole sets other than the writer's own.
+    private static List<(WorldBackendPreference Backend, string Set)> KeepOwnMeshSets(IReadOnlyList<WorldBackendPreference> backends, string output) {
+        var sets = new List<(WorldBackendPreference Backend, string Set)>();
+
+        foreach (var backend in backends) {
+            if (!WorldCachesCommand.TryIdentity(backend: WorldBackendTokens.Token(backend: backend), folder: output, identity: out var identity, why: out var why)) {
+                throw new InvalidOperationException(message: $"the build {why}.");
+            }
+            sets.Add(item: (backend, WorldCachesCommand.SetDirectory(folder: output, identity: identity)));
+        }
+
+        var meshes = Path.Combine(path1: output, path2: CacheName, path3: Puck.Launcher.Release.PlayerBuildLayout.MeshesDirectoryName);
+        var own = sets.Select(selector: static set => Path.GetFileName(path: set.Set)).ToHashSet(comparer: StringComparer.OrdinalIgnoreCase);
+
+        if (!Directory.Exists(path: meshes)) { return sets; }
+        foreach (var entry in Directory.EnumerateFileSystemEntries(path: meshes)) {
+            var name = Path.GetFileName(path: entry);
+            var dot = name.IndexOf(value: '.');
+
+            if (own.Contains(item: ((dot < 0) ? name : name[..dot]))) { continue; }
+            Console.WriteLine(value: $"{Verb}: removing the mesh set entry {name}, which this build's identities do not name.");
+            if (Directory.Exists(path: entry)) { Directory.Delete(path: entry, recursive: true); } else { File.Delete(path: entry); }
+        }
+        return sets;
+    }
     // One Release publish with the World's own self-contained switch (PuckSelfContained, see Puck.World.csproj): a global
     // SelfContained or RuntimeIdentifier would flow into every referenced project's locked restore. The ReadyToRun image is
     // composite: the framework and Puck share one version bubble, so the precompiler reaches the generic instantiations
@@ -400,17 +438,32 @@ public static class WorldPlayerCommand {
     /// <param name="GroupsBaked">The groups that began a bake, live geometry apart.</param>
     /// <param name="LiveBaked">The groups that began a bake because an operand or a sampled field they read moved.</param>
     /// <param name="RungsMissed">The tiers a stored-only boot asked that the store lacked.</param>
+    /// <param name="RungsMissedLive">The tiers among them asked by a sampled field's reader whose field then moved, which
+    /// are live geometry's.</param>
     /// <param name="LoadsDeclined">The stored entries a stored-only boot could not read for want of memory.</param>
     /// <param name="RungsFilled">The tiers a ladder boot baked beyond its demand.</param>
     /// <param name="Loaded">The groups the boot's bakes loaded from the store, summed over every start it reported.</param>
-    public sealed record BootReading(int Places, IReadOnlyList<string> Unsettled, long Dispatches, long LiveDispatches, long GroupsBaked, long LiveBaked, long RungsMissed, long LoadsDeclined, long RungsFilled, int Loaded) {
+    /// <param name="Missed">The tiers missed that a cache answers for, each with where the boot stood when it asked.</param>
+    public sealed record BootReading(int Places, IReadOnlyList<string> Unsettled, long Dispatches, long LiveDispatches, long GroupsBaked, long LiveBaked, long RungsMissed, long RungsMissedLive, long LoadsDeclined, long RungsFilled, int Loaded, IReadOnlyList<MissedTier> Missed) {
         /// <summary>Gets whether the boot took from the store everything a cache can hold: no lattice dispatched and
-        /// no group baked but for geometry the world made as it ran, and no tier missed.</summary>
-        public bool Hits => ((Dispatches == LiveDispatches) && (GroupsBaked == 0L) && (RungsMissed == 0L));
+        /// no group baked but for geometry the world made as it ran, and no tier missed but live geometry's.</summary>
+        public bool Hits => ((Dispatches == LiveDispatches) && (GroupsBaked == 0L) && (RungsMissed == RungsMissedLive));
 
         /// <summary>Describes the counts in one line, as the verb prints them.</summary>
         /// <returns>The line.</returns>
-        public string Describe() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"dispatches {Dispatches} ({LiveDispatches} live), groups baked {GroupsBaked} ({LiveBaked} more live), tiers missed {RungsMissed}, loads declined {LoadsDeclined}, tiers filled {RungsFilled}, groups loaded {Loaded}");
+        public string Describe() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"dispatches {Dispatches} ({LiveDispatches} live), groups baked {GroupsBaked} ({LiveBaked} more live), tiers missed {RungsMissed} ({RungsMissedLive} live), loads declined {LoadsDeclined}, tiers filled {RungsFilled}, groups loaded {Loaded}");
+        /// <summary>Names the first missed tiers a cache answers for: where the boot stood, the residency, the geometry,
+        /// the tier asked and the tier drawn in its place.</summary>
+        /// <param name="count">The most to name.</param>
+        /// <returns>The fragment, or an empty string when none was missed.</returns>
+        public string DescribeMissed(int count) {
+            if (Missed.Count == 0) { return string.Empty; }
+
+            var places = Missed.Select(selector: static missed => missed.Place).Distinct(comparer: StringComparer.Ordinal).Count();
+            var geometries = Missed.Select(selector: static missed => missed.Geometry).Distinct(comparer: StringComparer.Ordinal).Count();
+
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Missed.Sum(selector: static missed => missed.Times)} ask(s) of {geometries} geometr{((geometries == 1) ? "y" : "ies")} at {places} place(s): {string.Join(separator: "; ", values: Missed.Take(count: count).Select(selector: static missed => missed.ToString()))}{((Missed.Count > count) ? "; ..." : string.Empty)}");
+        }
         /// <summary>Writes the reading as <c>player.json</c> records it.</summary>
         /// <returns>The object.</returns>
         public JsonObject ToJson() => new() {
@@ -422,9 +475,34 @@ public static class WorldPlayerCommand {
             ["groupsBaked"] = GroupsBaked,
             ["liveBaked"] = LiveBaked,
             ["tiersMissed"] = RungsMissed,
+            ["tiersMissedLive"] = RungsMissedLive,
             ["loadsDeclined"] = LoadsDeclined,
             ["tiersFilled"] = RungsFilled,
             ["loaded"] = Loaded,
+            ["missed"] = new JsonArray([.. Missed.Select(selector: static missed => missed.ToJson())]),
+        };
+    }
+
+    /// <summary>A tier a stored-only boot asked that the store lacked, as its engine named it
+    /// (<c>[sdf.mesh-bake] rung-missed</c>): the fill's guarantee is that a check asks only for tiers the fill produced,
+    /// and each of these breaks it.</summary>
+    /// <param name="Place">Where the boot stood: an authored spawn point, or its spawn.</param>
+    /// <param name="Residency">The residency that asked.</param>
+    /// <param name="Geometry">The geometry asked, at the tier asked: its store entry's name.</param>
+    /// <param name="Shape">The shape, which every tier of the geometry shares.</param>
+    /// <param name="Reads">The frame inputs the geometry reads, or <c>none</c>.</param>
+    /// <param name="Asked">The tier asked.</param>
+    /// <param name="Drawn">The stored tier drawn in its place.</param>
+    /// <param name="Tiers">The geometry's ladder, finest to coarsest.</param>
+    /// <param name="Times">How many times the boot asked it there.</param>
+    public sealed record MissedTier(string Place, string Residency, string Geometry, string Shape, string Reads, int Asked, int Drawn, string Tiers, int Times) {
+        /// <inheritdoc/>
+        public override string ToString() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"at {Place} {Residency} geometry {Geometry} (reads {Reads}) asked tier {Asked} of {Tiers}, drew {Drawn}{((Times > 1) ? $", {Times} times" : string.Empty)}");
+        /// <summary>Writes the tier as <c>player.json</c> records it.</summary>
+        /// <returns>The object.</returns>
+        public JsonObject ToJson() => new() {
+            ["place"] = Place, ["residency"] = Residency, ["geometry"] = Geometry, ["shape"] = Shape, ["reads"] = Reads,
+            ["asked"] = Asked, ["drawn"] = Drawn, ["tiers"] = Tiers, ["times"] = Times,
         };
     }
 
@@ -475,6 +553,45 @@ public static class WorldPlayerCommand {
 
             var unsettled = new List<string>();
             var stood = 0;
+            // The tiers the boot missed, by where it stood, its geometry and the tier asked, and the reader geometries the
+            // engine then named live; read from the boot's lines since the last place (Collect).
+            var missed = new Dictionary<(string Place, string Residency, string Geometry, int Asked), MissedTier>();
+            var live = new HashSet<string>(comparer: StringComparer.Ordinal);
+            var collected = 0;
+
+            void Collect(string place) {
+                var rows = process.LinesFrom(from: collected);
+
+                collected += rows.Count;
+                foreach (var row in rows) {
+                    var text = row.Text;
+
+                    if (text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] rung-missed-live ")) {
+                        _ = live.Add(item: CliLineFields.Field(line: text, name: "geometry") ?? string.Empty);
+                        continue;
+                    }
+                    if (!text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] rung-missed ")) { continue; }
+
+                    var residency = (CliLineFields.Field(line: text, name: "residency") ?? "?");
+                    var geometry = (CliLineFields.Field(line: text, name: "geometry") ?? "?");
+                    var asked = CliLineFields.Count(line: text, name: "asked");
+                    var key = (place, residency, geometry, asked);
+
+                    missed[key] = (missed.TryGetValue(key: key, value: out var seen)
+                        ? (seen with { Times = (seen.Times + 1) })
+                        : new MissedTier(
+                            Asked: asked,
+                            Drawn: CliLineFields.Count(line: text, name: "drawn"),
+                            Geometry: geometry,
+                            Place: place,
+                            Reads: (CliLineFields.Field(line: text, name: "reads") ?? "none"),
+                            Residency: residency,
+                            Shape: (CliLineFields.Field(line: text, name: "shape") ?? "?"),
+                            Tiers: (CliLineFields.Field(line: text, name: "tiers") ?? "?"),
+                            Times: 1
+                        ));
+                }
+            }
 
             // The engine's own counts of what the boot has asked of its mesh cache so far.
             BootReading Read() {
@@ -490,9 +607,11 @@ public static class WorldPlayerCommand {
                     LiveDispatches: Counted(kind: Puck.SdfVm.SdfMeshCache.LiveDispatches),
                     Loaded: process.LinesFrom(from: 0).Where(predicate: static row => row.Text.StartsWith(comparisonType: StringComparison.Ordinal, value: "[sdf.mesh-bake] start ")).Sum(selector: static row => CliLineFields.Count(line: row.Text, name: "loading")),
                     LoadsDeclined: Counted(kind: Puck.SdfVm.SdfMeshCache.LoadsDeclined),
+                    Missed: [.. missed.Values.Where(predicate: tier => !live.Contains(item: tier.Geometry))],
                     Places: stood,
                     RungsFilled: Counted(kind: Puck.SdfVm.SdfMeshCache.RungsFilled),
                     RungsMissed: Counted(kind: Puck.SdfVm.SdfMeshCache.RungsMissed),
+                    RungsMissedLive: Counted(kind: Puck.SdfVm.SdfMeshCache.RungsMissedLive),
                     Unsettled: unsettled
                 );
             }
@@ -504,6 +623,12 @@ public static class WorldPlayerCommand {
             // longest hold) waits again, for as long as each wait dispatched or filled more; one that released with
             // nothing landed since is the boot's answer.
             bool Settle(string place) {
+                var settled = Wait(place: place);
+
+                Collect(place: place);
+                return settled;
+            }
+            bool Wait(string place) {
                 stood++;
                 while (true) {
                     var mark = process.LineCount;
@@ -538,7 +663,7 @@ public static class WorldPlayerCommand {
 
             var reading = Read();
 
-            Console.WriteLine(value: $"{Verb}: {pass} {name}: {((unsettled.Count == 0) ? $"settled at {stood} places" : $"not settled at {string.Join(separator: "; ", values: unsettled)}")}; {reading.Describe()}");
+            Console.WriteLine(value: $"{Verb}: {pass} {name}: {((unsettled.Count == 0) ? $"settled at {stood} places" : $"not settled at {string.Join(separator: "; ", values: unsettled)}")}; {reading.Describe()}{((reading.Missed.Count > 0) ? $"; missed {reading.DescribeMissed(count: 8)}" : string.Empty)}");
             return reading;
         } finally {
             // A windowed World can outlive its quit; one that does not exit is stopped by its process.
@@ -547,12 +672,13 @@ public static class WorldPlayerCommand {
             }
         }
     }
-    // A counter's lifetime total in world.counters' answer: the whole number after the kind's name on its line.
+    // A counter's lifetime total in world.counters' answer: the whole number after the kind's name on its line, the name
+    // a whole token (rungs-missed is a prefix of rungs-missed-live).
     private static long? CountOf(IEnumerable<string> lines, string kind) {
         foreach (var line in lines) {
             var at = line.IndexOf(value: kind, comparisonType: StringComparison.Ordinal);
 
-            if (at < 0) { continue; }
+            if ((at < 0) || (((at + kind.Length) < line.Length) && !char.IsWhiteSpace(c: line[at + kind.Length]))) { continue; }
             var rest = line.AsSpan(start: (at + kind.Length));
             var first = rest.IndexOfAnyInRange(lowInclusive: '0', highInclusive: '9');
 
@@ -645,7 +771,8 @@ public static class WorldPlayerCommand {
             The console prints `[derived] ... hit` for each shipped product it reads and `miss` for one it had to derive;
             `world.residency` and `[bakes: settled ...]` show the mesh store's state, and `world.counters sdf.mesh-cache`
             counts what the boot asked of the mesh store beyond a hit: `dispatches` and `groups-baked` are zero while it
-            bakes nothing, and `rungs-missed` counts each tier it drew another stored tier in place of.
+            bakes nothing, and `rungs-missed` counts each tier it drew another stored tier in place of (`rungs-missed-live`
+            those of a field state the world then moved past, which no cache holds).
             """;
 
         File.WriteAllText(path: Path.Combine(path1: output, path2: "README.md"), contents: text.ReplaceLineEndings(replacementText: "\n") + "\n");
