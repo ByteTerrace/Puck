@@ -143,11 +143,14 @@ public sealed partial class SdfMeshPathBake {
             lattice.AnswerRefinement(first: 0, materials: fineMaterials, values: fineValues);
         }
 
+        var spacing = SdfMeshBakeTaps.Spacing(cell: lattice.ContourCell);
+
         for (var crossings = lattice.CrossingPoints(); (crossings.Length > 0); crossings = lattice.CrossingPoints()) {
-            lattice.AnswerCrossings(first: 0, values: LevelValues(field: field, iso: IsoAt, points: crossings.Span));
+            var (crossingValues, crossingGradients) = LevelGradients(field: field, iso: IsoAt, points: Xyz(points: crossings.Span), spacing: spacing);
+
+            lattice.AnswerCrossings(first: 0, gradients: crossingGradients, values: crossingValues);
         }
 
-        var spacing = SdfMeshBakeTaps.Spacing(cell: lattice.ContourCell);
         var gradientPoints = Xyz(points: lattice.GradientPoints().Span);
         var (gradientValues, gradients) = LevelGradients(field: field, iso: IsoAt, points: gradientPoints, spacing: spacing);
 
@@ -277,15 +280,6 @@ public sealed partial class SdfMeshPathBake {
         for (var index = 0; (index < xyz.Length); index++) { xyz[index] = new Vector3(x: points[index].X, y: points[index].Y, z: points[index].Z); }
 
         return xyz;
-    }
-    private static float[] LevelValues(ISdfMeshLevelField field, Func<Vector3, float> iso, ReadOnlySpan<Vector4> points) {
-        var at = Xyz(points: points);
-        var values = new float[at.Length];
-
-        field.Values(materials: new int[at.Length], points: at, values: values, work: SdfMeshLevelWork.Contour);
-        for (var index = 0; (index < values.Length); index++) { values[index] -= iso(arg: at[index]); }
-
-        return values;
     }
     // Values less the iso-value and gradients, three floats a point, as the lattice and the field check take them.
     private static (float[] Values, float[] Gradients) LevelGradients(ISdfMeshLevelField field, Func<Vector3, float> iso, Vector3[] points, float spacing) {

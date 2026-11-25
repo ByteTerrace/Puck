@@ -733,10 +733,15 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // Each searched crossing edge's root, in m_crossingKeys' order (its edge's CrossingData.RootPlusOne names it).
     private readonly OwnedBuffer<CrossingRoot> m_crossingRoots;
 
-    private readonly OwnedBuffer<long> m_pendingCrossings;
+    // Each root's crossing edge, its row in m_crossingKeys and m_crossingData, in m_crossingRoots' order.
+    private readonly OwnedBuffer<int> m_rootEdges;
 
-    // The indices in m_crossingRoots of m_pendingCrossings' edges, in its order.
+    // The indices in m_crossingRoots of the roots still searching, in root order.
     private readonly OwnedBuffer<int> m_pendingRoots;
+    // Per point of the current crossing round, its root's index in m_crossingRoots times two plus its trial.
+    private readonly OwnedBuffer<int> m_roundTrials;
+    // The crossing rows GradientPoints lists after its samples, in its order: those no search trial measured.
+    private readonly OwnedBuffer<int> m_gradientCrossings;
 
     // Per crossing edge, in m_crossingKeys' order: its searched root, whether a closed sample ends it, and the gradient
     // measured at its crossing with the field's value there.
@@ -820,8 +825,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_crossingData = new(allocator, observer);
         m_crossingKeys = new(allocator: allocator, observer: observer);
         m_crossedFineCells = new(allocator: allocator, observer: observer);
-        m_pendingCrossings = new(allocator: allocator, observer: observer);
+        m_rootEdges = new(allocator: allocator, observer: observer);
         m_pendingRoots = new(allocator: allocator, observer: observer);
+        m_roundTrials = new(allocator: allocator, observer: observer);
+        m_gradientCrossings = new(allocator: allocator, observer: observer);
         m_crossingRoots = new(allocator: allocator, observer: observer);
         m_fineValues = new OwnedBuffer<float>(allocator: allocator, observer: observer);
         m_blockSlots = new OwnedBuffer<int>(allocator: allocator, observer: observer);
@@ -835,7 +842,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_valueHandle.Dispose(); m_materialHandle.Dispose();
         m_measured.Dispose(); m_thin.Dispose(); m_refined.Dispose(); m_strides.Dispose(); m_fineKeys.Dispose();
         m_crossingData.Dispose(); m_gradientAnswered.Dispose(); m_fineGradients.Dispose();
-        m_gradientKeys.Dispose(); m_points.Dispose(); m_crossingKeys.Dispose(); m_crossedFineCells.Dispose(); m_pendingCrossings.Dispose(); m_pendingRoots.Dispose(); m_crossingRoots.Dispose();
+        m_gradientKeys.Dispose(); m_points.Dispose(); m_crossingKeys.Dispose(); m_crossedFineCells.Dispose(); m_rootEdges.Dispose(); m_pendingRoots.Dispose(); m_roundTrials.Dispose(); m_gradientCrossings.Dispose(); m_crossingRoots.Dispose();
         m_gradients.Dispose();
         m_closedValues.Dispose();
         m_signKnown.Dispose();
@@ -1795,6 +1802,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// <param name="values">The run's field values.</param>
     /// <param name="materials">The run's materials, one per value.</param>
     /// <exception cref="ArgumentException">The run's arrays differ in length or reach past the fine samples.</exception>
+
     public void AnswerRefinement(int first, ReadOnlySpan<float> values, ReadOnlySpan<int> materials) {
         if ((values.Length != materials.Length) || (first < 0) || ((first + values.Length) > m_fineValues.Length)) {
             throw new ArgumentException(message: "A refinement answer holds one value and material per fine sample it names.");
@@ -1808,32 +1816,58 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_signInside.Resize(0);
     }
 
-    // An edge root stays bracketed by its original signs, and the search ends once the bracket is an 8,192th of the edge
-    // wide, its root then the bracket's middle, within a 16,384th of the zero. Each round measures two trials a
-    // tolerance apart about an estimate (the linear estimate, first, then the secant through the last round's trials, or
-    // the false position between the bracket's ends where that secant leaves the bracket), so a root the
-    // estimate all but hits closes the bracket that round; the bracket becomes the part between its ends and the trials
-    // whose ends differ in sign. A bracket whose remaining thirdings fill its remaining rounds is cut in thirds instead,
-    // so a field flat inside a corner cannot stall the search on the wrong face as an unguarded secant can, and no search
-    // takes more than MostRounds readback round trips of its group's.
+    // An edge root is searched by a safeguarded Newton iteration over dual trials: each trial walks the field once in
+    // forward mode and answers its value and gradient together, so the slope along the edge comes with the value. A
+    // round measures one trial at Newton's estimate (the linear estimate first), and the search ends at a trial's Newton
+    // landing once that landing's error is under Converged: its step itself, or, for a step under Asymptotic, the
+    // error two trials whose values and slopes agree on one quadratic give it (Error: the curvature their slopes
+    // measure, and the mismatch between their slopes and their values). Every trial stays inside the bracket the edge's original signs and the
+    // trials' signs keep, and a Newton estimate is followed only while it stays inside the bracket with the slope the
+    // bracket's ends give; otherwise the round bisects. A bracket whose remaining thirdings fill its remaining rounds is
+    // cut in thirds by two trials a round, so no search takes more than MostRounds readback round trips of its group's,
+    // and one cut to Tolerance ends at its middle (or at a Newton landing inside it).
+    //
+    // Invariant: a search's Position lies inside its final bracket, whose ends differ in sign, and is either within
+    // Tolerance of every point of a bracket at most Tolerance wide, or a Newton landing from a measured trial whose
+    // estimated error is under Converged. Enforced here alone: Answer is the one door a round's values pass, and Finish
+    // the one place Position is set. Where it stops: the landing's error is estimated from curvature measured over the
+    // trials' spacing, so a field that turns sharply between the trial and its landing (a kink inside the last step) can
+    // leave the root farther than the estimate, still inside the bracket.
+    //
+    // The trial whose Newton step is least is the one nearest the root by the field's own measure, and its gradient is
+    // the crossing's where it lies within Asymptotic of Position (Measured): the gradient stage measures no such crossing
+    // (GradientPoints), its value carried along the edge to Position by that trial's slope. Over that distance an accepted
+    // landing's curvature turns the slope along the edge by under Converged over Asymptotic of itself.
     private struct CrossingRoot {
         // The bracket width at which a search ends.
         public const float Tolerance = (1f / 8192f);
-        // The rounds a search takes at most: one about the linear estimate, one about the next false position, and the
-        // nine thirdings that close an edge's bracket.
+        // The rounds a search takes at most: the nine thirdings that close an edge's bracket, and two before them.
         public const int MostRounds = 11;
-
-        // Half the gap between a round's trials about an estimate: under half the tolerance, so a root between them
-        // ends the search.
-        private const float Straddle = (0.45f * Tolerance);
+        // The error, as a share of the edge, under which a trial's Newton landing places its root.
+        private const float Converged = (0.5f * Tolerance);
+        // The Newton step, as a share of the edge, under which a landing's error is estimated from the field's curvature,
+        // and the farthest a kept trial's gradient lies from the root it stands for.
+        private const float Asymptotic = (1f / 64f);
+        // How far inside the bracket's ends a trial stays, so a trial never repeats an end.
+        private const float Inset = (0.125f * Tolerance);
+        // How far, as a share of the steeper slope, two trials' secant may stray from the mean of their slopes while
+        // they are taken to measure one quadratic (Error).
+        private const float Quadratic = 0.01f;
 
         public CrossingRoot(float first, float second, bool firstMeasured, bool secondMeasured) {
             LowValue = first;
             HighValue = second;
             (LowMeasured, HighMeasured) = (firstMeasured, secondMeasured);
-            Done = ((first == 0f) || (second == 0f));
-            Position = (Done ? ((first == 0f) ? 0f : 1f) : 0.5f);
-            if (!Done) { Straddling(estimate: (first / (first - second))); }
+            BestAt = float.NaN;
+            BestStep = float.PositiveInfinity;
+            PreviousAt = float.NaN;
+            if ((first == 0f) || (second == 0f)) {
+                Finish(position: ((first == 0f) ? 0f : 1f));
+                return;
+            }
+            Trials = 1;
+            var linear = (first / (first - second));
+            First = (float.IsFinite(f: linear) ? Math.Clamp(value: linear, min: (Low + Inset), max: (High - Inset)) : 0.5f);
         }
 
         public bool Done { get; private set; }
@@ -1841,11 +1875,20 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // Whether both ends of the bracket the search ended in are measured values (a measured sample's, or a trial's),
         // rather than an end an unmeasured sample's interpolated value bounds: only then does the field change sign in it.
         public readonly bool Bracketed => (LowMeasured && HighMeasured);
-        // The round's two trials along the edge, nearer the low end first.
+        // The round's trials along the edge, nearer the low end first: one, or two for a round of thirds.
         public float First { get; private set; }
         public float Second { get; private set; }
+        public int Trials { get; private set; }
+        // Where along the edge the trial whose gradient the crossing keeps lies, NaN before any trial; and the slope it
+        // read along the edge, field units a whole edge.
+        public float BestAt { get; private set; }
+        public float BestSlope { get; private set; }
+        // Whether a measured trial's gradient stands for the crossing's: it lies within Asymptotic of Position.
+        public readonly bool Measured => (Done && float.IsFinite(f: BestAt) && (MathF.Abs(x: (Position - BestAt)) <= Asymptotic));
 
+        private float BestStep { get; set; }
         private int Answered { get; set; }
+        private float FirstSlope { get; set; }
         private float FirstValue { get; set; }
         private float High { get; set; } = 1f;
         private bool HighMeasured { get; set; }
@@ -1853,63 +1896,125 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         private float Low { get; set; }
         private bool LowMeasured { get; set; }
         private float LowValue { get; set; }
+        // The last trial before this round's whose slope runs the bracket's way, NaN before one, its value and slope.
+        private float PreviousAt { get; set; }
+        private float PreviousSlope { get; set; }
+        private float PreviousValue { get; set; }
         private int Rounds { get; set; }
 
-        // Takes the field's value at one of the round's trials (0 the first, 1 the second); once both are answered,
-        // narrows the bracket and chooses the next round's trials, or ends the search.
-        public void Answer(int trial, float value) {
-            if (Done) { return; }
-            if (trial == 0) { FirstValue = value; }
-            if (++Answered < 2) { return; }
+        // Takes the field's value and slope along the edge (field units a whole edge) at one of the round's trials (0
+        // the first, 1 the second); returns whether this trial's gradient is now the crossing's. Once the round's
+        // trials are answered, narrows the bracket and chooses the next round's trials, or ends the search.
+        public bool Answer(int trial, float value, float slope) {
+            if (Done) { return false; }
+
+            var at = ((trial == 0) ? First : Second);
+            // Newton's step from this trial, valid only with the slope the bracket's ends give.
+            var step = (Agrees(slope: slope) ? MathF.Abs(x: (value / slope)) : float.PositiveInfinity);
+            // A later trial with no step of its own replaces an earlier one with none: the bracket only narrows about the root.
+            var best = (!float.IsFinite(f: BestAt) || !(step > BestStep));
+
+            if (best) { (BestAt, BestStep, BestSlope) = (at, step, slope); }
+            if ((trial == 0) && (Trials == 2)) {
+                (FirstValue, FirstSlope) = (value, slope);
+                if (++Answered < 2) { return best; }
+            }
             Answered = 0;
             Rounds++;
 
-            var secondValue = value;
+            var (firstValue, firstSlope) = ((Trials == 2) ? (FirstValue, FirstSlope) : (value, slope));
 
-            if ((FirstValue == 0f) || (secondValue == 0f)) {
-                Position = ((FirstValue == 0f) ? First : Second);
-                Done = true;
-                return;
-            }
-            // The first part of low, first, second, high whose ends differ in sign.
-            var lowInside = (LowValue < 0f);
+            if (firstValue == 0f) { Finish(position: First); return best; }
+            if ((Trials == 2) && (value == 0f)) { Finish(position: Second); return best; }
+            Narrow(at: First, value: firstValue);
+            if (Trials == 2) { Narrow(at: Second, value: value); }
 
-            if ((FirstValue < 0f) != lowInside) {
-                (High, HighValue, HighMeasured) = (First, FirstValue, true);
-            } else if ((secondValue < 0f) != lowInside) {
-                (Low, LowValue, LowMeasured, High, HighValue, HighMeasured) = (First, FirstValue, true, Second, secondValue, true);
-            } else {
-                (Low, LowValue, LowMeasured) = (Second, secondValue, true);
+            // The Newton landing of the round's trial whose landing's error is least, where it stays inside the bracket.
+            var landing = float.NaN;
+            var landingError = float.PositiveInfinity;
+
+            Land(at: First, value: firstValue, slope: firstSlope, landing: ref landing, landingError: ref landingError);
+            if (Agrees(slope: firstSlope)) { (PreviousAt, PreviousSlope, PreviousValue) = (First, firstSlope, firstValue); }
+            if (Trials == 2) {
+                Land(at: Second, value: value, slope: slope, landing: ref landing, landingError: ref landingError);
+                if (Agrees(slope: slope)) { (PreviousAt, PreviousSlope, PreviousValue) = (Second, slope, value); }
             }
 
             var width = (High - Low);
 
             if ((width <= Tolerance) || (Rounds >= MostRounds)) {
-                Position = ((Low + High) * 0.5f);
-                Done = true;
-                return;
+                Finish(position: (float.IsFinite(f: landing) ? landing : ((Low + High) * 0.5f)));
+                return best;
+            }
+            if (landingError <= Converged) {
+                Finish(position: landing);
+                return best;
             }
             // The thirdings the bracket still needs; once they fill the rounds left, every round cuts it in thirds.
             if (((int)MathF.Ceiling(x: (MathF.Log2(x: (width / Tolerance)) / MathF.Log2(x: 3f)))) >= (MostRounds - Rounds)) {
+                Trials = 2;
                 First = (Low + (width / 3f));
                 Second = (Low + ((2f * width) / 3f));
-                return;
+                return best;
             }
-            // The secant through the round's two trials, a tolerance apart, reads the field's slope where it was just
-            // measured and lands far nearer a curved surface's root than the bracket's false position does; where it
-            // leaves the bracket, the false position stands.
-            var secant = (First - ((FirstValue * (Second - First)) / (secondValue - FirstValue)));
-
-            Straddling(estimate: ((float.IsFinite(f: secant) && (secant > Low) && (secant < High)) ? secant : (((Low * HighValue) - (High * LowValue)) / (HighValue - LowValue))));
+            Trials = 1;
+            First = (float.IsFinite(f: landing) ? Math.Clamp(value: landing, min: (Low + Inset), max: (High - Inset)) : ((Low + High) * 0.5f));
+            return best;
         }
 
-        // Places the round's trials a tolerance apart about an estimate inside the bracket.
-        private void Straddling(float estimate) {
-            var inset = (0.125f * Tolerance);
-            var centre = (float.IsFinite(f: estimate) ? Math.Clamp(value: estimate, min: (Low + inset), max: (High - inset)) : ((Low + High) * 0.5f));
+        // Whether a slope runs the way the bracket's ends change sign, so Newton's step from it heads into the bracket.
+        private readonly bool Agrees(float slope) => (float.IsFinite(f: slope) && (slope != 0f) && ((slope > 0f) == (HighValue > LowValue)));
 
-            First = MathF.Max(x: (centre - Straddle), y: (Low + inset));
-            Second = MathF.Min(x: (centre + Straddle), y: (High - inset));
+        // Narrows the bracket by one trial: it takes the end whose sign it shares.
+        private void Narrow(float at, float value) {
+            if (!((at > Low) && (at < High))) { return; }
+            if ((value < 0f) == (LowValue < 0f)) {
+                (Low, LowValue, LowMeasured) = (at, value, true);
+            } else {
+                (High, HighValue, HighMeasured) = (at, value, true);
+            }
+        }
+
+        // Takes a trial's Newton landing where it lies inside the bracket and its error is the least so far: its step
+        // under Converged, else for a step under Asymptotic the second-order error |f''| step² / (2 |f'|) the measured
+        // curvature gives it.
+        private readonly void Land(float at, float value, float slope, ref float landing, ref float landingError) {
+            if (!Agrees(slope: slope)) { return; }
+
+            var target = (at - (value / slope));
+            var step = MathF.Abs(x: (target - at));
+            var error = ((step <= Converged) ? step : ((step <= Asymptotic) ? Error(at: at, slope: slope, step: step, value: value) : float.PositiveInfinity));
+
+            if ((target >= Low) && (target <= High) && (!float.IsFinite(f: landing) || (error < landingError) || ((error == landingError) && (step < MathF.Abs(x: (landing - at)))))) {
+                (landing, landingError) = (target, error);
+            }
+        }
+
+        // The error of a trial's Newton landing a step away, from the trial and the previous one where the two measure one
+        // quadratic (the secant through their values matches the mean of their slopes to within Quadratic of the steeper,
+        // as a quadratic's does exactly and a field that kinks between them does not): the second-order term their change
+        // of slope gives, |f''| step² / (2 |f'|), and the first-order term the mismatch itself gives, step |secant - mean| /
+        // |f'|, which is how far the measured slopes stray from what the values say (a slope from taps rather than a dual
+        // walk reads a plane's slope a little off, and its landing lands that share of the step off). Infinite where the
+        // trials do not show the field to be smooth, so no landing is estimated from a field they do not measure.
+        private readonly float Error(float at, float value, float slope, float step) {
+            if (!float.IsFinite(f: PreviousAt) || (PreviousAt == at)) { return float.PositiveInfinity; }
+
+            var span = (at - PreviousAt);
+            var mismatch = MathF.Abs(x: (((value - PreviousValue) / span) - (0.5f * (slope + PreviousSlope))));
+
+            if (!(mismatch <= (Quadratic * MathF.Max(x: MathF.Abs(x: slope), y: MathF.Abs(x: PreviousSlope))))) { return float.PositiveInfinity; }
+
+            var curvature = MathF.Abs(x: ((slope - PreviousSlope) / span));
+
+            return (((0.5f * curvature * step) + mismatch) * (step / MathF.Abs(x: slope)));
+        }
+
+        // Ends the search at a position inside the bracket.
+        private void Finish(float position) {
+            Position = Math.Clamp(value: position, min: Low, max: High);
+            Done = true;
+            Trials = 0;
         }
     }
 
@@ -1995,19 +2100,20 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// <summary>Returns the next points for locating each sign-changing edge's zero along that edge. After refinement,
     /// repeatedly answer these points with <see cref="AnswerCrossings"/> until this returns no points, then measure
     /// <see cref="GradientPoints"/>. Closed thin sheets and gaps keep their lattice crossings.</summary>
-    /// <returns>The next round's points, with weight one, in the order <see cref="AnswerCrossings"/> takes their values.
-    /// The memory is the lattice's, valid until the next round of points is asked for or the lattice is disposed.</returns>
+    /// <returns>The next round's points, with weight one, in the order <see cref="AnswerCrossings"/> takes their values
+    /// and gradients: one a root searching by Newton's estimate, two a root cutting its bracket in thirds. The memory is
+    /// the lattice's, valid until the next round of points is asked for or the lattice is disposed.</returns>
     public ReadOnlyMemory<Vector4> CrossingPoints() {
         PrepareCrossings();
         if (!m_rootsPrepared) {
-            // The roots and the pending keys are written where they stay, in m_crossingKeys' order, then cut to the edges
-            // searched: a closed edge's key has neither.
+            // The roots and their edges are written where they stay, in m_crossingKeys' order, then cut to the edges
+            // searched: a closed edge has no root.
             var roots = m_crossingRoots;
-            var keys = m_pendingCrossings;
+            var edges = m_rootEdges;
             var searched = 0;
 
             roots.Resize(length: m_crossingKeys.Length, clear: false, preserve: false);
-            keys.Resize(length: m_crossingKeys.Length, clear: false, preserve: false);
+            edges.Resize(length: m_crossingKeys.Length, clear: false, preserve: false);
             for (var edge = 0; edge < m_crossingKeys.Length; edge++) {
                 var key = m_crossingKeys[edge];
                 var (start, axis, length) = CrossingEdge(key: key);
@@ -2022,64 +2128,114 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
                 var (ex, ey, ez) = FineCoordinates(key: end);
 
                 roots[searched] = new CrossingRoot(first: FineValue(x: x, y: y, z: z), firstMeasured: MeasuredSample(x: x, y: y, z: z), second: FineValue(x: ex, y: ey, z: ez), secondMeasured: MeasuredSample(x: ex, y: ey, z: ez));
-                keys[searched] = key;
+                edges[searched] = edge;
                 searched++;
                 m_crossingData[edge].RootPlusOne = searched;
             }
             m_rootsPrepared = true;
             // The first round's roots; each later round keeps those still searching.
             roots.Resize(length: searched, clear: false);
-            keys.Resize(length: searched, clear: false);
+            edges.Resize(length: searched, clear: false);
             m_pendingRoots.Resize(m_crossingRoots.Length, clear: false, preserve: false);
             for (var index = 0; (index < m_pendingRoots.Length); index++) { m_pendingRoots[index] = index; }
         }
 
         var kept = 0;
+        var trials = 0;
 
         for (var index = 0; (index < m_pendingRoots.Length); index++) {
-            if (m_crossingRoots[m_pendingRoots[index]].Done) { continue; }
-            m_pendingCrossings[kept] = m_pendingCrossings[index];
+            ref readonly var root = ref m_crossingRoots[m_pendingRoots[index]];
+
+            if (root.Done) { continue; }
+            trials += root.Trials;
             m_pendingRoots[kept] = m_pendingRoots[index];
             kept++;
         }
-        m_pendingCrossings.Resize(kept);
         m_pendingRoots.Resize(kept);
-
-        // Two trials a root, the root's first then its second.
-        m_points.Resize(clear: false, length: (2 * kept), preserve: false);
+        m_points.Resize(clear: false, length: trials, preserve: false);
+        m_roundTrials.Resize(clear: false, length: trials, preserve: false);
 
         var points = m_points.GetSpan();
+        var at = 0;
 
         for (var index = 0; (index < kept); index++) {
-            ref readonly var root = ref m_crossingRoots[m_pendingRoots[index]];
+            var rootIndex = m_pendingRoots[index];
+            ref readonly var root = ref m_crossingRoots[rootIndex];
+            var key = m_crossingKeys[m_rootEdges[rootIndex]];
 
-            points[(2 * index)] = new Vector4(value: CrossingPoint(key: m_pendingCrossings[index], fraction: root.First), w: 1f);
-            points[((2 * index) + 1)] = new Vector4(value: CrossingPoint(key: m_pendingCrossings[index], fraction: root.Second), w: 1f);
+            points[at] = new Vector4(value: CrossingPoint(key: key, fraction: root.First), w: 1f);
+            m_roundTrials[at++] = (2 * rootIndex);
+            if (root.Trials == 2) {
+                points[at] = new Vector4(value: CrossingPoint(key: key, fraction: root.Second), w: 1f);
+                m_roundTrials[at++] = ((2 * rootIndex) + 1);
+            }
         }
 
         return m_points.Memory;
     }
-    /// <summary>Answers a chunk of the current <see cref="CrossingPoints"/> round with field values. Every root remains
-    /// on its own edge, bracketed, and its search ends once the bracket is an 8,192th of the edge wide, the root within an
-    /// 16,384th of the zero, in at most eleven rounds.</summary>
+    /// <summary>Returns where each searched crossing's root landed, once <see cref="CrossingPoints"/> returns no points:
+    /// a diagnostic reading of the search, which no stage of the bake asks for.</summary>
+    /// <returns>Each searched root's point, in the lattice's frame, in crossing-edge order; its weight is one when a trial's
+    /// gradient stands for the crossing's, zero when the gradient stage measures it.</returns>
+    public Vector4[] Roots() {
+        var roots = new Vector4[m_crossingRoots.Length];
+
+        for (var index = 0; (index < roots.Length); index++) {
+            ref readonly var root = ref m_crossingRoots[index];
+
+            roots[index] = new Vector4(value: CrossingPoint(fraction: root.Position, key: m_crossingKeys[m_rootEdges[index]]), w: (root.Measured ? 1f : 0f));
+        }
+
+        return roots;
+    }
+    /// <summary>Answers a chunk of the current <see cref="CrossingPoints"/> round with the field's values and gradients.
+    /// Every root remains on its own edge inside its bracket, and its search ends once a trial's Newton step places it
+    /// within half an 8,192th of the edge or its bracket is an 8,192th of the edge wide, in at most eleven rounds. The
+    /// gradient of the trial nearest each root by its own Newton step is the crossing's.</summary>
     /// <param name="first">The first point answered in the current round.</param>
     /// <param name="values">One field value per point.</param>
-    /// <exception cref="ArgumentException">The chunk reaches past the current round or holds a non-finite value.</exception>
-    public void AnswerCrossings(int first, ReadOnlySpan<float> values) {
-        if ((first < 0) || ((first + values.Length) > (2 * m_pendingCrossings.Length))) {
-            throw new ArgumentException(message: "A crossing answer must name points in the current crossing round.");
+    /// <param name="gradients">Three components per point: the field's gradient, in field units per world unit, along the
+    /// lattice's axes.</param>
+    /// <exception cref="ArgumentException">The chunk reaches past the current round, its values and gradients name
+    /// different points, or it holds a non-finite value.</exception>
+    public void AnswerCrossings(int first, ReadOnlySpan<float> values, ReadOnlySpan<float> gradients) {
+        if ((first < 0) || ((first + values.Length) > m_roundTrials.Length) || (gradients.Length != (3 * values.Length))) {
+            throw new ArgumentException(message: "A crossing answer holds a value and three gradient components for points in the current crossing round.");
         }
+
+        var cell = ContourCell;
+
         for (var index = 0; (index < values.Length); index++) {
             var value = values[index];
 
             if (!float.IsFinite(f: value)) { throw new ArgumentException(message: "A crossing answer must be finite."); }
-            m_crossingRoots[m_pendingRoots[((first + index) / 2)]].Answer(trial: ((first + index) % 2), value: value);
+
+            var trial = m_roundTrials[(first + index)];
+            var rootIndex = (trial >> 1);
+            var edge = m_rootEdges[rootIndex];
+            var (_, axis, length) = CrossingEdge(key: m_crossingKeys[edge]);
+            var gradient = new Vector3(x: gradients[(3 * index)], y: gradients[((3 * index) + 1)], z: gradients[((3 * index) + 2)]);
+            // The field's change along the whole edge, as its gradient reads it there.
+            var slope = (((axis == 0) ? (gradient.X * cell.X) : ((axis == 1) ? (gradient.Y * cell.Y) : (gradient.Z * cell.Z))) * length);
+            ref var root = ref m_crossingRoots[rootIndex];
+
+            if (root.Answer(slope: slope, trial: (trial & 1), value: value)) {
+                m_crossingData[edge].Gradient = new Vector4(value: gradient, w: value);
+            }
+            if (root.Done && float.IsFinite(f: root.BestAt) && float.IsFinite(f: root.BestSlope)) {
+                // The kept trial's value carried along the edge to the root by its own slope.
+                ref var data = ref m_crossingData[edge];
+
+                data.Gradient.W += (root.BestSlope * (root.Position - root.BestAt));
+            }
         }
     }
     /// <summary>Returns the samples the contour reads a gradient at: the corners of every crossed cell that contours whole,
     /// the coarse corners of every refined cell, whose gradients its unmeasured fine samples interpolate, and the measured
     /// corners of every crossed fine cell, which its vertex normals interpolate; then the crossing of every sign-changing
-    /// edge a vertex is placed by. Call it once the refinement, if any, is answered.</summary>
+    /// edge a vertex is placed by whose search measured no trial at it (a closed edge, an end reading an exact zero): every
+    /// other crossing's gradient is its nearest trial's (<see cref="AnswerCrossings"/>). Call it once the crossings are
+    /// answered.</summary>
     /// <returns>The samples, in the lattice's frame, with weight one, in the order <see cref="AnswerGradients"/> takes
     /// their answers. The memory is the lattice's, valid until the next round of points is asked for or the lattice is
     /// disposed.</returns>
@@ -2165,7 +2321,15 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         m_fineGradients.Resize(m_fineValues.Length, clear: false, preserve: false);
         m_gradientAnswered.Resize(m_fineValues.Length.CeilingDivide(divisor: 64));
 
-        m_points.Resize(length: (listed + m_crossingKeys.Length), clear: false, preserve: false);
+        // The crossings whose gradient no search trial measured: a closed edge's, and a root an end's exact zero placed.
+        m_gradientCrossings.Resize(length: 0, clear: false, preserve: false);
+        for (var index = 0; (index < m_crossingKeys.Length); index++) {
+            var root = m_crossingData[index].RootPlusOne;
+
+            if ((root == 0) || !m_crossingRoots[(root - 1)].Measured) { m_gradientCrossings.Add(item: index); }
+        }
+
+        m_points.Resize(length: (listed + m_gradientCrossings.Length), clear: false, preserve: false);
 
         var points = m_points.GetSpan();
         var fine = ContourCell;
@@ -2175,8 +2339,8 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
 
             points[index] = new Vector4(value: (m_origin + (new Vector3(x: fx, y: fy, z: fz) * fine)), w: 1f);
         }
-        for (var index = 0; (index < m_crossingKeys.Length); index++) {
-            var (start, axis, length) = CrossingEdge(key: m_crossingKeys[index]);
+        for (var index = 0; (index < m_gradientCrossings.Length); index++) {
+            var (start, axis, length) = CrossingEdge(key: m_crossingKeys[m_gradientCrossings[index]]);
             var (fx, fy, fz) = FineCoordinates(key: start);
             var position = new Vector3(x: fx, y: fy, z: fz);
             var step = ((axis == 0) ? Vector3.UnitX : ((axis == 1) ? Vector3.UnitY : Vector3.UnitZ));
@@ -2732,7 +2896,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     /// <exception cref="ArgumentException">The run is not whole samples, its values and gradients name different samples,
     /// or it reaches past the samples.</exception>
     public void AnswerGradients(int first, ReadOnlySpan<float> values, ReadOnlySpan<float> gradients) {
-        if (((gradients.Length % 3) != 0) || (values.Length != (gradients.Length / 3)) || (first < 0) || ((first + values.Length) > (m_gradientKeys.Length + m_crossingKeys.Length))) {
+        if (((gradients.Length % 3) != 0) || (values.Length != (gradients.Length / 3)) || (first < 0) || ((first + values.Length) > (m_gradientKeys.Length + m_gradientCrossings.Length))) {
             throw new ArgumentException(message: "A gradient answer holds one value and three gradient components per sample it names.");
         }
 
@@ -2744,7 +2908,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             var gradient = new Vector3(x: gradients[(3 * index)], y: gradients[((3 * index) + 1)], z: gradients[((3 * index) + 2)]);
 
             if ((first + index) >= m_gradientKeys.Length) {
-                m_crossingData[(first + index) - m_gradientKeys.Length].Gradient = new Vector4(value: gradient, w: values[index]);
+                m_crossingData[m_gradientCrossings[((first + index) - m_gradientKeys.Length)]].Gradient = new Vector4(value: gradient, w: values[index]);
 
                 continue;
             }

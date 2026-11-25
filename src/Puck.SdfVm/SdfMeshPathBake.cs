@@ -2402,9 +2402,11 @@ public sealed partial class SdfMeshPathBake {
         return checked(((((long)final.Lattice.Samples) + fine) * WorkspaceBytesPerSample));
     }
     // The next chunk of a group's fine, crossing-root or gradient samples, as many as a frame's share of field evaluations
-    // takes. Gradient taps are spaced by the contour's finest cell.
+    // takes. A crossing trial measures its gradient with its value, from which its search takes its next Newton estimate
+    // and the crossing its gradient (SdfSampledLattice.AnswerCrossings). Gradient taps are spaced by the contour's finest
+    // cell.
     private static SdfMeshBakeRequest FinalChunk(Group group, FinalLattice final) {
-        var gradients = (final.Stage == FinalStage.Gradients);
+        var gradients = (final.Stage != FinalStage.Refinement);
         var count = Math.Clamp(value: (LatticeTaps / (gradients ? SdfMeshBakeRequest.GradientCost : 1)), min: 1, max: (final.Points.Length - final.Answered));
 
         return RequestOf(cell: final.Sampled!.ContourCell, dims: (count, 1, 1), gradients: gradients, group: group, origin: Vector3.Zero) with {
@@ -2420,7 +2422,7 @@ public sealed partial class SdfMeshPathBake {
         if (final.Stage == FinalStage.Refinement) {
             sampled.AnswerRefinement(first: final.Answered, materials: materials, values: values);
         } else if (final.Stage == FinalStage.Crossings) {
-            sampled.AnswerCrossings(first: final.Answered, values: values);
+            sampled.AnswerCrossings(first: final.Answered, gradients: gradients, values: values);
         } else {
             sampled.AnswerGradients(first: final.Answered, gradients: gradients!, values: values);
         }
@@ -2642,10 +2644,24 @@ public sealed partial class SdfMeshPathBake {
         var started = Stopwatch.GetTimestamp();
 
         var contour = group.Contour!.Finished(allocator: group.Allocator, cell: group.DiagnosticCell, workspace: group.Memory);
-        var cut = new SdfMeshMaterialCut(contour: contour);
+        // A group every point of whose field reads its one material samples none: its cut meshes every quad in it.
+        var cut = new SdfMeshMaterialCut(contour: contour, uniform: (((group.MaterialOrder.Length == 1) && group.Geometry.MaterialsClosed) ? group.MaterialOrder[0] : null));
         var points = cut.Points(into: group.Points);
+        var (decided, walks) = ((points > 0) ? DecideMaterials(group: group, points: points) : (0, 0));
+
+        points -= decided;
+        // A first round its CPU field decided whole is answered now, and the cut goes on to the round after it.
+        while ((points == 0) && (group.PointDecided.Length > 0)) {
+            cut.Answer(materials: group.PointDecided.GetSpan());
+            group.PointDecided.Resize(length: 0, clear: false, preserve: false);
+            points = cut.Points(into: group.Points);
+        }
 
         Account(group: group, since: started, stage: BakeStage.Split);
+        using (EnterGate(site: BakeGate.Split)) {
+            m_accounts.MaterialsDecided += decided;
+            m_accounts.MaterialWalks += walks;
+        }
         group.Contour = contour;
         group.Cut = cut;
         // A contour whose cut samples no point (one material, no boundary to place) meshes now, as Advance does once its
@@ -2686,12 +2702,91 @@ public sealed partial class SdfMeshPathBake {
             ScheduleAdvance(group: group);
         }
     }
+    // The edge, in contour cells, of the boxes the material cut's first round is decided in: each box the round's points
+    // fall in costs one walk of the group's CPU field.
+    private const int MaterialBoxCells = 8;
+    // The walks a group's material decision takes before judging whether they pay, and the points each walk must decide on
+    // average for it to go on walking.
+    private const int MaterialTrialWalks = 32;
+    private const int MaterialWalkPoints = 8;
+
+    // Decides the material cut's first-round points that lie in a box whose every point the group's CPU field proves reads
+    // one material (SdfFieldEvaluator.TryUniformMaterial), on the worker running the group's stage. Their materials go in
+    // PointDecided (-1 for a point the round samples) and group.Points keeps the rest, in their order; returns how many it
+    // decided and the walks it took. A group with no CPU field for the bake's field version decides none.
+    //
+    // Invariant: a decided point's material is the one the field's own walk answers there, so the cut reads the round as
+    // the fully sampled one. Enforced by TryUniformMaterial alone, the only source of a decided material, whose walk keeps
+    // every shape that can win at a point of the box. Where it stops: the CPU field is the render reading the bounds use,
+    // so a group whose GPU field the CPU cannot see (CpuField refuses it) samples every point.
+    private (int Decided, int Walks) DecideMaterials(Group group, int points) {
+        if ((group.BoundField?.Evaluator is not { } evaluator) || (group.BoundFieldVersion != Volatile.Read(location: ref m_field))) { return (0, 0); }
+
+        var cell = group.DiagnosticCell;
+        var side = (MaterialBoxCells * MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z)));
+
+        if (!(side > 0f)) { return (0, 0); }
+
+        var span = group.Points.GetSpan()[..points];
+        var decided = group.PointDecided;
+        var boxes = new Dictionary<(int X, int Y, int Z), int>();
+        var walks = 0;
+        var count = 0;
+        var kept = 0;
+        // Past every float position a point carries and the sampler reads it at.
+        var pad = new Vector3(value: (side / 64f));
+
+        decided.Resize(length: points, clear: false, preserve: false);
+        for (var index = 0; (index < points); index++) {
+            var point = new Vector3(x: span[index].X, y: span[index].Y, z: span[index].Z);
+            var key = (((int)MathF.Floor(x: (point.X / side))), ((int)MathF.Floor(x: (point.Y / side))), ((int)MathF.Floor(x: (point.Z / side))));
+
+            if (!boxes.TryGetValue(key: key, value: out var material)) {
+                var low = (new Vector3(x: key.Item1, y: key.Item2, z: key.Item3) * side);
+                // A group whose boxes hold several materials pays a walk for few points: past MaterialTrialWalks, it
+                // walks on only while each walk decides MaterialWalkPoints points.
+                var worth = ((walks < MaterialTrialWalks) || (count >= (MaterialWalkPoints * walks)));
+
+                walks += (worth ? 1 : 0);
+                material = ((worth && evaluator.TryUniformMaterial(lower: SdfMeshAudit.Fixed(point: (low - pad)), material: out var found, upper: SdfMeshAudit.Fixed(point: ((low + new Vector3(value: side)) + pad)))) ? found : -1);
+                boxes.Add(key: key, value: material);
+            }
+            decided[index] = material;
+            if (material >= 0) {
+                count++;
+            } else {
+                span[kept++] = span[index];
+            }
+        }
+        if (count == 0) {
+            decided.Resize(length: 0, clear: false, preserve: false);
+        } else {
+            group.Points.Resize(length: kept, clear: false);
+        }
+
+        return (count, walks);
+    }
+    // A round's materials as the cut takes them: the decided points' with the sampled points' answers in their places.
+    private static ReadOnlySpan<int> RoundMaterials(Group group) {
+        if (group.PointDecided.Length == 0) { return group.PointMaterials.GetSpan(); }
+
+        var decided = group.PointDecided.GetSpan();
+        var sampled = group.PointMaterials.GetSpan();
+        var next = 0;
+
+        for (var index = 0; (index < decided.Length); index++) {
+            if (decided[index] < 0) { decided[index] = sampled[next++]; }
+        }
+
+        return decided;
+    }
     // Hands a round's materials to the group's cut, then queues its next round, or meshes the group once none is left.
     private void Advance(Group group) {
         var cut = group.Cut!;
         var started = Stopwatch.GetTimestamp();
 
-        cut.Answer(materials: group.PointMaterials.GetSpan());
+        cut.Answer(materials: RoundMaterials(group: group));
+        group.PointDecided.Resize(length: 0, clear: false, preserve: false);
 
         var points = cut.Points(into: group.Points);
 
@@ -3262,6 +3357,12 @@ public sealed partial class SdfMeshPathBake {
 
         public OwnedBuffer<int> PointMaterials => m_pointMaterials ??= new(allocator: Allocator, observer: Memory);
         public int PointsAnswered { get; set; }
+
+        private OwnedBuffer<int>? m_pointDecided;
+
+        // The material cut's first round as the group's CPU field decided it (DecideMaterials): each point's material, or
+        // -1 for one the round samples; empty while no round holds decided points.
+        public OwnedBuffer<int> PointDecided => m_pointDecided ??= new(allocator: Allocator, observer: Memory);
         // The final lattice while its slabs and corner gradients are sampled.
         public FinalLattice? Final { get; set; }
         // Why a finished group has no mesh, or null.
@@ -3400,6 +3501,7 @@ public sealed partial class SdfMeshPathBake {
                     Final?.Dispose(); Final = null;
                     m_points?.Dispose();
                     m_pointMaterials?.Dispose();
+                    m_pointDecided?.Dispose();
                     Contour = null; Cut = null; Creases = null; Projection?.Dispose(); Projection = null;
                     Next = null; Deferred = null;
                     Memory.Dispose();
