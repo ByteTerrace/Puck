@@ -1,7 +1,8 @@
 // A tide by itself: a world with no pull of its own (one weightless area) and one far mass, 400 m along +Z. Two
 // rigid marbles float high over the floor, one 40 m toward the mass from the tide's origin and one 40 m to the side.
 // The far mass's whole pull moves the world and is never felt; what is felt is its difference across the world: the
-// marble toward the mass drifts on toward it, and the one to the side is drawn in toward the line.
+// marble toward the mass drifts on toward it, and the one to the side is drawn in toward the line. A walker posed
+// beside them drifts the same way.
 // `puck test worlds/debug/tide-tests.puck --reproduce`.
 
 schema: "puck.world.definition.v1"
@@ -126,6 +127,22 @@ test "a far mass stretches a world along the line to it and squeezes it across" 
     bodyPosition(body, 9, z) < 52
     bodyPosition(body, 8, x) < 35.4
     bodyPosition(body, 8, x) > 34.2
+  }
+}
+
+// A walker feels the tide as a marble does, along the line to the mass, though the tide is far too faint to turn her
+// up: posed where the marble toward the mass floats, she drifts with it, a little further for carrying no damping
+// (40 m to about 53.3 m in ten seconds), and neither rises nor sinks along her own up.
+test "a far mass draws a walker along the line to it" {
+  when {
+    seat1: body.pose 0 60 40 0 0 0
+    ticks 300
+  }
+  expect {
+    bodyPosition(body, 0, z) > 52.5
+    bodyPosition(body, 0, z) < 54
+    bodyPosition(body, 0, y) > 59.9
+    bodyPosition(body, 0, y) < 60.1
   }
 }
 
