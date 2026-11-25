@@ -508,9 +508,9 @@ composed through `imports` (see "Document composition" below) rather than a
 single-parent `basis` chain: a `basis` chain cannot express "several
 independent slices of one document" without imposing an artificial order
 between unrelated games, while imports can, because sibling imports are
-collision-checked rather than silently overridden—a same-key row, object
-member, or list two games both declare refuses by name unless the importing
-file's own body restates the key. Content genuinely shared between two
+collision-checked rather than silently overridden—a same-name member of an
+object or of a same-key row, or an unkeyed list, two games both declare refuses
+by name unless the importing file's own body restates it. Content genuinely shared between two
 games' documents (`billiardsColors`, read by both billiards and bowling)
 stays substrate in the importing file rather than being forced under either
 game's own arbitrary ownership. `ModularTransform` stays a C# concern rather
@@ -777,8 +777,8 @@ both sides—`key` covers a state row's own `cells`—or a grant row's
 `{"…", "$drop": true}` tombstones and a leading `{"$replace": true}` marker for
 wholesale replacement. Between basis and a derived document that relationship is
 a refine (the derived row always wins); between two SIBLING imports it is a
-collision—a same-key row, a same-name object member, or the same list authored
-by both refuses by name UNLESS the importing file's own body also declares that
+collision—a same-name member of an object or of a same-key row (whose other
+members combine), or the same unkeyed list, authored by both refuses by name UNLESS the importing file's own body also declares that
 same path (the explicit resolution; two imports merely agreeing on an inherited
 value, e.g. through a shared basis, never collides, and an empty list authors no
 row to collide with). `WorldDocumentBasis.cs`
