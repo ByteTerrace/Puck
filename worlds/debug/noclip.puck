@@ -10,8 +10,9 @@ import "../standard/kits"
 //
 // The kit assignment reads one register, so its selector reads `form`, the suit register plus two while noclip is on
 // (0 the pilot, 1 the suit, 2 and 3 the same with noclip on), which a rule keeps in step with both; a craft
-// (../standard/ship.puck's register, on the launch field's ship) is form 4 whatever the other two hold, and the look
-// assignment reads the same register for it. The debug world
+// (../standard/ship.puck's register, on the launch field's ship) is form 4 whatever the other two hold, and 5 while its
+// `space` register says nothing pulls it, as craft-form.puck has it on the moon, so a ship crossing the sky seam either
+// way keeps the form it flew in. The look assignment reads the same register. The debug world
 // imports this file in place of suit.puck, which it imports and whose selector it replaces. The garden and the night
 // field import suit.puck alone, so they declare neither register: noclip is the debug world's, and a crossing lands her
 // with her suit's kit there.
@@ -48,7 +49,7 @@ state {
       name: "form"
       kind: "Counter"
       initial: 1
-      envelope { $type: "set", values [0, 1, 2, 3, 4] }
+      envelope { $type: "set", values [0, 1, 2, 3, 4, 5] }
     }
   ]
 }
@@ -61,6 +62,7 @@ looks {
         { value: 0, row: "moth-pilot" }
         { value: 2, row: "moth-pilot" }
         { value: 4, row: "ship" }
+        { value: 5, row: "ship" }
       ]
     }
   }
@@ -75,6 +77,7 @@ kits {
         { value: 2, row: "noclip" }
         { value: 3, row: "noclip" }
         { value: 4, row: "ship" }
+        { value: 5, row: "ship-space" }
       ]
     }
   }
@@ -129,11 +132,11 @@ kits {
   ]
 }
 
-// Keeps every body's `form` the suit register plus two while noclip is on, and 4 on a craft. Rules run before the
-// tick's kit selection, so a toggle moves her kit the tick it lands.
+// Keeps every body's `form` the suit register plus two while noclip is on, 4 on a craft and 5 on a craft in space.
+// Rules run before the tick's kit selection, so a toggle moves her kit the tick it lands.
 rule "noclip-form" {
   when bodyState(each, form) != (
-    (bodyState(each, craft) * 4) +
+    (bodyState(each, craft) * (4 + bodyState(each, space))) +
     ((1 - bodyState(each, craft)) * (bodyState(each, suit) + 2 * bodyState(each, noclip)))
   )
   mode: Level
@@ -141,7 +144,7 @@ rule "noclip-form" {
   setBodyState(
     key: $each,
     state: "form",
-    expression: (bodyState(each, craft) * 4) + ((1 - bodyState(each, craft)) * (bodyState(each, suit) + 2 * bodyState(each, noclip)))
+    expression: (bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * (bodyState(each, suit) + 2 * bodyState(each, noclip)))
   )
 }
 

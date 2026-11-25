@@ -256,7 +256,7 @@ commands: galleryCommands
 // walkers, imported last, take the slots below the pieces (range.puck). Each body's size is its `size` register
 // (size.puck).
 bodies {
-  capacity: (galleryPopulation + 2 + boardRoomBodies + cardBodies + seatPopulation + 1 + 1)
+  capacity: (launchShipBody + 1)
   localSeats: seatPopulation
   networkPlayers: visitorPopulation
   reconnectGraceSeconds: 3

@@ -36,6 +36,8 @@ let goBodies = 362
 let reversiBodies = 65
 let cardBodies = 54
 let boardRoomBodies = (granaryBodies + alchemyBodies + goBodies + reversiBodies)
+// The launch field's ship (launch.puck) takes the population's highest slot, and debug.puck's capacity is one more.
+let launchShipBody = (galleryPopulation + 2 + boardRoomBodies + cardBodies + seatPopulation + 1)
 let galleryFloor = map(range(0, 4), k => ((galleryStorey * k) + 0.05))
 let galleryMapDirections = "stairs and lift north-west: press CALL, or gallery.lift <level>"
 

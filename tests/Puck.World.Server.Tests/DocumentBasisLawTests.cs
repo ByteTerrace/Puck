@@ -556,7 +556,7 @@ public sealed class DocumentBasisLawTests {
             actual: merged.Grants!.Select(selector: static grant => grant.Grantee).Distinct().Count()
         );
 
-        // The same triple authored with a different value by two imports is one row both claim.
+        // The same triple authored with a different value by two imports is one row whose member both claim.
         var collidingPath = files.WriteText(
             name: "colliding.world.json",
             text: /*lang=json*/ """
@@ -567,7 +567,7 @@ public sealed class DocumentBasisLawTests {
         Assert.Contains(
             actualString: RefusalOf(path: collidingPath),
             comparisonType: StringComparison.Ordinal,
-            expectedSubstring: "both author this row"
+            expectedSubstring: "].exclusive: 'importA.world.json' and 'importC.world.json' both author this member"
         );
     }
     [Fact]

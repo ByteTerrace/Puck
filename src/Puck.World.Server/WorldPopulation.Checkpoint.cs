@@ -376,7 +376,8 @@ public sealed partial class WorldPopulation {
         for (var index = 0; (index < Capacity); index++) {
             var entry = m_entries[index];
 
-            entry.Active = false;
+            // A slot the checkpoint holds no entry for stays as Retire leaves it; a captured entry overwrites it below.
+            entry.Retire(clearAdmission: true);
             entry.Generation = checkpoint.Generations[index];
             entry.ProducerState = new BodyProducerState {
                 AcquiredTarget = -1,
@@ -384,20 +385,9 @@ public sealed partial class WorldPopulation {
                 ActiveProducerNavigationDomainIndex = -1,
             };
             entry.AutonomyState.Clear();
-            entry.Body = null;
-            entry.Parked = false;
-            entry.ParkedUntilTick = null;
-            entry.IsRemoteHuman = false;
-            entry.IsAuthorityTransferred = false;
-            entry.PlacementId = null;
             entry.Titled = false;
             entry.Mobility = null;
             entry.MobilityGeneration = 0;
-            entry.AdmissionInstalledGrantTemplates = [];
-            entry.AdmissionRevokedKeys = [];
-            entry.IdentityDomain = string.Empty;
-            entry.IdentitySubject = string.Empty;
-            entry.AdmissionTrust = null;
             entry.NavigationState.Clear();
             ClearDesignations(entry: entry);
         }
@@ -501,16 +491,7 @@ public sealed partial class WorldPopulation {
                     entry.Parked = true;
                     entry.ParkedUntilTick = null;
                 } else if (m_reconnectGraceTicks.IsZero) {
-                    entry.Body = null;
-                    entry.Active = false;
-                    entry.IsRemoteHuman = false;
-                    entry.IsAuthorityTransferred = false;
-                    entry.PlacementId = null;
-                    entry.AdmissionInstalledGrantTemplates = [];
-                    entry.AdmissionRevokedKeys.Clear();
-                    entry.IdentityDomain = string.Empty;
-                    entry.IdentitySubject = string.Empty;
-                    entry.AdmissionTrust = null;
+                    entry.Retire(clearAdmission: true);
                 } else {
                     entry.Parked = true;
                     entry.ParkedUntilTick = unchecked((((long)tick) + m_reconnectGraceTicks.Ticks));

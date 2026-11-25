@@ -562,10 +562,34 @@ public sealed partial class WorldPopulation {
         public byte LookIndex { get; set; }
 
         // The kit and look rows this body's own cell of an assignment selector picks, or -1 where none does. They
-        // outrank KitIndex/LookIndex and the seat kit, and are derived from state (ResolveSelections), so a checkpoint
-        // carries the cell rather than these.
+        // outrank KitIndex/LookIndex and the seat kit, and are derived from state (ResolveSelections). An inactive
+        // entry selects nothing, so Retire clears both: a checkpoint captures only active entries, and a selection
+        // left on a retired slot would make the next ResolveSelections move (and bump the revision) on a restored
+        // authority where the recorded one did not.
         public int SelectedKit { get; set; } = -1;
         public int SelectedLook { get; set; } = -1;
+
+        // Empties the slot: no body, no occupant, no park, no placement and no selection. A remote human's admission
+        // (grant templates, revoked keys, identity and trust) is cleared with it when clearAdmission says so; a local
+        // seat's identity outlives its body. Every retirement goes through here, so a field added to what an
+        // occupied slot holds is cleared in one place.
+        public void Retire(bool clearAdmission) {
+            Body = null;
+            Active = false;
+            Parked = false;
+            ParkedUntilTick = null;
+            IsAuthorityTransferred = false;
+            PlacementId = null;
+            SelectedKit = -1;
+            SelectedLook = -1;
+            if (!clearAdmission) { return; }
+            IsRemoteHuman = false;
+            AdmissionInstalledGrantTemplates = [];
+            AdmissionRevokedKeys.Clear();
+            IdentityDomain = string.Empty;
+            IdentitySubject = string.Empty;
+            AdmissionTrust = null;
+        }
 
         // The stable cross-authority incarnation/epoch and the local generation whose occupant owns it. The stamp
         // makes ordinary slot reuse invalidate stale mobility without comparing the foreign origin generation.

@@ -304,9 +304,12 @@ refuse by name.
 
 **Collision policy — basis refines, imports collide.** Within the basis chain a derived row REFINES its same-key
 basis row (the rule above, unchanged: basis is a single-parent relationship, so there is never an ambiguity about
-which side wins). Imports are the opposite: siblings with no priority order between them, so a same-key row, a
-same-name object member, or the same list authored by TWO imports is a refusal by name (naming the two colliding
-import files) UNLESS the importing file's own body ALSO declares that same path — the explicit resolution, since
+which side wins). Imports are the opposite: siblings with no priority order between them, so a same-name member of
+an object or of a same-key row, or the same unkeyed list, authored by TWO imports is a refusal by name (naming the
+two colliding import files) UNLESS the importing file's own body ALSO declares that same path. A same-key row two
+imports author merges member-wise as an object does, so the Moth's `walker` kit takes its `dash` action from
+`moth-dash.puck` and its jetpack holds and `flight` action from `moth-jetpack.puck`, and `moth.puck`'s own `walker`
+row refines the union — the explicit resolution, since
 the importing file's own body always wins the final override regardless of what the imports disagreed on. Two
 imports agreeing on a value (typically because they share a common ancestor somewhere in their own basis/import
 graphs — a shared basis diamond) never collide; only a genuine disagreement, which can only arise from each side's

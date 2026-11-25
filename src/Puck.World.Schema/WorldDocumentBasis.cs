@@ -65,8 +65,8 @@ namespace Puck.World;
 /// (basis, then the folded import layer, then the file's own body, each refining the one before). Both consumed
 /// members are stripped before the strict parse, exactly like <c>basis</c>. Collision policy: within the basis
 /// chain a derived row REFINES its same-key basis row (unchanged, the rule above) — imports are the opposite,
-/// SIBLINGS with no priority order between them, so a same-key row, a same-name object member, or a same list both
-/// authored by two imports is a refusal by name (naming the two importing fragments) UNLESS the importing file's own
+/// SIBLINGS with no priority order between them, so a same-name member of an object or of a same-key row, or a same
+/// unkeyed list, both authored by two imports is a refusal by name (naming the two importing fragments) UNLESS the importing file's own
 /// body also declares that same path — the explicit resolution <see cref="TryMergeImports"/>'s remarks describe. Two
 /// imports agreeing on a value (typically because they share a common ancestor somewhere in their own basis/import
 /// graphs) never collide, so a shared basis diamond composes fine. Cycles across basis and import edges together
@@ -810,15 +810,22 @@ public static class WorldDocumentBasis {
                 continue;
             }
 
-            var restatesRow = (
-                (restatedRows is not null) && restatedRows.ContainsKey(rowKey!)
+            // A row both imports author is an object with an identity: its members merge as any object's do, so
+            // disjoint members combine and a member both author collides unless the importing file restates it.
+            var restatedRow = (((restatedRows is not null) && restatedRows.TryGetValue(rowKey!, out var restatedIndex))
+                ? restatedArray![restatedIndex]
+                : null);
+
+            MergeSiblingObject(
+                consume: false,
+                origins: origins,
+                overlay: rowObject,
+                overlayName: overlayName,
+                owners: owners,
+                path: $"{path}[{key}={DescribeKey(value: rowKey)}]",
+                restated: restatedRow,
+                target: ((JsonObject)merged[index: existingIndex]!)
             );
-
-            if (!restatesRow) {
-                var earlier = OwnerOf(node: merged[index: existingIndex], owners: owners);
-
-                throw new JsonException(message: $"{path}[{key}={DescribeKey(value: rowKey)}]: '{earlier}' and '{overlayName}' both author this row — restate it in the importing file to resolve the collision.");
-            }
         }
 
         return merged;
@@ -1372,8 +1379,9 @@ public static class WorldDocumentBasis {
     /// from each side's own authored content actually diverging, does. An object member merges member-wise
     /// (recursing when both sides carry an object, so disjoint nested members from two imports combine rather than
     /// colliding on their shared parent); a row list keyed by the settled identity vocabulary unions by row (a key
-    /// only one side carries appends; the same key on both sides collides exactly like a leaf, checked against
-    /// <paramref name="restated"/>'s own row); any other shared list or scalar collides wholesale.</summary>
+    /// only one side carries appends; the same key on both sides merges member-wise as an object does, each member
+    /// checked against <paramref name="restated"/>'s own row, so a row the importing file restates keeps every member
+    /// either import authored); any other shared list or scalar collides wholesale.</summary>
     /// <param name="imports">Each import's display name (for the refusal message) paired with its fully composed
     /// tree, in authored order.</param>
     /// <param name="restated">The importing file's own body — the sole exemption from a sibling collision.</param>

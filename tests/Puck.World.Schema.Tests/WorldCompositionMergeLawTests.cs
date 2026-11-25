@@ -73,7 +73,24 @@ public sealed class WorldCompositionMergeLawTests {
     public void Numeric_restatement_keys_match_across_CLR_and_JSON_backings() {
         var first = JsonNode.Parse("""{"rows":[{"id":1,"value":"first"}]}""")!.AsObject();
         var second = JsonNode.Parse("""{"rows":[{"id":1.0,"value":"second"}]}""")!.AsObject();
-        var restated = new JsonObject { ["rows"] = new JsonArray(new JsonObject { ["id"] = 1 }) };
+        var restated = new JsonObject { ["rows"] = new JsonArray(new JsonObject { ["id"] = 1, ["value"] = "restated" }) };
         Assert.True(WorldDocumentBasis.TryMergeImports([("first", first), ("second", second)], restated, out _, out var reason), reason);
+    }
+
+    [Fact]
+    public void A_row_two_imports_author_keeps_both_imports_members() {
+        var dash = JsonNode.Parse("""{"kits":[{"name":"walker","actions":{"dash":{"speed":15}}}]}""")!.AsObject();
+        var jetpack = JsonNode.Parse("""{"kits":[{"name":"walker","holds":[{"name":"flight"}],"actions":{"flight":{"speed":10}}}]}""")!.AsObject();
+        var restated = JsonNode.Parse("""{"kits":[{"name":"walker","holds":[{"name":"ground"}]}]}""")!.AsObject();
+
+        Assert.True(WorldDocumentBasis.TryMergeImports([("dash", dash), ("jetpack", jetpack)], restated, out var composed, out var reason), reason);
+        var walker = composed!["kits"]![0]!;
+        Assert.Equal(15, walker["actions"]!["dash"]!["speed"]!.GetValue<int>());
+        Assert.Equal(10, walker["actions"]!["flight"]!["speed"]!.GetValue<int>());
+        Assert.Equal("flight", walker["holds"]![0]!["name"]!.GetValue<string>());
+
+        var rival = JsonNode.Parse("""{"kits":[{"name":"walker","actions":{"dash":{"speed":20}}}]}""")!.AsObject();
+        Assert.False(WorldDocumentBasis.TryMergeImports([("dash", dash.DeepClone().AsObject()), ("rival", rival)], restated, out _, out reason));
+        Assert.Contains("'dash' and 'rival' both author this member", reason, StringComparison.Ordinal);
     }
 }
