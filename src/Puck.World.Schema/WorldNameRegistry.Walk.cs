@@ -184,9 +184,9 @@ public static partial class WorldNameRegistry {
             if (WorldKeyedValues.IsKeyable(type)) {
                 Record($"{path}.clock", KeyClock);
 
-                // A scalar's keys may join a second track, which names a clock of its own.
+                // A scalar's key may hold keys of its own, each naming a clock, to any depth.
                 if ((type == typeof(BindableScalar)) || (type == typeof(BindableAngle))) {
-                    Record($"{path}.with.clock", KeyClock);
+                    Record($"{path}{{keys}}.value….clock", KeyClock);
                 }
 
                 return;

@@ -33,14 +33,14 @@ let cloudFade = {
     { at: 1400, value: 0, ease: Step }
   ]
 }
-// One star field answers the night and the height: the hour brings it out at night, and the climb brings it out by day,
-// the greater of the two, at the night sky's luminance on the ground and space's at the seam.
+// One star field answers the night and the height: below 700 m the hour brings it out at night (skies.puck's
+// `nightStars`), and the climb to the seam brings it out whatever the hour, at the night sky's luminance on the ground
+// and space's at the seam.
 let starsByHeight = {
   clock: altitude
-  combine: Maximum
   keys [
-    { at: 0, value: 0 }
-    { at: 700, value: 0 }
+    { at: 0, value: nightStars("day") }
+    { at: 700, value: nightStars("day") }
     { at: 2250, value: 1, ease: Step }
   ]
 }

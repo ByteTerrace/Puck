@@ -11,13 +11,14 @@ public interface IWorldKeyTrack {
     /// <summary>Gets the number of keys.</summary>
     int Count { get; }
 
-    /// <summary>Gets the track that joins this one on its own clock, or <see langword="null"/>.</summary>
-    IWorldKeyTrack? With { get; }
-
     /// <summary>Returns where a key sits on the clock.</summary>
     /// <param name="index">The key's index.</param>
     /// <returns>The key's time, in the clock's span units.</returns>
     double AtOf(int index);
+    /// <summary>Returns the keys a key's value holds on a clock of their own, when the value nests keys.</summary>
+    /// <param name="index">The key's index.</param>
+    /// <returns>The nested keys, or <see langword="null"/> for a key whose value is a literal.</returns>
+    IWorldKeyTrack? NestedAt(int index);
 }
 /// <summary>One keyed value a document authors: where it sits, the bindable that carries it, and its keys.</summary>
 /// <param name="Path">The value's document path, in JSON member names (<c>theme.colors.ink</c>).</param>
@@ -159,17 +160,7 @@ public static class WorldKeyedValues {
                 return true;
             }
             if (KeysOf(value: value) is { } track) {
-                var path = site.Path;
-
-                // A track's second track reads a clock of its own, judged and projected as every keyed value is.
-                for (var link = track; (link is not null); link = link.With) {
-                    Found.Add(item: new WorldKeyedValue(
-                        Path: path,
-                        Track: link,
-                        Value: value
-                    ));
-                    path = $"{path}.with";
-                }
+                AddNested(path: site.Path, track: track, value: value);
             } else if (BindingOf(value: value) is { } binding) {
                 var scalar = (value switch {
                     BindableScalar bindable => bindable,
@@ -187,6 +178,36 @@ public static class WorldKeyedValues {
             }
 
             return false;
+        }
+        // A key that holds keys of its own reads a clock of its own, judged and projected as every keyed value is.
+        private void AddNested(string path, IWorldKeyTrack track, object value) {
+            Found.Add(item: new WorldKeyedValue(
+                Path: path,
+                Track: track,
+                Value: value
+            ));
+
+            for (var index = 0; (index < track.Count); index++) {
+                if (track.NestedAt(index: index) is { } nested) {
+                    AddNested(path: $"{path}.keys[{index}].value", track: nested, value: value);
+                }
+            }
+        }
+    }
+    /// <summary>Visits a track and every track its keys nest, depth first, each once.</summary>
+    /// <param name="track">The track, or <see langword="null"/> for none.</param>
+    /// <param name="visit">Called with each track.</param>
+    public static void VisitTracks(IWorldKeyTrack? track, Action<IWorldKeyTrack> visit) {
+        ArgumentNullException.ThrowIfNull(argument: visit);
+
+        if (track is null) {
+            return;
+        }
+
+        visit(obj: track);
+
+        for (var index = 0; (index < track.Count); index++) {
+            VisitTracks(track: track.NestedAt(index: index), visit: visit);
         }
     }
 }

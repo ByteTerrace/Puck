@@ -2412,7 +2412,6 @@ public static partial class WorldModelShape {
             [
                 M("clock", typeof(global::System.String), typeof(global::Puck.World.IWorldKeyTrack), "Clock", Read, static value => ((global::Puck.World.IWorldKeyTrack)value).Clock, kind: WorldNameKind.Clock, role: WorldNameRole.Names, facet: WorldExportFacet.Read),
                 M("count", typeof(global::System.Int32), typeof(global::Puck.World.IWorldKeyTrack), "Count", Read, static value => ((global::Puck.World.IWorldKeyTrack)value).Count),
-                M("with", typeof(global::Puck.World.IWorldKeyTrack), typeof(global::Puck.World.IWorldKeyTrack), "With", Read, static value => ((global::Puck.World.IWorldKeyTrack)value).With),
             ]),
         T(typeof(global::Puck.World.MotionScalarEnvelope), true, JsonTypeInfoKind.Object, null,
             [],

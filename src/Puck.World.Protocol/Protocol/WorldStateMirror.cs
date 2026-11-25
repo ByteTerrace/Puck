@@ -716,9 +716,10 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
             scalar: in value
         );
     }
-    // A keyed scalar or angle at its clock's phase, each further track joined on its own clock by its combine; a track
-    // whose clock reads no phase leaves the value beneath it, and a first track whose clock reads none is the fallback.
-    private float Keyed(WorldKeyTrack<float> keys, float fallback, bool delivered, bool angle) {
+    // A keyed scalar or angle at its clock's phase: the two keys about the phase, each resolved (a key holding keys of
+    // its own reads them at their own clock's phase), blended at the eased fraction. A track whose clock reads no phase
+    // is the fallback.
+    private float Keyed(WorldKeyTrack<BindableScalar> keys, float fallback, bool delivered, bool angle) {
         if (!TryPhase(
             clock: out var clock,
             name: keys.Clock,
@@ -728,29 +729,23 @@ public sealed partial class WorldStateMirror : IWorkCounterSource, IWorldClockSo
             return fallback;
         }
 
-        var value = (angle
-            ? WorldKeyResolver.Angle(phase: phase, span: clock.Span, track: keys)
-            : WorldKeyResolver.Scalar(phase: phase, span: clock.Span, track: keys));
+        var (from, to, t) = WorldKeyResolver.Locate(
+            phase: phase,
+            span: clock.Span,
+            track: keys
+        );
 
-        for (var link = keys.With; (link is not null); link = link.With) {
-            if (TryPhase(
-                clock: out var linkClock,
-                name: link.Clock,
-                phase: out var linkPhase,
-                delivered: delivered
-            )) {
-                value = WorldKeyResolver.Combine(
-                    below: value,
-                    combine: link.Combine,
-                    value: (angle
-                        ? WorldKeyResolver.Angle(phase: linkPhase, span: linkClock.Span, track: link)
-                        : WorldKeyResolver.Scalar(phase: linkPhase, span: linkClock.Span, track: link))
-                );
-            }
-        }
-
-        return value;
+        return WorldKeyResolver.Blend(
+            angle: angle,
+            from: KeyValue(angle: angle, delivered: delivered, fallback: fallback, value: keys.Keys[from].Value),
+            t: t,
+            to: KeyValue(angle: angle, delivered: delivered, fallback: fallback, value: keys.Keys[to].Value)
+        );
     }
+    private float KeyValue(in BindableScalar value, float fallback, bool delivered, bool angle) => ((value.Keys is { } nested)
+        ? Keyed(angle: angle, delivered: delivered, fallback: fallback, keys: nested)
+        : (value.Literal ?? fallback)
+    );
     /// <summary>Resolves a bindable color: its literal, its registered binding's current color, or its keys at their
     /// clock's presented phase, blended in linear light.</summary>
     /// <param name="color">The authored color.</param>

@@ -11,7 +11,7 @@ public sealed partial class ConsoleDisclosureLawTests {
     [InlineData(WorldSkyVisibility.Camera, "visual-only")]
     [Theory]
     public void LightingReportsPanelVisibilityAndEnvironmentGainClasses(WorldSkyVisibility? visibility, string change) {
-        var scalar = new BindableScalar(keys: new WorldKeyTrack<float>(clock: "day", keys: [new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0.1f)]));
+        var scalar = new BindableScalar(keys: new WorldKeyTrack<BindableScalar>(clock: "day", keys: [new WorldKey<BindableScalar>(At: 0d, Ease: WorldEase.Linear, Value: 0.1f)]));
         using var host = new DisclosureHost(Fixtures.BuildDocument() with {
             TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: "day", PeriodSeconds: 1d)]),
             RenderRaw = new WorldRenderDefaults(Environment: new WorldRenderEnvironment(Ambient: scalar, Reflection: scalar),
@@ -33,7 +33,7 @@ public sealed partial class ConsoleDisclosureLawTests {
     public void LightingReportsTheCadenceOfValueAndSectionKeys(bool section) {
         var color = new BindableColor(keys: new WorldKeyTrack<BindableColor>(clock: "day", keys: [
             new WorldKey<BindableColor>(At: 0d, Value: new BindableColor(Raw: "#ffffff"), Ease: WorldEase.Linear)]));
-        var scalar = new BindableScalar(keys: new WorldKeyTrack<float>(clock: "day", keys: [new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0.1f)]));
+        var scalar = new BindableScalar(keys: new WorldKeyTrack<BindableScalar>(clock: "day", keys: [new WorldKey<BindableScalar>(At: 0d, Ease: WorldEase.Linear, Value: 0.1f)]));
         var direction = new BindableDirection(keys: new WorldKeyTrack<Vector3>(clock: "day", keys: [new WorldKey<Vector3>(At: 0d, Value: Vector3.UnitY, Ease: WorldEase.Linear)]));
         var lights = new WorldRenderLighting(Lights: [new WorldRenderLight.Directional(Name: "sun", Shadow: WorldShadowMode.Always,
             Color: color, Direction: direction)], Curvature: new WorldRenderCurvature(Cavity: scalar));

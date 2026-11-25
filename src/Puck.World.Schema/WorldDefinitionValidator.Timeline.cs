@@ -160,7 +160,7 @@ public static partial class WorldDefinitionValidator {
         ValidateRenderKeys(definition, errors, "render.lighting", "light", "lights", lighting?.Clock,
             lighting?.Lights, lighting?.Keys, static light => light.LightName, static key => key.At,
             static key => key.Lights, ValidateLightKeyPart,
-            (key, path) => ValidateLightingKeyCurvature(lighting!, key, path, errors));
+            (key, path) => ValidateLightingKeyCurvature(key, path, errors));
         return errors.Count == start ? WorldRenderKeys.Expand(lighting) : lighting;
     }
 
@@ -210,19 +210,19 @@ public static partial class WorldDefinitionValidator {
         }
     }
 
-    private static void ValidateLightingKeyCurvature(WorldRenderLighting lighting, WorldRenderLightingKey key, string path, List<string> errors) {
+    private static void ValidateLightingKeyCurvature(WorldRenderLightingKey key, string path, List<string> errors) {
         if (key.Curvature is not { } curvature) { return; }
-        foreach (var (field, value, own) in new (string, BindableScalar?, BindableScalar?)[] {
-            ("cavity", curvature.Cavity, lighting.Curvature?.Cavity),
-            ("rim", curvature.Rim, lighting.Curvature?.Rim),
-            ("ink", curvature.Ink, lighting.Curvature?.Ink),
-            ("inkLow", curvature.InkLow, lighting.Curvature?.InkLow),
-            ("inkHigh", curvature.InkHigh, lighting.Curvature?.InkHigh),
+        foreach (var (field, value) in new (string, BindableScalar?)[] {
+            ("cavity", curvature.Cavity),
+            ("rim", curvature.Rim),
+            ("ink", curvature.Ink),
+            ("inkLow", curvature.InkLow),
+            ("inkHigh", curvature.InkHigh),
         }) {
-            RequireKeyScalar(errors: errors, own: own, path: $"{path}.curvature.{field}", value: value);
+            RequireKeyScalar(errors: errors, path: $"{path}.curvature.{field}", value: value);
         }
 
-        RequireKeyColor(errors: errors, own: lighting.Curvature?.InkColor, path: $"{path}.curvature.inkColor", value: curvature.InkColor);
+        RequireKeyColor(errors: errors, path: $"{path}.curvature.inkColor", value: curvature.InkColor);
     }
 
     private static void ValidateSectionNames(IEnumerable<string?> names, string path, List<string> errors) {
@@ -284,8 +284,6 @@ public static partial class WorldDefinitionValidator {
 
         switch (part) {
             case WorldRenderLight.Directional directional: {
-                    var own = ((WorldRenderLight.Directional)target);
-
                     RefuseStructure(
                         errors: errors,
                         path: $"{path}.shadow",
@@ -293,31 +291,26 @@ public static partial class WorldDefinitionValidator {
                     );
                     RequireKeyDirection(
                         errors: errors,
-                        own: own.Direction,
                         path: $"{path}.direction",
                         value: directional.Direction
                     );
                     RequireKeyColor(
                         errors: errors,
-                        own: own.Color,
                         path: $"{path}.color",
                         value: directional.Color
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Illuminance,
                         path: $"{path}.illuminance",
                         value: directional.Illuminance
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Temperature,
                         path: $"{path}.temperature",
                         value: directional.Temperature
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.AngularRadius?.Value,
                         path: $"{path}.angularRadius",
                         value: directional.AngularRadius?.Value
                     );
@@ -325,23 +318,18 @@ public static partial class WorldDefinitionValidator {
                     break;
                 }
             case WorldRenderLight.Rim rim: {
-                    var own = ((WorldRenderLight.Rim)target);
-
                     RequireKeyColor(
                         errors: errors,
-                        own: own.Color,
                         path: $"{path}.color",
                         value: rim.Color
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Luminance,
                         path: $"{path}.luminance",
                         value: rim.Luminance
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Power,
                         path: $"{path}.power",
                         value: rim.Power
                     );
@@ -349,11 +337,8 @@ public static partial class WorldDefinitionValidator {
                     break;
                 }
             case WorldRenderLight.Point point: {
-                    var own = ((WorldRenderLight.Point)target);
-
                     RequireKeyVector(
                         errors: errors,
-                        own: own.Position,
                         path: $"{path}.position",
                         value: point.Position
                     );
@@ -364,37 +349,31 @@ public static partial class WorldDefinitionValidator {
                     );
                     RequireKeyColor(
                         errors: errors,
-                        own: own.Color,
                         path: $"{path}.color",
                         value: point.Color
                     );
-                    RequireKeyScalar(errors: errors, own: own.Intensity, path: $"{path}.intensity", value: point.Intensity);
-                    RequireKeyScalar(errors: errors, own: own.Power, path: $"{path}.power", value: point.Power);
-                    RequireKeyScalar(errors: errors, own: own.Temperature, path: $"{path}.temperature", value: point.Temperature);
+                    RequireKeyScalar(errors: errors, path: $"{path}.intensity", value: point.Intensity);
+                    RequireKeyScalar(errors: errors, path: $"{path}.power", value: point.Power);
+                    RequireKeyScalar(errors: errors, path: $"{path}.temperature", value: point.Temperature);
 
                     break;
                 }
             case WorldRenderLight.Spot spot: {
-                    var own = ((WorldRenderLight.Spot)target);
-
-                    RequireKeyVector(errors: errors, own: own.Position, path: $"{path}.position", value: spot.Position);
-                    RequireKeyDirection(errors: errors, own: own.Direction, path: $"{path}.direction", value: spot.Direction);
+                    RequireKeyVector(errors: errors, path: $"{path}.position", value: spot.Position);
+                    RequireKeyDirection(errors: errors, path: $"{path}.direction", value: spot.Direction);
                     RefuseStructure(errors: errors, path: $"{path}.anchor", stated: (spot.Anchor is not null));
-                    RequireKeyColor(errors: errors, own: own.Color, path: $"{path}.color", value: spot.Color);
-                    RequireKeyScalar(errors: errors, own: own.Angle?.Value, path: $"{path}.angle", value: spot.Angle?.Value);
-                    RequireKeyScalar(errors: errors, own: own.InnerAngle?.Value, path: $"{path}.innerAngle", value: spot.InnerAngle?.Value);
-                    RequireKeyScalar(errors: errors, own: own.Intensity, path: $"{path}.intensity", value: spot.Intensity);
-                    RequireKeyScalar(errors: errors, own: own.Power, path: $"{path}.power", value: spot.Power);
-                    RequireKeyScalar(errors: errors, own: own.Temperature, path: $"{path}.temperature", value: spot.Temperature);
+                    RequireKeyColor(errors: errors, path: $"{path}.color", value: spot.Color);
+                    RequireKeyScalar(errors: errors, path: $"{path}.angle", value: spot.Angle?.Value);
+                    RequireKeyScalar(errors: errors, path: $"{path}.innerAngle", value: spot.InnerAngle?.Value);
+                    RequireKeyScalar(errors: errors, path: $"{path}.intensity", value: spot.Intensity);
+                    RequireKeyScalar(errors: errors, path: $"{path}.power", value: spot.Power);
+                    RequireKeyScalar(errors: errors, path: $"{path}.temperature", value: spot.Temperature);
 
                     break;
                 }
             case WorldRenderLight.Occluder occluder: {
-                    var own = ((WorldRenderLight.Occluder)target);
-
                     RequireKeyVector(
                         errors: errors,
-                        own: own.Position,
                         path: $"{path}.position",
                         value: occluder.Position
                     );
@@ -405,13 +384,11 @@ public static partial class WorldDefinitionValidator {
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Radius,
                         path: $"{path}.radius",
                         value: occluder.Radius
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Weight,
                         path: $"{path}.weight",
                         value: occluder.Weight
                     );
@@ -431,10 +408,10 @@ public static partial class WorldDefinitionValidator {
         RefuseStructure(errors: errors, path: $"{path}.clock", stated: (part.Clock is not null));
         RefuseStructure(errors: errors, path: $"{path}.visibility", stated: (part.Visibility is not null));
         RefuseStructure(errors: errors, path: $"{path}.tier", stated: (part.Tier is not null));
-        RequireKeyScalar(errors: errors, own: target.Opacity, path: $"{path}.opacity", value: part.Opacity);
-        RequireKeyScalar(errors: errors, own: target.Luminance, path: $"{path}.luminance", value: part.Luminance);
-        RequireKeyScalar(errors: errors, own: target.Transform?.Turn?.Value, path: $"{path}.transform.turn", value: part.Transform?.Turn?.Value);
-        RequireKeyScalar(errors: errors, own: target.Transform?.Tilt?.Value, path: $"{path}.transform.tilt", value: part.Transform?.Tilt?.Value);
+        RequireKeyScalar(errors: errors, path: $"{path}.opacity", value: part.Opacity);
+        RequireKeyScalar(errors: errors, path: $"{path}.luminance", value: part.Luminance);
+        RequireKeyScalar(errors: errors, path: $"{path}.transform.turn", value: part.Transform?.Turn?.Value);
+        RequireKeyScalar(errors: errors, path: $"{path}.transform.tilt", value: part.Transform?.Tilt?.Value);
 
         switch (part) {
             case WorldRenderSkyLayer.Gradient gradient: {
@@ -460,13 +437,11 @@ public static partial class WorldDefinitionValidator {
                     for (var index = 0; (index < stops.Count); index++) {
                         RequireKeyScalar(
                             errors: errors,
-                            own: ownStops[index]?.Elevation,
                             path: $"{path}.stops[{index}].elevation",
                             value: stops[index]?.Elevation
                         );
                         RequireKeyColor(
                             errors: errors,
-                            own: ownStops[index]?.Color,
                             path: $"{path}.stops[{index}].color",
                             value: stops[index]?.Color
                         );
@@ -475,8 +450,6 @@ public static partial class WorldDefinitionValidator {
                     break;
                 }
             case WorldRenderSkyLayer.SunDisc disc: {
-                    var own = ((WorldRenderSkyLayer.SunDisc)target);
-
                     RefuseStructure(
                         errors: errors,
                         path: $"{path}.light",
@@ -484,24 +457,20 @@ public static partial class WorldDefinitionValidator {
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Radius?.Value,
                         path: $"{path}.radius",
                         value: disc.Radius?.Value
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Intensity,
                         path: $"{path}.intensity",
                         value: disc.Intensity
                     );
-                    RequireKeyColor(errors: errors, own: own.Color, path: $"{path}.color", value: disc.Color);
+                    RequireKeyColor(errors: errors, path: $"{path}.color", value: disc.Color);
                     RefuseStructure(errors: errors, path: $"{path}.texture", stated: (disc.Texture is not null));
 
                     break;
                 }
             case WorldRenderSkyLayer.Stars stars: {
-                    var own = ((WorldRenderSkyLayer.Stars)target);
-
                     RefuseStructure(
                         errors: errors,
                         path: $"{path}.density",
@@ -516,25 +485,21 @@ public static partial class WorldDefinitionValidator {
                     RefuseStructure(errors: errors, path: $"{path}.size", stated: (stars.Size is not null));
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Brightness,
                         path: $"{path}.brightness",
                         value: stars.Brightness
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Twinkle?.Share,
                         path: $"{path}.twinkle.share",
                         value: stars.Twinkle?.Share
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Twinkle?.Depth,
                         path: $"{path}.twinkle.depth",
                         value: stars.Twinkle?.Depth
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Twinkle?.Rate,
                         path: $"{path}.twinkle.rate",
                         value: stars.Twinkle?.Rate
                     );
@@ -542,8 +507,6 @@ public static partial class WorldDefinitionValidator {
                     break;
                 }
             case WorldRenderSkyLayer.Clouds clouds: {
-                    var own = ((WorldRenderSkyLayer.Clouds)target);
-
                     RefuseStructure(
                         errors: errors,
                         path: $"{path}.seed",
@@ -555,49 +518,41 @@ public static partial class WorldDefinitionValidator {
                     RefuseStructure(errors: errors, path: $"{path}.extinction", stated: (clouds.Extinction is not null));
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Coverage,
                         path: $"{path}.coverage",
                         value: clouds.Coverage
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Softness,
                         path: $"{path}.softness",
                         value: clouds.Softness
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Scale,
                         path: $"{path}.scale",
                         value: clouds.Scale
                     );
                     RequireKeyColor(
                         errors: errors,
-                        own: own.Color,
                         path: $"{path}.color",
                         value: clouds.Color
                     );
                     RequireKeyVector(
                         errors: errors,
-                        own: own.Drift,
                         path: $"{path}.drift",
                         value: clouds.Drift
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Spin,
                         path: $"{path}.spin",
                         value: clouds.Spin
                     );
                     RequireKeyScalar(
                         errors: errors,
-                        own: own.Curl?.Value,
                         path: $"{path}.curl",
                         value: clouds.Curl?.Value
                     );
                     RequireKeyVector(
                         errors: errors,
-                        own: own.Shear,
                         path: $"{path}.shear",
                         value: clouds.Shear
                     );
@@ -605,14 +560,12 @@ public static partial class WorldDefinitionValidator {
                     break;
                 }
             case WorldRenderSkyLayer.Aurora aurora: {
-                    var own = ((WorldRenderSkyLayer.Aurora)target);
-
-                    RequireKeyScalar(errors: errors, own: own.Intensity, path: $"{path}.intensity", value: aurora.Intensity);
-                    RequireKeyColor(errors: errors, own: own.Color, path: $"{path}.color", value: aurora.Color);
-                    RequireKeyColor(errors: errors, own: own.Top, path: $"{path}.top", value: aurora.Top);
-                    RequireKeyScalar(errors: errors, own: own.Base?.Value, path: $"{path}.base", value: aurora.Base?.Value);
-                    RequireKeyScalar(errors: errors, own: own.Height?.Value, path: $"{path}.height", value: aurora.Height?.Value);
-                    RequireKeyScalar(errors: errors, own: own.Fold?.Value, path: $"{path}.fold", value: aurora.Fold?.Value);
+                    RequireKeyScalar(errors: errors, path: $"{path}.intensity", value: aurora.Intensity);
+                    RequireKeyColor(errors: errors, path: $"{path}.color", value: aurora.Color);
+                    RequireKeyColor(errors: errors, path: $"{path}.top", value: aurora.Top);
+                    RequireKeyScalar(errors: errors, path: $"{path}.base", value: aurora.Base?.Value);
+                    RequireKeyScalar(errors: errors, path: $"{path}.height", value: aurora.Height?.Value);
+                    RequireKeyScalar(errors: errors, path: $"{path}.fold", value: aurora.Fold?.Value);
                     RefuseStructure(errors: errors, path: $"{path}.rays", stated: (aurora.Rays is not null));
                     RefuseStructure(errors: errors, path: $"{path}.waves", stated: (aurora.Waves is not null));
                     RefuseStructure(errors: errors, path: $"{path}.seed", stated: (aurora.Seed is not null));
@@ -620,11 +573,9 @@ public static partial class WorldDefinitionValidator {
                     break;
                 }
             case WorldRenderSkyLayer.Noise noise: {
-                    var own = ((WorldRenderSkyLayer.Noise)target);
-
-                    RequireKeyColor(errors: errors, own: own.Low, path: $"{path}.low", value: noise.Low);
-                    RequireKeyColor(errors: errors, own: own.High, path: $"{path}.high", value: noise.High);
-                    RequireKeyScalar(errors: errors, own: own.Coverage, path: $"{path}.coverage", value: noise.Coverage);
+                    RequireKeyColor(errors: errors, path: $"{path}.low", value: noise.Low);
+                    RequireKeyColor(errors: errors, path: $"{path}.high", value: noise.High);
+                    RequireKeyScalar(errors: errors, path: $"{path}.coverage", value: noise.Coverage);
                     RefuseStructure(errors: errors, path: $"{path}.softness", stated: (noise.Softness is not null));
                     RefuseStructure(errors: errors, path: $"{path}.scale", stated: (noise.Scale is not null));
                     RefuseStructure(errors: errors, path: $"{path}.octaves", stated: (noise.Octaves is not null));
@@ -645,29 +596,25 @@ public static partial class WorldDefinitionValidator {
                             errors.Add(item: $"{path}.colors carries {colors.Count} colours; a key moves a pattern's two colours and never adds or removes one.");
                         }
                         for (var index = 0; (index < colors.Count); index++) {
-                            RequireKeyColor(errors: errors, own: (((own.Colors is { } ownColors) && (index < ownColors.Count)) ? ownColors[index] : null), path: $"{path}.colors[{index}]", value: colors[index]);
+                            RequireKeyColor(errors: errors, path: $"{path}.colors[{index}]", value: colors[index]);
                         }
                     }
 
                     break;
                 }
             case WorldRenderSkyLayer.Panel panel: {
-                    var own = ((WorldRenderSkyLayer.Panel)target);
-
-                    RequireKeyColor(errors: errors, own: own.Color, path: $"{path}.color", value: panel.Color);
-                    RequireKeyScalar(errors: errors, own: own.Intensity, path: $"{path}.intensity", value: panel.Intensity);
-                    RequireKeyScalar(errors: errors, own: own.Blur, path: $"{path}.blur", value: panel.Blur);
+                    RequireKeyColor(errors: errors, path: $"{path}.color", value: panel.Color);
+                    RequireKeyScalar(errors: errors, path: $"{path}.intensity", value: panel.Intensity);
+                    RequireKeyScalar(errors: errors, path: $"{path}.blur", value: panel.Blur);
                     if ((panel.Direction is not null) || (panel.Size is not null)) {
                         errors.Add(item: $"{path} states panel direction or size, which are structure rather than keyed values.");
                     }
                     break;
                 }
             case WorldRenderSkyLayer.Panorama panorama: {
-                    var own = ((WorldRenderSkyLayer.Panorama)target);
-
                     RefuseStructure(errors: errors, path: $"{path}.screen", stated: (panorama.Screen is not null));
                     RefuseStructure(errors: errors, path: $"{path}.projection", stated: (panorama.Projection is not null));
-                    RequireKeyScalar(errors: errors, own: own.Intensity, path: $"{path}.intensity", value: panorama.Intensity);
+                    RequireKeyScalar(errors: errors, path: $"{path}.intensity", value: panorama.Intensity);
 
                     break;
                 }
@@ -689,86 +636,31 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} is structure, which a key never states; keys move values, and a count, seed, kind, name, slot or frame is the same at every key.");
         }
     }
-    private static void RequireKeyScalar(BindableScalar? value, BindableScalar? own, string path, List<string> errors) {
-        if (value is not { } stated) {
-            return;
-        }
-
-        if (stated.Literal is null) {
+    // A section key states the literal a field holds at its time. A member that keys the field itself keeps its own
+    // keys (WorldRenderKeys), so a section key never competes with them.
+    private static void RequireKeyScalar(BindableScalar? value, string path, List<string> errors) {
+        if ((value is { } stated) && (stated.Literal is null)) {
             errors.Add(item: $"{path} must be a literal: a section key states the value the field holds at its time, never a binding or keys of its own.");
         }
-
-        RequireUnkeyed(
-            errors: errors,
-            // Keys that say how they join (a combine) join over the section's track rather than compete with it
-            // (WorldRenderKeys).
-            keyed: (own?.Keys is { Combine: null }),
-            path: path
-        );
     }
-    private static void RequireKeyColor(BindableColor? value, BindableColor? own, string path, List<string> errors) {
-        if (value is not { } stated) {
-            return;
-        }
-
-        if (stated.Literal is null) {
+    private static void RequireKeyColor(BindableColor? value, string path, List<string> errors) {
+        if ((value is { } stated) && (stated.Literal is null)) {
             errors.Add(item: $"{path} must be a #RRGGBB or #RRGGBBAA literal: a section key states the value the field holds at its time, never a binding or keys of its own.");
         }
-
-        RequireUnkeyed(
-            errors: errors,
-            keyed: (own?.Keys is not null),
-            path: path
-        );
     }
-    private static void RequireKeyDirection(BindableDirection? value, BindableDirection? own, string path, List<string> errors) {
-        if (value is not { } stated) {
-            return;
-        }
-
-        if (stated.Literal is null) {
+    private static void RequireKeyDirection(BindableDirection? value, string path, List<string> errors) {
+        if ((value is { } stated) && (stated.Literal is null)) {
             errors.Add(item: $"{path} must be a literal [x, y, z]: a section key states the value the field holds at its time, never keys of its own.");
         }
-
-        RequireUnkeyed(
-            errors: errors,
-            keyed: (own?.Keys is not null),
-            path: path
-        );
     }
-    private static void RequireKeyVector(BindableVector2? value, BindableVector2? own, string path, List<string> errors) {
-        if (value is not { } stated) {
-            return;
-        }
-
-        if (stated.Literal is null) {
+    private static void RequireKeyVector(BindableVector2? value, string path, List<string> errors) {
+        if ((value is { } stated) && (stated.Literal is null)) {
             errors.Add(item: $"{path} must be a literal [x, y]: a section key states the value the field holds at its time, never keys of its own.");
         }
-
-        RequireUnkeyed(
-            errors: errors,
-            keyed: (own?.Keys is not null),
-            path: path
-        );
     }
-    private static void RequireKeyVector(BindableVector3? value, BindableVector3? own, string path, List<string> errors) {
-        if (value is not { } stated) {
-            return;
-        }
-
-        if (stated.Literal is null) {
+    private static void RequireKeyVector(BindableVector3? value, string path, List<string> errors) {
+        if ((value is { } stated) && (stated.Literal is null)) {
             errors.Add(item: $"{path} must be a literal [x, y, z]: a section key states the value the field holds at its time, never keys of its own.");
-        }
-
-        RequireUnkeyed(
-            errors: errors,
-            keyed: (own?.Keys is not null),
-            path: path
-        );
-    }
-    private static void RequireUnkeyed(bool keyed, string path, List<string> errors) {
-        if (keyed) {
-            errors.Add(item: $"{path} is keyed by the section and by its own keys; key a field one way.");
         }
     }
 }

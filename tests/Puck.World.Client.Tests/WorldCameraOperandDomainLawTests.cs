@@ -69,11 +69,11 @@ public sealed class WorldCameraOperandDomainLawTests {
         TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: "day", PeriodSeconds: 100d)]),
     };
     // The fraction halfway between two keys on a clock of 100 seconds: the keys sit at 0 and 50, the presentation at 25.
-    private static BindableScalar Keyed(float first, float second) => new(keys: new WorldKeyTrack<float>(
+    private static BindableScalar Keyed(float first, float second) => new(keys: new WorldKeyTrack<BindableScalar>(
         clock: "day",
         keys: [
-            new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: first),
-            new WorldKey<float>(At: 50d, Ease: WorldEase.Linear, Value: second),
+            new WorldKey<BindableScalar>(At: 0d, Ease: WorldEase.Linear, Value: first),
+            new WorldKey<BindableScalar>(At: 50d, Ease: WorldEase.Linear, Value: second),
         ]
     ));
     private static (Vector3 Eye, Vector3 Target, float FovRadians) Present(WorldDefinition definition) {
