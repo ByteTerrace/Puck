@@ -618,10 +618,7 @@ public sealed partial class WorldBody {
         for (var slot = 0; (slot < m_motionRecency.Length); slot++) {
             m_motionRecency[slot] = (FactHolds(fact: m_tuning.ShapingRecencyFacts[slot])
                 ? m_tuning.ShapingRecencyWindows[slot]
-                : SubtractSaturating(
-                    value: m_motionRecency[slot],
-                    amount: stepTicks
-                )
+                : m_motionRecency[slot].SubtractSaturating(right: stepTicks)
             );
         }
 
@@ -774,10 +771,7 @@ public sealed partial class WorldBody {
 
             // Charge this whole tick against the front segment; durations were quantized upward to whole host ticks at
             // enqueue, so no fractional tail or floating accumulator exists here.
-            segment.RemainingTicks = SubtractSaturating(
-                amount: stepTicks,
-                value: segment.RemainingTicks
-            );
+            segment.RemainingTicks = segment.RemainingTicks.SubtractSaturating(right: stepTicks);
             movement = segment.Intent;
             tapeActor = segment.Actor;
             segment.Intent = WithoutRelative(intent: segment.Intent);
@@ -1864,8 +1858,6 @@ public sealed partial class WorldBody {
     // action-track lanes are then overlaid, so a wire body.press jumps a tape-driven runner.
     // Whether an intent source names a server-side producer whose staged image fills gaps.
     private static bool SourceNamesProducer(IntentSource source) => source.IsProducer;
-    private static ulong SubtractSaturating(ulong value, ulong amount) =>
-        value.SubtractSaturating(right: amount);
     /// <summary>Updates the latched <c>world.contacts</c> obstruction witness from this tick's raw solver result. A
     /// fresh non-walkable push always (re)latches immediately and refills the grace window. Absent one, the
     /// existing latch clears immediately the instant either releasing condition holds — the raw planar move intent
@@ -1914,10 +1906,7 @@ public sealed partial class WorldBody {
             return;
         }
 
-        m_obstructionWitnessGraceTicks = SubtractSaturating(
-            amount: stepTicks,
-            value: m_obstructionWitnessGraceTicks
-        );
+        m_obstructionWitnessGraceTicks = m_obstructionWitnessGraceTicks.SubtractSaturating(right: stepTicks);
 
         if (m_obstructionWitnessGraceTicks == 0) {
             m_obstructionWitness = FixedVector3.Zero;

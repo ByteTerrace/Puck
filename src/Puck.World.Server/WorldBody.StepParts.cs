@@ -271,10 +271,7 @@ public sealed partial class WorldBody {
             }
 
             for (var lane = 0; (lane < ActionLaneCount); lane++) {
-                var remaining = SubtractSaturating(
-                    value: Action.TimerTicks[lane],
-                    amount: stepTicks
-                );
+                var remaining = Action.TimerTicks[lane].SubtractSaturating(right: stepTicks);
 
                 if (Action.TimerTicks[lane] != remaining) { ActionEdit.TimerTicks[lane] = remaining; }
             }

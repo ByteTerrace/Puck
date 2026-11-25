@@ -255,7 +255,7 @@ public sealed partial class WorldColliderSet : IContactField {
             // A creation that collides as its composed field compiles one field collider per copy that keeps a contact shape.
             if (CollidesAsField(document: creation.EngineDocument)) {
                 if (CreationStampEmitter.EmitsContact(document: creation.EngineDocument)) {
-                    placementFields = AddSaturated(left: placementFields, right: copies);
+                    placementFields = BinaryIntegerFunctions.AddSaturating(left: placementFields, right: copies);
                 }
 
                 continue;
@@ -283,7 +283,7 @@ public sealed partial class WorldColliderSet : IContactField {
                 );
 
                 if (shape.Type == SdfSolidPrimitive.Plane) {
-                    placementPlanes = AddSaturated(
+                    placementPlanes = BinaryIntegerFunctions.AddSaturating(
                         left: placementPlanes,
                         right: shapeCopies
                     );
@@ -291,15 +291,15 @@ public sealed partial class WorldColliderSet : IContactField {
                     (shape.Type == SdfSolidPrimitive.Sphere) &&
                     CreationStampEmitter.IsIsotropicallyScaled(shape: shape)
                 ) {
-                    placementSpheres = AddSaturated(
+                    placementSpheres = BinaryIntegerFunctions.AddSaturating(
                         left: placementSpheres,
                         right: shapeCopies
                     );
                 } else if ((shape.Type == SdfSolidPrimitive.Cylinder) &&
                     (MathF.Abs(x: shape.Scale.X) == MathF.Abs(x: shape.Scale.Z))) {
-                    placementCylinders = AddSaturated(left: placementCylinders, right: shapeCopies);
+                    placementCylinders = BinaryIntegerFunctions.AddSaturating(left: placementCylinders, right: shapeCopies);
                 } else {
-                    placementBoxes = AddSaturated(
+                    placementBoxes = BinaryIntegerFunctions.AddSaturating(
                         left: placementBoxes,
                         right: shapeCopies
                     );
@@ -307,15 +307,15 @@ public sealed partial class WorldColliderSet : IContactField {
             }
         }
 
-        spheres = AddSaturated(
+        spheres = BinaryIntegerFunctions.AddSaturating(
             left: spheres,
             right: placementSpheres
         );
-        boxes = AddSaturated(
+        boxes = BinaryIntegerFunctions.AddSaturating(
             left: boxes,
             right: placementBoxes
         );
-        planes = AddSaturated(
+        planes = BinaryIntegerFunctions.AddSaturating(
             left: planes,
             right: placementPlanes
         );
@@ -333,8 +333,6 @@ public sealed partial class WorldColliderSet : IContactField {
         ) { PlacementFieldCount = placementFields };
     }
 
-    private static long AddSaturated(long left, long right) =>
-        left.AddSaturating(right: right);
     private static void FoldCollider(in FixedStaticCollider collider, ref Fnv1aHash hash) {
         hash.Add(value: ((byte)collider.Kind));
         hash.Add(value: collider.Center.X.Value);
