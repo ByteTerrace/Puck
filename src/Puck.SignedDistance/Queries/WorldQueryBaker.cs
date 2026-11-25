@@ -190,7 +190,7 @@ public static class WorldQueryBaker {
             for (var column = minColumn; (column < maxColumn); column++) {
                 var cellIndex = (rowBase + column);
 
-                blocked[(cellIndex >> 6)] |= (1UL << (cellIndex & 63));
+                BitWords.Add(index: cellIndex, words: blocked);
             }
         }
     }

@@ -150,10 +150,8 @@ public static partial class CompileCommand {
                 searchOption: SearchOption.AllDirectories,
                 searchPattern: ("*" + suffix)
             )).Where(predicate: file => !kept.Contains(item: Path.GetFullPath(path: file))).ToArray()) {
-                try {
-                    File.Delete(path: stale);
-                } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                    Console.Error.WriteLine(value: $"error: '{CliPaths.ToDisplay(fullPath: stale)}' has no source in the tree and could not be removed: {exception.Message}");
+                if (!FileRemoval.TryDelete(failure: out var failure, path: stale)) {
+                    Console.Error.WriteLine(value: $"error: '{CliPaths.ToDisplay(fullPath: stale)}' has no source in the tree and could not be removed: {failure.Message}");
 
                     return 2;
                 }

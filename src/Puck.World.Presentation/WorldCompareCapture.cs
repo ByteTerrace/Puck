@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using System.Globalization;
 using Puck.Abstractions.Presentation;
 using Puck.Assets;
@@ -124,8 +125,8 @@ public sealed class WorldCompareCapture(WorldFrameComparison comparison, WorldSe
     }
     private static CommandResult Refuse(string reason) => CommandResult.Error(output: $"[world.compare: {reason}]");
     private static void DeleteCapture(string path) {
-        try { File.Delete(path: path); } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"[world.compare: cannot remove temporary capture '{path}': {error.Message}]");
+        if (!FileRemoval.TryDelete(failure: out var failure, path: path)) {
+            Console.Error.WriteLine(value: $"[world.compare: cannot remove temporary capture '{path}': {failure.Message}]");
         }
     }
 

@@ -249,24 +249,55 @@ public static class HostCommand {
         return command;
     }
 
-    private static async Task<int> Allocations(int? processId, int seconds, string? trace, string? output, int? thread, int top, double fromSeconds, double toSeconds, string? focus, CancellationToken cancellationToken) {
-        if ((processId is null) == (trace is null)) { return CliExit.Refuse(verb: AllocationsVerb, what: "the trace", why: "name exactly one of --pid and --trace."); }
+    // The options both trace verbs take: a process to record or a trace already taken, and the window and thread read.
+    private sealed class TraceOptions(string traceKinds, int seconds, string threadUnit, string focusDescription, string fromDescription) {
+        public Option<int?> Pid { get; } = new(name: "--pid") { Description = "The .NET process to record, such as a World's process id from puck_world_start." };
+        public Option<string?> Trace { get; } = new(name: "--trace") { Description = FormattableString.Invariant($"Read this .nettrace instead of recording one (a dotnet-trace {traceKinds} trace, or one --output kept).") };
+        public Option<int> Seconds { get; } = CliOptions.Count(defaultValue: seconds, description: "Seconds to record with --pid.", minimum: 1, name: "--seconds");
+        public Option<string?> Output { get; } = new(name: "--output") { Description = "Where to keep the recorded .nettrace; a temporary file by default." };
+        public Option<int?> Thread { get; } = new(name: "--thread") { Description = FormattableString.Invariant($"Read only this thread's {threadUnit} (an id the report's thread lines name).") };
+        public Option<string?> Focus { get; } = new(name: "--focus") { Description = focusDescription };
+        public Option<double?> From { get; } = CliOptions.Amount(defaultValue: 0, description: fromDescription, minimum: 0, name: "--from");
+        public Option<double?> To { get; } = CliOptions.Amount(defaultValue: double.MaxValue, description: "Read the trace up to this second.", minimum: 0, name: "--to");
 
-        var path = trace ?? Path.GetFullPath(path: (output ?? Path.Combine(path1: Path.GetTempPath(), path2: FormattableString.Invariant($"puck-allocations-{processId}-{Environment.TickCount64}.nettrace"))));
-        AllocationReport report;
+        public void AddTo(Command command) {
+            foreach (var option in (Option[])[Pid, Trace, Seconds, Output, Thread, Focus, From, To]) { command.Options.Add(item: option); }
+        }
+        public TraceRequest Read(ParseResult parseResult) => new(Focus: parseResult.GetValue(option: Focus), FromMs: ((parseResult.GetValue(option: From) ?? 0) * 1000),
+            Output: parseResult.GetValue(option: Output), ProcessId: parseResult.GetValue(option: Pid), Seconds: parseResult.GetValue(option: Seconds),
+            Thread: parseResult.GetValue(option: Thread), ToMs: ((parseResult.GetValue(option: To) ?? double.MaxValue) * 1000), Trace: parseResult.GetValue(option: Trace));
+    }
+    private sealed record TraceRequest(int? ProcessId, int Seconds, string? Trace, string? Output, int? Thread, string? Focus, double FromMs, double ToMs) {
+        public string ThreadText => (Thread is { } thread ? thread.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) : "all");
+    }
+
+    // Records the process for the request's seconds (or takes the trace it names) and reads it. A refusal carries no
+    // report and the exit to return.
+    private static async Task<(TReport? Report, string Path, int Exit)> TakeTraceAsync<TReport>(string verb, string fileStem, TraceRequest request,
+        Func<int, TimeSpan, string, CancellationToken, Task> collectAsync, Func<string, TReport> read, CancellationToken cancellationToken) where TReport : class {
+        if ((request.ProcessId is null) == (request.Trace is null)) { return (null, "", CliExit.Refuse(verb: verb, what: "the trace", why: "name exactly one of --pid and --trace.")); }
+
+        var path = request.Trace ?? Path.GetFullPath(path: (request.Output ?? Path.Combine(path1: Path.GetTempPath(), path2: FormattableString.Invariant($"{fileStem}-{request.ProcessId}-{Environment.TickCount64}.nettrace"))));
 
         try {
-            if (processId is { } pid) { await AllocationTrace.CollectAsync(cancellationToken: cancellationToken, duration: TimeSpan.FromSeconds(seconds: seconds), path: path, processId: pid); }
-            report = AllocationTrace.Read(focus: focus, fromMs: (fromSeconds * 1000), path: path, thread: thread, toMs: (toSeconds * 1000));
+            if (request.ProcessId is { } pid) { await collectAsync(pid, TimeSpan.FromSeconds(seconds: request.Seconds), path, cancellationToken); }
+            return (read(path), path, CliExit.Success);
         } catch (Exception exception) when (exception is Microsoft.Diagnostics.NETCore.Client.ServerNotAvailableException or InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException) {
-            return CliExit.Refuse(verb: AllocationsVerb, what: (processId is { } id ? FormattableString.Invariant($"--pid {id}") : path), why: exception.Message);
+            return (null, path, CliExit.Refuse(verb: verb, what: (request.ProcessId is { } id ? FormattableString.Invariant($"--pid {id}") : path), why: exception.Message));
         }
+    }
+    private static string Quote(string text) => string.Concat(str0: "\"", str1: text, str2: "\"");
+
+    private static async Task<int> Allocations(TraceRequest request, int top, CancellationToken cancellationToken) {
+        var (report, path, exit) = await TakeTraceAsync(cancellationToken: cancellationToken, collectAsync: AllocationTrace.CollectAsync, fileStem: "puck-allocations", request: request, verb: AllocationsVerb,
+            read: path => AllocationTrace.Read(focus: request.Focus, fromMs: request.FromMs, path: path, thread: request.Thread, toMs: request.ToMs));
+
+        if (report is null) { return exit; }
 
         static string Mib(long bytes) => FormattableString.Invariant($"{bytes / 1048576.0:0.0}MiB");
-        static string Quote(string text) => string.Concat(str0: "\"", str1: text, str2: "\"");
         var pauses = report.Collections.Where(static collection => collection.PauseMs > 0).ToArray();
 
-        Console.Out.WriteLine(value: FormattableString.Invariant($"[host allocations: trace={Quote(path)} thread={(thread is { } t ? t.ToString(System.Globalization.CultureInfo.InvariantCulture) : "all")} ticks={report.Ticks} sampled={Mib(report.Bytes)} large={Mib(report.LargeBytes)} seconds={report.Seconds:0.0} | collections gen0={report.Collections.Count(static c => c.Generation == 0)} gen1={report.Collections.Count(static c => c.Generation == 1)} gen2={report.Collections.Count(static c => c.Generation == 2)} pause-ms={pauses.Sum(static c => c.PauseMs):0.0} longest-ms={(pauses.Length == 0 ? 0 : pauses.Max(static c => c.PauseMs)):0.0}"));
+        Console.Out.WriteLine(value: FormattableString.Invariant($"[host allocations: trace={Quote(path)} thread={request.ThreadText} ticks={report.Ticks} sampled={Mib(report.Bytes)} large={Mib(report.LargeBytes)} seconds={report.Seconds:0.0} | collections gen0={report.Collections.Count(static c => c.Generation == 0)} gen1={report.Collections.Count(static c => c.Generation == 1)} gen2={report.Collections.Count(static c => c.Generation == 2)} pause-ms={pauses.Sum(static c => c.PauseMs):0.0} longest-ms={(pauses.Length == 0 ? 0 : pauses.Max(static c => c.PauseMs)):0.0}"));
         foreach (var each in report.Threads.Take(count: top)) { Console.Out.WriteLine(value: FormattableString.Invariant($"thread {each.Id} {Mib(each.Bytes)} root={Quote(each.Root)}")); }
         foreach (var collection in report.Collections.Where(static c => (c.Generation > 1) || (c.PauseMs >= 50))) {
             Console.Out.WriteLine(value: FormattableString.Invariant($"collection #{collection.Index} gen{collection.Generation} {collection.Type} reason={collection.Reason} at-ms={collection.AtMs:0} pause-ms={collection.PauseMs:0.0}"));
@@ -282,19 +313,21 @@ public static class HostCommand {
         return CliExit.Success;
     }
     private static Command CreateAllocations() {
-        var pidOption = new Option<int?>(name: "--pid") { Description = "The .NET process to record, such as a World's process id from puck_world_start." };
-        var traceOption = new Option<string?>(name: "--trace") { Description = "Read this .nettrace instead of recording one (a dotnet-trace gc-verbose trace, or one --output kept)." };
-        var secondsOption = CliOptions.Count(defaultValue: 20, description: "Seconds to record with --pid.", minimum: 1, name: "--seconds");
-        var outputOption = new Option<string?>(name: "--output") { Description = "Where to keep the recorded .nettrace; a temporary file by default." };
-        var threadOption = new Option<int?>(name: "--thread") { Description = "Read only this thread's ticks (an id the report's thread lines name)." };
+        var trace = new TraceOptions(
+            focusDescription: "Read only the ticks beneath an engine frame naming this text, and list the paths of callers from it outward.",
+            fromDescription: "Read the trace from this second (the collection lines' at-ms over 1000), to look at one stall.",
+            seconds: 20,
+            threadUnit: "ticks",
+            traceKinds: "gc-verbose"
+        );
         var topOption = CliOptions.Count(defaultValue: 25, description: "How many threads, types and sites to list; twice as many frames.", minimum: 1, name: "--top");
-        var fromOption = CliOptions.Amount(defaultValue: 0, description: "Read the trace from this second (the collection lines' at-ms over 1000), to look at one stall.", minimum: 0, name: "--from");
-        var toOption = CliOptions.Amount(defaultValue: double.MaxValue, description: "Read the trace up to this second.", minimum: 0, name: "--to");
-        var focusOption = new Option<string?>(name: "--focus") { Description = "Read only the ticks beneath an engine frame naming this text, and list the paths of callers from it outward." };
         var command = new Command(
             description: "Attribute another .NET process's allocation to threads, types and call sites by the runtime's allocation ticks.",
             name: "allocations"
-        ) { pidOption, traceOption, secondsOption, outputOption, threadOption, topOption, fromOption, toOption, focusOption };
+        );
+
+        trace.AddTo(command: command);
+        command.Options.Add(item: topOption);
 
         command.Detail(detail: """
             Records an EventPipe session on the process's diagnostics port with the runtime provider's GC keyword at
@@ -311,37 +344,22 @@ public static class HostCommand {
             """);
         command.SetAction(action: (parseResult, cancellationToken) => Allocations(
             cancellationToken: cancellationToken,
-            focus: parseResult.GetValue(option: focusOption),
-            fromSeconds: parseResult.GetValue(option: fromOption) ?? 0,
-            output: parseResult.GetValue(option: outputOption),
-            processId: parseResult.GetValue(option: pidOption),
-            seconds: parseResult.GetValue(option: secondsOption),
-            thread: parseResult.GetValue(option: threadOption),
-            toSeconds: parseResult.GetValue(option: toOption) ?? double.MaxValue,
-            top: parseResult.GetValue(option: topOption),
-            trace: parseResult.GetValue(option: traceOption)
+            request: trace.Read(parseResult: parseResult),
+            top: parseResult.GetValue(option: topOption)
         ));
 
         return command;
     }
 
-    private static async Task<int> Samples(int? processId, int seconds, string? trace, string? output, int? thread, string? focus, int depth, int top, double fromSeconds, double toSeconds, CancellationToken cancellationToken) {
-        if ((processId is null) == (trace is null)) { return CliExit.Refuse(verb: SamplesVerb, what: "the trace", why: "name exactly one of --pid and --trace."); }
+    private static async Task<int> Samples(TraceRequest request, int depth, int top, CancellationToken cancellationToken) {
+        var (report, path, exit) = await TakeTraceAsync(cancellationToken: cancellationToken, collectAsync: SampleTrace.CollectAsync, fileStem: "puck-samples", request: request, verb: SamplesVerb,
+            read: path => SampleTrace.Read(depth: depth, focus: request.Focus, fromMs: request.FromMs, path: path, thread: request.Thread, toMs: request.ToMs));
 
-        var path = trace ?? Path.GetFullPath(path: (output ?? Path.Combine(path1: Path.GetTempPath(), path2: FormattableString.Invariant($"puck-samples-{processId}-{Environment.TickCount64}.nettrace"))));
-        SampleReport report;
+        if (report is null) { return exit; }
 
-        try {
-            if (processId is { } pid) { await SampleTrace.CollectAsync(cancellationToken: cancellationToken, duration: TimeSpan.FromSeconds(seconds: seconds), path: path, processId: pid); }
-            report = SampleTrace.Read(depth: depth, focus: focus, fromMs: (fromSeconds * 1000), path: path, thread: thread, toMs: (toSeconds * 1000));
-        } catch (Exception exception) when (exception is Microsoft.Diagnostics.NETCore.Client.ServerNotAvailableException or InvalidOperationException or ArgumentException or IOException or UnauthorizedAccessException) {
-            return CliExit.Refuse(verb: SamplesVerb, what: (processId is { } id ? FormattableString.Invariant($"--pid {id}") : path), why: exception.Message);
-        }
-
-        static string Quote(string text) => string.Concat(str0: "\"", str1: text, str2: "\"");
         static string Share(long part, long whole) => FormattableString.Invariant($"{((whole == 0) ? 0 : ((100.0 * part) / whole)):0.0}%");
 
-        Console.Out.WriteLine(value: FormattableString.Invariant($"[host samples: trace={Quote(path)} focus={Quote(focus ?? "")} thread={(thread is { } t ? t.ToString(System.Globalization.CultureInfo.InvariantCulture) : "all")} samples={report.Samples} focused={report.Focused} seconds={report.Seconds:0.0}"));
+        Console.Out.WriteLine(value: FormattableString.Invariant($"[host samples: trace={Quote(path)} focus={Quote(request.Focus ?? "")} thread={request.ThreadText} samples={report.Samples} focused={report.Focused} seconds={report.Seconds:0.0}"));
         foreach (var (id, samples, root) in report.Threads.Take(count: top)) { Console.Out.WriteLine(value: FormattableString.Invariant($"thread {id} {samples} root={Quote(root)}")); }
         foreach (var (callee, samples) in report.Callees.Take(count: top)) { Console.Out.WriteLine(value: FormattableString.Invariant($"callee {samples} {Share(samples, report.Focused)} {Quote(callee)}")); }
         Console.Out.WriteLine(value: "The sample profiler records each managed thread's stack about every millisecond, running or waiting; a callee's share is of the samples beneath the focus frame.]");
@@ -349,20 +367,23 @@ public static class HostCommand {
         return CliExit.Success;
     }
     private static Command CreateSamples() {
-        var pidOption = new Option<int?>(name: "--pid") { Description = "The .NET process to record, such as a World's process id from puck_world_start." };
-        var traceOption = new Option<string?>(name: "--trace") { Description = "Read this .nettrace instead of recording one (a dotnet-trace cpu-sampling or thread-time trace, or one --output kept)." };
-        var secondsOption = CliOptions.Count(defaultValue: 6, description: "Seconds to record with --pid.", minimum: 1, name: "--seconds");
-        var outputOption = new Option<string?>(name: "--output") { Description = "Where to keep the recorded .nettrace; a temporary file by default." };
-        var threadOption = new Option<int?>(name: "--thread") { Description = "Read only this thread's samples (an id the report's thread lines name)." };
-        var focusOption = new Option<string?>(name: "--focus") { Description = "Keep only the samples beneath a frame naming this text, such as WorldViewGraphHost.CompleteFootprints." };
+        var trace = new TraceOptions(
+            focusDescription: "Keep only the samples beneath a frame naming this text, such as WorldViewGraphHost.CompleteFootprints.",
+            fromDescription: "Read the trace from this second.",
+            seconds: 6,
+            threadUnit: "samples",
+            traceKinds: "cpu-sampling or thread-time"
+        );
         var depthOption = CliOptions.Count(defaultValue: 1, description: "How many callee frames beneath the focus name each path.", minimum: 1, name: "--depth");
         var topOption = CliOptions.Count(defaultValue: 25, description: "How many threads and callee paths to list.", minimum: 1, name: "--top");
-        var fromOption = CliOptions.Amount(defaultValue: 0, description: "Read the trace from this second.", minimum: 0, name: "--from");
-        var toOption = CliOptions.Amount(defaultValue: double.MaxValue, description: "Read the trace up to this second.", minimum: 0, name: "--to");
         var command = new Command(
             description: "Attribute another .NET process's thread time beneath a frame to its callees by the runtime's sample profiler.",
             name: "samples"
-        ) { pidOption, traceOption, secondsOption, outputOption, threadOption, focusOption, depthOption, topOption, fromOption, toOption };
+        );
+
+        trace.AddTo(command: command);
+        command.Options.Add(item: depthOption);
+        command.Options.Add(item: topOption);
 
         command.Detail(detail: """
             Records an EventPipe session on the process's diagnostics port with the runtime's sample profiler (and
@@ -378,15 +399,8 @@ public static class HostCommand {
         command.SetAction(action: (parseResult, cancellationToken) => Samples(
             cancellationToken: cancellationToken,
             depth: parseResult.GetValue(option: depthOption),
-            focus: parseResult.GetValue(option: focusOption),
-            fromSeconds: parseResult.GetValue(option: fromOption) ?? 0,
-            output: parseResult.GetValue(option: outputOption),
-            processId: parseResult.GetValue(option: pidOption),
-            seconds: parseResult.GetValue(option: secondsOption),
-            thread: parseResult.GetValue(option: threadOption),
-            toSeconds: parseResult.GetValue(option: toOption) ?? double.MaxValue,
-            top: parseResult.GetValue(option: topOption),
-            trace: parseResult.GetValue(option: traceOption)
+            request: trace.Read(parseResult: parseResult),
+            top: parseResult.GetValue(option: topOption)
         ));
 
         return command;

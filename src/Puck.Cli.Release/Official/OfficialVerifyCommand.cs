@@ -5,7 +5,6 @@ using Puck.Assets;
 using Puck.Assets.Documents;
 using Puck.Launcher.Release;
 using Puck.World;
-using Puck.World.Authoring;
 using Puck.World.Transpiler;
 using Puck.World.Transpiler.Composition;
 
@@ -25,59 +24,24 @@ public static class OfficialVerifyCommand {
             path2: entry.Path
         );
 
-        if (!File.Exists(path: fullPath)) {
+        // A family outside the vocabulary is the manifest validation's to name, not a pin to recompute.
+        if (!File.Exists(path: fullPath) || !AssetRowFamilies.All.Contains(item: entry.Family)) {
             return;
         }
 
-        var bytes = File.ReadAllBytes(path: fullPath);
-        string? recomputed;
-
-        try {
-            recomputed = entry.Family switch {
-                AssetRowFamilies.Music => (ContentPin.Prefix + MusicCanonicalizer.Canonicalize(
-                document: JsonSerializer.Deserialize<MusicDocument>(
-                    utf8Json: bytes,
-                    options: DocumentJsonOptions.Shared
-                )!,
-                source: entry.Name
-            ).Hash),
-                AssetRowFamilies.Table => (ContentPin.Prefix + TableCanonicalizer.Canonicalize(
-                document: JsonSerializer.Deserialize<TableDocument>(
-                    utf8Json: bytes,
-                    options: DocumentJsonOptions.Shared
-                )!,
-                source: entry.Name
-            ).Hash),
-                AssetRowFamilies.Tune => (ContentPin.Prefix + AudioCanonicalizer.Canonicalize(
-                document: JsonSerializer.Deserialize<AudioDocument>(
-                    utf8Json: bytes,
-                    options: DocumentJsonOptions.Shared
-                )!,
-                source: entry.Name
-            ).Hash),
-                AssetRowFamilies.Patch => (ContentPin.Prefix + SynthPatchCanonicalizer.Canonicalize(
-                document: JsonSerializer.Deserialize<SynthPatchDocument>(
-                    utf8Json: bytes,
-                    options: DocumentJsonOptions.Shared
-                )!,
-                source: entry.Name
-            ).Hash),
-                _ => null,
-            };
-        } catch (JsonException exception) {
-            problems.Add(item: $"{label}: '{entry.Path}' is not a valid {entry.Family} document: {exception.Message}");
+        if (!WorldAssetRowLoader.TryCanonicalHash(bytes: File.ReadAllBytes(path: fullPath), error: out var error, family: entry.Family, name: entry.Name, pin: out var hash)) {
+            problems.Add(item: $"{label}: '{entry.Path}' is not a valid {entry.Family} document: {error}");
 
             return;
         }
 
-        if (
-            (recomputed is not null) &&
-            !string.Equals(
+        var recomputed = (ContentPin.Prefix + hash);
+
+        if (!string.Equals(
             a: recomputed,
             b: entry.Pin,
             comparisonType: StringComparison.Ordinal
-        )
-        ) {
+        )) {
             problems.Add(item: $"{label}: pin '{entry.Pin}' does not match the recomputed '{recomputed}'.");
         }
     }

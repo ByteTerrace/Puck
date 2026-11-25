@@ -1,3 +1,4 @@
+using Puck.Maths;
 namespace Puck.State;
 
 public sealed partial class StateArena {
@@ -473,7 +474,7 @@ public sealed partial class StateArena {
 
         Visit(lanes: (2L + from.Dimensions));
 
-        var carried = (Bit(
+        var carried = (BitWords.Contains(
             index: slot,
             words: m_presence
         )

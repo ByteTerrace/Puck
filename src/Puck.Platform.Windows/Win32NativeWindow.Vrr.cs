@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
@@ -325,101 +324,62 @@ internal sealed partial class Win32NativeWindow : IDisplayTimingInfo {
             return false;
         }
 
-        var deviceInfoData = new SP_DEVINFO_DATA { cbSize = ((uint)sizeof(SP_DEVINFO_DATA)) };
+        if (!DeviceInterfaceDetail.TryRead(deviceInfoData: out var deviceInfoData, deviceInfoSet: deviceInfoSet, devicePath: out _, error: out _, interfaceData: in interfaceData)) {
+            return false;
+        }
 
-        _ = PInvoke.SetupDiGetDeviceInterfaceDetail(
-            DeviceInfoData: ref deviceInfoData,
+        using var deviceRegistryHandle = PInvoke.SetupDiOpenDevRegKey(
+            DeviceInfoData: in deviceInfoData,
             DeviceInfoSet: deviceInfoSet,
-            DeviceInterfaceData: in interfaceData,
-            DeviceInterfaceDetailData: default,
-            RequiredSize: out var requiredSize
+            HwProfile: 0u,
+            KeyType: DiregDevice,
+            Scope: DicsFlagGlobal,
+            samDesired: KeyRead
         );
 
-        if (
-            (requiredSize == 0u) ||
-            (Marshal.GetLastPInvokeError() != ((int)WIN32_ERROR.ERROR_INSUFFICIENT_BUFFER))
-        ) {
+        if (deviceRegistryHandle.IsInvalid) {
             return false;
         }
 
-        var detailBuffer = ArrayPool<byte>.Shared.Rent(minimumLength: ((int)requiredSize));
+        using var deviceRegistryKey = RegistryKey.FromHandle(
+            handle: deviceRegistryHandle,
+            view: RegistryView.Default
+        );
 
-        try {
-            var detail = detailBuffer.AsSpan(
-                length: ((int)requiredSize),
-                start: 0
+        // SetupDiOpenDevRegKey(DIREG_DEV) normally returns the device hardware key (the Device Parameters key on
+        // current Windows). Retain the explicit subkey fallback for drivers that expose the device-instance root.
+        if (deviceRegistryKey.GetValue(
+            defaultValue: null,
+            name: "EDID",
+            options: RegistryValueOptions.DoNotExpandEnvironmentNames
+        ) is byte[] hardwareKeyEdid) {
+            edid = ApplyEdidOverrides(
+                parametersKey: deviceRegistryKey,
+                rawEdid: hardwareKeyEdid
             );
 
-            MemoryMarshal.Write(
-                destination: detail,
-                value: ((uint)sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA_W))
-            );
-
-            if (!PInvoke.SetupDiGetDeviceInterfaceDetail(
-                DeviceInfoData: ref deviceInfoData,
-                DeviceInfoSet: deviceInfoSet,
-                DeviceInterfaceData: in interfaceData,
-                DeviceInterfaceDetailData: detail,
-                RequiredSize: out requiredSize
-            )) {
-                return false;
-            }
-
-            using var deviceRegistryHandle = PInvoke.SetupDiOpenDevRegKey(
-                DeviceInfoData: in deviceInfoData,
-                DeviceInfoSet: deviceInfoSet,
-                HwProfile: 0u,
-                KeyType: DiregDevice,
-                Scope: DicsFlagGlobal,
-                samDesired: KeyRead
-            );
-
-            if (deviceRegistryHandle.IsInvalid) {
-                return false;
-            }
-
-            using var deviceRegistryKey = RegistryKey.FromHandle(
-                handle: deviceRegistryHandle,
-                view: RegistryView.Default
-            );
-
-            // SetupDiOpenDevRegKey(DIREG_DEV) normally returns the device hardware key (the Device Parameters key on
-            // current Windows). Retain the explicit subkey fallback for drivers that expose the device-instance root.
-            if (deviceRegistryKey.GetValue(
-                defaultValue: null,
-                name: "EDID",
-                options: RegistryValueOptions.DoNotExpandEnvironmentNames
-            ) is byte[] hardwareKeyEdid) {
-                edid = ApplyEdidOverrides(
-                    parametersKey: deviceRegistryKey,
-                    rawEdid: hardwareKeyEdid
-                );
-
-                return true;
-            }
-
-            using var parametersKey = deviceRegistryKey.OpenSubKey(
-                name: "Device Parameters",
-                writable: false
-            );
-
-            if (parametersKey?.GetValue(
-                defaultValue: null,
-                name: "EDID",
-                options: RegistryValueOptions.DoNotExpandEnvironmentNames
-            ) is byte[] instanceRootEdid) {
-                edid = ApplyEdidOverrides(
-                    parametersKey: parametersKey,
-                    rawEdid: instanceRootEdid
-                );
-
-                return true;
-            }
-
-            return false;
-        } finally {
-            ArrayPool<byte>.Shared.Return(array: detailBuffer);
+            return true;
         }
+
+        using var parametersKey = deviceRegistryKey.OpenSubKey(
+            name: "Device Parameters",
+            writable: false
+        );
+
+        if (parametersKey?.GetValue(
+            defaultValue: null,
+            name: "EDID",
+            options: RegistryValueOptions.DoNotExpandEnvironmentNames
+        ) is byte[] instanceRootEdid) {
+            edid = ApplyEdidOverrides(
+                parametersKey: parametersKey,
+                rawEdid: instanceRootEdid
+            );
+
+            return true;
+        }
+
+        return false;
     }
     [SupportedOSPlatform(platformName: "windows6.1")]
     private static byte[] ApplyEdidOverrides(byte[] rawEdid, RegistryKey parametersKey) {

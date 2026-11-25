@@ -1,3 +1,4 @@
+using Puck.Maths;
 namespace Puck.State;
 
 public sealed partial class StateArena {
@@ -8,7 +9,7 @@ public sealed partial class StateArena {
     public bool IsJoined(StateLane lane, int ordinal) => (
         (lane is (StateLane.Participant or StateLane.Identity)) &&
         (((uint)ordinal) < ((uint)m_layout.Options.Capacity(lane: lane))) &&
-        Bit(
+        BitWords.Contains(
         index: (m_layout.LaneRosterBase(lane: lane) + ordinal),
         words: m_laneRoster
     )
@@ -38,7 +39,7 @@ public sealed partial class StateArena {
 
         var rosterBase = m_layout.LaneRosterBase(lane: lane);
 
-        if (Bit(
+        if (BitWords.Contains(
             index: (rosterBase + ordinal),
             words: m_laneRoster
         )) {

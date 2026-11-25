@@ -163,11 +163,8 @@ public static class AtomicFile {
             // Another writer's file took the name first; the backup is older than it.
         }
 
-        try {
-            File.Delete(path: backup);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            // An image still mapped cannot be deleted; its name ends in the temporary extension.
-        }
+        // An image still mapped cannot be deleted; its name ends in the temporary extension.
+        _ = FileRemoval.TryDelete(path: backup);
     }
     // Stages a temporary beside the destination. `durable` flushes it to stable storage before it is published; without it
     // the bytes reach the operating system alone, and a power loss before the system writes them back can leave the
@@ -303,7 +300,7 @@ public static class AtomicFile {
         public void Dispose() {
             if (m_finished) { return; }
             m_finished = true;
-            try { File.Delete(path: m_temporary); } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) { }
+            _ = FileRemoval.TryDelete(path: m_temporary);
         }
     }
 
@@ -348,12 +345,8 @@ public static class AtomicFile {
 
         if (!Directory.Exists(path: directory)) { return 0; }
         foreach (var backup in Directory.EnumerateFiles(path: directory, searchPattern: $"{Path.GetFileName(path: destination)}.*.replaced.tmp")) {
-            try {
-                File.Delete(path: backup);
-                deleted++;
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                // Still mapped by a running image.
-            }
+            // A backup still mapped by a running image stays.
+            deleted += (FileRemoval.TryDelete(path: backup) ? 1 : 0);
         }
         return deleted;
     }

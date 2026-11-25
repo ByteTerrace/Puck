@@ -1,7 +1,7 @@
+using Puck.Maths;
 namespace Puck.State;
 
 public sealed partial class StateArena {
-    private static bool Bit(ReadOnlySpan<ulong> words, int index) => (((words[(index >> 6)] >> (index & 63)) & 1UL) != 0UL);
     private static void SetBit(Span<ulong> words, int index, bool value) {
         var mask = (1UL << (index & 63));
 
@@ -58,7 +58,7 @@ public sealed partial class StateArena {
         ArenaColumn.PreviousSlot => m_previousSlots[index],
         ArenaColumn.HeadSlot => m_headSlots[index],
         ArenaColumn.TailSlot => m_tailSlots[index],
-        ArenaColumn.Presence => (Bit(
+        ArenaColumn.Presence => (BitWords.Contains(
         index: index,
         words: m_presence
     )
@@ -82,7 +82,7 @@ public sealed partial class StateArena {
         ArenaColumn.DrawnMaskWord => ((m_maskWords is null) ? 0L : m_maskWords[index]),
         ArenaColumn.PhaseSequence => ((m_phaseSequences is null) ? 0L : m_phaseSequences[index]),
         ArenaColumn.LaneNumber => m_laneNumbers[index],
-        ArenaColumn.LaneRoster => (Bit(
+        ArenaColumn.LaneRoster => (BitWords.Contains(
         index: index,
         words: m_laneRoster
     )

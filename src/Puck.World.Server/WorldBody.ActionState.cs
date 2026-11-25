@@ -270,10 +270,7 @@ public sealed partial class WorldBody {
                 if (definition.Kind == ActionStateKind.Counter) { m_stateLane?.Input?.CommitKitEffects(m_stateOrdinal); }
             } else if (definition.Kind == ActionStateKind.Timer) {
                 var previous = StateTimer(slot: slot);
-                var next = SubtractSaturating(
-                    amount: stepTicks,
-                    value: previous
-                );
+                var next = previous.SubtractSaturating(right: stepTicks);
 
                 if (next != previous) {
                     WriteStateRaw(
@@ -690,10 +687,7 @@ public sealed partial class WorldBody {
             for (var slot = 0; (slot < binding.RecencyFacts.Length); slot++) {
                 var clock = (FactHolds(fact: binding.RecencyFacts[slot])
                     ? binding.RecencyWindows[slot]
-                    : SubtractSaturating(
-                        value: m_laneRecency.Read[(recencyStart + slot)],
-                        amount: scratch.StepTicks
-                    )
+                    : m_laneRecency.Read[(recencyStart + slot)].SubtractSaturating(right: scratch.StepTicks)
                 );
 
                 if (clock != m_laneRecency.Read[(recencyStart + slot)]) { m_laneRecency.Write[(recencyStart + slot)] = clock; }
@@ -702,10 +696,7 @@ public sealed partial class WorldBody {
             if (binding.OnPress is { } press) {
                 var latch = (pressed
                     ? press.LatchTicks
-                    : SubtractSaturating(
-                        amount: scratch.StepTicks,
-                        value: Action.LaneLatch[ordinal]
-                    )
+                    : Action.LaneLatch[ordinal].SubtractSaturating(right: scratch.StepTicks)
                 );
 
                 if (Action.LaneLatch[ordinal] != latch) { ActionEdit.LaneLatch[ordinal] = latch; }

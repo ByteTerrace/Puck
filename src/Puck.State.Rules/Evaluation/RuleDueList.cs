@@ -248,7 +248,7 @@ internal sealed class RuleDueList {
     /// <summary>Takes a rule off the list for its visit and records the visit, counting the walks since its last one
     /// into its <see cref="RuleLatch.RuleSpent.Elided"/>.</summary>
     public void BeginVisit(int index) {
-        m_due[(index >> 6)] &= ~(1UL << (index & 63));
+        BitWords.Remove(index: index, words: m_due);
         States[index].Spent.Elided += (m_walk - m_settledWalk[index]);
         m_settledWalk[index] = (m_walk + 1L);
         m_visits++;
@@ -424,14 +424,13 @@ internal sealed class RuleDueList {
     /// <summary>Returns whether one body of a body sweep is due.</summary>
     public bool IsBodyDue(int index, int body) => (
         (m_bindings[index] is { } bodies) &&
-        ((body >> 6) < bodies.Length) &&
-        ((bodies[(body >> 6)] & (1UL << (body & 63))) != 0UL)
+        BitWords.Contains(index: body, words: bodies)
     );
     /// <summary>Takes one binding of a keyed sweep off the list for its evaluation: a body's index, or a row sweep's
     /// snapshot position.</summary>
     public void ClearBinding(int index, int binding) {
         if ((m_bindings[index] is { } bindings) && ((binding >> 6) < bindings.Length)) {
-            bindings[(binding >> 6)] &= ~(1UL << (binding & 63));
+            BitWords.Remove(index: binding, words: bindings);
         }
     }
     /// <summary>Keeps one binding of a keyed sweep due for next tick: its verdict must be judged again.</summary>
@@ -457,7 +456,7 @@ internal sealed class RuleDueList {
             Array.Clear(array: set);
         }
         foreach (var body in live) {
-            set[(body >> 6)] |= (1UL << (body & 63));
+            BitWords.Add(index: body, words: set);
         }
 
         static int Max(List<int> live) => ((live.Count == 0) ? 0 : live[^1]);
@@ -546,7 +545,7 @@ internal sealed class RuleDueList {
             }
         }
     }
-    private void SetDue(int index) => m_due[(index >> 6)] |= (1UL << (index & 63));
+    private void SetDue(int index) => BitWords.Add(index: index, words: m_due);
     private void MarkFull(int index) {
         SetDue(index: index);
         m_full[index] = true;
@@ -613,7 +612,7 @@ internal sealed class RuleDueList {
             bindings?.CopyTo(array: grown, index: 0);
             m_bindings[index] = bindings = grown;
         }
-        bindings[(binding >> 6)] |= (1UL << (binding & 63));
+        BitWords.Add(index: binding, words: bindings);
         SetDue(index: index);
     }
     private bool AnyBinding(int index) {

@@ -1356,7 +1356,7 @@ public static partial class PuckParser {
             cursor.Advance(count: 2);
             var hexStart = cursor.Offset;
 
-            while (!cursor.Eof && (IsHexChar(c: cursor.Current) || (cursor.Current == '_'))) {
+            while (!cursor.Eof && (char.IsAsciiHexDigit(c: cursor.Current) || (cursor.Current == '_'))) {
                 cursor.Advance();
             }
             var hexLen = (cursor.Offset - hexStart);
@@ -1468,7 +1468,7 @@ public static partial class PuckParser {
         cursor.Advance(); // consume '#'
         var hexStart = cursor.Offset;
 
-        while (!cursor.Eof && IsHexChar(c: cursor.Current)) {
+        while (!cursor.Eof && char.IsAsciiHexDigit(c: cursor.Current)) {
             cursor.Advance();
         }
 
@@ -2100,8 +2100,5 @@ public static partial class PuckParser {
 
         var (line, col) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: offset);
         return new PuckParseException(message, offset, line, col);
-    }
-    private static bool IsHexChar(char c) {
-        return ((c is >= '0' and <= '9') || (c is >= 'a' and <= 'f') || (c is >= 'A' and <= 'F'));
     }
 }

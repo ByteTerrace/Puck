@@ -1,3 +1,4 @@
+using Puck.Maths;
 namespace Puck.State;
 
 public sealed partial class StateArena {
@@ -53,7 +54,7 @@ public sealed partial class StateArena {
             for (var age = (live - 1); (age >= 0); age--) {
                 var slot = (layout.CellStart + ((int)(((cursor - 1L) - age) % layout.CellCapacity)));
 
-                word[length++] = (Bit(
+                word[length++] = (BitWords.Contains(
                     index: slot,
                     words: m_presence
                 )
@@ -82,7 +83,7 @@ public sealed partial class StateArena {
 
             for (var position = first; (position < count); position++) {
                 var slot = CellSlotAt(layout: layout, position: position);
-                var present = Bit(index: slot, words: m_presence);
+                var present = BitWords.Contains(index: slot, words: m_presence);
 
                 if (!present && m_catalog.IsPoolRow(rowOrdinal: rowOrdinal)) {
                     continue;
@@ -126,7 +127,7 @@ public sealed partial class StateArena {
     private bool TryReadRawSlot(int rowOrdinal, int slot, out long raw) {
         if (
             (m_layout[rowOrdinal].Kind is CellKind.Text or CellKind.Vector) ||
-            !Bit(
+            !BitWords.Contains(
             index: slot,
             words: m_presence
         )

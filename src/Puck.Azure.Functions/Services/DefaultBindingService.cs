@@ -72,13 +72,8 @@ public sealed class DefaultBindingService(IOptionsMonitor<IssuingKeyOptions> iss
     private static DateTimeOffset ToWholeSeconds(DateTimeOffset value) =>
         DateTimeOffset.FromUnixTimeSeconds(seconds: value.ToUnixTimeSeconds());
 
-    public Task<BindingResult> MintSubjectKeyBindingAsync(
-        MintSubjectKeyBindingRequest request,
-        DateTimeOffset now,
-        CancellationToken cancellationToken
-    ) {
-        cancellationToken.ThrowIfCancellationRequested();
-
+    // The configured root's domain and the issuing key every binding is signed with.
+    private (string Domain, ECDsa IssuingKey, IssuingKeyOptions Options) LoadIssuer() {
         var options = issuingKeyOptions.CurrentValue;
 
         using var rootPublicKey = ECDsa.Create();
@@ -88,31 +83,30 @@ public sealed class DefaultBindingService(IOptionsMonitor<IssuingKeyOptions> iss
             value: options.RootPublicKeyPem
         ));
 
-        var domain = KeyId.ComputeKeyHash(subjectPublicKeyInfo: rootPublicKey.ExportSubjectPublicKeyInfo());
+        var issuingKey = ECDsa.Create();
 
-        using var issuingKey = ECDsa.Create();
+        try {
+            issuingKey.ImportFromEncryptedPem(
+                input: RequireValue(
+                    name: nameof(IssuingKeyOptions.IssuingPrivateKeyPem),
+                    value: options.IssuingPrivateKeyPem
+                ),
+                password: RequireValue(
+                    name: nameof(IssuingKeyOptions.IssuingPrivateKeyPassword),
+                    value: options.IssuingPrivateKeyPassword
+                )
+            );
+        } catch {
+            issuingKey.Dispose();
+            throw;
+        }
 
-        issuingKey.ImportFromEncryptedPem(
-            input: RequireValue(
-                name: nameof(IssuingKeyOptions.IssuingPrivateKeyPem),
-                value: options.IssuingPrivateKeyPem
-            ),
-            password: RequireValue(
-                name: nameof(IssuingKeyOptions.IssuingPrivateKeyPassword),
-                value: options.IssuingPrivateKeyPassword
-            )
-        );
-
-        var targetId = KeyId.ForSubject(
-            algorithm: RegistryAlgorithmFor(keyType: request.KeyType),
-            domain: domain,
-            subject: request.SubjectId,
-            subjectPublicKeyInfo: request.PublicKey
-        );
-
+        return (KeyId.ComputeKeyHash(subjectPublicKeyInfo: rootPublicKey.ExportSubjectPublicKeyInfo()), issuingKey, options);
+    }
+    // Signs a binding of the target key for a fresh validity window from now.
+    private static Task<BindingResult> Bind(string domain, ECDsa issuingKey, IssuingKeyOptions options, KeyId targetId, ReadOnlyMemory<byte> targetSubjectPublicKeyInfo, DateTimeOffset now) {
         var notBefore = ToWholeSeconds(value: now);
         var notAfter = ToWholeSeconds(value: now.Add(timeSpan: options.SubjectBindingValidity));
-
         var signedAttestation = AttestationSigner.SignKeyBinding(
             codec: Codec,
             domain: domain,
@@ -121,17 +115,36 @@ public sealed class DefaultBindingService(IOptionsMonitor<IssuingKeyOptions> iss
             signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
             signerKey: issuingKey,
             targetId: targetId,
-            targetSubjectPublicKeyInfo: request.PublicKey
+            targetSubjectPublicKeyInfo: targetSubjectPublicKeyInfo
         );
 
-        var bindingBytes = Codec.EncodeAttestation(attestation: signedAttestation);
-
         return Task.FromResult(result: new BindingResult(
-            Binding: bindingBytes,
+            Binding: Codec.EncodeAttestation(attestation: signedAttestation),
             KeyId: FormatKeyId(keyId: targetId),
             NotAfter: notAfter,
             NotBefore: notBefore
         ));
+    }
+
+    public Task<BindingResult> MintSubjectKeyBindingAsync(
+        MintSubjectKeyBindingRequest request,
+        DateTimeOffset now,
+        CancellationToken cancellationToken
+    ) {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var (domain, issuingKey, options) = LoadIssuer();
+
+        using (issuingKey) {
+            var targetId = KeyId.ForSubject(
+                algorithm: RegistryAlgorithmFor(keyType: request.KeyType),
+                domain: domain,
+                subject: request.SubjectId,
+                subjectPublicKeyInfo: request.PublicKey
+            );
+
+            return Bind(domain: domain, issuingKey: issuingKey, now: now, options: options, targetId: targetId, targetSubjectPublicKeyInfo: request.PublicKey);
+        }
     }
     public Task<BindingResult> ReattestAsync(
         byte[] existingBinding,
@@ -141,100 +154,44 @@ public sealed class DefaultBindingService(IOptionsMonitor<IssuingKeyOptions> iss
     ) {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var options = issuingKeyOptions.CurrentValue;
+        var (domain, issuingKey, options) = LoadIssuer();
 
-        using var rootPublicKey = ECDsa.Create();
+        using (issuingKey) {
+            var previous = Codec.DecodeAttestation(wire: existingBinding);
 
-        rootPublicKey.ImportFromPem(input: RequireValue(
-            name: nameof(IssuingKeyOptions.RootPublicKeyPem),
-            value: options.RootPublicKeyPem
-        ));
+            if (
+                !string.Equals(a: previous.Header.Domain, b: domain, comparisonType: StringComparison.Ordinal) ||
+                !string.Equals(a: previous.Header.Purpose, b: AttestationPurposes.KeyBinding, comparisonType: StringComparison.Ordinal)
+            ) {
+                throw new InvalidOperationException(message: "Cannot re-attest an attestation with invalid domain or purpose.");
+            }
+            if (!AttestationKeys.VerifySignature(
+                algorithm: previous.Header.Algorithm,
+                data: previous.SignedPortion.Span,
+                publicKeySubjectPublicKeyInfo: issuingKey.ExportSubjectPublicKeyInfo(),
+                signature: previous.Signature.Span
+            )) {
+                throw new InvalidOperationException(message: "Cannot re-attest a binding that does not verify against the issuing key.");
+            }
 
-        var domain = KeyId.ComputeKeyHash(subjectPublicKeyInfo: rootPublicKey.ExportSubjectPublicKeyInfo());
+            var keyBindingPayload = Codec.DecodeKeyBindingPayload(bytes: previous.PayloadBytes.Span);
+            var expectedId = KeyId.ForSubject(
+                algorithm: RegistryAlgorithmFor(keyType: request.KeyType),
+                domain: domain,
+                subject: request.SubjectId,
+                subjectPublicKeyInfo: request.PublicKey
+            );
 
-        using var issuingKey = ECDsa.Create();
+            // The caller owns the storage containing this public binding. A valid issuer signature alone
+            // cannot authorize renewal: another account's binding can be copied into that storage.
+            if (
+                (keyBindingPayload.TargetId != expectedId) ||
+                !keyBindingPayload.PublicKeySubjectPublicKeyInfo.Span.SequenceEqual(other: request.PublicKey)
+            ) {
+                throw new InvalidOperationException(message: "Cannot re-attest a binding for another subject or key.");
+            }
 
-        issuingKey.ImportFromEncryptedPem(
-            input: RequireValue(
-                name: nameof(IssuingKeyOptions.IssuingPrivateKeyPem),
-                value: options.IssuingPrivateKeyPem
-            ),
-            password: RequireValue(
-                name: nameof(IssuingKeyOptions.IssuingPrivateKeyPassword),
-                value: options.IssuingPrivateKeyPassword
-            )
-        );
-
-        var previous = Codec.DecodeAttestation(wire: existingBinding);
-
-        if (
-            !string.Equals(
-            a: previous.Header.Domain,
-            b: domain,
-            comparisonType: StringComparison.Ordinal
-        ) ||
-            !string.Equals(
-            a: previous.Header.Purpose,
-            b: AttestationPurposes.KeyBinding,
-            comparisonType: StringComparison.Ordinal
-        )
-        ) {
-            throw new InvalidOperationException(message: "Cannot re-attest an attestation with invalid domain or purpose.");
+            return Bind(domain: domain, issuingKey: issuingKey, now: now, options: options, targetId: keyBindingPayload.TargetId, targetSubjectPublicKeyInfo: keyBindingPayload.PublicKeySubjectPublicKeyInfo);
         }
-
-        var descriptor = AttestationAlgorithms.Resolve(algorithm: previous.Header.Algorithm);
-
-        if (
-            (descriptor.SignatureHash is null) ||
-            !issuingKey.VerifyData(
-            data: previous.SignedPortion.Span,
-            hashAlgorithm: descriptor.SignatureHash.Value,
-            signature: previous.Signature.Span,
-            signatureFormat: DSASignatureFormat.IeeeP1363FixedFieldConcatenation
-        )
-        ) {
-            throw new InvalidOperationException(message: "Cannot re-attest a binding that does not verify against the issuing key.");
-        }
-
-        var notBefore = ToWholeSeconds(value: now);
-        var notAfter = ToWholeSeconds(value: now.Add(timeSpan: options.SubjectBindingValidity));
-
-        var keyBindingPayload = Codec.DecodeKeyBindingPayload(bytes: previous.PayloadBytes.Span);
-        var expectedId = KeyId.ForSubject(
-            algorithm: RegistryAlgorithmFor(keyType: request.KeyType),
-            domain: domain,
-            subject: request.SubjectId,
-            subjectPublicKeyInfo: request.PublicKey
-        );
-
-        // The caller owns the storage containing this public binding. A valid issuer signature alone
-        // cannot authorize renewal: another account's binding can be copied into that storage.
-        if (
-            (keyBindingPayload.TargetId != expectedId) ||
-            !keyBindingPayload.PublicKeySubjectPublicKeyInfo.Span.SequenceEqual(other: request.PublicKey)
-        ) {
-            throw new InvalidOperationException(message: "Cannot re-attest a binding for another subject or key.");
-        }
-
-        var reattested = AttestationSigner.SignKeyBinding(
-            codec: Codec,
-            domain: domain,
-            notAfter: notAfter.ToUnixTimeSeconds(),
-            notBefore: notBefore.ToUnixTimeSeconds(),
-            signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
-            signerKey: issuingKey,
-            targetId: keyBindingPayload.TargetId,
-            targetSubjectPublicKeyInfo: keyBindingPayload.PublicKeySubjectPublicKeyInfo
-        );
-
-        var bindingBytes = Codec.EncodeAttestation(attestation: reattested);
-
-        return Task.FromResult(result: new BindingResult(
-            Binding: bindingBytes,
-            KeyId: FormatKeyId(keyId: keyBindingPayload.TargetId),
-            NotAfter: notAfter,
-            NotBefore: notBefore
-        ));
     }
 }
-

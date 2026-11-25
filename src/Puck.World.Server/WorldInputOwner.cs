@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using System.Globalization;
 using Puck.Abstractions.Collections;
 using Puck.Maths;
@@ -518,10 +519,7 @@ public sealed partial class WorldInputOwner {
             return false;
         }
         if (count >= m_eventScratch.Length) {
-            var grown = new WorldInputRecord[Math.Min(val1: m_scratchCapacity, val2: Math.Max(val1: 8, val2: (m_eventScratch.Length * 2)))];
-
-            m_eventScratch.AsSpan(start: 0, length: count).CopyTo(destination: grown);
-            m_eventScratch = grown;
+            Array.Resize(array: ref m_eventScratch, newSize: ArrayCapacity.Grown(ceiling: m_scratchCapacity, current: m_eventScratch.Length, minimum: 8, required: (count + 1)));
         }
         m_eventScratch[count++] = record;
         reason = string.Empty;

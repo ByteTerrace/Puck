@@ -342,7 +342,7 @@ public sealed class WorldArtifactStore(string root) {
 
             if (PublishedDirectory(key: key) is null) {
                 // An entry naming no build directory publishes nothing.
-                TryDeleteFile(path: file);
+                _ = FileRemoval.TryDelete(path: file);
 
                 continue;
             }
@@ -374,17 +374,17 @@ public sealed class WorldArtifactStore(string root) {
 
                 // Unpublished first, so no run ever takes a half-deleted build; the directory, now named by no entry, is
                 // deleted below or, if something still holds a file in it, by a later run.
-                TryDeleteFile(path: Sibling(
+                _ = FileRemoval.TryDelete(path: Sibling(
                     key: key,
                     suffix: EntrySuffix
                 ));
-                TryDeleteFile(path: Sibling(
+                _ = FileRemoval.TryDelete(path: Sibling(
                     key: key,
                     suffix: ".used"
                 ));
             }
 
-            TryDeleteFile(path: leasePath);
+            _ = FileRemoval.TryDelete(path: leasePath);
         }
 
         // Build directories exist unpublished only while their key's claim is held (CreateStaging takes the claim, and
@@ -420,7 +420,7 @@ public sealed class WorldArtifactStore(string root) {
             }
 
             if (current is null) {
-                TryDeleteFile(path: leasePath);
+                _ = FileRemoval.TryDelete(path: leasePath);
             }
         }
 
@@ -448,7 +448,7 @@ public sealed class WorldArtifactStore(string root) {
                 }
             }
 
-            TryDeleteFile(path: file);
+            _ = FileRemoval.TryDelete(path: file);
         }
 
         PruneBuildLocks();
@@ -471,13 +471,6 @@ public sealed class WorldArtifactStore(string root) {
             return FileLock.TryAcquire(path: path);
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
             return null;
-        }
-    }
-    private static void TryDeleteFile(string path) {
-        try {
-            File.Delete(path: path);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            // Another run opened it again; it stays.
         }
     }
 }

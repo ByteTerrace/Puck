@@ -3978,6 +3978,14 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
+- [high, M1] **A player has no way to get the deployment's sign-in file.** The
+  deploy writes `artifacts/world-authentication.json` (the sign-in provider and
+  the primary world's transport-key pin, `AzureWorld`), but published it nowhere,
+  so no client could join the hosted world after release6's issuer deployed. It
+  now uploads with the `azure-production-release` artifact, for developers. A
+  player install needs it beside the channel: publish it in the official content
+  tree (it holds no secret), and have the launcher's player build read it, so
+  `--connect` needs no hand-copied file.
 - [high] **A player downloads about 5.8 GB of baked meshes up front.** The
   first complete player folder produced 2.9 GB sets per backend: 11,612 and
   11,533 meshes, none byte-identical across the two backends. The sets are now
@@ -4920,15 +4928,9 @@ their lane order; this packet keeps the single duplicates and leads.
   sites, though one helper now holds the rule (`ArrayCapacity`). Convert the
   sites in a second pass, keeping the caps that are deliberate and the
   lengths that mirror a GPU-declared count.
-- A per-family canonicalize switch is written three times
-  (`OfficialVerifyCommand`, `OfficialAssetResolver`, `WorldDocument`'s
-  compose) beside `WorldAssetRowLoader`, which owns the families. Fold them
-  into one bytes entry point there; its `TryCanonicalHash` also reads through
+- `WorldAssetRowLoader.TryReadBytes` reads an asset row's source through
   `File` where the compile's inputs door would let the browser resolve
   `hash: auto`.
-- A "delete this file, ignoring a failure" helper is written four times
-  (`WorldArtifactStore.TryDeleteFile`, `WorldCaptureScheduler`,
-  `CacheRetention`, `StartIdleness`). One home in the file-system primitives.
 - [low] What a scene reads is listed twice: `WorldSceneInputs`' rows omit the
   look lanes and the poses, which a second list holds. One shared list of a
   scene's reads, by the lane's report.
@@ -5062,43 +5064,6 @@ their lane order; this packet keeps the single duplicates and leads.
     changes. Read the done line's `retier`, `observe` and `dress` holds on a clean
     cold bake, then keep the aggregates the decision sums and the kept floors'
     names incrementally.
-  - **SdfVm and Assets: zlib through stream adapters.** [medium]
-    `SdfMeshStoreDecoder.TryDecode` expands every store entry through a `fixed`
-    block, an `UnmanagedMemoryStream`, a `ZLibStream` and an end-of-stream
-    probe, though the expanded length is in the header. One
-    `ZLibDecoder.TryDecompress` into the buffer it already owns replaces all
-    four; refuse the entry when the call fails or the written length differs.
-    `SdfMeshStoreCodec.Encode` writes its payload with a `BinaryWriter` over a
-    `MemoryStream`, compresses into a second one and copies out with
-    `ToArray`: write with `BinaryPrimitives` into an owned buffer and compress
-    with `ZLibEncoder.TryCompress`. `PngDecoder.DecodeImageData` and
-    `PngEncoder.ZlibCompress` have the same shape, so put one zlib one-shot
-    helper in a shared home for all four. Decode runs for every store load, in
-    parallel, on the cold-bake and boot path. Show it with allocated bytes per
-    entry and a warm-store load reading. Entries are caches, so a change in
-    compressed bytes needs no migration.
-  - **Commands: one whitespace token rule.** [low] `CommandRegistry.LeadingVerb`
-    and `CommandRegistry.Tokenize`, `WorldCommandArguments.EndOfToken` and
-    `WorldCommandArguments.LastTokenStart`, and `CommandEcho.TryReadToken`
-    each scan `char.IsWhiteSpace` runs by hand, and three comments say they
-    must agree. The comment in `WorldCommandArguments` gives the reason for
-    scanning as "not a listed set"; .NET 11 ships that exact set as span
-    searches (`IndexOfAnyWhiteSpace`, `IndexOfAnyExceptWhiteSpace`). Have the
-    three share one token-rule helper built on them and delete the comment's
-    reason. Command lines are short, so this unifies a rule and claims no
-    speed.
-  - **Shared: one hex-hash validator.** [medium] About ten sites validate a
-    fixed-length hex string, each in its own way: LINQ `Any` or `All` with a
-    per-character predicate (`WorldMutation`, `CorpusManifest`,
-    `WorldSpatialReadDependency`, `WorldDefinitionReadDependency`,
-    `MachineContentAdmissionPolicy`, `AzureWorldReleaseSecrets`,
-    `EntraWorldAuthenticator`), and a span search that passes the digit set as
-    a literal on each call (`AssetContentHash`, `ContentPin.TryParseHex`,
-    `LocalEndpointCapability`). Write one public validator beside the
-    content-hash types, backed by two cached `SearchValues<char>` sets
-    (lowercase, and either case), as a length test and one
-    `ContainsAnyExcept`. Keep each site's case rule: lowercase only at
-    `EntraWorldAuthenticator`, `AssetContentHash` and `ContentPin`.
   - **MCP: two uncancelled timeouts.** [low] `OperatorMcpFront.RunAsync`
     waits twice with `Task.WhenAny` over a `Task.Delay` that nothing cancels
     when the other task wins, the shape analyzer CA2027 names. Replace each

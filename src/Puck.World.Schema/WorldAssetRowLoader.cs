@@ -58,17 +58,30 @@ public static class WorldAssetRowLoader {
     /// reference row of its family carries as <c>hash</c>, so an author writes <c>hash: auto</c> and the compiler fills
     /// it with this.</summary>
     /// <param name="family">The row's family, one of <see cref="AssetRowFamilies"/>.</param>
-    /// <param name="documentDirectory">The directory of the document that authored the row.</param>
+    /// <param name="documentDirectory">The directory of the document that authored the row, or <see langword="null"/>
+    /// for a document with none, whose row is read by <paramref name="hash"/>.</param>
     /// <param name="name">The row's name, quoted by a refusal.</param>
     /// <param name="source">The row's authored source path.</param>
     /// <param name="pin">The SHA-256 hex64 of the canonical bytes, when this method returns <see langword="true"/>.</param>
     /// <param name="error">Why the document did not load or canonicalize, when this method returns <see langword="false"/>.</param>
+    /// <param name="hash">The row's declared <c>hash</c>, the pin a row of a document with no directory is read by.</param>
     /// <returns>Whether the source loaded and canonicalized.</returns>
-    public static bool TryCanonicalHash(string family, string? documentDirectory, string name, string source, out string pin, out string error) {
-        var loaded = (TryReadBytes(bytes: out var bytes, documentDirectory: documentDirectory, error: out var unread, hash: null, source: source)
-            ? Canonicalized(bytes: bytes, family: family, name: name)
-            : Loaded.Failed(unread));
-
+    public static bool TryCanonicalHash(string family, string? documentDirectory, string name, string source, out string pin, out string error, string? hash = null) =>
+        TryReadBytes(bytes: out var bytes, documentDirectory: documentDirectory, error: out var unread, hash: hash, source: source)
+            ? TryCanonicalHash(bytes: bytes, error: out error, family: family, name: name, pin: out pin)
+            : Answer(error: out error, loaded: Loaded.Failed(unread), pin: out pin);
+    /// <summary>Computes the canonical content pin of a family's document from its file bytes: they parse as the
+    /// family's document and canonicalize.</summary>
+    /// <param name="family">The row's family, one of <see cref="AssetRowFamilies"/>.</param>
+    /// <param name="name">The row's name, quoted by a refusal.</param>
+    /// <param name="bytes">The document file's bytes.</param>
+    /// <param name="pin">The SHA-256 hex64 of the canonical bytes, when this method returns <see langword="true"/>.</param>
+    /// <param name="error">Why the bytes did not parse or canonicalize, or the family is unknown, when this method
+    /// returns <see langword="false"/>.</param>
+    /// <returns>Whether the bytes canonicalized.</returns>
+    public static bool TryCanonicalHash(string family, string name, ReadOnlyMemory<byte> bytes, out string pin, out string error) =>
+        Answer(error: out error, loaded: Canonicalized(bytes: bytes, family: family, name: name), pin: out pin);
+    private static bool Answer(Loaded loaded, out string pin, out string error) {
         pin = (loaded.Hash ?? string.Empty);
         error = (loaded.Error ?? string.Empty);
 

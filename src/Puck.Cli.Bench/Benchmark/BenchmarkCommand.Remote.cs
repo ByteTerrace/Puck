@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -53,10 +54,8 @@ public static partial class BenchmarkCommand {
     private sealed record RemotePair(string Document, string KeyFile, string Endpoint, string IssuerFile = "", string AuthenticationFile = "") : IDisposable {
         /// <summary>Removes the staged delta.</summary>
         public void Dispose() {
-            try {
-                File.Delete(path: Document);
-            } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
-                Console.Error.WriteLine(value: $"{Verb}: the remote pair's staged document {PuckPaths.Normalize(path: Document)} could not be removed: {exception.Message}");
+            if (!FileRemoval.TryDelete(failure: out var failure, path: Document)) {
+                Console.Error.WriteLine(value: $"{Verb}: the remote pair's staged document {PuckPaths.Normalize(path: Document)} could not be removed: {failure.Message}");
             }
         }
 
