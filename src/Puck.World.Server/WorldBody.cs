@@ -207,6 +207,13 @@ public sealed partial class WorldBody {
     // teleport that resets vertical state — Warp/Pose/Reconcile — but NOT by Face (resetVertical: false, the jump arc
     // keeps running), and by SetBodyMotionProgram only when the new program integrates vertical gravity.
     private FixedQ4816 m_verticalVelocity;
+    // The rest of an airborne body's ballistic velocity: the world-space part that does not lie along its up, so that
+    // m_up * m_verticalVelocity + m_ballisticTangent is the velocity the field has given the body. It fills where the
+    // field does not pull along the body's up (a far source's tide, a field turned over faster than the up can follow)
+    // and a turning up re-expresses the sum without moving it (SetUp). The drive never shapes it, which is what
+    // separates it from m_planarVelocity. Zero on the ground: a contact that grounds the body, and every world-space
+    // write (SplitVelocity), hand it to the planar channel.
+    private FixedVector3 m_ballisticTangent;
     // The vertical velocity the last step's own thrust drove directly (BodyMotionScratch.DirectVerticalVelocity), which
     // owns the vertical channel while thrust is held and is no ballistic state of the source world. A transfer carries it
     // with the ballistic velocity (CaptureTransferState), so a body climbing on thrust arrives moving as it left.
@@ -327,6 +334,7 @@ public sealed partial class WorldBody {
     private FixedRateAccumulator m_contactUpTurnAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     private FixedRateAccumulator m_upTurnAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     private FixedRateAccumulator m_verticalVelocityAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+    private FixedVector3RateAccumulator m_ballisticTangentAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
     // The canonical orientation — the full 6DOF attitude the renderer, the camera rigs, and body.where all read. Under
     // grounded it mirrors m_yaw (pitch = roll = 0); under free it is the integrated body-frame attitude and m_yaw is
     // ignored. The model constrains how it is written, never its shape.

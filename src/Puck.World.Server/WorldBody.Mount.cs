@@ -35,6 +35,7 @@ public sealed partial class WorldBody {
         m_up = mount.m_up;
         m_planarVelocity = mount.m_planarVelocity;
         m_verticalVelocity = mount.m_verticalVelocity;
+        m_ballisticTangent = mount.m_ballisticTangent;
         m_grounded = false;
     }
     /// <summary>Sets the body down beside the body it rode: at <paramref name="facet"/>'s exit in

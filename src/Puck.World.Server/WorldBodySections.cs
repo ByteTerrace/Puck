@@ -50,6 +50,8 @@ public readonly record struct BodyPoseSection(
 /// step, and the support, hold, tether, carry and medium state its next step reads.</summary>
 /// <param name="PlanarVelocity">The ramped horizontal velocity.</param>
 /// <param name="VerticalVelocity">The vertical velocity.</param>
+/// <param name="BallisticTangent">The airborne ballistic velocity across the body's up.</param>
+/// <param name="BallisticTangentRemainder">The ballistic tangent accumulator's remainders.</param>
 /// <param name="DrivePitch">The drive frame's climb attitude scalar.</param>
 /// <param name="OverlayVelocity">The timed impulse overlay's world-space velocity.</param>
 /// <param name="TimedMove">The active authored displacement and yaw, with their progress.</param>
@@ -97,6 +99,8 @@ public readonly record struct BodyPoseSection(
 public readonly record struct BodyMotionSection(
     FixedVector3 PlanarVelocity,
     FixedQ4816 VerticalVelocity,
+    FixedVector3 BallisticTangent,
+    (long X, long Y, long Z) BallisticTangentRemainder,
     FixedQ4816 DrivePitch,
     FixedVector3 OverlayVelocity,
     WorldTimedBodyMove TimedMove,
@@ -155,6 +159,8 @@ public readonly record struct BodyMotionSection(
     public static void Write(WireWriter writer, in BodyMotionSection section) {
         writer.WriteFixedVector(value: section.PlanarVelocity);
         writer.WriteFixed(value: section.VerticalVelocity);
+        writer.WriteFixedVector(value: section.BallisticTangent);
+        WriteRaws(raws: section.BallisticTangentRemainder, writer: writer);
         writer.WriteFixed(value: section.DrivePitch);
         writer.WriteFixedVector(value: section.OverlayVelocity);
         WorldTimedBodyMove.Write(writer, section.TimedMove);
@@ -208,6 +214,8 @@ public readonly record struct BodyMotionSection(
     public static BodyMotionSection Read(ref WireReader reader) => new(
         PlanarVelocity: reader.ReadFixedVector(),
         VerticalVelocity: reader.ReadFixed(),
+        BallisticTangent: reader.ReadFixedVector(),
+        BallisticTangentRemainder: ReadRaws(reader: ref reader),
         DrivePitch: reader.ReadFixed(),
         OverlayVelocity: reader.ReadFixedVector(),
         TimedMove: WorldTimedBodyMove.Read(ref reader),

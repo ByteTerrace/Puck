@@ -36,6 +36,8 @@ public sealed partial class WorldBody {
             AttitudeLeaned: m_attitudeLeaned,
             AttitudeTurnRemainder: m_attitudeTurnAccumulator.Remainder,
             AttitudeUp: m_attitudeUp,
+            BallisticTangent: m_ballisticTangent,
+            BallisticTangentRemainder: (m_ballisticTangentAccumulator.XRemainder, m_ballisticTangentAccumulator.YRemainder, m_ballisticTangentAccumulator.ZRemainder),
             CarriedBy: m_carriedByIndex,
             Carrying: m_carryingIndex,
             DetachPreviousBit: m_detachPreviousBit,
@@ -267,6 +269,7 @@ public sealed partial class WorldBody {
 
         m_planarVelocity = motion.PlanarVelocity;
         m_verticalVelocity = motion.VerticalVelocity;
+        m_ballisticTangent = motion.BallisticTangent;
         m_directVerticalVelocity = motion.DirectVerticalVelocity;
         m_drivePitch = motion.DrivePitch;
         m_overlayVelocity = motion.OverlayVelocity;
@@ -296,6 +299,12 @@ public sealed partial class WorldBody {
             zRemainder: motion.RotationRemainder.Z
         );
         m_verticalVelocityAccumulator = FixedRateAccumulator.FromRemainder(remainder: motion.VerticalVelocityRemainder, ticksPerSecond: EngineTicksPerSecond);
+        m_ballisticTangentAccumulator = FixedVector3RateAccumulator.FromRemainders(
+            ticksPerSecond: EngineTicksPerSecond,
+            xRemainder: motion.BallisticTangentRemainder.X,
+            yRemainder: motion.BallisticTangentRemainder.Y,
+            zRemainder: motion.BallisticTangentRemainder.Z
+        );
         m_planarRampAccumulator = FixedRateAccumulator.FromRemainder(remainder: motion.PlanarRampRemainder, ticksPerSecond: EngineTicksPerSecond);
         m_driveLongAccumulator = FixedRateAccumulator.FromRemainder(remainder: motion.DriveLongRemainder, ticksPerSecond: EngineTicksPerSecond);
         m_driveLatAccumulator = FixedRateAccumulator.FromRemainder(remainder: motion.DriveLatRemainder, ticksPerSecond: EngineTicksPerSecond);

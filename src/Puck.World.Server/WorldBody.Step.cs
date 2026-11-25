@@ -709,7 +709,7 @@ public sealed partial class WorldBody {
         scratch.Orientation = (m_orientation * delta).Normalize();
     }
     private void IntegratePlanarAndVerticalVelocity(ref BodyMotionScratch scratch) {
-        scratch.Velocity = (m_planarVelocity + (scratch.Up * (m_verticalVelocity + scratch.DirectVerticalVelocity)));
+        scratch.Velocity = ((m_planarVelocity + (scratch.Up * (m_verticalVelocity + scratch.DirectVerticalVelocity))) + m_ballisticTangent);
         m_directVerticalVelocity = scratch.DirectVerticalVelocity;
         // The support search only re-aims the planar velocity along what lies below: from a body at rest it lands a
         // zero velocity, and finding nothing keeps the zero it already holds, so a resting body skips its sweeps.
@@ -1067,6 +1067,7 @@ public sealed partial class WorldBody {
         m_verticalVelocity = FixedQ4816.Zero;
         m_directVerticalVelocity = FixedQ4816.Zero;
         m_verticalVelocityAccumulator.Reset();
+        ClearBallisticTangent();
 
         // A teleport must not carry momentum: drop the ramped planar velocity, its accumulator carries (the
         // isotropic ramp and an anisotropic row's decomposed channels alike), the shaping table's recency clocks, and the
@@ -1126,6 +1127,13 @@ public sealed partial class WorldBody {
     // that was tangent a tick ago points off the surface now, and re-applying it launches the body — the faster it
     // runs, the harder it is thrown. Rotating by the shortest arc between the two axes preserves both speed and
     // heading along the surface, which is what running around a sphere is.
+    //
+    // The ballistic velocity of an airborne body is not carried: it is what the field gave the body in world space,
+    // and turning the body does not move it. The vertical channel and the ballistic tangent are re-expressed against
+    // the new up with their world sum unchanged, so a body whose field turns over beneath it keeps falling the way it
+    // was falling while it turns. Carrying it instead would swing a rising body's velocity round with its up and set it
+    // back down where it started. On the ground the vertical channel is the surface's normal speed and turns with the
+    // surface.
     private void SetUp(FixedVector3 next) {
         if (
             (next == FixedVector3.Zero) ||
@@ -1138,6 +1146,16 @@ public sealed partial class WorldBody {
             from: m_up,
             to: next
         );
+
+        if (!m_grounded) {
+            var ballistic = ((m_up * m_verticalVelocity) + m_ballisticTangent);
+
+            m_verticalVelocity = FixedVector3.Dot(
+                left: ballistic,
+                right: next
+            );
+            m_ballisticTangent = ballistic.RejectFrom(unitAxis: next);
+        }
 
         m_planarVelocity = transport.Rotate(vector: m_planarVelocity);
 
@@ -1240,15 +1258,32 @@ public sealed partial class WorldBody {
     // instead of retaining whichever surface the previous policy last adopted.
     // Whether this body's up is the surface it stands on: a SurfaceFollowing body, grounded, in a solved field that
     // still presses it onto that surface. The one predicate the frame authority (ResolveUp) and the contact phase's
-    // adoption of the measured normal both ask, so the two never disagree about whose axis it is. A field that has
-    // come to pull the body off its surface (a gravity area turned over under its feet) gives the axis back to the
-    // field, which steers it round and lifts the body away; a field with no pull along the axis leaves it standing.
+    // adoption of the measured normal both ask, so the two never disagree about whose axis it is. A field that no
+    // longer presses the body onto a walkable surface (a gravity area turned over or across under its feet) gives the
+    // axis back to the field, which steers it round while ApplyHoldGravity carries the body away along the field.
     private bool StandsBySurface() => (
         (m_upPolicy == WorldBodyUpPolicy.SurfaceFollowing) &&
         m_grounded &&
         TrySolvedGravity(acceleration: out var acceleration) &&
-        (FixedVector3.Dot(left: acceleration, right: m_up) <= FixedQ4816.Zero)
+        FieldHoldsOn(acceleration: acceleration, normal: m_up)
     );
+    // Whether a surface of this unit normal is ground under the body's solved field: the field presses the body onto it
+    // within the world's walkable slope, measured from the field's own up, the axis a hold's cone is measured from. A
+    // floor the field has turned over or across is a ceiling or a wall, whatever the body's own up still says. A field
+    // too faint to orient the body carries no direction, so it takes no ground away, nor does a body with no solved
+    // field.
+    private bool FieldHoldsOn(FixedVector3 normal) => (
+        !TrySolvedGravity(acceleration: out var acceleration) ||
+        FieldHoldsOn(acceleration: acceleration, normal: normal)
+    );
+    private bool FieldHoldsOn(FixedVector3 acceleration, FixedVector3 normal) {
+        var magnitude = acceleration.Length;
+
+        return (
+            (magnitude < MinFieldUpMagnitude) ||
+            (-FixedVector3.Dot(left: acceleration, right: normal) >= (m_walkableThreshold * magnitude))
+        );
+    }
     private FixedVector3 ResolveUp(ulong stepTicks) {
         // A SurfaceFollowing STANDING body's up is the surface it stands on, and it keeps it. The two candidates
         // disagree wherever a surface is not perpendicular to the field — every point of a planetoid under any second

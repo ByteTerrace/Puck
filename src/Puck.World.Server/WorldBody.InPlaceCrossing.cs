@@ -57,6 +57,7 @@ public sealed partial class WorldBody {
             m_planarVelocity = Rate(rate: m_planarVelocity);
             m_planarPreviousTarget = Rate(rate: m_planarPreviousTarget);
             m_overlayVelocity = Rate(rate: m_overlayVelocity);
+            m_ballisticTangent = Rate(rate: m_ballisticTangent);
             m_timedMove = m_timedMove with {
                 Motion = m_timedMove.Motion with { Displacement = Rate(rate: m_timedMove.Motion.Displacement) }
             };
@@ -64,6 +65,7 @@ public sealed partial class WorldBody {
             // A remainder is a per-axis numerator of a rate the pair just turned or scaled, below one raw unit.
             m_positionAccumulator.Reset();
             m_overlayAccumulator.Reset();
+            m_ballisticTangentAccumulator.Reset();
         }
         if (scales) {
             m_verticalVelocity *= scale;

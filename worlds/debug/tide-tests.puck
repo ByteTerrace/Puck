@@ -107,18 +107,25 @@ prototypes {
   }
 }
 
+// The marbles take the bodies after the eight seats in placement-name order, not the order the loop writes them:
+// body 8 is `marble-aside` (home 40 m along +X) and body 9 is `marble-toward` (home 40 m along +Z), as `body.where`
+// reads them back.
+//
 // The tensor of a mass of 200,000 (20 at 100 m) 400 m off is 0.00625 a second squared along the line to it and half
-// that, inward, across it. Over ten seconds the marble 40 m toward the mass gains about 14 m and the one to the side
-// loses about 6.
+// that, inward, across it; `world.gravity` reads it as tensor=(-0.003125, 0, 0, -0.003125, 0, 0.00625). The marbles
+// also carry the piece kit's linear damping, 0.05 a second, so each offset follows x'' = k x - 0.05 x'. Over ten
+// seconds that takes the marble toward the mass from 40 m to about 51.2 m (53.3 undamped) and the one to the side
+// from 40 m to about 34.8 m (33.9 undamped); the bounds hold the damped answer and exclude both the undamped one and
+// a tide applied with the wrong sign or axis.
 test "a far mass stretches a world along the line to it and squeezes it across" {
   when {
     ticks 300
   }
   expect {
-    bodyPosition(body, 8, z) > 50
-    bodyPosition(body, 8, z) < 58
-    bodyPosition(body, 9, x) < 36
-    bodyPosition(body, 9, x) > 31
+    bodyPosition(body, 9, z) > 50.5
+    bodyPosition(body, 9, z) < 52
+    bodyPosition(body, 8, x) < 35.4
+    bodyPosition(body, 8, x) > 34.2
   }
 }
 
@@ -129,7 +136,9 @@ test "a mass that has gone raises no tide" {
     ticks 300
   }
   expect {
-    bodyPosition(body, 8, z) > 39.9
-    bodyPosition(body, 8, z) < 40.1
+    bodyPosition(body, 9, z) > 39.9
+    bodyPosition(body, 9, z) < 40.1
+    bodyPosition(body, 8, x) > 39.9
+    bodyPosition(body, 8, x) < 40.1
   }
 }
