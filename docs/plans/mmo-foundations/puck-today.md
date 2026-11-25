@@ -1097,7 +1097,7 @@ Code and documents opened at this tree:
 `WorldBootComposition.cs`), `src/Puck.Azure.Resources/main.bicepparam`,
 `worlds/debug/debug.puck`, `worlds/debug/garden.puck`,
 `worlds/debug/night.puck`, `worlds/standard/companions.puck`, and the history
-of `lane/companion-v1` against `lead/velocity`.
+of `lane/companion-v1` against the integration branch of that time (since landed and deleted).
 
 ---
 

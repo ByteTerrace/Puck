@@ -107,7 +107,7 @@ lanes, [the release](#the-release), the
   - **CPU frame thread:** 8 to 12 ms an iteration (capture 4.2 to 4.5,
     record 2.0 to 2.5, pump 1.3 to 2.2, pack 1.5 to 1.8). Eight residencies
     are captured almost every frame whether or not a view renders them
-    (the frame-production plan on `origin/wip/frame-production`).
+    ([the frame-production plan](frame-production.md)).
   - **City simulation** (`worlds/debug/city.puck`, 1,920 citizens and 100
     vehicles, quiet RTX 2060, headless): about 22.5 Hz against 30, up from
     10. The step thread's largest costs now: the input runtime per body
@@ -126,10 +126,10 @@ lanes, [the release](#the-release), the
     valley's exposure blows out above about 1,500 m, the valley drops out
     of view below at the seam, and the crossing stalls
     ([the trip to the moon](valley-and-moons.md#the-trip-to-the-moon)).
-  - **Parked, unmerged, never run:** `origin/wip/frame-production` (one owed
-    capture a frame, residencies packed and their uploads recorded side by
-    side), which the `cpu` campaign builds on or rewrites. The `gpu-frame`
-    campaign merged `origin/wip/gpu-architecture`.
+  - **Landed:** the frame-production work (one owed capture a frame,
+    residencies packed and their uploads recorded side by side) and the GPU
+    architecture work are both on the integration branch; their branches are
+    deleted.
 
 ### The first lanes
 
