@@ -49,7 +49,7 @@ public sealed class PlaceholderReleaseVerifierTests : IDisposable {
                                     c: '0',
                                     count: 64
                                 )}",
-                                Size: 1
+                                Size: 1, Executable: false
                             )]
                     )],
                 Revoked: null,

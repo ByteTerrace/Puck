@@ -13,7 +13,7 @@ public static class SetupInstall {
 
     /// <summary>Copies every file of a version's launcher directory
     /// (<see cref="Puck.Launcher.Release.PlayerBuildLayout.LauncherDirectoryName"/>) into the install root, replacing a file
-    /// only when its bytes changed (a running stub keeps its image), and writes the stub's configuration to start the
+    /// only when its bytes changed (a running stub keeps its image) and carrying its Unix mode, and writes the stub's configuration to start the
     /// version's <paramref name="start"/> executable.</summary>
     /// <param name="installRoot">The install root.</param>
     /// <param name="version">The installed version whose launcher is laid.</param>
@@ -26,10 +26,7 @@ public static class SetupInstall {
             throw new IOException(message: $"version {version} carries no {LauncherDirectoryName}/{InstallLayout.ExecutableFileName(name: "Puck.Launcher.Stub")}");
         }
         foreach (var file in Directory.EnumerateFiles(path: launcher)) {
-            var target = Path.Combine(path1: installRoot, path2: Path.GetFileName(path: file));
-
-            AtomicFile.DeleteReplacedBackups(path: target);
-            _ = AtomicFile.WriteAllBytesIfChanged(bytes: File.ReadAllBytes(path: file), path: target);
+            _ = AtomicFile.CopyIfChanged(destination: Path.Combine(path1: installRoot, path2: Path.GetFileName(path: file)), source: file);
         }
         _ = AtomicFile.WriteAllBytesIfChanged(path: Path.Combine(path1: installRoot, path2: InstallLayout.StubConfigFileName),
             bytes: new StubConfiguration(AppExecutableFileName: InstallLayout.ExecutableFileName(name: start)).Serialize());

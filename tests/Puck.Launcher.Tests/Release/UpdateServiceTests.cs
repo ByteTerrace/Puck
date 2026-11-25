@@ -37,7 +37,7 @@ public sealed class UpdateServiceTests : IDisposable {
                             c: '0',
                             count: 64
                         )}",
-                        Size: 1
+                        Size: 1, Executable: false
                     )]
             )],
         Revoked: null,

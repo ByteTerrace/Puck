@@ -100,7 +100,9 @@ file. A reader that holds the old file memory-mapped keeps seeing the old bytes
 and does not block the replacement: when Windows refuses the rename over a
 mapped file, `AtomicFile` falls back to `File.Replace`, which moves the old file
 aside. On Unix the replacement keeps the destination's file mode, or takes the
-`unixCreateMode` the caller names, such as owner-only for a private key. A
+`unixCreateMode` the caller names, such as owner-only for a private key;
+`CopyIfChanged` copies a file over such a destination with the source's mode,
+so an installed executable laid elsewhere stays executable. A
 destination spelled in another case than the entry a case-insensitive file
 system already holds keeps that entry's name.
 

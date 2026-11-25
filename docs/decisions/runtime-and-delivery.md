@@ -535,7 +535,11 @@ the deployment's world extensions, and the TLS front when the deployment
 exposes the MCP front. `puck publish --channel server` and `puck channel push`
 turn it into a signed `puck.release.manifest.v1` release on the deployment's
 `server` channel, beside the `player` channel and under the same root key
-(`WorldHostLayout` holds every name).
+(`WorldHostLayout` holds every name). The manifest records which files are
+executable, read from the published tree, and the signature covers that flag
+like every byte; the stager creates each installed file with the mode its
+record names, and the applier refuses one whose mode disagrees
+(`ReleaseFileMode`), so Caddy, the CLI and the stub run from a Linux install.
 
 **The engine is the host release's payload identity.** A world release's
 manifest names its engine as `engine`, the `ReleasePayloadIdentity` of the

@@ -7,17 +7,22 @@ using Puck.Confinement;
 namespace Puck.Launcher.Release;
 
 /// <summary>One file inside a release payload: its path relative to the payload root, its content hash in
-/// <see cref="Puck.Assets.ContentAddressedStore"/> form (<c>sha256/&lt;hex64&gt;</c>), and its byte size.</summary>
+/// <see cref="Puck.Assets.ContentAddressedStore"/> form (<c>sha256/&lt;hex64&gt;</c>), its byte size, and whether it
+/// installs executable. The flag is part of the signed manifest, so a changed mode is refused like a changed byte; a
+/// document that omits it does not parse.</summary>
 /// <param name="Path">The file's path relative to the payload root, forward-slash separated, never absolute and
 /// never carrying a <c>..</c> segment.</param>
 /// <param name="Hash">The file's content hash, as <c>sha256/&lt;hex64&gt;</c>.</param>
 /// <param name="Size">The file's exact byte size.</param>
-public sealed record ReleasePayloadFile(string Path, string Hash, long Size);
+/// <param name="Executable">Whether the file installs with execute permission on Unix (<see cref="ReleaseFileMode"/>
+/// reads it from the published tree and applies it at install). Windows ignores it.</param>
+public sealed record ReleasePayloadFile(string Path, string Hash, long Size, [property: JsonRequired] bool Executable);
 /// <summary>One RID's complete file set for a release, plus an optional single-archive fallback for a transport
 /// that cannot fetch individual files.</summary>
 /// <param name="Rid">The .NET runtime identifier this payload targets (e.g. <c>win-x64</c>, <c>linux-x64</c>).</param>
 /// <param name="Files">Every file the RID's install directory contains, by content hash.</param>
-/// <param name="Archive">An optional single-archive form of the same payload.</param>
+/// <param name="Archive">An optional single-archive form of the same payload; it is never installed as a file, so its
+/// <see cref="ReleasePayloadFile.Executable"/> is <see langword="false"/>.</param>
 public sealed record ReleasePayload(string Rid, IReadOnlyList<ReleasePayloadFile> Files, ReleasePayloadFile? Archive = null);
 /// <summary>The staged-rollout fraction a release is exposed to, evaluated per install via
 /// <c>ReleaseRolloutBucket.IsIncluded</c> — never free-text; the client honors exactly one fixed bucketing

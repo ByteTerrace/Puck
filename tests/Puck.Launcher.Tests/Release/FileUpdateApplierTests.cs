@@ -45,7 +45,7 @@ public sealed class FileUpdateApplierTests : IDisposable {
         var original = "original"u8.ToArray();
 
         _ = Stage(version: "1.0.1", content: "tampered"u8.ToArray());
-        var result = Apply(file: new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: original).ToString(), Size: original.Length), version: "1.0.1");
+        var result = Apply(file: new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: original).ToString(), Size: original.Length, Executable: false), version: "1.0.1");
 
         Assert.False(condition: result.Applied);
         Assert.Contains(expectedSubstring: "hash", actualString: result.RefusalReason!, comparisonType: StringComparison.OrdinalIgnoreCase);
@@ -53,7 +53,7 @@ public sealed class FileUpdateApplierTests : IDisposable {
     }
     [Fact]
     public void Apply_Refuses_WhenTheVersionWasNeverStaged() {
-        var result = Apply(file: new ReleasePayloadFile(Path: "a.dll", Hash: $"sha256/{new string(c: '0', count: 64)}", Size: 1), version: "1.0.1");
+        var result = Apply(file: new ReleasePayloadFile(Path: "a.dll", Hash: $"sha256/{new string(c: '0', count: 64)}", Size: 1, Executable: false), version: "1.0.1");
 
         Assert.False(condition: result.Applied);
         Assert.Contains(expectedSubstring: "not staged", actualString: result.RefusalReason!, comparisonType: StringComparison.OrdinalIgnoreCase);
@@ -103,7 +103,7 @@ public sealed class FileUpdateApplierTests : IDisposable {
 
         Directory.CreateDirectory(path: Path.GetDirectoryName(path: stagedPath)!);
         File.WriteAllBytes(bytes: content, path: stagedPath);
-        return new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length);
+        return new ReleasePayloadFile(Path: "a.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length, Executable: false);
     }
 
     public void Dispose() => m_root.Dispose();

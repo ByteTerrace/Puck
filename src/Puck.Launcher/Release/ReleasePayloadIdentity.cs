@@ -6,7 +6,8 @@ namespace Puck.Launcher.Release;
 
 /// <summary>
 /// A release payload's complete identity: the content pin of a canonical text naming the identity schema, the payload's
-/// runtime identifier, the release's state generation, and every file's path, content pin and size in ordinal path order.
+/// runtime identifier, the release's state generation, and every file's path, content pin, size and executable flag in
+/// ordinal path order.
 /// Rollout, notes, channel, <see cref="ReleaseManifest.MinimumSupported"/>, revocations, the version label, the archive and
 /// the signature are excluded, so re-signing, advancing a rollout or relabelling identical files keeps the identity, and
 /// changing any file, the file set or the generation changes it. The install record and the release record
@@ -14,7 +15,7 @@ namespace Puck.Launcher.Release;
 /// </summary>
 public static class ReleasePayloadIdentity {
     /// <summary>The identity text's schema line.</summary>
-    public const string Schema = "puck.release.payload-identity.v1";
+    public const string Schema = "puck.release.payload-identity.v2";
 
     /// <summary>Computes a payload's identity.</summary>
     /// <param name="payload">The payload; its paths are validated manifest paths, which hold no control characters, so the
@@ -31,7 +32,8 @@ public static class ReleasePayloadIdentity {
 
         foreach (var file in payload.Files.OrderBy(keySelector: static file => file.Path, comparer: StringComparer.Ordinal)) {
             text.Append(value: "file:").Append(value: file.Path).Append(value: '\t').Append(value: file.Hash).Append(value: '\t')
-                .Append(value: file.Size.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '\n');
+                .Append(value: file.Size.ToString(provider: CultureInfo.InvariantCulture)).Append(value: '\t')
+                .Append(value: (file.Executable ? 'x' : '-')).Append(value: '\n');
         }
         return ContentPin.OfText(text: text.ToString()).ToString();
     }
