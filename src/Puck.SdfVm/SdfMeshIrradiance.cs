@@ -1901,8 +1901,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private bool WaitingForMemory(long? refusedAt) => refusedAt is { } at && Time.GetElapsedTime(at) < PendingSceneInterval;
 
     // Parallel hierarchy workers can report several refusals together. Other build faults still reach the caller.
-    private static SdfMeshIrradianceScene? TryBuildScene(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous, WorkCounterSet? counters = null) {
-        try { return SdfMeshIrradianceScene.Build(draws, previous, counters, traceError: TraceError); }
+    private SdfMeshIrradianceScene? TryBuildScene(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous, WorkCounterSet? counters = null) {
+        try { return SdfMeshIrradianceScene.Build(draws, previous, counters, traceError: TraceError, allocator: m_allocator); }
         catch (Exception exception) when (HostMemoryRefusedException.Of(exception: exception) is not null) { return null; }
     }
     // A built scene waiting to replace the installed one: its input, its key and the change it makes; Done completes
