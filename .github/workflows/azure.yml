@@ -107,9 +107,9 @@ jobs:
     with:
       prebuilt: true
   bicep:
-    # Infrastructure validation runs only on main (it needs the environment's Azure sign-in), so a validation run on
-    # the integration branch checks the Bicep sources offline: a source that is not formatted or has diagnostics fails
-    # here instead of stopping the next main deploy.
+    # Infrastructure validation runs only on main (it needs the environment's Azure sign-in to restore Template Specs),
+    # so a validation run on the integration branch checks offline what it can: an unformatted Bicep source fails here
+    # instead of stopping the next main deploy. Diagnostics need the restore, so they stay with that job.
     name: Check Bicep sources
     runs-on: ubuntu-24.04
     steps:
@@ -117,21 +117,17 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install pinned Bicep
         run: az bicep install --version v0.48.1
-      - name: Every Bicep source is formatted and builds without diagnostics
+      - name: Every Bicep source is formatted
         run: |
           set -euo pipefail
           status=0
           for file in $(git ls-files 'src/Puck.Azure.Resources/*.bicep' 'src/Puck.Azure.Resources/**/*.bicep'); do
-            # A source that references a Template Spec (ts:) restores it from Azure, which needs the sign-in only main's
-            # infrastructure job has; that job checks those sources.
-            if grep -q "'ts:" "$file"; then continue; fi
+            # Formatting a source that imports types from a Template Spec restores it from Azure, which needs the sign-in
+            # only main's infrastructure job has; that job checks those sources.
+            if grep -qE "from 'ts[:/]" "$file"; then continue; fi
             if ! az bicep format --file "$file" --stdout | diff -q "$file" - >/dev/null; then
               echo "::error file=$file::not formatted; run az bicep format --file $file"; status=1
             fi
-          done
-          for file in src/Puck.Azure.Resources/main.bicep src/Puck.Azure.Resources/worldSiloPlatform.bicep; do
-            if grep -q "'ts:" "$file"; then continue; fi
-            az bicep build --file "$file" --stdout >/dev/null || status=1
           done
           exit $status
   infrastructure:
