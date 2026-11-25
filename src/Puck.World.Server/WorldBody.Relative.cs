@@ -58,17 +58,7 @@ public sealed partial class WorldBody {
         m_channels = next;
         if (!sameLayout && (((ReadOnlySpan<long>)InputReadbacks.RelativeRemainders).IndexOfAnyExcept(value: 0L) >= 0)) { InputReadbacksEdit.RelativeRemainders = default; }
     }
-    private PlayerIntent WithoutRelative(PlayerIntent intent) {
-        var remaining = m_channels.RelativeMask;
-
-        while (remaining != 0) {
-            var ordinal = BitOperations.TrailingZeroCount(value: remaining);
-
-            remaining &= (remaining - 1);
-            intent = intent.WithRelative(ordinal: ordinal, value: default);
-        }
-        return intent;
-    }
+    private PlayerIntent WithoutRelative(PlayerIntent intent) => m_channels.WithRelativeAtRest(intent: intent);
     private PlayerIntent ProjectRelative(PlayerIntent intent) {
         var remaining = m_channels.RelativeMask;
 

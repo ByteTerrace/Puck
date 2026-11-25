@@ -672,6 +672,40 @@ restore and up to a round trip of steps of one body per seat per client tick.
 The digest-first form of replication's decision 7 (send eight bytes while the
 client's digest matches) is the step that cuts the bytes.
 
+## Decision 10: a route authors its party
+
+**What must be decided.** How a route written for one body is played by four
+seats at once without the seats fighting over one goal point.
+
+**Evidence.** The four-seat leg crowds steps written for one body: four seats
+posed at one spawn, four seats sent to one point within 0.12 m at the lift's
+panel, four seats walking one terrace lane. `WorldSeatDriver` answers with
+heuristics written in C#: a staggered start of four seconds a seat
+(`WorldBenchmarkCommandModule`'s lead-in), spare spots beside a claimed goal
+(`ResolvePartyHoldSpot`, `SpotClaimed`), a goal widened by the bodies parked
+near it, and a yield to a seat nearer the goal (`TryYieldAtPoint`). Each is a
+guess at where a follower should stand, made with constants no author chose.
+
+**Options.**
+
+1. *Per-seat goals written into every step.* Exact, and four times the route
+   text for every party size.
+2. *A party mechanism in the route model.* The route authors its party once,
+   and the engine derives each seat's goal from the leader's.
+
+**Ruling: a party mechanism in the route model.** A route row authors a
+party's spacing (`.puck` data in the route, with a standard default). Seat
+rank `r` (the route's own seat is rank 0) follows in file: its goal for a point
+step is the leader's point moved back `r` spacings along the seat's own path to
+it, which stays on ground the path already walked; a place step is reached on
+entering the place, as now; a pose sets rank `r` down `r` spacings behind the
+pose along its heading, resolved by the authority that declares the spawn
+(`WorldCommand.PoseSpawn` gains the distance); and a press step is pressed by
+rank 0 alone while the others stand, a `press until` waiting for each seat to
+stand in its place. The driver's heuristics above and the staggered start are
+deleted when this lands. **Status:** decided, not built; the four-seat leg is
+the check.
+
 ## The steps
 
 Each closes on a count or a state read from a headless pair on one machine:

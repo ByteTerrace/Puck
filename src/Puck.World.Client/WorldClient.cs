@@ -120,7 +120,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     public bool TrySeatInputOwner(int slot, out Principal owner, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldAuthorityRoute? route) {
         owner = default;
         route = null;
-        if (m_roster.IsPending(slot: slot) || (m_roster.Seat(slot: slot)?.Input is not { Admitted: true }) || (m_seatRouter.TryRoute(slot: slot) is not { } resolved) ||
+        if (!TryAdmittedSeat(input: out _, route: out var resolved, slot: slot) ||
             !TryRouteInput(principal: m_roster.PrincipalOf(slot: slot), publication: out var publication, route: resolved)) {
             return false;
         }
@@ -129,10 +129,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         route = resolved;
         return true;
     }
-    private bool TrySeatInputAnswer(int slot, out WorldSeatInput input, out WorldAuthorityRoute route, out WorldInputAnswer? answer) {
+    // A seat whose input its routed authority admitted, with that input and route.
+    private bool TryAdmittedSeat(int slot, out WorldSeatInput input, out WorldAuthorityRoute route) {
         input = null!;
         route = null!;
-        answer = null;
         if (
             m_roster.IsPending(slot: slot) ||
             (m_roster.Seat(slot: slot)?.Input is not { Admitted: true } resolvedInput) ||
@@ -143,6 +143,13 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
         input = resolvedInput;
         route = resolvedRoute;
+        return true;
+    }
+    private bool TrySeatInputAnswer(int slot, out WorldSeatInput input, out WorldAuthorityRoute route, out WorldInputAnswer? answer) {
+        answer = null;
+        if (!TryAdmittedSeat(input: out input, route: out route, slot: slot)) {
+            return false;
+        }
         if (!route.Endpoint.ClockOwnedHere &&
             TryRouteInput(principal: m_roster.PrincipalOf(slot: slot), publication: out var publication, route: route) &&
             route.Endpoint.Mirror.TryInputAnswer(answer: out var resolvedAnswer, owner: publication.Owner)) {

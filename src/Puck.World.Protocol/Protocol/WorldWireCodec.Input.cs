@@ -76,69 +76,56 @@ public static partial class WorldWireCodec {
     /// <param name="writer">The writer.</param>
     /// <param name="answers">The answers, at most one an owner.</param>
     /// <returns><see langword="false"/> when an answer cannot be written within wire bounds.</returns>
-    public static bool TryWriteInputAnswers(WireWriter writer, ReadOnlySpan<WorldInputAnswer> answers) {
-        if (answers.Length > ushort.MaxValue) { return false; }
-        writer.WriteUInt16(value: ((ushort)answers.Length));
-        foreach (var answer in answers) {
-            if (!TryWritePrincipal(writer, answer.Owner)) { return false; }
-            writer.WriteUInt64(value: answer.Epoch); writer.WriteUInt32(value: answer.Sequence); writer.WriteUInt64(value: answer.Tick);
-        }
-        return true;
-    }
+    public static bool TryWriteInputAnswers(WireWriter writer, ReadOnlySpan<WorldInputAnswer> answers) => TryWriteOwned(records: answers, writer: writer,
+        write: static (w, answer) => {
+            w.WriteUInt64(value: answer.Epoch); w.WriteUInt32(value: answer.Sequence); w.WriteUInt64(value: answer.Tick);
+            return true;
+        });
     /// <summary>Reads bounded input answers, checking the count against remaining bytes before allocation.</summary>
     /// <param name="reader">The reader.</param>
     /// <returns>The answers.</returns>
-    public static WorldInputAnswer[] ReadInputAnswers(ref WireReader reader) {
-        var count = reader.ReadUInt16();
-
-        if ((((long)count) * 21) > reader.Remaining) { reader.Fail(detail: "input answer count exceeds payload", refusal: WireRefusal.CountOutOfRange); return []; }
-        var answers = ((count == 0) ? [] : new WorldInputAnswer[count]);
-
-        for (var index = 0; ((index < answers.Length) && !reader.Failed); index++) {
-            var owner = ReadPrincipal(ref reader);
-            var epoch = reader.ReadUInt64();
-            var sequence = reader.ReadUInt32();
-            var tick = reader.ReadUInt64();
-
-            answers[index] = new(Epoch: epoch, Owner: owner, Sequence: sequence, Tick: tick);
-        }
-        return answers;
-    }
-
+    public static WorldInputAnswer[] ReadInputAnswers(ref WireReader reader) => ReadOwned(field: "input answer", minimumBytes: 21, reader: ref reader,
+        read: static (ref WireReader r, Puck.Commands.Principal owner) => new WorldInputAnswer(Owner: owner, Epoch: r.ReadUInt64(), Sequence: r.ReadUInt32(), Tick: r.ReadUInt64()));
     /// <summary>Writes the owner-filtered own-body continuations accompanying a snapshot.</summary>
     /// <param name="writer">The writer.</param>
     /// <param name="bodies">The continuations, at most one an owner.</param>
     /// <returns><see langword="false"/> when a continuation cannot be written within wire bounds.</returns>
-    public static bool TryWriteOwnBodies(WireWriter writer, ReadOnlySpan<WorldOwnBody> bodies) {
-        if (bodies.Length > ushort.MaxValue) { return false; }
-        writer.WriteUInt16(value: ((ushort)bodies.Length));
-        foreach (var body in bodies) {
-            if (!TryWritePrincipal(writer, body.Owner) || (body.Entry.Length > WireLimits.MaxDocumentBytes)) { return false; }
-            writer.WriteUInt64(value: body.Tick); writer.WriteUInt64(value: body.EngineTick); writer.WriteInt32(value: body.Body); writer.WriteInt32(value: body.Generation);
-            writer.WriteBlock(value: body.Entry.Span);
-        }
-        return true;
-    }
+    public static bool TryWriteOwnBodies(WireWriter writer, ReadOnlySpan<WorldOwnBody> bodies) => TryWriteOwned(records: bodies, writer: writer,
+        write: static (w, body) => {
+            if (body.Entry.Length > WireLimits.MaxDocumentBytes) { return false; }
+            w.WriteUInt64(value: body.Tick); w.WriteUInt64(value: body.EngineTick); w.WriteInt32(value: body.Body); w.WriteInt32(value: body.Generation);
+            w.WriteBlock(value: body.Entry.Span);
+            return true;
+        });
     /// <summary>Reads bounded own-body continuations, checking the count against remaining bytes before allocation.</summary>
     /// <param name="reader">The reader.</param>
     /// <returns>The continuations.</returns>
-    public static WorldOwnBody[] ReadOwnBodies(ref WireReader reader) {
+    public static WorldOwnBody[] ReadOwnBodies(ref WireReader reader) => ReadOwned(field: "own body", minimumBytes: 29, reader: ref reader,
+        read: static (ref WireReader r, Puck.Commands.Principal owner) => new WorldOwnBody(Owner: owner, Tick: r.ReadUInt64(), EngineTick: r.ReadUInt64(), Body: r.ReadInt32(),
+            Generation: r.ReadInt32(), Entry: r.ReadBlock(field: "own body entry", maxBytes: WireLimits.MaxDocumentBytes)));
+
+    private delegate T OwnedReader<T>(ref WireReader reader, Puck.Commands.Principal owner);
+    // The one encoding of a snapshot's owner-scoped records: a count, then each record's owner and its own fields.
+    private static bool TryWriteOwned<T>(WireWriter writer, ReadOnlySpan<T> records, Func<WireWriter, T, bool> write) where T : struct, IWorldOwnedRecord {
+        if (records.Length > ushort.MaxValue) { return false; }
+        writer.WriteUInt16(value: ((ushort)records.Length));
+        foreach (var record in records) {
+            if (!TryWritePrincipal(writer, record.Owner) || !write(arg1: writer, arg2: record)) { return false; }
+        }
+        return true;
+    }
+    private static T[] ReadOwned<T>(ref WireReader reader, string field, int minimumBytes, OwnedReader<T> read) where T : struct, IWorldOwnedRecord {
         var count = reader.ReadUInt16();
 
-        if ((((long)count) * 21) > reader.Remaining) { reader.Fail(detail: "own body count exceeds payload", refusal: WireRefusal.CountOutOfRange); return []; }
-        var bodies = ((count == 0) ? [] : new WorldOwnBody[count]);
+        if ((((long)count) * minimumBytes) > reader.Remaining) { reader.Fail(detail: $"{field} count exceeds payload", refusal: WireRefusal.CountOutOfRange); return []; }
+        var records = ((count == 0) ? [] : new T[count]);
 
-        for (var index = 0; ((index < bodies.Length) && !reader.Failed); index++) {
+        for (var index = 0; ((index < records.Length) && !reader.Failed); index++) {
             var owner = ReadPrincipal(ref reader);
-            var tick = reader.ReadUInt64();
-            var engineTick = reader.ReadUInt64();
-            var body = reader.ReadInt32();
-            var generation = reader.ReadInt32();
-            var entry = reader.ReadBlock(field: "own body entry", maxBytes: WireLimits.MaxDocumentBytes);
 
-            bodies[index] = new(Body: body, EngineTick: engineTick, Entry: entry, Generation: generation, Owner: owner, Tick: tick);
+            records[index] = read(reader: ref reader, owner: owner);
         }
-        return bodies;
+        return records;
     }
 
     private const int ContributionBytes = 22;

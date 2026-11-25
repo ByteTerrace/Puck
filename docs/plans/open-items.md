@@ -3315,6 +3315,13 @@ Federation and transfers:
   cuts it to eight bytes while the client's digest matches. Other bodies and a
   moving solid's motion after the continuation's tick are not predicted.
   [Readable interaction](readable-interaction.md)'s step 5 builds on it.
+- [medium] A route's party is decided and not built
+  ([decision 10](multi-seat-client.md#decision-10-a-route-authors-its-party)):
+  the route authors a spacing and each seat's goals follow the leader in file.
+  Building it deletes `WorldSeatDriver`'s party heuristics (`ResolvePartyHoldSpot`,
+  `SpotClaimed`, `TryYieldAtPoint`) and the benchmark's staggered lead-in. Check:
+  `puck benchmark --route debug --remote local --seats 4 --headless` arrives on
+  every chapter.
 - Signed remote write-back is
   [remote home adoption](records-and-pools.md#remote-home-adoption); it needs
   the hub plan's write door and award commit and

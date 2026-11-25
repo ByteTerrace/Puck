@@ -35,17 +35,5 @@ public readonly record struct WorldAcceptedInput(ulong Tick, int EntityIndex, Pl
     /// newer batch arrived, whose movement since the last batch was already taken.</summary>
     /// <param name="target">The channels of the body the input drives.</param>
     /// <returns>The held input.</returns>
-    public WorldAcceptedInput WithoutRelative(WorldChannelTable target) {
-        var intent = Intent;
-        var remaining = target.RelativeMask;
-
-        while (remaining != 0) {
-            var ordinal = System.Numerics.BitOperations.TrailingZeroCount(value: remaining);
-
-            remaining &= (remaining - 1);
-            intent = intent.WithRelative(ordinal: ordinal, value: default);
-        }
-
-        return this with { Intent = intent };
-    }
+    public WorldAcceptedInput WithoutRelative(WorldChannelTable target) => (this with { Intent = target.WithRelativeAtRest(intent: Intent) });
 }
