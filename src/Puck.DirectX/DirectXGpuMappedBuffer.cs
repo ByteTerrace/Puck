@@ -271,7 +271,7 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     // waits on the same signal. A disposed buffer's resource is gone, and a lost device's queue runs nothing, so their
     // tiles only go back.
     private void Release(List<(int Chunk, DirectXTilePlacement Tiles)> revoked) {
-        if (m_disposed || (m_context.Device.Handle != m_device)) {
+        if (m_disposed || (m_context.Device.Handle != m_device) || (((ID3D12Fence*)m_fence)->GetCompletedValue() == ulong.MaxValue)) {
             foreach (var (_, tiles) in revoked) { m_arena.ReturnTiles(tiles: tiles); }
 
             return;
@@ -288,11 +288,12 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
         foreach (var (_, tiles) in revoked) { m_returning.Enqueue(item: (m_fenceValue, tiles)); }
         ReturnCompleted();
     }
-    // Returns the released tile runs whose update the queue has executed.
+    // Returns the released tile runs whose update the queue has executed. A removed device's fence reads UINT64_MAX: its
+    // queue runs nothing more, so every run goes back, and the release a device loss's teardown makes never throws.
     private void ReturnCompleted() {
         if (m_returning.Count == 0) { return; }
 
-        var completed = DirectXSharedFence.ReadCompletedValue(fence: ((ID3D12Fence*)m_fence));
+        var completed = ((ID3D12Fence*)m_fence)->GetCompletedValue();
 
         while ((m_returning.Count > 0) && (m_returning.Peek().Value <= completed)) { m_arena.ReturnTiles(tiles: m_returning.Dequeue().Tiles); }
     }
