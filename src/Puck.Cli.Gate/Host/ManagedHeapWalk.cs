@@ -146,7 +146,57 @@ public static class ManagedHeapWalk {
             .ThenBy(keySelector: static tenant => tenant.Holder, comparer: StringComparer.Ordinal)
             .ToArray();
 
-        return new(Bytes: bytes, Collection: dumpCollection, Nodes: nodes.Count, Objects: objects, Tenants: tenants);
+        // The small objects, which the large tenants miss: every object under the large object threshold, summed by its
+        // type and the type of its first referrer (or root, or unreached), from one pass over the edges. A census of
+        // millions of small objects names its tenants this way where a chain per object would not fit.
+        var index = new Dictionary<ulong, int>(capacity: nodes.Count);
+
+        for (var at = 0; (at < nodes.Count); at++) { _ = index.TryAdd(key: nodes[at].Address, value: at); }
+
+        var holders = new ulong[nodes.Count];
+        var held = new bool[nodes.Count];
+
+        foreach (var node in nodes) {
+            for (var edge = node.FirstEdge; (edge < Math.Min(val1: (node.FirstEdge + node.Edges), val2: edges.Count)); edge++) {
+                if (index.TryGetValue(key: edges[edge], value: out var target) && !held[target]) {
+                    held[target] = true;
+                    holders[target] = node.Type;
+                }
+            }
+        }
+
+        long liveBytes = 0, smallBytes = 0;
+        var small = new Dictionary<(ulong Type, ulong Holder, int Kind), (int Objects, long Bytes)>();
+
+        for (var at = 0; (at < nodes.Count); at++) {
+            var node = nodes[at];
+
+            liveBytes += ((long)node.Size);
+            if (((long)node.Size) >= LargeObjectBytes) { continue; }
+            smallBytes += ((long)node.Size);
+
+            // Kind 0: held by an object of the holder's type; 1: kept by a root; 2: unreached.
+            var key = (node.Type, holders[at], (held[at] ? 0 : (roots.ContainsKey(key: node.Address) ? 1 : 2)));
+
+            small[key] = (small.TryGetValue(key: key, value: out var sum) ? ((sum.Objects + 1), (sum.Bytes + ((long)node.Size))) : (1, ((long)node.Size)));
+        }
+
+        string TypeName(ulong type) => (types.TryGetValue(key: type, value: out var name) ? name : "?");
+
+        var smallTenants = small
+            .Where(predicate: entry => (entry.Value.Bytes >= minimumBytes))
+            .Select(selector: entry => new HeapTenant(
+                Bytes: entry.Value.Bytes,
+                Holder: entry.Key.Kind switch { 0 => TypeName(type: entry.Key.Holder), 1 => "root", _ => "unreached" },
+                Objects: entry.Value.Objects,
+                Type: TypeName(type: entry.Key.Type)
+            ))
+            .OrderByDescending(keySelector: static tenant => tenant.Bytes)
+            .ThenBy(keySelector: static tenant => tenant.Type, comparer: StringComparer.Ordinal)
+            .ThenBy(keySelector: static tenant => tenant.Holder, comparer: StringComparer.Ordinal)
+            .ToArray();
+
+        return new(Bytes: bytes, Collection: dumpCollection, Nodes: nodes.Count, Objects: objects, Tenants: tenants) { LiveBytes = liveBytes, SmallBytes = smallBytes, SmallTenants = smallTenants };
     }
 }
 /// <summary>The large objects as one heap dump saw them, in bytes.</summary>
@@ -155,7 +205,15 @@ public static class ManagedHeapWalk {
 /// <param name="Nodes">The live objects the dump wrote, of every size.</param>
 /// <param name="Collection">The index of the collection that wrote the dump.</param>
 /// <param name="Tenants">The tenants of objects at least the walk's minimum size, largest first.</param>
-public sealed record HeapWalk(long Objects, long Bytes, int Nodes, int Collection, IReadOnlyList<HeapTenant> Tenants);
+public sealed record HeapWalk(long Objects, long Bytes, int Nodes, int Collection, IReadOnlyList<HeapTenant> Tenants) {
+    /// <summary>Gets the bytes of every live object the dump wrote, large and small.</summary>
+    public long LiveBytes { get; init; }
+    /// <summary>Gets the bytes of the live objects under <see cref="ManagedHeapWalk.LargeObjectBytes"/>.</summary>
+    public long SmallBytes { get; init; }
+    /// <summary>Gets the small objects summed by type and first holder (its type, <c>root</c> or <c>unreached</c>), each
+    /// group of at least the walk's minimum size, largest first.</summary>
+    public IReadOnlyList<HeapTenant> SmallTenants { get; init; } = [];
+}
 /// <summary>One tenant of the large object heap: the objects of one type one holder keeps.</summary>
 /// <param name="Type">The objects' type.</param>
 /// <param name="Holder">The first holder the walk found: the type of an object referring to them, a <c>root:</c> kind,
