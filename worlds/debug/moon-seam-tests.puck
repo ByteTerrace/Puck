@@ -1,24 +1,31 @@
 // The ship's trip across the sky seam, played as a player plays it: seat 1 boards the ship with the context button
 // from beside it, climbs through the seam into the moon's world, and sinks back through it into the debug world.
 // `puck test worlds/debug/moon-seam-tests.puck --reproduce` shows the round trip ends where it should and reproduces. The
-// ship starts posed 70 m under the seam (launch.puck's pad at 84, 86 and moon-frame.puck's seam at 2400), since the
-// climb from the pad is forty seconds of nothing else. Body 561 is the ship, the population's highest slot.
+// ship starts posed 70 m under the seam (launch.puck's pad at 84, 86 and moon-frame.puck's `skySeamAltitude`, about
+// 2400 m), since the climb from the pad is forty seconds of nothing else. The ship is body `launchShipBody`
+// (shapes.puck), the population's highest slot, which each step names through a `for` over that one value.
 //
 // A scripted flight has no camera, so `body.fly`'s rise is the only channel it needs: straight up through the seam and
-// straight down again. A crossing ends the scripted segment that made it, so each leg stops just past the seam, and a
-// last leg carries the ship well below it: a re-drive reads the neighbour's bodies as they stand when it runs
-// (WorldEventFeed's remarks on what the tape carries), so the trip ends with none of them near the seam.
+// straight down again. Near the seam neither world pulls the ship as hard as a metre a second squared, so it flies
+// there as a craft in space (form 5, the `ship-space` kit) on both sides: it dives at its space cruise and coasts on
+// when the stick lets go, until the valley's pull takes it back into the air (form 4) and its cruise hold stops it. A
+// crossing ends the scripted segment that made it, so each leg stops just past the seam, and a last leg carries the
+// ship well below it: a re-drive reads the neighbour's bodies as they stand when it runs (WorldEventFeed's remarks on
+// what the tape carries), so the trip ends with none of them near the seam.
 
 schema: "puck.world.definition.v1"
 basis: "debug"
 // The debug world's own id, so the trip leaves from and returns to the boot instance.
 documentId: "debug"
 import "stopped-machines"
+import "shapes"
 
 test "the ship crosses the sky seam with its pilot and comes back" {
   when {
     // The ship under the seam, and the Moth in the air beside it for the ticks the press takes.
-    seat1: body.pose 84 2330 86 220 0 0 561
+    for ship in [launchShipBody] {
+      seat1: body.pose 84 2330 86 220 0 0 {ship}
+    }
     seat1: body.pose 87 2331 86 220 0 0 0
     ticks 1
     seat1: player.signal keyboard.e press
@@ -33,10 +40,11 @@ test "the ship crosses the sky seam with its pilot and comes back" {
     ticks 80
   }
   expect {
-    // Back in the debug world some sixty metres under the seam, over the point it left from, the pilot still aboard:
-    // her body rides at the ship's seat, where no body falling on its own for five seconds would be.
-    bodyPosition(body, 0, y) > 2300
-    bodyPosition(body, 0, y) < 2380
+    // Back in the debug world some three hundred metres under the seam, over the point it left from, the pilot still
+    // aboard: her body rides at the seat of a ship its cruise hold stopped, where neither a ship still coasting from
+    // space nor a body falling on its own for four seconds would be.
+    bodyPosition(body, 0, y) > 2050
+    bodyPosition(body, 0, y) < 2250
     bodyPosition(body, 0, x) > 82
     bodyPosition(body, 0, x) < 86
     bodyPosition(body, 0, z) > 84
@@ -46,7 +54,9 @@ test "the ship crosses the sky seam with its pilot and comes back" {
 
 test "the ship crosses the sky seam into the moon" {
   when {
-    seat1: body.pose 84 2330 86 220 0 0 561
+    for ship in [launchShipBody] {
+      seat1: body.pose 84 2330 86 220 0 0 {ship}
+    }
     seat1: body.pose 87 2331 86 220 0 0 0
     ticks 1
     seat1: player.signal keyboard.e press
@@ -56,7 +66,11 @@ test "the ship crosses the sky seam into the moon" {
     seat1: body.fly 0 0 1 0 0 0 2
     ticks 120
   }
+  // `moon { … }` is judged in the moon instance the crossing reaches, in the moon's coordinates, where the seam stands
+  // about 1,700 m under its centre (moon-frame.puck's `skySeamAltitude` less `moonCentre`'s height).
   expect {
-    bodyPosition(body, 2, y) > -100000
+    moon {
+      bodyState(body, 0, size) == 1 and bodyPosition(body, 0, y) > -1700
+    }
   }
 }

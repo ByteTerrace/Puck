@@ -6,8 +6,8 @@
 //
 // The ship is the standard's (../standard/ship.puck): its `fly` program, its `ship` kit and its skiff. It is a body of
 // this world, so it takes a population slot: this document is imported ahead of every other inhabited placement and
-// the world's capacity grows by `launchBodies`, which gives the ship the highest slot and leaves every other body its
-// index.
+// the world's capacity is one more than `launchShipBody` (shapes.puck), which gives the ship the highest slot and
+// leaves every other body its index.
 
 import "../standard/ship"
 import "../standard/free-camera"
@@ -15,10 +15,6 @@ import "../standard/styles"
 import "ship-rows"
 import "moon-frame"
 import "shapes"
-
-let launchBodies = 1
-// The ship's body: the population's highest slot (debug.puck's capacity, less one).
-let launchShipBody = (galleryPopulation + 2 + boardRoomBodies + cardBodies + seatPopulation + 1)
 
 // The pad stands on the open floor north-east of the hall, toward the moon's bearing and far enough from the wall
 // under it that the moon shows over the rim, and the ship on it faces that way (moon-frame.puck's `launchPad`,
