@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Abstractions.Collections;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -180,25 +181,11 @@ public sealed partial class WorldInputOwner {
         return false;
     }
     // Makes room for `count` records in the history ring, at most its capacity, laying a grown ring out oldest first.
-    private void ReserveHistory(int count) {
-        if (count <= m_history.Length) { return; }
-        m_history = Regrown(capacity: m_historyCapacity, count: count, head: ref m_head, length: m_count, ring: m_history);
-    }
+    private void ReserveHistory(int count) =>
+        m_history = Rings.Regrown(capacity: m_historyCapacity, count: m_count, head: ref m_head, needed: count, ring: m_history);
     // Makes room for `count` boundaries in the switch ring, at most its capacity.
-    private void ReserveSwitches(int count) {
-        if (count <= m_switches.Length) { return; }
-        m_switches = Regrown(capacity: m_switchCapacity, count: count, head: ref m_switchHead, length: m_switchCount, ring: m_switches);
-    }
-    // A ring of at least `count` slots, doubling from its length and never past `capacity`, holding the `length` entries
-    // read from `head` at slots zero onward; `head` becomes zero.
-    private static T[] Regrown<T>(T[] ring, int count, int capacity, ref int head, int length) {
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: count, other: capacity);
-        var grown = new T[Math.Min(val1: capacity, val2: Math.Max(val1: count, val2: Math.Max(val1: 8, val2: (ring.Length * 2))))];
-
-        for (var index = 0; (index < length); index++) { grown[index] = ring[((head + index) % ring.Length)]; }
-        head = 0;
-        return grown;
-    }
+    private void ReserveSwitches(int count) =>
+        m_switches = Rings.Regrown(capacity: m_switchCapacity, count: m_switchCount, head: ref m_switchHead, needed: count, ring: m_switches);
     /// <summary>Expires records in sequence order, retaining original held identity separately.</summary>
     public void Expire(WorldInputInterval now) {
         var time = now.Time(default);
