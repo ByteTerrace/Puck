@@ -64,6 +64,8 @@ public static partial class BenchmarkCommand {
         public readonly Option<bool> Headless = new("--headless") { Description = "Play without a window or renderer: the arrival, state hash and host iterations are reported and every reading that needs a renderer is absent." };
         public readonly Option<string?> Remote = new("--remote") { Description = "Play against a remote authority: local starts a listening World on this machine from a staged copy of the world (its own federation key, admitting one remote player) and boots the measured World with --connect to it, sharing that key; issued starts the same authority with an issuer and the measured World signs in through it, as a hosted world's player does; an ip:port connects to an authority already listening there, signing in with --authentication-config-file. Omitted plays with the authority in process." };
         public readonly Option<string?> Authentication = new("--authentication-config-file") { Description = "The sign-in configuration (the deployment's published world-authentication.json) the measured World joins --remote <ip:port> with." };
+        public readonly Option<int> Jitter = CliOptions.Count("--jitter-ms", "Delay, bunch and jitter every peer stream's delivery by up to this many milliseconds (0..2000, default 0) on a seeded schedule, on both the measured World and a local authority, reproducing a loaded host's or a WAN's delivery. Requires --remote.", 0, 0, 2000);
+        public readonly Option<ulong> JitterSeed = CliOptions.Count("--jitter-seed", "The seed of --jitter-ms's schedule (default 1), so a delivery schedule and any failure under it reproduces.", 0UL, 1UL);
         public readonly Option<int> Seats = CliOptions.Count("--seats", $"Play the route on this many seats of one client at once (1..{MaxSeats}, default 1): the world is staged with that many local seats seated at boot, and every seat walks the route in one world, its own or the remote authority's. A world that cannot seat them reports the leg unrun with its reason.", 1, 1, MaxSeats);
         public readonly Option<int?> At = CliOptions.OptionalCount<int>("--at", "The tick the run is armed at: its first chapter's first line lands at this tick, or four ticks after the boot when that is later. Omitted starts four ticks after the boot.", 1);
         public readonly Option<int> Loops = CliOptions.Count("--loops", $"Play the route this many times from one boot, each loop from the state the one before left (1..{MaxLoops}, default 1). Reported as cold (the first), warm (the second) and steady (the rest).", 1, 1, MaxLoops);
@@ -82,7 +84,7 @@ public static partial class BenchmarkCommand {
         public Command Command { get; }
 
         public RunOptions() => Command = new Command(Verb, "Play routes through a world in real time on fresh Worlds, on each backend and topology, and report every chapter's frame statistics, frame-thread parts, GPU passes, counted work, memory census and the machine's conditions; compare with an earlier report.") {
-            World, Route, Chapter, Backends, Headless, Remote, Authentication, Seats, At, Loops, Profile, Uncapped, Budget, Timeout, Width, Height, Cache, Artifact, Output, Against, All, Json,
+            World, Route, Chapter, Backends, Headless, Remote, Authentication, Jitter, JitterSeed, Seats, At, Loops, Profile, Uncapped, Budget, Timeout, Width, Height, Cache, Artifact, Output, Against, All, Json,
         };
     }
 
@@ -425,12 +427,14 @@ public static partial class BenchmarkCommand {
         try {
             var issued = (leg.Remote == "issued");
             var local = (issued || (leg.Remote == "local"));
+            var jitter = ((leg.Remote is null) ? PeerJitter.None : new PeerJitter(Milliseconds: parse.GetValue(options.Jitter), Seed: parse.GetValue(options.JitterSeed)));
+            var allowance = (Allowance(timeout) * leg.Plays.Count);
 
             if (local || (leg.Seats > 1)) {
                 pair = RemotePair.Stage(directory: Path.Combine(directory, "remote"), issued: issued, pair: local, seats: leg.Seats, world: world);
             }
             if (local) {
-                authority = BootAuthority(build: build, budget: budget, directory: Path.Combine(directory, "authority"), pair: pair!, timeout: timeout);
+                authority = BootAuthority(build: build, budget: budget, directory: Path.Combine(directory, "authority"), pair: pair!, allowanceSeconds: allowance, jitter: jitter);
             }
 
             var connect = (local ? pair!.Endpoint : leg.Remote);
@@ -445,9 +449,10 @@ public static partial class BenchmarkCommand {
                         : (local
                             ? new[] { "--federation-key-file", pair!.KeyFile }
                             : ((parse.GetValue(options.Authentication) is { } signIn) ? new[] { "--authentication-config-file", Path.GetFullPath(path: signIn) } : []))),
+                    .. jitter.Arguments(side: "client"),
                     .. ((parse.GetValue(options.Uncapped) && (shape == WorldShape.Windowed)) ? new[] { "--present-mode", "immediate" } : [])],
                 Backend = leg.Backend,
-                ExitAfterSeconds = WorldLaunch.Backstop(TimeSpan.FromSeconds(Allowance(timeout) * leg.Plays.Count)),
+                ExitAfterSeconds = WorldLaunch.Backstop(TimeSpan.FromSeconds(allowance)),
                 Shape = shape,
                 StateDirectory = Path.Combine(directory, "state"),
                 Timing = true,
@@ -474,7 +479,7 @@ public static partial class BenchmarkCommand {
             }
             print($"{Verb}: {profile.Output}\n");
             if (connect is not null) {
-                WaitForRemote(authority: authority, budget: budget, clientLog: Path.Combine(directory, "stderr.log"), live: live, print: print);
+                WaitForRemote(authority: authority, budget: budget, clientLog: Path.Combine(directory, "stderr.log"), live: live, print: print, seats: leg.Seats);
             }
 
             var paused = (connect is null);
@@ -721,6 +726,10 @@ public static partial class BenchmarkCommand {
         if (!headless && (parse.GetValue(options.Width) is null)) {
             conditions["frameBar"] = (parse.GetValue(options.Profile) is { } profile and not "none" ? profile : "auto");
         }
+        if (parse.GetValue(options.Jitter) is var jitterMs and > 0) {
+            conditions["jitterMilliseconds"] = jitterMs;
+            conditions["jitterSeed"] = parse.GetValue(options.JitterSeed);
+        }
 
         return conditions;
     }
@@ -789,17 +798,26 @@ public static partial class BenchmarkCommand {
         return metrics;
     }
 
-    private static Dictionary<string, string> Settings(RunOptions options, ParseResult parse, string route, string world, WorldBackendPreference?[] backends) => new() {
-        ["route"] = route,
-        ["chapter"] = (parse.GetValue(options.Chapter) ?? "(every)"),
-        ["world"] = PuckPaths.Normalize(world),
-        ["backends"] = string.Join(',', backends.Select(backend => ((backend is { } chosen) ? WorldBackendTokens.Token(chosen) : "headless"))),
-        ["remote"] = (parse.GetValue(options.Remote) ?? "(in process)"),
-        ["seats"] = parse.GetValue(options.Seats).ToString(CultureInfo.InvariantCulture),
-        ["loops"] = parse.GetValue(options.Loops).ToString(CultureInfo.InvariantCulture),
-        ["at"] = (parse.GetValue(options.At)?.ToString(CultureInfo.InvariantCulture) ?? "(boot)"),
-        ["profile"] = (parse.GetValue(options.Profile) ?? "auto"),
-        ["uncapped"] = parse.GetValue(options.Uncapped).ToString(),
-        ["timeoutSeconds"] = parse.GetValue(options.Timeout).ToString(CultureInfo.InvariantCulture),
-    };
+    private static Dictionary<string, string> Settings(RunOptions options, ParseResult parse, string route, string world, WorldBackendPreference?[] backends) {
+        var settings = new Dictionary<string, string> {
+            ["route"] = route,
+            ["chapter"] = (parse.GetValue(options.Chapter) ?? "(every)"),
+            ["world"] = PuckPaths.Normalize(world),
+            ["backends"] = string.Join(',', backends.Select(backend => ((backend is { } chosen) ? WorldBackendTokens.Token(chosen) : "headless"))),
+            ["remote"] = (parse.GetValue(options.Remote) ?? "(in process)"),
+            ["seats"] = parse.GetValue(options.Seats).ToString(CultureInfo.InvariantCulture),
+            ["loops"] = parse.GetValue(options.Loops).ToString(CultureInfo.InvariantCulture),
+            ["at"] = (parse.GetValue(options.At)?.ToString(CultureInfo.InvariantCulture) ?? "(boot)"),
+            ["profile"] = (parse.GetValue(options.Profile) ?? "auto"),
+            ["uncapped"] = parse.GetValue(options.Uncapped).ToString(),
+            ["timeoutSeconds"] = parse.GetValue(options.Timeout).ToString(CultureInfo.InvariantCulture),
+        };
+
+        if (parse.GetValue(options.Jitter) is var jitterMs and > 0) {
+            settings["jitterMilliseconds"] = jitterMs.ToString(CultureInfo.InvariantCulture);
+            settings["jitterSeed"] = parse.GetValue(options.JitterSeed).ToString(CultureInfo.InvariantCulture);
+        }
+
+        return settings;
+    }
 }

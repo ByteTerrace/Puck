@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Puck.Maths;
 
 namespace Puck.Networking.Peers;
 
@@ -11,7 +12,13 @@ namespace Puck.Networking.Peers;
 /// same reason. An authenticated empty message ends one direction; use <see cref="CompleteWritesAsync"/> to send
 /// it. Ordinary empty writes do nothing. The stream is not seekable and does not support synchronous I/O.</remarks>
 public sealed class PeerStream : Stream {
+    private const int ScheduledArrivalsCapacity = 512;
+
+    private readonly Channel<(PeerEvent Event, long ReleaseTimestamp)>? m_arrivals;
+    private readonly Task? m_arrivalPump;
     private readonly PeerLink m_link;
+    private readonly PeerStreamPacer? m_readPacer;
+    private readonly PeerStreamPacer? m_writePacer;
     private readonly SemaphoreSlim m_writeGate = new(
         initialCount: 1,
         maxCount: 1
@@ -24,7 +31,35 @@ public sealed class PeerStream : Stream {
 
     /// <summary>Creates a stream owning one established link. Do not also consume the link's events or send messages.</summary>
     /// <param name="link">The exclusively owned, established peer link.</param>
-    public PeerStream(PeerLink link) => m_link = (link ?? throw new ArgumentNullException(paramName: nameof(link)));
+    /// <param name="schedule">Optional seeded delivery jitter and bunching schedule applied to asynchronous reads and writes.</param>
+    /// <param name="timeProvider">Clock used when <paramref name="schedule"/> delays delivery; defaults to <see cref="TimeProvider.System"/>.</param>
+    /// <param name="streamOrdinal">Zero-based stream ordinal folded into <paramref name="schedule"/>'s deterministic RNG stream id.</param>
+    public PeerStream(PeerLink link, PeerDeliverySchedule schedule = default, TimeProvider? timeProvider = null, ulong streamOrdinal = 0UL) {
+        m_link = (link ?? throw new ArgumentNullException(paramName: nameof(link)));
+        if (schedule.IsEnabled) {
+            var clock = (timeProvider ?? TimeProvider.System);
+            var baseStream = ((streamOrdinal << 1) & Pcg32XshRr.MaxStream);
+
+            m_readPacer = new PeerStreamPacer(
+                jitterMilliseconds: schedule.JitterMilliseconds,
+                seed: schedule.Seed,
+                streamId: baseStream,
+                timeProvider: clock
+            );
+            m_writePacer = new PeerStreamPacer(
+                jitterMilliseconds: schedule.JitterMilliseconds,
+                seed: schedule.Seed,
+                streamId: ((baseStream + 1UL) & Pcg32XshRr.MaxStream),
+                timeProvider: clock
+            );
+            m_arrivals = Channel.CreateBounded<(PeerEvent, long)>(options: new BoundedChannelOptions(capacity: ScheduledArrivalsCapacity) {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = true,
+            });
+            m_arrivalPump = Task.Run(function: PumpArrivalsAsync);
+        }
+    }
 
     /// <inheritdoc/>
     public override bool CanRead => (Volatile.Read(location: ref m_disposed) == 0);
@@ -39,6 +74,30 @@ public sealed class PeerStream : Stream {
     /// <inheritdoc/>
     public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
 
+    private async Task PumpArrivalsAsync() {
+        try {
+            while (await m_link.Events.WaitToReadAsync().ConfigureAwait(continueOnCapturedContext: false)) {
+                while (m_link.Events.TryRead(item: out var next)) {
+                    var releaseTimestamp = 0L;
+
+                    if (
+                        next is PeerEvent.Received { Payload: { IsEmpty: false } payload } &&
+                        (payload.Length < PeerWireProtocol.MaxMessagePayloadBytes) &&
+                        (m_readPacer is not null)
+                    ) {
+                        releaseTimestamp = m_readPacer.ScheduleArrival();
+                    } else if (m_readPacer is not null) {
+                        releaseTimestamp = m_readPacer.CurrentFloorTimestamp;
+                    }
+                    await m_arrivals!.Writer.WriteAsync(item: (next, releaseTimestamp)).ConfigureAwait(continueOnCapturedContext: false);
+                }
+            }
+        } catch (Exception exception) when ((exception is OperationCanceledException or ChannelClosedException or ObjectDisposedException)) {
+        } finally {
+            m_arrivals!.Writer.TryComplete();
+        }
+    }
+
     // Terminal cleanup owns the event reader just like ReadAsync. An authenticated empty message only ends the
     // remote's sending direction; it says nothing about whether that peer has received our final reply. Discard
     // events until the LINK closes (or the caller's deadline expires), including after a previously read EOF.
@@ -49,6 +108,20 @@ public sealed class PeerStream : Stream {
         );
         m_pending = default;
         m_readCompleted = true;
+        if (m_arrivals is not null) {
+            while (
+                !ct.IsCancellationRequested &&
+                await m_arrivals.Reader.WaitToReadAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)
+            ) {
+                while (
+                    !ct.IsCancellationRequested &&
+                    m_arrivals.Reader.TryRead(item: out var entry)
+                ) {
+                    if (entry.Event is PeerEvent.Closed) { return; }
+                }
+            }
+            return;
+        }
         while (
             !ct.IsCancellationRequested &&
             await m_link.Events.WaitToReadAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)
@@ -94,6 +167,9 @@ public sealed class PeerStream : Stream {
             value: 1
         ) == 0) {
             await m_link.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false);
+            if (m_arrivalPump is not null) {
+                try { await m_arrivalPump.ConfigureAwait(continueOnCapturedContext: false); } catch { }
+            }
         }
         GC.SuppressFinalize(obj: this);
     }
@@ -124,12 +200,28 @@ public sealed class PeerStream : Stream {
         ) { return 0; }
         while (m_pending.IsEmpty) {
             PeerEvent next;
+            var releaseTimestamp = 0L;
 
-            try { next = await m_link.Events.ReadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false); } catch (ChannelClosedException) { return 0; }
+            try {
+                if (m_arrivals is not null) {
+                    (next, releaseTimestamp) = await m_arrivals.Reader.ReadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                } else {
+                    next = await m_link.Events.ReadAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                }
+            } catch (ChannelClosedException) { return 0; }
             switch (next) {
                 case PeerEvent.Received received:
                     if (received.Payload.IsEmpty) { m_readCompleted = true; return 0; }
                     m_pending = received.Payload;
+                    if (
+                        (m_readPacer is not null) &&
+                        (releaseTimestamp > 0L)
+                    ) {
+                        await m_readPacer.WaitUntilAsync(
+                            ct: cancellationToken,
+                            releaseTimestamp: releaseTimestamp
+                        ).ConfigureAwait(continueOnCapturedContext: false);
+                    }
                     break;
                 case PeerEvent.Closed:
                     return 0;
@@ -173,6 +265,12 @@ public sealed class PeerStream : Stream {
 
         try {
             if (m_writeCompleted) { throw new InvalidOperationException(message: "Peer stream writes have completed."); }
+            if (
+                !buffer.IsEmpty &&
+                (m_writePacer is not null)
+            ) {
+                await m_writePacer.PaceWriteAsync(ct: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            }
             while (!buffer.IsEmpty) {
                 cancellationToken.ThrowIfCancellationRequested();
                 var count = Math.Min(
@@ -188,7 +286,7 @@ public sealed class PeerStream : Stream {
                 buffer = buffer[count..];
             }
         } catch {
-            if (started) { await DisposeAsync().ConfigureAwait(continueOnCapturedContext: false); }
+            if (started) { await m_link.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false); }
             throw;
         } finally { m_writeGate.Release(); }
     }

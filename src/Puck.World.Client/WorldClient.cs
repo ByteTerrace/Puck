@@ -78,6 +78,49 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
     /// <summary>Reports whether the seat's input source registry is currently admitted by its routed authority.</summary>
     public bool IsSeatInputAdmitted(int slot) => (!m_roster.IsPending(slot: slot) && (m_roster.Seat(slot: slot)?.Input is { Admitted: true }));
+    /// <summary>Reports whether the seat's current continuous move push has been answered by its routed authority at or
+    /// before <paramref name="bodyTick"/>.</summary>
+    public bool IsSeatMoveAnswered(int slot, ulong bodyTick) =>
+        (TrySeatInputAnswer(slot: slot, input: out var input, route: out var route, answer: out var answer) &&
+        (route.Endpoint.ClockOwnedHere || input.IsMoveAnswered(answer: answer, bodyTick: bodyTick)));
+    /// <summary>Reports whether the seat's latest move release to neutral has been answered by its routed authority at
+    /// or before <paramref name="bodyTick"/>.</summary>
+    public bool IsSeatMoveStoppedAnswered(int slot, ulong bodyTick) =>
+        (TrySeatInputAnswer(slot: slot, input: out var input, route: out var route, answer: out var answer) &&
+        (route.Endpoint.ClockOwnedHere || input.IsMoveStoppedAnswered(answer: answer, bodyTick: bodyTick)));
+    /// <summary>Reports whether a held press on <paramref name="source"/> has been answered by the seat's routed
+    /// authority at or before <paramref name="bodyTick"/>.</summary>
+    public bool IsSeatSourcePressAnswered(int slot, string source, ulong bodyTick) =>
+        (TrySeatInputAnswer(slot: slot, input: out var input, route: out var route, answer: out var answer) &&
+        (route.Endpoint.ClockOwnedHere || input.IsSourcePressAnswered(source: source, answer: answer, bodyTick: bodyTick)));
+    /// <summary>Reads the authority-tick round-trip lag observed on a seat's input stream.</summary>
+    public ulong SeatMoveLagTicks(int slot, ulong bodyTick) =>
+        ((TrySeatInputAnswer(slot: slot, input: out var input, route: out var route, answer: out var answer) && !route.Endpoint.ClockOwnedHere)
+            ? input.ObservedLagTicks(answer: answer, bodyTick: bodyTick)
+            : 0UL);
+
+    private bool TrySeatInputAnswer(int slot, out WorldSeatInput input, out WorldAuthorityRoute route, out WorldInputAnswer? answer) {
+        input = null!;
+        route = null!;
+        answer = null;
+        if (
+            m_roster.IsPending(slot: slot) ||
+            (m_roster.Seat(slot: slot)?.Input is not { Admitted: true } resolvedInput) ||
+            (m_seatRouter.TryRoute(slot: slot) is not { } resolvedRoute)
+        ) {
+            return false;
+        }
+
+        input = resolvedInput;
+        route = resolvedRoute;
+        if (!route.Endpoint.ClockOwnedHere &&
+            TryRouteInput(principal: m_roster.PrincipalOf(slot: slot), publication: out var publication, route: route) &&
+            route.Endpoint.Mirror.TryInputAnswer(answer: out var resolvedAnswer, owner: publication.Owner)) {
+            answer = resolvedAnswer;
+        }
+
+        return true;
+    }
 
     private readonly SeatGuessView m_seatGuess = new();
 
@@ -301,6 +344,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     // no camera dependency of its own.
     private readonly ulong[] m_lastSubmissionEpoch = new ulong[PlayerRoster.MaxSlots];
     private readonly ulong[] m_lastSubmissionTick = new ulong[PlayerRoster.MaxSlots];
+    private readonly PlayerIntent[] m_lastSubmittedIntent = new PlayerIntent[PlayerRoster.MaxSlots];
     // The double-buffered per-entity tick poses (the interpolation endpoints), active flags, placements and pose epochs
     // (m_poses), the tick's palette/archetype image, and the per-entity correction easers. Every column grows with the
     // pose table (FitEntities) to the highest body a delivery names, never a fixed slot count; a reader asking past it
@@ -866,9 +910,14 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <param name="yawPerTick">The yaw change, in radians, of one tick at full positive X deflection: negative, since
     /// a look to the right lowers the yaw, unless the preference inverts it.</param>
     /// <returns><see langword="true"/> when the seat is joined and its body's pose is known.</returns>
-    public bool TrySeatLook(int slot, out float yaw, out float yawPerTick) {
+    public bool TrySeatLook(int slot, out float yaw, out float yawPerTick) =>
+        TrySeatLook(slot: slot, yaw: out yaw, yawPerTick: out yawPerTick, latchedMoveYaw: out _);
+    /// <summary>Reads a seat's live facing, the yaw its stick movement is framed against when latched, and the turn one
+    /// tick of full right-stick look deflection gives it under the seat's look preference.</summary>
+    public bool TrySeatLook(int slot, out float yaw, out float yawPerTick, out float? latchedMoveYaw) {
         yaw = 0f;
         yawPerTick = 0f;
+        latchedMoveYaw = null;
         if ((m_roster.Seat(slot: slot) is not { } seat) || (m_seatRouter.TryRoute(slot: slot) is not { } route)) {
             return false;
         }
@@ -883,6 +932,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
         yaw = seat.View.LogicalYaw(bodyOrientation: bodyOrientation, views: definition.Views);
         yawPerTick = ((-preference.StickLookRate / definition.SimulationRateHz) * (preference.InvertYaw ? -1f : 1f));
+        latchedMoveYaw = ((seat.FreeLooking && route.Endpoint.TryEntityHeading(heading: out var freeHeading, index: route.EntityIndex))
+            ? freeHeading
+            : ((seat.Move.Behavior == SeatMoveBehavior.FaceTravel) ? seat.CameraFrameYaw : null));
         return true;
     }
     /// <summary>Consumes each seat's right-stick and toggled motion-control samples into its seat-owned view state
@@ -896,8 +948,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <param name="carried">Whether a tick of the authority behind an endpoint is about to execute beside the frame
     /// and carry this step: a seat routed to such an endpoint holds its step until <see cref="PresentSeatLook"/>
     /// names the endpoint (<see cref="WorldSeatViewState.CompleteTick"/>).</param>
+    /// <param name="remoteInPlaceTurn">Receives any yaw turn applied from a remote authority's in-place portal carry.</param>
     /// <exception cref="ArgumentNullException"><paramref name="carried"/> is <see langword="null"/>.</exception>
-    public void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried) {
+    public void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried, Action<int, FixedQ4816>? remoteInPlaceTurn = null) {
         ArgumentNullException.ThrowIfNull(argument: carried);
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
@@ -908,6 +961,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             seat.View.BeginTick();
             AdvanceSeatView(
                 deltaSeconds: deltaSeconds,
+                remoteInPlaceTurn: remoteInPlaceTurn,
                 seat: seat,
                 slot: slot
             );
@@ -928,7 +982,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         }
     }
 
-    private void AdvanceSeatView(SeatController seat, int slot, float deltaSeconds) {
+    private void AdvanceSeatView(SeatController seat, int slot, float deltaSeconds, Action<int, FixedQ4816>? remoteInPlaceTurn) {
         var route = m_seatRouter.Route(slot: slot);
         var definition = route.Endpoint.Definition;
 
@@ -950,18 +1004,32 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             seat.PointerSteering
         );
 
+        var inPlaceTurn = seat.View.ObserveCarry(
+            carries: route.Endpoint.Mirror.Carries,
+            clockOwnedHere: route.Endpoint.ClockOwnedHere,
+            index: route.EntityIndex,
+            routeEpoch: route.Epoch,
+            yawReference: definition.Views.SeatControl.YawReference
+        );
+        if (inPlaceTurn != FixedQ4816.Zero) {
+            if ((definition.Views.SeatControl.YawReference == WorldSeatYawReference.World) && (seat.CameraFrameYaw is { } carriedFrame)) {
+                seat.CameraFrameYaw = VectorFunctions.WrapAngle(radians: (carriedFrame + ((float)inPlaceTurn)));
+            }
+            remoteInPlaceTurn?.Invoke(arg1: slot, arg2: inPlaceTurn);
+        }
+
         // A body posed or teleported to a new heading carries a world-referenced look with it, ahead of this tick's nudge.
         if (route.Endpoint.TryEntityHeading(
             index: route.EntityIndex,
             heading: out var observedHeading,
             poseEpoch: out var observedEpoch
+        ) && seat.View.ObserveBody(
+            heading: observedHeading,
+            poseEpoch: observedEpoch,
+            routeEpoch: route.Epoch,
+            yawReference: definition.Views.SeatControl.YawReference
         )) {
-            seat.View.ObserveBody(
-                heading: observedHeading,
-                poseEpoch: observedEpoch,
-                routeEpoch: route.Epoch,
-                yawReference: definition.Views.SeatControl.YawReference
-            );
+            seat.CameraFrameYaw = null;
         }
 
         seat.View.Nudge(
@@ -1412,12 +1480,16 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             }
             // One batch for each tick the authority delivered, so a stalled stream does not queue copies of a held
             // input. An authority in another process delivers less often than the host steps, so a seat whose devices
-            // moved since its last batch sends at once: the movement would otherwise wait for the next delivery.
+            // or camera-framed motion request moved since its last batch sends at once: the movement or turn would
+            // otherwise wait for the next delivery.
             if (
+                endpoint.ClockOwnedHere &&
                 (m_lastSubmissionEpoch[slot] == route.Epoch) &&
-                (m_lastSubmissionTick[slot] >= tick) &&
-                (endpoint.ClockOwnedHere || (seat.Input is not { Admitted: true, HoldsUnpublished: true }))
+                (m_lastSubmissionTick[slot] >= tick)
             ) {
+                continue;
+            }
+            if (!endpoint.ClockOwnedHere && (seat.Input is not { Admitted: true })) {
                 continue;
             }
 
@@ -1463,7 +1535,17 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             }
 
             if (seat.Input is not { Admitted: true } input) { continue; }
+            if (
+                !endpoint.ClockOwnedHere &&
+                (m_lastSubmissionEpoch[slot] == routes[slot]!.Epoch) &&
+                (m_lastSubmissionTick[slot] >= tick) &&
+                !input.HoldsUnpublished &&
+                (intent == m_lastSubmittedIntent[slot])
+            ) {
+                continue;
+            }
             endpoint.Submissions.SubmitIntent(submission: input.Publish(m_roster.PrincipalOf(slot: slot), targets[slot], tick, seat, intent));
+            m_lastSubmittedIntent[slot] = intent;
             m_lastSubmissionEpoch[slot] = routes[slot]!.Epoch;
             m_lastSubmissionTick[slot] = tick;
         }

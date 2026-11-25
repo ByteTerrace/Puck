@@ -32,6 +32,15 @@ public abstract record WorldCommand(Principal Principal, int EntityIndex) {
         Principal,
         EntityIndex
     );
+    /// <summary>Snaps an entity to a declared <c>spawnPoints</c> row by id (<c>body.pose spawn:&lt;id&gt;</c>), resolved on
+    /// the authority that owns the body or carried home when only the host's boot world declares the id.</summary>
+    /// <param name="Principal">The acting identity.</param>
+    /// <param name="EntityIndex">The 0-based entity index.</param>
+    /// <param name="SpawnId">The authored spawn point id.</param>
+    public sealed record PoseSpawn(Principal Principal, int EntityIndex, string SpawnId) : WorldCommand(
+        Principal,
+        EntityIndex
+    );
     /// <summary>Enqueues a timed scripted segment on an entity's tape (run = planar channels, fly = all six) — while live
     /// it overrides that entity's device/producer intent for <see cref="Seconds"/> of advance time.</summary>
     /// <param name="Principal">The acting identity.</param>

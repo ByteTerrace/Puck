@@ -300,6 +300,12 @@ public static partial class WorldSubmissionCodec {
                     reader.ReadRequiredString("SelectInputState.Family"), reader.ReadRequiredString("SelectInputState.State"), reader.ReadUInt64(), reader.ReadBoolean());
             case 15:
                 return new WorldCommand.CalibrateInput(principal, entity, reader.ReadFixed());
+            case 16:
+                return new WorldCommand.PoseSpawn(
+                    EntityIndex: entity,
+                    Principal: principal,
+                    SpawnId: reader.ReadRequiredString(field: "PoseSpawn.SpawnId")
+                );
             default:
                 throw new LeafCodecException(failure: Fail(
                     detail: $"command discriminant {discriminant} is not declared",
@@ -1104,6 +1110,16 @@ public static partial class WorldSubmissionCodec {
             case WorldCommand.CalibrateInput value:
                 writer.WriteByte(value: 15);
                 writer.WriteFixed(value: value.Offset);
+                break;
+            case WorldCommand.PoseSpawn value:
+                if (string.IsNullOrWhiteSpace(value: value.SpawnId)) {
+                    throw new LeafCodecException(failure: Fail(
+                        detail: "PoseSpawn.SpawnId is empty",
+                        refusal: WorldCodecRefusal.PayloadMalformed
+                    ));
+                }
+                writer.WriteByte(value: 16);
+                writer.WriteString(value: value.SpawnId);
                 break;
             default:
                 throw UnknownLeaf(value: command);

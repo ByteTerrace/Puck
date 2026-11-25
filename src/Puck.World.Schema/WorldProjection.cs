@@ -1264,7 +1264,8 @@ public static class WorldProjection {
             ReferenceEquals(objA: projection.Speakers, objB: previousProjection.Speakers) &&
             ReferenceEquals(objA: projection.Tunes, objB: previousProjection.Tunes) &&
             ReferenceEquals(objA: projection.Patches, objB: previousProjection.Patches) &&
-            ReferenceEquals(objA: projection.Music, objB: previousProjection.Music));
+            ReferenceEquals(objA: projection.Music, objB: previousProjection.Music) &&
+            ReferenceEquals(objA: projection.Hud, objB: previousProjection.Hud));
 
         if (!audioUnchanged && !WorldDefinitionValidator.TryValidateDeliveredAudio(definition: hydrated, reason: out reason)) {
             return false;
@@ -1539,6 +1540,16 @@ public static class WorldProjectionContent {
 
     private static readonly CodeDerivedTable<WorldPrototype, DerivedPrototype> DerivedPrototypes = new();
     private static readonly CodeDerivedTable<WorldDefinition, Dictionary<ContentPin, WorldPrototype>> KnownPrototypes = new();
+
+    /// <summary>Gets the content pin of a disclosed prototype's canonical document and mesh.</summary>
+    /// <param name="prototype">The prototype.</param>
+    /// <returns>Its content pin.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="prototype"/> is <see langword="null"/>.</exception>
+    public static ContentPin PinOf(WorldPrototype prototype) {
+        ArgumentNullException.ThrowIfNull(argument: prototype);
+
+        return DerivedOf(prototype: prototype, serialized: out _).Pin;
+    }
 
     private static DerivedPrototype DerivedOf(WorldPrototype prototype, out byte[]? serialized) {
         if (DerivedPrototypes.TryGetValue(key: prototype, value: out var cached)) {

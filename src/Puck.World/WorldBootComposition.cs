@@ -1219,11 +1219,14 @@ public static class WorldBootComposition {
             // Registered by factory so the container owns and disposes it with the peer door that answers with it.
             services.AddSingleton(implementationFactory: _ => issuer);
         }
-        services.AddSingleton(implementationFactory: _ => new WorldPeerNetwork(identityFile: (inputs.FederationKeyFile ?? Path.Combine(
-            path1: inputs.StateRoot.FullPath,
-            path2: "Network",
-            path3: "peer.pk8"
-        ))));
+        services.AddSingleton(implementationFactory: _ => new WorldPeerNetwork(
+            deliverySchedule: inputs.PeerDelivery,
+            identityFile: (inputs.FederationKeyFile ?? Path.Combine(
+                path1: inputs.StateRoot.FullPath,
+                path2: "Network",
+                path3: "peer.pk8"
+            ))
+        ));
         // The resolved host settings — read by the composition modules below and the world.host verb.
         services.AddSingleton(implementationInstance: hostSettings);
         // Read by either backend's registration when it creates the device; a headless boot creates none.

@@ -87,17 +87,48 @@ public static class WorldVoiceSampleLoader {
         }
     }
 
+    /// <summary>Validates a delivered sampled voice's manifest and syllable WAVs from <see cref="WorldProjectionContent.Resolver"/>.
+    /// Content this process does not hold passes unchecked so a missing sound never refuses a world.</summary>
+    public static string? ValidateDelivered(string source, string hash) {
+        if (!WorldAssetRowLoader.TryPin(hash: hash, pin: out var manifestPin)) {
+            return $"sampleSet '{source}' carries invalid SHA-256 content pin '{hash}'.";
+        }
+        if (!WorldProjectionContent.Resolver.Contains(pin: manifestPin)) {
+            return null;
+        }
+        if (!WorldProjectionContent.Resolver.TryRead(content: out var manifestBytes, maximumBytes: MaxPinnedManifestBytes, pin: manifestPin)) {
+            return $"sampleSet '{source}' pin {manifestPin} could not be read within {MaxPinnedManifestBytes} bytes.";
+        }
+        if (!IsCanonical(bytes: manifestBytes)) {
+            return $"sampleSet '{source}' pin {manifestPin} is not in canonical sample-set manifest form.";
+        }
+        try {
+            var set = (JsonSerializer.Deserialize<WorldVoiceSampleSet>(utf8Json: manifestBytes.Span, options: Puck.Assets.Documents.DocumentJsonOptions.Shared)
+                ?? throw new InvalidDataException(message: "Sample set is empty."));
+            ValidateSetMetadata(set: set);
+            foreach (var (wavSource, wavHash) in SyllableEntries(set: set)) {
+                if (!WorldAssetRowLoader.TryPin(hash: wavHash, pin: out var wavPin)) {
+                    return $"sampleSet '{source}': syllable '{wavSource}' carries no valid SHA-256 content pin.";
+                }
+                if (!WorldProjectionContent.Resolver.Contains(pin: wavPin)) {
+                    continue;
+                }
+                if (!WorldProjectionContent.Resolver.TryRead(content: out var wavBytes, maximumBytes: MaxPinnedSampleBytes, pin: wavPin)) {
+                    return $"sampleSet '{source}': syllable '{wavSource}' pin {wavPin} could not be read within {MaxPinnedSampleBytes} bytes.";
+                }
+                if (!IsValidWave(bytes: wavBytes)) {
+                    return $"sampleSet '{source}': syllable '{wavSource}' pin {wavPin} is not a valid mono PCM wave.";
+                }
+            }
+            return null;
+        } catch (Exception exception) when (exception is InvalidDataException or JsonException) {
+            return $"sampleSet '{source}': {exception.Message}";
+        }
+    }
+
     /// <summary>Enumerates the pinned syllable WAV content pins declared on <paramref name="set"/>.</summary>
     public static IEnumerable<(string Source, ContentPin Pin)> SyllablePins(WorldVoiceSampleSet set) {
-        (string Source, string? Hash)[] entries = [
-            (set.A, set.AHash),
-            (set.E, set.EHash),
-            (set.I, set.IHash),
-            (set.O, set.OHash),
-            (set.U, set.UHash),
-            (set.Consonant, set.ConsonantHash),
-        ];
-        foreach (var (source, hash) in entries) {
+        foreach (var (source, hash) in SyllableEntries(set: set)) {
             if (WorldAssetRowLoader.TryPin(hash: hash, pin: out var pin)) {
                 yield return (source, pin);
             }
@@ -108,56 +139,36 @@ public static class WorldVoiceSampleLoader {
     public static bool TryLoad(string? documentDirectory, string source, out short[][] samples, out int rate, out string? error, string? hash = null) {
         samples = [];
         rate = 0;
-        if ((documentDirectory is null) && !Path.IsPathRooted(path: source)) {
-            if (!WorldAssetRowLoader.TryPin(hash: hash, pin: out var manifestPin)) {
-                error = $"sampleSet '{source}' is relative, this document has no directory to resolve it beside, and the voice carries no content pin to read it by.";
-                return false;
-            }
-            if (!WorldProjectionContent.Resolver.TryRead(content: out var pinnedManifest, maximumBytes: MaxPinnedManifestBytes, pin: manifestPin)) {
-                error = $"sampleSet '{source}' is read by its pin {manifestPin}, which this process does not hold.";
-                return false;
-            }
-            try {
-                var set = (JsonSerializer.Deserialize<WorldVoiceSampleSet>(utf8Json: pinnedManifest.Span, options: Puck.Assets.Documents.DocumentJsonOptions.Shared)
-                    ?? throw new InvalidDataException(message: "Sample set is empty."));
-                ValidateSetMetadata(set: set);
-                string[] sources = [set.A, set.E, set.I, set.O, set.U, set.Consonant];
-                string?[] hashes = [set.AHash, set.EHash, set.IHash, set.OHash, set.UHash, set.ConsonantHash];
-                var loaded = new short[sources.Length][];
+        var delivered = ((documentDirectory is null) && !Path.IsPathRooted(path: source));
 
-                for (var index = 0; (index < sources.Length); index++) {
-                    if (!WorldAssetRowLoader.TryPin(hash: hashes[index], pin: out var wavPin)) {
-                        throw new InvalidDataException(message: $"Syllable '{sources[index]}' carries no content pin for remote delivery.");
-                    }
-                    if (!WorldProjectionContent.Resolver.TryRead(content: out var wavBytes, maximumBytes: MaxPinnedSampleBytes, pin: wavPin)) {
-                        throw new InvalidDataException(message: $"Syllable '{sources[index]}' is read by its pin {wavPin}, which this process does not hold.");
-                    }
-                    try {
-                        loaded[index] = PcmWave.ReadMono(bytes: wavBytes.ToArray());
-                    } catch (InvalidDataException exception) {
-                        throw new InvalidDataException($"Syllable '{sources[index]}': {exception.Message}", exception);
-                    }
-                }
-                samples = loaded;
-                rate = set.PlaybackRateThousandths;
-                error = null;
-                return true;
-            } catch (Exception exception) when ((exception is InvalidDataException or JsonException or ArgumentException or InvalidOperationException or NotSupportedException)) {
-                error = $"sampleSet '{source}': {exception.Message}";
-                return false;
-            }
-        }
-        if (!WorldDocumentPaths.TryResolve(documentDirectory: documentDirectory, path: source, reason: out var reason, resolved: out var path)) {
-            error = reason;
-            return false;
-        }
         try {
-            var rawManifest = File.ReadAllBytes(path: path);
-            var set = (JsonSerializer.Deserialize<WorldVoiceSampleSet>(rawManifest, Puck.Assets.Documents.DocumentJsonOptions.Shared)
+            byte[] rawManifest;
+            string? setDirectory = null;
+
+            if (delivered) {
+                if (!WorldAssetRowLoader.TryPin(hash: hash, pin: out var manifestPin)) {
+                    error = $"sampleSet '{source}' is relative, this document has no directory to resolve it beside, and the voice carries no content pin to read it by.";
+                    return false;
+                }
+                if (!WorldProjectionContent.Resolver.TryRead(content: out var pinnedManifest, maximumBytes: MaxPinnedManifestBytes, pin: manifestPin)) {
+                    error = $"sampleSet '{source}' is read by its pin {manifestPin}, which this process does not hold.";
+                    return false;
+                }
+                rawManifest = pinnedManifest.ToArray();
+            } else {
+                if (!WorldDocumentPaths.TryResolve(documentDirectory: documentDirectory, path: source, reason: out var reason, resolved: out var path)) {
+                    error = reason;
+                    return false;
+                }
+                rawManifest = File.ReadAllBytes(path: path);
+                setDirectory = WorldDocumentPaths.DirectoryOf(documentPath: path);
+            }
+
+            var set = (JsonSerializer.Deserialize<WorldVoiceSampleSet>(utf8Json: rawManifest, options: Puck.Assets.Documents.DocumentJsonOptions.Shared)
                 ?? throw new InvalidDataException(message: "Sample set is empty."));
 
             ValidateSetMetadata(set: set);
-            if (hash is not null) {
+            if (!delivered && (hash is not null)) {
                 if (!WorldAssetRowLoader.TryPin(hash: hash, pin: out var expectedPin)) {
                     throw new InvalidDataException(message: $"Voice hash '{hash}' is not a valid SHA-256 content pin.");
                 }
@@ -169,35 +180,46 @@ public static class WorldVoiceSampleLoader {
                     throw new InvalidDataException(message: $"Manifest content pin is '{actualPin.Hex}', expected '{expectedPin.Hex}'.");
                 }
             }
-            var directory = WorldDocumentPaths.DirectoryOf(documentPath: path);
-            string[] sources = [set.A, set.E, set.I, set.O, set.U, set.Consonant];
-            string?[] hashes = [set.AHash, set.EHash, set.IHash, set.OHash, set.UHash, set.ConsonantHash];
-            var loaded = new short[sources.Length][];
 
-            for (var index = 0; (index < sources.Length); index++) {
-                var asset = WorldDocumentPaths.Resolve(documentDirectory: directory, path: sources[index]);
+            var entries = SyllableEntries(set: set);
+            var loaded = new short[entries.Length][];
+            var requireSyllablePins = (delivered || (hash is not null));
 
-                byte[] bytes;
+            for (var index = 0; (index < entries.Length); index++) {
+                var (wavSource, wavHash) = entries[index];
+                byte[] wavBytes;
 
-                using (var stream = File.OpenRead(path: asset)) {
-                    bytes = (Puck.Confinement.FileContent.ReadAtMost(maximumBytes: MaxPinnedSampleBytes, stream: stream)
-                        ?? throw new InvalidDataException(message: $"Syllable '{sources[index]}' exceeds the 1 MiB asset limit."));
-                }
-                if (hashes[index] is { } syllableHash) {
-                    if (!WorldAssetRowLoader.TryPin(hash: syllableHash, pin: out var expectedWav)) {
-                        throw new InvalidDataException(message: $"Syllable '{sources[index]}' hash '{syllableHash}' is not a valid SHA-256 content pin.");
+                if (delivered) {
+                    if (!WorldAssetRowLoader.TryPin(hash: wavHash, pin: out var wavPin)) {
+                        throw new InvalidDataException(message: $"Syllable '{wavSource}' carries no content pin for remote delivery.");
                     }
-                    var actualWav = ContentPin.Compute(content: bytes);
-                    if (actualWav != expectedWav) {
-                        throw new InvalidDataException(message: $"Syllable '{sources[index]}' content pin is '{actualWav.Hex}', expected '{expectedWav.Hex}'.");
+                    if (!WorldProjectionContent.Resolver.TryRead(content: out var pinnedWav, maximumBytes: MaxPinnedSampleBytes, pin: wavPin)) {
+                        throw new InvalidDataException(message: $"Syllable '{wavSource}' is read by its pin {wavPin}, which this process does not hold.");
+                    }
+                    wavBytes = pinnedWav.ToArray();
+                } else {
+                    var asset = WorldDocumentPaths.Resolve(documentDirectory: setDirectory, path: wavSource);
+                    using (var stream = File.OpenRead(path: asset)) {
+                        wavBytes = (Puck.Confinement.FileContent.ReadAtMost(maximumBytes: MaxPinnedSampleBytes, stream: stream)
+                            ?? throw new InvalidDataException(message: $"Syllable '{wavSource}' exceeds the 1 MiB asset limit."));
+                    }
+                    if (requireSyllablePins || (wavHash is not null)) {
+                        if (!WorldAssetRowLoader.TryPin(hash: wavHash, pin: out var expectedWav)) {
+                            throw new InvalidDataException(message: $"Syllable '{wavSource}' requires a valid SHA-256 content pin.");
+                        }
+                        var actualWav = ContentPin.Compute(content: wavBytes);
+                        if (actualWav != expectedWav) {
+                            throw new InvalidDataException(message: $"Syllable '{wavSource}' content pin is '{actualWav.Hex}', expected '{expectedWav.Hex}'.");
+                        }
                     }
                 }
                 try {
-                    loaded[index] = PcmWave.ReadMono(bytes: bytes);
+                    loaded[index] = PcmWave.ReadMono(bytes: wavBytes);
                 } catch (InvalidDataException exception) {
-                    throw new InvalidDataException($"Syllable '{sources[index]}': {exception.Message}", exception);
+                    throw new InvalidDataException($"Syllable '{wavSource}': {exception.Message}", exception);
                 }
             }
+
             samples = loaded;
             rate = set.PlaybackRateThousandths;
             error = null;
@@ -207,6 +229,15 @@ public static class WorldVoiceSampleLoader {
             return false;
         }
     }
+
+    private static (string Source, string? Hash)[] SyllableEntries(WorldVoiceSampleSet set) => [
+        (set.A, set.AHash),
+        (set.E, set.EHash),
+        (set.I, set.IHash),
+        (set.O, set.OHash),
+        (set.U, set.UHash),
+        (set.Consonant, set.ConsonantHash),
+    ];
 
     private static void ValidateSetMetadata(WorldVoiceSampleSet set) {
         if (string.IsNullOrWhiteSpace(value: set.Name) || (set.PlaybackRateThousandths is < 250 or > 4000)) {

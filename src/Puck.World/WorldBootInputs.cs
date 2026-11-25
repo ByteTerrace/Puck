@@ -59,6 +59,9 @@ public sealed record WorldBootInputs(
     /// <summary>Gets the attestation issuer this listening authority runs (<c>--issuer-config-file</c>), which the
     /// peer door answers issuance requests with and the container disposes, or <see langword="null"/> for none.</summary>
     public WorldAttestationIssuer? Issuer { get; init; }
+    /// <summary>Gets the deterministic peer stream delivery schedule (<c>--peer-jitter-ms</c> and
+    /// <c>--peer-jitter-seed</c>).</summary>
+    public Puck.Networking.Peers.PeerDeliverySchedule PeerDelivery { get; init; }
     /// <summary>Gets the schedule output directory (<c>--schedule-dir</c>), which also arms the document's
     /// <c>schedule</c> section, or <see langword="null"/> for a boot that runs no schedule.</summary>
     public string? ScheduleDirectory { get; init; }

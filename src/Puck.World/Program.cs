@@ -197,6 +197,28 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         DefaultValueFactory = static _ => null,
         Description = "A deployment-secret file holding this authority's own PKCS8 ECDSA P-256 private key (raw DER bytes) — the SignsDirectly signing identity peers pin against this world's host.authority (or its \"boot\" instance identity when host.authority is absent). Absent disables federation while leaving ordinary admitted-peer listening available.",
     };
+    var peerJitterMsOption = new Option<int?>(name: "--peer-jitter-ms") {
+        CustomParser = static result => {
+            if ((result.Tokens.Count == 1) && int.TryParse(s: result.Tokens[0].Value, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var jitter) && (jitter >= 0) && (jitter <= 2000)) {
+                return jitter;
+            }
+            result.AddError(errorMessage: "--peer-jitter-ms must be an integer from 0 to 2000.");
+            return null;
+        },
+        DefaultValueFactory = static _ => null,
+        Description = "Delay, bunch and jitter peer stream delivery by up to this many milliseconds (0..2000) on a deterministic schedule (see --peer-jitter-seed).",
+    };
+    var peerJitterSeedOption = new Option<ulong?>(name: "--peer-jitter-seed") {
+        CustomParser = static result => {
+            if ((result.Tokens.Count == 1) && ulong.TryParse(s: result.Tokens[0].Value, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var seed)) {
+                return seed;
+            }
+            result.AddError(errorMessage: "--peer-jitter-seed must be an unsigned 64-bit integer.");
+            return null;
+        },
+        DefaultValueFactory = static _ => null,
+        Description = "Deterministic seed for --peer-jitter-ms (default 1), so delayed and bunched peer delivery reproduces.",
+    };
     var authenticationConfigFileOption = new Option<string?>(name: "--authentication-config-file") {
         Description = "The deployment's published sign-in configuration (type, settings and the authority's remoteKeyHash). Requires --connect: the run signs in through the installed provider, the authority's issuer vouches for a key this run generates and never stores, and the run joins under that vouched identity. Credentials never enter the world document.",
     };
@@ -241,6 +263,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         controlOption,
         devicesOption,
         federationKeyFileOption,
+        peerJitterMsOption,
+        peerJitterSeedOption,
         authenticationConfigFileOption,
         issuerConfigFileOption,
         captureDirOption,
@@ -757,6 +781,10 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         ExtensionsConfiguration = extensionsConfiguration,
         FederationKeyFile = parseResult.GetValue(option: federationKeyFileOption),
         Issuer = issuer,
+        PeerDelivery = new Puck.Networking.Peers.PeerDeliverySchedule(
+            JitterMilliseconds: (parseResult.GetValue(option: peerJitterMsOption) ?? 0),
+            Seed: (parseResult.GetValue(option: peerJitterSeedOption) ?? 1UL)
+        ),
         ScheduleDirectory = parseResult.GetValue(option: scheduleDirOption),
         Scenario = batchHost is not null,
         StorageTarget = storageTarget,

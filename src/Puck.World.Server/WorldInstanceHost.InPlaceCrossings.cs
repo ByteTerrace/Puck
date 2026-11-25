@@ -115,6 +115,10 @@ public sealed partial class WorldInstanceHost {
         );
 
         foreach (var (slot, state, position, scale) in crossed) {
+            SeedArrivalOccupancy(
+                instance: source,
+                seat: slot
+            );
             // A turning pair turns the view of the seat routed to the body, as a mapped arrival does; a pair that
             // keeps the heading leaves the chase boom as it was, and the camera rides the carried body.
             if (

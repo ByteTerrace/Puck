@@ -24,6 +24,16 @@ public sealed class WorldSeatInput {
     // (TryLead), which stays answered whatever a later delivery carries.
     private readonly uint[] m_edgeSequence;
     private readonly uint[] m_answeredSequence;
+    private FixedVector2 m_driveStartDirection;
+    private bool m_driveAwaitingPublish;
+    private uint m_driveStartSequence;
+    private bool m_reconciledMoving;
+    private bool m_wasMoving;
+    private bool m_stopAwaitingPublish;
+    private uint m_stopSequence;
+    private uint m_pendingLagSequence;
+    private ulong m_pendingLagSentTick;
+    private ulong m_lagTicks;
 
     /// <summary>Reads a named action's authority-published eligibility, rearming and continuation.</summary>
     public WorldInputActionStatus ActionStatus(string name) {
@@ -146,13 +156,42 @@ public sealed class WorldSeatInput {
     public bool Reconcile(in WorldInputPublication publication, SeatController seat, InputRouter? router = null, int slot = 0) {
         var sources = publication.Sources.Span;
 
-        if ((sources.Length != m_contracts.Length) || (publication.Mapping >= m_catalog.Mappings.Length)) { return false; }
-        for (var index = 0; (index < sources.Length); index++) { if (sources[index].Source != m_contracts[index]) { return false; } }
+        if (
+            (sources.Length != m_contracts.Length) ||
+            (publication.Mapping >= m_catalog.Mappings.Length) ||
+            (publication.Revision < m_producer.Revision) ||
+            ((publication.Revision == m_producer.Revision) && (publication.Epoch < m_producer.Epoch))
+        ) {
+            m_admitted = false;
+            return false;
+        }
+        for (var index = 0; (index < sources.Length); index++) {
+            if (sources[index].Source != m_contracts[index]) {
+                m_admitted = false;
+                return false;
+            }
+        }
         if (m_admitted && (publication.Revision == m_producer.Revision) && (publication.Epoch == m_producer.Epoch)) { return true; }
         m_producer.Reconcile(publication.Revision, publication.Epoch, m_catalog.Mappings[publication.Mapping], publication.Baseline, sources);
         // A new epoch ends every guess: its edges belong to the epoch the authority closed.
         Array.Clear(array: m_edgeSequence);
         Array.Clear(array: m_answeredSequence);
+        var installedForward = (((m_moveForward >= 0) && (m_moveForward < sources.Length))
+            ? FixedQ4816.FromRawBits(value: sources[m_moveForward].RawValue)
+            : FixedQ4816.Zero);
+        var installedStrafe = (((m_moveStrafe >= 0) && (m_moveStrafe < sources.Length))
+            ? FixedQ4816.FromRawBits(value: sources[m_moveStrafe].RawValue)
+            : FixedQ4816.Zero);
+        var authorityMoving = ((installedForward != FixedQ4816.Zero) || (installedStrafe != FixedQ4816.Zero));
+        m_reconciledMoving = authorityMoving;
+        m_wasMoving = authorityMoving;
+        m_driveStartDirection = (authorityMoving ? new FixedVector2(X: installedStrafe, Y: installedForward) : default);
+        m_driveAwaitingPublish = false;
+        m_driveStartSequence = 0U;
+        m_stopAwaitingPublish = false;
+        m_stopSequence = 0U;
+        m_pendingLagSequence = 0U;
+        m_pendingLagSentTick = 0UL;
         m_boundary = publication.Boundary;
         m_keptActivations.Clear();
         foreach (var decision in m_boundary.Decisions.Span) {
@@ -227,6 +266,32 @@ public sealed class WorldSeatInput {
     public void ObserveMove(FixedVector2 value, in CommandContext context, ulong tick) {
         if (!m_admitted) { return; }
         var stamp = Stamp(context: context, tick: tick);
+        var zero = ((value.X == FixedQ4816.Zero) && (value.Y == FixedQ4816.Zero));
+
+        if (zero) {
+            if (m_wasMoving) {
+                m_stopAwaitingPublish = true;
+                m_stopSequence = 0U;
+            }
+            m_reconciledMoving = false;
+            m_wasMoving = false;
+            m_driveStartDirection = default;
+            m_driveAwaitingPublish = false;
+            m_driveStartSequence = 0U;
+        } else {
+            m_wasMoving = true;
+            m_stopAwaitingPublish = false;
+            m_stopSequence = 0U;
+            if (
+                ((m_driveStartDirection.X == FixedQ4816.Zero) && (m_driveStartDirection.Y == FixedQ4816.Zero)) ||
+                (((value.X * m_driveStartDirection.X) + (value.Y * m_driveStartDirection.Y)) <= FixedQ4816.Zero)
+            ) {
+                m_reconciledMoving = false;
+                m_driveStartDirection = value;
+                m_driveAwaitingPublish = true;
+                m_driveStartSequence = 0U;
+            }
+        }
 
         if (m_moveForward >= 0) { _ = m_producer.Observe(((ushort)m_moveForward), value.Y.Value, stamp.Tick, stamp.Offset, context.Activation, processingTick: tick); }
         if (m_moveStrafe >= 0) { _ = m_producer.Observe(((ushort)m_moveStrafe), value.X.Value, stamp.Tick, stamp.Offset, context.Activation, processingTick: tick); }
@@ -264,14 +329,138 @@ public sealed class WorldSeatInput {
     /// <summary>Freezes the tick's ordered input and the separately composed presentation-facing motion request.</summary>
     public IntentSubmission Publish(Principal owner, int body, ulong tick, SeatController seat, PlayerIntent motion) {
         var batch = m_producer.Publish(tick, seat.PointerRay);
+        var forwardChannel = ((m_moveForward >= 0) ? m_contracts[m_moveForward].Channel : ushort.MaxValue);
+        var strafeChannel = ((m_moveStrafe >= 0) ? m_contracts[m_moveStrafe].Channel : ushort.MaxValue);
 
         Array.Clear(array: m_relative);
         foreach (var input in batch.Events.Span) {
             if ((input.Kind is WorldInputEventKind.Press or WorldInputEventKind.Release or WorldInputEventKind.AxisSample) && (input.Channel < m_edgeSequence.Length)) {
                 m_edgeSequence[input.Channel] = input.Sequence;
+                if (m_pendingLagSequence == 0U) {
+                    m_pendingLagSequence = input.Sequence;
+                    m_pendingLagSentTick = tick;
+                }
+                if (m_driveAwaitingPublish && ((input.Channel == forwardChannel) || (input.Channel == strafeChannel))) {
+                    m_driveStartSequence = input.Sequence;
+                    m_driveAwaitingPublish = false;
+                }
+                if (m_stopAwaitingPublish && ((input.Channel == forwardChannel) || (input.Channel == strafeChannel))) {
+                    m_stopSequence = input.Sequence;
+                    m_stopAwaitingPublish = false;
+                }
             }
         }
+        if (m_driveAwaitingPublish && m_producer.IsQuiescent) {
+            var latestMoveEdge = Math.Max(
+                val1: ((forwardChannel < m_edgeSequence.Length) ? m_edgeSequence[forwardChannel] : 0U),
+                val2: ((strafeChannel < m_edgeSequence.Length) ? m_edgeSequence[strafeChannel] : 0U)
+            );
+            if ((latestMoveEdge != 0U) || m_reconciledMoving) {
+                m_driveStartSequence = latestMoveEdge;
+                m_driveAwaitingPublish = false;
+            }
+        }
+        if (m_stopAwaitingPublish && m_producer.IsQuiescent) {
+            m_stopAwaitingPublish = false;
+        }
         return new(tick, body, motion, owner, Input: batch);
+    }
+    /// <summary>Reports whether the seat's latest move release to neutral has been answered by the authority at or
+    /// before <paramref name="bodyTick"/>.</summary>
+    public bool IsMoveStoppedAnswered(WorldInputAnswer? answer, ulong bodyTick) {
+        if (!m_admitted || m_wasMoving || m_stopAwaitingPublish) {
+            return false;
+        }
+        UpdateLag(answer: answer, bodyTick: bodyTick);
+        if (m_stopSequence == 0U) {
+            return true;
+        }
+
+        return (
+            (answer is { } answered) &&
+            (answered.Epoch == m_producer.Epoch) &&
+            (answered.Sequence >= m_stopSequence) &&
+            (bodyTick >= answered.Tick)
+        );
+    }
+    /// <summary>Reports whether the seat's current continuous move push has been answered by the authority at or before
+    /// <paramref name="bodyTick"/>.</summary>
+    public bool IsMoveAnswered(WorldInputAnswer? answer, ulong bodyTick) {
+        if (!m_admitted || !m_wasMoving) {
+            return false;
+        }
+        UpdateLag(answer: answer, bodyTick: bodyTick);
+        if (m_driveAwaitingPublish) {
+            return false;
+        }
+        if (m_driveStartSequence == 0U) {
+            return m_reconciledMoving;
+        }
+
+        return (
+            (answer is { } answered) &&
+            (answered.Epoch == m_producer.Epoch) &&
+            (answered.Sequence >= m_driveStartSequence) &&
+            (bodyTick >= answered.Tick)
+        );
+    }
+    /// <summary>Reports whether a held press on <paramref name="source"/> has been answered by the authority at or
+    /// before <paramref name="bodyTick"/>.</summary>
+    public bool IsSourcePressAnswered(string source, WorldInputAnswer? answer, ulong bodyTick) {
+        if (!m_admitted) {
+            return false;
+        }
+
+        var sources = m_producer.Sources;
+        for (var index = 0; (index < m_sources.Length); index++) {
+            if (!string.Equals(a: m_sources[index], b: source, comparisonType: StringComparison.Ordinal)) {
+                continue;
+            }
+
+            if (sources[index].RawValue == 0) {
+                return false;
+            }
+
+            var sequence = m_edgeSequence[m_contracts[index].Channel];
+
+            if (
+                (sequence == 0U) ||
+                (answer is not { } answered) ||
+                (answered.Epoch != m_producer.Epoch) ||
+                (answered.Sequence < sequence) ||
+                (bodyTick < answered.Tick)
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    /// <summary>Gets the authority-tick round-trip control lag observed from answered input sequences, bounded to
+    /// [0, 45] ticks.</summary>
+    public ulong ObservedLagTicks(WorldInputAnswer? answer, ulong bodyTick) {
+        UpdateLag(answer: answer, bodyTick: bodyTick);
+        var live = m_lagTicks;
+
+        if ((m_pendingLagSequence != 0U) && (bodyTick >= m_pendingLagSentTick)) {
+            live = Math.Max(val1: live, val2: ((bodyTick - m_pendingLagSentTick) + 1UL));
+        }
+
+        return Math.Min(val1: live, val2: 45UL);
+    }
+
+    private void UpdateLag(WorldInputAnswer? answer, ulong bodyTick) {
+        if (
+            (m_pendingLagSequence != 0U) &&
+            (answer is { } answered) &&
+            (answered.Epoch == m_producer.Epoch) &&
+            (answered.Sequence >= m_pendingLagSequence)
+        ) {
+            if (bodyTick >= m_pendingLagSentTick) {
+                m_lagTicks = ((bodyTick - m_pendingLagSentTick) + 1UL);
+            }
+            m_pendingLagSequence = 0U;
+        }
     }
     /// <summary>Answers whether an edge this seat sent on a channel is outstanding (<c>CreationDriverDocument.Lead</c>):
     /// the one function a guess's start and end are read through, deciding through <see cref="ReadGuess"/>. The only

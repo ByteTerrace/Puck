@@ -35,8 +35,9 @@ public sealed class WorldSeatDriver {
     // The ticks a pose and a line are given to land before the next step reads the world.
     private const int LandTicks = 2;
     // How long, in seconds of the authority's time, a pose step waits for its pose to show in a delivery before it fails:
-    // a pose sent to an authority in another process crosses a lane, applies at a tick and returns in a later delivery.
-    private const int PoseLandSeconds = 3;
+    // a pose sent to an authority in another process crosses a lane, may carry the body home from a secondary instance,
+    // applies at a tick and returns in a later delivery.
+    private const int PoseLandSeconds = 45;
     // The heading error, in degrees, a crossing turns inside before it walks, and the ticks it gives the turn.
     private const double AlignDegrees = 3.0;
     private const int AlignTicks = 45;
@@ -52,6 +53,7 @@ public sealed class WorldSeatDriver {
 
     private readonly WorldSeatSenses m_senses;
     private readonly Func<string, Func<string>> m_submit;
+    private readonly Func<int, bool>? m_canPressUntil;
     private readonly WorldSeatProgram m_program;
     private readonly int m_slot;
     private readonly FixedQ4816 m_margin;
@@ -62,13 +64,23 @@ public sealed class WorldSeatDriver {
     private readonly List<(ulong Tick, string Place)> m_visited = [];
     // The chapter's submitted control lines, each a read of its outcome, which arrives as its tick applies.
     private readonly List<Func<string>> m_lines = [];
+    private readonly List<(int Index, WorldDeliveredBody Body)> m_solidScratch = [];
+    private readonly List<WorldSeatSenses.SolidWalker> m_walkers = [];
 
     private WorldRouteChapter? m_chapter;
     private Phase m_phase;
     private int m_step;
+    private ulong m_leadInUntilTick;
     private ulong m_chapterStart;
     private ulong m_stepStart;
+    private ulong m_stepAuthorityStart;
     private ulong m_deadline;
+    private ulong m_authorityTicks;
+    private ulong m_authorityBudget;
+    private ulong m_lastBodyTick;
+    private string? m_lastBodyAuthority;
+    private ulong m_noBodyStart;
+    private bool m_noBody;
     private string? m_routeWorld;
     private string? m_routeAuthority;
     private int m_routeIndex = -1;
@@ -83,21 +95,61 @@ public sealed class WorldSeatDriver {
     private FixedQ4816 m_firstReach;
     private bool m_checkCorridor;
     private string? m_plannedIn;
+    private IReadOnlyList<string> m_previousStepPlaces = [];
     private FixedQ4816 m_best;
     private ulong m_progressTick;
     private int m_stuckPlans;
     // A crossing's phase and its distance walked; a press's tap.
     private bool m_pushing;
+    private bool m_crossedPortal;
+    private ulong m_crossedPortalTick;
+    private string? m_crossAuthority;
+    private int m_crossIndex = -1;
+    private int m_crossGeneration;
+    private int m_crossPoseEpoch;
+    private int m_crossCarryEpoch;
+    private ulong m_crossBodyTick;
+    private FixedVector3 m_planStart;
+    private bool m_hasGoRead;
+    private FixedVector3 m_lastGoPosition;
+    private string? m_lastGoAuthority;
+    private int m_lastGoIndex = -1;
+    private int m_lastGoGeneration;
+    private int m_lastGoPoseEpoch;
+    private int m_lastGoCarryEpoch;
+    private ulong m_lastGoTick;
     // The documentId of the world a flight started in.
     private string? m_flownIn;
     private FixedQ4816? m_heading;
     private FixedQ4816 m_travelled;
     private FixedVector3 m_lastPosition;
     private string? m_tap;
+    private bool m_tapAwaitingParty;
+    private bool m_tapAnswered;
+    private ulong m_tapAnsweredTick;
     private ulong m_tapTick;
+    private ulong m_lastTapAuthorityTick;
     private string? m_tapAuthority;
     private bool m_poseSubmitted;
+    private ulong m_poseAttemptTick;
+    private ulong m_poseAttemptAuthorityTick;
+    private Func<string>? m_poseOutcome;
+    private Func<string>? m_lineOutcome;
+    private bool m_poseHadPreRead;
+    private string? m_posePreAuthority;
+    private int m_posePreIndex;
+    private int m_posePreGeneration;
+    private int m_posePreEpoch;
     private bool m_driving;
+    private bool m_docking;
+    private bool m_yielding;
+    private int m_yieldLeaderIndex = -1;
+    private ulong m_yieldStartBodyTick;
+    private bool m_settledBehindParty;
+    private bool m_enteredGoalPlace;
+    private FixedVector3 m_enteredGoalPlaceOrigin;
+    private FixedVector3? m_stepAnchorPoint;
+    private string? m_stepAnchorWorld;
     // Where the body stood when it last moved under a deflected stick, and the authority tick whose delivery showed it.
     private FixedVector3 m_stallOrigin;
     private ulong m_stallTick;
@@ -110,8 +162,10 @@ public sealed class WorldSeatDriver {
     /// <param name="submit">Submits a console line as the seat, through the seat's ordinary ingress, and returns a
     /// read of the line's outcome: <c>pending</c> until its tick applies, then <c>ran</c>, <c>refused</c> or
     /// <c>faulted</c>.</param>
+    /// <param name="canPressUntil">When several seats play one chapter together, reports whether every active seat has
+    /// reached the step before a shared <c>press ... until</c> triggers a vehicle or lift departure.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldSeatDriver(WorldRoute route, WorldSeatProgram program, WorldSeatSenses senses, Func<string, Func<string>> submit) {
+    public WorldSeatDriver(WorldRoute route, WorldSeatProgram program, WorldSeatSenses senses, Func<string, Func<string>> submit, Func<int, bool>? canPressUntil = null) {
         ArgumentNullException.ThrowIfNull(argument: route);
         ArgumentNullException.ThrowIfNull(argument: program);
         ArgumentNullException.ThrowIfNull(argument: senses);
@@ -119,6 +173,7 @@ public sealed class WorldSeatDriver {
         m_program = program;
         m_senses = senses;
         m_submit = submit;
+        m_canPressUntil = canPressUntil;
         m_slot = (route.Seat - 1);
         m_margin = FixedQ4816.FromDouble(value: route.Margin);
     }
@@ -152,16 +207,25 @@ public sealed class WorldSeatDriver {
     /// when the seat had no body to read.</summary>
     public WorldSeatSenses.Reading? Read { get; private set; }
 
-    /// <summary>Starts a chapter on the tick just completed: its first step reads the world in this tick's hook.</summary>
+    /// <summary>Starts a chapter on the tick just completed: its first step reads the world in this tick's hook, or
+    /// after <paramref name="leadInTicks"/> when several seats stagger their entry into a chapter.</summary>
     /// <param name="chapter">The chapter.</param>
     /// <param name="tick">The completed tick.</param>
     /// <param name="rateHz">The simulation rate, in ticks per second.</param>
-    public void Begin(WorldRouteChapter chapter, ulong tick, int rateHz) {
+    /// <param name="leadInTicks">The client ticks to hold idle before starting step 0.</param>
+    public void Begin(WorldRouteChapter chapter, ulong tick, int rateHz, ulong leadInTicks = 0UL) {
         m_chapter = chapter;
         m_phase = Phase.Running;
         m_step = -1;
+        m_leadInUntilTick = (tick + leadInTicks);
         m_chapterStart = tick;
-        m_deadline = (tick + (ulong)Math.Ceiling(a: (chapter.TimeoutSeconds * rateHz)));
+        m_authorityBudget = (ulong)Math.Ceiling(a: (chapter.TimeoutSeconds * rateHz));
+        m_authorityTicks = 0UL;
+        m_lastBodyAuthority = null;
+        m_lastBodyTick = 0UL;
+        m_noBody = false;
+        m_noBodyStart = tick;
+        m_deadline = (tick + leadInTicks + Math.Max(val1: (m_authorityBudget * ((m_canPressUntil is null) ? 4UL : 6UL)), val2: ((ulong)(60 * rateHz))));
         m_visited.Clear();
         Failure = null;
         FailureKind = null;
@@ -174,10 +238,21 @@ public sealed class WorldSeatDriver {
         m_routeAdmitted = false;
         m_stallAuthority = null;
         m_preparedIn = null;
+        m_yielding = false;
+        m_yieldLeaderIndex = -1;
+        m_yieldStartBodyTick = 0UL;
+        m_settledBehindParty = false;
+        m_enteredGoalPlace = false;
+        m_enteredGoalPlaceOrigin = default;
+        m_stepAnchorPoint = null;
+        m_stepAnchorWorld = null;
+        m_previousStepPlaces = (m_senses.TryRead(reading: out var openingRead, slot: m_slot) ? openingRead.Places : []);
         Read = null;
         m_navigates = chapter.Steps.Any(predicate: static step => step is WorldRouteStep.Go { Direct: false });
         Release();
-        NextStep(tick: tick, rateHz: rateHz);
+        if (leadInTicks == 0UL) {
+            NextStep(tick: tick, rateHz: rateHz);
+        }
     }
 
     /// <summary>Advances the chapter from the tick just completed and submits the seat's controls for the next.</summary>
@@ -187,12 +262,67 @@ public sealed class WorldSeatDriver {
         if ((m_phase != Phase.Running) || (m_chapter is null)) {
             return;
         }
+        if (m_step < 0) {
+            if (tick < m_leadInUntilTick) {
+                return;
+            }
+            m_chapterStart = tick;
+            m_noBody = false;
+            m_noBodyStart = tick;
+            m_lastBodyAuthority = null;
+            m_lastBodyTick = 0UL;
+            m_previousStepPlaces = (m_senses.TryRead(reading: out var delayedRead, slot: m_slot) ? delayedRead.Places : []);
+            NextStep(tick: tick, rateHz: rateHz);
+            if (m_phase != Phase.Running) {
+                return;
+            }
+        }
         if (!m_senses.TryRead(reading: out var read, slot: m_slot)) {
-            // A seat between authorities (a crossing in flight) has no body to read for a tick or two; it holds its
-            // controls and fails only when that outlasts the chapter.
+            // A seat between authorities (a crossing in flight) has no body to read until the destination's prime
+            // arrives; it holds its controls and fails only when that outlasts the chapter's window.
+            if (!m_noBody) {
+                m_noBody = true;
+                m_noBodyStart = tick;
+            }
             Read = null;
-            Fail(kind: "seat", place: "none", reason: "the seat's client was delivered no body for it in any world", tick: tick, when: (tick >= m_deadline));
+            var noBodyLimit = Math.Max(val1: m_authorityBudget, val2: ((ulong)(30 * rateHz)));
+            Fail(kind: "seat", place: "none", reason: "the seat's client was delivered no body for it in any world", tick: tick, when: (((tick - m_noBodyStart) >= noBodyLimit) || (tick >= m_deadline)));
             return;
+        }
+
+        m_noBody = false;
+        var awaitingNavigationBake = (
+            (m_step >= 0) &&
+            (m_step < m_chapter.Steps.Count) &&
+            (m_chapter.Steps[m_step] is WorldRouteStep.Go { Direct: false }) &&
+            !m_senses.Navigation(endpoint: read.Endpoint).Ready
+        );
+        var pausedBudget = (
+            awaitingNavigationBake ||
+            m_tapAwaitingParty ||
+            m_yielding
+        );
+        if (m_lastBodyAuthority is null) {
+            m_lastBodyAuthority = read.Endpoint.Authority;
+            m_lastBodyTick = read.Body.Tick;
+        } else if (string.Equals(a: m_lastBodyAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal)) {
+            if (read.Body.Tick > m_lastBodyTick) {
+                if (!pausedBudget) {
+                    m_authorityTicks += (read.Body.Tick - m_lastBodyTick);
+                }
+                m_lastBodyTick = read.Body.Tick;
+            } else if (read.Body.Tick < m_lastBodyTick) {
+                m_lastBodyTick = read.Body.Tick;
+            }
+        } else {
+            if (!pausedBudget) {
+                m_authorityTicks += 1UL;
+            }
+            m_lastBodyAuthority = read.Endpoint.Authority;
+            m_lastBodyTick = read.Body.Tick;
+        }
+        if (m_previousStepPlaces.Count == 0) {
+            m_previousStepPlaces = read.Places;
         }
 
         Read = read;
@@ -206,22 +336,28 @@ public sealed class WorldSeatDriver {
         }
         // A stick held while the body goes nowhere is a wall, as a player meets one. A body that moves, however it is
         // moved, starts the watch again, and so does an authority whose ticks are not the last one's or whose input
-        // admission for this seat has not yet settled.
+        // admission or initial push for this seat has not yet been answered.
         var admitted = m_senses.InputAdmitted(slot: m_slot);
-        if (!m_driving || !admitted || !string.Equals(a: m_stallAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal) ||
-            (read.Body.Tick < m_stallTick) || (Planar(from: m_stallOrigin, to: read.Position) > FixedQ4816.FromDouble(value: StallMetres))) {
+        var moveAnswered = (admitted && m_senses.MoveInputAnswered(slot: m_slot, bodyTick: read.Body.Tick));
+        var scale = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.05), y: m_senses.BodyScale(reading: in read));
+        var stallThreshold = (FixedQ4816.FromDouble(value: StallMetres) * scale);
+        var stallLimit = (read.Endpoint.ClockOwnedHere
+            ? ((ulong)StallTicks)
+            : (((ulong)StallTicks) + (m_docking ? 15UL : 0UL) + Math.Min(val1: 20UL, val2: m_senses.MoveLagTicks(slot: m_slot, bodyTick: read.Body.Tick))));
+        if (!m_driving || m_yielding || !moveAnswered || !string.Equals(a: m_stallAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal) ||
+            (read.Body.Tick < m_stallTick) || (Planar(from: m_stallOrigin, to: read.Position) > stallThreshold)) {
             m_stallOrigin = read.Position;
             m_stallTick = read.Body.Tick;
             m_stallAuthority = read.Endpoint.Authority;
-        } else if ((read.Body.Tick - m_stallTick) >= StallTicks) {
-            Fail(kind: "wall", place: read.Place, reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"the move stick was held across {StallTicks} delivered ticks and the body stayed within {StallMetres:0.##} m of ({Metres(m_stallOrigin.X)}, {Metres(m_stallOrigin.Y)}, {Metres(m_stallOrigin.Z)}), on step {m_step} ({Describe(step: m_chapter.Steps[m_step])})"), tick: tick);
+        } else if ((read.Body.Tick - m_stallTick) >= stallLimit) {
+            Fail(kind: "wall", place: read.Place, reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"the move stick was held across {StallTicks} delivered ticks and the body stayed within {((double)stallThreshold):0.###} m of ({Metres(m_stallOrigin.X)}, {Metres(m_stallOrigin.Y)}, {Metres(m_stallOrigin.Z)}), on step {m_step} ({Describe(step: m_chapter.Steps[m_step])})"), tick: tick);
             return;
         }
         if (m_checkCorridor && (m_corridor.Count > 0) && ((read.Places.Count == 0) ? !m_corridor.Contains(item: read.Place) : !read.Places.Any(predicate: m_corridor.Contains))) {
             Fail(kind: "corridor", place: read.Place, reason: $"left the corridor ({string.Join(separator: ", ", values: m_corridor.Order(comparer: StringComparer.Ordinal))}) into {read.Place} on step {m_step} ({Describe(step: m_chapter.Steps[m_step])})", tick: tick);
             return;
         }
-        if (tick >= m_deadline) {
+        if ((m_authorityTicks >= m_authorityBudget) || (tick >= m_deadline)) {
             Fail(kind: "timeout", place: read.Place, reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"ran past its {m_chapter.TimeoutSeconds:0.#} s on step {m_step} ({Describe(step: m_chapter.Steps[m_step])})"), tick: tick);
             return;
         }
@@ -257,6 +393,7 @@ public sealed class WorldSeatDriver {
             Submit(text: line);
         }
         m_driving = false;
+        m_docking = false;
     }
 
     /// <summary>Describes a step canonically, every member named, the text a chapter's identity hashes.</summary>
@@ -298,7 +435,7 @@ public sealed class WorldSeatDriver {
     // stop at and how far that is, the next corner's distance and turn, the facing to turn the camera onto, and the pace.
     // A flight adds how far the point stands along the body's own up (negative below it) and the body's delivered speed
     // along it, which the rise controls read.
-    private readonly record struct Steer(bool Moves, FixedQ4816 Dx, FixedQ4816 Dz, FixedQ4816 Stop, FixedQ4816 CornerDistance, FixedQ4816 CornerTurn, bool Faces, FixedQ4816 Facing, string Pace, FixedQ4816 Rise = default, FixedQ4816 Climb = default);
+    private readonly record struct Steer(bool Moves, FixedQ4816 Dx, FixedQ4816 Dz, FixedQ4816 Stop, FixedQ4816 CornerDistance, FixedQ4816 CornerTurn, bool Faces, FixedQ4816 Facing, string Pace, FixedQ4816 Rise = default, FixedQ4816 Climb = default, bool HoldWalk = false);
 
     // Whether the seat stands in the world a step names by its documentId; a step that names none is played wherever
     // the seat stands.
@@ -330,22 +467,94 @@ public sealed class WorldSeatDriver {
     }
 
     private void NextStep(ulong tick, int rateHz) {
+        if (Read is { } completedRead) {
+            m_previousStepPlaces = completedRead.Places;
+        }
+        if ((m_step >= 0) && (m_step < m_chapter!.Steps.Count)) {
+            switch (m_chapter.Steps[m_step]) {
+                case WorldRouteStep.PressAction:
+                    m_settledBehindParty = false;
+                    break;
+                case WorldRouteStep.PoseBody finishedPose:
+                    if (Read is { } poseRead) {
+                        var anchorPt = finishedPose.Point;
+                        if (finishedPose.Spawn is { } spawnId) {
+                            anchorPt = WorldDefinitionRows.FindSpawnPoint(spawnPoints: poseRead.Endpoint.Definition.SpawnPoints, id: spawnId)?.Position;
+                        }
+                        m_stepAnchorPoint = ((anchorPt is { } at) ? Point(at) : poseRead.Position);
+                        m_stepAnchorWorld = WorldKey(read: in poseRead);
+                    }
+                    break;
+                case WorldRouteStep.Go { Point: { } goPt }:
+                    if (!m_settledBehindParty && (Read is { } goRead)) {
+                        m_stepAnchorPoint = Point(goPt);
+                        m_stepAnchorWorld = WorldKey(read: in goRead);
+                    } else {
+                        m_stepAnchorPoint = null;
+                        m_stepAnchorWorld = null;
+                    }
+                    break;
+                case WorldRouteStep.Rest or WorldRouteStep.Line:
+                    break;
+                default:
+                    m_stepAnchorPoint = null;
+                    m_stepAnchorWorld = null;
+                    break;
+            }
+        }
         m_step++;
         m_stepStart = tick;
+        m_stepAuthorityStart = m_authorityTicks;
+        m_yielding = false;
+        m_yieldLeaderIndex = -1;
+        m_yieldStartBodyTick = 0UL;
+        m_enteredGoalPlace = false;
+        m_enteredGoalPlaceOrigin = default;
         m_checkCorridor = false;
         m_corridor.Clear();
         m_corners.Clear();
         m_corner = 0;
         m_plannedIn = null;
         m_stuckPlans = 0;
+        m_stallAuthority = null;
         m_pushing = false;
+        m_crossedPortal = false;
+        m_crossedPortalTick = 0UL;
+        m_crossAuthority = null;
+        m_crossIndex = -1;
+        m_crossGeneration = 0;
+        m_crossPoseEpoch = 0;
+        m_crossCarryEpoch = 0;
+        m_crossBodyTick = 0UL;
+        m_planStart = default;
+        m_hasGoRead = false;
+        m_lastGoPosition = default;
+        m_lastGoAuthority = null;
+        m_lastGoIndex = -1;
+        m_lastGoGeneration = 0;
+        m_lastGoPoseEpoch = 0;
+        m_lastGoCarryEpoch = 0;
+        m_lastGoTick = 0UL;
         m_flownIn = null;
         m_heading = null;
         m_travelled = FixedQ4816.Zero;
         m_tap = null;
+        m_tapAwaitingParty = false;
+        m_tapAnswered = false;
+        m_tapAnsweredTick = 0UL;
         m_tapTick = 0UL;
+        m_lastTapAuthorityTick = m_authorityTicks;
         m_tapAuthority = null;
         m_poseSubmitted = false;
+        m_poseAttemptTick = 0UL;
+        m_poseAttemptAuthorityTick = 0UL;
+        m_poseOutcome = null;
+        m_lineOutcome = null;
+        m_poseHadPreRead = false;
+        m_posePreAuthority = null;
+        m_posePreIndex = -1;
+        m_posePreGeneration = 0;
+        m_posePreEpoch = 0;
         if (m_step >= m_chapter!.Steps.Count) {
             m_phase = Phase.Arrived;
             Release();
@@ -355,69 +564,138 @@ public sealed class WorldSeatDriver {
         switch (m_chapter.Steps[m_step]) {
             case WorldRouteStep.PoseBody pose:
                 if ((pose.Spawn is null) || m_senses.TryRead(reading: out _, slot: m_slot)) {
-                    SubmitPose(pose: pose);
+                    SubmitPose(pose: pose, tick: tick, countLine: true);
                 }
                 break;
             case WorldRouteStep.Line line:
-                Submit(text: line.Text);
+                m_lineOutcome = Submit(text: line.Text);
                 break;
             case WorldRouteStep.PressAction press:
-                m_tap = press.Action;
-                if (Read is { } current) {
-                    m_tapTick = current.Body.Tick;
-                    m_tapAuthority = current.Endpoint.Authority;
+                if ((press.Until is not null) && (m_canPressUntil?.Invoke(arg: m_step) == false)) {
+                    m_tapAwaitingParty = true;
+                } else if (!m_settledBehindParty || (press.Until is null)) {
+                    ArmTap(action: press.Action, read: Read);
                 }
                 break;
         }
     }
 
-    private void SubmitPose(WorldRouteStep.PoseBody pose) {
+    private void ArmTap(string action, WorldSeatSenses.Reading? read) {
+        m_tap = action;
+        m_tapAwaitingParty = false;
+        m_tapAnswered = false;
+        m_tapAnsweredTick = 0UL;
+        m_lastTapAuthorityTick = m_authorityTicks;
+        if (read is { } current) {
+            m_tapTick = current.Body.Tick;
+            m_tapAuthority = current.Endpoint.Authority;
+        } else {
+            m_tapTick = 0UL;
+            m_tapAuthority = null;
+        }
+    }
+
+    private bool TapAnswered(string action, in WorldSeatSenses.Reading read) {
+        foreach (var operation in m_program.Operations) {
+            if ((operation is WorldSeatProgramOp.Tap tap) && string.Equals(a: tap.Action, b: action, comparisonType: StringComparison.Ordinal)) {
+                if (!m_senses.SourcePressAnswered(slot: m_slot, source: tap.Driven, bodyTick: read.Body.Tick)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private void SubmitPose(WorldRouteStep.PoseBody pose, ulong tick, bool countLine) {
         m_poseSubmitted = true;
-        Submit(text: (pose.Spawn is { } spawn)
+        m_poseAttemptTick = tick;
+        m_poseAttemptAuthorityTick = m_authorityTicks;
+        if (countLine && m_senses.TryRead(reading: out var preRead, slot: m_slot)) {
+            m_poseHadPreRead = true;
+            m_posePreAuthority = preRead.Endpoint.Authority;
+            m_posePreIndex = preRead.Index;
+            m_posePreGeneration = preRead.Body.Generation;
+            m_posePreEpoch = preRead.Body.PoseEpoch;
+        }
+        var lineText = ((pose.Spawn is { } spawn)
             ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"body.pose spawn:{spawn} {Seat}")
             : string.Create(provider: CultureInfo.InvariantCulture, handler: $"body.pose {Number(pose.Point!.Value.X)} {Number(pose.Point.Value.Y)} {Number(pose.Point.Value.Z)} {Number(pose.YawDegrees)} 0 0 {Seat}"));
+        m_poseOutcome = (countLine ? Submit(text: lineText) : m_submit(arg: lineText));
     }
 
     // Runs the current step from this tick's read and returns what it asks of the controls; a finished step hands on to
     // the next, which reads the world from the next tick.
     private Steer Step(in WorldSeatSenses.Reading read, ulong tick, int rateHz) {
+        m_yielding = false;
         if (!m_poseSubmitted && (m_chapter!.Steps[m_step] is WorldRouteStep.PoseBody deferredPose)) {
             m_stepStart = tick;
-            SubmitPose(pose: deferredPose);
+            m_stepAuthorityStart = m_authorityTicks;
+            SubmitPose(pose: deferredPose, tick: tick, countLine: true);
             return new Steer(Moves: false, Dx: default, Dz: default, Stop: default, CornerDistance: default, CornerTurn: default, Faces: false, Facing: default, Pace: string.Empty);
         }
 
         var elapsed = (tick - m_stepStart);
+        var elapsedAuthority = (m_authorityTicks - m_stepAuthorityStart);
         var step = m_chapter!.Steps[m_step];
         var still = new Steer(Moves: false, Dx: default, Dz: default, Stop: default, CornerDistance: default, CornerTurn: default, Faces: false, Facing: default, Pace: string.Empty);
 
         switch (step) {
             case WorldRouteStep.PoseBody pose:
                 if (elapsed >= LandTicks) {
+                    if (m_poseOutcome?.Invoke() is "refused" or "faulted") {
+                        Fail(kind: "pose", place: read.Place, reason: $"the body is not where step {m_step} ({Describe(step: pose)}) set it down", tick: tick);
+                        return still;
+                    }
+
                     var point = pose.Point;
                     if (pose.Spawn is { } id) {
                         point = WorldDefinitionRows.FindSpawnPoint(spawnPoints: read.Endpoint.Definition.SpawnPoints, id: id)?.Position;
                     }
+                    var poseConfirmed = (
+                        read.Endpoint.ClockOwnedHere ||
+                        !m_poseHadPreRead ||
+                        !string.Equals(a: read.Endpoint.Authority, b: m_posePreAuthority, comparisonType: StringComparison.Ordinal) ||
+                        (read.Index != m_posePreIndex) ||
+                        (read.Body.Generation != m_posePreGeneration) ||
+                        (read.Body.PoseEpoch != m_posePreEpoch)
+                    );
 
                     // A pose that did not land (refused, or overtaken by a crossing in flight) leaves the chapter
-                    // starting somewhere its author did not mean. A pose sent to an authority in another process
-                    // lands in a later delivery, so the step waits for it up to PoseLandSeconds before it fails.
-                    if ((point is not { } at) || ((Point(at) - read.Position).LengthSquared > FixedQ4816.One)) {
-                        if ((point is null) || (elapsed >= ((ulong)(PoseLandSeconds * rateHz)))) {
+                    // starting somewhere its author did not mean. A pose sent to an authority in another process (or
+                    // carrying the body home from a secondary world) lands in a later delivery, so the step waits for
+                    // the new pose epoch or authority to show within PoseLandSeconds before it fails.
+                    if ((point is not { } at) || !poseConfirmed || ((Point(at) - read.Position).LengthSquared > FixedQ4816.One)) {
+                        var poseAuthorityLimit = (ulong)(PoseLandSeconds * rateHz);
+                        if ((elapsedAuthority >= poseAuthorityLimit) || (elapsed >= (poseAuthorityLimit * 4UL))) {
                             Fail(kind: "pose", place: read.Place, reason: $"the body is not where step {m_step} ({Describe(step: pose)}) set it down", tick: tick);
+                            return still;
+                        }
+                        if (
+                            !read.Endpoint.ClockOwnedHere &&
+                            (m_poseOutcome?.Invoke() == "ran") &&
+                            ((m_authorityTicks - m_poseAttemptAuthorityTick) >= ((ulong)(10 * rateHz)))
+                        ) {
+                            SubmitPose(pose: pose, tick: tick, countLine: false);
                         }
                         return still;
                     }
+                    m_previousStepPlaces = read.Places;
                     NextStep(tick: tick, rateHz: rateHz);
                 }
                 return still;
             case WorldRouteStep.Line:
-                if (elapsed >= LandTicks) {
+                if (
+                    (elapsed >= LandTicks) &&
+                    ((m_lineOutcome is null) || (m_lineOutcome() is not "pending") || (elapsed >= ((ulong)rateHz)))
+                ) {
                     NextStep(tick: tick, rateHz: rateHz);
                 }
                 return still;
             case WorldRouteStep.Rest rest: {
-                if (elapsed >= (ulong)Math.Ceiling(a: (rest.Seconds * rateHz))) {
+                var restTicks = (ulong)Math.Ceiling(a: (rest.Seconds * rateHz));
+                var turnsCamera = ((rest.FaceDegrees is not null) || (rest.LookAt is not null));
+                if ((elapsedAuthority >= restTicks) && (!turnsCamera || (elapsed >= restTicks))) {
                     NextStep(tick: tick, rateHz: rateHz);
                     return still;
                 }
@@ -430,26 +708,55 @@ public sealed class WorldSeatDriver {
                 return still;
             }
             case WorldRouteStep.PressAction press: {
-                // Hold the tap across LandTicks delivered authority ticks as well as client steps, so a catch-up step or
-                // socket jitter never coalesces a press and its release into one authority tick before an edge-latched
-                // rule reads the held channel.
+                if ((press.Until is { } immediateUntil) && Stands(world: press.World, read: in read) && read.Places.Contains(value: immediateUntil)) {
+                    NextStep(tick: tick, rateHz: rateHz);
+                    return still;
+                }
+                if (m_tapAwaitingParty) {
+                    if (m_canPressUntil?.Invoke(arg: m_step) == false) {
+                        m_stepStart = tick;
+                        m_stepAuthorityStart = m_authorityTicks;
+                        return still;
+                    }
+                    m_stepStart = tick;
+                    m_stepAuthorityStart = m_authorityTicks;
+                    if (!m_settledBehindParty) {
+                        ArmTap(action: press.Action, read: read);
+                    } else {
+                        m_tapAwaitingParty = false;
+                        m_lastTapAuthorityTick = m_authorityTicks;
+                    }
+                    return still;
+                }
+                // Hold the tap until the authority has answered its press edge and stepped past it, so socket jitter
+                // or burst bunching never coalesces a press and its release into one authority tick before an
+                // edge-latched rule reads the held channel.
                 if ((m_tap is not null) && (m_tapAuthority is null)) {
                     m_tapTick = read.Body.Tick;
                     m_tapAuthority = read.Endpoint.Authority;
+                } else if ((m_tap is not null) && (elapsed >= LandTicks)) {
+                    if (read.Endpoint.ClockOwnedHere || !string.Equals(a: m_tapAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal)) {
+                        m_tap = null;
+                    } else if (TapAnswered(action: m_tap, read: in read)) {
+                        if (!m_tapAnswered) {
+                            m_tapAnswered = true;
+                            m_tapAnsweredTick = read.Body.Tick;
+                        } else if (read.Body.Tick > m_tapAnsweredTick) {
+                            m_tap = null;
+                        }
+                    }
                 } else if (
-                    (m_tap is not null) &&
-                    (elapsed >= LandTicks) &&
-                    (
-                        !string.Equals(a: m_tapAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal) ||
-                        ((read.Body.Tick >= m_tapTick) && ((read.Body.Tick - m_tapTick) >= LandTicks)) ||
-                        (elapsed >= (ulong)Math.Max(val1: LandTicks, val2: (rateHz / 2)))
-                    )
+                    (m_tap is null) &&
+                    !m_settledBehindParty &&
+                    (press.Until is not null) &&
+                    !read.Endpoint.ClockOwnedHere &&
+                    ((m_authorityTicks - m_lastTapAuthorityTick) >= ((ulong)(8 * rateHz)))
                 ) {
-                    m_tap = null;
+                    ArmTap(action: press.Action, read: read);
                 }
                 if ((press.Until is { } until) && Stands(world: press.World, read: in read) && read.Places.Contains(value: until)) {
                     NextStep(tick: tick, rateHz: rateHz);
-                } else if (elapsed >= (ulong)Math.Ceiling(a: (press.Seconds * rateHz))) {
+                } else if (elapsedAuthority >= (ulong)Math.Ceiling(a: (press.Seconds * rateHz))) {
                     if (press.Until is null) {
                         NextStep(tick: tick, rateHz: rateHz);
                     } else {
@@ -540,10 +847,17 @@ public sealed class WorldSeatDriver {
         }
 
         var heading = (m_heading ??= FixedQ4816.WrapAngle(radians: (FixedQ4816.FromDegrees(degrees: cross.HeadingDegrees) + (cross.Relative ? read.Yaw : FixedQ4816.Zero))));
+        var carryEpoch = read.Endpoint.Mirror.Carries.Epoch(index: read.Index);
 
         if (!m_pushing) {
             var error = FixedQ4816.Abs(value: FixedQ4816.WrapAngle(radians: (heading - read.Yaw)));
 
+            m_crossAuthority = read.Endpoint.Authority;
+            m_crossIndex = read.Index;
+            m_crossGeneration = read.Body.Generation;
+            m_crossPoseEpoch = read.Body.PoseEpoch;
+            m_crossCarryEpoch = carryEpoch;
+            m_crossBodyTick = read.Body.Tick;
             m_lastPosition = read.Position;
             if ((error > FixedQ4816.FromDegrees(degrees: AlignDegrees)) && (elapsed < AlignTicks)) {
                 return still with { Faces = true, Facing = heading };
@@ -551,27 +865,105 @@ public sealed class WorldSeatDriver {
             m_pushing = true;
         }
 
+        var portalJump = (
+            !string.Equals(a: m_crossAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal) ||
+            (m_crossIndex != read.Index) ||
+            (m_crossGeneration != read.Body.Generation) ||
+            (m_crossPoseEpoch != read.Body.PoseEpoch) ||
+            (m_crossCarryEpoch != carryEpoch)
+        );
+        var deltaTicks = ((!portalJump && (read.Body.Tick > m_crossBodyTick))
+            ? Math.Clamp(value: (read.Body.Tick - m_crossBodyTick), min: 1UL, max: 60UL)
+            : 1UL);
         var moved = (read.Position - m_lastPosition);
         var step = FixedQ4816.Sqrt(value: ((moved.X * moved.X) + (moved.Z * moved.Z)));
 
-        // A portal moves the body across the world in one tick; that jump is no distance walked.
-        if (step < FixedQ4816.FromDouble(value: 1.5)) {
+        // A portal moves the body across the world or into another authority; bunched continuous ticks scale with deltaTicks.
+        if (portalJump) {
+            m_crossedPortal = true;
+            m_crossedPortalTick = tick;
+        } else if (step < (FixedQ4816.FromDouble(value: 1.5) * FixedQ4816.FromInteger(value: (int)deltaTicks))) {
             m_travelled += step;
         }
+        m_crossAuthority = read.Endpoint.Authority;
+        m_crossIndex = read.Index;
+        m_crossGeneration = read.Body.Generation;
+        m_crossPoseEpoch = read.Body.PoseEpoch;
+        m_crossCarryEpoch = carryEpoch;
+        m_crossBodyTick = read.Body.Tick;
         m_lastPosition = read.Position;
-        if (m_travelled >= FixedQ4816.FromDouble(value: cross.Metres)) {
-            if (cross.Until is null) {
+
+        var crossLagTicks = Math.Clamp(value: Math.Max(val1: 10UL, val2: m_senses.MoveLagTicks(slot: m_slot, bodyTick: read.Body.Tick)), min: 10UL, max: 20UL);
+        var inFlight = (read.Endpoint.ClockOwnedHere
+            ? FixedQ4816.Zero
+            : (read.PlanarSpeed * FixedQ4816.FromDouble(value: ((double)crossLagTicks / rateHz))));
+        var targetMetres = FixedQ4816.FromDouble(value: cross.Metres);
+
+        if (cross.Until is null) {
+            if ((m_travelled + inFlight) >= targetMetres) {
                 NextStep(tick: tick, rateHz: rateHz);
-            } else {
-                Fail(kind: "route", place: read.Place, reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"walked {cross.Metres:0.#} m on heading {cross.HeadingDegrees:0.#} without reaching {cross.Until}"), tick: tick);
+                return still;
             }
-            return still;
+        } else if (m_travelled >= targetMetres) {
+            if (!read.Endpoint.ClockOwnedHere && m_crossedPortal && ((tick - m_crossedPortalTick) < ((ulong)(3 * rateHz)))) {
+                return still;
+            }
+            if (m_travelled >= (targetMetres + inFlight)) {
+                Fail(kind: "route", place: read.Place, reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"walked {cross.Metres:0.#} m on heading {cross.HeadingDegrees:0.#} without reaching {cross.Until}"), tick: tick);
+                return still;
+            }
         }
 
-        // Straight ahead in the camera's own frame, whatever a crossing did to the world's axes.
+        // Straight ahead in the camera's own frame, holding the entry heading until a portal crosses and then riding the
+        // camera's carried heading out of the destination face; before the portal crosses, any lateral nudge off the
+        // entry step's anchor point is steered smoothly back onto the crossing ray.
         var (sin, cos) = FixedQ4816.SinCos(angle: read.Yaw);
+        var moveDx = -sin;
+        var moveDz = -cos;
+        var scale = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.05), y: m_senses.BodyScale(reading: in read));
 
-        return still with { Moves = true, Dx = -sin, Dz = -cos, Stop = FixedQ4816.MaxValue, CornerDistance = FixedQ4816.MaxValue, Pace = cross.Pace };
+        if (!m_crossedPortal && !cross.Relative) {
+            var (headSin, headCos) = FixedQ4816.SinCos(angle: heading);
+
+            moveDx = -headSin;
+            moveDz = -headCos;
+            if (
+                (m_stepAnchorPoint is { } anchor) &&
+                string.Equals(a: m_stepAnchorWorld, b: WorldKey(read: in read), comparisonType: StringComparison.Ordinal) &&
+                (Planar(from: anchor, to: read.Position) <= (FixedQ4816.FromDouble(value: 12.0) * scale))
+            ) {
+                var rightX = headCos;
+                var rightZ = -headSin;
+                var crossTrack = (((read.Position.X - anchor.X) * rightX) + ((read.Position.Z - anchor.Z) * rightZ));
+
+                if (FixedQ4816.Abs(value: crossTrack) > (FixedQ4816.FromDouble(value: 0.08) * scale)) {
+                    var corr = FixedQ4816.Clamp(
+                        value: (-crossTrack * FixedQ4816.FromDouble(value: 0.85)),
+                        minimum: FixedQ4816.FromDouble(value: -0.55),
+                        maximum: FixedQ4816.FromDouble(value: 0.55)
+                    );
+                    var rawDx = (-headSin + (rightX * corr));
+                    var rawDz = (-headCos + (rightZ * corr));
+                    var rawLen = FixedQ4816.Sqrt(value: ((rawDx * rawDx) + (rawDz * rawDz)));
+
+                    if (rawLen > FixedQ4816.FromDouble(value: 0.001)) {
+                        moveDx = (rawDx / rawLen);
+                        moveDz = (rawDz / rawLen);
+                    }
+                }
+            }
+        }
+
+        return still with {
+            Moves = true,
+            Dx = moveDx,
+            Dz = moveDz,
+            Stop = FixedQ4816.MaxValue,
+            CornerDistance = FixedQ4816.MaxValue,
+            Faces = !m_crossedPortal,
+            Facing = (m_crossedPortal ? default : heading),
+            Pace = cross.Pace,
+        };
     }
 
     private Steer Go(WorldRouteStep.Go go, in WorldSeatSenses.Reading read, Steer still, ulong tick, int rateHz, bool planned = false) {
@@ -579,14 +971,85 @@ public sealed class WorldSeatDriver {
             Fail(kind: "route", place: read.Place, reason: $"step {m_step} ({Describe(step: go)}) is played in the world '{go.World}', and the seat stands in '{read.Endpoint.Definition.DocumentId}' ({read.World})", tick: tick);
             return still;
         }
+        m_senses.CopySolidWalkers(reading: in read, scratch: m_solidScratch, walkers: m_walkers);
+        var scale = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.05), y: m_senses.BodyScale(reading: in read));
+        var myRadius = m_senses.PlanarRadius(reading: in read);
+        var (holdsPartySync, holdsChapterEnd) = HoldsAfterGo();
+        var effectivePoint = default(FixedVector3);
+        var effectiveWithin = FixedQ4816.FromDouble(value: go.Within);
+        var behindParty = false;
+
         if (go.Place is { } place) {
             if (read.Places.Contains(value: place)) {
-                NextStep(tick: tick, rateHz: rateHz);
+                if ((m_canPressUntil is null) || !holdsChapterEnd) {
+                    NextStep(tick: tick, rateHz: rateHz);
+                    return still;
+                }
+                if (!m_enteredGoalPlace) {
+                    m_enteredGoalPlace = true;
+                    m_enteredGoalPlaceOrigin = read.Position;
+                }
+                if (
+                    (Planar(from: m_enteredGoalPlaceOrigin, to: read.Position) >= (FixedQ4816.FromDouble(value: 1.8) * scale)) ||
+                    ((m_corners.Count > 0) && (Planar(from: read.Position, to: m_corners[^1]) <= scale))
+                ) {
+                    NextStep(tick: tick, rateHz: rateHz);
+                    return still;
+                }
+            }
+        } else if (go.Point is { } rawPoint) {
+            var authoredPoint = Point(rawPoint);
+
+            effectivePoint = authoredPoint;
+            if (m_walkers.Count > 0) {
+                if (holdsPartySync && go.Direct) {
+                    ResolvePartyHoldSpot(
+                        authoredPoint: in authoredPoint,
+                        authoredWithin: effectiveWithin,
+                        behindParty: out behindParty,
+                        effectivePoint: out effectivePoint,
+                        effectiveWithin: out effectiveWithin,
+                        myRadius: myRadius,
+                        read: in read,
+                        scale: scale
+                    );
+                } else if (holdsPartySync || holdsChapterEnd) {
+                    var myDist = Planar(from: read.Position, to: authoredPoint);
+                    var parkedNear = 0;
+
+                    foreach (var other in m_walkers) {
+                        var sep = (myRadius + other.Radius);
+                        var otherDist = Planar(from: other.Position, to: authoredPoint);
+
+                        if (
+                            (other.PlanarSpeed <= (FixedQ4816.FromDouble(value: 0.35) * scale)) &&
+                            (otherDist <= (effectiveWithin + (sep * FixedQ4816.FromInteger(value: 2)))) &&
+                            (otherDist < myDist)
+                        ) {
+                            parkedNear++;
+                        }
+                    }
+                    if (parkedNear > 0) {
+                        effectiveWithin += ((myRadius * FixedQ4816.FromDouble(value: 2.2)) * FixedQ4816.FromInteger(value: Math.Min(val1: parkedNear, val2: 2)));
+                        behindParty = holdsPartySync;
+                    }
+                }
+            }
+            if ((effectivePoint - read.Position).IsWithin(radius: effectiveWithin)) {
+                var settleSpeed = (FixedQ4816.FromDouble(value: 0.10) * scale);
+
+                if (
+                    read.Endpoint.ClockOwnedHere ||
+                    ((double)effectiveWithin > (0.35 * (double)scale)) ||
+                    (!m_driving && m_senses.MoveStoppedAnswered(slot: m_slot, bodyTick: read.Body.Tick) && (read.PlanarSpeed <= settleSpeed))
+                ) {
+                    m_settledBehindParty = behindParty;
+                    NextStep(tick: tick, rateHz: rateHz);
+                    return still;
+                }
+                m_progressTick = m_authorityTicks;
                 return still;
             }
-        } else if ((Point(go.Point!.Value) - read.Position).IsWithin(radius: FixedQ4816.FromDouble(value: go.Within))) {
-            NextStep(tick: tick, rateHz: rateHz);
-            return still;
         }
         if (m_plannedIn != WorldKey(read: in read)) {
             if (!Plan(go: go, read: in read, tick: tick)) {
@@ -594,38 +1057,114 @@ public sealed class WorldSeatDriver {
             }
             planned = true;
         }
+        if (go.Direct && (go.Point is not null) && (m_corners.Count == 1)) {
+            m_corners[0] = effectivePoint;
+        }
 
-        // Pass the corners already reached: within reach of one, or past it along the segment that leads to it.
-        var reach = FixedQ4816.FromDouble(value: 0.4);
+        // Pass the corners already reached: within reach of one, swept across it during a bunched delivery, or past it
+        // along the segment that leads to it.
+        var reachScale = FixedQ4816.Min(x: FixedQ4816.One, y: scale);
+        var reach = (read.Endpoint.ClockOwnedHere
+            ? FixedQ4816.FromDouble(value: 0.4)
+            : (FixedQ4816.FromDouble(value: 0.50) * reachScale));
+        var goCarryEpoch = read.Endpoint.Mirror.Carries.Epoch(index: read.Index);
+        var continuousSegment = (
+            m_hasGoRead &&
+            string.Equals(a: m_lastGoAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal) &&
+            (m_lastGoIndex == read.Index) &&
+            (m_lastGoGeneration == read.Body.Generation) &&
+            (m_lastGoPoseEpoch == read.Body.PoseEpoch) &&
+            (m_lastGoCarryEpoch == goCarryEpoch)
+        );
+        var goDeltaTicks = ((continuousSegment && (read.Body.Tick > m_lastGoTick))
+            ? Math.Clamp(value: (read.Body.Tick - m_lastGoTick), min: 1UL, max: 60UL)
+            : 1UL);
+        var sweptSegment = (continuousSegment && (Planar(from: m_lastGoPosition, to: read.Position) < (FixedQ4816.FromDouble(value: 1.5) * FixedQ4816.FromInteger(value: (int)goDeltaTicks))));
 
         while (m_corner < (m_corners.Count - 1)) {
             var corner = m_corners[m_corner];
-            var from = ((m_corner > 0) ? m_corners[(m_corner - 1)] : corner);
+            var cornerReach = ((m_corner == 0) ? m_firstReach : reach);
+            var from = ((m_corner > 0) ? m_corners[(m_corner - 1)] : m_planStart);
             var along = new FixedVector3(X: (corner.X - from.X), Y: FixedQ4816.Zero, Z: (corner.Z - from.Z));
             var past = new FixedVector3(X: (read.Position.X - corner.X), Y: FixedQ4816.Zero, Z: (read.Position.Z - corner.Z));
-
-            if ((Planar(from: read.Position, to: corner) > ((m_corner == 0) ? m_firstReach : reach)) && ((m_corner == 0) || (FixedVector3.Dot(left: along, right: past) < FixedQ4816.Zero))) {
+            var hasSegment = (Planar(from: from, to: corner) > FixedQ4816.FromDouble(value: 0.05));
+            var withinCorner = (
+                (Planar(from: read.Position, to: corner) <= cornerReach) ||
+                (sweptSegment && (Stray(from: m_lastGoPosition, to: read.Position, point: corner) <= FixedQ4816.Max(x: cornerReach, y: (FixedQ4816.FromDouble(value: 0.35) * reachScale))))
+            );
+            var passedAlongSegment = (
+                hasSegment &&
+                (FixedVector3.Dot(left: along, right: past) >= FixedQ4816.Zero) &&
+                (read.Endpoint.ClockOwnedHere || (
+                    (Planar(from: read.Position, to: corner) <= FixedQ4816.Max(x: cornerReach, y: (FixedQ4816.FromDouble(value: 0.65) * reachScale))) &&
+                    (Stray(from: from, to: corner, point: read.Position) <= (FixedQ4816.FromDouble(value: 0.45) * reachScale))
+                ))
+            );
+            if (!withinCorner && !passedAlongSegment) {
                 break;
             }
 
             m_corner++;
             m_best = FixedQ4816.MaxValue;
-            m_progressTick = tick;
+            m_progressTick = m_authorityTicks;
         }
+        m_hasGoRead = true;
+        m_lastGoPosition = read.Position;
+        m_lastGoAuthority = read.Endpoint.Authority;
+        m_lastGoIndex = read.Index;
+        m_lastGoGeneration = read.Body.Generation;
+        m_lastGoPoseEpoch = read.Body.PoseEpoch;
+        m_lastGoCarryEpoch = goCarryEpoch;
+        m_lastGoTick = read.Body.Tick;
 
         var target = m_corners[m_corner];
         var distance = Planar(from: read.Position, to: target);
+        var moveAnswered = (m_senses.InputAdmitted(slot: m_slot) && m_senses.MoveInputAnswered(slot: m_slot, bodyTick: read.Body.Tick));
+        var final = (m_corner == (m_corners.Count - 1));
 
-        // A body that has strayed from its line, or made no progress toward its corner for a while, plans again from
-        // where it stands; one that keeps making no progress has met something its path did not show.
-        if (distance < (m_best - FixedQ4816.FromDouble(value: 0.05))) {
-            m_best = distance;
-            m_progressTick = tick;
+        if (
+            final &&
+            (go.Point is not null) &&
+            !holdsPartySync &&
+            !holdsChapterEnd &&
+            (go.Within < (0.45 * (double)scale)) &&
+            (m_walkers.Count > 0) &&
+            TryYieldAtPoint(
+                authoredPoint: in effectivePoint,
+                authoredWithin: effectiveWithin,
+                myDist: distance,
+                myRadius: myRadius,
+                rateHz: rateHz,
+                read: in read,
+                scale: scale,
+                still: still,
+                yieldSteer: out var yieldSteer
+            )
+        ) {
+            return yieldSteer;
         }
-        if (!planned && !go.Direct && (m_corner > 0) && (Stray(from: m_corners[(m_corner - 1)], point: read.Position, to: target) > FixedQ4816.FromDouble(value: StrayMetres))) {
+        m_yieldLeaderIndex = -1;
+
+        // A body that has strayed from its line, or made no progress toward its corner across StuckTicks answered
+        // authority ticks, plans again from where it stands; one that keeps making no progress has met something its
+        // path did not show.
+        if (distance < (m_best - (FixedQ4816.FromDouble(value: 0.05) * scale))) {
+            m_best = distance;
+            m_progressTick = m_authorityTicks;
+        } else if (!moveAnswered) {
+            m_progressTick = m_authorityTicks;
+        }
+        var strayLimit = FixedQ4816.FromDouble(value: (read.Endpoint.ClockOwnedHere ? StrayMetres : 1.6));
+        var strayFrom = ((m_corner > 0) ? m_corners[(m_corner - 1)] : m_planStart);
+        if (
+            !planned &&
+            !go.Direct &&
+            (Planar(from: strayFrom, to: target) > FixedQ4816.FromDouble(value: 0.25)) &&
+            (Stray(from: strayFrom, point: read.Position, to: target) > strayLimit)
+        ) {
             return Plan(go: go, read: in read, tick: tick) ? Go(go: go, planned: true, rateHz: rateHz, read: in read, still: still, tick: tick) : still;
         }
-        if (!planned && ((tick - m_progressTick) > StuckTicks)) {
+        if (!planned && moveAnswered && ((m_authorityTicks - m_progressTick) > StuckTicks)) {
             if (++m_stuckPlans > MaxStuckPlans) {
                 Fail(kind: "stuck", place: read.Place, reason: $"made no progress toward {(go.Place ?? Vector(go.Point))} after {MaxStuckPlans} plans", tick: tick);
                 return still;
@@ -635,7 +1174,6 @@ public sealed class WorldSeatDriver {
 
         var dx = (target.X - read.Position.X);
         var dz = (target.Z - read.Position.Z);
-        var final = (m_corner == (m_corners.Count - 1));
         var turn = FixedQ4816.Zero;
         var facing = Heading(dx: dx, dz: dz);
 
@@ -644,33 +1182,250 @@ public sealed class WorldSeatDriver {
 
             turn = FixedQ4816.Abs(value: FixedQ4816.WrapAngle(radians: (Heading(dx: (next.X - target.X), dz: (next.Z - target.Z)) - facing)));
             // Near a corner the camera already looks along the next leg, as a player looks where they turn.
-            if (distance < FixedQ4816.One) {
+            if (read.Endpoint.ClockOwnedHere && (distance < FixedQ4816.One)) {
                 facing = Heading(dx: (next.X - read.Position.X), dz: (next.Z - read.Position.Z));
             }
         }
 
         var length = FixedQ4816.Max(x: distance, y: FixedQ4816.FromDouble(value: 0.001));
+        var moveDx = (dx / length);
+        var moveDz = (dz / length);
         var stop = FixedQ4816.MaxValue;
 
-        if (final && (go.Point is not null)) {
-            stop = FixedQ4816.Max(x: FixedQ4816.Zero, y: (distance - (FixedQ4816.FromDouble(value: go.Within) / FixedQ4816.FromInteger(value: 2))));
-        } else if (!read.Endpoint.ClockOwnedHere && (m_corner == 0) && (m_firstReach < reach)) {
-            // Stepping onto a tight start cell (m_firstReach = 0.1 m) against a remote clock eases into the cell rather
-            // than sprinting over its 20 cm diameter between 30 Hz readings.
-            stop = FixedQ4816.Max(x: FixedQ4816.Zero, y: (distance - (m_firstReach / FixedQ4816.FromInteger(value: 2))));
+        if (go.Point is not null) {
+            var remaining = distance;
+
+            for (var index = m_corner; (index < (m_corners.Count - 1)); index++) {
+                remaining += Planar(from: m_corners[index], to: m_corners[(index + 1)]);
+            }
+            var margin = (read.Endpoint.ClockOwnedHere
+                ? (effectiveWithin / FixedQ4816.FromInteger(value: 2))
+                : FixedQ4816.Zero);
+            stop = FixedQ4816.Max(x: FixedQ4816.Zero, y: (remaining - margin));
+        } else if (
+            !read.Endpoint.ClockOwnedHere &&
+            (go.Place is { } goalPlace) &&
+            m_senses.TryPlaceShape(endpoint: read.Endpoint, placementId: goalPlace, shape: out var goalShape) &&
+            !goalShape.Contains(point: (goalShape.Center + new FixedVector3(X: FixedQ4816.FromInteger(value: 2), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero))) &&
+            !goalShape.Contains(point: (goalShape.Center + new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.FromInteger(value: 2))))
+        ) {
+            var remaining = distance;
+
+            for (var index = m_corner; (index < (m_corners.Count - 1)); index++) {
+                remaining += Planar(from: m_corners[index], to: m_corners[(index + 1)]);
+            }
+            stop = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 1.5), y: remaining);
         }
 
         return still with {
             Moves = true,
-            Dx = (dx / length),
-            Dz = (dz / length),
+            Dx = moveDx,
+            Dz = moveDz,
             Stop = stop,
             CornerDistance = (final ? FixedQ4816.MaxValue : distance),
             CornerTurn = turn,
             Faces = true,
             Facing = facing,
             Pace = go.Pace,
+            HoldWalk = ((m_corner == 0) && (m_firstReach < reach)),
         };
+    }
+
+    private (bool HoldsPartySync, bool HoldsChapterEnd) HoldsAfterGo() {
+        var scan = (m_step + 1);
+
+        while ((scan < m_chapter!.Steps.Count) && (m_chapter.Steps[scan] is WorldRouteStep.Rest or WorldRouteStep.Line)) {
+            scan++;
+        }
+        if (scan >= m_chapter.Steps.Count) {
+            return (HoldsPartySync: false, HoldsChapterEnd: true);
+        }
+        if ((m_canPressUntil is not null) && (m_chapter.Steps[scan] is WorldRouteStep.PressAction { Until: not null })) {
+            return (HoldsPartySync: true, HoldsChapterEnd: false);
+        }
+
+        return (HoldsPartySync: false, HoldsChapterEnd: false);
+    }
+
+    private void ResolvePartyHoldSpot(
+        in FixedVector3 authoredPoint,
+        FixedQ4816 authoredWithin,
+        in WorldSeatSenses.Reading read,
+        FixedQ4816 scale,
+        FixedQ4816 myRadius,
+        out FixedVector3 effectivePoint,
+        out FixedQ4816 effectiveWithin,
+        out bool behindParty
+    ) {
+        var tieEps = (FixedQ4816.FromDouble(value: 0.05) * scale);
+        var myGoalDist = Planar(from: read.Position, to: authoredPoint);
+        var claimRadius = (authoredWithin + (myRadius * FixedQ4816.FromInteger(value: 2)));
+        var goalClaimed = false;
+
+        foreach (var other in m_walkers) {
+            var otherDist = Planar(from: other.Position, to: authoredPoint);
+            var otherLeads = (((otherDist + tieEps) < myGoalDist) || ((FixedQ4816.Abs(value: (otherDist - myGoalDist)) <= tieEps) && (other.Index < read.Index)));
+
+            if ((otherDist <= claimRadius) && otherLeads) {
+                goalClaimed = true;
+                break;
+            }
+        }
+        if (!goalClaimed) {
+            effectivePoint = authoredPoint;
+            effectiveWithin = authoredWithin;
+            behindParty = false;
+            return;
+        }
+
+        var anchor = (((m_step > 0) && (m_chapter!.Steps[(m_step - 1)] is WorldRouteStep.Go { Point: { } prevPt })) ? Point(point: prevPt) : ((m_plannedIn == WorldKey(read: in read)) ? m_planStart : read.Position));
+        var entryDir = new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.One);
+
+        if ((m_step > 1) && (m_chapter!.Steps[(m_step - 2)] is WorldRouteStep.Go { Point: { } doorPt }) && (Planar(from: Point(point: doorPt), to: anchor) > (FixedQ4816.FromDouble(value: 0.1) * scale))) {
+            entryDir = PlanarUnit(from: Point(point: doorPt), to: anchor);
+        } else if (Planar(from: anchor, to: authoredPoint) > (FixedQ4816.FromDouble(value: 0.1) * scale)) {
+            entryDir = PlanarUnit(from: anchor, to: authoredPoint);
+        }
+
+        var entrySide = new FixedVector3(X: entryDir.Z, Y: FixedQ4816.Zero, Z: -entryDir.X);
+        var offset = (authoredPoint - anchor);
+        var openSide = ((((offset.X * entrySide.X) + (offset.Z * entrySide.Z)) >= FixedQ4816.Zero)
+            ? new FixedVector3(X: -entrySide.X, Y: FixedQ4816.Zero, Z: -entrySide.Z)
+            : entrySide);
+        var spot1 = new FixedVector3(
+            X: (anchor.X + (entryDir.X * (FixedQ4816.FromDouble(value: 0.75) * scale)) + (openSide.X * (FixedQ4816.FromDouble(value: 0.55) * scale))),
+            Y: authoredPoint.Y,
+            Z: (anchor.Z + (entryDir.Z * (FixedQ4816.FromDouble(value: 0.75) * scale)) + (openSide.Z * (FixedQ4816.FromDouble(value: 0.55) * scale)))
+        );
+        var spot2 = new FixedVector3(
+            X: (anchor.X + (entryDir.X * (FixedQ4816.FromDouble(value: 0.45) * scale)) - (openSide.X * (FixedQ4816.FromDouble(value: 0.65) * scale))),
+            Y: authoredPoint.Y,
+            Z: (anchor.Z + (entryDir.Z * (FixedQ4816.FromDouble(value: 0.45) * scale)) - (openSide.Z * (FixedQ4816.FromDouble(value: 0.65) * scale)))
+        );
+        var spot3 = (anchor with { Y = authoredPoint.Y });
+
+        behindParty = true;
+        if (!SpotClaimed(myRadius: myRadius, read: in read, scale: scale, spot: in spot1, tieEps: tieEps)) {
+            effectivePoint = spot1;
+            effectiveWithin = (FixedQ4816.FromDouble(value: 0.25) * scale);
+        } else if (!SpotClaimed(myRadius: myRadius, read: in read, scale: scale, spot: in spot2, tieEps: tieEps)) {
+            effectivePoint = spot2;
+            effectiveWithin = (FixedQ4816.FromDouble(value: 0.25) * scale);
+        } else {
+            effectivePoint = spot3;
+            effectiveWithin = (SpotClaimed(myRadius: myRadius, read: in read, scale: scale, spot: in spot3, tieEps: tieEps)
+                ? (FixedQ4816.FromDouble(value: 0.45) * scale)
+                : (FixedQ4816.FromDouble(value: 0.35) * scale));
+        }
+    }
+
+    private bool SpotClaimed(in FixedVector3 spot, in WorldSeatSenses.Reading read, FixedQ4816 scale, FixedQ4816 myRadius, FixedQ4816 tieEps) {
+        var myDist = Planar(from: read.Position, to: spot);
+
+        foreach (var other in m_walkers) {
+            var clearance = ((myRadius + other.Radius) - (FixedQ4816.FromDouble(value: 0.05) * scale));
+            var otherDist = Planar(from: other.Position, to: spot);
+            var otherLeads = (((otherDist + tieEps) < myDist) || ((FixedQ4816.Abs(value: (otherDist - myDist)) <= tieEps) && (other.Index < read.Index)));
+
+            if ((otherDist <= clearance) && otherLeads) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryYieldAtPoint(
+        in FixedVector3 authoredPoint,
+        FixedQ4816 authoredWithin,
+        FixedQ4816 myDist,
+        FixedQ4816 myRadius,
+        in WorldSeatSenses.Reading read,
+        FixedQ4816 scale,
+        int rateHz,
+        Steer still,
+        out Steer yieldSteer
+    ) {
+        var tieEps = (FixedQ4816.FromDouble(value: 0.05) * scale);
+
+        foreach (var other in m_walkers) {
+            var sep = (myRadius + other.Radius);
+            var blockRadius = FixedQ4816.Max(x: authoredWithin, y: (sep - (FixedQ4816.FromDouble(value: 0.08) * scale)));
+            var approachZone = (blockRadius + (FixedQ4816.FromDouble(value: 1.15) * scale));
+
+            if (myDist > approachZone) {
+                continue;
+            }
+
+            var otherDist = Planar(from: other.Position, to: authoredPoint);
+            var otherLeads = (((otherDist + tieEps) < myDist) || ((FixedQ4816.Abs(value: (otherDist - myDist)) <= tieEps) && (other.Index < read.Index)));
+
+            if (!otherLeads) {
+                continue;
+            }
+
+            var approaching = false;
+
+            if ((otherDist <= approachZone) && (otherDist > FixedQ4816.FromDouble(value: 0.01))) {
+                var toGoal = PlanarUnit(from: other.Position, to: authoredPoint);
+                var speedToward = ((other.Velocity.X * toGoal.X) + (other.Velocity.Z * toGoal.Z));
+
+                approaching = (speedToward > (FixedQ4816.FromDouble(value: 0.25) * scale));
+            }
+            if ((otherDist > blockRadius) && !approaching) {
+                continue;
+            }
+            if (m_yieldLeaderIndex != other.Index) {
+                m_yieldLeaderIndex = other.Index;
+                m_yieldStartBodyTick = read.Body.Tick;
+            } else if ((read.Body.Tick > m_yieldStartBodyTick) && ((read.Body.Tick - m_yieldStartBodyTick) >= ((ulong)(8 * rateHz)))) {
+                continue;
+            }
+
+            m_yielding = true;
+            m_progressTick = m_authorityTicks;
+            m_stallOrigin = read.Position;
+            m_stallTick = read.Body.Tick;
+            m_stallAuthority = read.Endpoint.Authority;
+            var clearance = (sep + (FixedQ4816.FromDouble(value: 0.15) * scale));
+
+            if (myDist < clearance) {
+                var away = ((myDist > FixedQ4816.FromDouble(value: 0.01))
+                    ? PlanarUnit(from: authoredPoint, to: read.Position)
+                    : new FixedVector3(X: (((read.Index & 1) == 0) ? FixedQ4816.One : -FixedQ4816.One), Y: FixedQ4816.Zero, Z: FixedQ4816.Zero));
+
+                yieldSteer = still with {
+                    Moves = true,
+                    Dx = away.X,
+                    Dz = away.Z,
+                    Stop = (FixedQ4816.FromDouble(value: 0.45) * scale),
+                    CornerDistance = FixedQ4816.MaxValue,
+                    Faces = true,
+                    Facing = Heading(dx: -away.X, dz: -away.Z),
+                    Pace = "walk",
+                };
+                return true;
+            }
+
+            yieldSteer = still with {
+                Faces = true,
+                Facing = Heading(dx: (authoredPoint.X - read.Position.X), dz: (authoredPoint.Z - read.Position.Z)),
+            };
+            return true;
+        }
+
+        yieldSteer = default;
+        return false;
+    }
+
+    private static FixedVector3 PlanarUnit(in FixedVector3 from, in FixedVector3 to) {
+        var dx = (to.X - from.X);
+        var dz = (to.Z - from.Z);
+        var len = FixedQ4816.Sqrt(value: ((dx * dx) + (dz * dz)));
+
+        return ((len > FixedQ4816.FromDouble(value: 0.001))
+            ? new FixedVector3(X: (dx / len), Y: FixedQ4816.Zero, Z: (dz / len))
+            : new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: FixedQ4816.One));
     }
 
     // Plans the step's path from where the body stands: straight at the goal for a direct step, otherwise the navigation
@@ -685,12 +1440,15 @@ public sealed class WorldSeatDriver {
         }
         Plans++;
         m_plannedIn = WorldKey(read: in read);
+        m_planStart = read.Position;
+        m_hasGoRead = false;
         m_corners.Clear();
         m_corner = 0;
         m_firstReach = FixedQ4816.FromDouble(value: 0.4);
         m_best = FixedQ4816.MaxValue;
-        m_progressTick = tick;
+        m_progressTick = m_authorityTicks;
         m_corridor.Clear();
+        m_settledBehindParty = false;
         if (!stuck) {
             m_stuckPlans = 0;
         }
@@ -700,8 +1458,15 @@ public sealed class WorldSeatDriver {
         if (go.Place is { } goal) {
             _ = m_corridor.Add(item: goal);
         }
-        // Where the body stands as the path is planned: a step that began on a place's edge may cross back over it.
+        // Where the body stands as the path is planned, and the places the preceding step handed off from: a step that
+        // began on a place's edge may cross back over it before a remote turn takes effect.
         _ = m_corridor.Add(item: read.Place);
+        foreach (var standing in read.Places) {
+            _ = m_corridor.Add(item: standing);
+        }
+        foreach (var prior in m_previousStepPlaces) {
+            _ = m_corridor.Add(item: prior);
+        }
         if ((m_step > 0) && (m_chapter?.Steps[(m_step - 1)] is WorldRouteStep.Go { Place: { } previousPlace })) {
             _ = m_corridor.Add(item: previousPlace);
         }
@@ -719,6 +1484,11 @@ public sealed class WorldSeatDriver {
             return true;
         }
 
+        var scale = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.05), y: m_senses.BodyScale(reading: in read));
+        var reachScale = FixedQ4816.Min(x: FixedQ4816.One, y: scale);
+        var corridorMargin = (read.Endpoint.ClockOwnedHere
+            ? m_margin
+            : FixedQ4816.Max(x: m_margin, y: (FixedQ4816.FromDouble(value: 0.45) * reachScale)));
         var plan = m_senses.Navigation(endpoint: read.Endpoint).Plan(
             corners: m_corners,
             goal: new WorldSeatGoal(Place: ((go.Place is null) ? null : shape), Point: target),
@@ -732,7 +1502,17 @@ public sealed class WorldSeatDriver {
             return false;
         }
         if (plan.StartsOnCell) {
-            m_firstReach = FixedQ4816.FromDouble(value: 0.1);
+            m_firstReach = (read.Endpoint.ClockOwnedHere
+                ? FixedQ4816.FromDouble(value: 0.1)
+                : (FixedQ4816.FromDouble(value: (stuck ? 0.15 : 0.55)) * reachScale));
+        }
+        if (
+            (go.Point is not null) &&
+            (m_corners.Count >= 2) &&
+            ((m_corners.Count > 2) || !plan.StartsOnCell) &&
+            (Planar(from: m_corners[^2], to: m_corners[^1]) < FixedQ4816.FromDouble(value: 0.85))
+        ) {
+            m_corners.RemoveAt(index: (m_corners.Count - 2));
         }
         var endpoint = read.Endpoint;
 
@@ -744,11 +1524,11 @@ public sealed class WorldSeatDriver {
 
         void AddPlaceAt(in FixedVector3 sample) {
             AddPlacePoint(point: in sample);
-            if (m_margin > FixedQ4816.Zero) {
-                AddPlacePoint(point: sample with { X = (sample.X - m_margin) });
-                AddPlacePoint(point: sample with { X = (sample.X + m_margin) });
-                AddPlacePoint(point: sample with { Z = (sample.Z - m_margin) });
-                AddPlacePoint(point: sample with { Z = (sample.Z + m_margin) });
+            if (corridorMargin > FixedQ4816.Zero) {
+                AddPlacePoint(point: sample with { X = (sample.X - corridorMargin) });
+                AddPlacePoint(point: sample with { X = (sample.X + corridorMargin) });
+                AddPlacePoint(point: sample with { Z = (sample.Z - corridorMargin) });
+                AddPlacePoint(point: sample with { Z = (sample.Z + corridorMargin) });
             }
         }
 
@@ -799,15 +1579,19 @@ public sealed class WorldSeatDriver {
         if (reassert) {
             m_lastAssert = tick;
         }
+        var driveScale = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.05), y: m_senses.BodyScale(reading: in read));
         m_driving = false;
+        m_docking = (!read.Endpoint.ClockOwnedHere && steer.Moves && (steer.Stop < driveScale));
 
         // The seat turns its camera by this tick's look before it composes this tick's move, so the move is framed
-        // against the facing the turn leaves, not the one read.
-        var facing = read.Yaw;
+        // against the facing the turn leaves, unless third-person movement holds a latched camera frame yaw.
+        var facing = (read.LatchedMoveYaw ?? read.Yaw);
 
-        foreach (var operation in m_program.Operations) {
-            if (operation is WorldSeatProgramOp.Turn turn) {
-                facing += (TurnDeflection(read: in read, steer: in steer, turn: turn) * read.YawPerTick);
+        if (read.LatchedMoveYaw is null) {
+            foreach (var operation in m_program.Operations) {
+                if (operation is WorldSeatProgramOp.Turn turn) {
+                    facing += (TurnDeflection(read: in read, steer: in steer, turn: turn) * read.YawPerTick);
+                }
             }
         }
         foreach (var operation in m_program.Operations) {
@@ -827,35 +1611,78 @@ public sealed class WorldSeatDriver {
     }
 
     private string Evaluate(WorldSeatProgramOp operation, in WorldSeatSenses.Reading read, in Steer steer, FixedQ4816 facing, ulong tick, int rateHz) {
+        var scale = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.05), y: m_senses.BodyScale(reading: in read));
+        var lagTicks = Math.Clamp(value: m_senses.MoveLagTicks(slot: m_slot, bodyTick: read.Body.Tick), min: 4UL, max: 30UL);
+        var lag = (read.Endpoint.ClockOwnedHere
+            ? FixedQ4816.Zero
+            : FixedQ4816.FromDouble(value: ((double)lagTicks / rateHz)));
+
         switch (operation) {
             case WorldSeatProgramOp.Move move: {
                 if (!steer.Moves) {
                     return "0 0";
                 }
 
-                // Slow for a sharp corner, or to stop at a final point, against the speed the body was delivered at.
+                // Slow for a sharp corner, or to stop at a final point, against the speed the body was delivered at
+                // and any round-trip pipeline lag between this reading and when a release reaches the authority.
                 var speed = read.PlanarSpeed;
                 var brake = FixedQ4816.FromDouble(value: move.Brake);
+                var bTau = (brake * lag);
                 var allowed = FixedQ4816.MaxValue;
 
                 if ((steer.CornerDistance != FixedQ4816.MaxValue) && (steer.CornerTurn > FixedQ4816.FromDegrees(degrees: move.CornerDegrees))) {
-                    var corner = FixedQ4816.FromDouble(value: move.CornerSpeed);
+                    var cornerRate = ((!read.Endpoint.ClockOwnedHere && (steer.CornerTurn > FixedQ4816.FromDegrees(degrees: 60.0)))
+                        ? Math.Min(val1: move.CornerSpeed, val2: 2.2)
+                        : move.CornerSpeed);
+                    var corner = (FixedQ4816.FromDouble(value: cornerRate) * scale);
+                    var cornerAllowed = (FixedQ4816.Sqrt(value: (((bTau * bTau) + (corner * corner)) + ((FixedQ4816.FromInteger(value: 2) * brake) * steer.CornerDistance))) - bTau);
 
-                    allowed = FixedQ4816.Sqrt(value: ((corner * corner) + ((FixedQ4816.FromInteger(value: 2) * brake) * steer.CornerDistance)));
+                    if (!read.Endpoint.ClockOwnedHere && (steer.CornerTurn > FixedQ4816.FromDegrees(degrees: 45.0)) && (steer.CornerDistance < (FixedQ4816.FromDouble(value: 5.0) * scale))) {
+                        var cornerDamped = FixedQ4816.Max(
+                            x: (FixedQ4816.FromDouble(value: 0.85) * scale),
+                            y: (FixedQ4816.FromDouble(value: 0.55) * steer.CornerDistance)
+                        );
+
+                        cornerAllowed = FixedQ4816.Min(x: cornerAllowed, y: cornerDamped);
+                    }
+                    allowed = cornerAllowed;
                 }
                 if (steer.Stop != FixedQ4816.MaxValue) {
-                    allowed = FixedQ4816.Min(x: allowed, y: FixedQ4816.Sqrt(value: ((FixedQ4816.FromInteger(value: 2) * brake) * steer.Stop)));
+                    var stopAllowed = (FixedQ4816.Sqrt(value: ((bTau * bTau) + ((FixedQ4816.FromInteger(value: 2) * brake) * steer.Stop))) - bTau);
+
+                    if (!read.Endpoint.ClockOwnedHere) {
+                        var knee = (FixedQ4816.FromDouble(value: 3.5) * scale);
+                        var damped = ((steer.Stop <= knee)
+                            ? (FixedQ4816.FromDouble(value: 0.80) * steer.Stop)
+                            : ((FixedQ4816.FromDouble(value: 2.80) * scale) + (FixedQ4816.FromDouble(value: 0.90) * (steer.Stop - knee))));
+
+                        stopAllowed = FixedQ4816.Min(x: stopAllowed, y: damped);
+                    }
+                    allowed = FixedQ4816.Min(x: allowed, y: stopAllowed);
+                }
+
+                if (
+                    !read.Endpoint.ClockOwnedHere &&
+                    (allowed != FixedQ4816.MaxValue) &&
+                    (speed > (allowed + (FixedQ4816.FromDouble(value: 0.60) * scale))) &&
+                    (speed > (FixedQ4816.FromDouble(value: 1.40) * scale))
+                ) {
+                    return "0 0";
                 }
 
                 var magnitude = FixedQ4816.One;
+                var floor = (read.Endpoint.ClockOwnedHere
+                    ? FixedQ4816.FromDouble(value: move.Least)
+                    : ((steer.Stop < (FixedQ4816.FromDouble(value: 0.50) * scale)) ? FixedQ4816.FromDouble(value: 0.12) : FixedQ4816.FromDouble(value: move.Least)));
 
                 if ((allowed != FixedQ4816.MaxValue) && (speed > allowed)) {
-                    magnitude = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: move.Least), y: (allowed / speed));
+                    magnitude = FixedQ4816.Max(x: floor, y: (allowed / speed));
                 }
-                if (!read.Endpoint.ClockOwnedHere && (steer.Stop != FixedQ4816.MaxValue)) {
+                if (!read.Endpoint.ClockOwnedHere && (allowed != FixedQ4816.MaxValue)) {
+                    var refWalkSpeed = (FixedQ4816.FromInteger(value: 4) * scale);
                     var approach = FixedQ4816.Clamp(
-                        value: (allowed / FixedQ4816.FromInteger(value: 5)),
-                        minimum: FixedQ4816.FromDouble(value: move.Least),
+                        value: (allowed / refWalkSpeed),
+                        minimum: floor,
                         maximum: FixedQ4816.One
                     );
 
@@ -875,11 +1702,12 @@ public sealed class WorldSeatDriver {
                 return ((deflection == FixedQ4816.Zero) ? "0 0" : $"{Number(deflection)} 0");
             }
             case WorldSeatProgramOp.Hold hold:
-                return ((steer.Moves && (read.Endpoint.ClockOwnedHere || (steer.Stop >= FixedQ4816.One)) && hold.Paces.Contains(value: steer.Pace)) ? "press" : "release");
+                return ((steer.Moves && CanSprint(lag: lag, read: in read, scale: scale, steer: in steer) && hold.Paces.Contains(value: steer.Pace)) ? "press" : "release");
             case WorldSeatProgramOp.Pulse pulse: {
                 var period = Math.Max(val1: 2UL, val2: (ulong)Math.Round(a: (pulse.PeriodSeconds * rateHz)));
+                var pulseElapsed = (read.Endpoint.ClockOwnedHere ? (tick - m_stepStart) : (m_authorityTicks - m_stepAuthorityStart));
 
-                return ((steer.Moves && (read.Endpoint.ClockOwnedHere || (steer.Stop >= FixedQ4816.One)) && pulse.Paces.Contains(value: steer.Pace) && (((tick - m_stepStart) % period) == 0UL)) ? "press" : "release");
+                return ((steer.Moves && CanSprint(lag: lag, read: in read, scale: scale, steer: in steer) && pulse.Paces.Contains(value: steer.Pace) && ((pulseElapsed % period) == 0UL)) ? "press" : "release");
             }
             case WorldSeatProgramOp.Tap tap:
                 return ((m_tap == tap.Action) ? "press" : "release");
@@ -916,8 +1744,35 @@ public sealed class WorldSeatDriver {
         return FixedQ4816.FromDouble(value: Math.Round(value: (double)deflection, digits: 4, mode: MidpointRounding.AwayFromZero));
     }
 
-    private void Submit(string text) {
-        m_lines.Add(item: m_submit(arg: text));
+    private static bool CanSprint(in WorldSeatSenses.Reading read, in Steer steer, FixedQ4816 scale, FixedQ4816 lag) {
+        if (read.Endpoint.ClockOwnedHere) {
+            return true;
+        }
+        if (steer.HoldWalk) {
+            return false;
+        }
+        if (steer.Stop < FixedQ4816.Max(x: (FixedQ4816.FromDouble(value: 15.0) * scale), y: ((FixedQ4816.FromInteger(value: 14) * scale) * lag))) {
+            return false;
+        }
+        if (
+            (steer.CornerDistance != FixedQ4816.MaxValue) &&
+            (steer.CornerTurn > FixedQ4816.FromDegrees(degrees: 40.0)) &&
+            (steer.CornerDistance < FixedQ4816.Max(x: (FixedQ4816.FromDouble(value: 14.0) * scale), y: ((FixedQ4816.FromInteger(value: 14) * scale) * lag)))
+        ) {
+            return false;
+        }
+        if (steer.Faces && (FixedQ4816.Abs(value: FixedQ4816.WrapAngle(radians: (steer.Facing - read.Yaw))) > FixedQ4816.FromDegrees(degrees: 35.0))) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private Func<string> Submit(string text) {
+        var outcome = m_submit(arg: text);
+
+        m_lines.Add(item: outcome);
+        return outcome;
     }
 
     private static string NeutralOf(WorldSeatProgramOp operation) => ((operation is WorldSeatProgramOp.Move or WorldSeatProgramOp.Turn) ? "0 0" : "release");

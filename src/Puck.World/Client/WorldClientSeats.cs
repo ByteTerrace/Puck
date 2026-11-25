@@ -11,7 +11,7 @@ internal sealed class WorldClientSeats(WorldClient client, PlayerRoster roster, 
     public int SeatCount => WorldSeatBindings.SeatCount;
 
     /// <inheritdoc/>
-    public void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried) => client.AdvanceSeatViews(carried: carried, deltaSeconds: deltaSeconds);
+    public void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried, Action<int, Puck.Maths.FixedQ4816>? remoteInPlaceTurn = null) => client.AdvanceSeatViews(carried: carried, deltaSeconds: deltaSeconds, remoteInPlaceTurn: remoteInPlaceTurn);
     /// <inheritdoc/>
     public void PresentSeatLook(WorldAuthorityEndpoint? endpoint) => client.PresentSeatLook(endpoint: endpoint);
     /// <inheritdoc/>
@@ -27,10 +27,19 @@ internal sealed class WorldClientSeats(WorldClient client, PlayerRoster roster, 
     /// <inheritdoc/>
     public void ConfigureLeave(Func<int, Principal, bool> leave) => roster.ConfigureLeave(leave: leave);
     /// <inheritdoc/>
-    public void CrossView(int slot, Puck.Maths.FixedQ4816 yawDelta, WorldSeatYawReference yawReference) => roster.Seat(slot: slot)?.View.Cross(
-        turn: WorldSeatViewState.ArrivalTurn(yawDelta: yawDelta),
-        yawReference: yawReference
-    );
+    public void CrossView(int slot, Puck.Maths.FixedQ4816 yawDelta, WorldSeatYawReference yawReference) {
+        if (roster.Seat(slot: slot) is not { } seat) {
+            return;
+        }
+
+        seat.View.Cross(
+            turn: WorldSeatViewState.ArrivalTurn(yawDelta: yawDelta),
+            yawReference: yawReference
+        );
+        if ((yawReference == WorldSeatYawReference.World) && (seat.CameraFrameYaw is { } latched)) {
+            seat.CameraFrameYaw = Puck.Maths.VectorFunctions.WrapAngle(radians: (latched + ((float)yawDelta)));
+        }
+    }
     /// <inheritdoc/>
     public bool IsOccupied(int slot) => (roster.Seat(slot: slot) is not null);
     /// <inheritdoc/>

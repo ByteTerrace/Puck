@@ -1,3 +1,4 @@
+using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -658,6 +659,22 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
 
+        if (
+            (m_instances.GetValueOrDefault(key: BootInstanceName) is { } boot) &&
+            ReferenceEquals(objA: source, objB: boot.Server) &&
+            (payload is WorldSubmissionPayload.Command { Value: WorldCommand.PoseSpawn poseSpawn }) &&
+            (route.Authority.DescribeForCheckpoint().Endpoint is null)
+        ) {
+            m_pendingPoseHomes.Enqueue(item: (
+                Mobility: mobility,
+                Pose: poseSpawn,
+                OperationId: operationId,
+                Completion: completion
+            ));
+            reason = string.Empty;
+            return true;
+        }
+
         var traveler = mobility;
 
         return route.Authority.TryForwardSubmission(
@@ -679,6 +696,161 @@ public sealed partial class WorldInstanceHost {
             ),
             reason: out reason
         );
+    }
+
+    // Drains colocated PoseSpawn requests on the host pump thread so m_instances and m_pendingTransfers are only read
+    // and mutated from their owning thread: poses in place when the secondary world declares the spawn point, and
+    // carries the traveler back to boot when only boot declares it.
+    private void DrainPendingPoseHomes() {
+        while (m_pendingPoseHomes.TryDequeue(result: out var request)) {
+            if (
+                (m_instances.GetValueOrDefault(key: BootInstanceName) is not { } boot) ||
+                !TryFindOnwardRoute(
+                    mobility: request.Mobility,
+                    reason: out var routeReason,
+                    route: out var route,
+                    source: boot.Server
+                )
+            ) {
+                request.Completion(obj: new WorldSubmissionResult.Refusal(
+                    Code: "body.pose.route-unknown",
+                    Detail: "traveler has no committed onward route from boot"
+                ));
+                continue;
+            }
+
+            if (TryForwardPoseHome(
+                boot: boot,
+                completion: request.Completion,
+                mobility: request.Mobility,
+                poseSpawn: request.Pose,
+                reason: out _,
+                route: route
+            )) {
+                continue;
+            }
+
+            if (!route.Authority.TryForwardSubmission(
+                completion: request.Completion,
+                operationId: request.OperationId,
+                payload: RebindForwardedPayload(
+                    payload: new WorldSubmissionPayload.Command(Value: request.Pose),
+                    bodyIndex: route.BodyIndex
+                ),
+                reason: out var forwardReason
+            )) {
+                request.Completion(obj: new WorldSubmissionResult.Refusal(
+                    Code: WorldFederatedServerLink.CompletionUnavailableCode,
+                    Detail: forwardReason
+                ));
+            }
+        }
+    }
+
+    // When a federated seat standing in a colocated secondary instance of this host poses at a spawn point that only
+    // this host's boot world declares, carry the traveler back to boot at that spawn point just as a local seat does.
+    private bool TryForwardPoseHome(WorldInstance boot, ForwardedBody route, in WorldMobilityIdentity mobility, WorldCommand.PoseSpawn poseSpawn, Action<WorldSubmissionResult> completion, out string reason) {
+        reason = string.Empty;
+        var current = route;
+        WorldInstance? located = null;
+        WorldForwardingDestination? descriptor = null;
+
+        for (var hop = 0; (hop < 64); hop++) {
+            var candidate = current.Authority.DescribeForCheckpoint();
+
+            if (candidate.Endpoint is not null) {
+                return false;
+            }
+
+            WorldInstance? instance = null;
+
+            foreach (var row in m_instances.Values) {
+                if (
+                    !ReferenceEquals(objA: row, objB: boot) &&
+                    string.Equals(a: row.Server.AuthorityIdentity, b: candidate.DestinationAuthority, comparisonType: StringComparison.Ordinal)
+                ) {
+                    instance = row;
+                    break;
+                }
+            }
+            if (instance is null) {
+                return false;
+            }
+            if (m_forwardedBodies.TryGetValue(key: (instance.Server, mobility.Incarnation), value: out var onward)) {
+                current = onward;
+                continue;
+            }
+
+            located = instance;
+            descriptor = candidate;
+            break;
+        }
+        if ((located is null) || (descriptor is null)) {
+            return false;
+        }
+
+        var resolved = located.Server.ExecuteAuthorityOperation(operation: () => {
+            if (
+                !located.Server.TryTransferredPrincipal(
+                    mobility: descriptor.Mobility,
+                    principal: out var peerPrincipal,
+                    sourceAuthority: descriptor.SourceAuthority
+                ) ||
+                !WorldLocalForwardedAuthority.IsLiveTransferredPrincipal(
+                    principal: peerPrincipal,
+                    server: located.Server
+                )
+            ) {
+                return (Live: false, HasLocalSpawn: false, Generation: 0, Principal: default(Principal));
+            }
+
+            var hasLocalSpawn = (WorldDefinitionRows.FindSpawnPoint(
+                spawnPoints: located.Server.Definition.SpawnPoints,
+                id: poseSpawn.SpawnId
+            ) is not null);
+
+            return (
+                Live: true,
+                HasLocalSpawn: hasLocalSpawn,
+                Generation: located.Server.Population.Generation(index: peerPrincipal.Index),
+                Principal: peerPrincipal
+            );
+        });
+
+        if (!resolved.Live || resolved.HasLocalSpawn) {
+            return false;
+        }
+        if (WorldDefinitionRows.FindSpawnPoint(
+            spawnPoints: boot.Server.Definition.SpawnPoints,
+            id: poseSpawn.SpawnId
+        ) is not { } homePoint) {
+            completion(obj: new WorldSubmissionResult.Refusal(
+                Code: "body.pose.spawn-unknown",
+                Detail: $"spawnPoint '{poseSpawn.SpawnId}' is not declared by '{located.Name}' or '{BootInstanceName}'"
+            ));
+            return true;
+        }
+        if (!TryEnqueuePoseHome(
+            actingPrincipal: resolved.Principal,
+            arrivalPose: FixedSpawnPoint.Compile(point: in homePoint),
+            reason: out var homeRefusal,
+            sourceInstance: located.Name,
+            transferId: out _,
+            traveller: new WorldEntityAddress(
+                Authority: located.Server.AuthorityIdentity,
+                Index: resolved.Principal.Index,
+                Generation: resolved.Generation
+            )
+        )) {
+            completion(obj: new WorldSubmissionResult.Refusal(
+                Code: "body.pose.home-refused",
+                Detail: homeRefusal
+            ));
+            return true;
+        }
+
+        completion(obj: WorldSubmissionResult.Ack.Instance);
+        return true;
     }
 
     // One edge-triggered portal hit, collected during a scan rather than acted on immediately — see

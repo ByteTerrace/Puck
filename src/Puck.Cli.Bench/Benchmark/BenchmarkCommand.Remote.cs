@@ -18,6 +18,25 @@ public static partial class BenchmarkCommand {
     // The one account an issuing pair's authority lists and its client signs in as.
     private const string AccountSubject = "benchmark";
 
+    // The seeded delivery jitter a remote leg's processes boot with (--peer-jitter-ms and --peer-jitter-seed). Each side
+    // derives its own seed from the run's seed and its name, so the two directions' schedules differ yet both reproduce.
+    private readonly record struct PeerJitter(int Milliseconds, ulong Seed) {
+        public static PeerJitter None => default;
+
+        public string[] Arguments(string side) {
+            if (Milliseconds <= 0) {
+                return [];
+            }
+
+            var seed = Puck.Maths.Fnv1aHash.Create();
+
+            seed.Add(value: Seed);
+            seed.Add(value: side);
+
+            return ["--peer-jitter-ms", Milliseconds.ToString(provider: CultureInfo.InvariantCulture), "--peer-jitter-seed", seed.Value.ToString(provider: CultureInfo.InvariantCulture)];
+        }
+    }
+
     /// <summary>A world staged for a leg: a delta over the world's entry. For a remote authority and its client on one
     /// machine it names the pair's namespace, admits one remote player for each seat and pins the pair's own federation
     /// key, which both processes boot with one key file; the authority listens on a free loopback port. For a leg on
@@ -181,15 +200,17 @@ public static partial class BenchmarkCommand {
         }
     }
 
-    // Boots the pair's authority, headless and listening, and waits until it has bound its endpoint.
-    private static SweepWorld BootAuthority(WorldBuild build, SuiteBudget budget, string directory, RemotePair pair, int timeout) {
+    // Boots the pair's authority, headless and listening, and waits until it has bound its endpoint. It outlives the
+    // measured World by the same backstop, so it never exits under a play still running against it.
+    private static SweepWorld BootAuthority(WorldBuild build, SuiteBudget budget, string directory, RemotePair pair, int allowanceSeconds, PeerJitter jitter) {
         _ = Directory.CreateDirectory(path: directory);
 
         var request = new WorldLaunchRequest(Verb, build.Path) {
             Arguments = [
                 "--listen", pair.Endpoint, "--federation-key-file", pair.KeyFile,
-                .. ((pair.IssuerFile.Length > 0) ? new[] { "--issuer-config-file", pair.IssuerFile } : [])],
-            ExitAfterSeconds = WorldLaunch.Backstop(TimeSpan.FromSeconds(Allowance(timeout))),
+                .. ((pair.IssuerFile.Length > 0) ? new[] { "--issuer-config-file", pair.IssuerFile } : []),
+                .. jitter.Arguments(side: "authority")],
+            ExitAfterSeconds = WorldLaunch.Backstop(TimeSpan.FromSeconds(allowanceSeconds)),
             Shape = WorldShape.Headless,
             StateDirectory = Path.Combine(directory, "state"),
             World = pair.Document,
@@ -205,9 +226,10 @@ public static partial class BenchmarkCommand {
     // Waits until the seat's authority route names a remote authority and its latest delivery holds the seat's body, so a
     // route armed after it plays against that authority; refuses, naming the last topology the World read, once the wait
     // passes its bound.
-    private static void WaitForRemote(SweepWorld? authority, SuiteBudget budget, SweepWorld live, string clientLog, Action<string> print) {
+    private static void WaitForRemote(SweepWorld? authority, SuiteBudget budget, SweepWorld live, string clientLog, Action<string> print, int seats = 1) {
         var clock = System.Diagnostics.Stopwatch.StartNew();
         var last = string.Empty;
+        var command = ((seats > 1) ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"world.benchmark topology {seats}") : "world.benchmark topology");
 
         while (clock.Elapsed < RemoteTimeout) {
             if (budget.Expired) {
@@ -218,14 +240,18 @@ public static partial class BenchmarkCommand {
                 throw new InvalidOperationException($"the remote authority refused the seat's transfer: {refused}");
             }
 
-            var topology = live.Run("world.benchmark topology", 30);
+            var topology = live.Run(command, 30);
 
             if (!topology.Ok) {
                 throw new InvalidOperationException($"the World cannot read its seat's topology: {topology.Output}");
             }
 
             last = topology.Output;
-            if (last.Contains("\"kind\":\"remote\"", StringComparison.Ordinal) && last.Contains("\"bodyDelivered\":true", StringComparison.Ordinal)) {
+            var jsonStart = last.IndexOf(value: '{');
+            var jsonEnd = last.LastIndexOf(value: '}');
+            var node = (((jsonStart >= 0) && (jsonEnd > jsonStart)) ? (JsonNode.Parse(json: last[jsonStart..(jsonEnd + 1)]) as JsonObject) : null);
+
+            if ((node?["kind"]?.GetValue<string>() == "remote") && (node["bodyDelivered"]?.GetValue<bool>() == true)) {
                 print($"{Verb}: {last}\n");
 
                 return;

@@ -1857,8 +1857,12 @@ public sealed partial class WorldInstanceHost {
     private static void SeedArrivalOccupancy(WorldInstance instance, int seat) {
         if (
             (seat < 0) ||
-            (seat >= instance.Server.Population.LocalSeatCount) ||
-            (instance.Server.Population.EntryBody(index: seat) is not { } body)
+            (seat >= instance.Server.Population.Capacity) ||
+            !WorldAdjacencyOwnership.TryTraveller(
+                body: out var body,
+                index: seat,
+                population: instance.Server.Population
+            )
         ) {
             return;
         }
@@ -2142,6 +2146,7 @@ public sealed partial class WorldInstanceHost {
     /// engine-time fence: destination topology resolves before population advance, and any overlapping destination
     /// step skips that traveler without evaluating input, motion, or dynamic contact a second time.</summary>
     public void DrainPendingTransfers() {
+        DrainPendingPoseHomes();
         ReconcileInDoubtTransfers();
 
         // A Retry refusal deliberately re-enqueues the same transfer. Drain only the batch that existed at this

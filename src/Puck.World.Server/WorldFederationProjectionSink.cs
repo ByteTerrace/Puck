@@ -25,7 +25,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null, WorldServer? server = null,
     WorldRecipientView? view = null) : IWorldDetachableSink, IWorldInterestSink {
     /// <summary>The maximum encoded records one projection subscriber retains while its wire consumer is behind.</summary>
-    public const int PendingDeliveryLimit = 8;
+    public const int PendingDeliveryLimit = 256;
     /// <summary>The named reason for detaching an observer whose wire queue fills.</summary>
     public const string BackpressureDetachReason = "world.observation.backpressure";
     /// <summary>The named reason for detaching a projection whose authority route is no longer current.</summary>
@@ -49,12 +49,22 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     private readonly record struct Record(WorldFederationResponse Kind, ReadOnlyMemory<byte> Head,
         ReadOnlyMemory<byte> Bodies = default, ReadOnlyMemory<byte> Tail = default) {
         public async Task WriteAsync(Stream output, CancellationToken ct) {
-            var prefix = new byte[FrameCodec.PrefixBytes + Head.Length];
-            FrameCodec.WritePrefix(prefix, (byte)Kind, checked(Head.Length + Bodies.Length + Tail.Length));
-            Head.CopyTo(prefix.AsMemory(FrameCodec.PrefixBytes));
-            await output.WriteAsync(prefix, ct).ConfigureAwait(false);
-            if (!Bodies.IsEmpty) { await output.WriteAsync(Bodies, ct).ConfigureAwait(false); }
-            if (!Tail.IsEmpty) { await output.WriteAsync(Tail, ct).ConfigureAwait(false); }
+            var payloadLength = checked(Head.Length + Bodies.Length + Tail.Length);
+            if (payloadLength <= 65536) {
+                var packet = new byte[FrameCodec.PrefixBytes + payloadLength];
+                FrameCodec.WritePrefix(packet, (byte)Kind, payloadLength);
+                Head.CopyTo(packet.AsMemory(FrameCodec.PrefixBytes));
+                if (!Bodies.IsEmpty) { Bodies.CopyTo(packet.AsMemory(FrameCodec.PrefixBytes + Head.Length)); }
+                if (!Tail.IsEmpty) { Tail.CopyTo(packet.AsMemory(FrameCodec.PrefixBytes + Head.Length + Bodies.Length)); }
+                await output.WriteAsync(packet, ct).ConfigureAwait(false);
+            } else {
+                var prefix = new byte[FrameCodec.PrefixBytes + Head.Length];
+                FrameCodec.WritePrefix(prefix, (byte)Kind, payloadLength);
+                Head.CopyTo(prefix.AsMemory(FrameCodec.PrefixBytes));
+                await output.WriteAsync(prefix, ct).ConfigureAwait(false);
+                if (!Bodies.IsEmpty) { await output.WriteAsync(Bodies, ct).ConfigureAwait(false); }
+                if (!Tail.IsEmpty) { await output.WriteAsync(Tail, ct).ConfigureAwait(false); }
+            }
             await output.FlushAsync(ct).ConfigureAwait(false);
         }
     }
@@ -69,8 +79,6 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
 
     /// <summary>The number of encoded records currently retained for this subscriber.</summary>
     public int PendingDeliveries => m_frames.Reader.Count;
-
-    internal bool HoldsProjection => ((m_view is null) || (m_feed?.Holds(view: m_view) ?? m_cursor.Holds(view: m_view)));
 
     /// <inheritdoc/>
     public string? DetachReason { get; private set; }
