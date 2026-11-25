@@ -14,12 +14,14 @@ public static class SdfQueryWork {
     public static WorkKind BoundSamples { get; } = new(name: "sdf.queries.samples.bounds", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Sampler calls that could not answer.</summary>
     public static WorkKind FailedSamples { get; } = new(name: "sdf.queries.samples.failed", unit: "count", workClass: WorkClass.Pacing);
-    /// <summary>Finite-difference gradient requests.</summary>
+    /// <summary>Gradient requests, answered by one forward-mode walk (<see cref="GradientWalks"/>) or by finite differences (<see cref="GradientTaps"/>).</summary>
     public static WorkKind Gradients { get; } = new(name: "sdf.queries.gradients", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Distance taps actually attempted by finite-difference gradients, including failed taps.</summary>
     public static WorkKind GradientTaps { get; } = new(name: "sdf.queries.gradient-taps", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gradients answered by one forward-mode walk (a region's tape, or the culled stream), in place of six taps.</summary>
+    public static WorkKind GradientWalks { get; } = new(name: "sdf.queries.gradient-walks", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gradient requests whose taps or normalization could not produce a gradient.</summary>
     public static WorkKind FailedGradients { get; } = new(name: "sdf.queries.gradients.failed", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Process totals; read twice to measure a window. March samples are accumulated locally and published once per march.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.queries", kinds: [Marches, Samples, ExactSamples, BoundSamples, FailedSamples, Gradients, GradientTaps, FailedGradients]);
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.queries", kinds: [Marches, Samples, ExactSamples, BoundSamples, FailedSamples, Gradients, GradientWalks, GradientTaps, FailedGradients]);
 }

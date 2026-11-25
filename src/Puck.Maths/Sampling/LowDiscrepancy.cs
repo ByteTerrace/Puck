@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace Puck.Maths;
 
 /// <summary>
@@ -33,4 +35,44 @@ public static class LowDiscrepancy {
     public static (UnitFraction32 X, UnitFraction32 Y) R2(ulong index) =>
         (new(Value: ((uint)(unchecked((index * PlasticInverseQ64)) >> 32))),
          new(Value: ((uint)(unchecked((index * PlasticInverseSquaredQ64)) >> 32))));
+
+    /// <summary>The golden angle in radians, <c>π · (3 − √5)</c>: the turn between consecutive points of a golden spiral
+    /// (<see cref="SphericalFibonacci"/>, a disc's spiral taps), the angular form of <see cref="R1"/>'s increment.</summary>
+    public const double GoldenAngle = 2.39996322972865332;
+
+    /// <summary>Returns the <paramref name="index"/>-th of <paramref name="count"/> directions spread evenly over the unit
+    /// sphere: the spherical Fibonacci lattice, a band of equal area per point along Y, each turned the golden angle from
+    /// the last. Presentation tier (float).</summary>
+    /// <param name="index">The direction's index, from zero to <paramref name="count"/>.</param>
+    /// <param name="count">The directions in the set; positive.</param>
+    /// <returns>The unit direction.</returns>
+    public static Vector3 SphericalFibonacci(int index, int count) {
+        var y = (1f - (((2f * index) + 1f) / count));
+        var radius = MathF.Sqrt(x: MathF.Max(x: 0f, y: (1f - (y * y))));
+        var angle = (index * ((float)GoldenAngle));
+
+        return new Vector3(x: (radius * MathF.Cos(x: angle)), y: y, z: (radius * MathF.Sin(x: angle)));
+    }
+
+    /// <summary>Returns the radical inverse of <paramref name="index"/> in base <paramref name="radix"/>: its digits
+    /// mirrored about the radix point, the <paramref name="index"/>-th point of the van der Corput sequence, whose pairs in
+    /// coprime bases are the Halton sequence. The digits accumulate exactly as an integer numerator over the radix power
+    /// and divide once.</summary>
+    /// <param name="index">The point's index.</param>
+    /// <param name="radix">The base, at least two.</param>
+    /// <returns>The point in <c>[0, 1)</c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="radix"/> is below two.</exception>
+    public static double RadicalInverse(uint index, uint radix) {
+        ArgumentOutOfRangeException.ThrowIfLessThan(value: radix, other: 2u);
+
+        var numerator = 0UL;
+        var denominator = 1UL;
+
+        while (index != 0u) {
+            numerator = ((numerator * radix) + (index % radix));
+            denominator *= radix;
+            index /= radix;
+        }
+        return (numerator / ((double)denominator));
+    }
 }

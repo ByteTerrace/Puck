@@ -338,7 +338,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private static Vector3[] BuildDirections(int count) {
         var directions = new Vector3[count];
 
-        for (var ray = 0; (ray < count); ray++) { directions[ray] = Fibonacci(count: count, index: ray); }
+        for (var ray = 0; (ray < count); ray++) { directions[ray] = LowDiscrepancy.SphericalFibonacci(count: count, index: ray); }
         return directions;
     }
 
@@ -3478,16 +3478,6 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // A stable sort: equal lengths keep their lexicographic order.
         return [.. candidates.OrderBy(keySelector: static candidate => candidate.LengthSquared())];
     }
-    // The index-th of count directions spread evenly over the sphere (a spherical Fibonacci lattice).
-    private static Vector3 Fibonacci(int index, int count) {
-        const float GoldenAngle = 2.39996323f;
-        var z = (1f - (((2f * index) + 1f) / count));
-        var radius = MathF.Sqrt(x: MathF.Max(x: 0f, y: (1f - (z * z))));
-        var angle = (index * GoldenAngle);
-
-        return new Vector3(x: (radius * MathF.Cos(x: angle)), y: z, z: (radius * MathF.Sin(x: angle)));
-    }
-
     // An axis-aligned world box.
     private readonly record struct Box(Vector3 Low, Vector3 High);
     // A probe the worker lists: its level and cell, whether it lacks a trace against the current geometry, the capture

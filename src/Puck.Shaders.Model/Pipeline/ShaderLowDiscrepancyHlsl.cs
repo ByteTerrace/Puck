@@ -15,7 +15,8 @@ public static class ShaderLowDiscrepancyHlsl {
 
     /// <summary>Generates the include.</summary>
     /// <returns>The HLSL text: <c>PuckR2AlphaX</c> and <c>PuckR2AlphaY</c>, <see cref="LowDiscrepancy.R2AlphaXQ32"/> and
-    /// <see cref="LowDiscrepancy.R2AlphaYQ32"/> as <c>uint</c> constants, and <c>puckR2Dither</c>, the sample they make.</returns>
+    /// <see cref="LowDiscrepancy.R2AlphaYQ32"/> as <c>uint</c> constants, <c>PuckGoldenAngle</c>,
+    /// <see cref="LowDiscrepancy.GoldenAngle"/>, and <c>puckR2Dither</c>, the sample the R2 increments make.</returns>
     public static string Generate() {
         var text = new StringBuilder();
 
@@ -30,6 +31,9 @@ public static class ShaderLowDiscrepancyHlsl {
         Line(line: "// index * alpha product per axis is the sequence's fixed-point point.");
         Constant(name: "PuckR2AlphaX", value: LowDiscrepancy.R2AlphaXQ32);
         Constant(name: "PuckR2AlphaY", value: LowDiscrepancy.R2AlphaYQ32);
+        Line();
+        Line(line: "// The golden angle in radians, pi * (3 - sqrt(5)): the turn between consecutive taps of a golden spiral.");
+        Line(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"static const float PuckGoldenAngle = {LowDiscrepancy.GoldenAngle:R};"));
         Line();
         Line(line: "// One R2 dither sample in [0, 1] from integer pixel coordinates, in fixed point so both backends add the identical");
         Line(line: "// pattern: the unsigned product wraps mod 2^32, which is the fractional part of the additive recurrence.");

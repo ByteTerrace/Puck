@@ -87,7 +87,7 @@ public sealed partial class SdfMeshPathBake {
         // Use the same packer that writes the dispatch. Offsets into a batch are rebased to the start of this request.
         SdfMeshBakeBlock.WriteLattice(row, in request, first: 0, poseBase: 0, poseFirst: keys.PoseFirst, poseRowCount: keys.PoseRowCount);
         hash.Append(row);
-        hash.Append(MemoryMarshal.AsBytes(request.Points.Span));
+        hash.Append(MemoryMarshal.AsBytes(request.TableRows.Span));
         return hash.GetCurrentHashAsUInt128();
     }
 

@@ -50,7 +50,7 @@ public static class Pcg3dLatticeNoise {
     private static readonly FixedInterval NoiseBand = new(lower: -FixedQ4816.One, upper: FixedQ4816.One);
 
     /// <summary>Returns the quintic fade <c>6t⁵ − 15t⁴ + 10t³</c> at a lattice fraction, rounded once: the CPU twin of
-    /// the renderer's blend, which <see cref="ValueNoise01"/> and <see cref="ValueNoise3"/> weigh their corners by.</summary>
+    /// the renderer's blend, which <see cref="ValueNoise01"/> and <see cref="ValueNoise3(FixedVector3, uint, uint, uint)"/> weigh their corners by.</summary>
     /// <param name="t">The fraction, in <c>[0, 1]</c>.</param>
     /// <returns>The exact polynomial at <paramref name="t"/> rounded to nearest, ties to even: within half a raw of it,
     /// in <c>[0, 1]</c>, and non-decreasing in <paramref name="t"/>, since the exact fade rises over <c>[0, 1]</c> and
@@ -214,7 +214,7 @@ public static class Pcg3dLatticeNoise {
             z: (unchecked((uint)z) ^ seedZ)
         ).X >> 16)));
     }
-    /// <summary>Sums octaves of <see cref="ValueNoise3"/> as the renderer's <c>NoiseDisplace</c> does: octave
+    /// <summary>Sums octaves of <see cref="ValueNoise3(FixedVector3, uint, uint, uint)"/> as the renderer's <c>NoiseDisplace</c> does: octave
     /// <c>k</c> samples at <c>q·lacunarityᵏ</c> with seed <c>seed + k</c> (its Y and Z lanes keyed by that seed times
     /// <see cref="HashStreamA"/> and <see cref="HashStreamB"/>) and weighs <c>gainᵏ</c>.</summary>
     /// <param name="q">The first octave's point in lattice cells.</param>
@@ -237,14 +237,78 @@ public static class Pcg3dLatticeNoise {
 
         return sum;
     }
-    /// <summary>Encloses every <see cref="ValueNoise3"/> answer over a box of lattice points.</summary>
+    /// <summary>Samples one octave of 3D value noise at a point that carries its gradient: the value
+    /// <see cref="ValueNoise3(FixedVector3, uint, uint, uint)"/> answers at the point's value, and its gradient by the chain
+    /// rule through the trilinear blend and each axis's quintic fade, whose slope is <c>30t²(1 − t)²</c>.</summary>
+    /// <param name="q">The point in lattice cells, with its gradient.</param>
+    /// <param name="seedX">The seed each corner's X lane is keyed with.</param>
+    /// <param name="seedY">The seed each corner's Y lane is keyed with.</param>
+    /// <param name="seedZ">The seed each corner's Z lane is keyed with.</param>
+    /// <returns>The noise with its gradient.</returns>
+    public static FixedGradient ValueNoise3(FixedGradient3 q, uint seedX, uint seedY, uint seedZ) {
+        var point = q.Value;
+        var value = ValueNoise3(q: point, seedX: seedX, seedY: seedY, seedZ: seedZ);
+        var cx = (point.X.Value >> FixedQ4816.FractionBitCount);
+        var cy = (point.Y.Value >> FixedQ4816.FractionBitCount);
+        var cz = (point.Z.Value >> FixedQ4816.FractionBitCount);
+        var tx = (point.X - FixedQ4816.FromInteger(value: cx));
+        var ty = (point.Y - FixedQ4816.FromInteger(value: cy));
+        var tz = (point.Z - FixedQ4816.FromInteger(value: cz));
+        var (ux, uy, uz) = (QuinticFade(t: tx), QuinticFade(t: ty), QuinticFade(t: tz));
+        ref readonly var cell = ref CellCorners(seedX: seedX, seedY: seedY, seedZ: seedZ, x: cx, y: cy, z: cz);
+        // The blend's partials along each fade: the other two fades blending the corner differences across that axis.
+        var dx = FixedQ4816.Lerp(amount: uz,
+            from: FixedQ4816.Lerp(amount: uy, from: (cell.C100 - cell.C000), to: (cell.C110 - cell.C010)),
+            to: FixedQ4816.Lerp(amount: uy, from: (cell.C101 - cell.C001), to: (cell.C111 - cell.C011)));
+        var dy = FixedQ4816.Lerp(amount: uz,
+            from: FixedQ4816.Lerp(amount: ux, from: (cell.C010 - cell.C000), to: (cell.C110 - cell.C100)),
+            to: FixedQ4816.Lerp(amount: ux, from: (cell.C011 - cell.C001), to: (cell.C111 - cell.C101)));
+        var dz = FixedQ4816.Lerp(amount: uy,
+            from: FixedQ4816.Lerp(amount: ux, from: (cell.C001 - cell.C000), to: (cell.C101 - cell.C100)),
+            to: FixedQ4816.Lerp(amount: ux, from: (cell.C011 - cell.C010), to: (cell.C111 - cell.C110)));
+        var two = FixedQ4816.FromInteger(value: 2);
+
+        return new FixedGradient(
+            Value: value,
+            Gradient: (((q.X.Gradient * ((two * dx) * QuinticFadeSlope(t: tx))) + (q.Y.Gradient * ((two * dy) * QuinticFadeSlope(t: ty)))) + (q.Z.Gradient * ((two * dz) * QuinticFadeSlope(t: tz))))
+        );
+    }
+    // The quintic fade's slope 30t²(1 − t)² at a lattice fraction.
+    private static FixedQ4816 QuinticFadeSlope(FixedQ4816 t) {
+        var rest = (FixedQ4816.One - t);
+
+        return (FixedQ4816.FromInteger(value: 30) * ((t * t) * (rest * rest)));
+    }
+    /// <summary>Sums octaves of <see cref="ValueNoise3(FixedGradient3, uint, uint, uint)"/> at a point that carries its
+    /// gradient, as <see cref="Fbm3(FixedVector3, uint, int, FixedQ4816, FixedQ4816)"/> sums them at a point.</summary>
+    /// <param name="q">The first octave's point in lattice cells, with its gradient.</param>
+    /// <param name="seed">The first octave's seed.</param>
+    /// <param name="octaves">The octave count; none sums to zero.</param>
+    /// <param name="gain">Each octave's weight over the one before.</param>
+    /// <param name="lacunarity">Each octave's frequency over the one before.</param>
+    /// <returns>The weighted sum with its gradient.</returns>
+    public static FixedGradient Fbm3(FixedGradient3 q, uint seed, int octaves, FixedQ4816 gain, FixedQ4816 lacunarity) {
+        var weight = FixedQ4816.One;
+        FixedGradient sum = FixedQ4816.Zero;
+
+        for (var octave = 0u; (octave < octaves); octave++) {
+            var octaveSeed = unchecked(seed + octave);
+
+            sum = FixedGradients.Add(a: sum, b: FixedGradients.Multiply(a: weight, b: ValueNoise3(q: q, seedX: octaveSeed, seedY: unchecked(octaveSeed * HashStreamA), seedZ: unchecked(octaveSeed * HashStreamB))));
+            q = FixedGradients.Multiply(a: q, b: lacunarity);
+            weight *= gain;
+        }
+
+        return sum;
+    }
+    /// <summary>Encloses every <see cref="ValueNoise3(FixedVector3, uint, uint, uint)"/> answer over a box of lattice points.</summary>
     /// <param name="x">The box's extent along X, in lattice cells.</param>
     /// <param name="y">The box's extent along Y, in lattice cells.</param>
     /// <param name="z">The box's extent along Z, in lattice cells.</param>
     /// <param name="seedX">The seed each corner's X lane is keyed with.</param>
     /// <param name="seedY">The seed each corner's Y lane is keyed with.</param>
     /// <param name="seedZ">The seed each corner's Z lane is keyed with.</param>
-    /// <returns>An interval holding <see cref="ValueNoise3"/> at every representable point of the box: certified, not
+    /// <returns>An interval holding <see cref="ValueNoise3(FixedVector3, uint, uint, uint)"/> at every representable point of the box: certified, not
     /// estimated, and never wider than <c>[-1, 1]</c>, which an unbounded box answers.</returns>
     /// <remarks>
     /// <para>Inside one cell the noise is a trilinear blend of its corners over the fades <c>u</c>, and a trilinear
@@ -311,7 +375,7 @@ public static class Pcg3dLatticeNoise {
         // Twice the blend less one, exact on the grid.
         return new FixedInterval(lower: FixedQ4816.FromRawBits(value: ((2L * least) - FadeOne)), upper: FixedQ4816.FromRawBits(value: ((2L * most) - FadeOne)));
     }
-    /// <summary>Encloses every <see cref="Fbm3"/> answer over a box of first-octave lattice points: each octave's
+    /// <summary>Encloses every <see cref="Fbm3(FixedVector3, uint, int, FixedQ4816, FixedQ4816)"/> answer over a box of first-octave lattice points: each octave's
     /// <see cref="ValueNoise3Bounds"/> over the box carried to that octave by the same rounded scaling
     /// (<see cref="FixedInterval.RoundedProduct"/>), weighed and summed in outward-rounded interval arithmetic.</summary>
     /// <param name="x">The box's extent along X, in first-octave lattice cells.</param>
@@ -321,7 +385,7 @@ public static class Pcg3dLatticeNoise {
     /// <param name="octaves">The octave count; none sums to zero.</param>
     /// <param name="gain">Each octave's weight over the one before.</param>
     /// <param name="lacunarity">Each octave's frequency over the one before.</param>
-    /// <returns>An interval holding <see cref="Fbm3"/> at every representable point of the box; unbounded only where a
+    /// <returns>An interval holding <see cref="Fbm3(FixedVector3, uint, int, FixedQ4816, FixedQ4816)"/> at every representable point of the box; unbounded only where a
     /// weighted sum leaves the carrier.</returns>
     public static FixedInterval Fbm3Bounds(FixedInterval x, FixedInterval y, FixedInterval z, uint seed, int octaves, FixedQ4816 gain, FixedQ4816 lacunarity) {
         var weight = FixedQ4816.One;

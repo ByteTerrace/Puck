@@ -13,6 +13,9 @@
 // along that frame's axes. The host meshes the samples (SdfMeshPathBake). This is bake-time work: the mesh path's frame
 // dispatches it only while a bake is pending.
 //
+// A final lattice's slab samples either every sample of its planes (mode 0) or only the blocks its interval bounds could
+// not prove the surface stays clear of (mode 1, SdfMeshPathBake.Bounds.cs); the host fills every skipped sample.
+//
 // Each lattice names its output base and fields in glyphs.w. Value and material planes are contiguous; gradient triples
 // follow the value plane, in the order the contour consumes them.
 #ifndef SDF_MESH_BAKE_STAGE_HLSLI
@@ -59,6 +62,16 @@ void sdfBakeSample(uint sample, uint count) {
     float3 position;
     if (mode >= 2u) {
         position = sdfMeshBakePoints[sample].xyz;
+    } else if (mode == 1u) {
+        // A block slab: blocks of dims.x by dims.y by the packed depth, back to back along z, each placed by its row of
+        // the point table (from the lattice's first sample) at its low corner on the final lattice's grid.
+        uint depth = (dims.w & 0xFFFFu) >> 2u;
+        uint perBlock = dims.x * dims.y * depth;
+        uint block = local / perBlock;
+        uint within = local - block * perBlock;
+        float3 corner = sdfMeshBakePoints[asuint(origin.w) + block].xyz;
+        uint3 grid = uint3(within % dims.x, (within / dims.x) % dims.y, within / (dims.x * dims.y));
+        position = origin.xyz + (corner + float3(grid)) * cell.xyz;
     } else {
         // A slab shares the final lattice's origin. Its packed first plane places it on that grid.
         uint plane = (dims.w & 0xFFFFu) >> 2u;
