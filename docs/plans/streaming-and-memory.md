@@ -587,9 +587,9 @@ held, promised and room.
 | A bake's answered samples (`mesh-bake-readback`) | Authoring | A standing reservation of `SdfMeshPathBake.ReadbackBytes`, a progress floor | 3 |
 | The store's writes of what a bake baked (`mesh-store-writes`) and the sample sets a bake reads in place of a dispatch (`mesh-bake-samples`) | Authoring | A workspace reservation; a refused write or read does without | 3 |
 | The store's reads of an entry a boot decodes (`mesh-entry`) | Play | A workspace reservation; a refused read leaves the entry in the store | 3 |
-| The trace scene's CPU hierarchy and a scene build's pieces beside the old scene | Play | A reservation for the build's peak; the hierarchy goes when placement reads the GPU trace | 9 |
+| The trace scene's CPU hierarchy and a scene build's pieces beside the old scene | Play | A reservation for the build's peak; each geometry's copies of its mesh level are native (`SdfMeshIrradianceScene.Geometry`) and its nodes managed; the hierarchy goes when placement reads the GPU trace | 9 |
 | `GpuRegion`'s host copies and staging | Play | Reserved with the region they mirror, at the same grant | 2, 3 |
-| The probe cache's blocks | Play | A cached owner in bytes, trimmed first, read again on the frame thread (`MemoryAccount.ServiceSampledOwners`) | 9 |
+| The probe cache's blocks and the volume's slot words | Play | Native storage freed through the volume's reader epochs; the blocks a cached owner in bytes (`sdf.mesh-gi.probe-blocks`), trimmed first, read again on the frame thread (`MemoryAccount.ServiceSampledOwners`), the words an elastic owner (`sdf.mesh-gi.volume`) | 9 |
 | The composed-document store | Play | Released after boot where nothing reads it | 6 |
 | Speculative work: bakes, loads and decodes for a predicted demand | As the work it speculates | A share of the workspace class, cancelled when the demand leaves or pressure asks | 3, 10 |
 | Rented arrays the shared pool keeps | Play | `RentedArrays` limits shared buckets by payload size. All element types share one retention limit for larger reference-free arrays. The cache admits each returned array against host room and releases its charge on reuse or trim. | 2, 11 |

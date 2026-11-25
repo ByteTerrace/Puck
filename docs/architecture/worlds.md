@@ -249,7 +249,7 @@ A world source is selected by its `schema:` line, never by its folder or suffix,
 so a cartridge source inside a package is copied rather than compiled as a
 world; a cartridge module (`cartridges/shared/`) declares the cartridge schema
 for the same reason, since a source naming none is a world module library. `puck world prepare <package>`, `puck official build --worlds <package>`
-and the silo image take the same folder.
+and `puck world host build` take the same folder.
 
 ## Compiled worlds
 

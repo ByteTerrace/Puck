@@ -46,7 +46,7 @@ edits, and repeats with an interrupted deployment and an interrupted rollback
 **Owns:** `worlds/<id>/` packages and their `manifest.json`
 (`puck.asset-package.v1`), package resolution in `Puck.World` (`--world
 <folder>`), `puck compile --tree`, `puck world prepare`, `puck world release
-prepare`, `puck official build`, `puck azure build` and the silo image
+prepare`, `puck official build`, `puck azure build` and `puck world host build`
 ([decision](../decisions/runtime-and-delivery.md#asset-packages)).
 
 **Delivers, in this order:**

@@ -1,7 +1,7 @@
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Imports
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-import { worldSiloConfigType, worldSiloActionGroupConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.7'
+import { worldSiloConfigType, worldSiloActionGroupConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.8'
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Parameters
@@ -10,7 +10,6 @@ param configuration worldSiloConfigType
 param actionGroup worldSiloActionGroupConfigType
 param publishingPrincipalId string
 param storageAccountName string
-param registryName string
 param keyVaultName string
 @description('The Application Insights component the silo\'s azure.monitor telemetry sink publishes to.')
 param applicationInsightsName string
@@ -29,7 +28,7 @@ module identity 'br/public:avm/res/managed-identity/user-assigned-identity:0.6.0
     tags: union(tags, configuration.userAssignedIdentity.?tags ?? {})
   }
 }
-module world 'ts/bvm:ptn_platform_world-silo:0.0.7' = {
+module world 'ts/bvm:ptn_platform_world-silo:0.0.8' = {
   params: {
     configuration: configuration
     actionGroup: actionGroup
@@ -37,7 +36,6 @@ module world 'ts/bvm:ptn_platform_world-silo:0.0.7' = {
     owner: identity.outputs.principalId
     publishingPrincipalId: publishingPrincipalId
     storageAccountName: storageAccountName
-    registryName: registryName
   }
 }
 resource insights 'Microsoft.Insights/components@2020-02-02' existing = { name: applicationInsightsName }

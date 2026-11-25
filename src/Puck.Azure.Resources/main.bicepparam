@@ -638,7 +638,7 @@ param resources = {
         scope: 'user_impersonation'
       }
     }
-    container: { cpu: 2, memoryInGB: 4, name: 'main' }
+    service: { cpu: 2, memoryInGB: 4 }
     compute: {
       adminUsername: 'puck'
       capacity: 1
@@ -691,7 +691,6 @@ param resources = {
     releaseStateSecretName: 'PuckWorldReleaseState'
     name: '${prefix}vmssp000'
     port: worldQuicPort
-    repositoryName: 'world-silo'
     roleDefinitionName: 'Puck World Store'
     tags: { PetName: 'Puck World' }
     userAssignedIdentity: {

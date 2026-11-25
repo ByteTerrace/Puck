@@ -1020,8 +1020,8 @@ claims.
 
 The lead runs any merge an agent is denied. Agents resolve conflicts in
 generated files by running their generators, never by hand-merging: the world
-schemas and the portal's TypeScript (`puck schema`), the name registry
-(`puck registry`), the vocabulary page (`puck vocabulary`), the console verb
+schemas, the portal's TypeScript, the model table and the name registry
+(`puck schema --bootstrap`, one run for all four), the vocabulary page (`puck vocabulary`), the console verb
 catalog (`puck verbs`, which boots a headless and a windowed World, a GPU leg) and
 `packages.lock.json` (`puck locks`).
 

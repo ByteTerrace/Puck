@@ -327,6 +327,16 @@ puck test <path-or-dir>               # boots each test block headless, one verd
 - `puck embed lock <path>` resolves authored `embed(...)` text into committed
   `.embeddings.json` lock files.
 - `puck vocabulary [--check]` regenerates the world vocabulary page.
+- **Adding a member to a world document type** (a property of `WorldDefinition` or anything it reaches) is
+  one annotation and one command. A `string`, `CellName`, `StateChannelRef` or `ExpressionProgram` member
+  carries `[DocumentName(kind, role)]` when its text spells a name the document resolves, or
+  `[DocumentText("what the text is")]` when it is literal or local text. Then
+  `puck schema --bootstrap` regenerates every generated product from the source model without waiting
+  for a rebuild: the JSON schemas, the portal's TypeScript, `WorldModelShape.generated.cs` and
+  `docs/world-name-registry.md`. A member that lacks its annotation refuses the whole run before anything
+  is written, naming the member and the fix. Rebuild afterwards. Until then a build of
+  `Puck.World.Schema` fails with `PUCKSCHEMA001`, which names this command. `puck schema --check` and
+  `puck registry --check` verify the tree; stage the regenerated files, since a check holds them to the index.
 
 **Source and generated documents.** The owner's ruling treats cartridge JSON
 twins as derived caches, never committed or byte-compared against a saved copy.

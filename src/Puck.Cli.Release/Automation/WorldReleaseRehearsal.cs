@@ -18,7 +18,7 @@ namespace Puck.Cli.Automation;
 /// selects (<see cref="Mode"/>), over a local directory store and the release's own silo started as a worker starts it,
 /// with a managed release section. Every operation runs through <see cref="WorldReleaseCoordinator"/> from its Drain phase
 /// on, so the roots and the group record are exactly what a deployment writes. Qualification is not rehearsed: it runs
-/// packaged legs in containers before any deployment already.
+/// the installed engines' legs before any deployment already.
 /// <para>Scratch mode rehearses the replace deployment: a first deployment's bootstrap, after which the silo opens
 /// admission, answers public health while stepping, and drains cleanly.</para>
 /// <para>Durable mode rehearses the preservation path on top of that bootstrap: a reset deployment to a second release
@@ -47,24 +47,24 @@ public static class WorldReleaseRehearsal {
     /// <param name="clock">The CLI host's clock, which every deadline runs on.</param>
     /// <returns>The verb.</returns>
     public static Command Create(TimeProvider clock) {
-        var package = new Argument<string?>(name: "package-directory") { Arity = ArgumentArity.ZeroOrOne, Description = "The release package (release.json and its composed worlds) a deployment would deploy, or a directory 'puck world prepare' wrote, which is packaged first. With --image it may be omitted: the image's own composed worlds are rehearsed." };
-        var silo = new Option<string?>("--silo") { Description = "The world silo to run: Puck.World.Silo.dll (run with dotnet) or its executable. Required without --image." };
-        var image = new Option<string?>("--image") { Description = "A world-silo image to rehearse in: the rehearsal runs inside it with the image's own CLI, silo, extensions and asset layout, isolated from the network." };
+        var package = new Argument<string?>(name: "package-directory") { Arity = ArgumentArity.ZeroOrOne, Description = "The release package (release.json and its composed worlds) a deployment would deploy, or a directory 'puck world prepare' wrote, which is packaged first. With --install it may be omitted: the install's own composed worlds are rehearsed." };
+        var silo = new Option<string?>("--silo") { Description = "The world silo to run: Puck.World.Silo.dll (run with dotnet), its executable, or a host release's puck (run as `puck world host serve`). Required without --install." };
+        var install = new Option<string?>("--install") { Description = "An install root holding a host release, installed from its channel as a hosting machine installs it: the rehearsal runs through that release's own CLI, silo, extensions and asset layout." };
         var extensions = new Option<string?>("--extensions-dir") { Description = "The extensions directory the silo searches; absent, the silo's default directories." };
-        var documents = new Option<string?>("--document-directory") { Description = "The asset layout the release's documents resolve their relative paths beside, as the deployed silo's documentDirectory; absent, the current directory, which is that layout in the world-silo image." };
+        var documents = new Option<string?>("--document-directory") { Description = "The asset layout the release's documents resolve their relative paths beside, as the deployed silo's documentDirectory; absent, the current directory." };
         var mode = new Option<Mode>("--mode") { DefaultValueFactory = static _ => Mode.Scratch, Description = "The hosted-data policy whose deployment path is rehearsed: scratch (a first deployment's bootstrap) or durable (the bootstrap, a reset deployment through the source's drain, and a failed deployment the source is recovered from)." };
         var output = CliOptions.Output(description: "A fresh directory for the rehearsal's store, silo documents, keys and logs; absent, a new directory under artifacts/world-release-rehearsals.");
         var timeout = CliOptions.Count(defaultValue: 900, description: "Seconds each silo may take to answer private health before the rehearsal fails.", maximum: 7200, minimum: 10, name: "--timeout");
         var command = new Command(
             description: "Rehearse a release package's deployment locally, as a scratch or durable deployment group runs it, against a local store and the release's own silo.",
             name: "rehearse"
-        ) { package, silo, image, extensions, documents, mode, output, timeout };
+        ) { package, silo, install, extensions, documents, mode, output, timeout };
 
         command.Detail(detail: """
             Exit codes: 0 every operation of the mode ended as it should (admitted, or recovered with the source
             readmitted) and the last silo drained; 1 the rehearsal ran and a silo or a transaction failed (its own lines
             and the private health reason are printed); 2 a refusal (an unreadable or unverified package, a missing
-            --silo or --image, or an output directory that already exists).
+            --silo or --install, or an output directory that already exists).
             """);
         command.SetAction(action: (parse, token) => {
             var directory = Path.GetFullPath(path: (parse.GetValue(option: output) ?? Path.Combine(
@@ -76,9 +76,9 @@ public static class WorldReleaseRehearsal {
             var timeoutSeconds = parse.GetValue(option: timeout);
             var selected = parse.GetValue(option: mode);
 
-            if (parse.GetValue(option: image) is { } reference) {
-                return RunInImageAsync(
-                    image: reference,
+            if (parse.GetValue(option: install) is { } root) {
+                return RunInstalledAsync(
+                    installRoot: Path.GetFullPath(path: root),
                     mode: selected,
                     outputDirectory: directory,
                     packageDirectory: packageDirectory,
@@ -87,7 +87,7 @@ public static class WorldReleaseRehearsal {
                 );
             }
             if ((parse.GetValue(option: silo) is not { } siloPath) || (packageDirectory is null)) {
-                return Task.FromResult(result: CliExit.Refuse(verb: "world release rehearse", what: "arguments", why: "a rehearsal without --image needs a package directory and --silo"));
+                return Task.FromResult(result: CliExit.Refuse(verb: "world release rehearse", what: "arguments", why: "a rehearsal without --install needs a package directory and --silo"));
             }
             return RunAsync(
                 clock: clock,
@@ -104,33 +104,30 @@ public static class WorldReleaseRehearsal {
         return command;
     }
 
-    // Runs the rehearsal inside the image with its own CLI, so the silo, extensions and asset layout are exactly those
-    // a worker runs. The container has no network (the silo's listeners are its own loopback), a read-only root, and the
-    // output directory as its one writable mount; a package from the host is mounted read-only.
-    private static async Task<int> RunInImageAsync(string image, string? packageDirectory, string outputDirectory, Mode mode, int timeoutSeconds, CancellationToken token) {
+    // Runs the rehearsal through the installed host release's own CLI, so the silo, extensions and asset layout are
+    // exactly those a hosting machine runs from the same install path.
+    private static async Task<int> RunInstalledAsync(string installRoot, string? packageDirectory, string outputDirectory, Mode mode, int timeoutSeconds, CancellationToken token) {
         if (Directory.Exists(path: outputDirectory) || File.Exists(path: outputDirectory)) { throw new IOException(message: "a rehearsal requires a fresh output directory"); }
+        var (version, engine) = (WorldHostEngine.Current(installRoot: installRoot) ?? throw new InvalidDataException(message: $"{installRoot} holds no installed host release"));
+        var executable = Path.Combine(path1: version, path2: Puck.Confinement.InstallLayout.ExecutableFileName(name: WorldHostLayout.Executable));
+        var worlds = Path.Combine(path1: version, path2: WorldHostLayout.WorldsDirectory);
+
+        Console.WriteLine(value: $"Rehearsing through the installed engine {engine} ({version}).");
         Directory.CreateDirectory(path: outputDirectory);
-        string[] user = ((ProcessIdentity.LinuxUserAndGroup() is { } identity) ? ["--user", identity] : []);
-        string[] packageMount = ((packageDirectory is null) ? [] : ["--mount", $"type=bind,source={packageDirectory},target=/package,readonly"]);
         var run = await CliProcess.RunAsync(
             arguments: [
-                "run", "--rm", .. user, "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
-                "--tmpfs", "/tmp:rw,nosuid,nodev,size=256m", "--env", "ASPNETCORE_HTTP_PORTS=",
-                "--mount", $"type=bind,source={outputDirectory},target=/rehearsal", .. packageMount,
-                "--entrypoint", "dotnet", image, WorldSiloImageLayout.CliAssembly, "world", "release", "rehearse",
-                ((packageDirectory is null) ? WorldSiloImageLayout.WorldsDirectory : "/package"),
-                "--silo", WorldSiloImageLayout.SiloAssembly, "--output", "/rehearsal/run", "--mode", mode.ToString().ToLowerInvariant(),
+                "world", "release", "rehearse", (packageDirectory ?? worlds), "--silo", executable, "--document-directory", worlds,
+                "--output", Path.Combine(path1: outputDirectory, path2: "run"), "--mode", mode.ToString().ToLowerInvariant(),
                 "--timeout", timeoutSeconds.ToString(provider: System.Globalization.CultureInfo.InvariantCulture),
             ],
             cancellationToken: token,
             capture: false,
-            fileName: "docker",
-            workingDirectory: Environment.CurrentDirectory
+            fileName: executable,
+            workingDirectory: version
         ).ConfigureAwait(continueOnCapturedContext: false);
 
         return run.ExitCode;
     }
-
     private static async Task<int> RunAsync(string packageDirectory, string silo, string? extensionsDirectory, string documentDirectory, string outputDirectory,
         Mode mode, TimeSpan readyTimeout, TimeProvider clock, CancellationToken token) {
         var directory = outputDirectory;
@@ -332,7 +329,7 @@ public static class WorldReleaseRehearsal {
     }
     // Packages composed documents (a 'puck world prepare' output, or a release package's own) as the release a deployment
     // would carry: the given owner, each document's own host, a label naming the package, and placeholder source and
-    // engine pins, since no image is involved.
+    // engine pins, since the rehearsal runs whichever engine it is handed rather than one a channel names.
     private static string PreparePackage(string worldsDirectory, string directory, string documentDirectory, string keys, Guid owner, string name) {
         var package = Directory.CreateDirectory(path: Path.Combine(path1: directory, path2: $"{name}-package")).FullName;
         var identities = new List<WorldAuthorityIdentity>();
@@ -358,7 +355,7 @@ public static class WorldReleaseRehearsal {
             )
         );
         _ = WorldReleaseCommand.Prepare(
-            engineImageDigest: ("sha256:" + new string(c: '0', count: 64)),
+            engine: ("sha256/" + new string(c: '0', count: 64)),
             label: $"rehearsal-{name}",
             outputPath: null,
             packageDirectory: package,
@@ -618,9 +615,11 @@ public static class WorldReleaseRehearsal {
 
         public void Start(string silo, string[] arguments, string workingDirectory) {
             var assembly = silo.EndsWith(value: ".dll", comparisonType: StringComparison.OrdinalIgnoreCase);
+            // A host release's CLI carries the silo and runs it as its service does.
+            var host = (Path.GetFileNameWithoutExtension(path: silo) == WorldHostLayout.Executable);
 
             m_process = ChildProcess.StartRedirected(
-                arguments: (assembly ? [silo, .. arguments] : arguments),
+                arguments: (assembly ? [silo, .. arguments] : (host ? ["world", "host", "serve", .. arguments] : arguments)),
                 fileName: (assembly ? "dotnet" : silo),
                 workingDirectory: workingDirectory
             );
