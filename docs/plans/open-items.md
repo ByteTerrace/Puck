@@ -3987,6 +3987,18 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
+- [high] **The silo telemetry grant: the CI principal is refused a role its
+  delegation lists.** The 98c4aee51d deploy failed at the platform reconcile:
+  the CI principal (object `d32381bf-…`) was refused
+  `Microsoft.Authorization/roleAssignments/write` for the world silo identity's
+  Monitoring Metrics Publisher grant on the containers Application Insights,
+  although its constrained Owner condition (authored by
+  `src/Puck.Azure.Resources/bootstrap.cs`) lists that role (`3913510d-…`) for
+  service principals. The grant is held out of `main.bicep` and
+  `worldSiloPlatform.bicep` (4f39cf912b), so the `azure.monitor` sink cannot sign
+  in (local auth is disabled) and failed workers leave no telemetry yet. Owner of
+  the identity (bootstrap runs outside CI): read the condition's full clause for
+  this request, fix it in `bootstrap.cs` and re-run it, then restore the grant.
 - [high, M1] **The release after the first replace deploy.** The first
   replace deploy succeeded
   ([the decision](../decisions/runtime-and-delivery.md#releases)). Next: a

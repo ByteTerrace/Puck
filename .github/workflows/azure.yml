@@ -104,6 +104,30 @@ jobs:
     uses: ./.github/workflows/pack.yml
     with:
       prebuilt: true
+  bicep:
+    # Infrastructure validation runs only on main (it needs the environment's Azure sign-in), so a validation run on
+    # the integration branch checks the Bicep sources offline: a source that is not formatted or has diagnostics fails
+    # here instead of stopping the next main deploy.
+    name: Check Bicep sources
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install pinned Bicep
+        run: az bicep install --version v0.48.1
+      - name: Every Bicep source is formatted and builds without diagnostics
+        run: |
+          set -euo pipefail
+          status=0
+          for file in $(git ls-files 'src/Puck.Azure.Resources/*.bicep' 'src/Puck.Azure.Resources/**/*.bicep'); do
+            if ! az bicep format --file "$file" --stdout | diff -q "$file" - >/dev/null; then
+              echo "::error file=$file::not formatted; run az bicep format --file $file"; status=1
+            fi
+          done
+          for file in src/Puck.Azure.Resources/main.bicep src/Puck.Azure.Resources/worldSiloPlatform.bicep; do
+            az bicep build --file "$file" --stdout >/dev/null || status=1
+          done
+          exit $status
   infrastructure:
     env:
       BICEPPARAM_WORLD_MCP: ${{ vars.WORLD_MCP || 'null' }}
