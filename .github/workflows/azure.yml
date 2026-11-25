@@ -382,8 +382,15 @@ jobs:
         run: puck world player worlds/debug --output artifacts/player --no-bake --channel-url "$PLAYER_CHANNEL_URL" --channel-name player
         shell: bash
       # Anonymous reads through the deployment's public edge, as an install reads the channel: no identity needed.
-      - name: Take the mesh cache sets whose bake identity matches this build, waiting for the GPU machine's, or hold the channel
-        run: puck world caches fetch artifacts/player --store "$PLAYER_CHANNEL_URL" --notes artifacts/player-notes.txt --wait 45
+      # A player can bake (the owner's ruling), so a set is a warm start, never a precondition: a build whose set is
+      # missing still ships, and the player's machine derives what the channel did not carry.
+      - name: Take the mesh cache sets whose bake identity matches this build, when there are any
+        run: |
+          set -uo pipefail
+          if ! puck world caches fetch artifacts/player --store "$PLAYER_CHANNEL_URL" --notes artifacts/player-notes.txt --wait 15; then
+            echo "::warning::No complete mesh cache set matches this build; the channel ships without it and players bake what they need."
+            [ -f artifacts/player-notes.txt ] || : > artifacts/player-notes.txt
+          fi
         shell: bash
       - name: Write the player release tree
         run: >-
