@@ -7,8 +7,11 @@ namespace Puck.Physics.Motion;
 /// <remarks><c>StateName</c> carries <see cref="BodyMotionOp.Generate"/>'s draw site — the one row a generate names,
 /// since a site's source and cursor are its own. Nothing
 /// is bound at kit-compile time here: the generate site is a world-global <c>state</c> row, not part of this kit's
-/// per-body slot table.</remarks>
-public readonly record struct CompiledBodyInstruction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, int StateSlot, ActionTarget Target = ActionTarget.Self, string? StateName = null, bool UseMoveDirection = false, BodyMotionCurve Curve = BodyMotionCurve.Linear);
+/// per-body slot table. A timed move reads <c>Arc</c> as the height its path stands off the straight line at its
+/// middle, along the body's up, <c>Exclusive</c> as whether it owns the body's translation while it runs, and
+/// <c>WorldFrame</c> as whether <c>Direction</c> is a displacement in world axes, resolved when the effect fired,
+/// rather than travel in the body's own frame.</remarks>
+public readonly record struct CompiledBodyInstruction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, int StateSlot, ActionTarget Target = ActionTarget.Self, string? StateName = null, bool UseMoveDirection = false, BodyMotionCurve Curve = BodyMotionCurve.Linear, FixedQ4816 Arc = default, bool Exclusive = false, bool WorldFrame = false);
 /// <summary>A slot envelope compiled into the slot's fixed counter or engine-tick domain.</summary>
 /// <param name="Minimum">The inclusive range minimum, or zero for a set.</param>
 /// <param name="Maximum">The inclusive range maximum, or zero for a set.</param>

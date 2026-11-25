@@ -68,6 +68,27 @@ public static class WorldStateReader {
         return resolved;
     }
 
+    /// <summary>Reads a <c>Fixed</c> cell by name, for a consumer that binds a number to a row and keeps its own value
+    /// where the row does not answer.</summary>
+    /// <param name="definition">The document whose arena is read.</param>
+    /// <param name="rowName">The state row.</param>
+    /// <param name="key">The cell, or <see langword="null"/> for the row's slot cell.</param>
+    /// <param name="tick">The tick to read as of.</param>
+    /// <param name="engineTick">The engine tick to read as of.</param>
+    /// <param name="fallback">The value a missing row, a missing cell or a row of another kind answers.</param>
+    /// <param name="arena">The live store, or <see langword="null"/> for the one bound to
+    /// <paramref name="definition"/>.</param>
+    /// <returns>The cell's value, or <paramref name="fallback"/>.</returns>
+    public static FixedQ4816 ReadFixed(WorldDefinition definition, string rowName, string? key, ulong tick, ulong engineTick, FixedQ4816 fallback, StateArena? arena = null) => (
+        (
+            TryRead(arena: arena, definition: definition, engineTick: engineTick, key: key, rawValue: out var raw, row: out var row, rowName: rowName, text: out _, tick: tick) &&
+            (row.Kind == CellKind.Fixed) &&
+            (raw is { } value)
+        )
+        ? FixedQ4816.FromRawBits(value: value)
+        : fallback
+    );
+
     /// <summary>Reads a typed cell, including a vector, without reading a seed cell.</summary>
     public static bool TryReadValue(WorldDefinition definition, string rowName, string? key, ulong tick, ulong engineTick,
         [NotNullWhen(true)] out WorldStateRow? row, out CellValue value, StateArena? arena = null) =>

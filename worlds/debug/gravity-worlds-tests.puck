@@ -1,0 +1,80 @@
+// Physics across worlds, played from the debug world: `puck test worlds/debug/gravity-worlds-tests.puck --reproduce`.
+// A seat walks through the galaxy painting and stands on a planetoid; walks through the globe painting and is turned
+// over by a lever in the world she left; and the sun goes out, reaching the moon before the valley.
+//
+// Each world is its own authority beside the debug world's: the galaxy (galaxy.puck), the bottle world (globe.puck),
+// the moon (moon.puck) and the sun (sun.puck). What crosses between them is a body through a door or a followed row,
+// the rows here with a delay.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+// The debug world's own id, so a traveller's way home resolves to the booted instance.
+documentId: "debug"
+import "stopped-machines"
+
+// Through the galaxy painting on the wing's south wall: a headless seat's heading is -Z, so walking ahead walks into
+// the canvas. She arrives on home's pad and stands there under home's own pull.
+test "a seat walks through the galaxy painting and stands on a planetoid" {
+  when {
+    seat1: body.pose 54 0.05 15.7 0 0 0
+    ticks 2
+    seat1: body.fly 1 0 0 0 0 0 2
+    ticks 150
+  }
+  expect {
+    galaxy {
+      fact(body, 0, Grounded) == 1 and bodyPosition(body, 0, y) > -1 and bodyPosition(body, 0, y) < 1.5
+    }
+  }
+}
+
+// Through the globe painting on the wing's west wall (a sideways walk for a headless seat), then the lever's turn is
+// written in the debug world: a second later the bottle world's pull points west, and she lies against its west wall.
+test "a lever in the debug world turns over a seat in the bottle world" {
+  when {
+    seat1: body.pose 54.4 0.05 18 90 0 0
+    ticks 2
+    seat1: body.fly 0 -1 0 0 0 0 2
+    ticks 120
+    seat1: world.state.cell.set globeTurn $value 1
+    ticks 240
+  }
+  expect {
+    globeTurn == 1
+    globePullX == -14
+    globe {
+      pullX == -14 and pullY == 0 and bodyPosition(body, 0, x) < -5
+    }
+  }
+}
+
+// The sun goes out by the debug world's switch. The switch reaches the sun six seconds later; the dark then reaches
+// the moon, 13.6 km from the sun, before the valley, 15 km from it. Twelve seconds after the switch the moon's
+// received light reads dark while the valley's still reads full.
+test "the sun's dark reaches the moon before the valley" {
+  when {
+    ticks 10
+    seat1: world.state.cell.set sunSwitch $value 0
+    ticks 355
+  }
+  expect {
+    sunSwitch == 0
+    moonSunLight == 0
+    sunLight == 1
+    sunMass == 1
+  }
+}
+
+// A second later it has reached the valley too, and with it the loss of the sun's pull.
+test "the sun's dark and its lost pull reach the valley after it" {
+  when {
+    ticks 10
+    seat1: world.state.cell.set sunSwitch $value 0
+    ticks 385
+  }
+  expect {
+    moonSunLight == 0
+    sunLight == 0
+    sunMass == 0
+  }
+}

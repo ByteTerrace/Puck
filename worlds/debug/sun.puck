@@ -1,0 +1,72 @@
+// The sun: a world of its own, the third body of the debug world's small system with the planet under the valley and
+// the moon. It has no ground to stand on. It owns two values, its light and its mass, and the worlds about it follow
+// them (sun-watch.puck for the debug world, moon.puck for the moon), each reading what this world wrote as long ago as
+// light takes to reach it (moon-frame.puck's delays). No world lights or pulls another directly: each lights itself
+// from the light it has received and feels the tide of the mass it has received.
+//
+// The sun can go out. The debug world owns a switch (`sunSwitch`, sun-watch.puck); this world follows it, across the
+// same distance, and its own rules decide what the switch does here. When it goes out the dark and the lost pull reach
+// the moon first and the valley a little over half a second later, and the same when it lights again.
+// Boot the debug world, never this one.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "sun"
+
+import "moon-frame"
+
+metadata {
+  title: "Sun"
+  description: "The sun of the debug world's small system: a world that owns its light and its mass, which the debug world and the moon follow after light's delay."
+}
+
+// The debug world and the moon observe the sun whole as sessions; nobody stands here.
+admission [
+  {
+    admits: Session
+    disclosure: Replica
+    domain: "*"
+    grants [
+      { budget: 64, capability: Observe, subject: "all" }
+    ]
+    mode: FederatedAuthority
+  }
+]
+
+references [
+  { document: "debug", name: "debug" }
+]
+
+destinations [
+  { durability: persisted, name: "debug", reference: "debug", scope: global }
+]
+
+state {
+  world [
+    // The debug world's switch, read here as long after it was thrown as the distance takes.
+    {
+      name: "sunSwitch"
+      kind: "Int"
+      value: 1
+      min: 0
+      max: 1
+      follows { destination: "debug", delaySeconds: sunDelayPlanet }
+    }
+    // What this world publishes: its light and its mass, each a share of the whole.
+    { name: "sunLight", kind: "Fixed", value: "1", min: "0", max: "1" }
+    { name: "sunMass", kind: "Fixed", value: "1", min: "0", max: "1" }
+  ]
+}
+
+rule "sun-goes-out" {
+  when sunSwitch == 0
+  mode: Edge
+  sunLight = 0
+  sunMass = 0
+}
+rule "sun-lights" {
+  when sunSwitch == 1
+  mode: Edge
+  sunLight = 1
+  sunMass = 1
+}

@@ -441,6 +441,89 @@ one boundary.
 [portals in play, section 4](../plans/portals-in-play.md#4-a-door-onto-another-world-opened-in-play);
 `worlds/debug/follows-tests.puck`.
 
+## Influence between worlds is a delayed value and a tide
+
+**Decided.** A world's own gravity field dominates inside it, and no world
+reaches into another's bodies. What one world feels of another is a value it
+follows, delivered late, and reduced before it touches a body:
+
+- **A far mass is a tide.** A far source pulls a world's frame and everything
+  in it alike, so the uniform part of its pull is dropped and the remainder is
+  the tidal tensor at the world's tide origin, evaluated once per source per
+  tick. A body's acceleration is its world's field plus that tensor applied to
+  its offset from the origin.
+- **Influence travels at an authored speed.** A followed row carries a delay
+  (`WorldStateFollow`), which the author derives from distance over a
+  propagation speed. The follower adopts each value the leader held that long
+  ago, in the order the leader wrote them. A source that vanishes is one write
+  its own authority makes; every follower meets it at its own delay.
+- **Light is the same value.** A light's power is a state row, so sunlight is a
+  followed row with a delay and an eclipse is a rule over delayed rows.
+- **An unwatched body rides a closed form.** An orbit is a conic whose phase is
+  an exact rational of the engine tick, so its position at any tick is computed
+  without stepping the ticks between. Whether a body rides is a state row the
+  author's rules write, so leaving the rails and rejoining them is the
+  author's policy. A body rejoining closes on the orbit at an authored speed;
+  rejoining on a conic fitted to where a perturbed body then is, is the
+  [plan's first open item](../plans/cross-world.md#left-open).
+- **A seam between two pulls is derived.** Where two worlds' pulls balance
+  follows from their masses and separation; the author computes it in the
+  document, so a seam moves when a mass is edited.
+
+**Options weighed.**
+
+| Option | What it is | What it closes | What it leaves open |
+|---|---|---|---|
+| A. One solver across worlds | Every massive body in every world joins one solve | Exact pairwise pull | Needs every authority's bodies in one place at one tick: lockstep, and a foreign authority able to move this world's bodies |
+| B. A hand-placed uniform per world | The moon's faint `uniform` standing in for the valley | Nothing to transport | Wrong by construction (a uniform pull moves nothing relative to the frame it also pulls), and it changes only by an author's edit |
+| C. A delayed followed value reduced to a tide | This decision | Each authority computes its own bodies from values it reads; cost is per world, never per body pair; lag is the physics, so no authority waits on another | A tide is the first-order term: a body far from the tide origin relative to the source's distance reads it less exactly, which bounds how large one world may be against how near its neighbour stands |
+| D. Addressed impulses between worlds | A world sends forces into another's bodies | Carries any force | A second transport beside sessions, and a foreign writer of this world's bodies |
+
+**Why.** Reading is the one way anything crosses between authorities
+([reading and acting across worlds](#reading-and-acting-across-worlds)), and a
+delayed read keeps it honest at scale: an authority never waits for another's
+tick, a leader's value is input its followers' own rules bound, and thousands
+of worlds cost each other one row and one tensor apiece. The delay is correct
+rather than a compromise, because no influence outruns its own propagation.
+Dropping the uniform term is what makes the reduction exact enough to be
+useful: a world is a freely falling frame, so only the difference of a far pull
+across it is felt inside it.
+
+**Invariants and where each is enforced.**
+
+- A lagged follow never delivers a value earlier than its delay after the
+  follower first observed it, and delivers values in the leader's order. The
+  one place that holds it is the follow adoption at the host boundary
+  (`WorldAdjacencyFields`' follow adoption); every other writer of a followed
+  row is already refused. It stops at a restart: the delay line is not
+  checkpointed, so a restored follower keeps its last adopted value and delays
+  again from its first new observation, which can only be later than the
+  physics allows, never earlier.
+- A tide moves no body's frame: the uniform term is never added. The tensor is
+  built in one function and applied in the gravity fold, so no caller can add a
+  far source's whole pull.
+- An orbit's position is a function of the engine tick and its elements alone.
+  The elements are authored values and the phase is an integer division of
+  ticks, and the orbit field (`WorldOrbitField`) holds no state between steps,
+  so a checkpoint, a replay and a world that skipped ticks all read the same
+  position. A body off its orbit closes on it by a rule that reads only where
+  the body and the orbit stand that tick.
+
+**Attacks it closes.** A hostile leader can lie only about its own rows: an
+absurd mass is input the follower's own gravity section scales and its rules
+may clamp, and it cannot move a body the follower's authority simulates. A
+follower cannot learn a leader's value before the leader's disclosure
+delivers it, and the delay adds no channel that carries anything earlier.
+
+**Rulings it rests on.** Cross-world interaction is a flagship feature;
+authors rule (every speed, mass, delay and threshold is authored, and the
+standard package holds the designs); Puck code over engine code (a launch, a
+gravity flip and a sun going out are rules over these mechanisms); brute force
+is a defect when mathematics answers directly (a tide per world, a closed-form
+orbit).
+
+**Evidence.** [Cross-world interaction, physics across worlds](../plans/cross-world.md#physics-across-worlds).
+
 ## The tables
 
 **Decided.**

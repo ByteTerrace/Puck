@@ -102,6 +102,31 @@ seam. The sky thins as it climbs: the `altitude` clock
 [day.puck](day.puck) keys the air, the clouds and the stars of space on it.
 Past the seam the seat sees the moon's own scene.
 
+## The planet, the sun and the seam
+
+The moon, the planet under the valley and the sun are three bodies of one small
+system ([moon-frame.puck](moon-frame.puck)), each a world of its own.
+
+The seam between the valley and the moon is derived from the two masses, never
+placed: each world's mass is its gravity at its radius, and the seam is level
+with the point on the line between the centres where the two pulls balance.
+Editing either world's gravity or radius moves it.
+
+Out of the moon's reach, what a body feels of the planet and the sun is their
+tide (`gravity.tides` in [moon.puck](moon.puck)): the difference of each pull
+across the moon, since the pull itself moves the moon with everything on it.
+`world.gravity` on the moon's instance reads the tensor.
+
+The sun ([sun.puck](sun.puck)) owns its light and its mass. The moon and the
+valley each follow them, as long after the sun wrote them as light takes to
+cross the distance, so the moon, the nearer, meets a change first. `sun.switch 0`
+in the valley puts the sun out: the switch reaches the sun six seconds later,
+the moon goes dark about five and a half seconds after that (its key light is
+the light it has received), and the valley's own rows read the dark a little
+over half a second after the moon's. `world.state sunLight` and `world.state
+moonSunLight` read the two arrivals; `sun.switch 1` lights it again.
+`puck test worlds/debug/gravity-worlds-tests.puck` plays it.
+
 ## What it does not do yet
 
 The plan's [engine gaps](../../docs/plans/valley-and-moons.md#engine-gaps-on-the-path)

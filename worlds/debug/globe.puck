@@ -1,0 +1,334 @@
+// The bottle world: a destination of the debug world's painting wing, a closed room whose gravity is not its own to
+// decide. The debug world owns three rows, the pull's vector (globe-lever.puck), and a lever beside the painting turns
+// them; this world follows the three rows, a second after they were written, and its one gravity area reads its vector
+// from them. So a visitor standing here, and the marbles lying about her, fall toward whichever wall the lever in the
+// other world last chose, a beat after someone there chose it, while that someone watches through the glass.
+//
+// Nothing here writes the pull: a followed row has one writer, the world that owns it. Nothing there moves a body here:
+// this world's own authority reads the vector and steps its own bodies. Each authority runs on its own, and the delay
+// between them is the design, not a fault to hide.
+// Boot the debug world, never this one.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "globe"
+
+import "moth-controls"
+import "size"
+import "painting-kit"
+import "place-kit"
+import "../standard/visitors"
+import "../standard/kits"
+
+hud {
+  panels []
+}
+
+metadata {
+  title: "Bottle world"
+  description: "A destination of the debug world painting wing: a closed room whose gravity is a vector the debug world owns, turned by a lever beside the painting and followed here a second later."
+}
+
+// The room: `roomHalf` metres from its middle to each wall's inner face, the walls `wall` thick, its floor's top at
+// the origin's height.
+let roomHalf = 7
+let wall = 0.5
+let roomMiddle = [0, roomHalf, 0]
+
+// The marbles: rigid balls that roll to whichever wall is down. They take the slots after the seats and visitors.
+let marbles = 6
+let marbleRadius = 0.45
+
+// How long the debug world's lever takes to reach this world.
+let leverDelay = 1s
+
+bodies {
+  capacity: (8 + marbles)
+  localSeats: 4
+  networkPlayers: 4
+  reconnectGraceSeconds: 3
+}
+
+admission [
+  {
+    admits: Session
+    disclosure: Replica
+    domain: "*"
+    grants [
+      {
+        budget: 8
+        capability: Drive
+        exclusive: true
+      }
+      {
+        budget: 64
+        capability: Observe
+        subject: "all"
+      }
+    ]
+    mode: FederatedAuthority
+  }
+  visitorAdmissionRow(domain: "*")
+]
+
+references [
+  {
+    document: "debug"
+    name: "debug"
+  }
+]
+
+destinations [
+  {
+    durability: persisted
+    name: "debug"
+    reference: "debug"
+    scope: global
+  }
+]
+
+views {
+  nestingDepth: 3
+}
+
+// Every wall is ground a body may stand on once it is down.
+collision {
+  contactSkin: 0.02
+  defaultHold: true
+  gradientProbe: 0
+  gridCellSize: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements []
+}
+
+// One area fills the room, and its vector is the three followed rows.
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, 0, 0]
+  areas [
+    {
+      placementId: `globe-core`
+      priority: 0
+      mode: Replace
+      bounds: box(halfExtents: [(roomHalf + wall), (roomHalf + wall), (roomHalf + wall)])
+      acceleration: directional(value: [0, -14, 0])
+      vector {
+        x: pullX
+        y: pullY
+        z: pullZ
+      }
+    }
+  ]
+}
+
+state {
+  world [
+    // The pull, as the debug world last wrote it and as it has arrived here.
+    {
+      name: "pullX"
+      kind: "Fixed"
+      value: "0"
+      follows { destination: "debug", row: "globePullX", delaySeconds: leverDelay }
+    }
+    {
+      name: "pullY"
+      kind: "Fixed"
+      value: "-14"
+      follows { destination: "debug", row: "globePullY", delaySeconds: leverDelay }
+    }
+    {
+      name: "pullZ"
+      kind: "Fixed"
+      value: "0"
+      follows { destination: "debug", row: "globePullZ", delaySeconds: leverDelay }
+    }
+  ]
+}
+
+pieceKit(name: "marble", collider: sphere(radius: marbleRadius), mass: 4, friction: 0.5, restitution: 0.2)
+
+looks [
+  {
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    name: "marble"
+    scale: 1
+    source: creation(prototypeId: marble)
+  }
+]
+
+spawnPoints [
+  { id: "stage", position [0, 0.05, 2], yawDegrees: 0 }
+]
+
+placements {
+  policy {
+    authoringHeadroomInstances: 0
+    authoringHeadroomScreens: 0
+    candidateCap: 1
+    candidateRadius: 1
+    maxPlacementScale: 1
+    minPlacementScale: 1
+    previewDeadlineFrames: 1
+  }
+
+  placement "place-globe" {
+    prototype: "place"
+    position: roomMiddle
+    region {
+      halfExtents [(roomHalf + wall), (roomHalf + wall), (roomHalf + wall)]
+    }
+  }
+
+  // What the pull rides: the middle of the room.
+  placement "globe-core" {
+    prototype: "place"
+    position: roomMiddle
+  }
+
+  placement "room" {
+    prototype: "room"
+    position [0, 0, 0]
+    solid
+  }
+
+  // The globe painting's counterpart, standing out from the north wall: walking into its glass arrives out of the
+  // painting.
+  placement "arrival" {
+    prototype: "frame"
+    position [0, 0, (0 - (roomHalf - 2))]
+    yawDegrees: 0
+    faceSources [
+      {
+        face: "glass"
+        filter: linear
+        portal {
+          arrival: "mapped"
+          counterpart: "painting-globe/glass"
+          destination: "debug"
+          travel: "body"
+        }
+        source {
+          $type: "session"
+          destination: "debug"
+          fallback: "#1B2330"
+          projection: window
+        }
+      }
+    ]
+  }
+
+  for i in range(0, marbles) {
+    placement $"marble-{i}" {
+      prototype: "marble"
+      position [((i - 2.5) * 1.6), 2, 4]
+      inhabit {
+        count: 1
+        distribution {
+          fill {
+            name: "additive"
+            offset: 0
+            step: 0.001
+          }
+          region: disc(radius: 0.01)
+        }
+        kit: "marble"
+        look: "marble"
+        source: "Idle"
+      }
+    }
+  }
+}
+
+prototypes {
+  // The basis's floor is the room's: six slabs about the room's middle, each a wall, a floor or a ceiling by turns.
+  prototype "floor" {
+    document {
+      name: "floor"
+      palette [{ color: "#6E7B8C", roughness: 0.85, specular: 0.04 }]
+      schema: "puck.creation.v1"
+      shape Box "floor" {
+        material: 0
+        position [0, (0 - (wall / 2)), 0]
+        scale [(roomHalf + wall), (wall / 2), (roomHalf + wall)]
+      }
+    }
+  }
+
+  prototype "room" {
+    document {
+      name: "room"
+      palette [
+        { color: "#8C9AAE", roughness: 0.85, specular: 0.04 }
+        { color: "#B8926A", roughness: 0.8, specular: 0.05 }
+        { color: "#7FA08A", roughness: 0.8, specular: 0.05 }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "ceiling" {
+        material: 0
+        position [0, ((2 * roomHalf) + (wall / 2)), 0]
+        scale [(roomHalf + wall), (wall / 2), (roomHalf + wall)]
+      }
+      shape Box "wall-east" {
+        material: 1
+        position [(roomHalf + (wall / 2)), roomHalf, 0]
+        scale [(wall / 2), roomHalf, (roomHalf + wall)]
+      }
+      shape Box "wall-west" {
+        material: 1
+        position [(0 - (roomHalf + (wall / 2))), roomHalf, 0]
+        scale [(wall / 2), roomHalf, (roomHalf + wall)]
+      }
+      shape Box "wall-north" {
+        material: 2
+        position [0, roomHalf, (roomHalf + (wall / 2))]
+        scale [roomHalf, roomHalf, (wall / 2)]
+      }
+      shape Box "wall-south" {
+        material: 2
+        position [0, roomHalf, (0 - (roomHalf + (wall / 2)))]
+        scale [roomHalf, roomHalf, (wall / 2)]
+      }
+    }
+  }
+
+  prototype "frame" {
+    document {
+      arrivalFrame(color: "#D9B36A", roughness: 0.4, specular: 0.4, post: 0.12)
+    }
+  }
+
+  prototype "marble" {
+    document {
+      name: "marble"
+      palette [{ color: "#E9E2D0", roughness: 0.25, specular: 0.5 }]
+      schema: "puck.creation.v1"
+      shape Sphere "ball" {
+        material: 0
+        position [0, 0, 0]
+        scale [marbleRadius, marbleRadius, marbleRadius]
+      }
+    }
+  }
+}
+
+// A lit room: lamps in the middle of the air, so no wall is the dark one whichever way is down.
+render {
+  farDistance: 60
+  lighting {
+    lights [
+      point(name: "lamp", position: [0, roomHalf, 0], temperature: 3400K, power: 60000)
+    ]
+  }
+  sky {
+    layers [
+      gradient(name: "air", luminance: 40nit, stops: [
+        { elevation: -1, color: "#1B2330" }
+        { elevation: 1, color: "#2A3446" }
+      ])
+    ]
+  }
+}

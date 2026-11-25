@@ -1157,6 +1157,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `kits.rows[].actions{*}.onPress.effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
+| `kits.rows[].actions{*}.onPress.effects[][timedMove].toward` | Placement | Names | Read | `WorldEffect.TimedMove.Toward` |
+| `kits.rows[].actions{*}.onPress.effects[][timedMove].towardOffset` | State | Binding | Binding | `WorldEffect.TimedMove.TowardOffset` |
 | `kits.rows[].actions{*}.onPress.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onPress.effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
@@ -1569,6 +1571,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `kits.rows[].actions{*}.onRelease.effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
+| `kits.rows[].actions{*}.onRelease.effects[][timedMove].toward` | Placement | Names | Read | `WorldEffect.TimedMove.Toward` |
+| `kits.rows[].actions{*}.onRelease.effects[][timedMove].towardOffset` | State | Binding | Binding | `WorldEffect.TimedMove.TowardOffset` |
 | `kits.rows[].actions{*}.onRelease.effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onRelease.effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
@@ -1981,6 +1985,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `kits.rows[].actions{*}.onFact[].effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
+| `kits.rows[].actions{*}.onFact[].effects[][timedMove].toward` | Placement | Names | Read | `WorldEffect.TimedMove.Toward` |
+| `kits.rows[].actions{*}.onFact[].effects[][timedMove].towardOffset` | State | Binding | Binding | `WorldEffect.TimedMove.TowardOffset` |
 | `kits.rows[].actions{*}.onFact[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `kits.rows[].actions{*}.onFact[].effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
@@ -2329,6 +2335,18 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `gravity.areas[].placementId` | Placement | Names | Read | `WorldGravityArea.PlacementId` |
 | `gravity.areas[].bounds[box].halfExtents` | State | Binding | Binding | `WorldGravityAreaBounds.BoxBounds.HalfExtents` |
 | `gravity.areas[].acceleration[directional].value` | State | Binding | Binding | `WorldGravityAreaAcceleration.Directional.Value` |
+| `gravity.areas[].acceleration[axial].axis` | State | Binding | Binding | `WorldGravityAreaAcceleration.Axial.Axis` |
+| `gravity.areas[].acceleration[planar].normal` | State | Binding | Binding | `WorldGravityAreaAcceleration.Planar.Normal` |
+| `gravity.areas[].weight` | State | Names | Read | `WorldGravityArea.Weight` |
+| `gravity.areas[].scale` | State | Names | Read | `WorldGravityArea.Scale` |
+| `gravity.areas[].vector.x` | State | Names | Read | `WorldGravityAreaVector.X` |
+| `gravity.areas[].vector.y` | State | Names | Read | `WorldGravityAreaVector.Y` |
+| `gravity.areas[].vector.z` | State | Names | Read | `WorldGravityAreaVector.Z` |
+| `gravity.orbits[].around` | Placement | Names | Read | `WorldGravityOrbit.Around` |
+| `gravity.orbits[].riding` | State | Names | Read | `WorldGravityOrbit.Riding` |
+| `gravity.tides[].placementId` | Placement | Names | Read | `WorldGravityTide.PlacementId` |
+| `gravity.tides[].scale` | State | Names | Read | `WorldGravityTide.Scale` |
+| `gravity.tideOrigin` | Placement | Names | Read | `WorldGravity.TideOrigin` |
 | `host.backendRow` | State | Names | Read | `WorldHostDefaults.BackendRow` |
 | `views.seatRig.operations[][anchor].subject[placement].placementId` | Placement | Names | Read | `WorldCameraSubject.Placement.PlacementId` |
 | `views.seatRig.operations[][anchor].subject[worldPoint].point` | State | Binding | Binding | `WorldCameraSubject.WorldPoint.Point` |
@@ -2944,6 +2962,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `rules[].effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `rules[].effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
+| `rules[].effects[][timedMove].toward` | Placement | Names | Read | `WorldEffect.TimedMove.Toward` |
+| `rules[].effects[][timedMove].towardOffset` | State | Binding | Binding | `WorldEffect.TimedMove.TowardOffset` |
 | `rules[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `rules[].effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
@@ -3374,6 +3394,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `rules[].decision.options[].effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `rules[].decision.options[].effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
+| `rules[].decision.options[].effects[][timedMove].toward` | Placement | Names | Read | `WorldEffect.TimedMove.Toward` |
+| `rules[].decision.options[].effects[][timedMove].towardOffset` | State | Binding | Binding | `WorldEffect.TimedMove.TowardOffset` |
 | `rules[].decision.options[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].decision.options[].effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `rules[].decision.options[].effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
@@ -3827,6 +3849,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `rules[].decision.onNoChoice[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `rules[].decision.onNoChoice[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
+| `rules[].decision.onNoChoice[][timedMove].toward` | Placement | Names | Read | `WorldEffect.TimedMove.Toward` |
+| `rules[].decision.onNoChoice[][timedMove].towardOffset` | State | Binding | Binding | `WorldEffect.TimedMove.TowardOffset` |
 | `rules[].decision.onNoChoice[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `rules[].decision.onNoChoice[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `rules[].decision.onNoChoice[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
@@ -4222,6 +4246,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][planarImpulse].bodyDirection` | State | Binding | Binding | `WorldEffect.PlanarImpulse.BodyDirection` |
 | `interactions.interactions[].effects[][planarImpulse].key` | State | Key | Read | `WorldEffect.PlanarImpulse.Key` |
 | `interactions.interactions[].effects[][timedMove].key` | State | Key | Read | `WorldEffect.TimedMove.Key` |
+| `interactions.interactions[].effects[][timedMove].toward` | Placement | Names | Read | `WorldEffect.TimedMove.Toward` |
+| `interactions.interactions[].effects[][timedMove].towardOffset` | State | Binding | Binding | `WorldEffect.TimedMove.TowardOffset` |
 | `interactions.interactions[].effects[][startTimer].state` | State | Names | Action | `WorldEffect.StartTimer.State` |
 | `interactions.interactions[].effects[][designate].key` | State | Key | Read | `WorldEffect.Designate.Key` |
 | `interactions.interactions[].effects[][designate].targetKey` | State | Key | Read | `WorldEffect.Designate.TargetKey` |
@@ -5799,6 +5825,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `audio.cues[].event` | `WorldAudioCue.Event` | an audio event |
 | `audio.cues[].patchId` | `WorldAudioCue.PatchId` | a synth patch id |
 | `audio.cues[].placement` | `WorldAudioCue.Placement` | where a cue sounds: a site, the listener, or a named speaker |
+| `gravity.orbits[].name` | `WorldGravityOrbit.Name` | an orbit name |
+| `gravity.tides[].orbit` | `WorldGravityTide.Orbit` | an orbit name |
 | `host.genlock` | `WorldHostDefaults.Genlock` | a clock election policy |
 | `host.listen` | `WorldHostDefaults.Listen` | a network endpoint |
 | `host.authority` | `WorldHostDefaults.Authority` | a network endpoint |

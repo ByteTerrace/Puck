@@ -50,6 +50,10 @@ same change.
 | A rope that caps distance and keeps swing momentum | `FixedTetherConstraint` (`ResolveAnchor`, `Reel`); host `WorldBody.Tether.cs` | [tether](../../../docs/reference/physics.md#the-tether-constraint) |
 | Climb a wall, grapple, pick an anchor | `FixedSurfaceQuery.TryNearest`, `TryNearestDirected`; `IContactField.TryHoldableSurfaceAlongDirection` | [physics reference](../../../docs/reference/physics.md#contact-and-rigid-body-kernels) |
 | Gravity between many bodies | `GravitySolvers.Create` over `PairwiseGravitySolver` (the oracle), `FastMonopoleGravitySolver`, `AdaptiveFmmGravitySolver` | [choose a solver](../../../docs/reference/physics.md#choose-a-gravity-solver) |
+| Gravity from a shape: a ball, a line, a plane, the nearest solid surface; areas that blend, flip or fade by a state row | `FixedWorldGravityArea` (`AccelerationAt`, `WeightAt`, `SurfaceAcceleration`), folded per body by `WorldGravityField`; a surface area asks `IContactField.TryUp` and keeps the answer while the body and the field stand | [the gravity section](../../../src/Puck.World.Schema/README.md#the-gravity-sectionacceleration-not-geometry) |
+| A far body's pull on a whole world | `GravityTide` (the tidal tensor of a point mass, the multipole solver's own gradient), summed once a solve by `WorldGravityTides` and applied to each body's offset from the tide origin | [influence between worlds](../../../docs/decisions/worlds-and-federation.md#influence-between-worlds-is-a-delayed-value-and-a-tide) |
+| A body on rails: a closed-form orbit, exact at any tick | `FixedConicOrbit` (`Phase`, `EccentricAnomaly`, `PositionAt`, `TryFit`) in `Puck.Maths`; `WorldOrbitField` places each orbit and glides its rider | [the gravity section](../../../src/Puck.World.Schema/README.md#the-gravity-sectionacceleration-not-geometry) |
+| Carry a body to a point of the world along an arc (a launch) | the `timedMove` effect's `toward`, `arc` and `exclusive`, over `FixedTimedMove` and `WorldBody.ProposeTimedMove` | [timed moves](../puck-world/references/documents-motion.md#timed-moves) |
 | Routes, off-grid checks | `NavigationRuntime` over `NavigationDomainInput`, proved with the body's own resolve and sweep against the static contact geometry (`WorldColliderSet.StaticField`, a `FixedStaticContactField`, or `WorldSolidField.StaticField`), each domain baked once on the thread pool (`NavigationDomainBake`, kept across rebuilds while its `IRegionalContactField.Within` part is equal); medium fields through `INavigationMediumField`; host `WorldPopulation.Navigation.cs` | [navigation](../../../docs/reference/physics.md#navigation-kernel-navigation) |
 | One route across several domains (a building's levels and stairwells, the valley), to a cell or a place | `NavigationRuntime.FindRoute` with an `INavigationRouteGoal` (`NavigationCellGoal`, the host's `WorldNavigationPlaceGoal`), joined at aligned grids' shared cells within one authored `network`; `world.navigation route` checks it against the contact field, `world.navigation map` draws a domain | [navigation](../../../docs/reference/physics.md#navigation-kernel-navigation) |
 | Many bodies heading to a few places (a crowd, a town's citizens), with no route per body | goal fields: `NavigationRuntime.GoalField` derives one per goal cell over the goal domain's network (a reverse search over the domain's cached route graph, `Domain.GoalGraph`, kept as one step per cell, `NavigationGoalField`) and `NavigationRuntime.GoalStep` reads a body's next step; `RequestGoalField` starts a derivation off the step that the read (`GoalField`, the only read, which always yields the field) joins, so residency decides work and never a tick's outcome; a cache within `NavigationCapacity.GoalFieldBytes`, never checkpointed or hashed; authored `shared: true`; host `WorldPopulation.ReadGoalFieldTarget`; work in `NavigationSearchWork` (`physics.navigation`) | [navigation](../../../docs/reference/physics.md#navigation-kernel-navigation) |
@@ -162,6 +166,22 @@ same change.
   checkpoint restore. Restore keeps the captured sample; the next tick reads the restored arena.
 - **Workspaces are reused and not thread-safe.** The hierarchical gravity
   solvers and navigation domains allocate once and keep their arrays.
+- **A kit body feels a field's magnitude along its own up; a rigid body feels
+  the vector.** `ApplyHoldGravity` integrates the solved magnitude along the
+  body's up, and the up turns toward the field only at a metre a second
+  squared and above (`MinFieldUpMagnitude`). A faint field (a tide, open
+  space) therefore moves a kit body along the up it already has.
+- **A standing body's up is its surface until the field pulls it off.**
+  Under `GradientDerivedUp` a grounded body keeps the surface's up while the
+  field presses it on (`WorldBody.StandsBySurface`, asked by `ResolveUp` and by
+  the contact phase's adoption of the measured normal). A field that turns to
+  pull it away gives the axis back to the field. That change does not yet lift
+  a standing body off its floor
+  ([left open](../../../docs/plans/cross-world.md#left-open)).
+- **A moving solid is one root.** A solid placement attached to a body, or
+  sized by state, is a root of the moving set (`WorldColliderSet.Build`'s
+  `movingOnly` rows) under either provider; the field provider's static
+  program leaves it out.
 - **Moving solids reach gameplay queries too.** `WorldSolidField` queries the
   static program and the contact owner's live roots through `FieldWorldQuery`,
   which uses the existing SDF march. Grip reads the sampled row's own policy.

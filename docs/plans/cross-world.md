@@ -152,6 +152,137 @@ beacon's power. An action that carries who acted (an attack, a gift) is not a
 followed row: it is an addressed effect the far world's grants admit, which
 waits for the interaction settlement the world model names as unbuilt.
 
+## Physics across worlds
+
+The owner's request: fill the engine gaps that make cross-world physics rich,
+and prove that authors rule with toy worlds, such as a world that portals to a
+galaxy-like planetoid platformer. The settled design is
+[influence between worlds](../decisions/worlds-and-federation.md#influence-between-worlds-is-a-delayed-value-and-a-tide);
+this section is its plan: the mechanisms, what each toy world proves, and the
+check for each.
+
+### The model
+
+- **A world's own field dominates inside it.** Gravity stays a per-world
+  section (`WorldGravity`). Nothing reaches into another world's bodies.
+- **Another body's pull is a tide.** A far mass pulls a world's frame and
+  everything in it alike, so the uniform part is dropped (the frame falls with
+  it) and what is left is the tidal term: one symmetric tensor per world per
+  tick, applied to each body as a product with its offset from the world's
+  tide origin. The cost is one tensor per source per tick, never a pair per
+  body.
+- **Influence is a value that arrives late.** A world publishes its mass, its
+  light and its orbit as state rows. Another world follows them
+  (`WorldStateFollow`) with a delay the author derives from distance over a
+  propagation speed, so a follower reads the leader's value from that long ago.
+  A sun that goes out is a row its world writes once; each follower meets the
+  change at its own delay. Authorities need causality, never lockstep.
+- **What nobody watches rides rails.** An orbit is a closed-form conic of the
+  engine tick: its phase is an exact rational of the tick, so any tick's
+  position is computed directly, and a world that stopped stepping resumes
+  exactly where the orbit stands.
+
+### Mechanisms
+
+| # | Mechanism | Authored surface | Check |
+|---|---|---|---|
+| 1 | Gravity from any shape | `gravity.areas[].acceleration`: `directional`, `radial`, `axial` (toward the placement's own Y axis), `planar` (toward its XZ plane), `point` (inverse square from a reference radius) and `surface` (toward the nearest solid surface, the contact field's gradient) | `world.gravity` lists each area's form; a body dropped beside a torus, a cube and a tube lands and stands with its up along the surface |
+| 2 | Areas blend and bind to state | `areas[].blend`, the depth inside the bound over which the area's weight rises to one; `weight` and `scale`, state rows that fade an area or scale and flip its pull; `vector`, a keyed state row that supplies a directional area's vector | A body walking from one planetoid's reach into another's turns over the blend depth, never in one tick; writing a scale row to -1 flips a corridor |
+| 3 | A body and its camera follow their up | The kit's `motion.upTurn` and the chase rig, which rides the seat's up (both existed) | A seat walks round a planetoid with the boom behind and above it everywhere |
+| 4 | A launch along a path | The `timedMove` effect's `toward` (a placement or a point), `arc` and `exclusive`; the standard's launch template | A body stepping onto a launch pad lands on the planetoid the pad names |
+| 5 | Rails | A `gravity.orbits` row: centre, semi-major axis, eccentricity, plane angles, period, phase, the body that rides it, the state row that says whether it rides and the speed it catches the rails at | The rider's position at a tick is the same whatever happened before it (`galaxy-tests.puck`'s two pebble scenarios end at one point); `world.gravity` reads each orbit and where it stands |
+| 6 | A delayed follow | `follows { destination, row, delaySeconds }` | A leader's write reaches each follower its own delay later (`gravity-worlds-tests.puck`: the moon reads the sun's dark while the valley still reads its light), and reproduces |
+| 7 | Tides | `gravity.tides[]`: a source's placement or orbit, its mass as a pull at a radius, and a `scale` state row (a followed mass) | `world.gravity` reads the tensor; a body off the origin drifts as the tensor says, and a zero mass row stops it (`tide-tests.puck`) |
+| 8 | Seams from masses | The author's own arithmetic: `squareRoot` in a `let` derives where two pulls balance (`moon-frame.puck`'s `skySeamAltitude`) | The seam altitude a document compiles to is the balance point of its two masses |
+
+Light needs no mechanism of its own: a light's power is already a state row
+or a keyed value on a clock a state row turns, so a sun's light is a followed
+row with a delay (the moon's key light is keyed on the light it has received),
+and an eclipse is a rule over the delayed rows.
+
+One engine limit the toys met is fixed with them: a solid placement attached
+to a body collides under the field contact provider, as it did under the
+analytic one (the pebble's ball rides its body in a world of field solids). A
+second is changed and not yet shown to work: a grounded body whose up follows
+its surface now gives that up back to a field that has come to pull it off the
+surface (`StandsBySurface` in `WorldBody`), which is the first open item below.
+
+What has run: `galaxy-tests.puck` (a drop onto home's side, two launches, the
+turnover's switch, the pebble's orbit and its return to the rails), and, in a
+headless debug world driven over its console, the sun's switch (the moon's
+received light reads dark while the valley's still reads full, then both) and
+the bottle world's lever (the debug world's vector changes at once and the
+bottle world's a second later). What is authored and has not run:
+`tide-tests.puck` and `gravity-worlds-tests.puck`, so the tide (mechanism 7),
+a walk through either new painting and both scenarios' reproduction are
+unproven until they do.
+
+### The toy worlds
+
+Each is a document beside the debug world, reached from it, and played headless
+by a `puck test --reproduce` scenario.
+
+| World | Reached by | What it proves |
+|---|---|---|
+| The planetoid field (`galaxy.puck`) | A painting in the painting wing | Mechanisms 1 to 5: planetoids of several shapes each with its own pull, launch pads between them, a corridor whose gravity a switch flips, and a small moon on rails |
+| The sun (`sun.puck`), with the debug world and the moon | Rows the debug world and the moon follow | Mechanisms 6 to 8: the sun's mass and light reach each world after its own delay, and the sun going out reaches the valley and the moon at different ticks |
+| The bottle world (`globe.puck`) | A glass in the painting wing | What only Puck's world model allows: the globe's gravity is a value the debug world owns. A lever beside the glass tilts the globe, and the globe's own authority follows the lever with a delay, with one visitor inside and another watching through the glass |
+
+### Left open
+
+In the order they matter:
+
+0. **The turnover does not lift a body off its floor.** The pad writes
+   `turnoverPull` to -1 and the area's pull turns up, but the body is still
+   grounded below the ceiling eight seconds later (`galaxy-tests.puck` asserted
+   a height over 31 m and failed; the assertion is removed and the scenario now
+   claims only the row). The cause is not found. Where to look: `ResolveUp`'s
+   steer through the antipodal turn while the body is grounded, the ground
+   hold's cone against the new gravity-up, and whether the body slid off the
+   slab while its up turned. *Check:* restore the height assertion and read
+   `body.where` each second after the flip. The same question decides whether
+   the bottle world turns a standing visitor over.
+1. **A body leaves the rails at rest and rejoins the orbit it left.** An orbit
+   is authored elements; taking a body off it (`riding` to zero) leaves the body
+   to its kit from a standstill, and putting it back closes on the same orbit
+   at the join speed. The fit that gives a perturbed body the orbit it is now
+   on exists (`FixedConicOrbit.TryFit`, with `TryScalePeriod` for its period)
+   and nothing calls it. Two pieces are owed: the orbit's elements as cells of
+   a state row the engine writes on the rejoin, through the taped mutation door
+   a followed adoption uses, so a checkpoint and a replay hold them; and a
+   velocity door on the body, so a body leaving the rails takes the orbit's
+   velocity and a rejoining one hands the fit its own. *Check:* a pebble
+   knocked off its orbit by a rule's impulse rides a different orbit after it
+   settles, the same one on a second run and after a checkpoint restore.
+2. **A kit body feels a tide's size and not its direction.** A kit body
+   integrates the field's magnitude along its own up, and a field under a metre
+   a second squared does not turn that up, so a tide moves a walker or a ship
+   along the up it has; a rigid body takes the vector (`tide-tests.puck` uses
+   marbles for that reason). A ship coasting between worlds should drift as the
+   tensor says. The fix is the vector applied to a kit body's velocity where
+   the field is too faint to be its up. *Check:* a ship parked beside the
+   moon's reach drifts along the line to the planet.
+3. **The valley's own sun does not dim.** The valley follows the sun's light
+   (`sunLight` in `sun-watch.puck`) and nothing there reads it yet: its key
+   light is a chain of two keyed tracks (the day and the viewer's height), and
+   the received light is a third factor that chain has to take. The moon's key
+   light, a single track, does dim. *Check:* `sun.switch 0` darkens the valley
+   floor a little over half a second after the moon in its sky.
+4. **Eclipses.** The moon's phase is the shared day's; an eclipse (the planet
+   between the sun and the moon) is a keyed track over the day that multiplies
+   the received light, authored from the three bodies' places in
+   `moon-frame.puck`. Not authored yet.
+5. **A delayed follow's values in flight are host memory.** A restored
+   authority delays again from its next observation, so a value in flight at
+   the checkpoint arrives late by up to one delay. Carrying the line in the
+   checkpoint closes it. *Check:* a restore between a leader's write and its
+   arrival delivers it at the tick an unrestored run does.
+6. **Laws.** `FixedConicOrbit` and `GravityTide` carry no law in
+   `tests/Puck.Maths.Tests` or `tests/Puck.Physics.Tests`. The properties worth
+   one: the Kepler solve's residual at every phase below the eccentricity
+   ceiling, the fit's round trip, and the tide against the difference of two
+   exact pulls.
+
 ## Readings owed
 
 - A windowed Direct3D 12 pass: the moon painting's curtain shut and drawn, the
@@ -161,3 +292,7 @@ waits for the interaction settlement the world model names as unbuilt.
   the valley.
 - The remote topology: `puck benchmark --route debug --remote local` with the
   door and the beacon exercised against the remote authority.
+- A windowed pass over the planetoid field for feel: the chase camera through a
+  walk round home, over the cube's edges and round the ring's tube; a launch
+  between two bodies; the turnover's flip from the floor to the ceiling; and the
+  bottle world turned from outside with a seat inside it.

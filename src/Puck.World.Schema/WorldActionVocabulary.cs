@@ -81,13 +81,24 @@ public static class WorldEffect {
         ActionTarget Target = ActionTarget.Self,
         bool UseMoveDirection = false
     ) : ActionEffect;
-    /// <summary>Moves a body along its launch plane and turns it through a signed relative yaw over time.</summary>
+    /// <summary>Moves a body over time, turning it through a signed relative yaw: across its launch plane and along
+    /// its up in its own frame, or to a point of the world.</summary>
     /// <param name="Right">Travel to the right in body-sized world units.</param>
     /// <param name="Forward">Travel forward in body-sized world units.</param>
     /// <param name="YawDegrees">Signed relative turn in degrees, in Puck's yaw convention.</param>
     /// <param name="DurationSeconds">Positive duration in exact engine ticks, expressed in seconds.</param>
     /// <param name="Curve">How both travel and yaw are distributed over the duration.</param>
     /// <param name="Key">The recipient of a world rule. A kit action supplies its own body.</param>
+    /// <param name="Up">Travel along the body's up at the launch, in body-sized world units.</param>
+    /// <param name="Arc">The height the path stands off the straight line at its middle, along the body's up at the
+    /// launch, in body-sized world units: the path is a parabola that leaves and arrives on the line.</param>
+    /// <param name="Exclusive">Whether the move owns the body's translation while it runs: its walk and its fall add
+    /// nothing, it is off its support throughout, and it ends at rest. The default adds the move to ordinary
+    /// locomotion.</param>
+    /// <param name="Toward">The placement the move ends at, read when the effect fires: the travel is from where the
+    /// body stands to that placement's position plus <paramref name="TowardOffset"/>, in place of
+    /// <paramref name="Right"/>, <paramref name="Forward"/> and <paramref name="Up"/>. A world rule's only.</param>
+    /// <param name="TowardOffset">The offset from <paramref name="Toward"/>'s position, in world axes.</param>
     public sealed record TimedMove(
         decimal Right,
         decimal Forward,
@@ -95,7 +106,13 @@ public static class WorldEffect {
         decimal DurationSeconds,
         BodyMotionCurve Curve = BodyMotionCurve.Linear,
         [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)]
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] StateChannelRef? Key = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] decimal Up = 0m,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] decimal Arc = 0m,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Exclusive = false,
+        [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Toward = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? TowardOffset = null
     ) : ActionEffect;
     /// <summary>Starts a named timer slot with an authored duration.</summary>
     public sealed record StartTimer(

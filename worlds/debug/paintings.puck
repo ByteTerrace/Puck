@@ -47,6 +47,8 @@ let fallbackGarden = "#FF9A4D"
 let fallbackNight = "#070B16"
 let fallbackCity = "#E8C48A"
 let fallbackMoon = "#CFC8BC"
+let fallbackGalaxy = "#02030A"
+let fallbackGlobe = "#1B2330"
 
 // Shape rotations, as authored quaternions [x, y, z, w]: a quarter turn about +X lays a canvas (its +Z face) flat. The
 // floor turns it to face up and the ceiling to face down; the ceiling placement's half turn about up then lines its right
@@ -95,6 +97,14 @@ let wallPaintings = [
   {
     name: "moon", x: 66, z: wingZ0, yaw: 180, frame: modern, destination: "moon", counterpart: "moon-socket/glass", fallback: fallbackMoon
     title: "THE MOON", note: "The pale moon over the valley, the same one a ship from the launch field lands on. Knock and wait for the moon to answer; the frame it opens leads back."
+  }
+  {
+    name: "galaxy", x: 54, z: wingZ0, yaw: 180, frame: brass, destination: "galaxy", counterpart: "arrival/glass", fallback: fallbackGalaxy
+    title: "THE PLANETOIDS", note: "Six small worlds in open space, each with gravity of its own shape. Step in; the glowing pads launch you from one to the next."
+  }
+  {
+    name: "globe", x: wingX0, z: 18, yaw: 270, frame: ornate, destination: "globe", counterpart: "arrival/glass", fallback: fallbackGlobe
+    title: "THE BOTTLE WORLD", note: "A room whose gravity this gallery owns. Press the lever before it and watch which way the marbles fall; step in and someone out here can turn you over."
   }
   {
     name: "link-west", x: wingX0, z: 34.5, yaw: 270, frame: brass, destination: "self", counterpart: "painting-link-east/glass", fallback: fallbackSelf
@@ -596,6 +606,8 @@ spawnPoints [
   { id: "portal-night", position [64, wingFloor, 36.3], yawDegrees: 180 }
   { id: "portal-city", position [60, wingFloor, 15.7], yawDegrees: 0 }
   { id: "portal-moon", position [66, wingFloor, 15.7], yawDegrees: 0 }
+  { id: "portal-galaxy", position [54, wingFloor, 15.7], yawDegrees: 0 }
+  { id: "portal-globe", position [54.4, wingFloor, 18], yawDegrees: 90 }
   { id: "portal-link", position [54.5, wingFloor, 34.5], yawDegrees: 90 }
   { id: "portal-fall", position [fallX, wingFloor, (fallZ - 4)], yawDegrees: 180 }
   // Eleven metres south of the garden painting, facing it: the seam walk's second crossing (walkthrough-tests.puck).

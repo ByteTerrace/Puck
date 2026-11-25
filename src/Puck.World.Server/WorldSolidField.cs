@@ -363,8 +363,8 @@ public sealed class WorldSolidField : IContactField {
     /// <param name="reason">The forwarded <see cref="SdfFieldEvaluator"/> reject reason when a solid names an op the
     /// warp-free evaluator cannot interpret; empty on success.</param>
     /// <param name="regions">The field lattice whose height columns union with the solids for contact, or <see langword="null"/>.</param>
-    /// <param name="posed">Attached solid rows to union in at the given poses (an attached row in
-    /// <paramref name="definition"/> is placed by its inert authored transform like any other), or <see langword="null"/>.</param>
+    /// <param name="posed">Attached solid rows to union in at the given poses (an attached row of
+    /// <paramref name="definition"/> is otherwise left to the moving set, which follows its body), or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when the field compiled, <see langword="false"/> with a named reason otherwise.</returns>
     public static bool TryBuild(WorldDefinition definition, out WorldSolidField? built, out string reason, IReadOnlyList<WorldFieldRegion>? regions = null, IReadOnlyList<WorldPosedSolid>? posed = null) {
         var recording = WorldDocumentReads.Begin();
@@ -454,7 +454,10 @@ public sealed class WorldSolidField : IContactField {
                 continue;
             }
 
-            if (creation.Document.SizeBy is not null) { continue; }
+            // A row that moves (one sized by state, or one attached to a body) is a root of the moving set
+            // (WorldColliderSet.Build's movingOnly rows), which this field unions in at its live pose. Compiling it here
+            // too would leave a second, standing copy at its authored pose.
+            if ((creation.Document.SizeBy is not null) || (placement.Attach is not null)) { continue; }
             var (material, reach) = BeginRow(creation: creation, placement: placement, solid: solid);
             var stamp = WorldPlacementStamp.Resolve(definition, placement, worldSeed: worldSeed);
             var fixedRotation = stamp.FixedRotation;

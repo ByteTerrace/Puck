@@ -1140,12 +1140,55 @@ source count and last evaluation counts.
 Optional `areas` add bounded local influences without introducing another
 physics system. Each row rides a placement and declares `priority`, explicit
 `Combine` or `Replace`, an analytic `$type` bound (`sphere` with `radius`, or a
-yaw-local `box` with `halfExtents`), and an acceleration `$type`: `directional`
-with a placement-local vector, or `radial` with a constant magnitude toward the
-placement origin. Bounds include their boundary and scale with the placement;
-directional vectors rotate with its yaw. When the placement carries `attach`,
-the area follows the same authoritative fixed-point body pose as its region,
-analytic collider, and emission. An inactive carrier contributes no area.
+yaw-local `box` with `halfExtents`), and an acceleration `$type`:
+
+| `$type` | Pulls toward | Members |
+|---|---|---|
+| `directional` | nowhere: a placement-local vector | `value` |
+| `radial` | the placement origin, at a constant magnitude | `magnitude` |
+| `axial` | the line through the origin along `axis` | `magnitude`, `axis` (default the placement's Y) |
+| `planar` | the plane through the origin across `normal`, from either side | `magnitude`, `normal` (default the placement's Y) |
+| `point` | the origin, as a uniform ball pulls: `surfaceGravity` at `referenceRadius`, the inverse square of the distance beyond it and in proportion to it inside | `surfaceGravity`, `referenceRadius` |
+| `surface` | the nearest solid surface: against the contact field's gradient at the body | `magnitude` |
+
+Every magnitude but a directional vector is signed: a negative one pushes away,
+which holds a body to the inside of a tube or a shell. A `surface` area asks the
+world's contact provider for the gradient, so the world selects
+`GradientDerivedUp` in `collision.requirements`; the validator refuses the area
+otherwise. Bounds include their boundary and scale with the placement;
+directional vectors and the axial and planar directions rotate with its yaw.
+When the placement carries `attach`, the area follows the same authoritative
+fixed-point body pose as its region, collider, and emission. An inactive
+carrier contributes no area.
+
+An area's weight shapes how it joins the fold. `blend` is the depth inside the
+bound over which the weight rises smoothly from nothing at the bound to one; at
+a weight between the two a `Replace` area mixes its answer with the accumulated
+one in that proportion and a `Combine` area adds that share. Three optional
+bindings read `Fixed` slot rows once a solve: `weight` multiplies the weight
+(clamped to zero through one; zero takes the area out of the fold), `scale`
+multiplies the acceleration (minus one turns it about), and `vector` (`x`, `y`,
+`z`, three rows) supplies a directional area's vector. Each is a row of its
+own, so each may be a followed row.
+
+`orbits` are closed-form conics, each about a placement
+(`WorldGravityOrbit`, `FixedConicOrbit`): a semi-major axis, an eccentricity
+below `FixedConicOrbit.MaxEccentricity`, the three plane angles, a period of
+whole engine ticks and a phase. The phase at an engine tick is one integer
+division, so a position is computed for any tick directly. A row naming
+`bodyIndex` moves that body along the orbit each tick as continuous motion
+while its `riding` row reads nonzero (absent rides always); a body found away
+from its orbit closes on it at `joinSpeed`. Orbits are placed in authored
+order, so an orbit about a placement attached to a rider is authored after the
+rider's own.
+
+`tides` are far masses (`WorldGravityTide`): each names a placement or an orbit
+for its centre, states its mass as `surfaceGravity` at `referenceRadius`, and
+may name a `scale` row. The runtime forms one tidal tensor a solve at
+`tideOrigin` (a placement; absent is the world's origin) and adds its product
+with each body's offset from that origin; a source's whole pull is never
+added. Tides add to an authored field, so the validator refuses them in a
+section that authors no uniform, area or source.
 
 A placement may name a `parent` placement: its `position` and `yawDegrees`
 are then a local offset and heading in the parent's resolved frame—the
@@ -1172,10 +1215,10 @@ outside every area does not participate and retains that same fallback. The cap 
 and `world.budget` reports declared areas per target plus those live counters.
 Every global/uniform/area addition saturates componentwise at the Q48.16 extrema
 rather than wrapping direction; a later Replace still resets the accumulated value.
+The tide is added last, to every body.
 
-These bounds stay analytic by design. An arbitrary SDF-bounded influence needs
-a deliberate cross-project asset/query contract; per-body masks belong at that
-same future extension seam. Neither is inferred from placement geometry today.
+An area's bound stays analytic: a sphere or a box. Per-body masks are not
+authored.
 
 ## The `metadata` section—free-form author-facing facts
 

@@ -240,10 +240,16 @@ public static partial class WorldFactsCompiler {
                 Y: CompilePointAxis(axis: designate.PointY, context: context, ruleName: ruleName, verb: form.Verb),
                 Z: CompilePointAxis(axis: designate.PointZ, context: context, ruleName: ruleName, verb: form.Verb)
             );
+        } else if ((form.Operation == BodyMotionOp.TimedMove) && (form.Placement is not null)) {
+            // A move toward a placement ends at a literal point of the world: the placement's position at firing
+            // plus the authored offset.
+            point = new WorldPointTarget(Offset: form.Offset, Placement: form.Placement);
         }
 
         return new WorldBodyMotionEffect(
             action: new WorldBodyAction(
+                Arc: form.Arc,
+                Exclusive: form.Exclusive,
                 Curve: form.Curve,
                 Designation: form.Designation,
                 Direction: form.Direction,

@@ -922,7 +922,7 @@ public sealed partial class WorldPopulation {
     // The tick's one gravity solve. Gathered in ENTITY ORDER so the solver's input order is the population's own
     // stable order: an approximate solver's answer depends on the order its tree is built in, so activation history
     // must not reach it.
-    private bool SolveGravity() {
+    private bool SolveGravity(WorldDefinition definition, ulong tick, ulong engineTick) {
         if (m_gravityField is not { IsActive: true } gravity) {
             return false;
         }
@@ -949,7 +949,10 @@ public sealed partial class WorldPopulation {
             ));
         }
 
-        gravity.Solve(targets: m_gravityTargets);
+        gravity.Solve(
+            inputs: new WorldGravityInputs(Definition: definition, EngineTick: engineTick, Orbits: m_orbitField, Surface: m_contactField, SurfaceVersion: ContactFieldVersion, Tick: tick),
+            targets: m_gravityTargets
+        );
         var woke = false;
         // The field's contact revision says nothing about solved acceleration. Reuse its already-required,
         // entity-ordered target pass; a static/default-gravity world pays no sleeping-body scan.
@@ -1029,6 +1032,9 @@ public sealed partial class WorldPopulation {
         SimulatedBodyVisits = 0;
         m_rigidTickStepTicks = stepTicks;
 
+        // Orbits place their riders first, so a solid, an area or a tide source attached to a rider reads it where this
+        // step puts it.
+        if (m_orbitField is { Count: > 0 } orbits) { orbits.Advance(definition: definition, engineTick: stepStartEngineTick, population: this, stepTicks: stepTicks, tick: tick); }
         if (MovingSolids is { } attached) { attached.RefreshAttached(definition: definition, engineTick: stepStartEngineTick, population: this, tick: tick); }
         var stepBodies = PrepareBodyStep();
 
@@ -1045,7 +1051,7 @@ public sealed partial class WorldPopulation {
         }
 
         // A solved-field change can wake a member after the first snapshot, before integration begins.
-        if (SolveGravity()) { stepBodies = PrepareBodyStep(); }
+        if (SolveGravity(definition: definition, engineTick: stepStartEngineTick, tick: tick)) { stepBodies = PrepareBodyStep(); }
         FreezeFlockImage();
         m_navigation.BeginStep();
 

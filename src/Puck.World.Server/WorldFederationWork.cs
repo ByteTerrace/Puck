@@ -19,10 +19,16 @@ public static class WorldFederationWork {
     public static WorkKind FollowReads { get; } = new(name: "world.federation.follow-reads", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the leader's values adopted into followed rows: one taped write each.</summary>
     public static WorkKind FollowAdoptions { get; } = new(name: "world.federation.follow-adoptions", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the leader's writes a delayed follow put in flight: each arrives, and counts as
+    /// an adoption, one delay later.</summary>
+    public static WorkKind FollowDelayed { get; } = new(name: "world.federation.follow-delayed", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting values a delayed follow replaced in flight because its leader wrote more often
+    /// inside one delay than the line holds.</summary>
+    public static WorkKind FollowDelayOverflows { get; } = new(name: "world.federation.follow-delay-overflows", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the ledger a host's authorities count into. Declared after the kinds, which it reads as it is
     /// created.</summary>
     public static WorkCounterSet Process { get; } = new(
-        kinds: [FollowReads, FollowAdoptions],
+        kinds: [FollowReads, FollowAdoptions, FollowDelayed, FollowDelayOverflows],
         name: SourceName
     );
 }

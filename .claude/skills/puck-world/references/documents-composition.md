@@ -35,18 +35,36 @@ subject names them:
   price. Optional `areas` are the bounded-local layer over that SAME answer:
   each rides a placement, declares a priority and explicit `Combine`/`Replace`,
   an inclusive analytic `sphere` or yaw-local `box` bound (scaled by the
-  placement), and either a placement-local `directional` vector or constant-
-  magnitude inward `radial` acceleration. Static rows use authored pose;
+  placement), and an acceleration form: a placement-local `directional` vector,
+  a constant `radial` pull toward the origin, `axial` toward a line, `planar`
+  toward a plane, `point` (a ball's pull, falling with distance) or `surface`
+  (toward the nearest solid surface, the contact field's gradient, which needs
+  `GradientDerivedUp`). Magnitudes are signed; a negative one pushes away.
+  `blend` is the depth inside the bound over which the area's weight rises to
+  one, and `weight`, `scale` and `vector` read `Fixed` slot rows once a solve
+  (a fade, a signed multiplier and a directional area's vector), so a rule or a
+  followed row turns gravity. Static rows use authored pose;
   attached rows use `WorldPlacementAttachment.TryResolve` each tick and
   contribute nothing while their carrier is inactive. The fixed fold begins
   with uniform + global solved gravity, then applies areas ascending by
-  `(priority, authored index)`; later equal-priority rows therefore apply later.
+  `(priority, authored index)`, each at its weight; later equal-priority rows
+  therefore apply later.
   A matching zero Replace, exact cancellation, or radial center is participating
   authored zero-G; outside every area in an areas-only field retains kit fallback.
   Global + uniform + Combine composition saturates componentwise at Q48.16
   extrema rather than wrapping, while a later Replace resets the fold.
-  Capped at 64 rows. Arbitrary SDF bounds and per-body masks are the future
-  asset/query extension seam, not implicit geometry-derived gravity.
+  Capped at 64 rows. `orbits` are closed-form conics about a placement
+  (`WorldOrbitField`): the phase is an integer division of the engine tick, a
+  body named by `bodyIndex` is glided along the orbit while its `riding` row
+  reads nonzero, and one found off its orbit closes on it at `joinSpeed`; the
+  field holds no state a checkpoint needs. `tides` are far masses reduced to one
+  tensor a solve at `tideOrigin` (`WorldGravityTides`), added to every body by
+  its offset from that origin and never as a whole pull; a kit body takes the
+  field's magnitude along its own up, so a tide too faint to turn it (under a
+  metre a second squared) moves it along the up it has, while a rigid body
+  takes the vector. A grounded body under `GradientDerivedUp` keeps its
+  surface's up until the field pulls it off that surface
+  (`WorldBody.StandsBySurface`); a turned-over area does not yet lift a standing body ([left open](../../../../docs/plans/cross-world.md#left-open)).
 - **`Portals`** (`WorldPortals.cs`) — `WorldPortalsSection(WorldPortalDefaults
   PortalDefaults)`, whose `travel` is `Party` (the traveling seat's whole
   active local-seat party) or `Body` (one seat). It is the world-scope default

@@ -1,4 +1,5 @@
 using System.Numerics;
+using Puck.Assets.Documents;
 using System.Text.Json;
 using Puck.World.Authoring;
 using Puck.Maths;
@@ -102,7 +103,159 @@ public static partial class WorldDefinitionValidator {
     // The gravitational field (SIM-AFFECTING). The constant is non-negative and the softening length positive (a
     // zero softening lets a coincident pair diverge); every attractor names a live placement, exactly once, with a
     // non-negative mass. An inactive section still validates: authoring the constants before the sources is legal.
-    private static void ValidateGravity(WorldGravity gravity, IReadOnlyList<WorldPlacement> placements, ulong worldSeed, List<string> errors) {
+    private static void RequireGravityMagnitude(float value, string path, List<string> errors) {
+        if (!float.IsFinite(f: value) || (value == 0f)) {
+            errors.Add(item: $"{path}.acceleration.magnitude must be finite and nonzero: positive pulls toward the form, negative pushes away from it.");
+        }
+    }
+    private static void RequireGravityDirection(DocumentVector3? value, string name, List<string> errors) {
+        if ((value is { } direction) && (!VectorFunctions.IsFinite(vector: direction) || (direction.LengthSquared() <= 0f))) {
+            errors.Add(item: $"{name} must be a finite direction of nonzero length.");
+        }
+    }
+    // A gravity row's scalar binding: a declared Fixed slot row, read each tick.
+    private static void RequireGravityScalarRow(string? name, string path, IReadOnlyList<WorldStateRow> state, List<string> errors) {
+        if (name is null) {
+            return;
+        }
+
+        if (WorldDefinitionRows.FindStateRow(name: name, rows: state) is not { } row) {
+            errors.Add(item: $"{path} '{name}' names no state row.");
+        } else if ((row.Kind != CellKind.Fixed) || !row.IsSlot) {
+            errors.Add(item: $"{path} '{name}' must be a Fixed slot row.");
+        }
+    }
+    // Orbits (SIM-AFFECTING): a unique name, a live focus placement, a positive axis, an eccentricity the fixed-point
+    // Kepler solve settles for, a period of whole engine ticks, and a riding row that exists.
+    private static void ValidateGravityOrbits(WorldGravity gravity, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldStateRow> state, List<string> errors) {
+        if (gravity.Orbits is not { } orbits) {
+            return;
+        }
+
+        if (orbits.Count > WorldGravityCapacity.MaxOrbits) {
+            errors.Add(item: $"gravity.orbits declares {orbits.Count} rows, past the {WorldGravityCapacity.MaxOrbits}-row cap.");
+        }
+
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var riders = new HashSet<int>();
+
+        for (var index = 0; (index < orbits.Count); index++) {
+            var orbit = orbits[index];
+            var path = $"gravity.orbits[{index}]";
+
+            if (orbit is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(value: orbit.Name)) {
+                errors.Add(item: $"{path}.name is required.");
+            } else if (!names.Add(item: orbit.Name)) {
+                errors.Add(item: $"{path}.name duplicates '{orbit.Name}'.");
+            }
+
+            if (string.IsNullOrWhiteSpace(value: orbit.Around)) {
+                errors.Add(item: $"{path}.around is required.");
+            } else if (!WorldPlacementIndex.ById(placements: placements).ContainsKey(key: orbit.Around)) {
+                errors.Add(item: $"{path}.around '{orbit.Around}' resolves to no placement.");
+            }
+
+            RequirePositive(
+                value: orbit.SemiMajorAxis,
+                name: new Subject(Member: ".semiMajorAxis", Path: path),
+                errors: errors
+            );
+
+            var maxEccentricity = ((float)((double)FixedConicOrbit.MaxEccentricity));
+
+            if (!float.IsFinite(f: orbit.Eccentricity) || (orbit.Eccentricity < 0f) || (orbit.Eccentricity >= maxEccentricity)) {
+                errors.Add(item: $"{path}.eccentricity {orbit.Eccentricity} must be zero or more and below {maxEccentricity:0.##}: a closed orbit the fixed-point solve settles for.");
+            }
+
+            if (!float.IsFinite(f: orbit.InclinationDegrees) || !float.IsFinite(f: orbit.AscendingNodeDegrees) || !float.IsFinite(f: orbit.PeriapsisDegrees) || !float.IsFinite(f: orbit.Phase)) {
+                errors.Add(item: $"{path} must author finite angles and a finite phase.");
+            }
+
+            if (!float.IsFinite(f: orbit.JoinSpeed) || (orbit.JoinSpeed < 0f)) {
+                errors.Add(item: $"{path}.joinSpeed must be a finite speed of zero or more.");
+            }
+
+            if ((orbit.PeriodSeconds <= 0m) || !FixedTickConversion.TryDurationEngineTicksExact(seconds: orbit.PeriodSeconds, ticks: out _)) {
+                errors.Add(item: $"{path}.periodSeconds {orbit.PeriodSeconds} must be a positive whole number of engine ticks ({FixedTickConversion.TicksPerSecond} a second).");
+            }
+
+            if (orbit.BodyIndex is { } body) {
+                if (body < 0) {
+                    errors.Add(item: $"{path}.bodyIndex {body} must be zero or more.");
+                } else if (!riders.Add(item: body)) {
+                    errors.Add(item: $"{path}.bodyIndex {body} already rides another orbit.");
+                }
+            } else if (orbit.Riding is not null) {
+                errors.Add(item: $"{path}.riding names the row that keeps a body on the orbit; this orbit names no bodyIndex.");
+            }
+
+            if ((orbit.Riding is { } riding) && (WorldDefinitionRows.FindStateRow(name: riding, rows: state) is not { IsSlot: true, Kind: CellKind.Int or CellKind.Bool or CellKind.Fixed })) {
+                errors.Add(item: $"{path}.riding '{riding}' must name an Int, Bool or Fixed slot row.");
+            }
+        }
+    }
+    // Tides (SIM-AFFECTING): each source names exactly one of a placement and an orbit, states a positive mass in the
+    // observed quantities, and the section authors a field of its own for the tide to add to.
+    private static void ValidateGravityTides(WorldGravity gravity, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldStateRow> state, List<string> errors) {
+        if ((gravity.TideOrigin is { } origin) && !WorldPlacementIndex.ById(placements: placements).ContainsKey(key: origin)) {
+            errors.Add(item: $"gravity.tideOrigin '{origin}' resolves to no placement.");
+        }
+
+        if (gravity.Tides is not { Count: > 0 } tides) {
+            return;
+        }
+
+        if (tides.Count > WorldGravityCapacity.MaxTides) {
+            errors.Add(item: $"gravity.tides declares {tides.Count} rows, past the {WorldGravityCapacity.MaxTides}-row cap.");
+        }
+
+        if ((gravity.UniformAcceleration == Vector3.Zero) && (gravity.Areas is not { Count: > 0 }) && !(gravity.GravitationalConstant > 0f)) {
+            errors.Add(item: "gravity.tides adds to the world's own field, and this section authors none: declare a uniform, an area or a source for the tide to add to.");
+        }
+
+        for (var index = 0; (index < tides.Count); index++) {
+            var tide = tides[index];
+            var path = $"gravity.tides[{index}]";
+
+            if (tide is null) {
+                errors.Add(item: $"{path} is required.");
+
+                continue;
+            }
+
+            if ((tide.PlacementId is null) == (tide.Orbit is null)) {
+                errors.Add(item: $"{path} must name exactly one of placementId and orbit: where the source stands.");
+            } else if ((tide.PlacementId is { } placementId) && !WorldPlacementIndex.ById(placements: placements).ContainsKey(key: placementId)) {
+                errors.Add(item: $"{path}.placementId '{placementId}' resolves to no placement.");
+            } else if ((tide.Orbit is { } orbitName) && !(gravity.Orbits?.Any(predicate: orbit => string.Equals(a: orbit?.Name, b: orbitName, comparisonType: StringComparison.Ordinal)) ?? false)) {
+                errors.Add(item: $"{path}.orbit '{orbitName}' names no gravity.orbits row.");
+            }
+
+            RequirePositive(
+                value: tide.SurfaceGravity,
+                name: new Subject(Member: ".surfaceGravity", Path: path),
+                errors: errors
+            );
+            RequirePositive(
+                value: tide.ReferenceRadius,
+                name: new Subject(Member: ".referenceRadius", Path: path),
+                errors: errors
+            );
+
+            if ((tide.SurfaceGravity > 0f) && (tide.ReferenceRadius > 0f) && !FixedWorldGravityTide.TryStrength(strength: out _, tide: tide)) {
+                errors.Add(item: $"{path} cannot lower surfaceGravity times referenceRadius squared to Q48.16 without underflow or overflow.");
+            }
+
+            RequireGravityScalarRow(name: tide.Scale, path: $"{path}.scale", state: state, errors: errors);
+        }
+    }
+    private static void ValidateGravity(WorldGravity gravity, IReadOnlyList<WorldPlacement> placements, IReadOnlyList<WorldStateRow> state, WorldCollision collision, ulong worldSeed, List<string> errors) {
         if (!Enum.IsDefined(value: gravity.Solver)) {
             errors.Add(item: $"gravity.solver '{gravity.Solver}' is not defined.");
         }
@@ -208,6 +361,9 @@ public static partial class WorldDefinitionValidator {
             }
         }
 
+        ValidateGravityOrbits(gravity: gravity, placements: placements, state: state, errors: errors);
+        ValidateGravityTides(gravity: gravity, placements: placements, state: state, errors: errors);
+
         if (gravity.Areas is not { } areas) {
             return;
         }
@@ -280,11 +436,31 @@ public static partial class WorldDefinitionValidator {
                     }
                     break;
                 case WorldGravityAreaAcceleration.Radial radial:
+                    RequireGravityMagnitude(value: radial.Magnitude, path: path, errors: errors);
+                    break;
+                case WorldGravityAreaAcceleration.Axial axial:
+                    RequireGravityMagnitude(value: axial.Magnitude, path: path, errors: errors);
+                    RequireGravityDirection(value: axial.Axis, name: $"{path}.acceleration.axis", errors: errors);
+                    break;
+                case WorldGravityAreaAcceleration.Planar planar:
+                    RequireGravityMagnitude(value: planar.Magnitude, path: path, errors: errors);
+                    RequireGravityDirection(value: planar.Normal, name: $"{path}.acceleration.normal", errors: errors);
+                    break;
+                case WorldGravityAreaAcceleration.PointMass point:
+                    if (!float.IsFinite(f: point.SurfaceGravity) || (point.SurfaceGravity == 0f)) {
+                        errors.Add(item: $"{path}.acceleration.surfaceGravity must be finite and nonzero: positive pulls toward the placement, negative pushes away.");
+                    }
                     RequirePositive(
-                        value: radial.Magnitude,
-                        name: new Subject(Member: ".acceleration.magnitude", Path: path),
+                        value: point.ReferenceRadius,
+                        name: new Subject(Member: ".acceleration.referenceRadius", Path: path),
                         errors: errors
                     );
+                    break;
+                case WorldGravityAreaAcceleration.Surface surface:
+                    RequireGravityMagnitude(value: surface.Magnitude, path: path, errors: errors);
+                    if (!collision.Requirements.Contains(value: WorldContactRequirement.GradientDerivedUp)) {
+                        errors.Add(item: $"{path}.acceleration is 'surface', which pulls against the contact field's gradient: add GradientDerivedUp to collision.requirements so the world's contact provider answers it.");
+                    }
                     break;
                 case null:
                     errors.Add(item: $"{path}.acceleration is required.");
@@ -292,6 +468,23 @@ public static partial class WorldDefinitionValidator {
                 default:
                     errors.Add(item: $"{path}.acceleration has an unsupported shape.");
                     break;
+            }
+
+            if (!float.IsFinite(f: area.Blend) || (area.Blend < 0f)) {
+                errors.Add(item: $"{path}.blend must be a finite depth of zero or more.");
+            }
+
+            RequireGravityScalarRow(name: area.Weight, path: $"{path}.weight", state: state, errors: errors);
+            RequireGravityScalarRow(name: area.Scale, path: $"{path}.scale", state: state, errors: errors);
+
+            if (area.Vector is { } vector) {
+                if (area.Acceleration is not (null or WorldGravityAreaAcceleration.Directional)) {
+                    errors.Add(item: $"{path}.vector supplies a directional area's vector; this area's acceleration is not directional.");
+                }
+
+                RequireGravityScalarRow(name: vector.X, path: $"{path}.vector.x", state: state, errors: errors);
+                RequireGravityScalarRow(name: vector.Y, path: $"{path}.vector.y", state: state, errors: errors);
+                RequireGravityScalarRow(name: vector.Z, path: $"{path}.vector.z", state: state, errors: errors);
             }
 
             if (

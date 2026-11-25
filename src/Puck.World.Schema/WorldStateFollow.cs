@@ -25,10 +25,17 @@ namespace Puck.World;
 /// </remarks>
 /// <param name="Destination">The global destination whose world this row follows.</param>
 /// <param name="Row">The row of that world this row holds. Absent is this row's own name.</param>
+/// <param name="DelaySeconds">How long the leader's value takes to arrive: the row reads what the leader's row read
+/// this long ago, each of the leader's writes arriving in order that long after this authority observed it. An
+/// author derives it from the distance between the two worlds over the speed the influence travels at. Zero, the
+/// default, adopts the leader's value at the next tick boundary. Until the first value arrives the row keeps its
+/// authored one. The values in flight are not checkpointed: a restored authority delays again from its first new
+/// observation, which is never earlier than the delay allows.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldStateFollow(
     [property: DocumentText("a destination name")] string Destination,
-    [property: DocumentText("a state row of the followed world")][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Row = null
+    [property: DocumentText("a state row of the followed world")][property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Row = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] decimal DelaySeconds = 0m
 ) {
     /// <summary>Returns the followed world's row a row holds: <see cref="Row"/>, or the row's own name.</summary>
     /// <param name="row">The following row's own name.</param>

@@ -55,6 +55,26 @@ public static class FixedSaturate {
             : FixedQ4816.MaxValue
         );
     }
+    /// <summary>Scales a vector componentwise, clamping each component to the representable extremes instead of
+    /// wrapping.</summary>
+    /// <param name="left">The vector.</param>
+    /// <param name="right">The scale.</param>
+    /// <returns>The componentwise saturated product: each component is
+    /// <see cref="Multiply(FixedQ4816, FixedQ4816)"/> of that component and <paramref name="right"/>.</returns>
+    public static FixedVector3 Multiply(FixedVector3 left, FixedQ4816 right) => new(
+        X: Multiply(
+            left: left.X,
+            right: right
+        ),
+        Y: Multiply(
+            left: left.Y,
+            right: right
+        ),
+        Z: Multiply(
+            left: left.Z,
+            right: right
+        )
+    );
     /// <summary>Clamps a widened accumulator into the <see cref="long"/> range and narrows it.</summary>
     /// <param name="value">The widened value.</param>
     /// <returns><paramref name="value"/> narrowed, or the nearer <see cref="long"/> extreme when it lies outside.</returns>

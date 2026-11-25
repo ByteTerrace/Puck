@@ -1238,17 +1238,23 @@ public sealed partial class WorldBody {
     // while grounded. A degenerate ambient query leaves the held value untouched rather than snapping to an arbitrary
     // direction. Centralizing every policy arm here makes a live policy rebuild authoritative on the very next step
     // instead of retaining whichever surface the previous policy last adopted.
+    // Whether this body's up is the surface it stands on: a SurfaceFollowing body, grounded, in a solved field that
+    // still presses it onto that surface. The one predicate the frame authority (ResolveUp) and the contact phase's
+    // adoption of the measured normal both ask, so the two never disagree about whose axis it is. A field that has
+    // come to pull the body off its surface (a gravity area turned over under its feet) gives the axis back to the
+    // field, which steers it round and lifts the body away; a field with no pull along the axis leaves it standing.
+    private bool StandsBySurface() => (
+        (m_upPolicy == WorldBodyUpPolicy.SurfaceFollowing) &&
+        m_grounded &&
+        TrySolvedGravity(acceleration: out var acceleration) &&
+        (FixedVector3.Dot(left: acceleration, right: m_up) <= FixedQ4816.Zero)
+    );
     private FixedVector3 ResolveUp(ulong stepTicks) {
         // A SurfaceFollowing STANDING body's up is the surface it stands on, and it keeps it. The two candidates
         // disagree wherever a surface is not perpendicular to the field — every point of a planetoid under any second
         // attractor — and recomputing from the field each tick would flip the axis back and forth between them,
         // rotating the planar velocity one way and then the other until the body simply stops making progress.
-        if (
-            (m_upPolicy == WorldBodyUpPolicy.SurfaceFollowing) &&
-            m_grounded &&
-            TrySolvedGravity(acceleration: out _) &&
-            (m_up != FixedVector3.Zero)
-        ) {
+        if (StandsBySurface() && (m_up != FixedVector3.Zero)) {
             return m_up;
         }
 

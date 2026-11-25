@@ -1,0 +1,104 @@
+// The planetoid field (galaxy.puck), each scenario booted in the galaxy alone: `puck test worlds/debug/galaxy-tests.puck`,
+// and `--reproduce` to show a walk round a ball, a launch, a gravity flip and the pebble's orbit replay bit for bit. The
+// visitor is body 0 and the pebble body 8. The frame back to the debug world is dropped so only the galaxy's authority
+// runs.
+
+schema: "puck.world.definition.v1"
+basis: "galaxy"
+documentId: "galaxy-tests"
+
+placements {
+  placement "arrival" {
+    $drop: true
+  }
+}
+
+// Dropped beside home, the visitor falls to it and stands on it wherever she lands: on the side of the ball her feet are
+// toward the centre, eight metres out.
+test "a body dropped beside home falls to it and stands on its side" {
+  when {
+    seat1: body.pose 12 -8 0 0 0 0
+    ticks 240
+  }
+  expect {
+    fact(body, 0, Grounded) == 1
+    bodyPosition(body, 0, x) > 7.5
+    bodyPosition(body, 0, x) < 8.6
+    bodyPosition(body, 0, y) > -9
+    bodyPosition(body, 0, y) < -7
+  }
+}
+
+// Standing on home's pad for the ring, the visitor is carried over to it and lands on its tube.
+test "home's launch pad lands a body on the ring" {
+  when {
+    seat1: body.pose 3.5 0.3 0 0 0 0
+    ticks 240
+  }
+  expect {
+    fact(body, 0, Grounded) == 1
+    bodyPosition(body, 0, x) > 20
+    bodyPosition(body, 0, x) < 28
+    bodyPosition(body, 0, y) > 5
+  }
+}
+
+// On the ring's far pad she is carried to the cube and stands on its top face.
+test "the ring's launch pad lands a body on the cube" {
+  when {
+    seat1: body.pose 36 6.5 0 0 0 0
+    ticks 300
+  }
+  expect {
+    fact(body, 0, Grounded) == 1
+    bodyPosition(body, 0, z) > 30
+    bodyPosition(body, 0, z) < 38
+    bodyPosition(body, 0, y) > 9.5
+    bodyPosition(body, 0, y) < 10.6
+  }
+}
+
+// In the turnover, the floor pad writes the room's gravity over: the row reads -1. That the body then ends on the
+// ceiling is not claimed here: it does not yet (docs/plans/cross-world.md, "Left open").
+test "the turnover's floor pad turns its gravity over" {
+  when {
+    seat1: body.pose 0 26.4 -36 0 0 0
+    ticks 240
+  }
+  expect {
+    turnoverPull == -1
+  }
+}
+
+// The pebble rides its orbit: twelve seconds in it is half way round, on the far side of home from where it started.
+test "the pebble circles home on its orbit" {
+  when {
+    ticks 360
+  }
+  expect {
+    bodyPosition(body, 8, x) < -17.9
+    bodyPosition(body, 8, x) > -18.1
+    bodyPosition(body, 8, y) > -8.2
+    bodyPosition(body, 8, y) < -7.8
+  }
+}
+
+// Taken off the rails the pebble stays where it is; put back, it closes on the orbit and is on it again. At the same
+// tick as the scenario above it stands at the same point: where the orbit puts it is the tick's alone, whatever
+// happened between.
+test "the pebble leaves its rails and catches them again" {
+  when {
+    ticks 30
+    seat1: world.state.cell.set pebbleRiding $value 0
+    ticks 90
+    seat1: world.state.cell.set pebbleRiding $value 1
+    ticks 240
+  }
+  expect {
+    pebbleRiding == 1
+    bodyPosition(body, 8, x) < -17.9
+    bodyPosition(body, 8, x) > -18.1
+    bodyPosition(body, 8, y) > -8.2
+    bodyPosition(body, 8, y) < -7.8
+  }
+}

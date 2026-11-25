@@ -1,0 +1,575 @@
+// The planetoid field: a destination of the debug world's painting wing, and the proving ground for gravity that comes
+// from shapes. Six small bodies hang in open space, each with its own pull, and a body tours them by launch pad:
+//
+//   home      a ball; its pull falls with distance as a ball's does (a `point` area)
+//   ring      a torus; the pull is toward its nearest surface, so a body walks round the tube and through the hole
+//   cube      a cube; the same surface pull, so each face is a floor
+//   coin      a slab walked on both faces (a `planar` area); the pad that leaves it is on its underside
+//   turnover  a corridor with a floor and a ceiling whose gravity a pad turns over (a `directional` area and a scale row)
+//   pipe      a tube walked on the inside (an `axial` area pushing outward); the pad that leaves it is on its ceiling
+//
+// A pebble moon circles home on rails (a `gravity.orbits` row): its position is the orbit's closed form at every tick,
+// and it carries its own small pull. Open space pulls faintly toward home, so a body that walks off a planetoid drifts
+// back to where the world starts. Every pull, reach, launch and switch is this document's or the standard's
+// (../standard/gravity.puck); the engine supplies the area forms, the blend, the orbit and the move toward a placement.
+//
+// Boot the debug world, never this one: the galaxy painting (`painting-galaxy`, paintings.puck) opens onto the arrival
+// frame on home. galaxy.md beside this file says how to get here and what to try.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "galaxy"
+
+// The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's size.
+import "moth-controls"
+import "size"
+import "painting-kit"
+import "place-kit"
+import "../standard/visitors"
+import "../standard/gravity"
+import "../standard/kits"
+
+// The galaxy draws no HUD panels; controls.puck supplies its cursor.
+hud {
+  panels []
+}
+
+metadata {
+  title: "Galaxy"
+  description: "A destination of the debug world painting wing: six planetoids in open space, each with gravity of its own shape, toured by launch pad, with a pebble moon on rails."
+}
+
+// The pull every planetoid gives a body standing on it, in metres a second squared, and the faint pull of open space
+// toward home.
+let pull = 14
+let drift = 2
+
+// Home: a ball `homeRadius` across the middle with its top at the origin, where the arrival frame stands on a level pad.
+let homeRadius = 8
+let homeCentre = [0, (0 - homeRadius), 0]
+
+// The other bodies' centres.
+let ringCentre = [30, 4, 0]
+let ringMajor = 6
+let ringMinor = (0.4 * ringMajor)
+let cubeCentre = [0, 6, 34]
+let cubeHalf = 4
+let coinCentre = [0, 20, 10]
+let coinHalf = 5
+let coinThick = 0.4
+let turnoverFloor = [0, 26, -30]
+let turnoverHeight = 6
+let turnoverHalf = [5, 0.3, 8]
+let pipeCentre = [-30, 14, -30]
+let pipeOuter = 5
+let pipeInner = 4.2
+let pipeHalf = 8
+
+// The pebble moon: the population body that rides the orbit, the ball attached to it and the orbit's shape.
+let pebbleBody = 8
+let pebbleRadius = 1.2
+let pebbleOrbit = 15
+let pebblePeriod = 24s
+
+// A launch pad's region: a box a body's feet stand in, `reach` to a side.
+let padReach = [0.8, 0.8, 0.8]
+
+bodies {
+  capacity: 9
+  localSeats: 4
+  networkPlayers: 4
+  reconnectGraceSeconds: 3
+}
+
+// The debug world's window onto the galaxy observes it whole as a session; arriving visitors receive the standard
+// visitor row.
+admission [
+  {
+    admits: Session
+    disclosure: Replica
+    domain: "*"
+    grants [
+      {
+        budget: 8
+        capability: Drive
+        exclusive: true
+      }
+      {
+        budget: 64
+        capability: Observe
+        subject: "all"
+      }
+    ]
+    mode: FederatedAuthority
+  }
+  visitorAdmissionRow(domain: "*")
+]
+
+references [
+  {
+    document: "debug"
+    name: "debug"
+  }
+]
+
+destinations [
+  {
+    durability: persisted
+    name: "debug"
+    reference: "debug"
+    scope: global
+  }
+]
+
+views {
+  nestingDepth: 3
+}
+
+// Every solid here is a field solid, so a body's up may follow the surface it stands on and a `surface` area may ask
+// the field which way that surface lies.
+collision {
+  contactSkin: 0.02
+  defaultHold: true
+  gradientProbe: 0.05
+  gridCellSize: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements [GradientDerivedUp]
+}
+
+// One field, in the order it folds: open space's faint pull toward home under everything, each planetoid's own pull
+// over it, the turnover's room over those, and the pebble's pull on top wherever it has come round to.
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, 0, 0]
+  areas [
+    driftPull(placement: "home-core", reach: 400, pull: drift)
+    ballPull(placement: "home-core", reach: 22, pull: pull, radius: homeRadius, blend: 6)
+    shapePull(placement: "ring", reach: 14, pull: pull, blend: 4)
+    shapePull(placement: "cube", reach: 12, pull: pull, blend: 3)
+    slabPull(placement: "coin", halfExtents: [coinHalf, 5, coinHalf], pull: pull, blend: 1.5)
+    axisPull(placement: "pipe", halfExtents: [pipeHalf, pipeInner, pipeInner], pull: (0 - pull), axis: [1, 0, 0])
+    roomPull(
+      placement: "turnover-core",
+      halfExtents: [turnoverHalf[0], (turnoverHeight / 2), turnoverHalf[2]],
+      vector: [0, (0 - pull), 0],
+      scale: "turnoverPull"
+    )
+    ballPull(placement: "pebble-ball", reach: 4, pull: 8, radius: pebbleRadius, blend: 1.5, priority: 3)
+  ]
+  orbits [
+    {
+      name: "pebble"
+      around: `home-core`
+      semiMajorAxis: pebbleOrbit
+      eccentricity: 0.2
+      inclinationDegrees: 25
+      periodSeconds: pebblePeriod
+      bodyIndex: pebbleBody
+      riding: pebbleRiding
+      joinSpeed: 6
+    }
+  ]
+}
+
+state {
+  world [
+    // The turnover's gravity, as a multiple of its authored pull: 1 holds a body to the floor, -1 to the ceiling.
+    { name: "turnoverPull", kind: "Fixed", value: "1", min: "-1", max: "1" }
+    // Whether the pebble rides its orbit. Zero leaves it where it is; one brings it back onto the rails.
+    { name: "pebbleRiding", kind: "Int", value: 1, min: 0, max: 1 }
+  ]
+}
+
+heldKit(name: "pebble")
+
+looks [
+  {
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    name: "pebble"
+    scale: 1
+    source: creation(prototypeId: `hidden`)
+  }
+]
+
+spawnPoints [
+  { id: "stage", position [0, 0.3, 2], yawDegrees: 0 }
+  { id: "galaxy-arrival", position [0, 0.3, -2], yawDegrees: 0 }
+]
+
+placements {
+  policy {
+    authoringHeadroomInstances: 0
+    authoringHeadroomScreens: 0
+    candidateCap: 1
+    candidateRadius: 1
+    maxPlacementScale: 1
+    minPlacementScale: 1
+    previewDeadlineFrames: 1
+  }
+
+  placement "place-galaxy" {
+    prototype: "place"
+    position [0, 8, 0]
+    region {
+      halfExtents [60, 50, 60]
+    }
+  }
+
+  // What home's pull and the pebble's orbit ride: home's centre.
+  placement "home-core" {
+    prototype: "place"
+    position: homeCentre
+  }
+
+  // The galaxy painting's counterpart, on home's pad: walking into its glass arrives out of the painting.
+  placement "arrival" {
+    prototype: "frame"
+    position [0, 0.3, -4]
+    yawDegrees: 0
+    faceSources [
+      {
+        face: "glass"
+        filter: linear
+        portal {
+          arrival: "mapped"
+          counterpart: "painting-galaxy/glass"
+          destination: "debug"
+          travel: "body"
+        }
+        source {
+          $type: "session"
+          destination: "debug"
+          fallback: "#02030A"
+          projection: window
+        }
+      }
+    ]
+  }
+
+  placement "ring" {
+    prototype: "ring"
+    position: ringCentre
+    solid
+  }
+  placement "cube" {
+    prototype: "cube"
+    position: cubeCentre
+    solid
+  }
+  placement "coin" {
+    prototype: "coin"
+    position: coinCentre
+    solid
+  }
+  placement "turnover" {
+    prototype: "turnover"
+    position: turnoverFloor
+    solid
+  }
+  // What the turnover's gravity rides: the middle of the corridor's air.
+  placement "turnover-core" {
+    prototype: "place"
+    position [turnoverFloor[0], (turnoverFloor[1] + (turnoverHeight / 2)), turnoverFloor[2]]
+  }
+  placement "pipe" {
+    prototype: "pipe"
+    position: pipeCentre
+    solid
+  }
+
+  // The pebble: a body the orbit moves (kit `pebble`), and the ball and the pull attached to it.
+  placement "pebble" {
+    prototype: "hidden"
+    position [(homeCentre[0] + pebbleOrbit), homeCentre[1], homeCentre[2]]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "pebble"
+      look: "pebble"
+      source: "Idle"
+    }
+  }
+  placement "pebble-ball" {
+    prototype: "pebble"
+    position [(homeCentre[0] + pebbleOrbit), homeCentre[1], homeCentre[2]]
+    attach {
+      bodyIndex: pebbleBody
+      localOffset [0, 0, 0]
+    }
+    solid
+  }
+
+  // The tour's pads and landings. A pad is a region a body's feet stand in; a landing is the point a launch ends at,
+  // a little off the surface it falls to.
+  for stop in [
+    {
+      name: "home-ring"
+      pad [3.5, 0.7, 0]
+      land [(ringCentre[0] - ringMajor), (ringCentre[1] + ringMinor + 3), ringCentre[2]]
+    }
+    {
+      name: "ring-cube"
+      pad [(ringCentre[0] + ringMajor), (ringCentre[1] + ringMinor + 0.5), ringCentre[2]]
+      land [cubeCentre[0], (cubeCentre[1] + cubeHalf + 3), cubeCentre[2]]
+    }
+    {
+      name: "cube-coin"
+      pad [(cubeCentre[0] + 2.5), (cubeCentre[1] + cubeHalf + 0.5), (cubeCentre[2] + 2.5)]
+      land [coinCentre[0], (coinCentre[1] + coinThick + 2.6), coinCentre[2]]
+    }
+    {
+      name: "coin-turnover"
+      pad [(coinCentre[0] + 3), (coinCentre[1] - coinThick - 0.5), coinCentre[2]]
+      land [turnoverFloor[0], (turnoverFloor[1] + 4), (turnoverFloor[2] + 5)]
+    }
+    {
+      name: "turnover-pipe"
+      pad [(turnoverFloor[0] - 3.8), (turnoverFloor[1] + turnoverHalf[1] + 0.5), turnoverFloor[2]]
+      land [(pipeCentre[0] + pipeHalf - 1.5), (pipeCentre[1] - 1.5), pipeCentre[2]]
+    }
+    {
+      name: "pipe-home"
+      pad [(pipeCentre[0] + pipeHalf - 2), (pipeCentre[1] + pipeInner - 0.5), pipeCentre[2]]
+      land [0, 3.3, 1]
+    }
+  ] {
+    placement $"pad-{stop.name}" {
+      prototype: "pad"
+      position: stop.pad
+      region {
+        halfExtents: padReach
+      }
+    }
+    placement $"land-{stop.name}" {
+      prototype: "place"
+      position: stop.land
+    }
+  }
+
+  // The turnover's two switches: the floor pad at the far end turns gravity up, the ceiling pad at the near end turns
+  // it down again.
+  placement "pad-turnover-up" {
+    prototype: "pad"
+    position [turnoverFloor[0], (turnoverFloor[1] + turnoverHalf[1] + 0.5), (turnoverFloor[2] - 6)]
+    region {
+      halfExtents: padReach
+    }
+  }
+  placement "pad-turnover-down" {
+    prototype: "pad"
+    position [turnoverFloor[0], ((turnoverFloor[1] + turnoverHeight) - turnoverHalf[1] - 0.5), (turnoverFloor[2] + 6)]
+    region {
+      halfExtents: padReach
+    }
+  }
+}
+
+// The tour, each leg a launch: the arc stands along the body's own up where it leaves, so the legs that leave the
+// coin's underside and the pipe's ceiling dip away from them first.
+launchPad(name: "home-ring", pad: "pad-home-ring", landing: "land-home-ring", arc: 6)
+launchPad(name: "ring-cube", pad: "pad-ring-cube", landing: "land-ring-cube", arc: 6, seconds: 3)
+launchPad(name: "cube-coin", pad: "pad-cube-coin", landing: "land-cube-coin", arc: 5)
+launchPad(name: "coin-turnover", pad: "pad-coin-turnover", landing: "land-coin-turnover", arc: 4, seconds: 3)
+launchPad(name: "turnover-pipe", pad: "pad-turnover-pipe", landing: "land-turnover-pipe", arc: 6)
+launchPad(name: "pipe-home", pad: "pad-pipe-home", landing: "land-pipe-home", arc: 3, seconds: 3)
+
+gravitySwitch(name: "turnover-up", pad: "pad-turnover-up", row: "turnoverPull", value: -1)
+gravitySwitch(name: "turnover-down", pad: "pad-turnover-down", row: "turnoverPull", value: 1)
+
+// A body that drifts out of the field altogether comes back to home's pad.
+rule "galaxy-return" {
+  when bodyPosition(each, y) < -120 or bodyPosition(each, y) > 160
+  mode: Level
+  forEach: $bodies
+  pose(key: $each, spawnPoint: stage)
+}
+
+prototypes {
+  // The basis's floor is home: a ball with its top at the origin and a level pad there for the arrival frame.
+  prototype "floor" {
+    document {
+      name: "floor"
+      palette [
+        { color: "#6FAE5B", roughness: 0.9, specular: 0.03 }
+        { color: "#C9BFA6", roughness: 0.7, specular: 0.05 }
+      ]
+      schema: "puck.creation.v1"
+      shape Sphere "ball" {
+        material: 0
+        position: homeCentre
+        scale [homeRadius, homeRadius, homeRadius]
+      }
+      shape Cylinder "pad" {
+        material: 1
+        position [0, -0.3, 0]
+        scale [5.5, 0.6, 5.5]
+        rounding: 0.2
+      }
+    }
+  }
+
+  prototype "frame" {
+    document {
+      arrivalFrame(color: "#B9C2D9", roughness: 0.4, specular: 0.4, post: 0.12)
+    }
+  }
+
+  prototype "hidden" {
+    document {
+      name: "hidden"
+      schema: "puck.creation.v1"
+      palette [{ color: "#000000" }]
+      shapes []
+    }
+  }
+
+  // A launch pad's marker: a glowing disc at the feet of its region.
+  prototype "pad" {
+    document {
+      name: "pad"
+      palette [{ color: "#FFD35A", emissive: 9000, roughness: 0.4, specular: 0.2 }]
+      schema: "puck.creation.v1"
+      shape Cylinder "disc" {
+        material: 0
+        position [0, -0.45, 0]
+        scale [0.7, 0.04, 0.7]
+      }
+    }
+  }
+
+  prototype "ring" {
+    document {
+      name: "ring"
+      palette [{ color: "#D98A4E", roughness: 0.6, specular: 0.1 }]
+      schema: "puck.creation.v1"
+      shape Torus "tube" {
+        material: 0
+        position [0, 0, 0]
+        scale [ringMajor, ringMajor, ringMajor]
+      }
+    }
+  }
+
+  prototype "cube" {
+    document {
+      name: "cube"
+      palette [{ color: "#6C8FD6", roughness: 0.55, specular: 0.15 }]
+      schema: "puck.creation.v1"
+      shape Box "block" {
+        material: 0
+        position [0, 0, 0]
+        scale [cubeHalf, cubeHalf, cubeHalf]
+        rounding: 0.6
+      }
+    }
+  }
+
+  prototype "coin" {
+    document {
+      name: "coin"
+      palette [{ color: "#D9C24E", roughness: 0.35, specular: 0.4 }]
+      schema: "puck.creation.v1"
+      shape Box "slab" {
+        material: 0
+        position [0, 0, 0]
+        scale [coinHalf, coinThick, coinHalf]
+        rounding: 0.2
+      }
+    }
+  }
+
+  // A floor and a ceiling with the ends and sides open, so a launch flies in at one end.
+  prototype "turnover" {
+    document {
+      name: "turnover"
+      palette [
+        { color: "#8C93A6", roughness: 0.7, specular: 0.08 }
+        { color: "#A6708C", roughness: 0.7, specular: 0.08 }
+      ]
+      schema: "puck.creation.v1"
+      shape Box "floor" {
+        material: 0
+        position [0, 0, 0]
+        scale: turnoverHalf
+      }
+      shape Box "ceiling" {
+        material: 1
+        position [0, turnoverHeight, 0]
+        scale: turnoverHalf
+      }
+    }
+  }
+
+  // A tube lying along X, open at both ends and walked on the inside.
+  prototype "pipe" {
+    document {
+      name: "pipe"
+      palette [{ color: "#59B8A6", roughness: 0.6, specular: 0.1 }]
+      schema: "puck.creation.v1"
+      shape Cylinder "wall" {
+        material: 0
+        position [0, 0, 0]
+        rotation [0, 0, 0.7071068, 0.7071068]
+        scale [pipeOuter, pipeHalf, pipeOuter]
+      }
+      shape Cylinder "bore" {
+        blend: Subtraction
+        material: 0
+        position [0, 0, 0]
+        rotation [0, 0, 0.7071068, 0.7071068]
+        scale [pipeInner, (pipeHalf + 0.5), pipeInner]
+      }
+    }
+  }
+
+  prototype "pebble" {
+    document {
+      name: "pebble"
+      palette [{ color: "#C8C4BC", roughness: 0.85, specular: 0.04 }]
+      schema: "puck.creation.v1"
+      shape Sphere "ball" {
+        material: 0
+        position [0, 0, 0]
+        scale [pebbleRadius, pebbleRadius, pebbleRadius]
+      }
+    }
+  }
+}
+
+// Open space: a hard sun, a near-black void and stars.
+render {
+  farDistance: 400
+  lighting {
+    lights [
+      directional(
+        name: "key",
+        direction: [3, 5, -4],
+        color: "#FFF4E2",
+        illuminance: 60000lx,
+        shadow: always,
+        angularRadius: 0.0046
+      )
+    ]
+  }
+  sky {
+    layers [
+      gradient(name: "void", luminance: 1, stops: [
+        { elevation: -1, color: "#02030A" }
+        { elevation: 1, color: "#060818" }
+      ])
+      stars(name: "stars", luminance: 3000, density: 90, brightness: 1.3, seed: 11)
+      sunDisc(name: "sun", light: 0, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
+    ]
+  }
+}
