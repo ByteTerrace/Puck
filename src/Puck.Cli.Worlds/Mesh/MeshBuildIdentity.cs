@@ -123,7 +123,15 @@ public sealed record MeshBuildIdentity(
             throw new FileNotFoundException($"Target build '{directory}' is missing its dependency '{assemblyName}'.", local);
         }
 
-        protected override nint LoadUnmanagedDll(string unmanagedDllName) =>
-            throw new DllNotFoundException($"Mesh identity inspection cannot load native library '{unmanagedDllName}'.");
+        // A native library the target ships loads from the target; one the CLI ships is refused, as a managed one is;
+        // anything else (kernel32, libc) is the operating system's and takes the default probe.
+        protected override nint LoadUnmanagedDll(string unmanagedDllName) {
+            m_resolver ??= new AssemblyDependencyResolver(Path.Combine(directory, "Puck.SdfVm.dll"));
+            if (m_resolver.ResolveUnmanagedDllToPath(unmanagedDllName) is { } resolved) { return LoadUnmanagedDllFromPath(resolved); }
+            if (Directory.EnumerateFiles(AppContext.BaseDirectory, Path.GetFileNameWithoutExtension(unmanagedDllName) + ".*", SearchOption.AllDirectories).Any()) {
+                throw new DllNotFoundException($"Target build '{directory}' is missing its native library '{unmanagedDllName}'.");
+            }
+            return nint.Zero;
+        }
     }
 }
