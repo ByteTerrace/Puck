@@ -94,6 +94,32 @@ public sealed partial record SdfMesh {
     public static string DescribeRestores() => string.Create(provider: CultureInfo.InvariantCulture,
         handler: $"mesh-releases={Interlocked.Read(location: ref Releases)} mesh-released-bytes={Interlocked.Read(location: ref ReleasedBytes)}B mesh-restores={Interlocked.Read(location: ref Restores)} mesh-restored-bytes={Interlocked.Read(location: ref RestoredBytes)}B mesh-restore-misses={Interlocked.Read(location: ref RestoreMisses)} mesh-released-now={Interlocked.Read(location: ref ReleasedNow)}B");
 
+    /// <summary>The seconds a published mesh's planes stand resident with no need before they go
+    /// (<see cref="ReleaseIdle"/>): long enough for the reads that follow a landing to find them resident.</summary>
+    public const double IdleSeconds = 5.0;
+
+    // The planes waiting to go, oldest first, each with the stamp of the idling it was queued for.
+    private static readonly Queue<(Restorable Storage, long Stamp)> Idle = new();
+    private static readonly Lock IdleGate = new();
+
+    /// <summary>Lets go of the planes of every published mesh that has stood unneeded for <see cref="IdleSeconds"/>, or of
+    /// every unneeded one when <paramref name="all"/> is set (the host account's trim): a residency calls it once a frame.
+    /// The planes come back from the store when next held.</summary>
+    /// <param name="all">Whether to let go of every unneeded mesh's planes, however recently it idled.</param>
+    public static void ReleaseIdle(bool all = false) {
+        var cutoff = (all ? long.MaxValue : (System.Diagnostics.Stopwatch.GetTimestamp() - ((long)(IdleSeconds * System.Diagnostics.Stopwatch.Frequency))));
+
+        while (true) {
+            (Restorable Storage, long Stamp) next;
+
+            lock (IdleGate) {
+                if (!Idle.TryPeek(result: out next) || (next.Stamp > cutoff)) { return; }
+                _ = Idle.Dequeue();
+            }
+            next.Storage.FreeIfIdle(cutoff: cutoff, stamp: next.Stamp);
+        }
+    }
+
     private static long Releases;
     private static long ReleasedBytes;
     private static long Restores;
@@ -112,6 +138,8 @@ public sealed partial record SdfMesh {
         private readonly List<Entry<uint>> m_words = [];
 
         private int m_needs;
+        // When the planes last stood resident with no need, which names their entry in the idle queue.
+        private long m_idleSince;
         // Written under the gate; read without it, so the frame thread never waits on a restore's copy. The write that
         // makes it Resident follows the copy, so a reader that sees Resident sees the restored parts.
         private volatile State m_state;
@@ -167,8 +195,21 @@ public sealed partial record SdfMesh {
         public void Unneed() {
             lock (m_gate) {
                 if (m_needs <= 0) { throw new InvalidOperationException(message: "A mesh need was released twice."); }
-                if ((--m_needs == 0) && (m_state == State.Resident) && (m_bytes > 0)) { FreeUnderGate(); }
+                if ((--m_needs == 0) && (m_state == State.Resident) && (m_bytes > 0)) { IdleUnderGate(); }
             }
+        }
+        // Lets the planes go if they have stood unneeded since the stamp their idling was queued with, no later than the
+        // cutoff; a need taken since, or a later idling, keeps them.
+        public void FreeIfIdle(long stamp, long cutoff) {
+            lock (m_gate) {
+                if ((m_needs == 0) && (m_state == State.Resident) && (m_bytes > 0) && (m_idleSince == stamp) && (stamp <= cutoff)) { FreeUnderGate(); }
+            }
+        }
+        // Under the gate, with no need held: queues the planes to go once they have stood unneeded for IdleSeconds, so the
+        // reads that follow a landing (the irradiance scene's build, the trace judge) find them resident.
+        private void IdleUnderGate() {
+            m_idleSince = System.Diagnostics.Stopwatch.GetTimestamp();
+            lock (IdleGate) { Idle.Enqueue(item: (this, m_idleSince)); }
         }
         // Takes a need and returns once the parts are resident or lost: a restore no worker has started runs on the
         // caller, one a worker is running is waited for.
@@ -279,7 +320,7 @@ public sealed partial record SdfMesh {
                     _ = Interlocked.Increment(location: ref Restores);
                     _ = Interlocked.Add(location1: ref RestoredBytes, value: m_bytes);
                     _ = Interlocked.Add(location1: ref ReleasedNow, value: -m_bytes);
-                    if ((m_needs == 0) && (m_bytes > 0)) { FreeUnderGate(); }
+                    if ((m_needs == 0) && (m_bytes > 0)) { IdleUnderGate(); }
                 } else {
                     m_state = State.Lost;
                 }

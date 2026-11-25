@@ -671,6 +671,8 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     /// chunk the device refused waits. None of that is due on any one frame, so a frame that finds the store held by a
     /// plan or a landing on another thread leaves it to the next frame rather than waiting.</summary>
     internal void Service() {
+        // The published meshes whose planes no reader has held for a while let them go (SdfMesh.Restore.cs).
+        SdfMesh.ReleaseIdle();
         if (!m_gate.TryEnter()) { return; }
         try {
             if (m_disposed) { return; }
@@ -678,6 +680,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
             if (Interlocked.Exchange(location1: ref m_trimRequested, value: 0) != 0) {
                 try {
                     SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Trims);
+                    SdfMesh.ReleaseIdle(all: true);
                     m_refusedGrowthBytes = -1L;
                     _ = ForgetUnused();
                     // A mapped region gives the forgotten meshes' chunks back now, under the pressure that asked.
