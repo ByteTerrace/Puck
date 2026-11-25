@@ -112,32 +112,8 @@ public static class PngDecoder {
         var expectedLength = checked(((stride + 1) * height));
         var decodedBytes = new byte[expectedLength];
 
-        using (var idatStream = new MemoryStream(
-            buffer: idatBytes,
-            writable: false
-        ))
-        using (var zlibStream = new ZLibStream(
-            mode: CompressionMode.Decompress,
-            stream: idatStream
-        )) {
-            var totalRead = 0;
-
-            while (totalRead < expectedLength) {
-                var read = zlibStream.Read(buffer: decodedBytes.AsSpan(start: totalRead));
-
-                if (read == 0) {
-                    break;
-                }
-
-                totalRead += read;
-            }
-
-            if (
-                (totalRead != expectedLength) ||
-                (zlibStream.ReadByte() != -1)
-            ) {
-                throw new InvalidDataException(message: "Decoded PNG scanline length did not match the expected image size.");
-            }
+        if (!ZLibDecoder.TryDecompress(bytesWritten: out var decodedLength, destination: decodedBytes, source: idatBytes) || (decodedLength != expectedLength)) {
+            throw new InvalidDataException(message: "Decoded PNG scanline data is invalid or its length did not match the expected image size.");
         }
 
         var rgbaPixels = new byte[checked(((width * height) * 4))];

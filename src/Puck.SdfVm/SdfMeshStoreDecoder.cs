@@ -9,7 +9,7 @@ using static Puck.SdfVm.SdfMeshStoreCodec;
 namespace Puck.SdfVm;
 
 // Restores the versioned entry into the storage chosen by its reader.
-internal static unsafe class SdfMeshStoreDecoder {
+internal static class SdfMeshStoreDecoder {
     internal static bool TryPayload(ReadOnlySpan<byte> bytes, UInt128 key, out ReadOnlySpan<byte> compressed,
         out int length, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal) {
         compressed = default;
@@ -30,18 +30,9 @@ internal static unsafe class SdfMeshStoreDecoder {
         return (length > 0) && (length <= 1_073_741_824) && !compressed.IsEmpty;
     }
 
-    internal static bool TryInflate(ReadOnlySpan<byte> compressed, Span<byte> destination) {
-        try {
-            fixed (byte* start = compressed) {
-                using var input = new UnmanagedMemoryStream(pointer: start, length: compressed.Length);
-                using var decoder = new ZLibStream(mode: CompressionMode.Decompress, stream: input);
-                decoder.ReadExactly(destination);
-                return decoder.ReadByte() == -1;
-            }
-        } catch (Exception exception) when (exception is IOException or InvalidDataException) {
-            return false;
-        }
-    }
+    // An entry expands to exactly its header's length: a stream that runs short or past it is refused.
+    internal static bool TryInflate(ReadOnlySpan<byte> compressed, Span<byte> destination) =>
+        ZLibDecoder.TryDecompress(bytesWritten: out var written, destination: destination, source: compressed) && (written == destination.Length);
 
     // Decodes an entry into a storage, which keeps each plane where the mesh will live. `taking` is the taking group's
     // material ids: the triangle ids are written renumbered to them when the mesh can be held in them and renumbered back

@@ -5057,21 +5057,6 @@ their lane order; this packet keeps the single duplicates and leads.
     changes. Read the done line's `retier`, `observe` and `dress` holds on a clean
     cold bake, then keep the aggregates the decision sums and the kept floors'
     names incrementally.
-  - **SdfVm and Assets: zlib through stream adapters.** [medium]
-    `SdfMeshStoreDecoder.TryDecode` expands every store entry through a `fixed`
-    block, an `UnmanagedMemoryStream`, a `ZLibStream` and an end-of-stream
-    probe, though the expanded length is in the header. One
-    `ZLibDecoder.TryDecompress` into the buffer it already owns replaces all
-    four; refuse the entry when the call fails or the written length differs.
-    `SdfMeshStoreCodec.Encode` writes its payload with a `BinaryWriter` over a
-    `MemoryStream`, compresses into a second one and copies out with
-    `ToArray`: write with `BinaryPrimitives` into an owned buffer and compress
-    with `ZLibEncoder.TryCompress`. `PngDecoder.DecodeImageData` and
-    `PngEncoder.ZlibCompress` have the same shape, so put one zlib one-shot
-    helper in a shared home for all four. Decode runs for every store load, in
-    parallel, on the cold-bake and boot path. Show it with allocated bytes per
-    entry and a warm-store load reading. Entries are caches, so a change in
-    compressed bytes needs no migration.
   - **Commands: one whitespace token rule.** [low] `CommandRegistry.LeadingVerb`
     and `CommandRegistry.Tokenize`, `WorldCommandArguments.EndOfToken` and
     `WorldCommandArguments.LastTokenStart`, and `CommandEcho.TryReadToken`
