@@ -516,13 +516,14 @@ public static class WorldPlayerCommand {
     private static BootReading Boot(WorldBackendPreference backend, BakeTarget target, string policy, IReadOnlyList<string> places, string output, string world, string logs, int bakeSeconds, string pass) {
         var name = $"{WorldBackendTokens.Token(backend: backend)}-{target.Profile}-{target.Width}x{target.Height}";
         var directory = Path.Combine(path1: logs, path2: $"{pass}-{name}");
-        // One wait and its answer at each place, and at the spawn; the World's own exit backstop, should the verb die.
-        var deadline = TimeSpan.FromSeconds(seconds: (300L + ((places.Count + 1L) * (bakeSeconds + 90L))));
         var request = new WorldLaunchRequest(Artifact: Path.Combine(path1: output, path2: "Puck.World.dll"), Step: Verb) {
             Arguments = ["--width", target.Width.ToString(provider: CultureInfo.InvariantCulture), "--height", target.Height.ToString(provider: CultureInfo.InvariantCulture),
                 "--cache-dir", Path.Combine(path1: output, path2: CacheName), "--mesh-cache", policy],
             Backend = backend,
-            ExitAfterSeconds = WorldLaunch.Backstop(deadline: deadline),
+            // No exit backstop: a place waits again for as long as each wait lands work (Wait), so no deadline known at
+            // launch bounds the boot. Every console step is bounded by its own timeout, the finally below stops the
+            // World, and on Windows the World joins this process's job (ChildProcessJob), which ends it with the verb.
+            ExitAfterSeconds = 0,
             Shape = WorldShape.Windowed,
             StateDirectory = Path.Combine(path1: directory, path2: "state"),
             WorkingDirectory = output,
