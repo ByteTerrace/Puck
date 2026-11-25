@@ -4918,10 +4918,7 @@ their lane order; this packet keeps the single duplicates and leads.
   sites, though one helper now holds the rule (`ArrayCapacity`). Convert the
   sites in a second pass, keeping the caps that are deliberate and the
   lengths that mirror a GPU-declared count.
-- A per-family canonicalize switch is written three times
-  (`OfficialVerifyCommand`, `OfficialAssetResolver`, `WorldDocument`'s
-  compose) beside `WorldAssetRowLoader`, which owns the families. Fold them
-  into one bytes entry point there; its `TryCanonicalHash` also reads through
+- `WorldAssetRowLoader.TryReadBytes` reads an asset row's source through
   `File` where the compile's inputs door would let the browser resolve
   `hash: auto`.
 - [low] What a scene reads is listed twice: `WorldSceneInputs`' rows omit the
