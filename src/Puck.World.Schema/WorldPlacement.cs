@@ -54,9 +54,24 @@ public sealed record WorldPrototype(
     /// (<see cref="CreationCanonicalizer.Normalize"/>: unit swing and slide axes, explicit gates, clamped amplitudes) and
     /// converted from the author frame to the engine frame (<see cref="Puck.World.Authoring.CreationFrame.ToEngine"/>):
     /// every writer of each shape's pose, what the pose reads, and its reach. Every consumer of motion reads this. Cached
-    /// on first read since <see cref="WorldPrototype"/> rows are replaced, not mutated, on edit.</summary>
+    /// on first read since <see cref="WorldPrototype"/> rows are replaced, not mutated, on edit, and shared by every row
+    /// whose document has the same canonical bytes (<see cref="CanonicalHash"/>): the rows of one creation that each world
+    /// a process runs carries, the authority's and its presentation's, hold one rig and one engine document.</summary>
     [JsonIgnore]
-    public CreationRig Rig => (m_rig ??= CreationRig.Compile(document: Puck.World.Authoring.CreationFrame.ToEngine(document: CreationCanonicalizer.Normalize(document: Document))));
+    public CreationRig Rig => (m_rig ??= SharedRig());
+
+    // A rig is a function of its document's canonical form, which the canonical hash names.
+    private static readonly Puck.Abstractions.CodeDerivedSharedValues<string, CreationRig> SharedRigs = new();
+
+    private static CreationRig Compile(CreationDocument document) => CreationRig.Compile(document: Puck.World.Authoring.CreationFrame.ToEngine(document: CreationCanonicalizer.Normalize(document: document)));
+    // The rig every row of this document's canonical bytes shares; a document the canonicalizer refuses has no such name,
+    // and compiles a rig of its own, which the validator then refuses by name.
+    private CreationRig SharedRig() {
+        string key;
+
+        try { key = CanonicalHash; } catch (Puck.Assets.Documents.DocumentValidationException) { return Compile(document: Document); }
+        return SharedRigs.GetValue(derive: static document => Compile(document: document), key: key, state: Document);
+    }
     /// <summary>Gets the creation as every render, collision, and anchor consumer reads it, never
     /// <see cref="Document"/>: normalized, in the engine frame, with its shapes' swings and slides removed because
     /// <see cref="Rig"/> plays them (<see cref="CreationRig.Document"/>), so a loaded row and an upserted one animate
