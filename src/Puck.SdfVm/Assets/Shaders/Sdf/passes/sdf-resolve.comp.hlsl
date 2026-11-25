@@ -52,10 +52,12 @@
 // left above it, zero for none, and two high bits for the directions eligible for shared shading. The weight saturates at SDF_HISTORY_WEIGHT_CAP, one jitter period of full-weight samples
 // (SdfWorldPackage.TemporalPeriod), or at SDF_HISTORY_FEATURE_WEIGHT_CAP while the pixel carries a feature.
 // The stationary window (historyWindowRW, SDF_HISTORY_WINDOW_WORDS a pixel in the same planar layout) is one buffer the
-// resolve updates in place, not history in two copies: word zero is the phase mask, and from SDF_HISTORY_WINDOW_OFFSET
+// resolve updates in place, not history in two copies: word zero is the phase mask, with the sum of the phases' packed
+// weights above it (sdfWindowSampleWeight), and from SDF_HISTORY_WINDOW_OFFSET
 // each phase holds three words (sdfPackWindowSample). A completed window replaces each phase with that phase's new samples. Its fixed-order sum is invariant when the
 // jitter repeats; an exponential mean capped at one period instead keeps favoring the latest phase, and clipping to its
-// neighborhood destroys unsighted features. Every window access names the invocation's own pixel (sdfHistoryWindowWord
+// neighborhood destroys unsighted features. A complete window is summed in full once a period and otherwise keeps its
+// mean and replaces one phase's term in it (sdfResolveTemporal). Every window access names the invocation's own pixel (sdfHistoryWindowWord
 // takes no other), and a pixel keeps its window only while its history comes from that same pixel, so no invocation
 // reads a word another invocation of the dispatch writes; a pixel whose history comes from elsewhere restarts its
 // window at this frame's phase, and the phases its mask leaves out are never read.
@@ -105,6 +107,15 @@ void sdfUnpackWindowSample(uint3 packed, out float4 color, out float weight, out
         (float((packed.z >> 10u) & 0x3FFu) / 1023.0),
         (float((packed.z >> 20u) & 0x3FFu) / 1023.0)
     );
+}
+
+// A packed phase's weight field (sdfPackWindowSample), and the weight a sum of such fields stands for, as
+// sdfUnpackWindowSample decodes one field.
+uint sdfWindowSampleWeight(uint3 packed) {
+    return ((packed.y >> 10u) & 0x3FFu);
+}
+float sdfWindowWeight(uint weights) {
+    return ((float(weights) / 1023.0) * 2.0);
 }
 
 uint2 sdfResolveClamp(int2 pixel, uint2 dims) {
@@ -632,60 +643,119 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     bool sampleValid = ((reactive <= 0.0) && (weightSum > 1.0e-6) && isfinite(weightSum) && all(isfinite(sum)) && all(isfinite(transportSum)));
     // A pixel that is not stationary keeps no phase, this frame's included: its window starts from the first frame it
     // stands still, so a pixel in motion reads the mask and writes nothing of the window.
-    uint storedMask = historyWindowRW[sdfHistoryWindowWord(id, 0u, extent)];
-    uint mask = ((stationary && sampleValid) ? ((storedMask & fullMask) | (1u << phase)) : 0u);
+    uint storedWord = historyWindowRW[sdfHistoryWindowWord(id, 0u, extent)];
+    uint storedMask = (storedWord & fullMask);
+    uint mask = ((stationary && sampleValid) ? (storedMask | (1u << phase)) : 0u);
 
     gathered = ((weightSum > 1.0e-6) && isfinite(weightSum) && all(isfinite(sum)) && all(isfinite(transportSum)));
     current = (gathered ? (sum / weightSum) : float4(0.0, 0.0, 0.0, 0.0));
     current.a = clamp(current.a, coverageMin, coverageMax);
     currentTransport = (gathered ? (transportSum / weightSum) : float4(0.0, 0.0, 0.0, 0.0));
-    float4 windowColor = 0.0;
-    float4 windowTransport = 0.0;
     float windowWeight = 0.0;
-    float4 windowMin = 3.402823e+38;
-    float4 windowMax = -windowMin;
+    // The window's mean is the weighted mean of its phases' packed words. A window that was complete before this frame
+    // keeps that mean, stored at this pixel by the frame before (the color in the history color, the transport in the
+    // history surface; a full stored mask says that frame was reusable, so it stored them unzeroed), and the sum of its
+    // phases' packed weights above the mask in the window's first word. Replacing one phase then changes the mean by
+    // that phase's weight share of the difference between its new sample and its old one, which costs the pixel one
+    // phase's words where summing the window again costs all eight:
+    // - a component the phase did not change is carried exactly, since its difference is zero, so a still pixel under
+    //   steady light shows the same bits every frame and full coverage stays full;
+    // - the stored mean is a half float, so a phase that did change leaves the mean within an ulp of the full sum's.
+    //   Every group of pixels sums its windows in full once a period, on its own frame of the period, so that rounding
+    //   never gathers past a period. The turn is the group's, never the pixel's: a wave runs both paths when its lanes
+    //   differ, and a turn that differed by pixel would put a summing lane in nearly every wave;
+    // - a phase whose weight changed (the footprint's coverage did) sums in full, since the share rests on the weights'
+    //   sum standing.
+    uint phaseOffset = (SDF_HISTORY_WINDOW_OFFSET + (phase * SDF_HISTORY_SAMPLE_WORDS));
+    uint3 phasePacked = uint3(0u, 0u, 0u);
+    uint3 phaseStored = uint3(0u, 0u, 0u);
+    uint weights = 0u;
+    bool replaces = false;
 
-    [unroll] for (uint sample = 0u; sample < SDF_TEMPORAL_PERIOD; sample++) {
-        uint offset = (SDF_HISTORY_WINDOW_OFFSET + (sample * SDF_HISTORY_SAMPLE_WORDS));
-        uint3 packed = uint3(0u, 0u, 0u);
-        bool present = ((mask & (1u << sample)) != 0u);
+    if ((mask & (1u << phase)) != 0u) {
+        float4 color = (sum / weightSum);
 
-        if (present && (sample == phase)) {
-            float4 color = (sum / weightSum);
-            color.a = clamp(color.a, coverageMin, coverageMax);
-            packed = sdfPackWindowSample(color, weightSum, (transportSum / weightSum));
-            historyWindowRW[sdfHistoryWindowWord(id, offset, extent)] = packed.x;
-            historyWindowRW[sdfHistoryWindowWord(id, (offset + 1u), extent)] = packed.y;
-            historyWindowRW[sdfHistoryWindowWord(id, (offset + 2u), extent)] = packed.z;
-        } else if (present) {
-            packed = uint3(historyWindowRW[sdfHistoryWindowWord(id, offset, extent)],
-                historyWindowRW[sdfHistoryWindowWord(id, (offset + 1u), extent)],
-                historyWindowRW[sdfHistoryWindowWord(id, (offset + 2u), extent)]);
+        color.a = clamp(color.a, coverageMin, coverageMax);
+        phasePacked = sdfPackWindowSample(color, weightSum, (transportSum / weightSum));
+        phaseStored = uint3(historyWindowRW[sdfHistoryWindowWord(id, phaseOffset, extent)],
+            historyWindowRW[sdfHistoryWindowWord(id, (phaseOffset + 1u), extent)],
+            historyWindowRW[sdfHistoryWindowWord(id, (phaseOffset + 2u), extent)]);
+        if (any(phaseStored != phasePacked)) {
+            historyWindowRW[sdfHistoryWindowWord(id, phaseOffset, extent)] = phasePacked.x;
+            historyWindowRW[sdfHistoryWindowWord(id, (phaseOffset + 1u), extent)] = phasePacked.y;
+            historyWindowRW[sdfHistoryWindowWord(id, (phaseOffset + 2u), extent)] = phasePacked.z;
         }
-        // Decode the new phase too: using its unrounded sum while the other phases use their packed words would itself
-        // pulse.
-        if (present) {
-            float4 color;
-            float weight;
-            float4 transport;
 
-            sdfUnpackWindowSample(packed, color, weight, transport);
-            windowMin = min(windowMin, color);
-            windowMax = max(windowMax, color);
-            windowColor += (weight * color);
-            windowTransport += (weight * transport);
-            windowWeight += weight;
-        }
+        uint2 group = (id.xy / 8u);
+        bool turn = ((((passGroup.historyFrames + group.x) + (3u * group.y)) % SDF_TEMPORAL_PERIOD) == 0u);
+
+        replaces = ((storedMask == fullMask) && !turn && (sdfWindowSampleWeight(phaseStored) == sdfWindowSampleWeight(phasePacked)));
     }
-    complete = ((mask == fullMask) && (windowWeight > 1.0e-6));
-    if (complete) {
+    [branch] if (replaces) {
+        float4 color;
+        float4 colorStored;
+        float weight;
+        float weightStored;
+        float4 transport;
+        float4 transportStored;
+
+        sdfUnpackWindowSample(phasePacked, color, weight, transport);
+        sdfUnpackWindowSample(phaseStored, colorStored, weightStored, transportStored);
+        weights = (storedWord >> SDF_TEMPORAL_PERIOD);
+        windowWeight = sdfWindowWeight(weights);
+
+        float share = (weight / windowWeight);
+
+        complete = true;
         accepted = true;
         total = windowWeight;
-        // A convex mean stays inside its samples' bounds. Preserve a constant component exactly even when the
-        // division's approximate reciprocal rounds just below it before half-float storage (notably full coverage).
-        accumulated = clamp((windowColor / windowWeight), windowMin, windowMax);
-        accumulatedTransport = (windowTransport / windowWeight);
+        accumulated = (historyColor.Load(int3(id.xy, 0)) + (share * (color - colorStored)));
+        accumulatedTransport = (sdfUnpackTransport(uint2(historySurface[sdfHistoryWord(pixelIndex, 2u, extent)], historySurface[sdfHistoryWord(pixelIndex, 3u, extent)])) +
+            (share * (transport - transportStored)));
     } else {
+        float4 windowColor = 0.0;
+        float4 windowTransport = 0.0;
+        float4 windowMin = 3.402823e+38;
+        float4 windowMax = -windowMin;
+
+        [unroll] for (uint sample = 0u; sample < SDF_TEMPORAL_PERIOD; sample++) {
+            uint offset = (SDF_HISTORY_WINDOW_OFFSET + (sample * SDF_HISTORY_SAMPLE_WORDS));
+            bool present = ((mask & (1u << sample)) != 0u);
+
+            // Decode the new phase too: using its unrounded sum while the other phases use their packed words would
+            // itself pulse.
+            if (present) {
+                uint3 packed = ((sample == phase)
+                    ? phasePacked
+                    : uint3(historyWindowRW[sdfHistoryWindowWord(id, offset, extent)],
+                        historyWindowRW[sdfHistoryWindowWord(id, (offset + 1u), extent)],
+                        historyWindowRW[sdfHistoryWindowWord(id, (offset + 2u), extent)]));
+                float4 color;
+                float weight;
+                float4 transport;
+
+                sdfUnpackWindowSample(packed, color, weight, transport);
+                windowMin = min(windowMin, color);
+                windowMax = max(windowMax, color);
+                windowColor += (weight * color);
+                windowTransport += (weight * transport);
+                weights += sdfWindowSampleWeight(packed);
+            }
+        }
+        // The weights' sum from the packed fields, as the replacing path reads it back, so the two agree to the bit.
+        windowWeight = sdfWindowWeight(weights);
+        complete = ((mask == fullMask) && (weights != 0u));
+        if (complete) {
+            accepted = true;
+            total = windowWeight;
+            // A convex mean stays inside its samples' bounds. Preserve a constant component exactly even when the
+            // division's approximate reciprocal rounds just below it before half-float storage (notably full coverage).
+            accumulated = clamp((windowColor / windowWeight), windowMin, windowMax);
+            accumulatedTransport = (windowTransport / windowWeight);
+        }
+    }
+    if (!complete) {
+        // The weighted mean of every sample the pixel has gathered: history clipped to this frame's neighbourhood, widened    } else {
         // The weighted mean of every sample the pixel has gathered: history clipped to this frame's neighbourhood, widened
         // to the feature the pixel remembers while its surface stands still, and weighed down by reactivity, then this
         // frame's samples, the transport with the color's weights. While less than one sample's full weight is gathered,
@@ -722,10 +792,10 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
     // The working history is half-float. A non-finite current sample contributes no reusable history, and a finite
     // reconstruction must remain representable when stored, so one bright transient cannot poison later frames.
     bool reusable = (all(isfinite(accumulated)) && all(isfinite(accumulatedTransport)) && isfinite(total));
-    uint writtenMask = (reusable ? mask : 0u);
+    uint writtenWord = (reusable ? (mask | (weights << SDF_TEMPORAL_PERIOD)) : 0u);
 
-    if (writtenMask != storedMask) {
-        historyWindowRW[sdfHistoryWindowWord(id, 0u, extent)] = writtenMask;
+    if (writtenWord != storedWord) {
+        historyWindowRW[sdfHistoryWindowWord(id, 0u, extent)] = writtenWord;
     }
     // The feature the pixel carries on: this frame's sighting for a whole period, or the accepted history's with one
     // frame less, which the jitter comes round to before it runs out; a restarted history remembers none.

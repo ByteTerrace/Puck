@@ -1138,14 +1138,18 @@ orders their build:
   kind of motion (grass, banners), which is a feature in engine code.
 - A raster pass's commands are its draws: the selection kernel compacts its
   survivors in slot order (built, `SdfMeshOcclusion`).
-- A pixel's lighting inputs are refreshed when the receivers they were built
-  for change and otherwise over the frames of one jitter period, by tile and
-  as a dispatched list, since a kernel saves time by wave and never by lane.
-  Visibility is taken every frame. Rejected for the bar devices: fewer shaded
-  samples (a render scale under one, a coarser shading rate), which lowers
-  what every pixel shows, where a held lighting input changes only how late a
-  change of light arrives, inside the window the temporal resolve already
-  spreads it over.
+- A pixel pays for what changed in it. Work kept by pixel or by tile is held
+  while the receiver it was built for stands there, and a kernel saves time
+  by wave and never by lane, so whatever decides to hold is uniform over a
+  group. Such holding lowers the standing frame alone: when the camera moves
+  every pixel holds another receiver. The frame in motion is lowered by each
+  pass doing less for a pixel and by records kept in world space. The first
+  rule built is the temporal resolve's: a complete window keeps its mean and
+  replaces one phase's term in it, with a full sum once a period for each
+  group of pixels. Rejected: holding a window only while its replaced phase
+  is bit-equal, which light that turns with the day almost never allows; and
+  a turn to sum in full chosen by pixel, which puts a summing lane in nearly
+  every wave.
 - The device's caches of derived products are never state. Compiled
   pipelines, like meshes and compiles, live in the device cache root
   (`WorldCacheRoots`), keyed by their inputs, so a boot with a new state
