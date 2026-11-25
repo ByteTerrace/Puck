@@ -1775,6 +1775,34 @@ public sealed partial class WorldDocument {
                 }
 
                 break;
+            case WorldCommand.PoseSpawn spawnPose:
+                if (WorldDefinitionRows.FindSpawnPoint(
+                    spawnPoints: Host.Definition.SpawnPoints,
+                    id: spawnPose.SpawnId
+                ) is not { } resolvedSpawn) {
+                    var spawnDenial = $"spawnPoint '{spawnPose.SpawnId}' is not declared by '{Host.AuthorityIdentity}'";
+
+                    if (Host.Output.HasNarrationSink) {
+                        Host.Output.Narrate(channel: "body.pose denied", text: $"[body.pose denied: {spawnDenial}]");
+                    }
+                    Host.Tick.NoteDriveRefusalIfTracked(
+                        command: command,
+                        reason: spawnDenial
+                    );
+
+                    break;
+                }
+
+                body.Pose(
+                    x: resolvedSpawn.Position.X,
+                    y: resolvedSpawn.Position.Y,
+                    z: resolvedSpawn.Position.Z,
+                    yawRadians: float.DegreesToRadians(degrees: resolvedSpawn.YawDegrees),
+                    pitchRadians: 0f,
+                    rollRadians: 0f
+                );
+
+                break;
             case WorldCommand.RigidImpulse impulse:
                 if (!body.IsRigid) {
                     var notRigidDenial = $"body:{command.EntityIndex} carries no rigid kit facet";

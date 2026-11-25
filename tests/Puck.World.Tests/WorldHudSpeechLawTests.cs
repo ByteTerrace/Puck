@@ -30,8 +30,8 @@ public sealed class WorldHudSpeechLawTests {
         var voice = Voice;
 
         if (sampled) {
-            WriteSampleBank(directory: scratch.RootPath, patch: WorldVoicePatchFactory.FromDocument(document: Puck.Assets.Documents.SynthPatchCanonicalizer.Normalize(document: patch)));
-            voice = Voice with { PatchId = null, SampleSet = "set.json" };
+            var pin = WriteSampleBank(directory: scratch.RootPath, patch: WorldVoicePatchFactory.FromDocument(document: Puck.Assets.Documents.SynthPatchCanonicalizer.Normalize(document: patch)));
+            voice = Voice with { Hash = pin, PatchId = null, SampleSet = "set.json" };
         }
         var element = new WorldHudElement("note", WorldHudElementKind.Text, Rect, WorldHudStyleToken.Primary,
             Text: "Ae, b!", Voice: voice);
@@ -130,15 +130,38 @@ public sealed class WorldHudSpeechLawTests {
         Assert.Equal((source.TotalFrames * 4), BitConverter.ToUInt32(first.ToArray(), 40));
     }
 
-    private static void WriteSampleBank(string directory, VoicePatch patch) {
-        foreach (var letter in "aeioub") {
-            using var output = File.Create(path: Path.Combine(path1: directory, path2: $"{letter}.wav"));
+    private static string WriteSampleBank(string directory, VoicePatch patch) {
+        var pins = new Dictionary<char, string>();
 
-            WorldSpeechRenderer.WriteWave(output: output, source: new TextSpeechSource(letter.ToString(), patch, 24));
+        foreach (var letter in "aeioub") {
+            var wavPath = Path.Combine(path1: directory, path2: $"{letter}.wav");
+            using (var output = File.Create(path: wavPath)) {
+                WorldSpeechRenderer.WriteWave(output: output, source: new TextSpeechSource(letter.ToString(), patch, 24));
+            }
+            pins[letter] = Puck.Assets.ContentPin.Compute(content: File.ReadAllBytes(path: wavPath)).Hex;
         }
-        File.WriteAllText(Path.Combine(path1: directory, path2: "set.json"), """
-            { "name": "test", "a": "a.wav", "e": "e.wav", "i": "i.wav", "o": "o.wav", "u": "u.wav", "consonant": "b.wav", "playbackRateThousandths": 1500 }
-            """);
+        var set = new WorldVoiceSampleSet(
+            Name: "test",
+            A: "a.wav",
+            E: "e.wav",
+            I: "i.wav",
+            O: "o.wav",
+            U: "u.wav",
+            Consonant: "b.wav",
+            PlaybackRateThousandths: 1500,
+            AHash: pins['a'],
+            EHash: pins['e'],
+            IHash: pins['i'],
+            OHash: pins['o'],
+            UHash: pins['u'],
+            ConsonantHash: pins['b']
+        );
+        File.WriteAllText(
+            path: Path.Combine(path1: directory, path2: "set.json"),
+            contents: System.Text.Json.JsonSerializer.Serialize(value: set, options: Puck.Assets.Documents.DocumentJsonOptions.Shared)
+        );
+        Assert.True(condition: WorldVoiceSampleLoader.TryCanonicalHash(documentDirectory: directory, source: "set.json", pin: out var manifestPin, error: out var error), userMessage: error);
+        return manifestPin;
     }
 
     [Fact]
@@ -148,11 +171,11 @@ public sealed class WorldHudSpeechLawTests {
             Oscillator: Puck.Assets.Documents.SynthOscillator.Saw, DutyThousandths: null, Polynomial: null, PitchMillihertz: 240000, AttackFrames: 96, DecayFrames: 240,
             SustainThousandths: 650, ReleaseFrames: 240);
 
-        WriteSampleBank(directory: scratch.RootPath, patch: WorldVoicePatchFactory.FromDocument(document: Puck.Assets.Documents.SynthPatchCanonicalizer.Normalize(document: patchDocument)));
+        var manifestPin = WriteSampleBank(directory: scratch.RootPath, patch: WorldVoicePatchFactory.FromDocument(document: Puck.Assets.Documents.SynthPatchCanonicalizer.Normalize(document: patchDocument)));
         var definition = Fixtures.BuildDocument() with { DocumentDirectory = scratch.RootPath };
-        var voice = Voice with { PatchId = null, SampleSet = "set.json" };
+        var voice = Voice with { Hash = manifestPin, PatchId = null, SampleSet = "set.json" };
 
-        Assert.True(condition: WorldVoiceSampleLoader.TryLoad(scratch.RootPath, "set.json", out var bank, out var rate, out var error), userMessage: error);
+        Assert.True(condition: WorldVoiceSampleLoader.TryLoad(scratch.RootPath, "set.json", out var bank, out var rate, out var error, hash: manifestPin), userMessage: error);
         Assert.Equal(6, bank.Length);
         Assert.Equal(actual: rate, expected: 1500);
         Assert.True(condition: WorldTextSpeechFactory.TryCreate(definition: definition, error: out error, source: out var first, text: "Ae, b!", voice: voice), userMessage: error);
@@ -167,9 +190,53 @@ public sealed class WorldHudSpeechLawTests {
         Assert.False(condition: WorldVoiceSampleLoader.TryLoad(documentDirectory: null, error: out error, rate: out _, samples: out _, source: "set.json"));
         Assert.Contains(actualString: error, expectedSubstring: "no directory");
         File.WriteAllBytes(Path.Combine(path1: scratch.RootPath, path2: "a.wav"), [0, 1, 2]);
-        Assert.False(condition: WorldVoiceSampleLoader.TryLoad(scratch.RootPath, "set.json", out _, out _, out error));
-        Assert.Contains(actualString: error, expectedSubstring: "RIFF");
+        Assert.False(condition: WorldVoiceSampleLoader.TryLoad(scratch.RootPath, "set.json", out _, out _, out error, hash: manifestPin));
+        Assert.Contains(actualString: error, expectedSubstring: "content pin");
         Assert.False(condition: WorldTextSpeechFactory.TryCreate(definition: definition, error: out _, source: out _, text: "a", voice: voice));
+    }
+    [Fact]
+    public void DeliveredWorldFetchesPinnedSampledVoiceThroughContentResolverAndSpeaksIdentically() {
+        using var sender = new Puck.Testing.TemporaryDirectory(prefix: "puck-voice-sender-");
+        using var recipientStoreDir = new Puck.Testing.TemporaryDirectory(prefix: "puck-voice-recipient-");
+        var patchDocument = new Puck.Assets.Documents.SynthPatchDocument(Schema: "puck.synthesizer-patch.v1", Name: "voice",
+            Oscillator: Puck.Assets.Documents.SynthOscillator.Saw, DutyThousandths: null, Polynomial: null, PitchMillihertz: 240000, AttackFrames: 88, DecayFrames: 210,
+            SustainThousandths: 610, ReleaseFrames: 220);
+
+        var manifestPin = WriteSampleBank(directory: sender.RootPath, patch: WorldVoicePatchFactory.FromDocument(document: Puck.Assets.Documents.SynthPatchCanonicalizer.Normalize(document: patchDocument)));
+        var voice = Voice with { Hash = manifestPin, PatchId = null, SampleSet = "set.json" };
+        var element = new WorldHudElement("note", WorldHudElementKind.Text, Rect, WorldHudStyleToken.Primary, Text: "Ae, b!", Voice: voice);
+        var panel = new WorldHudPanel("guide", Rect, WorldHudLayer.Over, WorldHudPanelStyle.Panel, [element]);
+        var authored = Fixtures.BuildDocument() with {
+            DocumentDirectory = sender.RootPath,
+            HudRaw = new WorldHudSection(Defaults: new WorldHudDefaults(Enabled: true), Panels: [panel]),
+        };
+
+        var senderObjects = new Dictionary<Puck.Assets.ContentPin, byte[]>();
+        var canonicalManifest = WorldVoiceSampleLoader.CanonicalBytes(bytes: File.ReadAllBytes(path: Path.Combine(path1: sender.RootPath, path2: "set.json")))!;
+        senderObjects[Puck.Assets.ContentPin.Compute(content: canonicalManifest)] = canonicalManifest;
+        foreach (var letter in "aeioub") {
+            var wavBytes = File.ReadAllBytes(path: Path.Combine(path1: sender.RootPath, path2: $"{letter}.wav"));
+            senderObjects[Puck.Assets.ContentPin.Compute(content: wavBytes)] = wavBytes;
+        }
+
+        var delivered = authored with { DocumentDirectory = null };
+        var recipientStore = new Puck.Assets.ContentAddressedStore(root: recipientStoreDir.RootPath);
+
+        WorldContentIndex.Fetch(
+            definition: delivered,
+            held: recipientStore,
+            fetch: pin => (WorldContentIndex.Names(definition: authored, maximumBytes: out _, pin: pin) && senderObjects.TryGetValue(key: pin, value: out var bytes)) ? bytes : null
+        );
+        Assert.True(condition: WorldDefinitionValidator.TryValidateDeliveredAudio(definition: delivered, reason: out var reason), userMessage: reason);
+        Assert.True(condition: WorldTextSpeechFactory.TryCreate(definition: authored, error: out var authoredError, source: out var authoredSpeech, text: "Ae, b!", voice: voice), userMessage: authoredError);
+        Assert.True(condition: WorldTextSpeechFactory.TryCreate(definition: delivered, error: out var deliveredError, source: out var deliveredSpeech, text: "Ae, b!", voice: voice), userMessage: deliveredError);
+
+        using var expected = new MemoryStream();
+        using var actual = new MemoryStream();
+        WorldSpeechRenderer.WriteWave(output: expected, source: authoredSpeech!);
+        WorldSpeechRenderer.WriteWave(output: actual, source: deliveredSpeech!);
+        Assert.Equal(expected.ToArray(), actual.ToArray());
+        Assert.Contains(collection: Puck.Assets.PcmWave.ReadMono(bytes: actual.ToArray()), filter: value => (value != 0));
     }
     [Fact]
     public void ComposedHudAndIdentityVoicesRelocateSampleManifests() {

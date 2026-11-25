@@ -885,7 +885,7 @@ An observation feed provides:
 
 The in-process output hub delivers synchronously on the tick thread. Its snapshots borrow reused storage,
 so each sink consumes or copies them before returning. The federation projection sink copies encoded records
-into a per-subscription queue of at most eight pending deliveries (`WorldFederationProjectionSink.PendingDeliveryLimit`).
+into a per-subscription queue bounded at several seconds of deliveries (`WorldFederationProjectionSink.PendingDeliveryLimit`), so a link that stalls or bunches deliveries for a moment is not detached.
 When that queue fills, it detaches with `world.observation.backpressure` and ends the stream with a projection
 invalidation. The hub detaches it immediately; draining the retained records does not keep the subscription alive.
 A peer reopens for a fresh primer: a snapshot alone cannot repair a missed definition revision

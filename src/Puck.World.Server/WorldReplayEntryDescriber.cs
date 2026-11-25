@@ -37,6 +37,7 @@ public static class WorldReplayEntryDescriber {
             provider: CultureInfo.InvariantCulture,
             handler: $"pose {entity} pos=({pose.Position.X:0.##}, {pose.Position.Y:0.##}, {pose.Position.Z:0.##}) yaw={pose.YawRadians:0.###} pitch={pose.PitchRadians:0.###} roll={pose.RollRadians:0.###}"
         ),
+            WorldCommand.PoseSpawn spawnPose => $"pose {entity} spawn='{spawnPose.SpawnId}'",
             WorldCommand.EnqueueSegment segment => string.Create(
             provider: CultureInfo.InvariantCulture,
             handler: $"segment {entity} {segment.Seconds:0.##}s [{DescribeIntent(intent: segment.Intent)}]"

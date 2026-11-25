@@ -94,7 +94,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         "host.memory families 0",
     ];
 
-    private static readonly CommandForms WorldBenchmarkForms = CommandForms.Of(verb: "world.benchmark", "run <route>|<source.puck> [<chapter name prefix>|-] [at <tick>] [budget <ms>] [timeout <seconds>] [loops <n>] [seats <n>] [output <directory>]", "stop", "topology", "marks <route>", "overlay on|off|auto");
+    private static readonly CommandForms WorldBenchmarkForms = CommandForms.Of(verb: "world.benchmark", "run <route>|<source.puck> [<chapter name prefix>|-] [at <tick>] [budget <ms>] [timeout <seconds>] [loops <n>] [seats <n>] [output <directory>]", "stop", "topology [<seats>]", "marks <route>", "overlay on|off|auto");
 
     private sealed record Row(int At, int Slot, string Command, bool Refusal);
 
@@ -292,8 +292,9 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
             // The paths are planned over the document the seat's authority delivered, which bakes off the pump first.
             var endpoint = seat.Endpoint;
+            var undisclosed = (!endpoint.ClockOwnedHere && ReferenceEquals(objA: endpoint.Definition, objB: WorldProjection.Undisclosed));
 
-            if ((context.TextSession is { } session) && !senses.Navigation(endpoint: endpoint).Ready && route.Chapters.Any(predicate: chapter =>
+            if ((context.TextSession is { } session) && (undisclosed || !senses.Navigation(endpoint: endpoint).Ready) && route.Chapters.Any(predicate: chapter =>
                 chapter.Name.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal) && chapter.Steps.Any(predicate: static step => step is WorldRouteStep.Go { Direct: false }))) {
                 return Prepare(at: at, budget: budget, context: context, endpoint: endpoint, loops: loops, output: output, prefix: prefix, reference: reference, session: session, timeout: timeout);
             }
@@ -390,13 +391,18 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         var started = Stopwatch.GetTimestamp();
         var preparing = new Preparation(endpoint: endpoint, limit: (started + (Stopwatch.Frequency * timeout)), reference: reference, started: started);
 
-        senses!.Navigation(endpoint: endpoint).Prepare();
+        if ( endpoint.ClockOwnedHere || !ReferenceEquals(objA: endpoint.Definition, objB: WorldProjection.Undisclosed) ) {
+            senses!.Navigation(endpoint: endpoint).Prepare();
+        }
         m_preparing = preparing;
         session.CompleteOnPump(
             done: () => {
-                var navigation = senses.Navigation(endpoint: endpoint);
+                if (preparing.Stopped || (Stopwatch.GetTimestamp() >= preparing.Limit)) { return true; }
+                if (!endpoint.ClockOwnedHere && ReferenceEquals(objA: endpoint.Definition, objB: WorldProjection.Undisclosed)) { return false; }
 
-                if (preparing.Stopped || navigation.Ready || (Stopwatch.GetTimestamp() >= preparing.Limit)) { return true; }
+                var navigation = senses!.Navigation(endpoint: endpoint);
+
+                if (navigation.Ready) { return true; }
                 navigation.Prepare();
                 return false;
             },
@@ -404,11 +410,12 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
                 m_preparing = null;
                 if (preparing.Stopped) { return; }
 
-                var navigation = senses.Navigation(endpoint: endpoint);
-                var (baked, declared) = navigation.Domains;
+                var disclosed = (endpoint.ClockOwnedHere || !ReferenceEquals(objA: endpoint.Definition, objB: WorldProjection.Undisclosed));
+                var navigation = senses!.Navigation(endpoint: endpoint);
+                var (baked, declared) = (disclosed ? navigation.Domains : (0, 0));
                 var seconds = Stopwatch.GetElapsedTime(startingTimestamp: started).TotalSeconds;
 
-                if (!navigation.Ready) {
+                if (!disclosed || !navigation.Ready) {
                     Unstarted(reference: reference, reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"navigation preparation did not finish within the run's {timeout} s limit; {baked}/{declared} domains of the document '{endpoint.Identity}' delivered are baked, the rest bake on"));
                     return;
                 }
@@ -468,15 +475,53 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             m_companions.Add(item: Driver(seat: (slot + extra)));
         }
 
-        Puck.World.Client.WorldSeatDriver Driver(int seat) => new(program: program, route: (route with { Seat = (seat + 1) }), senses: senses, submit: text => {
-            var line = script.SubmitSeat(router: router, slot: seat, text: text);
+        bool PartyReachedStep(int step) {
+            if ((m_driver is { Ended: false } primary) && (primary.StepReached < step)) {
+                return false;
+            }
+            foreach (var companion in m_companions) {
+                if (!companion.Ended && (companion.StepReached < step)) {
+                    return false;
+                }
+            }
 
-            return () => line.Outcome;
-        });
+            return true;
+        }
+
+        Puck.World.Client.WorldSeatDriver Driver(int seat) => new(
+            program: program,
+            route: (route with { Seat = (seat + 1) }),
+            senses: senses,
+            submit: text => {
+                var line = script.SubmitSeat(router: router, slot: seat, text: text);
+
+                return () => line.Outcome;
+            },
+            canPressUntil: ((m_seatCount > 1) ? PartyReachedStep : null)
+        );
 
         var firstTick = Math.Max(val1: (script.CompletedTick + LeadTicks), val2: (at ?? 0UL));
+        string? priorCameraLine = null;
+
+        foreach (var candidate in route.Chapters) {
+            if (ReferenceEquals(objA: candidate, objB: chapters[0])) {
+                break;
+            }
+            foreach (var step in candidate.Steps) {
+                if ((step is WorldRouteStep.Line line) && line.Text.StartsWith(value: "player.camera.", comparisonType: StringComparison.Ordinal)) {
+                    priorCameraLine = line.Text;
+                }
+            }
+        }
 
         try {
+            if (priorCameraLine is not null) {
+                for (var extra = 0; (extra < m_seatCount); extra++) {
+                    if (script.ArmSeat(line: out _, router: router, slot: (slot + extra), text: priorCameraLine, tick: (firstTick - 1UL)) is { } cameraRefusal) {
+                        throw new InvalidOperationException(message: $"could not arm '{priorCameraLine}' at tick {(firstTick - 1UL)}: {cameraRefusal}");
+                    }
+                }
+            }
             ArmGoalChapter(loop: 0, position: 0, start: firstTick);
         } catch (InvalidOperationException refusal) {
             _ = script.Clear();
@@ -488,8 +533,9 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         }
         script.Ticked += OnTicked;
 
-        // A route's length is known only as it plays; its chapters' time limits bound it.
-        var bound = (ulong)(chapters.Sum(selector: chapter => Math.Ceiling(a: (chapter.TimeoutSeconds * m_rateHz)) + GapTicks) * loops);
+        // A route's length is known only as it plays; its chapters' authority-tick time limits bound it, with headroom
+        // for a remote authority that steps slower than the client host under load and for multi-seat staggered starts.
+        var bound = ((ulong)(chapters.Sum(selector: chapter => Math.Ceiling(a: (chapter.TimeoutSeconds * m_rateHz)) + GapTicks) * loops) * 6UL);
 
         return Enter(budget: budget, firstTick: firstTick, label: (string.IsNullOrEmpty(value: prefix) ? route.Name : $"{route.Name}#{prefix}"), lastTick: (firstTick + bound), loops: loops, output: output, session: session, timeout: timeout);
     }
@@ -519,8 +565,13 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             chapter.Endpoint = seatRouter?.TryRoute(slot: driver.Seat)?.Endpoint;
             chapter.DeliveryAtBegin = (chapter.Endpoint?.Mirror.DeliveryWork ?? default);
             driver.Begin(chapter: chapter.Program.Goals!, rateHz: m_rateHz, tick: tick);
-            foreach (var companion in m_companions) {
-                companion.Begin(chapter: chapter.Program.Goals!, rateHz: m_rateHz, tick: tick);
+            for (var extra = 0; (extra < m_companions.Count); extra++) {
+                m_companions[extra].Begin(
+                    chapter: chapter.Program.Goals!,
+                    leadInTicks: ((ulong)((extra + 1) * 4 * m_rateHz)),
+                    rateHz: m_rateHz,
+                    tick: tick
+                );
             }
             return;
         }
@@ -562,18 +613,19 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             }
 
             var endpoint = seatRouter?.TryRoute(slot: driver.Seat)?.Endpoint;
+            var failedCompanion = m_companions.FirstOrDefault(predicate: static companion => !companion.Arrived);
 
             chapter.Duration = (int)(next - chapter.Start);
-            chapter.Arrived = driver.Arrived;
+            chapter.Arrived = (driver.Arrived && (failedCompanion is null));
             chapter.Seats = [.. m_companions.Select(selector: static companion => (companion.Seat, companion.Arrived, companion.Failure))];
-            chapter.Failure = driver.Failure;
-            chapter.FailureKind = driver.FailureKind;
-            chapter.FailureTick = driver.FailureTick;
-            chapter.FailurePlace = driver.FailurePlace;
+            chapter.Failure = (driver.Failure ?? ((failedCompanion is null) ? null : $"seat {(failedCompanion.Seat + 1)}: {failedCompanion.Failure}"));
+            chapter.FailureKind = (driver.FailureKind ?? failedCompanion?.FailureKind);
+            chapter.FailureTick = ((driver.Failure is not null) ? driver.FailureTick : (failedCompanion?.FailureTick ?? 0UL));
+            chapter.FailurePlace = ((driver.Failure is not null) ? driver.FailurePlace : (failedCompanion?.FailurePlace ?? "none"));
             chapter.StepReached = driver.StepReached;
-            chapter.Plans = driver.Plans;
-            chapter.ControlLines = driver.Submitted;
-            chapter.ControlRefusals = driver.Refused;
+            chapter.Plans = (driver.Plans + m_companions.Sum(selector: static companion => companion.Plans));
+            chapter.ControlLines = (driver.Submitted + m_companions.Sum(selector: static companion => companion.Submitted));
+            chapter.ControlRefusals = (driver.Refused + m_companions.Sum(selector: static companion => companion.Refused));
             chapter.Visited = [.. driver.Visited];
             chapter.EndRead = (read ?? chapter.Samples.LastOrDefault());
             chapter.Delivery = DescribeDelivery(begin: chapter.Endpoint, end: endpoint, workAtBegin: chapter.DeliveryAtBegin);
@@ -1152,8 +1204,14 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
                 if (args.Count == 0) {
                     return Status();
                 }
-                if ((args.Count == 1) && args.Is(index: 0, value: "topology")) {
-                    return new CommandResult(Output: $"[world.benchmark topology: {TopologyReport().ToJsonString()}]");
+                if ((args.Count is 1 or 2) && args.Is(index: 0, value: "topology")) {
+                    var topologySeats = m_seatCount;
+
+                    if ((args.Count == 2) && (!args.TryInt(index: 1, value: out topologySeats) || (topologySeats < 1) || (topologySeats > MaxSeats))) {
+                        return WorldBenchmarkForms.Refuse(args: in args);
+                    }
+
+                    return new CommandResult(Output: $"[world.benchmark topology: {TopologyReport(requestedSeats: topologySeats).ToJsonString()}]");
                 }
                 if ((args.Count == 2) && args.Is(index: 0, value: "marks")) {
                     return Marks(reference: args[1].ToString());

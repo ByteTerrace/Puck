@@ -3207,6 +3207,10 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   document pins, as a hosted world's player does. `--remote <ip:port>` connects to an authority already listening,
   signing in with `--authentication-config-file <file>` (a deployment's `world-authentication.json`). A client of a remote authority boots running, since a paused boot commits no transfer, so its runs
   are `attached`. `--seats <n>` plays the route on that many seats of one client (`world.benchmark run ... seats <n>`).
+  `--jitter-ms <n>` with `--remote` runs every peer stream of the measured World, and of a local authority, on a seeded
+  delivery schedule (`Puck.World`'s `--peer-jitter-ms` and `--peer-jitter-seed`): messages held up to `n` ms, bursts
+  after a held read, and write stalls, in order. `--jitter-seed` names the schedule, and each process derives its own
+  seed from it, so a loaded host's or a wide-area link's delivery, and a failure under it, reproduces.
 - **Player builds.** `--world-artifact` names any World build: a player install's self-contained `Puck.World.dll` is
   started through its own host (`WorldLaunchRequest.SelfContainedHost`), with `--world` and `--cache-dir` naming the
   install's package and prewarmed caches. `puck benchmark fold <run.json or its directory>...` folds runs typed into a

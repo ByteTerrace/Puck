@@ -20,6 +20,15 @@ public sealed class WorldRoutedSeatTurns(int seatCount) {
             m_turns[slot] = travelTurn;
         }
     }
+    /// <summary>Advances the held accumulated arrival turn when a remote authority's snapshot carries the seat's view
+    /// through an in-place portal crossing without issuing a new route claim.</summary>
+    /// <param name="slot">The local seat.</param>
+    /// <param name="yawDelta">The in-place crossing's yaw turn.</param>
+    public void Advance(int slot, FixedQ4816 yawDelta) {
+        lock (m_gate) {
+            m_turns[slot] = FixedQ4816.WrapAngle(radians: (m_turns[slot] + yawDelta));
+        }
+    }
     /// <summary>Returns the turn a seat's view takes for a route that describes its traveler at
     /// <paramref name="travelTurn"/>, and holds that turn.</summary>
     /// <param name="slot">The local seat.</param>

@@ -496,6 +496,93 @@ authority's tick.
   `Leave` holds its `networkPlayers` slot at most for the world's authored
   `bodies.reconnectGraceSeconds`.
 
+## Decision 8: a remote seat is judged by its authority's state
+
+A remote seat met five failures on a loaded machine that it never met on a
+quiet one: a seat delivered no body, a refused control line, a wall with the
+stick held and the body still, a pose that did not land, and a lift step that
+never settled. A loaded host and a wide-area link are the same condition to a
+client: deliveries arrive late, in bursts, and with gaps. Each failure was the
+code reading wall time, or an answer the authority had not yet given, as if it
+were the authority's state.
+
+**The reproduction is a maintained option of the pair.** Every peer stream
+can run on a seeded delivery schedule (`PeerDeliverySchedule`): each message is
+held up to the jitter, one in eleven reads is held two to four times as long so
+the messages behind it arrive as a burst, and writes stall in windows. Order is
+kept and steady throughput is not throttled. `Puck.World` takes
+`--peer-jitter-ms` and `--peer-jitter-seed`; `puck benchmark --remote` takes
+`--jitter-ms` and `--jitter-seed` and hands each process of the pair its own
+seed derived from the run's, so a failure under a schedule reproduces.
+
+**What each failure was, and the fix at its cause.**
+
+- *No body delivered.* The client acknowledged each delivery by writing on the
+  same loop that reads them, so a stalled write stopped reads, the authority's
+  queue for that subscriber filled, and the authority detached the observer.
+  The acknowledgement is cumulative (the latest stream stamp), so the client
+  keeps only the latest and writes it from its own task
+  (`WorldRemoteAuthority`'s observation loop). The authority's per-subscriber
+  bound (`WorldFederationProjectionSink.PendingDeliveryLimit`) holds seconds of
+  deliveries, not a fraction of one. A traveller's stream also ended whenever
+  the authority's document changed, found by comparing whole serialized
+  projections at every delivery; the feed sends such a change as a delta, so
+  the stream no longer compares them. Prototype fetches take their own lane
+  (`WorldFederationLane.Content`), so a large fetch never queues a seat's input
+  behind it.
+- *A refused control line, and a pose that did not land.* A remote seat's
+  `body.pose spawn:<id>` is resolved by the authority that declares the spawn
+  (`WorldCommand.PoseSpawn`), not by the client's copy of a document it may
+  not stand in; a spawn only the host's boot world declares carries the body
+  home there, as a local seat's does. The pose step counts as landed when a
+  delivery shows the body's pose epoch, authority or body changed from the
+  read before the pose, and waits for it in the authority's ticks.
+- *A wall with the stick held.* The wall watch starts only once the authority
+  has answered the push (`WorldInputAnswer`), and watches only a stick asking
+  for enough speed to leave the watch's distance in its ticks.
+- *A tight step that never settled.* Against a remote clock the stick scaled a
+  delivered speed that was already a lag old, under a floor of a fifth of a
+  walk, so a body at rest beside a 10 cm goal was sent off at full deflection
+  and oscillated about it. The stick asks for an absolute speed instead. Toward
+  a stop that speed follows the braking curve started a measured control lag
+  late, and is at most half the speed that closes the remaining distance in one
+  lag, so each overshoot is smaller than the distance it had to cover and the
+  approach converges at any lag. A corner plans against the latest lag rather
+  than the longest, since a turn taken late only widens it; braking for every
+  corner against the longest lag left a narrow lane walked at a crawl, and not
+  braking at all bounced the body between its walls.
+  A stop plans against the longest round trip met lately, decaying eight
+  ticks each second, since a burst after a held delivery is random. Running
+  raises only the top speed the stick's speed is asked against, so a held run
+  never outruns a stop; a dash, whose burst cannot be taken back, waits for
+  room to stop from twice a run. The step lands once the body is inside its
+  goal with the release answered and the body at rest.
+- *A chapter's clock.* A chapter's time limit counts the authority ticks
+  delivered for the seat's body, so a slow delivery spends none of it; the
+  client's own ticks bound it only as a backstop several times longer.
+
+**Invariants and what enforces each.**
+
+| Invariant | Enforced by | Where it stops |
+|---|---|---|
+| A route step is judged from authority state the client was delivered | `WorldSeatDriver` reads the body only through `WorldSeatSenses`, which reads the delivered mirror and the authority's input answers | The client-tick backstop still ends a chapter whose authority never delivers |
+| A delivery is never refused for a slow acknowledgement | The acknowledgement is one latest-stamp slot written by its own task; the read loop never writes | A consumer behind by more than the subscriber bound is still detached and re-primes |
+| A remote spawn names the authority's own row | `PoseSpawn` is resolved in `WorldDocument.ApplyCommand` against the authority's definition | A spawn neither world declares is refused by name |
+| A jittered run reproduces | Each stream's schedule is a `Pcg32XshRr` stream from the run seed, the side and the stream's ordinal | Ordinals follow connection order, which the host's scheduling decides |
+
+**Where it stops: a seat that steers from delivered state is as slow as its
+lag.** With the five failures fixed, the remote debug route arrives on every
+chapter with no jitter, in both `--remote local` and `--remote issued`, and
+under 250 ms jitter on one schedule. On others the city painting, the
+route's longest walk, runs just past its 120 s: about 3,700 authority ticks
+under jitter against about 1,900 quiet, since every corner and every tight
+goal is approached a control lag late. At 500 ms jitter the lift also runs
+past its limit, and four seats under jitter meet each other in the city's
+terrace lane and at the lift's door. The structural answer is a seat that
+steers from its own predicted body, the client running its sent input ahead
+of the last delivery and correcting to it, so its control loop no longer
+holds the round trip; lengthening the chapter's limit would only hide it.
+
 ## The steps
 
 Each closes on a count or a state read from a headless pair on one machine:
@@ -600,3 +687,11 @@ manifest step for the debug world itself. Steps 4 and 5 depend on 2 and 3.
   [panes](open-items.md#panes-split-screens-the-player-drives); the seat mask
   of [decision 3](#decision-3-one-replica-of-a-world-for-the-seats-in-it) is
   the input that work needs.
+- *A remote seat that predicts its own body*
+  ([decision 8](#decision-8-a-remote-seat-is-judged-by-its-authoritys-state))
+  is the next lane on this plan. Its check: `puck benchmark --route debug
+  --remote local --headless --jitter-ms 250` arrives on every chapter for
+  several seeds, the city painting in about its quiet tick count, and with
+  `--seats 4`. The lane first searches the client for an existing correction
+  easer or replay of sent input to build on (`WorldClient`'s per-entity
+  correction easers are the lead).

@@ -41,7 +41,7 @@ public sealed partial class WorldScopedReplayRuntime {
         }
         if (!Ordered(ticks: checkpoint.Inputs.Select(selector: input => input.Tick)) || checkpoint.Inputs.Any(predicate: input => (!Within(mutation: input.Mutation) || !m_source.Seats.Contains(value: input.Mutation.Principal)))) { Refuse(detail: "invalid or unordered cell inputs"); }
         if (!Ordered(ticks: checkpoint.Commands.Select(selector: input => input.Tick)) || checkpoint.Commands.Any(predicate: input =>
-            ((input.Command is not (WorldCommand.SnapPose or WorldCommand.PressChannel or WorldCommand.EnqueueSegment or WorldCommand.Stop or WorldCommand.RigidImpulse)) ||
+            ((input.Command is not (WorldCommand.SnapPose or WorldCommand.PoseSpawn or WorldCommand.PressChannel or WorldCommand.EnqueueSegment or WorldCommand.Stop or WorldCommand.RigidImpulse)) ||
             !m_bodies.Contains(item: input.Command.EntityIndex) || !m_source.Seats.Contains(value: input.Command.Principal)))) { Refuse(detail: "invalid or unordered body commands"); }
         if (!Ordered(ticks: checkpoint.Intents.Select(selector: input => input.Tick)) || checkpoint.Intents.Any(predicate: input => ((input.Intent.Tick != 0) || !m_bodies.Contains(item: input.Intent.EntityIndex) || !m_source.Seats.Contains(value: input.Intent.Principal)))) { Refuse(detail: "invalid or unordered body intents"); }
         if (checkpoint.Active && !checkpoint.Recording && (checkpoint.InputCursor != checkpoint.Inputs.Count(predicate: input => (input.Tick < checkpoint.Cursor)))) { Refuse(detail: "input cursor disagrees with playback"); }

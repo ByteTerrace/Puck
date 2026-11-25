@@ -368,6 +368,26 @@ public static partial class WorldDefinitionValidator {
             )),
             errors: errors
         );
+        if (delivered) {
+            ValidateIdentityVoiceProfile(delivered: true, documentDirectory: null, errors: errors, identity: definition.Identity, patchIds: patches);
+            var panels = (definition.Hud?.Panels ?? []);
+            for (var panelIndex = 0; (panelIndex < panels.Count); panelIndex++) {
+                if (panels[panelIndex] is not { } panel) { continue; }
+                foreach (var element in (panel.Elements ?? [])) {
+                    if (element?.Voice is { } voice) {
+                        ValidateVoiceProfile(
+                            delivered: true,
+                            documentDirectory: null,
+                            errors: errors,
+                            patchIds: patches,
+                            path: $"hud.panels[{panelIndex}].elements['{element.Id}'].voice",
+                            required: true,
+                            voice: voice
+                        );
+                    }
+                }
+            }
+        }
     }
     // In a delivered document, a row whose pinned content this process does not hold answers as its own pin with no
     // violation; every other row is checked.

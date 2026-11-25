@@ -18,6 +18,7 @@ public sealed class WorldInputProducer {
     private readonly bool[] m_reconciledNeutral;
 
     private bool m_needsNeutral;
+    private bool m_reconciled;
 
     private readonly DeferredObservation[] m_deferred;
 
@@ -117,6 +118,7 @@ public sealed class WorldInputProducer {
         }
         producer.m_sequence = sequence;
         producer.m_image = image;
+        producer.m_reconciled = true;
         return producer;
     }
     /// <summary>Records a physical or synthetic source observation in capture order, including explicit neutral.</summary>
@@ -284,7 +286,7 @@ public sealed class WorldInputProducer {
 
     /// <summary>Installs the authority's kept baseline and source decisions; never invents a mode or carries an old event.</summary>
     public void Reconcile(uint revision, ulong epoch, WorldInputMapping mapping, PlayerIntent image, ReadOnlySpan<WorldInputSourceState> sources) {
-        if ((revision == Revision) && (epoch == Epoch)) { return; }
+        if (m_reconciled && (revision == Revision) && (epoch == Epoch)) { return; }
         if ((revision < Revision) || ((revision == Revision) && (epoch < Epoch)) || (sources.Length != m_sources.Length)) {
             throw new ArgumentException(message: "input publication is stale or belongs to another profile");
         }
@@ -303,6 +305,7 @@ public sealed class WorldInputProducer {
         Epoch = epoch;
         Mapping = mapping;
         m_image = image;
+        m_reconciled = true;
         sources.CopyTo(destination: m_sources);
         m_sourcesChanged = true;
         m_borrowedCount = -1;

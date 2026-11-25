@@ -345,55 +345,78 @@ internal sealed partial class PlayerCommandModule {
             if (IsSeat(index: requestedSpawnIndex)) {
                 var location = seatRouter.Route(slot: requestedSpawnIndex);
 
-                if (
-                    m_roster.IsJoined(slot: requestedSpawnIndex) &&
-                    !WorldDefinitionLoader.IsBootInstance(name: location.Endpoint.Identity)
-                ) {
-                    if (WorldDefinitionRows.FindSpawnPoint(
-                        spawnPoints: location.Endpoint.Definition.SpawnPoints,
-                        id: spawnId
-                    ) is not { } routedPoint) {
-                        // A point only the home world declares takes the body home, standing at it.
-                        if (WorldDefinitionRows.FindSpawnPoint(
-                            spawnPoints: m_server.ReadView(context).SpawnPoints,
-                            id: spawnId
-                        ) is { } homePoint) {
-                            if (!m_instances.TryEnqueuePoseHome(
-                                actingPrincipal: context.Principal,
-                                arrivalPose: FixedSpawnPoint.Compile(point: in homePoint),
-                                reason: out var homeRefusal,
-                                sourceInstance: location.Endpoint.Identity,
-                                transferId: out _,
-                                traveller: location.Entity
-                            )) {
-                                return CommandResult.Error(output: $"[body.pose: spawnPoint '{spawnId}' is declared only at home, and body:{requestedSpawnIndex} cannot be carried there — {homeRefusal}]");
-                            }
+                if (m_roster.IsJoined(slot: requestedSpawnIndex)) {
+                    if (!location.Endpoint.ClockOwnedHere) {
+                        var remoteDefinition = location.Endpoint.Definition;
+                        var localView = m_server.ReadView(context);
 
-                            return Echoed(
-                                args: in args,
-                                handler: $"[body.pose: body:{requestedSpawnIndex} leaves '{location.Endpoint.Identity}' for spawn '{spawnId}' ({homePoint.Position.X:0.00}, {homePoint.Position.Y:0.00}, {homePoint.Position.Z:0.00}) yaw={homePoint.YawDegrees:0}°]"
-                            );
+                        if (
+                            !ReferenceEquals(objA: remoteDefinition, objB: WorldProjection.Undisclosed) &&
+                            string.Equals(a: remoteDefinition.DocumentId, b: m_client.Definition.DocumentId, comparisonType: StringComparison.Ordinal) &&
+                            (WorldDefinitionRows.FindSpawnPoint(spawnPoints: remoteDefinition.SpawnPoints, id: spawnId) is null) &&
+                            (WorldDefinitionRows.FindSpawnPoint(spawnPoints: localView.SpawnPoints, id: spawnId) is null)
+                        ) {
+                            return CommandResult.Error(output: $"[body.pose: spawnPoint '{spawnId}' is not declared by '{location.Endpoint.Identity}' — see its spawnPoints section]");
                         }
 
-                        return CommandResult.Error(output: $"[body.pose: spawnPoint '{spawnId}' is not declared by '{location.Endpoint.Identity}' — see its spawnPoints section]");
+                        location.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.PoseSpawn(
+                            Principal: context.Principal,
+                            EntityIndex: location.EntityIndex,
+                            SpawnId: spawnId
+                        ));
+
+                        return Echoed(
+                            args: in args,
+                            handler: $"[body.pose: body:{requestedSpawnIndex} via '{location.Endpoint.Identity}' body={location.EntityIndex} -> spawn '{spawnId}']"
+                        );
                     }
+                    if (!WorldDefinitionLoader.IsBootInstance(name: location.Endpoint.Identity)) {
+                        if (WorldDefinitionRows.FindSpawnPoint(
+                            spawnPoints: location.Endpoint.Definition.SpawnPoints,
+                            id: spawnId
+                        ) is not { } routedPoint) {
+                            // A point only the home world declares takes the body home, standing at it.
+                            if (WorldDefinitionRows.FindSpawnPoint(
+                                spawnPoints: m_server.ReadView(context).SpawnPoints,
+                                id: spawnId
+                            ) is { } homePoint) {
+                                if (!m_instances.TryEnqueuePoseHome(
+                                    actingPrincipal: context.Principal,
+                                    arrivalPose: FixedSpawnPoint.Compile(point: in homePoint),
+                                    reason: out var homeRefusal,
+                                    sourceInstance: location.Endpoint.Identity,
+                                    transferId: out _,
+                                    traveller: location.Entity
+                                )) {
+                                    return CommandResult.Error(output: $"[body.pose: spawnPoint '{spawnId}' is declared only at home, and body:{requestedSpawnIndex} cannot be carried there — {homeRefusal}]");
+                                }
 
-                    Vector3 routedSpawnPosition = routedPoint.Position;
+                                return Echoed(
+                                    args: in args,
+                                    handler: $"[body.pose: body:{requestedSpawnIndex} leaves '{location.Endpoint.Identity}' for spawn '{spawnId}' ({homePoint.Position.X:0.00}, {homePoint.Position.Y:0.00}, {homePoint.Position.Z:0.00}) yaw={homePoint.YawDegrees:0}°]"
+                                );
+                            }
 
-                    location.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.SnapPose(
-                        Principal: context.Principal,
-                        EntityIndex: location.EntityIndex,
-                        Position: routedSpawnPosition,
-                        YawRadians: float.DegreesToRadians(degrees: routedPoint.YawDegrees),
-                        PitchRadians: 0f,
-                        RollRadians: 0f,
-                        Mode: SnapPoseMode.Pose
-                    ));
+                            return CommandResult.Error(output: $"[body.pose: spawnPoint '{spawnId}' is not declared by '{location.Endpoint.Identity}' — see its spawnPoints section]");
+                        }
 
-                    return Echoed(
-                        args: in args,
-                        handler: $"[body.pose: body:{requestedSpawnIndex} via '{location.Endpoint.Identity}' body={location.EntityIndex} -> spawn '{spawnId}' ({routedSpawnPosition.X:0.00}, {routedSpawnPosition.Y:0.00}, {routedSpawnPosition.Z:0.00}) yaw={routedPoint.YawDegrees:0}° pitch=0° roll=0°]"
-                    );
+                        Vector3 routedSpawnPosition = routedPoint.Position;
+
+                        location.Endpoint.Submissions.SubmitCommand(command: new WorldCommand.SnapPose(
+                            Principal: context.Principal,
+                            EntityIndex: location.EntityIndex,
+                            Position: routedSpawnPosition,
+                            YawRadians: float.DegreesToRadians(degrees: routedPoint.YawDegrees),
+                            PitchRadians: 0f,
+                            RollRadians: 0f,
+                            Mode: SnapPoseMode.Pose
+                        ));
+
+                        return Echoed(
+                            args: in args,
+                            handler: $"[body.pose: body:{requestedSpawnIndex} via '{location.Endpoint.Identity}' body={location.EntityIndex} -> spawn '{spawnId}' ({routedSpawnPosition.X:0.00}, {routedSpawnPosition.Y:0.00}, {routedSpawnPosition.Z:0.00}) yaw={routedPoint.YawDegrees:0}° pitch=0° roll=0°]"
+                        );
+                    }
                 }
             }
 

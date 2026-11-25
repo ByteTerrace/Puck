@@ -861,8 +861,12 @@ public static partial class WorldDefinitionValidator {
             if (voice.PatchId is not null) { errors.Add(item: $"{path} must choose patchId or sampleSet, not both."); }
             if ((voice.Hash is { } voiceHash) && !WorldAssetRowLoader.TryPin(hash: voiceHash, pin: out _)) {
                 errors.Add(item: $"{path}.hash '{voiceHash}' is not a valid SHA-256 content pin.");
-            }
-            if (!delivered && !WorldVoiceSampleLoader.TryLoad(documentDirectory: documentDirectory, error: out var sampleError, hash: voice.Hash, rate: out _, samples: out _, source: sampleSet)) {
+            } else if (delivered) {
+                // A delivered voice is read from the content its pin names; one with no pin travels without its samples.
+                if ((voice.Hash is { } deliveredHash) && (WorldVoiceSampleLoader.ValidateDelivered(source: sampleSet, hash: deliveredHash) is { } deliveredError)) {
+                    errors.Add(item: $"{path}: {deliveredError}");
+                }
+            } else if (!WorldVoiceSampleLoader.TryLoad(documentDirectory: documentDirectory, error: out var sampleError, hash: voice.Hash, rate: out _, samples: out _, source: sampleSet)) {
                 errors.Add(item: $"{path}: {sampleError}");
             }
         }
