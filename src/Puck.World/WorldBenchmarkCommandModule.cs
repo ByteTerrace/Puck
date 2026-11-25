@@ -168,6 +168,9 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         public string? FailurePlace { get; set; }
         public int StepReached { get; set; }
         public int Plans { get; set; }
+        public ulong AuthorityTicks { get; set; }
+        public ulong PredictedTicks { get; set; }
+        public string Prediction { get; set; } = string.Empty;
         public int ControlLines { get; set; }
         public int ControlRefusals { get; set; }
         public IReadOnlyList<(ulong Tick, string Place)> Visited { get; set; } = [];
@@ -624,6 +627,9 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             chapter.FailurePlace = ((driver.Failure is not null) ? driver.FailurePlace : (failedCompanion?.FailurePlace ?? "none"));
             chapter.StepReached = driver.StepReached;
             chapter.Plans = (driver.Plans + m_companions.Sum(selector: static companion => companion.Plans));
+            chapter.AuthorityTicks = driver.AuthorityTicks;
+            chapter.PredictedTicks = driver.PredictedTicks;
+            chapter.Prediction = (senses?.DescribePrediction(slot: driver.Seat) ?? string.Empty);
             chapter.ControlLines = (driver.Submitted + m_companions.Sum(selector: static companion => companion.Submitted));
             chapter.ControlRefusals = (driver.Refused + m_companions.Sum(selector: static companion => companion.Refused));
             chapter.Visited = [.. driver.Visited];
@@ -1152,7 +1158,8 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         var (failed, unjudged, read) = Arrival(chapter: chapter);
         var disturbed = Disturbances(chapter: chapter, statistics: statistics);
         var arrival = (chapter.Driven
-            ? (chapter.Arrived ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"arrived in {chapter.Duration} ticks") : $"FAILED: {chapter.Failure}")
+            ? ((chapter.Arrived ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"arrived in {chapter.Duration} ticks") : $"FAILED: {chapter.Failure}") +
+                string.Create(provider: CultureInfo.InvariantCulture, handler: $" ({chapter.AuthorityTicks} authority ticks, {chapter.PredictedTicks} steered from a prediction; prediction {chapter.Prediction})"))
             : (!read ? "arrival unmeasured (no body pose was read)" : ((failed.Count > 0) ? $"OFF COURSE: {string.Join(separator: "; ", values: failed)}" : ((unjudged.Count > 0) ? $"arrived ({unjudged.Count} gate(s) only the headless test judges)" : "arrived"))));
 
         var from = PlacesOf(read: chapter.Opening) is { Count: > 0 } start ? start[0]!.GetValue<string>() : "none";

@@ -3299,21 +3299,29 @@ Federation and transfers:
   re-enters an emitter from silence when its identity changes, and no plan
   owns continuity; the [audio reference](../reference/audio.md) is the
   mixer's contract.
-- [medium] Prediction and rollback for remote play has no design.
-  [Readable interaction](readable-interaction.md)'s step 5 depends on it, and
-  its step 0 research round covers it. The [state-of-the-art audit](state-of-the-art/audit.md#5-there-is-no-client-prediction)
-  names the gap that design has to close: the wire carries float render state
-  (`WorldFederationCodec.WriteEntity`), not the seat's own fixed-point
-  continuation (pose, integration residue, contacts, input cursor). Start from
-  a per-seat own-body continuation record carried in the input
-  acknowledgement, so a predicted local body reproduces the authority exactly
-  and a correction means a real divergence, not rounding. Check: a predicted
-  body replays the authority's ticks bit for bit at a fixed latency, and a
-  corrected one differs only where an input arrived late.
-  [Replication's decision 7](replication.md#decision-7-the-seats-own-body)
-  holds the continuation's design and the two preconditions it found: the
-  client project cannot reach `WorldBody.Advance`, and the step's read set is
-  not yet stated.
+- [medium] A remote seat's own-body prediction steers its route driver only.
+  [The multi-seat memo's decision 9](multi-seat-client.md#decision-9-a-remote-seat-predicts-its-own-body)
+  built the exact continuation (`WorldOwnBody`) and the predictor
+  (`WorldSeatPrediction`). Open: the predictor builds only from the client's own
+  boot document, since a presentation-tier document withholds the step's code;
+  a world reached through a crossing needs its document resolved from the
+  client's package by pin, as creations are (`WorldProjectionContent`). The
+  presented body and the seat camera still
+  draw the delivered pose, so a player's own body does not yet move at once;
+  presenting the prediction, with a correction eased by the client's existing
+  render-error easer, is the next step. The continuation is sent whole every
+  delivery; the digest-first form of
+  [replication's decision 7](replication.md#decision-7-the-seats-own-body)
+  cuts it to eight bytes while the client's digest matches. Other bodies and a
+  moving solid's motion after the continuation's tick are not predicted.
+  [Readable interaction](readable-interaction.md)'s step 5 builds on it.
+- [medium] A route's party is decided and not built
+  ([decision 10](multi-seat-client.md#decision-10-a-route-authors-its-party)):
+  the route authors a spacing and each seat's goals follow the leader in file.
+  Building it deletes `WorldSeatDriver`'s party heuristics (`ResolvePartyHoldSpot`,
+  `SpotClaimed`, `TryYieldAtPoint`) and the benchmark's staggered lead-in. Check:
+  `puck benchmark --route debug --remote local --seats 4 --headless` arrives on
+  every chapter.
 - Signed remote write-back is
   [remote home adoption](records-and-pools.md#remote-home-adoption); it needs
   the hub plan's write door and award commit and

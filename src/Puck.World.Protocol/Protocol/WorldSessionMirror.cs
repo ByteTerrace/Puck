@@ -104,6 +104,14 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <param name="answer">The owner's answer, when the latest image carries one.</param>
     /// <returns><see langword="true"/> when the latest image carries an answer for <paramref name="owner"/>.</returns>
     public bool TryInputAnswer(Principal owner, out WorldInputAnswer answer) => TryOwned(owner: owner, records: static image => image.Answers, value: out answer);
+    // The latest delivery's own-body continuations, kept and published beside the answers.
+    private readonly Dictionary<Principal, WorldOwnBody> m_ownBodies = [];
+    /// <summary>Reads the exact continuation of the body an owner drives from the latest complete image, never waiting on
+    /// a delivery in progress.</summary>
+    /// <param name="owner">The principal whose body to read: the owner the authority answers its input under.</param>
+    /// <param name="body">The owner's continuation, when the latest image carries one.</param>
+    /// <returns><see langword="true"/> when the latest image carries a continuation for <paramref name="owner"/>.</returns>
+    public bool TryOwnBody(Principal owner, out WorldOwnBody body) => TryOwned(owner: owner, records: static image => image.OwnBodies, value: out body);
 
     /// <summary>Reads an authority-issued input epoch and its immutable source decisions from the latest complete
     /// image, never waiting on a delivery in progress.</summary>
@@ -751,6 +759,8 @@ public sealed class WorldSessionMirror : IClientSink {
         foreach (var (owner, input) in m_inputs) { image.Inputs[owner] = input; }
         image.Answers.Clear();
         foreach (var (owner, answer) in m_answers) { image.Answers[owner] = answer; }
+        image.OwnBodies.Clear();
+        foreach (var (owner, body) in m_ownBodies) { image.OwnBodies[owner] = body; }
         m_arrivals.CopyTo(array: image.Arrivals, index: 0);
         image.ArrivalCount = m_arrivalCount;
     }
@@ -807,6 +817,7 @@ public sealed class WorldSessionMirror : IClientSink {
         public long ArrivalTimestamp = arrivalTimestamp;
         public readonly Dictionary<Principal, WorldInputPublication> Inputs = [];
         public readonly Dictionary<Principal, WorldInputAnswer> Answers = [];
+        public readonly Dictionary<Principal, WorldOwnBody> OwnBodies = [];
         public readonly long[] Arrivals = new long[ArrivalHistory];
 
         public int ArrivalCount;
@@ -981,6 +992,8 @@ public sealed class WorldSessionMirror : IClientSink {
             foreach (ref readonly var input in snapshot.Inputs.Span) { m_inputs[input.Owner] = input; }
             m_answers.Clear();
             foreach (ref readonly var answer in snapshot.InputAnswers.Span) { m_answers[answer.Owner] = answer; }
+            m_ownBodies.Clear();
+            foreach (ref readonly var body in snapshot.OwnBodies.Span) { m_ownBodies[body.Owner] = body; }
             var seeded = m_seededRouteEntity;
             var containsSeed = ((seeded is { } address) && SnapshotContains(
                 entity: in address,

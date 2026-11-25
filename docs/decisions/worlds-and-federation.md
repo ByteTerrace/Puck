@@ -350,6 +350,24 @@ body deltas keep naming acknowledged snapshots across it. The cursor observes
 the body policy before taking the rows, and a policy that moved owes a cut,
 which sends the stream through its document door and a new primer.
 
+### A remote seat predicts its own body
+
+A seat whose authority runs in another process steps its own body ahead of the
+last delivery with the authority's own body step, never a second motion model
+([the memo](../plans/multi-seat-client.md#decision-9-a-remote-seat-predicts-its-own-body)).
+After each tick the authority captures each remote human's population entry and
+the world's attached solid poses and delivers them to that body's owner alone
+(`WorldOwnBody`, owner-scoped like `WorldInputAnswer`). The client restores the
+continuation into a private population of the delivered document and replays
+the batches the authority had not yet taken, through the fold and owner-input
+write the authority uses (`WorldAcceptedInput.Fold`, `WorldBody.TakeOwnerInput`).
+Equal continuations and equal input give equal bodies, so a correction is a real
+divergence. The prediction stops at what lies outside the body after the
+continuation's tick (other bodies, a moving solid's later motion, a rule's
+register write), which the next delivery corrects; a body riding another is not
+predicted. The authority stays authoritative: nothing a prediction does reaches
+it.
+
 ### The wire's transport lane
 
 **Decided.**
@@ -826,7 +844,7 @@ network side ahead in structure and a generation behind in scale:
   slows a congested system, with no runtime split of the place. It is recorded in
   [the synthesis](../plans/mmo-foundations/synthesis.md#4-puck-native-combinations)
   and is open work, not a decision.
-- *Behind in scale, and filed as open work:* client prediction, interest priority
+- *Behind in scale, and filed as open work:* interest priority
   under a byte budget, the wire's encoding, and incremental checkpoints
   ([the transfers packet](../plans/open-items.md#transfers-federation-and-server)).
 

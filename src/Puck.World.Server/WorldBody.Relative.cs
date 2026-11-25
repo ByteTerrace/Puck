@@ -29,6 +29,19 @@ public sealed partial class WorldBody {
         return incoming;
     }
 
+    /// <summary>Takes the input of the participant that owns this body: the motion request, its relative movement summed
+    /// with what this interval already holds, and its held device levels. The one write of an owner's input, the
+    /// authority's and a client's prediction of its own body alike.</summary>
+    /// <param name="applied">The owner's input, folded onto this body's channels (<see cref="WorldAcceptedInput.Fold"/>).</param>
+    /// <returns>The motion request as taken.</returns>
+    public PlayerIntent TakeOwnerInput(in WorldAcceptedInput applied) {
+        var submitted = MergeSubmittedRelative(incoming: applied.Intent);
+
+        SubmitIntent(intent: submitted);
+        SetHeldChannels(channels: applied.HeldChannels);
+        return submitted;
+    }
+
     private void SetChannelTable(WorldChannelTable? channels) {
         var next = (channels ?? WorldChannelTable.Empty);
 
@@ -45,17 +58,7 @@ public sealed partial class WorldBody {
         m_channels = next;
         if (!sameLayout && (((ReadOnlySpan<long>)InputReadbacks.RelativeRemainders).IndexOfAnyExcept(value: 0L) >= 0)) { InputReadbacksEdit.RelativeRemainders = default; }
     }
-    private PlayerIntent WithoutRelative(PlayerIntent intent) {
-        var remaining = m_channels.RelativeMask;
-
-        while (remaining != 0) {
-            var ordinal = BitOperations.TrailingZeroCount(value: remaining);
-
-            remaining &= (remaining - 1);
-            intent = intent.WithRelative(ordinal: ordinal, value: default);
-        }
-        return intent;
-    }
+    private PlayerIntent WithoutRelative(PlayerIntent intent) => m_channels.WithRelativeAtRest(intent: intent);
     private PlayerIntent ProjectRelative(PlayerIntent intent) {
         var remaining = m_channels.RelativeMask;
 

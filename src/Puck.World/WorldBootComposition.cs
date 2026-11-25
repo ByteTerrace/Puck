@@ -1115,9 +1115,19 @@ public static class WorldBootComposition {
         // What each seat's client was delivered, which a seat driver reads. Its paths come from the navigation the
         // delivered document describes, compiled in this process from that document alone whichever process runs its
         // authority.
+        // A remote seat's own body is predicted with the authority's own body step, which this process can reach.
+        services.AddSingleton(implementationFactory: static sp => {
+            var boot = sp.GetRequiredService<WorldDefinitionSource>().Definition;
+
+            return new WorldSeatPrediction(
+                client: sp.GetRequiredService<Puck.World.Client.WorldClient>(),
+                packageDocument: documentId => (string.Equals(a: documentId, b: boot.DocumentId, comparisonType: StringComparison.Ordinal) ? boot : null)
+            );
+        });
         services.AddSingleton(implementationFactory: static sp => new Puck.World.Client.WorldSeatSenses(
             client: sp.GetRequiredService<Puck.World.Client.WorldClient>(),
             navigation: static (definition, previous) => WorldDocumentNavigation.Compile(definition: definition, previous: (previous as WorldDocumentNavigation)),
+            prediction: sp.GetRequiredService<WorldSeatPrediction>(),
             routes: sp.GetRequiredService<Puck.World.Client.WorldSeatAuthorityRouter>()
         ));
         // world.benchmark: plays a route's chapters through the seat's own ingress in real time and records every host

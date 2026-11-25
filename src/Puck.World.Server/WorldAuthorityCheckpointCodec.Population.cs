@@ -170,6 +170,47 @@ public static partial class WorldAuthorityCheckpointCodec {
             section = TSection.Read(reader: ref Reader);
     }
 
+    /// <summary>Encodes the exact continuation of one body a remote owner restores its prediction from
+    /// (<see cref="Puck.World.Protocol.WorldOwnBody"/>): its population entry and the poses of the moving solids its step
+    /// reads, each in the encoding a checkpoint holds them in.</summary>
+    /// <param name="entry">The captured entry.</param>
+    /// <param name="attached">The world's attached solid rows as the step left them.</param>
+    /// <returns>The encoded continuation.</returns>
+    public static byte[] EncodeOwnBody(in WorldPopulationEntryCheckpoint entry, IReadOnlyList<WorldAttachedSolidCheckpoint> attached) {
+        var writer = new WireWriter();
+
+        WritePopulationEntry(entry: entry, writer: writer);
+        WriteAttachedSolids(rows: attached, writer: writer);
+        return writer.ToArray();
+    }
+    /// <summary>Decodes a continuation <see cref="EncodeOwnBody"/> encoded, checking every section as a checkpoint's
+    /// entries are checked.</summary>
+    /// <param name="bytes">The encoded continuation.</param>
+    /// <param name="entry">The entry, on success.</param>
+    /// <param name="attached">The attached solid rows, on success.</param>
+    /// <param name="reason">The one-line refusal reason, or empty on success.</param>
+    /// <returns><see langword="true"/> when the bytes decode to one whole continuation.</returns>
+    public static bool TryDecodeOwnBody(ReadOnlySpan<byte> bytes, out WorldPopulationEntryCheckpoint entry, out WorldAttachedSolidCheckpoint[] attached, out string reason) {
+        var reader = new WireReader(bytes: bytes);
+
+        entry = ReadPopulationEntry(reader: ref reader);
+        attached = ReadAttachedSolids(reader: ref reader);
+        if (!reader.TryFinish(failure: out var failure)) {
+            entry = default;
+            attached = [];
+            reason = $"own body: {failure}";
+            return false;
+        }
+
+        reason = string.Empty;
+        return true;
+    }
+    private static void WriteAttachedSolids(WireWriter writer, IReadOnlyList<WorldAttachedSolidCheckpoint> rows) =>
+        writer.WriteArray(items: rows, writeItem: static (w, row) => {
+            w.WriteBoolean(value: row.Resolved); w.WriteFixedVector(value: row.Origin); w.WriteFixedQuaternion(value: row.Rotation); w.WriteInt64(value: row.Scale.Value);
+        });
+    private static WorldAttachedSolidCheckpoint[] ReadAttachedSolids(ref WireReader reader) => reader.ReadArray(field: "attached solids", maximum: MaxCollectionCount,
+        readItem: static (ref WireReader r) => new WorldAttachedSolidCheckpoint(r.ReadBoolean(), r.ReadFixedVector(), r.ReadFixedQuaternion(), FixedQ4816.FromRawBits(value: r.ReadInt64())));
     private static void WritePopulationEntry(WireWriter writer, WorldPopulationEntryCheckpoint entry) {
         var sections = new SectionWriter(writer: writer);
 
@@ -242,9 +283,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             w.WriteInt32(value: row.Body);
             w.WriteOptional(value: row.Acceleration, writeValue: static (v, acceleration) => v.WriteFixedVector(value: acceleration));
         });
-        writer.WriteArray(items: (section.AttachedSolids ?? []), writeItem: static (w, row) => {
-            w.WriteBoolean(value: row.Resolved); w.WriteFixedVector(value: row.Origin); w.WriteFixedQuaternion(value: row.Rotation); w.WriteInt64(value: row.Scale.Value);
-        });
+        WriteAttachedSolids(rows: (section.AttachedSolids ?? []), writer: writer);
 
         return writer.ToArray();
     }
@@ -273,8 +312,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             readItem: static (ref WireReader r) => r.ReadInt32());
         var gravity = reader.ReadArray(field: "population sleeping gravity", maximum: WorldBodiesLimits.IndexLimit,
             readItem: static (ref WireReader r) => (r.ReadInt32(), r.ReadOptional(readValue: static (ref WireReader v) => v.ReadFixedVector())));
-        var attached = reader.ReadArray(field: "population attached solids", maximum: MaxCollectionCount,
-            readItem: static (ref WireReader r) => new WorldAttachedSolidCheckpoint(r.ReadBoolean(), r.ReadFixedVector(), r.ReadFixedQuaternion(), FixedQ4816.FromRawBits(value: r.ReadInt64())));
+        var attached = ReadAttachedSolids(reader: ref reader);
 
         return new WorldPopulationCheckpoint(
             AttachedSolids: attached,

@@ -1051,6 +1051,7 @@ public static partial class WorldFederationCodec {
         foreach (var size in snapshot.SolidScales.Span) { writer.WriteString(value: size.Placement); writer.WriteInt64(value: size.Scale.Value); }
         if (!WorldWireCodec.TryWriteInputPublications(writer, snapshot.Inputs.Span)) { throw new ArgumentException(message: "snapshot input publication exceeds wire bounds", paramName: nameof(snapshot)); }
         if (!WorldWireCodec.TryWriteInputAnswers(writer, snapshot.InputAnswers.Span)) { throw new ArgumentException(message: "snapshot input answers exceed wire bounds", paramName: nameof(snapshot)); }
+        if (!WorldWireCodec.TryWriteOwnBodies(writer, snapshot.OwnBodies.Span)) { throw new ArgumentException(message: "snapshot own bodies exceed wire bounds", paramName: nameof(snapshot)); }
         ArgumentOutOfRangeException.ThrowIfGreaterThan(snapshot.Cues.Length, WorldRuleCapacity.MaxDeliveredCues);
         writer.WriteByte(snapshot.MusicBoundary);
         writer.WriteByte(snapshot.MusicSenses);
@@ -1854,6 +1855,7 @@ public static partial class WorldFederationCodec {
             readItem: static (ref WireReader r) => new WorldSolidScale(Placement: r.ReadString(field: "solid placement"), Scale: Puck.Maths.FixedQ4816.FromRawBits(value: r.ReadInt64())));
         var inputs = WorldWireCodec.ReadInputPublications(reader: ref reader);
         var answers = WorldWireCodec.ReadInputAnswers(reader: ref reader);
+        var ownBodies = WorldWireCodec.ReadOwnBodies(reader: ref reader);
         var musicBoundary = reader.ReadByte();
         var musicSenses = reader.ReadByte();
         if ((musicBoundary & ~3) != 0 || (musicSenses & ~7) != 0) { reader.Fail(WireRefusal.EnumValueUnknown, "invalid snapshot music flags"); }
@@ -1881,6 +1883,7 @@ public static partial class WorldFederationCodec {
             FieldsFull: fieldsFull,
             InputAnswers: answers,
             Inputs: inputs,
+            OwnBodies: ownBodies,
             MusicBoundary: musicBoundary,
             MusicSenses: musicSenses,
             Revision: revision,

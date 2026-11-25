@@ -112,6 +112,21 @@ public sealed class WorldChannelTable {
 
     /// <summary>The numeric slots carrying displacement in this layout.</summary>
     public uint RelativeMask { get; private set; }
+    /// <summary>Returns an intent with every relative channel of this layout at rest: an input held again after the
+    /// movement it carried since the last batch was taken.</summary>
+    /// <param name="intent">The intent, addressed in this layout.</param>
+    /// <returns>The intent with its relative channels zero.</returns>
+    public PlayerIntent WithRelativeAtRest(PlayerIntent intent) {
+        var remaining = RelativeMask;
+
+        while (remaining != 0) {
+            var ordinal = System.Numerics.BitOperations.TrailingZeroCount(value: remaining);
+
+            remaining &= (remaining - 1);
+            intent = intent.WithRelative(ordinal: ordinal, value: default);
+        }
+        return intent;
+    }
     /// <summary>Gets the declared channel count.</summary>
     public int ChannelCount { get; private init; }
 

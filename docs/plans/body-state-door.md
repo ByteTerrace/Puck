@@ -308,7 +308,7 @@ The authoritative hash's components overlap the continuation
   own key.
 - **A setter that is the only writer.** The population's `Entry` already keeps
   its occupancy behind the `field` keyword **[opened]**
-  (`src/Puck.World.Server/WorldPopulation.cs:476`):
+  (`src/Puck.World.Server/WorldPopulation.cs:474`):
 
   ```csharp
         public bool Active {

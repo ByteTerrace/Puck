@@ -66,6 +66,7 @@ public sealed partial class WorldOutputHub {
         private WorldGameplayCue[] m_cues = [];
         private int m_cuesLength;
         private WorldInputAnswer[] m_answers = [];
+        private WorldOwnBody[] m_ownBodies = [];
         private int[] m_moved = [];
         // An entries loan: the span it holds, and the lender storage it adopted or null when it copied.
         private ReadOnlyMemory<EntitySnapshot> m_heldEntries;
@@ -92,6 +93,7 @@ public sealed partial class WorldOutputHub {
                 SolidScales = Hold(snapshot.SolidScales, ref m_scales),
                 Cues = HoldReferences(snapshot.Cues, ref m_cues, out m_cuesLength),
                 InputAnswers = Hold(snapshot.InputAnswers, ref m_answers),
+                OwnBodies = Hold(snapshot.OwnBodies, ref m_ownBodies),
             };
         }
         // Another record's loan holds this entries loan as its parent. Under the outbox lock.

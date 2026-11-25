@@ -176,6 +176,41 @@ public sealed partial class WorldPopulation {
         }
         return true;
     }
+    /// <summary>Captures the exact continuation of every remote human's own body after a tick, each named by the owner
+    /// the authority answers that body's input under, for the owner's prediction of it. Allocates nothing when no remote
+    /// human stands in the world, and captures nothing between a step and its completion.</summary>
+    /// <param name="tick">The completed tick the continuations are taken after.</param>
+    /// <param name="engineTick">The engine-tick boundary <paramref name="tick"/> completed at.</param>
+    /// <returns>One continuation a remote human, in slot order.</returns>
+    public Puck.World.Protocol.WorldOwnBody[] CaptureOwnBodies(ulong tick, ulong engineTick) {
+        if ((CountRemoteHumans() == 0) || !m_outputs.IsEmpty || (m_durableStateOutputs.Count != 0)) {
+            return [];
+        }
+
+        var bodies = new List<Puck.World.Protocol.WorldOwnBody>();
+        WorldAttachedSolidCheckpoint[]? attached = null;
+
+        for (var index = 0; (index < Capacity); index++) {
+            var entry = m_entries[index];
+
+            if (entry is not { Active: true, IsRemoteHuman: true, Parked: false, Body: { } body }) {
+                continue;
+            }
+
+            EntryCheckpoint(alias: false, body: body, entry: entry, held: false, image: out var image, index: index);
+            attached ??= (MovingSolids?.CaptureAttached() ?? []);
+            bodies.Add(item: new(
+                Body: index,
+                EngineTick: engineTick,
+                Entry: WorldAuthorityCheckpointCodec.EncodeOwnBody(attached: attached, entry: in image),
+                Generation: entry.Generation,
+                Owner: PeerPrincipal(index: index),
+                Tick: tick
+            ));
+        }
+
+        return [.. bodies];
+    }
     private void RequireCapturePoint() {
         if (
             (!m_outputs.IsEmpty) ||
@@ -369,46 +404,8 @@ public sealed partial class WorldPopulation {
 
         foreach (var captured in checkpoint.Entries) {
             var entry = m_entries[captured.Index];
-            var bodyKitIndex = CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit);
-            var profile = ((captured.Tail.Profile is { } projection)
-                ? WorldIdentity.FromProjection(
-                    defaults: defaults,
-                    projection: projection
-                )
-                : null
-            );
-            var body = BuildBodyForKit(
-                index: captured.Index,
-                kitIndex: bodyKitIndex,
-                profile: profile
-            );
 
-            body.SetContactConfiguration(
-                field: m_contactField,
-                upPolicy: m_bodyUpPolicy,
-                walkableThreshold: m_walkableThreshold
-            );
-            body.SetGravityField(field: m_gravityField);
-            // Reconstruct live geometry before restoring latches. The next register catch-up must be a no-op
-            // when scale/selection already matched at capture, and a real change when a write was still pending.
-            body.SetScale(value: captured.Body.Pose.Scale);
-            body.Pose(
-                position: captured.Body.Pose.Position,
-                yawRadians: captured.Body.Pose.Yaw,
-                pitchRadians: FixedQ4816.Zero,
-                rollRadians: FixedQ4816.Zero
-            );
-            // The slot is marked occupied before its body's state is written: occupancy admits the action-state
-            // lane ordinal, and the captured registers are written into it.
-            entry.Body = body;
-            entry.Active = true;
-            body.RestoreSections(
-                contactFieldObservationCurrent: captured.Tail.ContactFieldObservationCurrent,
-                contactFieldVersion: ContactFieldVersion,
-                registers: captured.Tail.Registers.Span,
-                sections: in captured.Body
-            );
-            ApplyRigidContactImages(index: captured.Index, images: captured.Body.Contacts.Slots.Span);
+            RestoreEntryBody(captured: in captured, defaults: defaults, index: captured.Index, seatKit: checkpoint.SeatKit);
 
             var admission = captured.Admission;
             var producer = captured.Producer;
@@ -473,7 +470,7 @@ public sealed partial class WorldPopulation {
             };
             if (
                 (producer.ActiveName is { } activeName) &&
-                m_kits[bodyKitIndex].Producers.TryGetValue(
+                m_kits[CapturedKitIndex(captured: captured, seatKit: checkpoint.SeatKit)].Producers.TryGetValue(
                 key: activeName,
                 value: out var binding
             )
@@ -531,6 +528,75 @@ public sealed partial class WorldPopulation {
     }
 
     /// <summary>Preflights caller-controlled population shape, counts, kits, cadence, and route addresses without mutating live state.</summary>
+    // Builds a slot's body from a captured entry and writes the entry's body sections and registers into it: the body
+    // half of a restore, shared by a whole checkpoint's restore and a client's prediction of its own body, which
+    // restores an entry another authority captured into a slot of its own.
+    private WorldBody RestoreEntryBody(in WorldPopulationEntryCheckpoint captured, WorldPlayerDefaults defaults, int index, byte seatKit) {
+        var entry = m_entries[index];
+        var profile = ((captured.Tail.Profile is { } projection)
+            ? WorldIdentity.FromProjection(
+                defaults: defaults,
+                projection: projection
+            )
+            : null
+        );
+        var body = BuildBodyForKit(
+            index: index,
+            kitIndex: CapturedKitIndex(captured: captured, seatKit: seatKit),
+            profile: profile
+        );
+
+        body.SetContactConfiguration(
+            field: m_contactField,
+            upPolicy: m_bodyUpPolicy,
+            walkableThreshold: m_walkableThreshold
+        );
+        body.SetGravityField(field: m_gravityField);
+        // Reconstruct live geometry before restoring latches. The next register catch-up must be a no-op
+        // when scale/selection already matched at capture, and a real change when a write was still pending.
+        body.SetScale(value: captured.Body.Pose.Scale);
+        body.Pose(
+            position: captured.Body.Pose.Position,
+            yawRadians: captured.Body.Pose.Yaw,
+            pitchRadians: FixedQ4816.Zero,
+            rollRadians: FixedQ4816.Zero
+        );
+        // The slot is marked occupied before its body's state is written: occupancy admits the action-state
+        // lane ordinal, and the captured registers are written into it.
+        entry.Body = body;
+        entry.Active = true;
+        body.RestoreSections(
+            contactFieldObservationCurrent: captured.Tail.ContactFieldObservationCurrent,
+            contactFieldVersion: ContactFieldVersion,
+            registers: captured.Tail.Registers.Span,
+            sections: in captured.Body
+        );
+        ApplyRigidContactImages(index: index, images: captured.Body.Contacts.Slots.Span);
+        return body;
+    }
+    /// <summary>Restores into a local seat slot the body another authority captured, for a client's prediction of its own
+    /// body: the slot holds that body's exact sections and registers, under its captured kit, and no other entry or
+    /// relationship changes. The population must be one no authority steps.</summary>
+    /// <param name="slot">The 0-based local seat slot.</param>
+    /// <param name="captured">The captured entry, in this population's document.</param>
+    /// <param name="defaults">The document's player defaults, which an identity projection resolves against.</param>
+    /// <returns>The restored body.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is not a local seat slot.</exception>
+    /// <param name="attached">The world's attached solid rows as the capturing authority's step left them, which the
+    /// body's step reads where it stands on or against one.</param>
+    public WorldBody RestorePredicted(int slot, in WorldPopulationEntryCheckpoint captured, WorldPlayerDefaults defaults, IReadOnlyList<WorldAttachedSolidCheckpoint> attached) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: slot);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: slot, other: LocalSeatCount);
+        ArgumentNullException.ThrowIfNull(argument: defaults);
+        ArgumentNullException.ThrowIfNull(argument: attached);
+        if ((MovingSolids is { } moving) && (attached.Count != 0)) {
+            moving.ValidateAttached(rows: attached);
+            moving.RestoreAttached(rows: attached);
+        }
+        m_entries[slot].Active = false;
+        m_entries[slot].Body = null;
+        return RestoreEntryBody(captured: in captured, defaults: defaults, index: slot, seatKit: m_seatKit);
+    }
     internal void ValidateCheckpoint(WorldPopulationCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
         if (MovingSolids is { } attached) { attached.ValidateAttached(rows: (checkpoint.AttachedSolids ?? [])); }

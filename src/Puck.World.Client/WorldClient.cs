@@ -99,10 +99,40 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             ? input.ObservedLagTicks(answer: answer, bodyTick: bodyTick)
             : 0UL);
 
-    private bool TrySeatInputAnswer(int slot, out WorldSeatInput input, out WorldAuthorityRoute route, out WorldInputAnswer? answer) {
+    /// <summary>Gets the simulated time the seats' views have advanced through, in seconds: the client's own clock, which
+    /// runs on through a stalled delivery as the host steps, and what a seat's sent input and its prediction are timed
+    /// against. Presentation time, never simulation state.</summary>
+    public double SeatClockSeconds { get; private set; }
+    /// <summary>Reads the seat clock in ticks of a simulation rate.</summary>
+    /// <param name="rateHz">The rate, in ticks per second.</param>
+    /// <returns>The whole ticks the seat clock has advanced through.</returns>
+    public ulong SeatClockTicks(int rateHz) => ((ulong)Math.Floor(d: (SeatClockSeconds * rateHz)));
+    /// <summary>Gets the batches a seat sent to an authority in another process, with the client tick each was sent at.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <returns>The seat's sent input.</returns>
+    public WorldSeatSentInput SeatSentInput(int slot) => m_sentInput[slot];
+    /// <summary>Reads the principal a seat's routed authority answers its input under, and the seat's route.</summary>
+    /// <param name="slot">The 0-based seat slot.</param>
+    /// <param name="owner">The input owner, when this returns <see langword="true"/>: the seat's own principal, or the
+    /// one a forwarding authority stamps the seat's traveller with.</param>
+    /// <param name="route">The seat's route, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the seat's input is admitted at its routed authority.</returns>
+    public bool TrySeatInputOwner(int slot, out Principal owner, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldAuthorityRoute? route) {
+        owner = default;
+        route = null;
+        if (!TryAdmittedSeat(input: out _, route: out var resolved, slot: slot) ||
+            !TryRouteInput(principal: m_roster.PrincipalOf(slot: slot), publication: out var publication, route: resolved)) {
+            return false;
+        }
+
+        owner = publication.Owner;
+        route = resolved;
+        return true;
+    }
+    // A seat whose input its routed authority admitted, with that input and route.
+    private bool TryAdmittedSeat(int slot, out WorldSeatInput input, out WorldAuthorityRoute route) {
         input = null!;
         route = null!;
-        answer = null;
         if (
             m_roster.IsPending(slot: slot) ||
             (m_roster.Seat(slot: slot)?.Input is not { Admitted: true } resolvedInput) ||
@@ -113,6 +143,13 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
         input = resolvedInput;
         route = resolvedRoute;
+        return true;
+    }
+    private bool TrySeatInputAnswer(int slot, out WorldSeatInput input, out WorldAuthorityRoute route, out WorldInputAnswer? answer) {
+        answer = null;
+        if (!TryAdmittedSeat(input: out input, route: out route, slot: slot)) {
+            return false;
+        }
         if (!route.Endpoint.ClockOwnedHere &&
             TryRouteInput(principal: m_roster.PrincipalOf(slot: slot), publication: out var publication, route: route) &&
             route.Endpoint.Mirror.TryInputAnswer(answer: out var resolvedAnswer, owner: publication.Owner)) {
@@ -345,6 +382,8 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     private readonly ulong[] m_lastSubmissionEpoch = new ulong[PlayerRoster.MaxSlots];
     private readonly ulong[] m_lastSubmissionTick = new ulong[PlayerRoster.MaxSlots];
     private readonly PlayerIntent[] m_lastSubmittedIntent = new PlayerIntent[PlayerRoster.MaxSlots];
+    // Each seat's batches sent to an authority in another process, which its prediction replays.
+    private readonly WorldSeatSentInput[] m_sentInput = [.. Enumerable.Range(start: 0, count: PlayerRoster.MaxSlots).Select(selector: static _ => new WorldSeatSentInput())];
     // The double-buffered per-entity tick poses (the interpolation endpoints), active flags, placements and pose epochs
     // (m_poses), the tick's palette/archetype image, and the per-entity correction easers. Every column grows with the
     // pose table (FitEntities) to the highest body a delivery names, never a fixed slot count; a reader asking past it
@@ -952,6 +991,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <exception cref="ArgumentNullException"><paramref name="carried"/> is <see langword="null"/>.</exception>
     public void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried, Action<int, FixedQ4816>? remoteInPlaceTurn = null) {
         ArgumentNullException.ThrowIfNull(argument: carried);
+        SeatClockSeconds += deltaSeconds;
 
         for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
             if (m_roster.Seat(slot: slot) is not { } seat) {
@@ -1544,7 +1584,10 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             ) {
                 continue;
             }
-            endpoint.Submissions.SubmitIntent(submission: input.Publish(m_roster.PrincipalOf(slot: slot), targets[slot], tick, seat, intent));
+            var submission = input.Publish(m_roster.PrincipalOf(slot: slot), targets[slot], tick, seat, intent);
+
+            endpoint.Submissions.SubmitIntent(submission: in submission);
+            if (!endpoint.ClockOwnedHere) { m_sentInput[slot].Record(clientTick: SeatClockTicks(rateHz: definition.SimulationRateHz), endpoint: endpoint, submission: in submission); }
             m_lastSubmittedIntent[slot] = intent;
             m_lastSubmissionEpoch[slot] = routes[slot]!.Epoch;
             m_lastSubmissionTick[slot] = tick;
