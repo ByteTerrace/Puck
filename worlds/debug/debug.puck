@@ -58,6 +58,10 @@ import "deduction"
 import "skirmish"
 import "paintings"
 import "moon-beacon"
+// The sun (sun.puck): the switch this world owns and the sun's light and mass as they reach the valley.
+import "sun-watch"
+// The bottle world's lever (globe.puck): the gravity of another world, owned here.
+import "globe-lever"
 import "moon-door"
 import "wonderland"
 import "camera-course"
@@ -140,6 +144,14 @@ references [
     document: "moon"
     name: "moon"
   }
+  {
+    document: "galaxy"
+    name: "galaxy"
+  }
+  {
+    document: "globe"
+    name: "globe"
+  }
 ]
 
 destinations [
@@ -165,6 +177,18 @@ destinations [
     durability: persisted
     name: "moon"
     reference: "moon"
+    scope: global
+  }
+  {
+    durability: persisted
+    name: "galaxy"
+    reference: "galaxy"
+    scope: global
+  }
+  {
+    durability: persisted
+    name: "globe"
+    reference: "globe"
     scope: global
   }
 ]

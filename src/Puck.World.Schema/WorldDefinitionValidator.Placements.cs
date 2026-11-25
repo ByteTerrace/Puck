@@ -1544,7 +1544,6 @@ public static partial class WorldDefinitionValidator {
         var placements = definition.Placements;
         var scope = DeclaredPlacementScope(definition);
         var authoring = definition.Authoring;
-        var requiresField = WorldContactSelection.RequiresField(collision: definition.Collision);
         var creationsById = FirstRowsByName(rows: definition.Creations, name: static row => row.Id?.Value);
         var kitsByName = FirstRowsByName(rows: definition.Kits, name: static row => row.Name);
         var placementsById = WorldPlacementIndex.ById(placements: placements);
@@ -1818,18 +1817,6 @@ public static partial class WorldDefinitionValidator {
                     (placement.Mirror is not null)
                 ) {
                     errors.Add(item: $"{path} ATTACHES — placement distribution/mirror facets are static-stamp-only (the same rule an animated or inhabited row already enforces), incompatible with a live-following root.");
-                }
-
-                // Only the FIELD contact provider still refuses solid+attach: it compiles every solid row's geometry
-                // once into ONE SdfProgram (WorldSolidField.TryBuild) and is never rebuilt per tick, so an attached
-                // row's collider would silently stop tracking the body. The analytic provider's WorldColliderSet
-                // recomputes an attached row's colliders every tick instead (RefreshAttached) — see requiresField's
-                // own derivation (WorldContactSelection.RequiresField reads collision.requirements).
-                if (
-                    requiresField &&
-                    (placement.Solid is not null)
-                ) {
-                    errors.Add(item: $"{path} ATTACHES under the FIELD contact provider (collision.requirements is non-empty) — WorldSolidField compiles every solid row's geometry once and never rebuilds it per tick; the analytic provider tracks an attached solid instead.");
                 }
 
                 if (placement.Inhabit is not null) {

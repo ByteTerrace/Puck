@@ -16,25 +16,39 @@ namespace Puck.World.Server;
 /// which is what lets two massive bodies attract each other.</para>
 /// <para>Body order is the entity index, so the solver's input order is the population's own stable order and the
 /// answer does not depend on activation history.</para>
-/// <para>Matching local areas fold over the global answer in their compiled priority/authored order. Participation is
-/// tracked independently of vector magnitude: authored zero is a result, while an unmatched target in an area-only
-/// field retains ordinary kit gravity.</para>
+/// <para>Matching local areas fold over the global answer in their compiled priority/authored order, each at its
+/// weight: the smooth rise across its blend depth times its weight row. Participation is tracked independently of
+/// vector magnitude: authored zero is a result, while an unmatched target in an area-only field retains ordinary kit
+/// gravity. An area's state rows are read once a solve, so every body of a tick meets the same scale, weight and
+/// vector.</para>
+/// <para>The far sources' tide is the last term: one tensor a solve (<see cref="WorldGravityTides"/>), applied to
+/// each body's offset from the tide origin. A far source's uniform pull is never added, since it moves the world's
+/// frame with everything in it.</para>
 /// </remarks>
 public sealed class WorldGravityField {
     private readonly FixedVector3[] m_accelerations;
     private readonly bool[] m_areaActive;
     private readonly FixedVector3[] m_areaPositions;
     private readonly FixedQuaternion[] m_areaRotations;
+    private readonly FixedQ4816[] m_areaScales;
+    private readonly FixedVector3[] m_areaVectors;
+    private readonly FixedQ4816[] m_areaWeights;
     private readonly GravityBody[] m_bodies;
     private readonly FixedWorldGravity m_compiled;
     private readonly int[] m_entityBySlot;
     private readonly bool[] m_participating;
     private readonly int[] m_slotByEntity;
     private readonly IGravitySolver m_solver;
+    // The contact field's up at each body's position, kept while the body stands where it was asked and the field is
+    // the one it was asked of: a standing or sleeping body under a surface area costs no field query.
+    private readonly FixedVector3[] m_surfacePositions;
+    private readonly FixedVector3[] m_surfaceUps;
+    private readonly ulong[] m_surfaceVersions;
+    private readonly WorldGravityTides m_tides;
 
     private int m_bodyCount;
 
-    private void ApplyAreas(IReadOnlyList<WorldGravityTarget> targets) {
+    private void ApplyAreas(IReadOnlyList<WorldGravityTarget> targets, in WorldGravityInputs inputs) {
         if (m_compiled.Areas.Length == 0) {
             return;
         }
@@ -42,9 +56,12 @@ public sealed class WorldGravityField {
         var evaluations = 0;
         var matches = 0;
         var activeAreas = 0;
+        var surfaceQueries = 0;
 
-        foreach (var active in m_areaActive) {
-            if (active) {
+        ReadAreaRows(inputs: in inputs);
+
+        for (var index = 0; (index < m_areaActive.Length); index++) {
+            if (m_areaActive[index] && (m_areaWeights[index] > FixedQ4816.Zero)) {
                 activeAreas++;
             }
         }
@@ -59,7 +76,7 @@ public sealed class WorldGravityField {
             var acceleration = m_accelerations[target.EntityIndex];
 
             for (var index = 0; (index < m_compiled.Areas.Length); index++) {
-                if (!m_areaActive[index]) {
+                if (!m_areaActive[index] || (m_areaWeights[index] <= FixedQ4816.Zero)) {
                     continue;
                 }
 
@@ -74,24 +91,54 @@ public sealed class WorldGravityField {
                     continue;
                 }
 
-                matches++;
-                m_participating[target.EntityIndex] = true;
-                var contribution = area.AccelerationAt(
+                var weight = (area.WeightAt(
                     center: m_areaPositions[index],
                     point: target.Position,
                     rotation: m_areaRotations[index]
-                );
+                ) * m_areaWeights[index]);
+
+                // A point on the bound of a blended area, like one in an area its weight row has faded out, is not
+                // under the area: it neither participates nor moves the fold.
+                if (weight <= FixedQ4816.Zero) {
+                    continue;
+                }
+
+                matches++;
+                m_participating[target.EntityIndex] = true;
+                FixedVector3 contribution;
+
+                if (area.AccelerationKind == FixedWorldGravityAreaAccelerationKind.Surface) {
+                    contribution = (TrySurfaceUp(entityIndex: target.EntityIndex, inputs: in inputs, position: target.Position, queries: ref surfaceQueries, up: out var up)
+                        ? area.SurfaceAcceleration(surfaceUp: up)
+                        : FixedVector3.Zero
+                    );
+                } else {
+                    contribution = area.AccelerationAt(
+                        center: m_areaPositions[index],
+                        localVector: m_areaVectors[index],
+                        point: target.Position,
+                        rotation: m_areaRotations[index]
+                    );
+                }
+
+                if (m_areaScales[index] != FixedQ4816.One) {
+                    contribution = FixedSaturate.Multiply(left: contribution, right: m_areaScales[index]);
+                }
 
                 // Composition is the one place independently valid accelerations meet. Saturating componentwise
                 // prevents an overlap from wrapping toward the opposite direction; the fixed extreme is deterministic
                 // and Replace can still reset it before a later Combine.
-                acceleration = ((area.Mode == WorldGravityAreaMode.Replace)
-                    ? contribution
-                    : FixedSaturate.Add(
+                if (area.Mode == WorldGravityAreaMode.Replace) {
+                    acceleration = ((weight >= FixedQ4816.One)
+                        ? contribution
+                        : FixedVector3.Lerp(from: acceleration, to: contribution, amount: weight)
+                    );
+                } else {
+                    acceleration = FixedSaturate.Add(
                         left: acceleration,
-                        right: contribution
-                    )
-                );
+                        right: ((weight >= FixedQ4816.One) ? contribution : (contribution * weight))
+                    );
+                }
             }
 
             m_accelerations[target.EntityIndex] = acceleration;
@@ -101,8 +148,88 @@ public sealed class WorldGravityField {
             ActiveAreaCount: activeAreas,
             EvaluationCount: evaluations,
             MatchCount: matches,
+            SurfaceQueryCount: surfaceQueries,
             TargetCount: targets.Count
         );
+    }
+    // The far sources' tide: the tensor is read once a solve, and every participating body takes its product with the
+    // body's own offset from the tide origin.
+    private void ApplyTides(IReadOnlyList<WorldGravityTarget> targets, in WorldGravityInputs inputs) {
+        if (!m_tides.Refresh(inputs: in inputs)) {
+            return;
+        }
+
+        for (var targetIndex = 0; (targetIndex < targets.Count); targetIndex++) {
+            var target = targets[targetIndex];
+
+            if (((uint)target.EntityIndex) >= ((uint)m_slotByEntity.Length)) {
+                continue;
+            }
+
+            m_slotByEntity[target.EntityIndex] = Math.Max(val1: m_slotByEntity[target.EntityIndex], val2: 0);
+            m_participating[target.EntityIndex] = true;
+            m_accelerations[target.EntityIndex] = FixedSaturate.Add(
+                left: m_accelerations[target.EntityIndex],
+                right: m_tides.AccelerationAt(position: target.Position)
+            );
+        }
+    }
+    // Reads each area's state rows once for the solve. A row that does not read (removed since validation) leaves the
+    // authored value in force.
+    private void ReadAreaRows(in WorldGravityInputs inputs) {
+        for (var index = 0; (index < m_compiled.Areas.Length); index++) {
+            var area = m_compiled.Areas[index];
+
+            m_areaWeights[index] = ((area.WeightRow is { } weightRow)
+                ? FixedQ4816.Clamp(
+                    maximum: FixedQ4816.One,
+                    minimum: FixedQ4816.Zero,
+                    value: inputs.ReadFixed(fallback: FixedQ4816.One, key: null, row: weightRow)
+                )
+                : FixedQ4816.One
+            );
+            m_areaScales[index] = ((area.ScaleRow is { } scaleRow)
+                ? inputs.ReadFixed(fallback: FixedQ4816.One, key: null, row: scaleRow)
+                : FixedQ4816.One
+            );
+            m_areaVectors[index] = ((area.VectorRows is { } vector)
+                ? new FixedVector3(
+                    X: inputs.ReadFixed(fallback: area.LocalVector.X, key: null, row: vector.X),
+                    Y: inputs.ReadFixed(fallback: area.LocalVector.Y, key: null, row: vector.Y),
+                    Z: inputs.ReadFixed(fallback: area.LocalVector.Z, key: null, row: vector.Z)
+                )
+                : area.LocalVector
+            );
+        }
+    }
+    private bool TrySurfaceUp(int entityIndex, FixedVector3 position, in WorldGravityInputs inputs, ref int queries, out FixedVector3 up) {
+        // The stored version is the field's own plus one, so a slot never asked reads as stale against any field.
+        var version = (inputs.SurfaceVersion + 1UL);
+
+        if (
+            (m_surfaceVersions[entityIndex] == version) &&
+            (m_surfacePositions[entityIndex] == position)
+        ) {
+            up = m_surfaceUps[entityIndex];
+
+            return (up != FixedVector3.Zero);
+        }
+
+        up = FixedVector3.Zero;
+        queries++;
+
+        if (
+            (inputs.Surface is not { } surface) ||
+            !surface.TryUp(position: in position, up: out up)
+        ) {
+            up = FixedVector3.Zero;
+        }
+
+        m_surfaceVersions[entityIndex] = version;
+        m_surfacePositions[entityIndex] = position;
+        m_surfaceUps[entityIndex] = up;
+
+        return (up != FixedVector3.Zero);
     }
 
     /// <summary>Refreshes areas riding attached placements from the current authoritative body poses.</summary>
@@ -133,19 +260,19 @@ public sealed class WorldGravityField {
             m_areaPositions[index] = position;
             m_areaRotations[index] = FixedQuaternion.FromAxisAngle(
                 angle: yaw,
-                axis: new FixedVector3(
-                    X: FixedQ4816.Zero,
-                    Y: FixedQ4816.One,
-                    Z: FixedQ4816.Zero
-                )
+                axis: FixedVector3.UnitY
             );
         }
+
+        m_tides.RefreshAttached(population: population);
     }
     /// <summary>Solves the field for this tick from the supplied body targets.</summary>
     /// <param name="targets">Each participating body's entity index, world position, and gravitational mass, in entity
     /// order.</param>
+    /// <param name="inputs">The tick's state, contact field and orbits, which an area's rows, a surface area and a
+    /// tide source read.</param>
     /// <exception cref="ArgumentNullException"><paramref name="targets"/> is <see langword="null"/>.</exception>
-    public void Solve(IReadOnlyList<WorldGravityTarget> targets) {
+    public void Solve(IReadOnlyList<WorldGravityTarget> targets, in WorldGravityInputs inputs) {
         ArgumentNullException.ThrowIfNull(targets);
 
         Array.Fill(
@@ -183,7 +310,8 @@ public sealed class WorldGravityField {
                 }
             }
 
-            ApplyAreas(targets: targets);
+            ApplyAreas(inputs: in inputs, targets: targets);
+            ApplyTides(inputs: in inputs, targets: targets);
 
             return;
         }
@@ -241,7 +369,8 @@ public sealed class WorldGravityField {
             );
         }
 
-        ApplyAreas(targets: targets);
+        ApplyAreas(inputs: in inputs, targets: targets);
+        ApplyTides(inputs: in inputs, targets: targets);
     }
     /// <summary>Returns the acceleration solved for a body this tick.</summary>
     /// <param name="entityIndex">The body's entity index.</param>
@@ -278,10 +407,20 @@ public sealed class WorldGravityField {
         m_areaActive = new bool[compiled.Areas.Length];
         m_areaPositions = new FixedVector3[compiled.Areas.Length];
         m_areaRotations = new FixedQuaternion[compiled.Areas.Length];
+        m_areaScales = new FixedQ4816[compiled.Areas.Length];
+        m_areaVectors = new FixedVector3[compiled.Areas.Length];
+        m_areaWeights = new FixedQ4816[compiled.Areas.Length];
         m_bodies = new GravityBody[(compiled.Attractors.Length + capacity)];
         m_entityBySlot = new int[capacity];
         m_participating = new bool[capacity];
         m_slotByEntity = new int[capacity];
+
+        var surfaces = (Array.Exists(array: compiled.Areas, match: static area => (area.AccelerationKind == FixedWorldGravityAreaAccelerationKind.Surface)) ? capacity : 0);
+
+        m_surfacePositions = new FixedVector3[surfaces];
+        m_surfaceUps = new FixedVector3[surfaces];
+        m_surfaceVersions = new ulong[surfaces];
+        m_tides = new WorldGravityTides(compiled: compiled);
 
         Array.Fill(
             array: m_slotByEntity,
@@ -294,6 +433,9 @@ public sealed class WorldGravityField {
             m_areaPositions[index] = area.AuthoredPosition;
             m_areaRotations[index] = area.AuthoredRotation;
             m_areaActive[index] = (area.Attach is null);
+            m_areaScales[index] = FixedQ4816.One;
+            m_areaVectors[index] = area.LocalVector;
+            m_areaWeights[index] = FixedQ4816.One;
         }
     }
 
@@ -305,15 +447,53 @@ public sealed class WorldGravityField {
     public bool IsActive => m_compiled.IsActive;
     /// <summary>Gets the work counters the last solve reported.</summary>
     public GravitySolveStatistics Statistics { get; private set; }
+    /// <summary>Gets the far sources' tide as the last solve read it.</summary>
+    public WorldGravityTides Tides => m_tides;
 }
 /// <summary>The deterministic local-area work reported by one gravity solve.</summary>
-/// <param name="ActiveAreaCount">The areas with a resolved placement pose this tick.</param>
+/// <param name="ActiveAreaCount">The areas with a resolved placement pose and a weight above zero this tick.</param>
 /// <param name="TargetCount">The participating population targets considered for local areas.</param>
 /// <param name="EvaluationCount">The body-area analytic bound tests performed.</param>
 /// <param name="MatchCount">The matching contributions folded into body answers.</param>
-public readonly record struct WorldGravityAreaStatistics(int ActiveAreaCount, int TargetCount, int EvaluationCount, int MatchCount);
+/// <param name="SurfaceQueryCount">The contact-field gradient queries a surface area asked; a body standing where it
+/// was last asked costs none.</param>
+public readonly record struct WorldGravityAreaStatistics(int ActiveAreaCount, int TargetCount, int EvaluationCount, int MatchCount, int SurfaceQueryCount);
 /// <summary>One body participating in a gravity solve.</summary>
 /// <param name="EntityIndex">The body's entity index, which is also the order its answer is read back by.</param>
 /// <param name="Position">The body's world position.</param>
 /// <param name="Mass">The body's gravitational mass; zero makes it a target that pulls nothing.</param>
 public readonly record struct WorldGravityTarget(int EntityIndex, FixedVector3 Position, FixedQ4816 Mass);
+/// <summary>What one gravity solve reads beside its body targets: the tick's state, the contact field a surface area
+/// asks, and the orbits a tide source rides.</summary>
+/// <param name="Definition">The authority's current definition and state binding.</param>
+/// <param name="Tick">The authority tick being solved.</param>
+/// <param name="EngineTick">The engine tick at the start of the step.</param>
+/// <param name="Surface">The world's contact field, or <see langword="null"/> where the world has none.</param>
+/// <param name="SurfaceVersion">The contact field's version: a surface answer is kept while it and the body's position
+/// both stand.</param>
+/// <param name="Orbits">The world's orbits, or <see langword="null"/> where it authors none.</param>
+public readonly record struct WorldGravityInputs(WorldDefinition Definition, ulong Tick, ulong EngineTick, IContactField? Surface, ulong SurfaceVersion, WorldOrbitField? Orbits) {
+    /// <summary>Reads a <c>Fixed</c> cell as of the solve.</summary>
+    /// <param name="row">The state row.</param>
+    /// <param name="key">The cell, or <see langword="null"/> for the row's slot cell.</param>
+    /// <param name="fallback">The value a row or cell that does not read answers.</param>
+    /// <returns>The cell's value, or <paramref name="fallback"/>.</returns>
+    public FixedQ4816 ReadFixed(string row, string? key, FixedQ4816 fallback) => (
+        (
+            WorldStateReader.TryRead(
+                definition: Definition,
+                engineTick: EngineTick,
+                key: key,
+                rawValue: out var raw,
+                row: out var found,
+                rowName: row,
+                text: out _,
+                tick: Tick
+            ) &&
+            (found.Kind == Puck.State.CellKind.Fixed) &&
+            (raw is { } value)
+        )
+        ? FixedQ4816.FromRawBits(value: value)
+        : fallback
+    );
+}

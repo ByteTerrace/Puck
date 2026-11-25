@@ -28,10 +28,12 @@ public enum WorldBodyEffectScope : byte {
 /// <param name="TargetKey">The body a rule designates, or <see langword="null"/>.</param>
 /// <param name="UseMoveDirection">Whether a planar impulse prefers the normalized current movement command.</param>
 /// <param name="Curve">The timed move's progress curve.</param>
-/// <param name="Placement">The placement a point designation is based at, or <see langword="null"/> for the
-/// origin.</param>
+/// <param name="Placement">The placement a point designation is based at or a timed move ends at, or
+/// <see langword="null"/> for the origin or a move in the body's frame.</param>
 /// <param name="Offset">The literal point of a point designation, or its offset from <paramref name="Placement"/>;
-/// zero when the point is computed.</param>
+/// zero when the point is computed. A timed move's offset from the placement it ends at.</param>
+/// <param name="Arc">The height a timed move's path stands off the straight line at its middle.</param>
+/// <param name="Exclusive">Whether a timed move owns the body's translation while it runs.</param>
 public readonly record struct WorldBodyEffectForm(
     string Verb,
     BodyMotionOp Operation,
@@ -46,7 +48,9 @@ public readonly record struct WorldBodyEffectForm(
     bool UseMoveDirection = false,
     BodyMotionCurve Curve = BodyMotionCurve.Linear,
     string? Placement = null,
-    FixedVector3 Offset = default
+    FixedVector3 Offset = default,
+    FixedQ4816 Arc = default,
+    bool Exclusive = false
 );
 /// <summary>The one check and lowering of the body-motion effects — <see cref="WorldEffect.SetVerticalVelocity"/>,
 /// <see cref="WorldEffect.ScaleVerticalVelocity"/>, <see cref="WorldEffect.PlanarImpulse"/> and
@@ -113,6 +117,8 @@ public static class WorldBodyEffects {
         var designation = WorldBodyDesignationKind.Body;
         string? placement = null;
         var offset = default(FixedVector3);
+        var arc = FixedQ4816.Zero;
+        var exclusive = false;
         StateChannelRef? targetKey = null;
         BodyMotionOp operation;
 
@@ -167,12 +173,42 @@ public static class WorldBodyEffects {
                 }
                 if (!TryFixed(move.Right, "right", verb, out var right, out reason)
                     || !TryFixed(-move.Forward, "forward", verb, out var back, out reason)
+                    || !TryFixed(move.Up, "up", verb, out var lift, out reason)
+                    || !TryFixed(move.Arc, "arc", verb, out arc, out reason)
                     || !TryFixed(move.YawDegrees, "yawDegrees", verb, out var yawDegrees, out reason)
                     || !TryDuration(move.DurationSeconds, verb, allowZero: false, out durationTicks, ref refusal, out reason)) {
                     return false;
                 }
 
-                direction = new FixedVector3(X: right, Y: FixedQ4816.Zero, Z: back);
+                if (move.Toward is { } toward) {
+                    if (scope == WorldBodyEffectScope.Kit) {
+                        reason = $"'{verb}' names toward '{toward}' — a kit's action travels in its own body's frame; only a world rule moves a body to a placement";
+                        return false;
+                    }
+                    if ((move.Right != 0m) || (move.Forward != 0m) || (move.Up != 0m)) {
+                        reason = $"'{verb}' names toward '{toward}' and a right, forward or up travel — the move goes to the placement or travels in the body's frame, never both";
+                        return false;
+                    }
+                    if (move.TowardOffset is { } authoredOffset) {
+                        var literal = ((Vector3)authoredOffset);
+
+                        if (!TryFixedAxis(value: literal.X, field: "towardOffset x", verb: verb, result: out var offsetX, reason: out reason) ||
+                            !TryFixedAxis(value: literal.Y, field: "towardOffset y", verb: verb, result: out var offsetY, reason: out reason) ||
+                            !TryFixedAxis(value: literal.Z, field: "towardOffset z", verb: verb, result: out var offsetZ, reason: out reason)) {
+                            return false;
+                        }
+
+                        offset = new FixedVector3(X: offsetX, Y: offsetY, Z: offsetZ);
+                    }
+
+                    placement = toward;
+                } else if (move.TowardOffset is not null) {
+                    reason = $"'{verb}' authors towardOffset without toward — the offset is from the placement the move ends at";
+                    return false;
+                }
+
+                direction = new FixedVector3(X: right, Y: lift, Z: back);
+                exclusive = move.Exclusive;
                 value = FixedQ4816.FromDegrees(yawDegrees);
                 break;
             default:
@@ -200,6 +236,8 @@ public static class WorldBodyEffects {
         }
 
         form = new WorldBodyEffectForm(
+            Arc: arc,
+            Exclusive: exclusive,
             Curve: curve,
             Designation: designation,
             Direction: direction,

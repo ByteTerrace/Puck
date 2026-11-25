@@ -32,7 +32,19 @@ public sealed partial class WorldAdjacencyFields {
         public ulong ComparedTick = ulong.MaxValue;
         public ulong ComparedDelivery = ulong.MaxValue;
         public string? Narrated;
+        // A delayed follow's values in flight, oldest first: each is what the leader's row read when this authority
+        // observed a write of it, and the tick it arrives at. The last one observed is the leader's line as this
+        // authority knows it: its value and the leader tick it was read at.
+        public Queue<(ulong DueTick, long Raw)>? InFlight;
+        public bool Observed;
+        public long ObservedRaw;
+        public long ObservedLeaderTick;
     }
+
+    /// <summary>The most values one delayed follow holds in flight. A leader that writes more often than that inside
+    /// one delay has its newest value replaced, so the follower still ends on the leader's last value and still
+    /// never reads one early.</summary>
+    public const int MaxFollowValuesInFlight = 256;
     private sealed record FollowLease(string InstanceName, ulong GenerationId, WorldSessionMirror Mirror, IDisposable Lease) : IDisposable {
         public void Dispose() => Lease.Dispose();
     }
@@ -85,6 +97,11 @@ public sealed partial class WorldAdjacencyFields {
         }
         state.Narrated = null;
 
+        if (follows.DelaySeconds > 0m) {
+            AdoptDelayed(server: server, definition: definition, name: name, follows: follows, mirror: mirror, leaderRow: leaderRow, state: state, tick: tick, leaderTick: leaderTick, leader: leader);
+            return;
+        }
+
         if (state.Adopted && WorldStateReader.TryReadEasedValue(
             arena: server.Arena,
             definition: definition,
@@ -113,6 +130,56 @@ public sealed partial class WorldAdjacencyFields {
             Row: name,
             Value: leader.Raw
         ));
+    }
+
+    // A delayed follow. The invariant: the row never reads a value earlier than its delay after this authority observed
+    // the leader holding it, and values arrive in the order the leader wrote them. Both hold here and nowhere else:
+    // an observed write joins the back of the line with its arrival tick, and only the front of the line is ever
+    // written. A write is told from the row's own advance by reading the latest delivery back at the tick of the last
+    // observation: the leader's trait is exact, so the two read alike unless something wrote the row since.
+    private void AdoptDelayed(WorldServer server, WorldDefinition definition, string name, WorldStateFollow follows, WorldSessionMirror mirror, string leaderRow, FollowState state, ulong tick, long leaderTick, CellValue leader) {
+        var inFlight = (state.InFlight ??= new Queue<(ulong DueTick, long Raw)>());
+        var written = (
+            !state.Observed ||
+            !TryReadLeader(mirror: mirror, row: leaderRow, tick: state.ObservedLeaderTick, value: out var line) ||
+            (Math.Abs(value: (line.Raw - state.ObservedRaw)) > 1L)
+        );
+
+        if (written) {
+            var due = (tick + Math.Max(val1: 1UL, val2: FixedTickConversion.DurationTicks(ratePerSecond: ((ulong)definition.SimulationRateHz), seconds: follows.DelaySeconds)));
+
+            // The leader's ticks ahead of this authority's are fixed at each observation, as an undelayed adoption
+            // fixes them, so later boundaries read the leader at the tick that stands beside this one.
+            state.Adopted = true;
+            state.LeaderAhead = (leaderTick - ((long)tick));
+            state.Observed = true;
+            state.ObservedRaw = leader.Raw;
+            state.ObservedLeaderTick = leaderTick;
+            if (inFlight.Count >= MaxFollowValuesInFlight) {
+                // The line is full: the newest value in flight gives way to this one, keeping its arrival tick.
+                var held = inFlight.ToArray();
+
+                inFlight.Clear();
+                for (var index = 0; (index < (held.Length - 1)); index++) { inFlight.Enqueue(item: held[index]); }
+                due = held[^1].DueTick;
+                WorldFederationWork.Process.Add(kind: WorldFederationWork.FollowDelayOverflows, amount: 1L);
+            }
+            inFlight.Enqueue(item: (due, leader.Raw));
+            WorldFederationWork.Process.Add(kind: WorldFederationWork.FollowDelayed, amount: 1L);
+        }
+
+        while ((inFlight.Count > 0) && (inFlight.Peek().DueTick <= tick)) {
+            var arrived = inFlight.Dequeue();
+
+            WorldFederationWork.Process.Add(kind: WorldFederationWork.FollowAdoptions, amount: 1L);
+            server.AdoptFollowed(mutation: new WorldMutation.UpsertStateCell(
+                Key: StateRow.SlotKey.Value,
+                Kind: WorldDocumentWriteKind.Set,
+                Principal: Principal.World,
+                Row: name,
+                Value: arrived.Raw
+            ));
+        }
     }
 
     // Reads the leader's row at one of its ticks, by its own trait from its latest delivery.

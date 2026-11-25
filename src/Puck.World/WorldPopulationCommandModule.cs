@@ -602,15 +602,47 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
             var acceleration = authoredArea.Acceleration switch {
                 WorldGravityAreaAcceleration.Directional directional => $"directional({directional.Value.X:0.#####},{directional.Value.Y:0.#####},{directional.Value.Z:0.#####})",
                 WorldGravityAreaAcceleration.Radial radial => $"radial({radial.Magnitude:0.#####})",
+                WorldGravityAreaAcceleration.Axial axial => $"axial({axial.Magnitude:0.#####})",
+                WorldGravityAreaAcceleration.Planar planar => $"planar({planar.Magnitude:0.#####})",
+                WorldGravityAreaAcceleration.PointMass point => $"point(g{point.SurfaceGravity:0.#####}@r{point.ReferenceRadius:0.#####})",
+                WorldGravityAreaAcceleration.Surface surface => $"surface({surface.Magnitude:0.#####})",
                 _ => "unknown",
             };
             var ride = ((area.Attach is { } attach)
                 ? $"body:{attach.BodyIndex}"
                 : "static"
             );
+            var bindings = string.Concat(
+                ((authoredArea.Blend > 0f) ? $"/blend={authoredArea.Blend:0.#####}" : string.Empty),
+                ((area.WeightRow is { } weightRow) ? $"/weight={weightRow}" : string.Empty),
+                ((area.ScaleRow is { } scaleRow) ? $"/scale={scaleRow}" : string.Empty),
+                ((area.VectorRows is { } vectorRows) ? $"/vector=({vectorRows.X},{vectorRows.Y},{vectorRows.Z})" : string.Empty)
+            );
 
-            areaRows.Add(item: $"#{area.AuthoredIndex}:{area.PlacementId}/priority={area.Priority}/mode={area.Mode}/{bounds}/{acceleration}/ride={ride}/order={compiledOrder}");
+            areaRows.Add(item: $"#{area.AuthoredIndex}:{area.PlacementId}/priority={area.Priority}/mode={area.Mode}/{bounds}/{acceleration}{bindings}/ride={ride}/order={compiledOrder}");
         }
+
+        var orbitRows = new List<string>();
+
+        if (Population.Orbits is { } orbitField) {
+            var orbits = orbitField.Orbits;
+
+            for (var index = 0; (index < orbits.Length); index++) {
+                var position = orbitField.Position(index: index);
+                var rider = ((orbits[index].BodyIndex >= 0) ? $"body:{orbits[index].BodyIndex}" : "none");
+
+                orbitRows.Add(item: $"{orbits[index].Name}/a={DescribeFixed(value: orbits[index].Orbit.SemiMajorAxis)}/e={DescribeFixed(value: orbits[index].Orbit.Eccentricity)}/periodTicks={orbits[index].PeriodTicks}/rider={rider}/at=({DescribeFixed(value: position.X)},{DescribeFixed(value: position.Y)},{DescribeFixed(value: position.Z)})");
+            }
+        }
+
+        var orbitStatistics = (Population.Orbits?.Statistics ?? default);
+        var orbitDescription = ((orbitRows.Count == 0) ? "none" : string.Join(separator: ",", values: orbitRows));
+        var tides = Population.GravityTides;
+        var tensor = (tides?.Tide.Entries ?? default);
+        var tideDescription = (((tides is null) || (tides.SourceCount == 0))
+            ? "none"
+            : $"sources={tides.SourceCount} refused={tides.RefusedSourceCount} formed={tides.FormCount} tensor=({tensor.Xx:0.########},{tensor.Xy:0.########},{tensor.Xz:0.########},{tensor.Yy:0.########},{tensor.Yz:0.########},{tensor.Zz:0.########})"
+        );
         var areaDescription = ((areaRows.Count == 0)
             ? "none"
             : string.Join(
@@ -621,7 +653,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
 
         return string.Create(
             provider: CultureInfo.InvariantCulture,
-            handler: $"[world.gravity: solver {authored.Solver} uniform=({uniform.X:0.#####},{uniform.Y:0.#####},{uniform.Z:0.#####}) G={authored.GravitationalConstant:0.#####} softening={authored.SofteningLength:0.#####} | sources {sourceRows} | areas {areaDescription} | compiled={compiled.Attractors.Length} static source(s), {compiled.Areas.Length} area(s) last globalTargets={targetCount} nodes={statistics.TreeNodeCount} exact={statistics.ExactSourceEvaluations} approximate={statistics.ApproximatedNodeEvaluations} represented={statistics.ApproximatedSourceCount} m2m={statistics.MultipoleToMultipoleTranslations} m2l={statistics.MultipoleToLocalTranslations} l2l={statistics.LocalToLocalTranslations} local={statistics.LocalExpansionEvaluations} deferred={statistics.DeferredLocalExpansionEvaluations} areaTargets={areaStatistics.TargetCount} areaActive={areaStatistics.ActiveAreaCount} areaEvaluations={areaStatistics.EvaluationCount} areaMatches={areaStatistics.MatchCount}]"
+            handler: $"[world.gravity: solver {authored.Solver} uniform=({uniform.X:0.#####},{uniform.Y:0.#####},{uniform.Z:0.#####}) G={authored.GravitationalConstant:0.#####} softening={authored.SofteningLength:0.#####} | sources {sourceRows} | areas {areaDescription} | orbits {orbitDescription} evaluated={orbitStatistics.EvaluationCount} riding={orbitStatistics.RiderCount} joining={orbitStatistics.JoiningCount} | tide {tideDescription} | compiled={compiled.Attractors.Length} static source(s), {compiled.Areas.Length} area(s) last globalTargets={targetCount} nodes={statistics.TreeNodeCount} exact={statistics.ExactSourceEvaluations} approximate={statistics.ApproximatedNodeEvaluations} represented={statistics.ApproximatedSourceCount} m2m={statistics.MultipoleToMultipoleTranslations} m2l={statistics.MultipoleToLocalTranslations} l2l={statistics.LocalToLocalTranslations} local={statistics.LocalExpansionEvaluations} deferred={statistics.DeferredLocalExpansionEvaluations} areaTargets={areaStatistics.TargetCount} areaActive={areaStatistics.ActiveAreaCount} areaEvaluations={areaStatistics.EvaluationCount} areaMatches={areaStatistics.MatchCount} surfaceQueries={areaStatistics.SurfaceQueryCount}]"
         );
     }
     // The world.parked readout: every entity index currently PARKED (see WorldPopulation.Entry.Parked), its

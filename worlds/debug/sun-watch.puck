@@ -1,0 +1,41 @@
+// The debug world's side of the sun (sun.puck): the switch it owns, and the sun's light and mass as they reach the
+// valley. The sun is a world of its own that follows the switch and decides what it does; this world follows the sun's
+// light and mass back, `sunDelayPlanet` seconds after the sun wrote them (moon-frame.puck), and the moon follows them
+// on its own shorter delay. `sun.switch 0` puts the sun out and `sun.switch 1` lights it: the moon in the valley's
+// sky goes dark first, since the moon's world lights itself from the light it has received, and the valley's own rows
+// read the change a little over half a second after the moon's.
+
+import "moon-frame"
+
+references [
+  { document: "sun", name: "sun" }
+]
+
+destinations [
+  { durability: persisted, name: "sun", reference: "sun", scope: global }
+]
+
+state {
+  world [
+    // The switch this world owns: the sun follows it.
+    { name: "sunSwitch", kind: "Int", value: 1, min: 0, max: 1 }
+    // The sun's light and mass as received here.
+    { name: "sunLight", kind: "Fixed", value: "1", follows { destination: "sun", delaySeconds: sunDelayPlanet } }
+    { name: "sunMass", kind: "Fixed", value: "1", follows { destination: "sun", delaySeconds: sunDelayPlanet } }
+    // The moon's received light, read here as the moon reads it, to compare the two arrivals.
+    { name: "moonSunLight", kind: "Fixed", value: "1", follows { destination: "moon", row: "sunLight" } }
+  ]
+}
+
+commands [
+  {
+    name: "sun.switch"
+    help: "Puts the sun out (0) or lights it (1). Writes the sunSwitch row, which the sun's own world follows; its light and mass then reach the moon and the valley after their delays (world.state sunLight, world.state moonSunLight)."
+    parameters [
+      { name: "lit", kind: Integer }
+    ]
+    lines [
+      "world.state.cell.set sunSwitch $value {lit}"
+    ]
+  }
+]

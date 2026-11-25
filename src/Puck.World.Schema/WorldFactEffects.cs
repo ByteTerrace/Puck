@@ -37,9 +37,11 @@ public enum WorldDocumentWrite : byte {
 /// <param name="Designation">What a designation writes.</param>
 /// <param name="UseMoveDirection">Whether a planar impulse prefers the normalized current movement command.</param>
 /// <param name="Curve">The timed move's progress curve.</param>
-/// <param name="Point">The point a <see cref="WorldBodyDesignationKind.Point"/> designation writes, or
+/// <param name="Arc">The height a timed move's path stands off the straight line at its middle.</param>
+/// <param name="Exclusive">Whether a timed move owns the body's translation while it runs.</param>
+/// <param name="Point">The point a <see cref="WorldBodyDesignationKind.Point"/> designation writes or a timed move ends at, or
 /// <see langword="null"/> for any other operation.</param>
-public readonly record struct WorldBodyAction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, string? Register = null, CellKey TargetKey = default, CompiledCellRef? TargetKeyFrom = null, WorldBodyDesignationKind Designation = WorldBodyDesignationKind.Body, bool UseMoveDirection = false, BodyMotionCurve Curve = BodyMotionCurve.Linear, WorldPointTarget? Point = null);
+public readonly record struct WorldBodyAction(BodyMotionOp Operation, FixedQ4816 Value, FixedVector3 Direction, ulong DurationTicks, string? Register = null, CellKey TargetKey = default, CompiledCellRef? TargetKeyFrom = null, WorldBodyDesignationKind Designation = WorldBodyDesignationKind.Body, bool UseMoveDirection = false, BodyMotionCurve Curve = BodyMotionCurve.Linear, WorldPointTarget? Point = null, FixedQ4816 Arc = default, bool Exclusive = false);
 /// <summary>The world point a rule's point designation writes: a base (the origin, or a placement's document position,
 /// read when the effect fires) plus an offset that is either a literal or three fixed-point expressions evaluated when
 /// it fires.</summary>

@@ -1457,8 +1457,10 @@ public static partial class WorldDefinitionValidator {
         }
         ValidateGravity(
             errors: errors,
+            collision: definition.Collision,
             gravity: definition.Gravity,
             placements: definition.Placements,
+            state: definition.AuthoredState,
             worldSeed: (definition.Generation?.WorldSeed ?? 0UL)
         );
         _ = ValidateTextCatalog(

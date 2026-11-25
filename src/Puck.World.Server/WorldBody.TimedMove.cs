@@ -25,6 +25,8 @@ public readonly record struct WorldTimedBodyMove(FixedTimedMove Motion, FixedQ48
         writer.WriteUInt64(value: move.Motion.DurationTicks);
         writer.WriteUInt64(value: move.ElapsedTicks);
         writer.WriteByte(value: (byte)move.Motion.Curve);
+        writer.WriteFixedVector(value: move.Motion.Arc);
+        writer.WriteBoolean(value: move.Motion.Exclusive);
     }
 
     internal static WorldTimedBodyMove Read(ref WireReader reader) {
@@ -36,11 +38,13 @@ public readonly record struct WorldTimedBodyMove(FixedTimedMove Motion, FixedQ48
         var duration = reader.ReadUInt64();
         var elapsed = reader.ReadUInt64();
         var curve = (BodyMotionCurve)reader.ReadByte();
+        var arc = reader.ReadFixedVector();
+        var exclusive = reader.ReadBoolean();
         if ((elapsed >= duration) || !Enum.IsDefined(curve)) {
             reader.Fail(detail: "invalid timed move continuation", refusal: WireRefusal.PayloadMalformed);
             return default;
         }
-        return new(Motion: new(displacement, yaw, duration, curve), StartYaw: startYaw, ElapsedTicks: elapsed);
+        return new(Motion: new(displacement, yaw, duration, curve, arc, exclusive), StartYaw: startYaw, ElapsedTicks: elapsed);
     }
 }
 
@@ -70,14 +74,20 @@ public sealed partial class WorldBody {
         var right = orientation.Rotate(vector: FixedVector3.UnitX).RejectFrom(unitAxis: up);
         var back = orientation.Rotate(vector: FixedVector3.UnitZ).RejectFrom(unitAxis: up);
         FixedVector3 displacement;
+        FixedVector3 arc;
         try {
-            displacement = checked(((right * instruction.Direction.X) + (back * instruction.Direction.Z)) * m_scale);
+            // A move toward a point carries the displacement its effect resolved in world axes; any other travels in
+            // the body's own frame at the body's scale. The arc stands along the body's up either way.
+            displacement = (instruction.WorldFrame
+                ? instruction.Direction
+                : checked((((right * instruction.Direction.X) + (back * instruction.Direction.Z)) + (up * instruction.Direction.Y)) * m_scale));
+            arc = checked((up * instruction.Arc) * m_scale);
         } catch (OverflowException) {
             return false;
         }
 
         var startYaw = (TimedYawFrame(up, attitudeUp).Conjugate() * orientation).Yaw();
-        move = new(Motion: new(displacement, instruction.Value, instruction.DurationTicks, instruction.Curve), StartYaw: startYaw, ElapsedTicks: 0);
+        move = new(Motion: new(displacement, instruction.Value, instruction.DurationTicks, instruction.Curve, arc, instruction.Exclusive), StartYaw: startYaw, ElapsedTicks: 0);
         return true;
     }
 
@@ -86,6 +96,17 @@ public sealed partial class WorldBody {
         if (!m_timedMove.IsActive) { return true; }
 
         var sample = m_timedMove.SampleStep(scratch.StepTicks);
+
+        // An exclusive move owns the translation: the step starts from where the body stands, whatever its program
+        // integrated, and the body carries no velocity out of the move but what it gains after it ends. It is off its
+        // support for the move's whole length, so the ground snap never holds it to the surface it is leaving.
+        if (m_timedMove.Motion.Exclusive) {
+            scratch.NextPosition = m_position;
+            m_planarVelocity = FixedVector3.Zero;
+            m_verticalVelocity = FixedQ4816.Zero;
+            m_verticalVelocityAccumulator.Reset();
+            m_grounded = false;
+        }
         if (!FixedVector3.TryAdd(scratch.NextPosition, sample.Displacement, out var nextPosition)
             || !FixedVector3.TrySubtract(nextPosition, m_position, out _)) {
             NoteSweepRefusal(refusal: ContactRefusal.UnrepresentableSweep);

@@ -65,6 +65,10 @@ references [
     document: "debug"
     name: "debug"
   }
+  {
+    document: "sun"
+    name: "sun"
+  }
 ]
 
 destinations [
@@ -72,6 +76,12 @@ destinations [
     durability: persisted
     name: "debug"
     reference: "debug"
+    scope: global
+  }
+  {
+    durability: persisted
+    name: "sun"
+    reference: "sun"
     scope: global
   }
 ]
@@ -113,16 +123,21 @@ bodies {
   reconnectGraceSeconds: 3
 }
 
-// The pull: toward the centre at `moonGravity` everywhere inside `moonReach`. Outside it only the valley's pull is
-// left, toward the seam and far too faint to turn a body: under a metre a second squared a field moves no body's up,
-// so a body out in the open keeps the up it came with until the moon takes it, and keeps the moon's on the way out.
+// The pull: toward the centre at `moonGravity` everywhere inside `moonReach`. The planet and the sun are too far to
+// pull a body here against the moon, and their whole pull moves the moon and everything on it alike, so what this
+// world feels of them is their tide: the difference of each pull across the moon, a stretch along the line to the
+// source and a squeeze across it, which grows with distance from the moon's centre. Outside the reach it is all that
+// is left, far too faint to turn a body: under a metre a second squared a field moves no body's up, so a body out in
+// the open keeps the up it came with until the moon takes it, and keeps the moon's on the way out. The sun's share
+// is scaled by the sun's mass as it has reached the moon (`sunMass`, a followed row), so a sun that goes out stops
+// pulling here when its last pull has arrived.
 gravity {
   attractors []
   gravitationalConstant: 0
   isActive: true
   softeningLength: 0.5
   solver: Pairwise
-  uniform [0, -0.05, 0]
+  uniform [0, 0, 0]
   areas [
     {
       placementId: `moon-core`
@@ -131,6 +146,11 @@ gravity {
       bounds: sphere(radius: moonReach)
       acceleration: radial(magnitude: moonGravity)
     }
+  ]
+  tideOrigin: `moon-core`
+  tides [
+    { placementId: `planet-core`, surfaceGravity: planetGravity, referenceRadius: planetRadius }
+    { placementId: `sun-core`, surfaceGravity: sunGravity, referenceRadius: sunRadius, scale: sunMass }
   ]
 }
 
@@ -166,6 +186,16 @@ placements {
   placement "moon-core" {
     prototype: "place"
     position [0, 0, 0]
+  }
+
+  // Where the planet's centre and the sun stand in this world's coordinates: the sources of the tide.
+  placement "planet-core" {
+    prototype: "place"
+    position [(debugOrigin[0] + planetCentre[0]), (debugOrigin[1] + planetCentre[1]), (debugOrigin[2] + planetCentre[2])]
+  }
+  placement "sun-core" {
+    prototype: "place"
+    position [(debugOrigin[0] + sunCentre[0]), (debugOrigin[1] + sunCentre[1]), (debugOrigin[2] + sunCentre[2])]
   }
 
   placement "place-moon-pole" {
@@ -359,7 +389,12 @@ prototypes {
 // `day` there moves the moon's sun too, and writing it here is refused. Between adoptions the row advances at the
 // shared rate, as the debug world's does, so the two read alike every tick.
 timeline {
-  clocks [{ name: day, state: day, spanSeconds: 24h }]
+  clocks [
+    { name: day, state: day, spanSeconds: 24h }
+    // The sun's light as received, on a dial whose half turn spans dark to full (a clock wraps at its whole span), which
+    // the key light's strength keys on.
+    { name: sun, state: sunDial, spanSeconds: 1s }
+  ]
 }
 
 state {
@@ -371,6 +406,12 @@ state {
       advance { perSecondNumerator: 1, perSecondDenominator: sharedDaySeconds }
       follows { destination: "debug" }
     }
+    // The sun's light and mass as they reach the moon (sun.puck): each read `sunDelayMoon` seconds after the sun wrote
+    // it. The key light below burns at the light received, and the sun's tide is scaled by the mass received.
+    { name: "sunLight", kind: "Fixed", value: "1", follows { destination: "sun", delaySeconds: sunDelayMoon } }
+    { name: "sunMass", kind: "Fixed", value: "1", follows { destination: "sun", delaySeconds: sunDelayMoon } }
+    // The dial the key light reads: half the light received, which the rule below keeps.
+    { name: "sunDial", kind: "Fixed", value: "0.5" }
     // The beacon switch beside the moon painting in the debug world (moon-beacon.puck): the debug world owns it, this
     // row follows it, and the rules below decide what it does here.
     { name: "moonBeacon", kind: "Int", value: 0, min: 0, max: 1, follows { destination: "debug" } }
@@ -412,6 +453,13 @@ rule "beacon-dark" {
   beaconPower = 0
 }
 
+// The moon lights itself from the sun's light as it has arrived here, never from the sun's world directly.
+rule "sun-dial" {
+  when sunDial != sunLight / 2
+  mode: Level
+  sunDial = sunLight / 2
+}
+
 // Vacuum: a hard sun over a black sky of stars, and no air between the eye and the far crater walls. The sun is the
 // valley's, turning with the shared day at full strength all the way round, since no horizon of the valley's hides it
 // here: the ground under it has a day and a night, and the side the valley sees shows a phase.
@@ -423,7 +471,15 @@ render {
         name: "key",
         direction: sunDirection(sharedDayStart, sharedSunHeading, sharedNoonElevation),
         color: "#FFF4E2",
-        illuminance: 100000lx,
+        // Full strength while the sun's light arrives, and dark when the last of it has: the moon lights itself from
+        // the light it has received, never from the sun's world directly.
+        illuminance: {
+          clock: sun
+          keys [
+            { at: 0, value: 0 }
+            { at: 0.5, value: 100000 }
+          ]
+        },
         shadow: always,
         angularRadius: 0.0046
       )

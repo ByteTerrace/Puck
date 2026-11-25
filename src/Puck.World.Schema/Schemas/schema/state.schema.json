@@ -1174,6 +1174,11 @@
                   "null"
                 ],
                 "default": null
+              },
+              "delaySeconds": {
+                "description": "How long the leader\u0027s value takes to arrive: the row reads what the leader\u0027s row read this long ago, each of the leader\u0027s writes arriving in order that long after this authority observed it. An author derives it from the distance between the two worlds over the speed the influence travels at. Zero, the default, adopts the leader\u0027s value at the next tick boundary. Until the first value arrives the row keeps its authored one. The values in flight are not checkpointed: a restored authority delays again from its first new observation, which is never earlier than the delay allows.",
+                "type": "number",
+                "default": 0
               }
             },
             "required": [

@@ -114,9 +114,7 @@ public sealed partial class WorldBody {
             // own per-sample gradient), and adopting a measured contact normal on top would make it wobble, which a
             // marginal handoff — an adjacency seam strip — cannot absorb.
             if (
-                m_grounded &&
-                (m_upPolicy == WorldBodyUpPolicy.SurfaceFollowing) &&
-                TrySolvedGravity(acceleration: out _) &&
+                StandsBySurface() &&
                 (contactResolution.GroundNormal != FixedVector3.Zero)
             ) {
                 // BOUNDED, for the same reason the field's axis is: a measured normal is continuous only where the

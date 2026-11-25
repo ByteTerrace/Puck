@@ -250,8 +250,10 @@ public static partial class BodyActionSpecFactory {
         }
 
         return new CompiledBodyInstruction(
+            Arc: form.Arc,
             Curve: form.Curve,
             Direction: form.Direction,
+            Exclusive: form.Exclusive,
             UseMoveDirection: form.UseMoveDirection,
             DurationTicks: form.DurationTicks,
             Operation: form.Operation,

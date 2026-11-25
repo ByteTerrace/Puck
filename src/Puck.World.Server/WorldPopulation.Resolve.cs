@@ -98,10 +98,13 @@ public sealed partial class WorldPopulation {
 
         // The gravitational field the definition authors. Compiled here beside the contact field so one derivation
         // serves a fresh activation and a live body alike.
+        var gravity = FixedWorldGravity.Compile(definition: definition);
+
         m_gravityField = new WorldGravityField(
             capacity: Capacity,
-            compiled: FixedWorldGravity.Compile(definition: definition)
+            compiled: gravity
         );
+        m_orbitField = new WorldOrbitField(compiled: gravity);
 
         // The field lattices (InstallFields) were installed before this build; the solid consumers read them.
         CompileSolidConsumers(

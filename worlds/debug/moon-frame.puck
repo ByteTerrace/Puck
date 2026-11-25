@@ -17,10 +17,40 @@ let moonRadius = 600
 let moonReach = 1500
 let moonGravity = 6
 
-// The seam between the two authorities: a level plane this high over the valley floor, below the moon's reach, that
-// wide and deep. Under it a body is the debug world's, over it the moon's.
-let skySeamAltitude = 2400
+// The planet under the valley: the pull a body feels on the valley floor and how far under the floor the planet's
+// centre lies, which together are its mass as the moon's gravity and radius are the moon's. A small, dense world: the
+// two are a double planet.
+let planetGravity = 18
+let planetRadius = 614
+let planetCentre = [0, (0 - planetRadius), 0]
+let planetMass = (planetGravity * planetRadius * planetRadius)
+let moonMass = (moonGravity * moonRadius * moonRadius)
+
+// The seam between the two authorities: a level plane over the valley floor, that wide and deep. Under it a body is
+// the debug world's, over it the moon's. Its height is derived, never placed: on the line between the two centres the
+// pulls balance `moonHold` metres from the moon's centre (the distance apart over one plus the root of the masses'
+// ratio), and the seam is level with that point. Editing either world's gravity or radius moves it.
+let centresApart = squareRoot(
+  ((moonCentre[0] * moonCentre[0]) + ((moonCentre[1] + planetRadius) * (moonCentre[1] + planetRadius))) + (moonCentre[2] * moonCentre[2])
+)
+let moonHold = (centresApart / (1 + squareRoot(planetMass / moonMass)))
+let skySeamAltitude = (moonCentre[1] - ((moonHold * (moonCentre[1] + planetRadius)) / centresApart))
 let skySeamSpan = 20000
+
+// The sun: where it stands in the frame the two worlds share, its mass as a pull at a radius, and how fast its light and
+// its pull cross the system. Each world reads the sun's rows that long after the sun wrote them (sun.puck, a followed
+// row's `delaySeconds`), so the moon, the nearer of the two, meets a change first.
+let sunCentre = [-9000, 12000, 0]
+let sunGravity = 30
+let sunRadius = 1500
+let influenceSpeed = 2500
+let sunToPlanet = squareRoot(((sunCentre[0] * sunCentre[0]) + (sunCentre[1] * sunCentre[1])) + (sunCentre[2] * sunCentre[2]))
+let sunToMoon = squareRoot(
+  (((sunCentre[0] - moonCentre[0]) * (sunCentre[0] - moonCentre[0])) + ((sunCentre[1] - moonCentre[1]) * (sunCentre[1] - moonCentre[1]))) + ((sunCentre[2] - moonCentre[2]) * (sunCentre[2] - moonCentre[2]))
+)
+// The delays, rounded to a thirtieth of a second so each is a whole number of both worlds' ticks.
+let sunDelayPlanet = (round((sunToPlanet / influenceSpeed) * 30) / 30)
+let sunDelayMoon = (round((sunToMoon / influenceSpeed) * 30) / 30)
 
 // The launch field's pad on the valley floor (launch.puck), where the trip starts and ends: its centre over the ground,
 // the height of its top, and the heading the ship on it faces.

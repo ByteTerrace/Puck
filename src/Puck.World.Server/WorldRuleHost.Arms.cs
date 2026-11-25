@@ -425,14 +425,36 @@ public sealed partial class WorldRuleHost {
             return true;
         }
         var instruction = new CompiledBodyInstruction(
+            Arc: operation.Arc,
             Curve: operation.Curve,
             Direction: operation.Direction,
+            Exclusive: operation.Exclusive,
             UseMoveDirection: operation.UseMoveDirection,
             DurationTicks: operation.DurationTicks,
             Operation: operation.Operation,
             StateSlot: -1,
             Value: operation.Value
         );
+        if ((operation.Operation == BodyMotionOp.TimedMove) && (operation.Point is { } destination)) {
+            // A move toward a placement travels from where the body stands now to the point the placement stands at
+            // now, in world axes.
+            if (!TryDesignatedPoint(point: out var end, reason: out var endReason, target: destination, values: in values)) {
+                return Refuse(
+                    code: WorldRuleEffectRefusal.BodyTargetInvalid,
+                    reason: endReason,
+                    refusal: out refusal
+                );
+            }
+            if (!FixedVector3.TrySubtract(end, body.FixedPosition, out var travel)) {
+                return Refuse(
+                    code: RuleEffectRefusal.Arithmetic,
+                    reason: $"timedMove displacement is unrepresentable for body:{bodyIndex}",
+                    refusal: out refusal
+                );
+            }
+
+            instruction = instruction with { Direction = travel, WorldFrame = true };
+        }
         if (operation.Operation == BodyMotionOp.TimedMove) {
             if (!body.CanStartTimedMove) {
                 return Refuse(

@@ -21,6 +21,9 @@ public static partial class WorldDefinitionValidator {
             if (row.Kind is not (CellKind.Fixed or CellKind.Int or CellKind.Bool)) {
                 errors.Add(item: $"{path} is on a {StateSpelling.Kind(kind: row.Kind)} row — a followed row holds one fixed, int or bool value.");
             }
+            if (follows.DelaySeconds < 0m) {
+                errors.Add(item: $"{path}.delaySeconds {follows.DelaySeconds} must be zero or more: how long the leader's value takes to arrive.");
+            }
             if (!row.IsSlot) {
                 errors.Add(item: $"{path} is on a keyed row — a followed row is a slot that holds the leader's one value.");
             }

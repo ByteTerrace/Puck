@@ -187,7 +187,7 @@
                   },
                   "value": {
                     "$ref": "./common.schema.json#/$defs/DocumentVector3",
-                    "description": "The acceleration vector in world units per second squared. Zero is admitted so Replace can author a zero-gravity pocket."
+                    "description": "The acceleration vector in world units per second squared. Zero is admitted so Replace can author a zero-gravity pocket. An area\u0027s Vector rows, where authored, supply the vector in its place."
                   }
                 },
                 "required": [
@@ -203,7 +203,7 @@
                     "const": "radial"
                   },
                   "magnitude": {
-                    "description": "The positive acceleration magnitude in world units per second squared.",
+                    "description": "The nonzero signed acceleration magnitude in world units per second squared.",
                     "type": "number"
                   }
                 },
@@ -212,9 +212,142 @@
                 ],
                 "additionalProperties": false,
                 "title": "WorldGravityAreaAccelerationRadial"
+              },
+              {
+                "description": "A constant-magnitude acceleration directed toward the line through the placement origin along Axis: the pull of a cylinder, or with a negative magnitude the hold of a tube\u0027s inside.",
+                "properties": {
+                  "$type": {
+                    "const": "axial"
+                  },
+                  "magnitude": {
+                    "description": "The nonzero signed acceleration magnitude in world units per second squared.",
+                    "type": "number"
+                  },
+                  "axis": {
+                    "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                    "description": "The line\u0027s placement-local direction, rotated by the placement\u0027s resolved yaw. Absent is the placement\u0027s own Y axis.",
+                    "default": null
+                  }
+                },
+                "required": [
+                  "magnitude"
+                ],
+                "additionalProperties": false,
+                "title": "WorldGravityAreaAccelerationAxial"
+              },
+              {
+                "description": "A constant-magnitude acceleration directed toward the plane through the placement origin, from either side of it: the pull of a slab a body walks on both faces of.",
+                "properties": {
+                  "$type": {
+                    "const": "planar"
+                  },
+                  "magnitude": {
+                    "description": "The nonzero signed acceleration magnitude in world units per second squared.",
+                    "type": "number"
+                  },
+                  "normal": {
+                    "$ref": "./common.schema.json#/$defs/DocumentVector3",
+                    "description": "The plane\u0027s placement-local normal, rotated by the placement\u0027s resolved yaw. Absent is the placement\u0027s own Y axis.",
+                    "default": null
+                  }
+                },
+                "required": [
+                  "magnitude"
+                ],
+                "additionalProperties": false,
+                "title": "WorldGravityAreaAccelerationPlanar"
+              },
+              {
+                "description": "An acceleration toward the placement origin that falls with distance as a uniform ball\u0027s does: SurfaceGravity at ReferenceRadius, the inverse square of the distance beyond it, and in proportion to the distance inside it.",
+                "properties": {
+                  "$type": {
+                    "const": "point"
+                  },
+                  "surfaceGravity": {
+                    "description": "The nonzero signed acceleration at the reference radius.",
+                    "type": "number"
+                  },
+                  "referenceRadius": {
+                    "description": "The positive distance from the origin at which the surface value holds, multiplied by the placement\u0027s scale.",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "surfaceGravity",
+                  "referenceRadius"
+                ],
+                "additionalProperties": false,
+                "title": "WorldGravityAreaAccelerationPointMass"
+              },
+              {
+                "description": "A constant-magnitude acceleration toward the nearest solid surface: against the world contact field\u0027s gradient at the body, so a body walks on whatever shape the world\u0027s solids give the field. The world must select gradient-derived up (GradientDerivedUp), which is what makes its contact provider answer the gradient.",
+                "properties": {
+                  "$type": {
+                    "const": "surface"
+                  },
+                  "magnitude": {
+                    "description": "The nonzero signed acceleration magnitude in world units per second squared.",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "magnitude"
+                ],
+                "additionalProperties": false,
+                "title": "WorldGravityAreaAccelerationSurface"
               }
             ],
             "title": "WorldGravityAreaAcceleration"
+          },
+          "blend": {
+            "description": "The depth inside the bound, in world units, over which the area\u0027s weight rises smoothly from nothing at the bound to one. Zero, the default, gives the area its whole weight everywhere inside. At a weight between the two a Replace area mixes its answer with the accumulated one in that proportion and a Combine area adds that share of its own, so a body passing between two areas turns across the depth and never in one tick.",
+            "type": "number",
+            "default": 0
+          },
+          "weight": {
+            "description": "A Fixed state row whose value, clamped to zero through one, multiplies the area\u0027s weight: zero takes the area out of the fold altogether. Absent is one.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "scale": {
+            "description": "A Fixed state row whose signed value multiplies the area\u0027s acceleration: minus one turns the pull about. Absent is one.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "vector": {
+            "description": "Three Fixed state rows that supply a Directional area\u0027s placement-local vector in place of the authored one. Each is a row of its own so each may be a followed row: another world\u0027s value, read here as gravity.",
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "x": {
+                "description": "The Fixed slot row holding the vector\u0027s placement-local x.",
+                "type": "string"
+              },
+              "y": {
+                "description": "The Fixed slot row holding the vector\u0027s placement-local y.",
+                "type": "string"
+              },
+              "z": {
+                "description": "The Fixed slot row holding the vector\u0027s placement-local z.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "z"
+            ],
+            "additionalProperties": false,
+            "default": null,
+            "title": "WorldGravityAreaVector"
           }
         },
         "required": [
@@ -229,8 +362,158 @@
       },
       "default": null
     },
+    "orbits": {
+      "description": "Closed-form orbits, each about a placement. Absent means none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A closed-form orbit about a placement: a conic whose phase is an exact fraction of the engine tick, so its position at any tick is computed directly and never by stepping the ticks before it.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The orbit\u0027s name, unique in the section.",
+            "type": "string"
+          },
+          "around": {
+            "description": "The placement at the orbit\u0027s focus. One attached to a body follows that body, so an orbit nests about a body riding another.",
+            "type": "string"
+          },
+          "semiMajorAxis": {
+            "description": "The positive semi-major axis, in world units.",
+            "type": "number"
+          },
+          "periodSeconds": {
+            "description": "The positive period, an exact whole number of engine ticks.",
+            "type": "number"
+          },
+          "eccentricity": {
+            "description": "The eccentricity, zero for a circle and below MaxEccentricity.",
+            "type": "number",
+            "default": 0
+          },
+          "inclinationDegrees": {
+            "description": "The tilt of the orbit\u0027s plane from the world\u0027s XZ plane, about its line of nodes.",
+            "type": "number",
+            "default": 0
+          },
+          "ascendingNodeDegrees": {
+            "description": "The heading of the line of nodes about \u002BY from \u002BX.",
+            "type": "number",
+            "default": 0
+          },
+          "periapsisDegrees": {
+            "description": "The angle in the plane from the line of nodes to the periapsis.",
+            "type": "number",
+            "default": 0
+          },
+          "phase": {
+            "description": "The fraction of a turn past the periapsis at engine tick zero.",
+            "type": "number",
+            "default": 0
+          },
+          "bodyIndex": {
+            "description": "The population body that rides the orbit, or absent for an orbit nothing rides.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "riding": {
+            "description": "A state row whose nonzero value keeps the body on the orbit. Absent rides always.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "joinSpeed": {
+            "description": "The speed, in world units per second, at which a body away from the orbit closes on it once it rides again, on top of the orbit\u0027s own motion: it catches the rails rather than jumping onto them. Zero, the default, puts the body on the orbit at once.",
+            "type": "number",
+            "default": 0
+          }
+        },
+        "required": [
+          "name",
+          "around",
+          "semiMajorAxis",
+          "periodSeconds"
+        ],
+        "additionalProperties": false,
+        "title": "WorldGravityOrbit"
+      },
+      "default": null
+    },
+    "tides": {
+      "description": "Far sources whose pull reaches the world as a tide. Absent means none.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "description": "A far mass whose pull reaches this world as a tide: the difference of its pull across the world, since the pull itself moves the world\u0027s frame with everything in it and is dropped.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "surfaceGravity": {
+            "description": "The positive acceleration the source would give at ReferenceRadius from its centre, in world units per second squared. With the radius it states the source\u0027s mass in the quantities a designer observes.",
+            "type": "number"
+          },
+          "referenceRadius": {
+            "description": "The positive distance from the source\u0027s centre at which SurfaceGravity holds.",
+            "type": "number"
+          },
+          "placementId": {
+            "description": "The placement at the source\u0027s centre, in this world\u0027s frame. Exactly one of this and Orbit is authored.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "orbit": {
+            "description": "The orbit whose position is the source\u0027s centre.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "scale": {
+            "description": "A Fixed state row whose value multiplies the source\u0027s mass: a followed row carries another world\u0027s mass here, and zero is a source that has gone. Absent is one.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "surfaceGravity",
+          "referenceRadius"
+        ],
+        "additionalProperties": false,
+        "title": "WorldGravityTide"
+      },
+      "default": null
+    },
+    "tideOrigin": {
+      "description": "The placement the tide is formed at: the point of the world that falls freely with the far sources\u0027 pull. Absent is the world\u0027s origin.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
     "isActive": {
-      "description": "Gets a value indicating whether the section declares an active global or bounded local field.",
+      "description": "Gets a value indicating whether the section declares an active global or bounded local field, an orbit or a tide.",
       "type": "boolean"
     }
   },

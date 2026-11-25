@@ -8006,7 +8006,7 @@ export type WorldEffectStartTimer = {
 };
 
 /**
- * Moves a body along its launch plane and turns it through a signed relative yaw over time.
+ * Moves a body over time, turning it through a signed relative yaw: across its launch plane and along its up in its own frame, or to a point of the world.
  */
 export type WorldEffectTimedMove = {
   $type?: "timedMove";
@@ -8034,6 +8034,26 @@ export type WorldEffectTimedMove = {
    * The recipient of a world rule. A kit action supplies its own body.
    */
   key?: StateChannelRefNonNullable;
+  /**
+   * Travel along the body's up at the launch, in body-sized world units.
+   */
+  up?: number;
+  /**
+   * The height the path stands off the straight line at its middle, along the body's up at the launch, in body-sized world units: the path is a parabola that leaves and arrives on the line.
+   */
+  arc?: number;
+  /**
+   * Whether the move owns the body's translation while it runs: its walk and its fall add nothing, it is off its support throughout, and it ends at rest. The default adds the move to ordinary locomotion.
+   */
+  exclusive?: boolean;
+  /**
+   * The placement the move ends at, read when the effect fires: the travel is from where the body stands to that placement's position plus TowardOffset, in place of Right, Forward and Up. A world rule's only.
+   */
+  toward?: string | null;
+  /**
+   * The offset from Toward's position, in world axes.
+   */
+  towardOffset?: DocumentVector3;
 };
 
 /**
@@ -8379,7 +8399,19 @@ export type WorldGravity = {
    */
   areas?: (WorldGravityArea | null)[] | null;
   /**
-   * Gets a value indicating whether the section declares an active global or bounded local field.
+   * Closed-form orbits, each about a placement. Absent means none.
+   */
+  orbits?: (WorldGravityOrbit | null)[] | null;
+  /**
+   * Far sources whose pull reaches the world as a tide. Absent means none.
+   */
+  tides?: (WorldGravityTide | null)[] | null;
+  /**
+   * The placement the tide is formed at: the point of the world that falls freely with the far sources' pull. Absent is the world's origin.
+   */
+  tideOrigin?: string | null;
+  /**
+   * Gets a value indicating whether the section declares an active global or bounded local field, an orbit or a tide.
    */
   isActive?: boolean;
 };
@@ -8405,22 +8437,82 @@ export type WorldGravityArea = {
    * The placement-relative acceleration form.
    */
   acceleration: WorldGravityAreaAcceleration;
+  /**
+   * The depth inside the bound, in world units, over which the area's weight rises smoothly from nothing at the bound to one. Zero, the default, gives the area its whole weight everywhere inside. At a weight between the two a Replace area mixes its answer with the accumulated one in that proportion and a Combine area adds that share of its own, so a body passing between two areas turns across the depth and never in one tick.
+   */
+  blend?: number;
+  /**
+   * A Fixed state row whose value, clamped to zero through one, multiplies the area's weight: zero takes the area out of the fold altogether. Absent is one.
+   */
+  weight?: string | null;
+  /**
+   * A Fixed state row whose signed value multiplies the area's acceleration: minus one turns the pull about. Absent is one.
+   */
+  scale?: string | null;
+  /**
+   * Three Fixed state rows that supply a Directional area's placement-local vector in place of the authored one. Each is a row of its own so each may be a followed row: another world's value, read here as gravity.
+   */
+  vector?: WorldGravityAreaVector | null;
 };
 
-export type WorldGravityAreaAcceleration = WorldGravityAreaAccelerationDirectional | WorldGravityAreaAccelerationRadial | null;
+export type WorldGravityAreaAcceleration = WorldGravityAreaAccelerationDirectional | WorldGravityAreaAccelerationRadial | WorldGravityAreaAccelerationAxial | WorldGravityAreaAccelerationPlanar | WorldGravityAreaAccelerationPointMass | WorldGravityAreaAccelerationSurface | null;
+
+export type WorldGravityAreaAccelerationAxial = {
+  $type?: "axial";
+  /**
+   * The nonzero signed acceleration magnitude in world units per second squared.
+   */
+  magnitude: number;
+  /**
+   * The line's placement-local direction, rotated by the placement's resolved yaw. Absent is the placement's own Y axis.
+   */
+  axis?: DocumentVector3;
+};
 
 export type WorldGravityAreaAccelerationDirectional = {
   $type?: "directional";
   /**
-   * The acceleration vector in world units per second squared. Zero is admitted so Replace can author a zero-gravity pocket.
+   * The acceleration vector in world units per second squared. Zero is admitted so Replace can author a zero-gravity pocket. An area's Vector rows, where authored, supply the vector in its place.
    */
   value: DocumentVector3;
+};
+
+export type WorldGravityAreaAccelerationPlanar = {
+  $type?: "planar";
+  /**
+   * The nonzero signed acceleration magnitude in world units per second squared.
+   */
+  magnitude: number;
+  /**
+   * The plane's placement-local normal, rotated by the placement's resolved yaw. Absent is the placement's own Y axis.
+   */
+  normal?: DocumentVector3;
+};
+
+export type WorldGravityAreaAccelerationPointMass = {
+  $type?: "point";
+  /**
+   * The nonzero signed acceleration at the reference radius.
+   */
+  surfaceGravity: number;
+  /**
+   * The positive distance from the origin at which the surface value holds, multiplied by the placement's scale.
+   */
+  referenceRadius: number;
 };
 
 export type WorldGravityAreaAccelerationRadial = {
   $type?: "radial";
   /**
-   * The positive acceleration magnitude in world units per second squared.
+   * The nonzero signed acceleration magnitude in world units per second squared.
+   */
+  magnitude: number;
+};
+
+export type WorldGravityAreaAccelerationSurface = {
+  $type?: "surface";
+  /**
+   * The nonzero signed acceleration magnitude in world units per second squared.
    */
   magnitude: number;
 };
@@ -8445,6 +8537,21 @@ export type WorldGravityAreaBoundsSphereBounds = {
 
 export type WorldGravityAreaMode = "Combine" | "Replace";
 
+export type WorldGravityAreaVector = {
+  /**
+   * The Fixed slot row holding the vector's placement-local x.
+   */
+  x: string;
+  /**
+   * The Fixed slot row holding the vector's placement-local y.
+   */
+  y: string;
+  /**
+   * The Fixed slot row holding the vector's placement-local z.
+   */
+  z: string;
+};
+
 export type WorldGravityAttractor = {
   /**
    * The placements row whose position the source sits at. The row need not be solid or visible; only its transform is read.
@@ -8454,6 +8561,57 @@ export type WorldGravityAttractor = {
    * The source's non-negative gravitational mass.
    */
   mass: number;
+};
+
+export type WorldGravityOrbit = {
+  /**
+   * The orbit's name, unique in the section.
+   */
+  name: string;
+  /**
+   * The placement at the orbit's focus. One attached to a body follows that body, so an orbit nests about a body riding another.
+   */
+  around: string;
+  /**
+   * The positive semi-major axis, in world units.
+   */
+  semiMajorAxis: number;
+  /**
+   * The positive period, an exact whole number of engine ticks.
+   */
+  periodSeconds: number;
+  /**
+   * The eccentricity, zero for a circle and below MaxEccentricity.
+   */
+  eccentricity?: number;
+  /**
+   * The tilt of the orbit's plane from the world's XZ plane, about its line of nodes.
+   */
+  inclinationDegrees?: number;
+  /**
+   * The heading of the line of nodes about +Y from +X.
+   */
+  ascendingNodeDegrees?: number;
+  /**
+   * The angle in the plane from the line of nodes to the periapsis.
+   */
+  periapsisDegrees?: number;
+  /**
+   * The fraction of a turn past the periapsis at engine tick zero.
+   */
+  phase?: number;
+  /**
+   * The population body that rides the orbit, or absent for an orbit nothing rides.
+   */
+  bodyIndex?: number | null;
+  /**
+   * A state row whose nonzero value keeps the body on the orbit. Absent rides always.
+   */
+  riding?: string | null;
+  /**
+   * The speed, in world units per second, at which a body away from the orbit closes on it once it rides again, on top of the orbit's own motion: it catches the rails rather than jumping onto them. Zero, the default, puts the body on the orbit at once.
+   */
+  joinSpeed?: number;
 };
 
 export type WorldGravityPoint = {
@@ -8472,6 +8630,29 @@ export type WorldGravityPoint = {
 };
 
 export type WorldGravitySolver = "Pairwise" | "FastMonopole" | "AdaptiveFmm";
+
+export type WorldGravityTide = {
+  /**
+   * The positive acceleration the source would give at ReferenceRadius from its centre, in world units per second squared. With the radius it states the source's mass in the quantities a designer observes.
+   */
+  surfaceGravity: number;
+  /**
+   * The positive distance from the source's centre at which SurfaceGravity holds.
+   */
+  referenceRadius: number;
+  /**
+   * The placement at the source's centre, in this world's frame. Exactly one of this and Orbit is authored.
+   */
+  placementId?: string | null;
+  /**
+   * The orbit whose position is the source's centre.
+   */
+  orbit?: string | null;
+  /**
+   * A Fixed state row whose value multiplies the source's mass: a followed row carries another world's mass here, and zero is a source that has gone. Absent is one.
+   */
+  scale?: string | null;
+};
 
 export type WorldGroup = {
   /**
@@ -14967,6 +15148,10 @@ export type WorldStateRow = {
      * The row of that world this row holds. Absent is this row's own name.
      */
     row?: string | null;
+    /**
+     * How long the leader's value takes to arrive: the row reads what the leader's row read this long ago, each of the leader's writes arriving in order that long after this authority observed it. An author derives it from the distance between the two worlds over the speed the influence travels at. Zero, the default, adopts the leader's value at the next tick boundary. Until the first value arrives the row keeps its authored one. The values in flight are not checkpointed: a restored authority delays again from its first new observation, which is never earlier than the delay allows.
+     */
+    delaySeconds?: number;
   };
 };
 

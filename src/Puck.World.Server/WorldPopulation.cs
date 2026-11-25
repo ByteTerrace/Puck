@@ -290,6 +290,10 @@ public sealed partial class WorldPopulation {
     public GravitySolveStatistics GravityStatistics => (m_gravityField?.Statistics ?? default);
     /// <summary>Gets the last bounded-local-gravity evaluation counters.</summary>
     public WorldGravityAreaStatistics GravityAreaStatistics => (m_gravityField?.AreaStatistics ?? default);
+    /// <summary>Gets the far sources' tide as the last gravity solve formed it, or <see langword="null"/> before the world resolves.</summary>
+    public WorldGravityTides? GravityTides => m_gravityField?.Tides;
+    /// <summary>Gets the world's orbits as the last step placed them, or <see langword="null"/> before the world resolves.</summary>
+    public WorldOrbitField? Orbits => m_orbitField;
 
     private WorldPlayerDefaults m_playerDefaults = null!;
     private WorldPopulationVariation m_peerVariation = null!;
@@ -307,6 +311,7 @@ public sealed partial class WorldPopulation {
     private IReadOnlyList<WorldKit> m_kitRows = [];
 
     private WorldGravityField? m_gravityField;
+    private WorldOrbitField? m_orbitField;
 
     // Reused across ticks: a steady-state population allocates nothing to solve its field.
     private readonly List<WorldGravityTarget> m_gravityTargets = [];

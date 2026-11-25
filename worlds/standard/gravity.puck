@@ -1,0 +1,115 @@
+// The standard's gravity designs, a library: what a world of planetoids is authored from. It hands its importers
+// functions and templates and emits no document. The engine supplies the mechanisms (a gravity area's forms, blend and
+// state rows, an orbit, the timed move that travels to a placement); every pull, reach, launch and switch here is a
+// design an author overrides or replaces.
+//
+//   import "../standard/gravity"
+//   gravity {
+//     ...
+//     areas [
+//       driftPull(placement: `home-core`, reach: 400, pull: 2)
+//       ballPull(placement: `home-core`, reach: 22, pull: 14, radius: 8, blend: 6)
+//       shapePull(placement: `ring`, reach: 14, pull: 14, blend: 4)
+//     ]
+//   }
+//   launchPad(name: "home-ring", pad: `pad-home-ring`, landing: `land-ring`)
+//   gravitySwitch(name: "flip-up", pad: `pad-flip-up`, row: "corridorPull", value: -1)
+
+// The pull of a ball: toward `placement`, `pull` metres a second squared at `radius` from it, falling with the square
+// of the distance beyond that and in proportion to it inside, out to `reach`. Over the last `blend` metres before the
+// reach the pull fades into whatever lies under it, so a body arriving turns over that depth and never in one tick.
+function ballPull(placement, reach, pull, radius, blend = 0, priority = 1) = {
+  placementId: placement
+  priority: priority
+  mode: Replace
+  bounds: sphere(radius: reach)
+  acceleration: point(surfaceGravity: pull, referenceRadius: radius)
+  blend: blend
+}
+
+// The pull of a shape: toward the nearest solid surface within `reach` of `placement`, so a body walks on a ring, a
+// cube or a strip as it does on a ball. The world selects GradientDerivedUp in collision.requirements for it.
+function shapePull(placement, reach, pull, blend = 0, priority = 1) = {
+  placementId: placement
+  priority: priority
+  mode: Replace
+  bounds: sphere(radius: reach)
+  acceleration: surface(magnitude: pull)
+  blend: blend
+}
+
+// The pull of a log or the hold of a pipe: toward the line through `placement` along `axis`, or away from it when
+// `pull` is negative, inside a box of `halfExtents`.
+function axisPull(placement, halfExtents, pull, axis = [0, 1, 0], blend = 0, priority = 1) = {
+  placementId: placement
+  priority: priority
+  mode: Replace
+  bounds: box(halfExtents: halfExtents)
+  acceleration: axial(magnitude: pull, axis: axis)
+  blend: blend
+}
+
+// The pull of a slab a body walks on both faces of: toward the plane through `placement` across `normal`.
+function slabPull(placement, halfExtents, pull, normal = [0, 1, 0], blend = 0, priority = 1) = {
+  placementId: placement
+  priority: priority
+  mode: Replace
+  bounds: box(halfExtents: halfExtents)
+  acceleration: planar(magnitude: pull, normal: normal)
+  blend: blend
+}
+
+// The faint pull of open space toward `placement`: what brings a body adrift back to the place a world starts from.
+// It sits under every other area (priority 0). Under a metre a second squared a body keeps the up it had.
+function driftPull(placement, reach, pull, priority = 0) = {
+  placementId: placement
+  priority: priority
+  mode: Replace
+  bounds: sphere(radius: reach)
+  acceleration: radial(magnitude: pull)
+}
+
+// A room's own gravity: `vector` inside a box of `halfExtents` about `placement`, multiplied by the `scale` state row
+// when one is named, so writing the row to -1 turns the room over.
+function roomPull(placement, halfExtents, vector, scale = null, blend = 0, priority = 2) = {
+  placementId: placement
+  priority: priority
+  mode: Replace
+  bounds: box(halfExtents: halfExtents)
+  acceleration: directional(value: vector)
+  blend: blend
+  scale: scale
+}
+
+// A launch pad: a body standing in `pad`'s region is carried to `landing` (plus `offset`) over `seconds`, along an arc
+// `arc` metres off the straight line at its middle. The move owns the body while it runs, so nothing pulls it off the
+// path, and it ends at rest for the pull at the landing to take.
+template launchPad(name, pad, landing, seconds = 2.5, arc = 6, offset = [0, 0, 0]) {
+  rule $"launch-{name}" {
+    when fact(each, Grounded) == 1
+    mode: Level
+    forEach: region(pad)
+    timedMove(
+      key: $each,
+      toward: landing,
+      towardOffset: offset,
+      arc: arc,
+      durationSeconds: seconds,
+      curve: Smoothstep,
+      exclusive: true,
+      right: 0,
+      forward: 0,
+      yawDegrees: 0
+    )
+  }
+}
+
+// A gravity switch: a body entering `pad`'s region writes `value` into the Fixed row `row`, which a gravity area's
+// `scale` or `weight` names.
+template gravitySwitch(name, pad, row, value) {
+  rule $"gravity-switch-{name}" {
+    when region(pad) >= 1
+    mode: Edge
+    $"{row}" = value
+  }
+}

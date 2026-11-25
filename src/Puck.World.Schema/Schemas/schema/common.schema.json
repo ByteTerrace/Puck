@@ -7807,7 +7807,7 @@
       "title": "WorldEffectPlanarImpulse"
     },
     "WorldEffectTimedMove": {
-      "description": "Moves a body along its launch plane and turns it through a signed relative yaw over time.",
+      "description": "Moves a body over time, turning it through a signed relative yaw: across its launch plane and along its up in its own frame, or to a point of the world.",
       "properties": {
         "$type": {
           "const": "timedMove"
@@ -7840,6 +7840,34 @@
         "key": {
           "$ref": "#/$defs/StateChannelRefNonNullable",
           "description": "The recipient of a world rule. A kit action supplies its own body.",
+          "default": null
+        },
+        "up": {
+          "description": "Travel along the body\u0027s up at the launch, in body-sized world units.",
+          "type": "number",
+          "default": 0
+        },
+        "arc": {
+          "description": "The height the path stands off the straight line at its middle, along the body\u0027s up at the launch, in body-sized world units: the path is a parabola that leaves and arrives on the line.",
+          "type": "number",
+          "default": 0
+        },
+        "exclusive": {
+          "description": "Whether the move owns the body\u0027s translation while it runs: its walk and its fall add nothing, it is off its support throughout, and it ends at rest. The default adds the move to ordinary locomotion.",
+          "type": "boolean",
+          "default": false
+        },
+        "toward": {
+          "description": "The placement the move ends at, read when the effect fires: the travel is from where the body stands to that placement\u0027s position plus TowardOffset, in place of Right, Forward and Up. A world rule\u0027s only.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "towardOffset": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The offset from Toward\u0027s position, in world axes.",
           "default": null
         }
       },
