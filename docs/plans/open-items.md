@@ -4046,14 +4046,6 @@ retirement.
   differ (a compiler version, the container hash or signing). An identity must be
   machine-independent: pin and verify the DXC both use, or hash the shader source
   and the compiler's identity instead of the emitted container.
-- [high, M1] **A player has no way to get the deployment's sign-in file.** The
-  deploy writes `artifacts/world-authentication.json` (the sign-in provider and
-  the primary world's transport-key pin, `AzureWorld`), but published it nowhere,
-  so no client could join the hosted world after release6's issuer deployed. It
-  now uploads with the `azure-production-release` artifact, for developers. A
-  player install needs it beside the channel: publish it in the official content
-  tree (it holds no secret), and have the launcher's player build read it, so
-  `--connect` needs no hand-copied file.
 - [high] **A player downloads about 5.8 GB of baked meshes up front.** The
   first complete player folder produced 2.9 GB sets per backend: 11,612 and
   11,533 meshes, none byte-identical across the two backends. The sets are now
