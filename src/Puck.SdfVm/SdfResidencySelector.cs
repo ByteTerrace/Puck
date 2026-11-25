@@ -166,8 +166,12 @@ public sealed class SdfResidencySelector {
 
         return grant;
     }
-    // Registers the presentation's mesh region: the grant that holds its reservation.
-    internal SdfResidencyGrant RegisterRegion() {
+    /// <summary>Registers the presentation's mesh region: the grant that holds the region's reservation, which the
+    /// region grows under (<see cref="SdfResidencyGrant.ReserveGrowth"/>) and whose limit every residency's budget is
+    /// held to. The region's store makes it once it stands (<see cref="AttachStore"/>); a later registration replaces
+    /// the selector's region.</summary>
+    /// <returns>The region's grant; disposing it releases the reservation.</returns>
+    public SdfResidencyGrant RegisterRegion() {
         var grant = new SdfResidencyGrant(name: "mesh-store", reservation: m_account.ReserveDevice(memoryClass: MemoryClass.Elastic, owner: RegionOwner, pool: Pool), selector: this);
 
         lock (m_gate) { m_region = grant; }

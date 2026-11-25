@@ -24,6 +24,11 @@ public static class ManagedHeapWalk {
     public const long LargeObjectBytes = 85_000;
 
     private const string RuntimeProvider = "Microsoft-Windows-DotNETRuntime";
+    // The most referrers a small-object group's chain names; its links mark a root or an unreached end with these
+    // values, which no type id takes.
+    private const int SmallDepth = 3;
+    private const ulong RootLink = ulong.MaxValue;
+    private const ulong UnreachedLink = (ulong.MaxValue - 1UL);
 
     /// <summary>Walks a process's heap.</summary>
     /// <param name="processId">The target process, which must expose its diagnostics port (the default of every .NET
@@ -146,7 +151,75 @@ public static class ManagedHeapWalk {
             .ThenBy(keySelector: static tenant => tenant.Holder, comparer: StringComparer.Ordinal)
             .ToArray();
 
-        return new(Bytes: bytes, Collection: dumpCollection, Nodes: nodes.Count, Objects: objects, Tenants: tenants);
+        // The small objects, which the large tenants miss: every object under the large object threshold, summed by its
+        // type and its chain of first referrers to --depth (at most SmallDepth), each link a referrer's type or the root
+        // or unreached end, from one pass over the edges. A census of millions of small objects names its tenants this
+        // way where a chain of names per object would not fit.
+        var index = new Dictionary<ulong, int>(capacity: nodes.Count);
+
+        for (var at = 0; (at < nodes.Count); at++) { _ = index.TryAdd(key: nodes[at].Address, value: at); }
+
+        var firstReferrer = new int[nodes.Count];
+
+        Array.Fill(array: firstReferrer, value: -1);
+        for (var at = 0; (at < nodes.Count); at++) {
+            var node = nodes[at];
+
+            for (var edge = node.FirstEdge; (edge < Math.Min(val1: (node.FirstEdge + node.Edges), val2: edges.Count)); edge++) {
+                if (index.TryGetValue(key: edges[edge], value: out var target) && (firstReferrer[target] < 0) && (target != at)) { firstReferrer[target] = at; }
+            }
+        }
+
+        long liveBytes = 0, smallBytes = 0;
+        var links = Math.Min(val1: depth, val2: SmallDepth);
+        var small = new Dictionary<(ulong Type, ulong First, ulong Second, ulong Third), (int Objects, long Bytes)>();
+        Span<ulong> chain = stackalloc ulong[SmallDepth];
+
+        for (var at = 0; (at < nodes.Count); at++) {
+            var node = nodes[at];
+
+            liveBytes += ((long)node.Size);
+            if (((long)node.Size) >= LargeObjectBytes) { continue; }
+            smallBytes += ((long)node.Size);
+            chain.Clear();
+
+            var cursor = at;
+
+            for (var link = 0; (link < links); link++) {
+                var next = firstReferrer[cursor];
+
+                if (next < 0) {
+                    chain[link] = (roots.ContainsKey(key: nodes[cursor].Address) ? RootLink : UnreachedLink);
+                    break;
+                }
+                chain[link] = nodes[next].Type;
+                cursor = next;
+            }
+
+            var key = (node.Type, chain[0], chain[1], chain[2]);
+
+            small[key] = (small.TryGetValue(key: key, value: out var sum) ? ((sum.Objects + 1), (sum.Bytes + ((long)node.Size))) : (1, ((long)node.Size)));
+        }
+
+        string TypeName(ulong type) => (types.TryGetValue(key: type, value: out var name) ? name : "?");
+        string LinkName(ulong link) => link switch { RootLink => "root", UnreachedLink => "unreached", _ => TypeName(type: link) };
+        string ChainName((ulong Type, ulong First, ulong Second, ulong Third) key) =>
+            string.Join(separator: " <- ", values: new[] { key.First, key.Second, key.Third }.TakeWhile(predicate: static link => (link != 0UL)).Select(selector: LinkName));
+
+        var smallTenants = small
+            .Where(predicate: entry => (entry.Value.Bytes >= minimumBytes))
+            .Select(selector: entry => new HeapTenant(
+                Bytes: entry.Value.Bytes,
+                Holder: ChainName(key: entry.Key),
+                Objects: entry.Value.Objects,
+                Type: TypeName(type: entry.Key.Type)
+            ))
+            .OrderByDescending(keySelector: static tenant => tenant.Bytes)
+            .ThenBy(keySelector: static tenant => tenant.Type, comparer: StringComparer.Ordinal)
+            .ThenBy(keySelector: static tenant => tenant.Holder, comparer: StringComparer.Ordinal)
+            .ToArray();
+
+        return new(Bytes: bytes, Collection: dumpCollection, Nodes: nodes.Count, Objects: objects, Tenants: tenants) { LiveBytes = liveBytes, SmallBytes = smallBytes, SmallTenants = smallTenants };
     }
 }
 /// <summary>The large objects as one heap dump saw them, in bytes.</summary>
@@ -155,7 +228,16 @@ public static class ManagedHeapWalk {
 /// <param name="Nodes">The live objects the dump wrote, of every size.</param>
 /// <param name="Collection">The index of the collection that wrote the dump.</param>
 /// <param name="Tenants">The tenants of objects at least the walk's minimum size, largest first.</param>
-public sealed record HeapWalk(long Objects, long Bytes, int Nodes, int Collection, IReadOnlyList<HeapTenant> Tenants);
+public sealed record HeapWalk(long Objects, long Bytes, int Nodes, int Collection, IReadOnlyList<HeapTenant> Tenants) {
+    /// <summary>Gets the bytes of every live object the dump wrote, large and small.</summary>
+    public long LiveBytes { get; init; }
+    /// <summary>Gets the bytes of the live objects under <see cref="ManagedHeapWalk.LargeObjectBytes"/>.</summary>
+    public long SmallBytes { get; init; }
+    /// <summary>Gets the small objects summed by type and chain of first referrers to the walk's depth, at most three (each
+    /// link a referrer's type, or <c>root</c> or <c>unreached</c> where the chain ends), each group of at least the walk's
+    /// minimum size, largest first.</summary>
+    public IReadOnlyList<HeapTenant> SmallTenants { get; init; } = [];
+}
 /// <summary>One tenant of the large object heap: the objects of one type one holder keeps.</summary>
 /// <param name="Type">The objects' type.</param>
 /// <param name="Holder">The first holder the walk found: the type of an object referring to them, a <c>root:</c> kind,

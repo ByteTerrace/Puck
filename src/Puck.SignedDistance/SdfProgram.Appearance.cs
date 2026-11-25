@@ -71,7 +71,10 @@ public sealed partial class SdfProgram {
             sweepCurves: sweepCurves
         );
 
-        appearance.Pack(materialVector: ((int)program.m_words[ProgramMaterialOffsetLane]), section: program.m_appearanceWords);
+        var section = new uint[program.m_appearanceWordCount];
+
+        appearance.Pack(materialVector: ((int)program.m_words[ProgramMaterialOffsetLane]), section: section);
+        program.m_appearanceWords = section;
         program.m_appearance = appearance;
         program.m_instructionsKey = key;
         program.m_reservedPathWords = reservedPathWords;

@@ -429,11 +429,11 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     }
     // A placement of a mesh's words from a first word: its vertices, triangle materials, indices and skin, in that order.
     private static SdfMeshRegionMesh PlacementAt(SdfMesh mesh, int vertexWord) {
-        var materialWord = (vertexWord + (mesh.Positions.Length * SdfMeshRecord.VertexWords));
+        var materialWord = (vertexWord + (mesh.VertexCount * SdfMeshRecord.VertexWords));
         var indexWord = (materialWord + SdfMeshRegion.MaterialWordsOf(mesh: mesh));
         var skinWord = (mesh.VertexMembers.IsEmpty ? 0 : (indexWord + SdfMeshRegion.IndexWordsOf(mesh: mesh)));
 
-        return new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord, SkinWord: skinWord);
+        return new SdfMeshRegionMesh(IndexCount: mesh.IndexCount, IndexWord: indexWord, MaterialWord: materialWord, VertexWord: vertexWord, SkinWord: skinWord);
     }
     // Tells residencies whose rows name a mesh, or a mesh renumbered from it, that its address or standing changed.
     private void Notify(SdfMesh mesh, SdfWorldTables? except = null, bool moved = false) {
@@ -462,7 +462,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
 
         var body = PlacementAt(mesh: source, vertexWord: sourceWord);
 
-        m_placements[mesh] = new SdfMeshRegionMesh(IndexCount: mesh.Indices.Length, IndexWord: body.IndexWord, MaterialWord: word, VertexWord: body.VertexWord, SkinWord: body.SkinWord);
+        m_placements[mesh] = new SdfMeshRegionMesh(IndexCount: mesh.IndexCount, IndexWord: body.IndexWord, MaterialWord: word, VertexWord: body.VertexWord, SkinWord: body.SkinWord);
     }
     // Whether a mesh's own words stand at its place.
     private bool StandsOne(SdfMesh mesh) => (m_arena.Placements.ContainsKey(key: mesh) && !m_owed.Contains(mesh: mesh) && m_pages.TryGetValue(key: mesh, value: out var pages) && pages.IsCurrent);
@@ -671,6 +671,8 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     /// chunk the device refused waits. None of that is due on any one frame, so a frame that finds the store held by a
     /// plan or a landing on another thread leaves it to the next frame rather than waiting.</summary>
     internal void Service() {
+        // The published meshes whose planes no reader has held for a while let them go (SdfMesh.Restore.cs).
+        SdfMesh.ReleaseIdle();
         if (!m_gate.TryEnter()) { return; }
         try {
             if (m_disposed) { return; }
@@ -678,6 +680,7 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
             if (Interlocked.Exchange(location1: ref m_trimRequested, value: 0) != 0) {
                 try {
                     SdfRowChecks.ProcessWork.Count(kind: SdfRowChecks.Trims);
+                    SdfMesh.ReleaseIdle(all: true);
                     m_refusedGrowthBytes = -1L;
                     _ = ForgetUnused();
                     // A mapped region gives the forgotten meshes' chunks back now, under the pressure that asked.

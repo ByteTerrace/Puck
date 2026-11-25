@@ -83,10 +83,11 @@ public sealed class SdfResidencySelectorLawTests {
     public void AnUnboundedPoolGrantsEveryResidencyWithoutABudget() {
         var (account, _, _) = Discrete();
         var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);
+        using var region = selector.RegisterRegion();
         using var grant = selector.Register(name: "valley");
 
         Assert.Equal(expected: long.MaxValue, actual: grant.Budget(filled: Gibibyte, named: Gibibyte));
-        Assert.Equal(expected: (64L * Gibibyte), actual: grant.ReserveGrowth(capacityBytes: Mebibyte, mostBytes: (64L * Gibibyte)));
+        Assert.Equal(expected: (64L * Gibibyte), actual: region.ReserveGrowth(capacityBytes: Mebibyte, mostBytes: (64L * Gibibyte)));
     }
     [Fact]
     public void TheOneBiasRisesWhenTheBudgetPressesWithNothingSpareAndFallsOnceEveryResidencyFits() {
@@ -128,7 +129,7 @@ public sealed class SdfResidencySelectorLawTests {
     public void ARegionGrowsOnlyUnderItsGrantsReservationAndARefusedGrowthKeepsWhatStands() {
         var (account, ledger, segments) = Discrete();
         var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);
-        using var grant = selector.Register(name: "valley");
+        using var grant = selector.RegisterRegion();
 
         Budget(account: account, localBudget: (2L * Gibibyte), segments: segments, serial: 1UL);
 
@@ -166,26 +167,28 @@ public sealed class SdfResidencySelectorLawTests {
     }
     [Fact]
     public void ABudgetNeverPassesTheShareOfWhatItsRegionMayPlace() {
-        var (account, _, segments) = Discrete();
+        var (account, ledger, segments) = Discrete();
         var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Device);
+        using var region = selector.RegisterRegion();
         using var valley = selector.Register(name: "valley");
         using var painting = selector.Register(name: "painting");
 
         Budget(account: account, localBudget: (4L * Gibibyte), segments: segments, serial: 1UL);
-        valley.Mapped = true;
-        valley.Created(capacityBytes: (16L * Mebibyte));
-        painting.Created(capacityBytes: (16L * Mebibyte));
+        region.Mapped = true;
+        region.Created(capacityBytes: (16L * Mebibyte));
+        Assert.True(condition: ledger.TryAdmit(bytes: (16L * Mebibyte), device: Device, family: "sdf.mesh-region/mesh-region", grant: out var held, payer: "sdf.mesh-region/mesh-region", payerBytes: (16L * Mebibyte), role: GpuMemoryRole.DeviceLocal, segment: GpuMemorySegments.DirectXLocal));
+        ledger.CountAllocated(allocation: 0x10, grant: held);
         // Before any limit is known the selector's share alone bounds the budget.
-        Assert.Equal(expected: long.MaxValue, actual: valley.LimitBytes);
+        Assert.Equal(expected: long.MaxValue, actual: region.LimitBytes);
         Assert.True(condition: (valley.Budget(filled: Gibibyte, named: Gibibyte) > (16L * Mebibyte)));
-        // Another residency's reservation takes the pool's room: the selector still counts it as the regions' own, but
-        // the valley's region may place only what it holds and its unbacked interior.
-        _ = painting.ReserveGrowth(capacityBytes: (16L * Mebibyte), mostBytes: (64L * Gibibyte));
+        // The region may place no more than what it holds and its unbacked interior (the most any device lets it hold),
+        // while the pool still has room: every residency's budget keeps to the share of what the region may place, though
+        // the pool's own share would allow far more.
+        var limit = region.ReserveGrowth(capacityBytes: (16L * Mebibyte), mostBytes: (24L * Mebibyte), unbackedBytes: (8L * Mebibyte));
 
-        var limit = valley.ReserveGrowth(capacityBytes: (16L * Mebibyte), mostBytes: (64L * Gibibyte), unbackedBytes: (8L * Mebibyte));
-
-        Assert.Equal(expected: ((24L * Mebibyte), (24L * Mebibyte)), actual: (limit, valley.LimitBytes));
+        Assert.Equal(expected: ((24L * Mebibyte), (24L * Mebibyte)), actual: (limit, region.LimitBytes));
         Assert.Equal(expected: ((limit / 8L) * SdfMeshTier.BudgetEighths), actual: valley.Budget(filled: Gibibyte, named: Gibibyte));
+        Assert.True(condition: (painting.Budget(filled: (10L * Mebibyte), named: (10L * Mebibyte)) <= ((limit / 8L) * SdfMeshTier.BudgetEighths)));
         Assert.Contains(expectedSubstring: $"region-limit={limit}B", actualString: selector.Describe());
     }
     [Fact]
@@ -550,7 +553,7 @@ public sealed class SdfResidencySelectorLawTests {
         var ledger = new GpuDeviceMemoryWork(backend: "law", owners: account.DeviceOwners(backend: "law"));
         var segments = GpuMemorySegments.FromDirectX(profile: new GpuMemoryProfile(CoherentUnifiedMemory: true, DeviceLocalBytes: (16UL << 30), HostVisibleDeviceLocalBytes: (16UL << 30), LargestDeviceLocalHeapBytes: (16UL << 30), UnifiedMemory: true));
         var selector = new SdfResidencySelector(account: account, pool: PhysicalMemory.Host);
-        using var grant = selector.Register(name: "valley");
+        using var grant = selector.RegisterRegion();
         const string RegionFamily = (SdfResidencySelector.RegionOwner + "/mesh-region");
         const string StagingFamily = (SdfResidencySelector.RegionStagingOwner + "/mesh-region");
 

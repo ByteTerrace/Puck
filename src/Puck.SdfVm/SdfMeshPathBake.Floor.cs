@@ -27,7 +27,7 @@ public sealed partial class SdfMeshPathBake {
     // The groups ObserveResidency found drawing a refused finer tier over a standing kept floor, which the next prepared
     // frame evicts; the evictions made and the bytes of the finer tiers they let go; the groups in reach that drew no
     // standing mesh at the latest frame, and the frames that had any.
-    private readonly List<(Group Group, int Index)> m_evictions = [];
+    private readonly List<Group> m_evictions = [];
     private long m_evicted;
     private long m_evictedBytes;
     private int m_holes;
@@ -71,7 +71,7 @@ public sealed partial class SdfMeshPathBake {
             if (group.Retired || !group.Listed || !group.Done || (group.Replaces is not null) || group.Ahead || (group.KeptFloor is not { } floor) || (group.Mesh is not { } mesh)) { continue; }
             spent += (mesh.PieceCount + floor.PieceCount);
             if (!AnyPiece(mesh: mesh, tables: tables, test: static (region, piece) => region.RefusesMesh(mesh: piece)) || AnyPiece(mesh: floor, tables: tables, test: static (region, piece) => !region.MeshStands(mesh: piece))) { continue; }
-            m_evictions.Add(item: (group, group.Index));
+            m_evictions.Add(item: group);
         }
         m_evictAt = at;
     }
@@ -81,8 +81,11 @@ public sealed partial class SdfMeshPathBake {
     // (Group.Evicted). Under the gate, on the frame's thread.
     private void Evict(SdfFrame frame) {
         if (m_evictions.Count == 0) { return; }
-        foreach (var (group, index) in m_evictions) {
-            if ((index >= m_groups.Count) || !ReferenceEquals(objA: m_groups[index], objB: group) || group.Retired || (group.Replaces is not null) || group.Ahead ||
+        foreach (var group in m_evictions) {
+            // A group's place is the list's record of it, which a restart since the collection may have moved.
+            var index = group.Index;
+
+            if (!GroupList.Holds(group: group) || group.Retired || (group.Replaces is not null) || group.Ahead ||
                 (group.KeptFloor is not { } kept) || (group.Mesh is not { } detail)) { continue; }
 
             var plans = new List<Group> { group };

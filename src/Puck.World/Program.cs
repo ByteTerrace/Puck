@@ -672,6 +672,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     Puck.Hosting.Jobs.MemoryAccount.Shared.SetAuthoringOnPlayBar(onPlayBar: (runsAsPlayer || (caches.MeshPolicy == Puck.SdfVm.SdfMeshCachePolicy.Stored)));
     // A reclaim returns the native allocator's unused pages with the collector's (MemoryAccount.Reclaims).
     Puck.Hosting.Jobs.MemoryAccount.Shared.ReclaimRequested += static () => (Puck.Memory.Allocator.Current as Puck.Abstractions.Memory.IAllocatorStatistics)?.Collect();
+    // A worker going idle returns its own heap's free pages, which only its own thread can give back.
+    Puck.Hosting.Jobs.MemoryAccount.Shared.ThreadMemoryReturnRequested += static () => (Puck.Memory.Allocator.Current as Puck.Abstractions.Memory.IAllocatorStatistics)?.Collect();
     // Everything the boot resolved above becomes the one service collection its shape needs; the composition laws build
     // the same collection through the same method.
     services.AddWorldBoot(inputs: new WorldBootInputs(

@@ -31,17 +31,21 @@ public sealed class SdfMeshCollapseLawTests {
 
         Assert.NotEmpty(collection: levelled.Levels);
         Assert.True(condition: (levelled.Levels[0].TriangleCount < (ring.TriangleCount / 2)));
-        foreach (var level in levelled.Levels) {
-            var actual = FeatureEdges(ring, level.Indices);
+        var ringPositions = ring.Positions.Span;
+
+        for (var number = 1; (number <= levelled.Levels.Count); number++) {
+            var levelIndices = levelled.LevelIndices(level: number);
+            var actual = FeatureEdges(ring, levelIndices);
+            var corners = levelIndices.Span;
 
             CheckLines(budget: (0.1 / 8), source: expected, target: actual);
             CheckLines(budget: (0.1 / 8), source: actual, target: expected);
-            Assert.Equal(0, OpenEdges(ring.Positions.Span, level.Indices.Span));
+            Assert.Equal(0, OpenEdges(ringPositions, corners));
             // No projected triangle may cover the counter's centre, independently of the outline-distance check.
-            for (var at = 0; (at < level.Indices.Length); at += 3) {
-                var a = ring.Positions.Span[((int)level.Indices.Span[at])];
-                var b = ring.Positions.Span[((int)level.Indices.Span[(at + 1)])];
-                var c = ring.Positions.Span[((int)level.Indices.Span[(at + 2)])];
+            for (var at = 0; (at < corners.Length); at += 3) {
+                var a = ringPositions[((int)corners[at])];
+                var b = ringPositions[((int)corners[(at + 1)])];
+                var c = ringPositions[((int)corners[(at + 2)])];
                 var ab = ((a.X * b.Y) - (a.Y * b.X));
                 var bc = ((b.X * c.Y) - (b.Y * c.X));
                 var ca = ((c.X * a.Y) - (c.Y * a.X));
@@ -124,8 +128,8 @@ public sealed class SdfMeshCollapseLawTests {
 
             Assert.Equal(chunk.Levels.Count, read.Chunks[at].Levels.Count);
             for (var level = 0; (level < chunk.Levels.Count); level++) {
-                Assert.True(condition: boundary.SetEquals(other: Boundary(chunk, chunk.Levels[level].Indices)));
-                Assert.Equal(chunk.Levels[level].Indices.ToArray(), read.Chunks[at].Levels[level].Indices.ToArray());
+                Assert.True(condition: boundary.SetEquals(other: Boundary(chunk, chunk.LevelIndices(level: (level + 1)))));
+                Assert.Equal(chunk.LevelIndices(level: (level + 1)).ToArray(), read.Chunks[at].LevelIndices(level: (level + 1)).ToArray());
                 Assert.Equal(chunk.Levels[level].Error, read.Chunks[at].Levels[level].Error);
             }
         }
@@ -133,11 +137,12 @@ public sealed class SdfMeshCollapseLawTests {
 
     private static HashSet<(Vector3, Vector3)> Boundary(SdfMesh mesh, ReadOnlyMemory<uint> indices) {
         var edges = new Dictionary<(Vector3, Vector3), int>();
+        var positions = mesh.Positions.Span;
 
         for (var at = 0; (at < indices.Length); at += 3) {
             for (var corner = 0; (corner < 3); corner++) {
-                var a = mesh.Positions.Span[((int)indices.Span[(at + corner)])];
-                var b = mesh.Positions.Span[((int)indices.Span[(at + ((corner + 1) % 3))])];
+                var a = positions[((int)indices.Span[(at + corner)])];
+                var b = positions[((int)indices.Span[(at + ((corner + 1) % 3))])];
                 var key = (((a.X, a.Y, a.Z).CompareTo(other: (b.X, b.Y, b.Z)) < 0) ? (a, b) : (b, a));
 
                 edges[key] = (edges.GetValueOrDefault(key: key) + 1);
@@ -161,7 +166,7 @@ public sealed class SdfMeshCollapseLawTests {
         Assert.True(condition: (levelled.Levels[0].TriangleCount < (sphere.TriangleCount / 4)));
         Assert.True(condition: (levelled.Levels[1].TriangleCount <= (SdfMeshCollapse.KeptShare * levelled.Levels[0].TriangleCount)));
         for (var level = 0; (level < levelled.Levels.Count); level++) {
-            Holds(degrees: SdfMeshCollapse.NormalDegrees[level], level: levelled.Levels[level], mesh: sphere, share: SdfMeshCollapse.CellShares[level]);
+            Holds(degrees: SdfMeshCollapse.NormalDegrees[level], number: (level + 1), levelled: levelled, mesh: sphere, share: SdfMeshCollapse.CellShares[level]);
         }
 
         Assert.True(condition: (levelled.Levels[1].Error >= levelled.Levels[0].Error));
@@ -172,12 +177,13 @@ public sealed class SdfMeshCollapseLawTests {
         var levelled = SdfMeshCollapse.Levels(mesh: cube);
         var level = Assert.Single(collection: levelled.Levels);
 
-        Holds(degrees: SdfMeshCollapse.NormalDegrees[0], level: level, mesh: cube, share: SdfMeshCollapse.CellShares[0]);
+        Holds(degrees: SdfMeshCollapse.NormalDegrees[0], number: 1, levelled: levelled, mesh: cube, share: SdfMeshCollapse.CellShares[0]);
         // Its faces are flat and its edges straight, so the level loses nothing and keeps little more than its corners.
         Assert.True(condition: (level.Error < 1e-6f));
         Assert.True(condition: (level.TriangleCount <= 24));
 
-        var kept = new HashSet<Vector3>(collection: level.Indices.ToArray().Select(selector: index => cube.Positions.Span[((int)index)]));
+        var cubePositions = cube.Positions;
+        var kept = new HashSet<Vector3>(collection: levelled.LevelIndices(level: 1).ToArray().Select(selector: index => cubePositions.Span[((int)index)]));
 
         foreach (var corner in Corners()) {
             Assert.Contains(collection: kept, expected: corner);
@@ -190,16 +196,16 @@ public sealed class SdfMeshCollapseLawTests {
 
         Assert.NotEmpty(collection: levelled.Levels);
         for (var level = 0; (level < levelled.Levels.Count); level++) {
-            Holds(degrees: SdfMeshCollapse.NormalDegrees[level], level: levelled.Levels[level], mesh: plane, share: SdfMeshCollapse.CellShares[level]);
+            Holds(degrees: SdfMeshCollapse.NormalDegrees[level], number: (level + 1), levelled: levelled, mesh: plane, share: SdfMeshCollapse.CellShares[level]);
         }
 
         // The open edge's vertices never move: every one is still a vertex of each level.
-        var positions = plane.Positions.Span;
+        var planePositions = plane.Positions;
 
-        foreach (var level in levelled.Levels) {
-            var kept = new HashSet<Vector3>(collection: level.Indices.ToArray().Select(selector: index => plane.Positions.Span[((int)index)]));
+        for (var level = 1; (level <= levelled.Levels.Count); level++) {
+            var kept = new HashSet<Vector3>(collection: levelled.LevelIndices(level: level).ToArray().Select(selector: index => planePositions.Span[((int)index)]));
 
-            foreach (var position in positions) {
+            foreach (var position in planePositions.Span) {
                 if ((MathF.Abs(x: position.X) == 1f) || (MathF.Abs(x: position.Y) == 1f)) {
                     Assert.Contains(collection: kept, expected: position);
                 }
@@ -287,11 +293,12 @@ public sealed class SdfMeshCollapseLawTests {
     // A level's whole contract against its mesh, measured by brute force: its error within the level's bound and at least
     // every vertex's distance to the level's nearest triangle of its material, some such triangle within the error and the
     // angle, no edge opened, and no triangle turned against its normals.
-    private static void Holds(SdfMesh mesh, SdfMeshLevel level, float share, float degrees) {
+    private static void Holds(SdfMesh mesh, SdfMesh levelled, int number, float share, float degrees) {
+        var level = levelled.Levels[(number - 1)];
         var cell = mesh.BakeCell.X;
         var positions = mesh.Positions.Span;
         var normals = mesh.Normals.Span;
-        var indices = level.Indices.Span;
+        var indices = levelled.LevelIndices(level: number).Span;
         var cosine = Math.Cos(d: ((degrees * Math.PI) / 180.0));
 
         Assert.True(condition: (level.Error <= (share * cell)));
@@ -303,7 +310,7 @@ public sealed class SdfMeshCollapseLawTests {
         }
 
         var materials = mesh.TriangleMaterials.Span;
-        var levelMaterials = level.TriangleMaterials.Span;
+        var levelMaterials = levelled.LevelMaterials(level: number).Span;
         var own = mesh.Indices.Span;
 
         for (var corner = 0; (corner < own.Length); corner++) {

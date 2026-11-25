@@ -1,7 +1,5 @@
 using System.Numerics;
 
-using Puck.SdfVm;
-
 namespace Puck.Cli.Mesh;
 
 /// <summary>An orthographic view onto a mesh: a window centred on a point, <see cref="HalfWidth"/> metres either way
@@ -63,9 +61,9 @@ internal sealed class MeshVisibility {
 /// <summary>Draws a mesh's triangles into a visibility buffer on the CPU: a z-buffered orthographic scan conversion, one
 /// implementation for every view the offline mesh tools draw (<see cref="MeshAuditImage"/>, <see cref="MeshPreviewImage"/>).</summary>
 internal static class MeshRaster {
-    /// <summary>Rasterises a mesh.</summary>
-    /// <param name="mesh">The mesh; its own triangles, not its levels.</param>
-    /// <param name="positions">The mesh's vertex positions in the view's frame, as many as <paramref name="mesh"/> holds.</param>
+    /// <summary>Rasterises a mesh's triangles.</summary>
+    /// <param name="indices">The mesh's own triangles, three vertex indices each, not its levels.</param>
+    /// <param name="positions">The mesh's vertex positions in the view's frame.</param>
     /// <param name="view">The view; its window's width is spread over <paramref name="width"/> pixels, and the same
     /// scale is used up the image.</param>
     /// <param name="width">The image's width, in pixels.</param>
@@ -73,12 +71,8 @@ internal static class MeshRaster {
     /// <param name="nearLimit">The depth past which a triangle with any corner is left out, so a view looks into a mesh
     /// from within.</param>
     /// <returns>The visibility buffer.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
-    public static MeshVisibility Draw(SdfMesh mesh, ReadOnlySpan<Vector3> positions, MeshView view, int width, int height, float nearLimit = float.PositiveInfinity) {
-        ArgumentNullException.ThrowIfNull(argument: mesh);
-
+    public static MeshVisibility Draw(ReadOnlySpan<uint> indices, ReadOnlySpan<Vector3> positions, MeshView view, int width, int height, float nearLimit = float.PositiveInfinity) {
         var buffer = new MeshVisibility(width: width, height: height);
-        var indices = mesh.Indices.Span;
         var scale = ((width * 0.5f) / view.HalfWidth);
         var projected = new (float X, float Y, float Z)[positions.Length];
 
@@ -88,7 +82,7 @@ internal static class MeshRaster {
             projected[vertex] = (((width * 0.5f) + (Vector3.Dot(vector1: offset, vector2: view.Right) * scale)), ((height * 0.5f) - (Vector3.Dot(vector1: offset, vector2: view.Up) * scale)), Vector3.Dot(vector1: offset, vector2: view.Forward));
         }
 
-        for (var triangle = 0; (triangle < mesh.TriangleCount); triangle++) {
+        for (var triangle = 0; (triangle < (indices.Length / 3)); triangle++) {
             var a = projected[(int)indices[3 * triangle]];
             var b = projected[(int)indices[(3 * triangle) + 1]];
             var c = projected[(int)indices[(3 * triangle) + 2]];

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Maths;
 
 namespace Puck.Commands;
@@ -104,22 +105,8 @@ public sealed partial class InputRouter {
             m_count = kept;
         }
 
-        private void Grow() {
-            var grown = new T[Math.Min(
-                val1: m_capacity,
-                val2: Math.Max(
-                    val1: 4,
-                    val2: (m_items.Length * 2)
-                )
-            )];
-
-            for (var index = 0; (index < m_count); index++) {
-                grown[index] = m_items[Offset(index: index)];
-            }
-
-            m_head = 0;
-            m_items = grown;
-        }
+        private void Grow() =>
+            m_items = Rings.Regrown(capacity: m_capacity, count: m_count, head: ref m_head, least: 4, needed: (m_items.Length + 1), ring: m_items);
         private int Offset(int index) {
             var offset = (m_head + index);
 

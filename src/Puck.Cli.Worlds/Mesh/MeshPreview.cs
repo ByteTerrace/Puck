@@ -131,7 +131,9 @@ internal static class MeshPreviewImage {
         var axes = MeshView.Looking(center: Vector3.Zero, halfWidth: 1f, toward: view.Toward, up: view.Up);
         var (low, high) = (new Vector2(value: float.PositiveInfinity), new Vector2(value: float.NegativeInfinity));
 
-        foreach (var position in mesh.Positions.Span) {
+        using var held = mesh.Hold();
+
+        foreach (var position in held.Positions.Span) {
             var projected = new Vector2(x: Vector3.Dot(vector1: position, vector2: axes.Right), y: Vector3.Dot(vector1: position, vector2: axes.Up));
 
             low = Vector2.Min(value1: low, value2: projected);
@@ -153,11 +155,12 @@ internal static class MeshPreviewImage {
     /// <returns>The image, RGBA8, <paramref name="width"/> by <paramref name="height"/> plus <see cref="StripHeight"/>.</returns>
     public static byte[] Render(MeshPreviewSubject subject, MeshView view, int width, int height, bool flat, IReadOnlyList<string> caption) {
         var mesh = subject.Mesh;
-        var positions = mesh.Positions.Span;
-        var normals = mesh.Normals.Span;
-        var indices = mesh.Indices.Span;
+        using var held = mesh.Hold();
+        var positions = held.Positions.Span;
+        var normals = held.Normals.Span;
+        var indices = held.Indices.Span;
         var (wide, tall) = ((width * Supersample), (height * Supersample));
-        var seen = MeshRaster.Draw(height: tall, mesh: mesh, positions: positions, view: view, width: wide);
+        var seen = MeshRaster.Draw(height: tall, indices: indices, positions: positions, view: view, width: wide);
         var colors = new Vector3[wide * tall];
         var light = Vector3.Normalize(value: (view.Forward + (0.6f * view.Up) - (0.4f * view.Right)));
         var outline = (OutlineShare * 2f * view.HalfWidth);

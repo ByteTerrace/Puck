@@ -707,13 +707,15 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
     // A managed mesh renumbered into new managed arrays: an offline library's variants, and a decode before its native copy.
     private static SdfMesh RenumberManaged(SdfMesh mesh, SdfMeshMaterials.Remap map) {
         if (mesh.Chunks.Count != 0) { return SdfMeshChunks.Join(chunks: mesh.Chunks.Select(selector: chunk => RenumberManaged(chunk, map)).ToArray()); }
+        // A managed mesh's planes are its arrays, which the renumbered mesh shares.
+        using var held = mesh.Hold();
         var levels = new SdfMeshLevel[mesh.Levels.Count];
 
         for (var level = 0; (level < levels.Length); level++) {
-            levels[level] = (mesh.Levels[level] with { TriangleMaterials = Renumbered(source: mesh.Levels[level].TriangleMaterials.Span, map: map) });
+            levels[level] = new SdfMeshLevel(Error: mesh.Levels[level].Error, Indices: held.LevelIndices(level: (level + 1)), TriangleMaterials: Renumbered(source: held.LevelMaterials(level: (level + 1)).Span, map: map));
         }
 
-        return new SdfMesh(indices: mesh.Indices, members: mesh.Members, normals: mesh.Normals, positions: mesh.Positions, triangleMaterials: Renumbered(source: mesh.TriangleMaterials.Span, map: map), vertexMembers: mesh.VertexMembers, influences: mesh.Influences) { BakeCell = mesh.BakeCell, Levels = levels };
+        return new SdfMesh(indices: held.Indices, members: mesh.Members, normals: held.Normals, positions: held.Positions, triangleMaterials: Renumbered(source: held.TriangleMaterials.Span, map: map), vertexMembers: mesh.VertexMembers, influences: mesh.Influences) { BakeCell = mesh.BakeCell, Levels = levels };
     }
     private static uint[] Renumbered(ReadOnlySpan<uint> source, SdfMeshMaterials.Remap map) {
         var renumbered = new uint[source.Length];

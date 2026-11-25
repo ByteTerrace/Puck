@@ -56,7 +56,7 @@ public sealed partial class WorldInputOwner {
             width += stage.Terms.Length;
             for (var term = 0; (term < stage.Terms.Length); term++) {
                 var last = -1;
-                var offset = (term * m_history.Length);
+                var offset = (term * m_historyCapacity);
 
                 for (var index = 0; (index < m_count); index++) {
                     var record = Record(index: index);
@@ -81,13 +81,13 @@ public sealed partial class WorldInputOwner {
                 if (!Eligible(ending, pattern.Group)) { continue; }
                 var endingTerm = -1;
 
-                for (var term = 0; (term < stage.Terms.Length); term++) { if (m_matchPrevious[((term * m_history.Length) + end)] == end) { endingTerm = term; break; } }
+                for (var term = 0; (term < stage.Terms.Length); term++) { if (m_matchPrevious[((term * m_historyCapacity) + end)] == end) { endingTerm = term; break; } }
                 if (endingTerm < 0) { continue; }
                 var endTime = ending.Time(policy: m_policy.Judgement);
-                var state = ((stageIndex * m_history.Length) + end);
+                var state = ((stageIndex * m_historyCapacity) + end);
 
                 for (var previous = ((stageIndex == 0) ? -1 : 0); (previous < ((stageIndex == 0) ? 0 : end)); previous++) {
-                    var priorState = (((stageIndex - 1) * m_history.Length) + previous);
+                    var priorState = (((stageIndex - 1) * m_historyCapacity) + previous);
 
                     if ((previous >= 0) && !m_matchValid[priorState]) { continue; }
                     var minimumTime = (endTime - stage.Tolerance);
@@ -102,7 +102,7 @@ public sealed partial class WorldInputOwner {
 
                         for (var term = 0; (term < stage.Terms.Length); term++) {
                             if (term == endingTerm) { continue; }
-                            var last = ((end == 0) ? -1 : m_matchPrevious[(((term * m_history.Length) + end) - 1)]);
+                            var last = ((end == 0) ? -1 : m_matchPrevious[(((term * m_historyCapacity) + end) - 1)]);
 
                             if ((last < 0) || (Record(index: last).Time(policy: m_policy.Judgement) < minimumTime)) { latestStart = FixedQ4816.MinValue; break; }
                             var time = Record(index: last).Time(policy: m_policy.Judgement);
@@ -126,7 +126,7 @@ public sealed partial class WorldInputOwner {
                     for (var term = 0; (term < stage.Terms.Length); term++) {
                         group[term] = ((term == endingTerm) ? end : -1);
                         if (term == endingTerm) { continue; }
-                        var next = m_matchNext[((term * m_history.Length) + lower)];
+                        var next = m_matchNext[((term * m_historyCapacity) + lower)];
 
                         if ((next >= lower) && (next < end)) { group[term] = next; }
                         if (group[term] < 0) { complete = false; break; }
@@ -195,7 +195,7 @@ public sealed partial class WorldInputOwner {
         return (candidate.SequenceCompareTo(other: previous) < 0);
     }
     private bool Eligible(WorldInputRecord record, int group) => ((record.Epoch == Epoch) &&
-        (m_claimed[group][((int)(record.Id % ((ulong)m_history.Length)))] != record.Id));
+        (m_claimed[group][((int)(record.Id % ((ulong)m_historyCapacity)))] != record.Id));
     private bool Matches(WorldInputPatternTerm term, WorldInputRecord record) {
         MatchWork++;
         return ((record.Event.Channel == term.Channel) && (record.Event.Kind == term.Kind) && (record.Crossing == term.Crossing) &&
