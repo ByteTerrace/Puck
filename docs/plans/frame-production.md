@@ -352,7 +352,7 @@ across a benchmark chapter and divided by the frames.
    weighs the pipeline again.
 9. **Judge rigid motion by slot.** Built. The previous draw-row judgement
    raised `sdf.residency.motion.rows` by 1,332,578 over 120 ticks of the
-   east-wing route. `SdfWorldTables.NoteMovedSlots` now judges each moved
+   east-wing route. `SdfWorldTables.CollectMovedSlots` now judges each moved
    slot once. Its union meets every scope and owes every rectangle its rows
    would have owed. The shadow entries keep their drawn and judged bounds
    by slot.
@@ -437,7 +437,7 @@ across a benchmark chapter and divided by the frames.
       boxes that can hide motion inside it, so every moved slot owed both of
       its ends at every shadow entry, however little it moved. A slot whose two
       boxes are one box its pose carries (one carry, no fixed member, no member
-      added or gone, `SdfWorldTables.JudgeMotionSlot`) moves every caster point
+      added or gone, `SdfWorldTables.DecideMotionSlot`) moves every caster point
       with the box, so the box's displacement bounds the caster's and it takes
       the standalone row's rule: drift under a texel of the finest entry costs
       nothing until it gathers (`SdfWorldShadows.Moved`'s `rigid`). Decision:
@@ -508,10 +508,12 @@ across a benchmark chapter and divided by the frames.
     the screen list's identity, the portal version and the filmed count; the
     host replaces the screen list whenever it changes any of the three.
 
-13. **The pipeline with a camera late-latch.** Decided, not built. Capture
-    frame N+1 on the frame thread while frame N's recordings run on the pool,
-    and place the camera the recording renders at submission. The order of
-    work:
+13. **The pipeline with a camera late-latch.** Decided, not built: it waits
+    for its latch, without which look would gain a frame
+    ([the decision](../decisions/rendering.md#the-pipeline-foundation)).
+    Capture frame N+1 on the frame thread while frame N's recordings run on
+    the pool, and place the camera the recording renders at submission. The
+    order of work:
 
     - Double-buffer what a capture writes and a recording reads, indexed by
       the frame's parity through the residency's two capture writers
@@ -560,12 +562,55 @@ across a benchmark chapter and divided by the frames.
       prepare plus record, `render.record`, and presented bursts in motion
       for tearing or a frame-old camera.
 
+    **What reading the code settled.** Four more things, for the lane that
+    builds it:
+
+    - Where the frames meet. Frame N's recordings open at the start of frame
+      N+1's produce, after that iteration's input, which is what lets the
+      latch read a newer look sample than N's capture did. They run beside
+      the host's composition capture of N+1 only (the composition's
+      `PrepareCapture`, `PackCapture` and `FinishCapture`, whose dress places
+      the cameras), and join before anything else of N+1: the runtime's pump,
+      the residencies' upkeep and `SdfWorldResidency.BeginFrame` (which starts
+      the shadows' next decision, `BeginShadowFrame`) all touch what a
+      recording reads. `WorldFramePresenter.PlaceComposedFrame` and the
+      residency's `PublishCaptured` also run after the join, since they write
+      the graph host's placements, the panes' frames and parameters
+      (`ShaderPipelineRenderNode.Frame`, read by `WriteFrameGroup` as a node
+      records) and the dresser's rows.
+    - What frame N's recordings must stop reading. The SDF recorders read
+      `SdfWorldResidency.Frame`, which a capture replaces; they read the frame
+      the tables packed instead. `SdfFrame.Writer.CopyFrom` copies the
+      content's references, and the presenter's dress refills its view list in
+      place, so a copy owns what the recorders read of the content (the views
+      first). `SdfWorldResidency.OpenCapture` makes the tables forget their
+      view inputs, which a recording reads, so that moves after the join.
+    - The runtime's frame state splits across two produces. Today one call
+      prepares, records, commits, flushes and settles a frame
+      (`RenderGraphRuntime.ProduceFrameBatched`, then `Complete`,
+      `ServePresented` and the retirements in `ProduceFrameCore`, and
+      `FinishHistory` after it). The commit loop, `ConvertForCapture`,
+      `FinishHistory` and the frame's completions move to the call after, ahead
+      of that call's schedule, which reads the history the commit settles; the
+      node returns frame N's surface and `Render` from call N+1. A frame that
+      cannot wait a call keeps today's shape: a second wave
+      (`RenderGraphRuntime.PlanWaves`), a capture armed or converging, a
+      locked tick.
+    - The latch's camera. The camera evaluator is a pure function of its frame
+      (`SdfCameraProgramEvaluator`), so frame N's seat camera is evaluated
+      again from `WorldSeatViewState.PresentedLook` at N+1's fraction against
+      the subjects, scalars and clocks N's capture handed it, with the boom's
+      ease and the clearance carried from N's evaluation; the views that read
+      the seat's camera after the dress (windows fitted to its glass, the
+      footprints' sight) keep N's fit for that frame, which is the padding the
+      second item above asks for.
+
 14. **Smaller cuts beside the chain.** Built.
 
     - **A rigid slot under met scopes is placed only past a texel.** With
       every motion scope met (`m_motionOpen == 0`) only the shadows read a
       slot's change, and a rigid slot's box is a function of its pose, so
-      `SdfWorldTables.JudgeMotionSlot` leaves an unmoved slot unplaced, and
+      `SdfWorldTables.DecideMotionSlot` leaves an unmoved slot unplaced, and
       a moved one whose pose change bounds its box's displacement from the
       shadows' judged box under their finest texel
       (`CarriedBound.Displacement` against `SdfWorldShadows.StillDisplacement`).
@@ -585,6 +630,27 @@ across a benchmark chapter and divided by the frames.
       counts the shapes not composed again. Moving the drivers' evaluation to
       the GPU stays the structural cut, since the bake and the draws already
       read each slot's transform.
+
+15. **The moved slots decide side by side.** Built. In motion every motion
+    scope stays open, so the slot's sparing (step 14) rarely applies, and the
+    host's pack placed and judged about 3,700 moved slots a staging on the
+    pack's one lane (`sdf.residency.motion.rows` against `rows-spared`), which
+    the frame thread then waited for in `SdfWorldResidency.JoinPack`. A slot's
+    judgement is now two halves. `SdfWorldTables.DecideMotionSlot` places the
+    slot's boxes, or spares it, reading only the slot's own `SlotMotion`, the
+    frame's poses, the draw records and the shadows' judged boxes, so the
+    staging's slots decide as the partitions of one `JobClass.Frame` fork
+    (`SdfWorldTables.Jobs`, set as the residency begins its pack).
+    `SettleMotionSlot` hands each decided change to the scopes and the shadows
+    (`NoteMotion`), which every slot shares, on the packing thread in the order
+    `CollectMotionSlot` gathered them. Invariant: no decision writes what
+    another decision reads. Door: nothing a decision reads is written until
+    the fork joins, since every write to the scopes, the shadows' judged boxes
+    and the slot table sits in the settle. The open scope count a decision
+    spares by is the one the staging began with, so a scope a settle meets
+    spares nothing more until the next staging, which only places more slots.
+    What shows it: `host.frames`' `pack` part and the frame thread's samples
+    in `JoinPack` (`puck host samples --focus ProduceFrameBatched`).
 
 ## Systems considered
 

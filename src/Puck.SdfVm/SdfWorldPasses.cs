@@ -558,7 +558,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         // The host's pack needs nothing the readers' rounds resolve: its screens' sources were published before the frame
         // and its views were filmed with its capture. So it begins here and runs on its lane beside the rounds, and the
         // frame's pack (ReadsPrepared) joins it.
-        if ((jobs is { Serial: false }) && (m_host is { IsReleased: false } packed) && packed.BeginPack(context: in context)) {
+        if ((jobs is { Serial: false }) && (m_host is { IsReleased: false } packed) && packed.BeginPack(context: in context, jobs: jobs)) {
             _ = packed.PackAhead();
         }
     }
@@ -695,7 +695,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         try {
             foreach (var residency in m_packsPending) {
-                if (residency.IsReleased || !residency.BeginPack(context: in context)) { continue; }
+                if (residency.IsReleased || !residency.BeginPack(context: in context, jobs: jobs)) { continue; }
                 if ((jobs is { Serial: false }) && residency.PacksBeside) {
                     fork.Add(residency: residency);
                 } else {

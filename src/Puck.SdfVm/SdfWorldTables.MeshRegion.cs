@@ -558,7 +558,7 @@ public sealed partial class SdfWorldTables {
                 var sameRoster = (ReferenceEquals(objA: m_meshSource, objB: draws.Roster) && (draws.Occupancy(row: index) == m_stagedOccupancies[index]));
                 var difference = draw.StagedDifference(other: in m_stagedDraws[index]);
                 // A draw that moved with the slot it rides has the record it had: the kernels pose it from the slot's row,
-                // and the motion scopes judge it as that slot moves (NoteMovedSlots).
+                // and the motion scopes judge it as that slot moves (CollectMovedSlots).
                 var recordStands = ((difference == SdfMeshDrawDifference.None) || (difference == SdfMeshDrawDifference.Slot));
 
                 if (!sameRoster || !recordStands ||

@@ -889,9 +889,31 @@ whose check boots did not settle with no tier missed.
   (`puck world player worlds/debug --output <folder> --extension src/Puck.World.Azure --backend directx --backend vulkan --target rtx2060@1920x1080 --target rtx4070@2560x1440`,
   `player.json` saying `complete`), then the 2060 itself, at rest and over the
   route, reading `world.counters sdf.mesh-cache` at the end. Check:
-  `rungs-missed` is zero and every group baked is geometry a rule made. A
-  check that does not settle names what holds each bake in `player.json`'s
-  `unsettled` (`SdfMeshPathBake.DescribeUnsettled`).
+  `rungs-missed` less `rungs-missed-live` is zero and every group baked is
+  geometry a rule made. A check that does not settle names what holds each
+  bake in `player.json`'s `unsettled` (`SdfMeshPathBake.DescribeUnsettled`),
+  and one that misses names each tier in its `missed` list.
+- [high] The Direct3D 12 fill wedges at the `launch` spawn point after its
+  spawn settles: a screen session (`session$18`) records a view of the parked
+  garden residency (`routed$6~global6~garden`), `SdfWorldResidency.Staged`
+  refuses it ("has no tables to render ... building (28 of 28 pipelines
+  created)"), the render graph stops committing frames, and the console stops
+  answering, so `world.wait bakes` never returns. The residency's parking
+  invariant (`SdfWorldResidency.Parking.cs`) says no schedule records a view
+  of a parked residency; this one does. Owner: residency, with frame
+  production. Check: a Direct3D 12 ladder boot of the debug world posed at
+  `hero`, `stage`, then `launch` keeps answering `world.wait bakes`.
+- [medium] One cache set for both backends would halve the fill and the
+  shipped bytes: the mesh bake identity hashes each backend's kernel bytecode
+  (`SdfMeshBakeIdentity`), so the same HLSL compiled to DXIL and to SPIR-V
+  names two sets of the same meshes. Naming a set by the kernels' source and
+  compiler would let one fill serve both, if the two backends' bakes agree
+  within the still tolerance; measure that on one world before changing the
+  identity. Owner: rendering, with delivery.
+- [medium] The fill cannot yet run on a CPU-only runner: WARP runs the same
+  DXIL, so its identity matches, but the fill boots a window and bakes at a
+  software rasterizer's pace. It needs a device-holding boot without a window
+  and a bake fast enough that a whole ladder fits a CI job.
 - [medium · unconfirmed] One Direct3D 12 fill and one 2060 check of the
   run before the complete one lost the device with
   `DXGI_ERROR_INVALID_CALL` (no breadcrumb; first seen at
@@ -1482,14 +1504,6 @@ The frame thread's CPU work, largest first:
   gate's holds attributed by site on a cold bake (`gate=[...]` in the done line)
   and the workers' longest sections shortened, or the frame's entries made to
   publish rather than wait as `Pending` does.
-- [medium] `SdfWorldTables.NoteMovedSlots` judges each row riding a moved slot
-  (`sdf.residency.motion.rows`, about 3,500 a staging across the route's
-  residencies), decoding its record's box. Rows riding one slot move rigidly,
-  as its readers do (`ReachBySlot`), but each row's held box (`m_slotBoxes`) is
-  what a later restage judges from; judging a slot once needs that held box
-  derived from the slot's last judged pose instead, and a per-slot reach must
-  group a slot's rows by their record's carry and scale (`SdfMeshBox.Ridden`
-  reads both per record), since rows on one slot need not share them.
 
 - [high] The tick runs on the frame thread (`HostLoop.Run` through
   `FixedStepPump.Step`), so a frame that steps carries a whole tick. The move
@@ -2160,9 +2174,10 @@ check; this packet holds the defects beside it.
 - [medium] The mesh store evicts whole sets when it nears its size limit
   (`CacheRetention`), and a whole ladder per backend is now several times the
   bytes of the sets that limit was sized for, so a lead machine that bakes
-  for two backends and several identities loses sets it still needs. Size the
-  limit from what a set is, or retire by identity age, and say who owns the
-  figure.
+  for two backends and several identities loses sets it still needs. A player
+  folder keeps only its build's sets and fails when one was evicted
+  (`puck world player`); the per-user store still needs its limit sized from
+  what a set is, or retirement by identity age, and an owner for the figure.
 - [medium] Step 2's heap walk on a headless debug world names two large-object
   tenants the plan's [large host owners](streaming-and-memory.md#the-large-host-owners)
   table bounds by no step: `FieldCellDelta[]` arrays held by

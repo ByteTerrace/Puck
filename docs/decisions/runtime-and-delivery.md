@@ -444,13 +444,39 @@ geometry no player reaches: bounding a ladder's finest tier needs the nearest
 a body can stand to a mesh, and the set is cut to that bound only once
 something computes it.
 
+**The fill stands at places rather than enumerating the plan offline.** What a
+player's build needs is every tier between finest and coarsest of every
+geometry a check boot draws, since window, distance and memory budget can ask
+any of them. Enumerating that from the rest scene would need no camera and
+would fit a CPU runner, but the debug world shows three things a rest scene
+does not stand: its program grows as it runs (dealt cards add instances, and
+each growth renumbers the groups after them), a world field's reference takes a
+new shape as its water settles, and other worlds' residencies open only where a
+place's portal or screen shows them. A boot of the published engine stands in
+all three as a player's does, so the fill stays a boot. Its cost is the bake's,
+not the visits': in a Vulkan fill of the debug world the spawn's whole-world
+ladder took nearly all of the boot and the places after it a few minutes,
+so a smaller fill comes from fewer tiers or fewer sets, not fewer places
+([open items](../plans/open-items.md#the-player-build-never-bakes)).
+
 **Complete means checked as a player runs it.** `puck world player` boots each
 backend and target under the stored policy on the target's device profile,
 stands at every authored spawn point, and marks the folder complete only when
 every boot settled at every place, missed no tier and baked nothing but live
-geometry (`world.counters sdf.mesh-cache`). An incomplete folder says why
-in `player.json` and produces no cache set, so the release job holds the
-channel as it does for a missing set.
+geometry (`world.counters sdf.mesh-cache`). The invariant is that a check asks
+only for tiers the fill produced. The engine names every tier a check asks
+that the store lacks (`[sdf.mesh-bake] rung-missed`), and the verb records each
+in `player.json` with the place it stood at, the residency, the geometry and
+the tiers asked and drawn, so a miss names what the fill did not produce. A
+sampled field's reader asked at a field state the world then moves past is live
+geometry, like a reader planned again as its field moves: its misses are counted
+apart (`SdfMeshCache.RungsMissedLive`), because no cache made beforehand holds
+the ladder of a state the world passes through on its way to rest. The folder's
+store holds only the build's own sets, one a backend, since the store keeps the
+writer's set whole and evicts others past its bound; a set a later fill evicted
+fails the folder. An incomplete folder says why in `player.json` and produces
+no cache set, so the release job holds the channel as it does for a missing
+set.
 
 ## Vendor binaries
 
