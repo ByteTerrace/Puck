@@ -2,8 +2,6 @@
     <PropertyGroup>
         <IsAotCompatible>false</IsAotCompatible>
         <OutputType>Exe</OutputType>
-        <!-- Puck.Cli publishes self-contained for these runtimes and references this executable, so its restore needs them too. -->
-        <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
         <!-- A silo row's QUIC door listens, so `dotnet run` starts the silo under the shared dotnet host
              (Directory.Build.targets); the Docker image already runs `dotnet Puck.World.Silo.dll`. -->
         <PuckRunUnderDotnetHost>true</PuckRunUnderDotnetHost>

@@ -5,8 +5,6 @@
         <IsAotCompatible>false</IsAotCompatible>
         <NoWarn>$(NoWarn);CS1591</NoWarn>
         <OutputType>Exe</OutputType>
-        <!-- Puck.Cli publishes self-contained for these runtimes and references this executable, so its restore needs them too. -->
-        <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
         <PuckKind>Tool</PuckKind>
         <RootNamespace>Puck.Cli</RootNamespace>
         <SatelliteResourceLanguages>en</SatelliteResourceLanguages>

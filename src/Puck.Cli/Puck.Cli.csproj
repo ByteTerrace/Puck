@@ -17,8 +17,10 @@
         <ServerGarbageCollection>true</ServerGarbageCollection>
         <!-- A hosting machine has no .NET: a host build (`puck world host build`) publishes the CLI, which carries the
              silo, with its own runtime. The switch is this project's alone, as Puck.World's is, so referenced libraries
-             keep their portable locked restores. -->
-        <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
+             keep their portable locked restores. The runtimes are declared to the restore (so the locked restore carries
+             their sections) and to a host build, never to an ordinary build or pack: a tool package that sees
+             RuntimeIdentifiers becomes RID-specific packages and leaves its implementation out of the package CI installs. -->
+        <RuntimeIdentifiers Condition="'$(MSBuildIsRestoring)' == 'true' or '$(PuckSelfContained)' == 'true'">win-x64;linux-x64</RuntimeIdentifiers>
         <SelfContained Condition="'$(PuckSelfContained)' == 'true'">true</SelfContained>
         <!-- The silo and the worlds CLI are referenced for their assemblies, which this process hosts in-process (`puck
              world host serve`); their own apphosts are never started from a host release. -->

@@ -610,20 +610,6 @@
           "Puck.World.Schema": "[1.0.0, )"
         }
       }
-    },
-    "net11.0/linux-x64": {
-      "Wasmtime": {
-        "type": "Transitive",
-        "resolved": "50.0.1",
-        "contentHash": "YLMAwzmjCkpsA2dPzO91tcG12PTO2tt6eQw1pcMwMTujHpcn2RlPmvF8id++5V+3gI/qTkI/aWPnrwaeaXCyhA=="
-      }
-    },
-    "net11.0/win-x64": {
-      "Wasmtime": {
-        "type": "Transitive",
-        "resolved": "50.0.1",
-        "contentHash": "YLMAwzmjCkpsA2dPzO91tcG12PTO2tt6eQw1pcMwMTujHpcn2RlPmvF8id++5V+3gI/qTkI/aWPnrwaeaXCyhA=="
-      }
     }
   }
 }
