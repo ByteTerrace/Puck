@@ -100,12 +100,8 @@ public static partial class AzureCommand {
                     token: token
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
-                await RetainWorldReleaseImagesAsync(
-                    ((source is null)
-                    ? [candidate.Image]
-                    : [source.Image, candidate.Image]),
-                    token
-                ).ConfigureAwait(continueOnCapturedContext: false);
+                var candidateEngine = await InstallWorldReleaseEngineAsync(deployment: candidate, token: token).ConfigureAwait(continueOnCapturedContext: false);
+                var sourceEngine = ((source is null) ? candidateEngine : await InstallWorldReleaseEngineAsync(deployment: source, token: token).ConfigureAwait(continueOnCapturedContext: false));
                 var operation = (operationId ?? Guid.NewGuid());
 
                 Console.WriteLine(value: $"Release operation: {operation:D}");
@@ -121,8 +117,8 @@ public static partial class AzureCommand {
                 var runner = new WorldReleaseQualificationRunner(
                     fixtureDirectory,
                     Path.GetFullPath(path: "artifacts/world-release-qualification"),
-                    (((source is null) || (reset is not null)) ? candidate.Image : source.Image),
-                    candidate.Image,
+                    (((source is null) || (reset is not null)) ? candidateEngine : sourceEngine),
+                    candidateEngine,
                     archive: context.Archive,
                     clock: context.Clock,
                     documentDirectory: LocalWorldsDirectory

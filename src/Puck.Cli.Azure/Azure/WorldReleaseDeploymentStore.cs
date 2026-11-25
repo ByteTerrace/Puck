@@ -3,26 +3,26 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Puck.Abstractions.Documents;
 using Puck.Assets;
+using Puck.Cli.Automation;
 using Puck.Storage;
 using Puck.World.Server;
 
 namespace Puck.Cli.Azure;
 
-/// <summary>A release's exact deployment inputs: the compute parameters and template, the worker's bootstrap script
-/// and the launcher that fetches it. They hold no signing key, so they are retained as an immutable object in the
-/// release content store, which the worker's own identity reads; only their pin travels with the keys.</summary>
+/// <summary>A release's exact deployment inputs: the compute parameters and template, the hosting machine's typed inputs
+/// and the signed host release it installs. They hold no signing key, so they are retained as an immutable object in the
+/// release content store, which the machine's own identity reads; only their pin travels with the keys.</summary>
 /// <param name="Release">The full identity of the release the inputs deploy.</param>
 /// <param name="Group">The deployment group the inputs belong to.</param>
-/// <param name="Parameters">The compute template's parameters, without the protected bootstrap command.</param>
+/// <param name="Parameters">The compute template's parameters, without the protected bootstrap.</param>
 /// <param name="PublicKey">The base64 SubjectPublicKeyInfo of the primary world's federation key.</param>
 /// <param name="ComputeTemplate">The compiled compute template.</param>
-/// <param name="Bootstrap">The worker's bootstrap script, run once the launcher has verified it.</param>
-/// <param name="Launcher">The program the protected bootstrap command runs: it reads these inputs by their pin,
-/// verifies them, and runs <paramref name="Bootstrap"/> with the keys.</param>
+/// <param name="Host">What the machine's bootstrap (<c>puck world host install</c>) writes and starts.</param>
+/// <param name="Install">The signed host release the machine installs before its bootstrap runs.</param>
 public sealed record WorldReleaseDeploymentConfiguration(string Release, string Group, JsonObject Parameters, string PublicKey, JsonObject ComputeTemplate,
-    string Bootstrap, string Launcher) {
-    /// <summary>Gets whether the immutable worker configuration enforces the closed inventory recovery points require.</summary>
-    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    WorldHostInputs Host, WorldHostRelease Install) {
+    /// <summary>Gets the engine the deployment runs, the payload identity of its host release.</summary>
+    [System.Text.Json.Serialization.JsonIgnore] public string Engine => Install.Engine;
     public bool ClosedGroupRewind { get; init; }
 }
 /// <summary>A release's retained deployment: its inputs, the pin they are retained under, and the federation signing
@@ -68,7 +68,7 @@ public sealed partial class WorldReleaseDeploymentStore(IObjectBlobStore blobs, 
 
     /// <summary>The file names a worker's bootstrap accepts for a mounted signing key.</summary>
     // A world's federation key (federation.pk8, or federation-<world digest>.pk8) or the deployment issuer's root key
-    // (issuer.pk8, AzureWorld.WorldIssuerKeyFile), the same names build/Start-WorldSilo.sh accepts.
+    // (issuer.pk8, AzureWorld.WorldIssuerKeyFile), the same plain .pk8 names the machine's bootstrap accepts.
     [GeneratedRegex(pattern: "\\A(?:federation(-[0-9a-f]{64})?|issuer)\\.pk8\\z", options: RegexOptions.CultureInvariant)]
     private static partial Regex KeyFile();
 
@@ -180,22 +180,19 @@ public sealed partial class WorldReleaseDeploymentStore(IObjectBlobStore blobs, 
             (configuration.Parameters is null) ||
             (configuration.ComputeTemplate is null) ||
             string.IsNullOrWhiteSpace(value: configuration.PublicKey) ||
-            string.IsNullOrWhiteSpace(value: configuration.Bootstrap) ||
-            string.IsNullOrWhiteSpace(value: configuration.Launcher)
+            (configuration.Host is null) ||
+            (configuration.Install is null)
         ) {
-            throw new InvalidDataException(message: "deployment configuration does not identify the exact release, public key and bootstrap");
+            throw new InvalidDataException(message: "deployment configuration does not identify the exact release, public key and host inputs");
         }
         _ = SafeName.Parse(candidate: configuration.Group);
-        var image = configuration.Parameters["release"]?.GetValue<string>();
-
         if (
-            (image is null) ||
-            !image.EndsWith(
-            ("@" + manifest.EngineImageDigest),
-            StringComparison.Ordinal
-        )
+            (configuration.Install.Engine != manifest.Engine) ||
+            (configuration.Host.Engine != manifest.Engine) ||
+            (configuration.Host.Release != manifest.Identity) ||
+            (configuration.Parameters["release"]?.GetValue<string>() != manifest.Engine)
         ) {
-            throw new InvalidDataException(message: "deployment image does not match the manifest's exact registry digest");
+            throw new InvalidDataException(message: "deployment inputs do not run the manifest's exact engine and release");
         }
     }
     private static void ValidateKeys(ReadOnlySpan<byte> inputs, IReadOnlyDictionary<string, string> keys) {

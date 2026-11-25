@@ -32,8 +32,10 @@ public sealed record WorldReleaseManifest {
     /// <summary>Required coordinator behavior; <see cref="TryValidate"/> admits only
     /// <see cref="CurrentCoordinatorContract"/> and refuses any other value by name.</summary>
     [JsonPropertyName("coordinatorContract")] public required string CoordinatorContract { get; init; }
-    /// <summary>Immutable engine image digest.</summary>
-    [JsonPropertyName("engineImageDigest")] public required string EngineImageDigest { get; init; }
+    /// <summary>The engine the release runs: the payload identity (<c>Puck.Launcher.Release.ReleasePayloadIdentity</c>, a
+    /// full <c>sha256/&lt;hex&gt;</c> content pin) of the signed host release a hosting machine installs from its release
+    /// channel. Re-signing or relabelling that release keeps it; any changed file changes it.</summary>
+    [JsonPropertyName("engine")] public required string Engine { get; init; }
     /// <summary>Returns the canonical, content-addressed identity of this manifest.</summary>
     [JsonIgnore] public string Identity => ComputeIdentity(manifest: this);
     /// <summary>Human-readable operator label.</summary>
@@ -65,13 +67,6 @@ public sealed record WorldReleaseManifest {
         return false;
     }
     // An OCI image digest spells the same full SHA-256 as "sha256:<hex64>"; its digits parse through ContentPin.
-    private static bool IsImageDigest(string? value) => ((value is not null) && value.StartsWith(
-        comparisonType: StringComparison.Ordinal,
-        value: "sha256:"
-    ) && ContentPin.TryParseHex(
-        hex: value.AsSpan(start: "sha256:".Length),
-        pin: out _
-    ));
     private static bool ValidateFilePath(string relativeName, string expected, string kind, out string reason) {
         if (string.IsNullOrWhiteSpace(value: relativeName)) { reason = $"release {kind} path is empty"; return false; }
         try {
@@ -182,8 +177,8 @@ public sealed record WorldReleaseManifest {
             reason = "release label and source revision are required";
             return false;
         }
-        if (!IsImageDigest(value: manifest.EngineImageDigest)) {
-            reason = "engine image must be an immutable sha256 digest";
+        if (!ContentPin.TryParse(pin: out _, text: manifest.Engine)) {
+            reason = "the engine must be a full content pin of the host release's payload identity";
             return false;
         }
         if (
@@ -326,7 +321,7 @@ public sealed record WorldReleaseManifest {
                 StringComparer.Ordinal
             ),
                 ["coordinatorContract"] = manifest.CoordinatorContract,
-                ["engineImageDigest"] = manifest.EngineImageDigest,
+                ["engine"] = manifest.Engine,
                 ["label"] = manifest.Label,
                 ["peerProtocolContract"] = manifest.PeerProtocolContract,
                 ["persistenceContract"] = manifest.PersistenceContract,

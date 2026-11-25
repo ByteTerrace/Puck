@@ -59,9 +59,11 @@ if (ChannelSubscription.TryLoad(error: out var loadError, installRoot: root, sub
 var current = (ReleasePolicy.ReadUnlocked(installRoot: root).Current ?? "0.0.0");
 var services = new ServiceCollection();
 
+var channelSource = subscription.ToReleaseSource(httpClient: HttpReleaseSource.SharedClient);
+
 services.AddSelfUpdate(
     options: new UpdateOptions(App: arguments.App, CacheRoot: root, Channel: subscription.Channel, InstalledVersion: current, TrustAnchor: subscription.TrustAnchor),
-    releaseSource: subscription.ToReleaseSource(httpClient: HttpReleaseSource.SharedClient)
+    releaseSource: ((arguments.Release is { } release) ? new PinnedReleaseSource(inner: channelSource, length: arguments.ReleaseSize, pin: release) : channelSource)
 );
 UpdateApplyOutcome applied;
 
@@ -84,7 +86,7 @@ if (!applied.Applied) {
     if (installed is null) { return 1; }
 }
 try {
-    SetupInstall.LayLauncher(installRoot: root, version: installed!);
+    SetupInstall.LayLauncher(installRoot: root, start: arguments.Start, version: installed!);
 } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
     Console.Error.WriteLine(value: $"setup: version {installed} is installed, but its launcher could not be laid beside it: {exception.Message}");
     return 1;

@@ -13,7 +13,7 @@ using Puck.World.Server;
 namespace Puck.Cli.Azure;
 
 public static partial class AzureCommand {
-    private static async Task TestWorldReleaseAsync(string? group, string? image, string? scaleSet, TimeProvider clock) {
+    private static async Task TestWorldReleaseAsync(string? group, string? engine, string? scaleSet, TimeProvider clock) {
         var outputs = (((group is not null) && (scaleSet is not null))
             ? null
             : Outputs()
@@ -27,7 +27,7 @@ public static partial class AzureCommand {
             key: "worldSiloConfiguration",
             outputs: outputs!
         )["name"]);
-        image ??= File.ReadAllText(path: "artifacts/world-silo.digest").Trim();
+        engine ??= File.ReadAllText(path: WorldHostEnginePath).Trim();
         var workers = await WorkersAsync(
             group: group,
             scaleSet: scaleSet
@@ -60,22 +60,15 @@ public static partial class AzureCommand {
             }
         }
         var worker = Text(value: workers[0]!["name"]);
-        var message = await WorldGuestOutputAsync(
-            contents: "cat /etc/puck/release; docker inspect --format '{{.Config.Image}} {{.State.Running}}' puck-world",
+        var process = (await WorldGuestJsonAsync(
             group: group,
+            script: WorldProbeScript,
             worker: worker
-        );
+        ))["process"]!;
 
-        if (
-            !message.Contains(
-            comparisonType: StringComparison.Ordinal,
-            value: (image + " true")
-        ) ||
-            !message.Contains(
-            comparisonType: StringComparison.Ordinal,
-            value: $"\n{image}\n"
-        )
-        ) { throw new InvalidDataException(message: $"The running world container does not match the requested release digest {image}: {message.Trim()}"); }
+        if ((process["engine"]?.GetValue<string>() != engine) || (process["running"]?.GetValue<bool>() != true)) {
+            throw new InvalidDataException(message: $"The running world host does not run the requested engine {engine}: {process.ToJsonString()}");
+        }
         await RetryAsync(
             action: async () => {
                 var view = await AzJsonAsync(
@@ -322,7 +315,7 @@ public static partial class AzureCommand {
                 await TestWorldReleaseAsync(
                     clock: clock,
                     group: null,
-                    image: null,
+                    engine: null,
                     scaleSet: null
                 );
                 // The load balancer forwards QUIC only to a worker whose /healthz answers 200, so the worker's own answer
@@ -459,22 +452,19 @@ public static partial class AzureCommand {
             throw new InvalidDataException(message: $"Unexpected representation at {uri}: {response.Content.Headers.ContentType} with Cache-Control {response.Headers.CacheControl} and X-Cache {edge}.");
         }
     }
-    private static async Task TestWorldContainerAsync(string image, TimeProvider clock) {
-        await DockerAsync(
-            "run",
-            "--rm",
-            "--user",
-            "1655:1655",
-            "--read-only",
-            "--cap-drop",
-            "ALL",
-            "--security-opt",
-            "no-new-privileges",
-            "--entrypoint",
-            "/usr/bin/caddy",
-            image,
-            "version"
-        );
+    // A checkpoint root's ordinal, which advances with each checkpoint a boot writes.
+    [GeneratedRegex(pattern: "\"checkpointOrdinal\":[0-9]+", options: RegexOptions.CultureInvariant)]
+    private static partial Regex CheckpointOrdinal();
+    private static async Task TestWorldHostAsync(string installRoot, TimeProvider clock) {
+        var (version, engine) = (WorldHostEngine.Current(installRoot: installRoot) ?? throw new InvalidDataException(message: $"{installRoot} holds no installed host release"));
+        var executable = Path.Combine(path1: version, path2: Puck.Confinement.InstallLayout.ExecutableFileName(name: WorldHostLayout.Executable));
+        var worldsDirectory = Path.Combine(path1: version, path2: WorldHostLayout.WorldsDirectory);
+        var tlsFront = Path.Combine(path1: version, path2: WorldHostLayout.TlsFrontExecutable);
+
+        Console.WriteLine(value: $"Verifying the installed engine {engine} ({version}).");
+        if (File.Exists(path: tlsFront)) {
+            await RunAsync(arguments: ["version"], executable: tlsFront);
+        }
         var fixture = Path.GetFullPath(path: "artifacts/silo-smoke");
 
         if (Directory.Exists(path: fixture)) { throw new IOException(message: "Use a fresh silo smoke-test directory."); }
@@ -501,26 +491,8 @@ public static partial class AzureCommand {
                 )
             );
         }
-        await DockerAsync(
-            "create",
-            "--name",
-            "silo-source",
-            image
-        );
-        try {
-            await DockerAsync(
-                "cp",
-                $"silo-source:{WorldSiloImageLayout.WorldsDirectory}/.",
-                Path.Combine(
-                    path1: fixture,
-                    path2: "worlds"
-                )
-            );
-        } finally {
-            await DockerAsync(
-                "rm",
-                "silo-source"
-            );
+        if (CliFiles.CopyDirectory(destination: Path.Combine(path1: fixture, path2: "worlds"), source: worldsDirectory) != 0) {
+            throw new IOException(message: $"the installed worlds at {worldsDirectory} could not be copied");
         }
         var services = new ServiceCollection();
 
@@ -559,14 +531,14 @@ public static partial class AzureCommand {
             }
         }
         var silo = SiloDocument(
-            documentDirectory: WorldSiloImageLayout.WorldsDirectory,
-            keyFile: "/fixture/federation.pk8",
+            documentDirectory: WorldHostLayout.WorldsDirectory,
+            keyFile: Path.Combine(path1: fixture, path2: "federation.pk8"),
             owner: Owner,
-            store: new JsonObject { ["type"] = "directory", ["settings"] = new JsonObject { ["path"] = "/fixture/store" } },
+            store: new JsonObject { ["type"] = "directory", ["settings"] = new JsonObject { ["path"] = Path.Combine(path1: fixture, path2: "store") } },
             world: HostedWorldName
         );
 
-        silo["stateDir"] = "/fixture/state";
+        silo["stateDir"] = Path.Combine(path1: fixture, path2: "state");
         silo["lifecycle"] = new JsonObject {
             ["healthPort"] = 8081,
             ["healthAddress"] = DeploymentListenAddress,
@@ -583,7 +555,7 @@ public static partial class AzureCommand {
             ),
             value: silo
         );
-        // The second boot runs the image the way a deployment with MCP enabled does, so this document has the shape the
+        // The second boot runs the release the way a deployment with MCP enabled does, so this document has the shape the
         // deployment's worldMcpConfiguration output renders: a tenant issuer, oid subjects and an inventory observation,
         // which makes the Azure MCP host construct its ARM pipeline at startup. Nothing here reaches the network before
         // a caller arrives.
@@ -623,83 +595,29 @@ public static partial class AzureCommand {
                 },
             }
         );
-        await DockerAsync(
-            "run",
-            "--rm",
-            "--user",
-            "0",
-            "--entrypoint",
-            "chown",
-            "--mount",
-            $"type=bind,source={fixture},target=/fixture",
-            image,
-            "-R",
-            "1654:1654",
-            "/fixture"
-        );
-        var root = $"/fixture/store/{Owner}/{WorldOwnedWorldSync.HostedPrivateNamespace}/{HostedWorldName}/authority/root";
+        var root = Path.Combine(path1: fixture, path2: "store", path3: $"{Owner}/{WorldOwnedWorldSync.HostedPrivateNamespace}/{HostedWorldName}/authority/root");
         var previous = "";
 
         for (var boot = 1; (boot <= 2); boot++) {
-            // Boot 1 runs the image's own entry point, the deployment's shape without MCP; boot 2 runs the deployment's
-            // MCP shape, the image's CLI composing the installed extensions over the silo it hosts.
-            string[] command = ((boot == 1)
-                ? [image, "--silo", "/fixture/silo.json"]
-                : ["--entrypoint", "dotnet", image, .. WorldSiloImageLayout.McpArguments(silo: "/fixture/silo.json", http: "/fixture/mcp.json")]);
+            // Boot 1 runs the deployment's shape without MCP; boot 2 runs its MCP shape, the release's CLI composing the
+            // installed extensions over the silo it hosts. Both run from the version directory, as the units do.
+            var log = Path.Combine(path1: fixture, path2: $"boot-{boot}.log");
+            using var host = Puck.Abstractions.ChildProcess.StartRedirected(
+                arguments: ["world", "host", "serve", "--silo", Path.Combine(path1: fixture, path2: "silo.json"), .. ((boot == 1) ? [] : (string[])["--mcp", Path.Combine(path1: fixture, path2: "mcp.json")])],
+                fileName: executable,
+                workingDirectory: version
+            );
+            var output = Task.WhenAll(host.StandardOutput.ReadToEndAsync(), host.StandardError.ReadToEndAsync());
 
-            await DockerAsync(args: [
-                "run",
-                "-d",
-                "--name",
-                "silo-smoke",
-                "--user",
-                "1654:1654",
-                "--read-only",
-                "--tmpfs",
-                "/tmp:rw,noexec,nosuid,size=64m",
-                "--cap-drop",
-                "ALL",
-                "--security-opt",
-                "no-new-privileges",
-                "--pids-limit",
-                "512",
-                "--log-driver",
-                "local",
-                "--log-opt",
-                "max-size=10m",
-                "--log-opt",
-                "max-file=3",
-                "--mount",
-                $"type=bind,source={fixture},target=/fixture",
-                "-p",
-                $"127.0.0.1:{Port}:{Port}/udp",
-                "-p",
-                "127.0.0.1:8081:8081",
-                "--env",
-                "ASPNETCORE_HTTP_PORTS=",
-                .. command,
-            ]);
+            host.StandardInput.Close();
             try {
                 var checkpoint = "";
                 var ready = false;
                 var healthReason = "readiness has not answered";
 
                 for (var attempt = 0; (attempt < 90); attempt++) {
-                    if (await DockerAsync(
-                        "inspect",
-                        "silo-smoke",
-                        "--format",
-                        "{{.State.Running}}"
-                    ) != "true") { throw new InvalidOperationException(message: "Silo exited before checkpointing the primary world."); }
-                    checkpoint = await DockerAsync(
-                        "exec",
-                        "silo-smoke",
-                        "sh",
-                        "-c",
-                        "if [ -f \"$1\" ]; then grep -o '\"checkpointOrdinal\":[0-9][0-9]*' \"$1\" || true; fi",
-                        "probe",
-                        root
-                    );
+                    if (host.HasExited) { throw new InvalidOperationException(message: "Silo exited before checkpointing the primary world."); }
+                    checkpoint = (File.Exists(path: root) ? (CheckpointOrdinal().Match(input: await File.ReadAllTextAsync(path: root)).Value) : "");
                     if (
                         (checkpoint.Length != 0) &&
                         (checkpoint != previous)
@@ -734,7 +652,7 @@ public static partial class AzureCommand {
                     (azureHealth.Content.Headers.ContentType?.MediaType != "application/json") ||
                     (Text(value: richHealth?["ApplicationHealthState"]) != "Healthy")
                 ) {
-                    throw new InvalidDataException(message: "The world container does not satisfy Azure's rich application health contract.");
+                    throw new InvalidDataException(message: "The world host does not satisfy Azure's rich application health contract.");
                 }
                 await PuckAsync(
                     "world",
@@ -749,18 +667,12 @@ public static partial class AzureCommand {
                 previous = checkpoint;
                 Console.WriteLine(value: $"PASS: Puck boot {boot} activated, checkpointed, and accepted an authenticated QUIC connection.");
             } finally {
-                try {
-                    Console.WriteLine(value: await DockerAsync(
-                        "logs",
-                        "silo-smoke"
-                    ));
-                } finally {
-                    await DockerAsync(
-                        "rm",
-                        "-f",
-                        "silo-smoke"
-                    );
-                }
+                if (!host.HasExited) { host.Kill(entireProcessTree: true); }
+                await host.WaitForExitAsync();
+                var lines = await output;
+
+                Console.WriteLine(value: lines[0]);
+                Console.WriteLine(value: lines[1]);
             }
         }
     }

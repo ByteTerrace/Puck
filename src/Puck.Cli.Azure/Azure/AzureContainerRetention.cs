@@ -29,7 +29,6 @@ public static partial class AzureCommand {
         }
         var digest = Text(value: metadata["digest"]);
 
-        _ = ParseWorldReleaseImage(image: ((((server + "/") + repository) + "@") + digest));
         var reference = ((((server + "/") + repository) + "@") + digest);
         var retained = JsonNode.Parse(await DockerAsync(
             "manifest",

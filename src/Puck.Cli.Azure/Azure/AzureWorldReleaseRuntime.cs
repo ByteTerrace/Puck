@@ -11,14 +11,14 @@ public static partial class AzureCommand {
     private sealed record AzureWorldReleaseDeployment(WorldReleaseManifest Manifest, WorldReleaseRetainedDeployment Retained) {
         public WorldReleaseDeploymentConfiguration Configuration => Retained.Configuration;
         public int HealthPort => Parameters["configuration"]!["lifecycle"]!["healthPort"]!.GetValue<int>();
-        public string Image => Text(value: Parameters["release"]);
+        public string Engine => Configuration.Engine;
         public JsonObject Parameters => Configuration.Parameters;
         public string Priority => WorldPriority(compute: Parameters["configuration"]!["compute"]!);
         public int ShutdownSeconds => Parameters["configuration"]!["lifecycle"]!["shutdownSeconds"]!.GetValue<int>();
     }
     /// <summary>Runs the shared release transaction against the existing single-worker VMSS and private store.</summary>
     private sealed class AzureWorldReleaseRuntime(
-        string resourceGroup, string scaleSet, string temporary, string endpoint, string clientId,
+        string resourceGroup, string scaleSet, string temporary,
         WorldReleaseGroupStore groups, WorldAuthorityBlobStore authority, WorldReleaseArchive archive,
         WorldReleaseRestore restores,
         AzureWorldReleaseDeployment? source, AzureWorldReleaseDeployment target,
@@ -30,7 +30,7 @@ public static partial class AzureCommand {
         // reset's target may change (a world added starts fresh; a world removed keeps its protected root).
         private readonly WorldAuthorityIdentity[] m_sourceIdentities = (source ?? target).Manifest.Definitions.Keys.Select(selector: WorldAuthorityIdentity.ParseRootKey).ToArray();
 
-        // Checks a worker in one guest round trip: its container runs the exact image, its release status names the
+        // Checks a worker in one guest round trip: its silo runs the exact engine, its release status names the
         // retained release and group, and private health answers. Each Run Command costs tens of seconds, which a release's
         // repeated checks across its phases once multiplied into most of its post-boot time.
         private async Task CheckWorkerAsync(string worker, AzureWorldReleaseDeployment deployment, JsonNode? probe = null) {
@@ -39,9 +39,9 @@ public static partial class AzureCommand {
 
             if (
                 (process["running"]?.GetValue<bool>() != true) ||
-                (process["image"]?.GetValue<string>() != deployment.Image)
+                (process["engine"]?.GetValue<string>() != deployment.Engine)
             ) {
-                throw new InvalidDataException(message: $"the container on {worker} does not match the retained exact image {deployment.Image}: {process.ToJsonString()}");
+                throw new InvalidDataException(message: $"the world host on {worker} does not run the retained exact engine {deployment.Engine}: {process.ToJsonString()}");
             }
             WorldReleaseWorkerStatus? status = null;
 
@@ -54,14 +54,14 @@ public static partial class AzureCommand {
                 throw new InvalidOperationException(message: $"the worker on {worker} is not privately healthy: {Text(value: probe["health"]!["body"])}");
             }
         }
-        // One Run Command reading the container's image and state, the release status and private health.
+        // One Run Command reading the engine the silo runs and its state, the release status and private health.
         private Task<JsonNode> ProbeWorkerAsync(string worker, AzureWorldReleaseDeployment deployment) => WorldGuestJsonAsync(
             group: resourceGroup,
-            script: WorldProbeScript.Replace(oldValue: "__PORT__", newValue: deployment.HealthPort.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), comparisonType: StringComparison.Ordinal),
+            script: WorldProbeScript,
             worker: worker
         );
         // Runs the deployment's retained bootstrap under the operation's current phase. A worker already running the exact
-        // image is only checked; any other worker is replaced with fresh compute, never reconfigured in place. Azure
+        // engine is only checked; any other worker is replaced with fresh compute, never reconfigured in place. Azure
         // re-runs a VM extension only when its configuration changes, so applying the model a worker already carries (a
         // source its drain stopped, a VM an automatic repair booted while the guest guard refused it) runs nothing and
         // reports that worker's last result. A fresh worker runs the bootstrap when the scale set creates it, so the guard
@@ -83,7 +83,7 @@ public static partial class AzureCommand {
 
                 if (
                     (process["running"]?.GetValue<bool>() == true) &&
-                    (process["image"]?.GetValue<string>() == deployment.Image)
+                    (process["engine"]?.GetValue<string>() == deployment.Engine)
                 ) {
                     await CheckWorkerAsync(
                         deployment: deployment,
@@ -92,7 +92,7 @@ public static partial class AzureCommand {
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     return;
                 }
-                if (process["running"]?.GetValue<bool>() == true) { throw new InvalidOperationException(message: "another image is still running after the drain boundary"); }
+                if (process["running"]?.GetValue<bool>() == true) { throw new InvalidOperationException(message: "another engine is still running after the drain boundary"); }
                 // No host runs, and the drain or recovery already made the state durable in blob storage, so the worker
                 // holds nothing to keep.
                 await RequireAsync(
@@ -115,7 +115,7 @@ public static partial class AzureCommand {
 
             var parameters = deployment.Parameters.DeepClone().AsObject();
 
-            parameters["bootstrapCommand"] = WorldReleaseBootstrapCommand(deployment: deployment.Retained);
+            parameters["bootstrap"] = WorldReleaseBootstrapCommand(deployment: deployment.Retained);
             WriteParameters(
                 path: path,
                 values: parameters
@@ -165,22 +165,20 @@ public static partial class AzureCommand {
                 expected: operation,
                 phases: phases
             ).ConfigureAwait(continueOnCapturedContext: false);
-            var request = new JsonObject {
-                ["endpoint"] = endpoint,
-                ["owner"] = operation.Owner.ToString(format: "D"),
-                ["group"] = scaleSet,
-                ["clientId"] = clientId,
-                ["operation"] = operation.PendingOperationId!.Value.ToString(format: "D"),
-                ["source"] = operation.PendingSourceRelease,
-                ["target"] = operation.PendingTargetRelease,
-                ["phases"] = new JsonArray(phases.Select(selector: phase => JsonValue.Create(((int)phase))).ToArray()),
-            };
+            var request = new WorldReleaseGuestGuardRequest(
+                Group: scaleSet,
+                Operation: operation.PendingOperationId!.Value,
+                Owner: operation.Owner,
+                Phases: phases,
+                Source: operation.PendingSourceRelease,
+                Target: operation.PendingTargetRelease
+            );
 
             return ((WorldReleaseGuestLock + WorldReleaseGuestGuard(request: request)) + "\n");
         }
         private Task<JsonNode> InspectAsync(string worker) => WorldGuestJsonAsync(
             group: resourceGroup,
-            script: "if docker inspect puck-world >/dev/null 2>&1; then docker inspect --format '{\"image\":{{json .Config.Image}},\"running\":{{.State.Running}}}' puck-world; else printf '%s' '{\"image\":null,\"running\":false}'; fi",
+            script: WorldProbeScript,
             worker: worker
         );
         private async Task<WorldReleaseRuntimePublicationResult> PublishAsync(WorldReleaseGroupRecord operation, AzureWorldReleaseDeployment deployment, WorldReleaseOperationPhase phase, CancellationToken cancellationToken) {
@@ -354,10 +352,10 @@ public static partial class AzureCommand {
                     var process = await InspectAsync(worker: worker).ConfigureAwait(continueOnCapturedContext: false);
 
                     if (
-                        (process["image"]?.GetValue<string>() is { } image) &&
-                        (image != source.Image)
+                        (process["engine"]?.GetValue<string>() is { } engine) &&
+                        (engine != source.Engine)
                     ) {
-                        throw new InvalidOperationException(message: "source drain found an unknown image; refusing to stop another deployment");
+                        throw new InvalidOperationException(message: "source drain found an unknown engine; refusing to stop another deployment");
                     }
                     await WorldGuestAsync(
                         group: resourceGroup,
@@ -523,14 +521,14 @@ public static partial class AzureCommand {
             if (workers.Length == 1) {
                 var worker = Text(value: workers[0]!["name"]);
                 var process = await InspectAsync(worker: worker).ConfigureAwait(continueOnCapturedContext: false);
-                var image = process["image"]?.GetValue<string>();
+                var engine = process["engine"]?.GetValue<string>();
 
                 if (
-                    (image is not null) &&
-                    (image != target.Image) &&
-                    (image != source?.Image)
+                    (engine is not null) &&
+                    (engine != target.Engine) &&
+                    (engine != source?.Engine)
                 ) {
-                    throw new InvalidOperationException(message: "the worker contains an unknown image; refusing to stop another deployment");
+                    throw new InvalidOperationException(message: "the worker runs an unknown engine; refusing to stop another deployment");
                 }
                 // A failed private candidate may be unable to checkpoint. Its protected source roots are already durable.
                 await WorldGuestAsync(
@@ -570,42 +568,26 @@ public static partial class AzureCommand {
     // it. A worker without the unit is already stopped: Azure replaces a worker (a Spot eviction, a repair) with a fresh
     // VM whose bootstrap the guard refuses while an operation is pending, so the unit never exists there, and the drain's
     // roots are already retained by then. A unit whose stop fails, as a candidate that cannot checkpoint does, still
-    // counts once systemd reports it inactive; one that stays active fails the script by name. The container is removed
-    // last, so no host keeps running whatever the unit's state was.
+    // counts once systemd reports it inactive; one that stays active fails the script by name.
     private const string WorldStopScript = """
         if [ "$(systemctl show --property=LoadState --value puck-world.service)" != not-found ]; then
           systemctl stop puck-world.service || true
           if systemctl is-active --quiet puck-world.service; then echo 'puck-world.service is still active after its stop' >&2; exit 1; fi
         fi
-        if docker inspect puck-world >/dev/null 2>&1; then docker rm -f puck-world >/dev/null; fi
         """;
-    // Reads, in one Run Command, the world container's image and state, then (when it runs) the release status and
-    // private health from the lifecycle listener on loopback, as one JSON object: {process, status:{code, body},
-    // health:{code, body}}; a route that does not answer has code 0 and the error as its body.
-    private const string WorldProbeScript = """
-        python3 - <<'PROBE'
-        import json, subprocess, urllib.error, urllib.request
-        def get(path):
-            try:
-                with urllib.request.urlopen('http://127.0.0.1:__PORT__' + path, timeout=30) as response:
-                    return {'code': response.status, 'body': response.read().decode('utf-8', 'replace')}
-            except urllib.error.HTTPError as error:
-                return {'code': error.code, 'body': error.read().decode('utf-8', 'replace')}
-            except Exception as error:
-                return {'code': 0, 'body': str(error)}
-        inspected = subprocess.run(['docker', 'inspect', '--format', '{"image":{{json .Config.Image}},"running":{{.State.Running}}}', 'puck-world'], capture_output=True, text=True)
-        process = json.loads(inspected.stdout) if inspected.returncode == 0 else {'image': None, 'running': False}
-        idle = {'code': 0, 'body': 'the container is not running'}
-        print(json.dumps({'process': process, 'status': get('/release/status') if process['running'] else idle, 'health': get('/private-healthz') if process['running'] else idle}))
-        PROBE
+    // Reads, in one Run Command, the engine the silo unit runs and whether it is active, then (when it is) the release
+    // status and private health, as one JSON object (WorldHostGuest.ProbeAsync). A machine whose bootstrap never installed
+    // its host answers as one that runs nothing.
+    private static readonly string WorldProbeScript = $$$"""
+        if [ -x {{{WorldHostLayout.HostExecutable}}} ]; then {{{WorldHostLayout.HostExecutable}}} world host probe; else printf '%s' '{"process":{"engine":null,"running":false},"status":{"code":0,"body":"no world host is installed"},"health":{"code":0,"body":"no world host is installed"}}'; fi
         """;
-    // The worker's loopback release-control request, bounded by the deployment's shutdown allowance. --fail-with-body keeps
-    // the worker's refusal reason, the 409 body WorldSiloReleaseControl writes, in a failed request's output.
+    // The worker's loopback release-control request, bounded by the deployment's shutdown allowance. A refusal prints the
+    // worker's reason, the 409 body WorldSiloReleaseControl writes, to standard error.
     private static string WorldControlRequest(AzureWorldReleaseDeployment deployment, string method, string path) =>
-        $"curl --fail-with-body --silent --show-error --max-time {deployment.ShutdownSeconds} -X {method} http://127.0.0.1:{deployment.HealthPort}{path}";
-    // A failed request prints the captured response (curl --fail-with-body keeps the worker's refusal reason) to stderr,
-    // which the run-command output carries back. The substitution runs under `||`, which suspends errexit inside it, so
-    // every step of a request script exits on its own failure: the lock and guard carry `|| exit`, and curl runs last.
+        $"{WorldHostLayout.HostExecutable} world host request {method} '{path}' --timeout {deployment.ShutdownSeconds}";
+    // A failed request prints the worker's refusal reason to stderr, which the run-command output carries back. The
+    // substitution runs under `||`, which suspends errexit inside it, so every step of a request script exits on its own
+    // failure: the lock and guard carry `|| exit`, and the request runs last.
     private static async Task<JsonNode> WorldGuestJsonAsync(string group, string script, string worker) {
         var marker = (("puck-json-" + Guid.NewGuid().ToString(format: "N")) + ":");
         var output = await WorldGuestOutputAsync(
