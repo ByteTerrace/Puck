@@ -11,7 +11,7 @@ internal sealed class WorldClientSeats(WorldClient client, PlayerRoster roster, 
     public int SeatCount => WorldSeatBindings.SeatCount;
 
     /// <inheritdoc/>
-    public void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried) => client.AdvanceSeatViews(carried: carried, deltaSeconds: deltaSeconds);
+    public void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried, Action<int, Puck.Maths.FixedQ4816>? remoteInPlaceTurn = null) => client.AdvanceSeatViews(carried: carried, deltaSeconds: deltaSeconds, remoteInPlaceTurn: remoteInPlaceTurn);
     /// <inheritdoc/>
     public void PresentSeatLook(WorldAuthorityEndpoint? endpoint) => client.PresentSeatLook(endpoint: endpoint);
     /// <inheritdoc/>

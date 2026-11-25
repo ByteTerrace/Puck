@@ -344,7 +344,7 @@ public sealed partial class WorldScopedReplayRuntime {
     /// this boundary; they require a wider authority scope.</summary>
     public void Observe(WorldCommand command) {
         if (!m_active || !m_recording || !m_source.Seats.Contains(value: command.Principal) || !m_bodies.Contains(item: command.EntityIndex) ||
-            (command is not (WorldCommand.SnapPose or WorldCommand.PressChannel or WorldCommand.EnqueueSegment or WorldCommand.Stop or WorldCommand.RigidImpulse))) { return; }
+            (command is not (WorldCommand.SnapPose or WorldCommand.PoseSpawn or WorldCommand.PressChannel or WorldCommand.EnqueueSegment or WorldCommand.Stop or WorldCommand.RigidImpulse))) { return; }
         m_commands.Add(item: (m_cursor, command));
         HashCommand(command: command, tick: m_cursor);
     }

@@ -45,43 +45,54 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
         public string World => Endpoint.Identity;
     }
 
-    // What one endpoint's delivered document compiles to, kept until the mirror says its scene changed.
-    private sealed class World {
-        public WorldStateLease? Scale;
+    // What one delivered document compiles to, kept by (authority, documentId) so a seat returning from a secondary
+    // world or companion seats sharing one authority reuse its baked navigation and places without rebuilding them.
+    private sealed class Document {
         public IWorldSeatNavigation? LastNavigation;
         public readonly WorldDocumentProduct<IWorldSeatNavigation> Navigation = new();
-        public int NavigationRevision = -1;
+        public WorldDefinition? NavigationSource;
         public WorldPlaces LastPlaces = WorldPlaces.None;
         public readonly WorldDocumentProduct<WorldPlaces> Places = new();
-        public int PlacesRevision = -1;
+        public WorldDefinition? PlacesSource;
     }
 
-    private readonly Dictionary<WorldAuthorityEndpoint, World> m_worlds = new(comparer: ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<(string Authority, string DocumentId), Document> m_documents = [];
+    private readonly Dictionary<WorldAuthorityEndpoint, WorldStateLease> m_scales = new(comparer: ReferenceEqualityComparer.Instance);
 
-    /// <summary>Gets the navigation the endpoint's delivered document describes, compiled when the document's scene
-    /// last changed (<see cref="WorldSessionMirror.DefinitionRevision"/>), carrying over what stands from the
-    /// compilation before.</summary>
+    /// <summary>Gets the navigation the endpoint's delivered document describes, compiled when a part its build read
+    /// changed (<see cref="WorldDocumentProduct{T}"/>), carrying over what stands from an earlier compilation of the
+    /// same document.</summary>
     /// <param name="endpoint">The authority.</param>
     /// <returns>The navigation.</returns>
     public IWorldSeatNavigation Navigation(WorldAuthorityEndpoint endpoint) {
-        var world = WorldOf(endpoint: endpoint);
-        var revision = endpoint.Mirror.DefinitionRevision;
+        var definition = endpoint.Definition;
+        var documentId = (definition.DocumentId ?? endpoint.Identity);
+        var document = DocumentOf(authority: endpoint.Authority, documentId: documentId);
 
-        if ((world.LastNavigation is null) || (world.NavigationRevision != revision)) {
-            var definition = endpoint.Definition;
-            var previous = world.LastNavigation;
+        if ((document.LastNavigation is null) || !ReferenceEquals(objA: document.NavigationSource, objB: definition)) {
+            var previous = (document.LastNavigation ?? ((definition.DocumentId is { Length: > 0 } named) ? AnyNavigationFor(documentId: named) : null));
 
-            world.LastNavigation = world.Navigation.Of(
+            document.LastNavigation = document.Navigation.Of(
                 document: definition,
                 build: () => navigation(arg1: definition, arg2: previous)
             );
-            world.NavigationRevision = revision;
+            document.NavigationSource = definition;
         }
 
-        return world.LastNavigation;
+        return document.LastNavigation;
     }
     /// <summary>Reports whether a seat's input source registry is admitted by its routed authority.</summary>
     public bool InputAdmitted(int slot) => client.IsSeatInputAdmitted(slot: slot);
+    /// <summary>Reports whether a seat's current continuous move push has been answered by its routed authority.</summary>
+    public bool MoveInputAnswered(int slot, ulong bodyTick) => client.IsSeatMoveAnswered(slot: slot, bodyTick: bodyTick);
+    /// <summary>Reports whether a seat's latest move release to neutral has been answered by its routed authority.</summary>
+    public bool MoveStoppedAnswered(int slot, ulong bodyTick) => client.IsSeatMoveStoppedAnswered(slot: slot, bodyTick: bodyTick);
+    /// <summary>Reports whether a held press on a physical input source has been answered by its routed authority.</summary>
+    public bool SourcePressAnswered(int slot, string source, ulong bodyTick) => client.IsSeatSourcePressAnswered(slot: slot, source: source, bodyTick: bodyTick);
+    /// <summary>Reads the authority-tick round-trip control lag observed on a seat's input stream.</summary>
+    public ulong MoveLagTicks(int slot, ulong bodyTick) => client.SeatMoveLagTicks(slot: slot, bodyTick: bodyTick);
+    /// <summary>Reads the body's live scale in the delivered document's state.</summary>
+    public FixedQ4816 BodyScale(in Reading reading) => FixedQ4816.FromDouble(value: Scale(reading: in reading));
 
     /// <summary>Lists the places of the endpoint's delivered document whose volume holds a point, innermost first.</summary>
     /// <param name="endpoint">The authority.</param>
@@ -166,20 +177,19 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
     }
 
     private WorldPlaces PlacesOf(WorldAuthorityEndpoint endpoint) {
-        var world = WorldOf(endpoint: endpoint);
-        var revision = endpoint.Mirror.DefinitionRevision;
+        var definition = endpoint.Definition;
+        var documentId = (definition.DocumentId ?? endpoint.Identity);
+        var document = DocumentOf(authority: endpoint.Authority, documentId: documentId);
 
-        if (world.PlacesRevision != revision) {
-            var definition = endpoint.Definition;
-
-            world.LastPlaces = world.Places.Of(
+        if (!ReferenceEquals(objA: document.PlacesSource, objB: definition)) {
+            document.LastPlaces = document.Places.Of(
                 document: definition,
                 build: () => WorldPlaces.Of(definition: definition)
             );
-            world.PlacesRevision = revision;
+            document.PlacesSource = definition;
         }
 
-        return world.LastPlaces;
+        return document.LastPlaces;
     }
     // The body's live scale: the register the delivered document's bodies.scale names, read through the delivered state.
     private float Scale(in Reading reading) {
@@ -189,7 +199,10 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
             return 1f;
         }
 
-        var reads = (WorldOf(endpoint: reading.Endpoint).Scale ??= new WorldStateLease());
+        if (!m_scales.TryGetValue(key: reading.Endpoint, value: out var reads)) {
+            reads = new WorldStateLease();
+            m_scales[reading.Endpoint] = reads;
+        }
 
         reads.Bind(bodyIndex: reading.Index, mirror: reading.Endpoint.FollowState());
         reads.Arrive(first: definition, second: null);
@@ -216,12 +229,23 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
         );
         return true;
     }
-    private World WorldOf(WorldAuthorityEndpoint endpoint) {
-        if (!m_worlds.TryGetValue(key: endpoint, value: out var world)) {
-            world = new World();
-            m_worlds[endpoint] = world;
+    private Document DocumentOf(string authority, string documentId) {
+        var key = (Authority: authority, DocumentId: documentId);
+
+        if (!m_documents.TryGetValue(key: key, value: out var document)) {
+            document = new Document();
+            m_documents[key] = document;
         }
 
-        return world;
+        return document;
+    }
+    private IWorldSeatNavigation? AnyNavigationFor(string documentId) {
+        foreach (var (key, document) in m_documents) {
+            if ((document.LastNavigation is not null) && string.Equals(a: key.DocumentId, b: documentId, comparisonType: StringComparison.Ordinal)) {
+                return document.LastNavigation;
+            }
+        }
+
+        return null;
     }
 }

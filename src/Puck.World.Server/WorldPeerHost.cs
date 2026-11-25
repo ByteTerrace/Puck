@@ -1243,8 +1243,8 @@ public sealed class WorldPeerHost : IDisposable {
                     val2: ((byte)observation.Ceiling)
                 )),
                 };
-                await BeginTravelerStreamAsync(sourceAuthority: sourceAuthority, mobility: observation.Mobility, ct: ct).ConfigureAwait(false);
                 try {
+                    await BeginTravelerStreamAsync(sourceAuthority: sourceAuthority, mobility: observation.Mobility, ct: ct).ConfigureAwait(false);
                     var refusal = await WorldTravelerProjection.StreamAsync(
                         m_server,
                         observation,
@@ -1747,6 +1747,14 @@ public sealed class WorldPeerHost : IDisposable {
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     return;
                 }
+                if (leasedMobilities.Add(item: mobility)) {
+                    await BeginTravelerStreamAsync(
+                        ct: ct,
+                        mobility: mobility,
+                        sourceAuthority: sourceAuthority
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+                }
+
                 // Taken under the authority gate on this connection's own thread, as a forwarded arm in the same process
                 // takes it. Waiting for the tick thread here would take one batch a tick, the rate batches are made, so
                 // a stall would leave a backlog that never drains. The credential and the source authority's live
@@ -1807,9 +1815,6 @@ public sealed class WorldPeerHost : IDisposable {
 
                 // An accepted update is not answered: the lane writes without waiting, and the authority's answer to an
                 // input travels in its deliveries. Only a refusal, or a handoff's acknowledgement, is written here.
-                if (leasedMobilities.Add(item: mobility)) {
-                    AttachTravelerStream(sourceAuthority: sourceAuthority, mobility: mobility);
-                }
                 touched[mobility] = (Principal: stamped.Principal, Submission: stamped);
             }
         } finally {
@@ -1859,47 +1864,23 @@ public sealed class WorldPeerHost : IDisposable {
             });
         }
     }
-    private void AttachTravelerStream(string sourceAuthority, WorldMobilityIdentity mobility) {
-        var entry = m_travelerLiveness.GetOrAdd(
-            key: (sourceAuthority, mobility.Incarnation),
-            valueFactory: static (_, m) => new TravelerLiveness(mobility: m),
-            factoryArgument: mobility
-        );
-        var shouldResume = false;
-
-        lock (entry.Gate) {
-            if (mobility.Epoch > entry.Mobility.Epoch) {
-                entry.Mobility = mobility;
-            }
-            entry.ActiveStreams++;
-            shouldResume = (entry.ActiveStreams == 1);
-        }
-        if (shouldResume) {
-            _ = m_server.RunOnTickThreadAsync(work: () => m_server.GrantTable.TryResumeTransferredPeer(sourceAuthority: sourceAuthority, mobility: in mobility));
-        }
-    }
-
     private async Task BeginTravelerStreamAsync(string sourceAuthority, WorldMobilityIdentity mobility, CancellationToken ct) {
         var entry = m_travelerLiveness.GetOrAdd(
             key: (sourceAuthority, mobility.Incarnation),
             valueFactory: static (_, m) => new TravelerLiveness(mobility: m),
             factoryArgument: mobility
         );
-        var shouldResume = false;
 
         lock (entry.Gate) {
             if (mobility.Epoch > entry.Mobility.Epoch) {
                 entry.Mobility = mobility;
             }
             entry.ActiveStreams++;
-            shouldResume = (entry.ActiveStreams == 1);
         }
-        if (shouldResume) {
-            _ = await m_server.RunOnTickThreadAsync(
-                work: () => m_server.GrantTable.TryResumeTransferredPeer(sourceAuthority: sourceAuthority, mobility: in mobility),
-                ct: ct
-            ).ConfigureAwait(false);
-        }
+        _ = await m_server.RunOnTickThreadAsync(
+            work: () => m_server.GrantTable.TryResumeTransferredPeer(sourceAuthority: sourceAuthority, mobility: in mobility),
+            ct: ct
+        ).ConfigureAwait(false);
     }
 
     private bool HasFederationConnectionFrom(string sourceAuthority) {

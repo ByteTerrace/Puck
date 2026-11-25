@@ -699,6 +699,23 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             return false;
         }
 
+        using var ackCts = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
+        using var ackSignal = new SemaphoreSlim(initialCount: 0, maxCount: 1);
+        byte[]? latestAck = null;
+        var ackTask = Task.Run(function: async () => {
+            try {
+                while (!ackCts.IsCancellationRequested) {
+                    await ackSignal.WaitAsync(cancellationToken: ackCts.Token).ConfigureAwait(continueOnCapturedContext: false);
+                    if (Interlocked.Exchange(location1: ref latestAck, value: null) is { } stampBytes) {
+                        await stream.WriteAsync(buffer: stampBytes, cancellationToken: ackCts.Token).ConfigureAwait(continueOnCapturedContext: false);
+                        await stream.FlushAsync(cancellationToken: ackCts.Token).ConfigureAwait(continueOnCapturedContext: false);
+                    }
+                }
+            } catch (Exception exception) when ((exception is IOException or SocketException or OperationCanceledException or ObjectDisposedException)) {
+            }
+        });
+
+        try {
         while (!ct.IsCancellationRequested) {
             var frame = await WorldFederationCodec.ReadResponseAsync(
                 ct: ct,
@@ -883,13 +900,20 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                             value: snapshot.Authority
                         );
                         sink.DeliverSnapshot(snapshot: in snapshot, stream: snapshotStream);
-                        await stream.WriteAsync(frame.Body[..WorldFederationCodec.StreamStampBytes], ct).ConfigureAwait(false);
-                        await stream.FlushAsync(ct).ConfigureAwait(false);
+                        _ = Interlocked.Exchange(
+                            location1: ref latestAck,
+                            value: frame.Body[..WorldFederationCodec.StreamStampBytes].ToArray()
+                        );
+                        try { _ = ackSignal.Release(); } catch (SemaphoreFullException) { }
                         break;
                     }
             }
         }
         return false;
+        } finally {
+            ackCts.Cancel();
+            try { await ackTask.ConfigureAwait(continueOnCapturedContext: false); } catch { }
+        }
     }
     // Authority processes may start in any order. An adjacency is durable topology, so its observation channel
     // cannot become permanently CLOSED merely because the neighbour had not bound its socket on the first tick.
@@ -918,11 +942,21 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 }
             } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
                 return;
-            } catch (Exception exception) when ((exception is IOException or SocketException or OperationCanceledException)) {
+            } catch (Exception exception) when ((exception is IOException or SocketException or OperationCanceledException or ObjectDisposedException)) {
                 if (m_narrationHub is { HasNarrationSink: true }) {
                     m_narrationHub?.Narrate(
                         channel: "world.projection",
                         text: $"[world.projection: remote observer '{Endpoint}' unavailable ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")}); retrying]"
+                    );
+                }
+            } catch (Exception exception) {
+                if (ct.IsCancellationRequested) {
+                    return;
+                }
+                if (m_narrationHub is { HasNarrationSink: true }) {
+                    m_narrationHub?.Narrate(
+                        channel: "world.projection",
+                        text: $"[world.projection: remote observer '{Endpoint}' faulted ({exception.GetType().Name}: {exception.Message.ReplaceLineEndings(replacementText: " ")}); retrying]"
                     );
                 }
             } finally {
@@ -1515,7 +1549,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                     );
                 } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
                     return;
-                } catch (Exception exception) when (((attemptedEndpoint is not null) && (exception is IOException or SocketException or OperationCanceledException) &&
+                } catch (Exception exception) when (((attemptedEndpoint is not null) && (exception is IOException or SocketException or OperationCanceledException or ObjectDisposedException) &&
                     !string.Equals(
                     a: attemptedEndpoint,
                     b: m_owner.Endpoint,
@@ -1525,7 +1559,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                     // close that lane before our explicit handoff frame arrives; reconnect immediately to the new
                     // endpoint without misreporting a healthy authority change as an outage.
                     try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
-                } catch (Exception exception) when ((exception is IOException or SocketException or OperationCanceledException)) {
+                } catch (Exception exception) when ((exception is IOException or SocketException or OperationCanceledException or ObjectDisposedException)) {
                     if (ct.IsCancellationRequested) {
                         return;
                     }
@@ -1557,6 +1591,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         ).ConfigureAwait(continueOnCapturedContext: false);
                     } catch (OperationCanceledException) when (ct.IsCancellationRequested) {
                         return;
+                    }
+                    foreach (var pair in m_sent.ToArray()) {
+                        ResendLastIntent(mobility: pair.Key.Mobility);
                     }
                     if (HasPending) {
                         try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
@@ -1707,42 +1744,53 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             m_lifetime.Dispose();
             m_signal.Dispose();
         }
+        private readonly ConcurrentDictionary<IntentKey, SentIntent> m_lastQueued = new();
+
         public void ResendLastIntent(WorldMobilityIdentity mobility) {
             var key = new IntentKey(Mobility: mobility);
 
+            _ = m_lastQueued.TryRemove(key: key, value: out _);
             if (m_sent.TryRemove(
                 key: key,
                 value: out var last
             )) {
                 var queue = m_pending.GetOrAdd(key: key, valueFactory: static _ => new());
 
-                lock (queue) { if (queue.IsEmpty) { queue.Enqueue(item: last.Submission); } }
+                lock (queue) {
+                    if (queue.IsEmpty) {
+                        queue.Enqueue(item: last.Submission);
+                        m_lastQueued[key] = last;
+                    }
+                }
             }
             try { _ = m_signal.Release(); } catch (SemaphoreFullException) { }
         }
         public void Publish(WorldMobilityIdentity mobility, in IntentSubmission submission) {
             var key = new IntentKey(Mobility: mobility);
-
-            if (
-                m_sent.TryGetValue(
-                key: key,
-                value: out var last
-            ) &&
-                (last.Submission == submission) &&
-                (m_owner.m_clock.GetElapsedTime(startingTimestamp: last.Timestamp) < IntentRepeatWindow)
-            ) {
-                return;
-            }
             var pending = m_pending.GetOrAdd(key: key, valueFactory: static _ => new());
+            var now = m_owner.m_clock.GetTimestamp();
 
             lock (pending) {
+                if (
+                    m_lastQueued.TryGetValue(key: key, value: out var last) &&
+                    (last.Submission == submission) &&
+                    (m_owner.m_clock.GetElapsedTime(startingTimestamp: last.Timestamp, endingTimestamp: now) < IntentRepeatWindow)
+                ) {
+                    return;
+                }
                 if (pending.Count >= 1024) {
                     pending.Clear();
-                    pending.Enqueue(item: submission with {
+                    var lost = submission with {
                         Intent = default,
                         Input = submission.Input with { CaptureLost = true, Image = default, Events = default, Contributions = default },
-                    });
-                } else { pending.Enqueue(item: submission); }
+                    };
+
+                    pending.Enqueue(item: lost);
+                    m_lastQueued[key] = new SentIntent(Submission: lost, Timestamp: now);
+                } else {
+                    pending.Enqueue(item: submission);
+                    m_lastQueued[key] = new SentIntent(Submission: submission, Timestamp: now);
+                }
             }
             try {
                 _ = m_signal.Release();
@@ -1754,6 +1802,10 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
             var key = new IntentKey(Mobility: mobility);
 
             _ = m_pending.TryRemove(
+                key: key,
+                value: out _
+            );
+            _ = m_lastQueued.TryRemove(
                 key: key,
                 value: out _
             );

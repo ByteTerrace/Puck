@@ -137,6 +137,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     // must therefore be concurrent even though every mutation still comes from the host's ordinary commit path.
     private readonly ConcurrentDictionary<(WorldServer Server, WorldEntityAddress Incarnation), ForwardedBody> m_forwardedBodies = [];
     private readonly Queue<PendingTransfer> m_pendingTransfers = new();
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(WorldMobilityIdentity Mobility, WorldCommand.PoseSpawn Pose, Guid OperationId, Action<WorldSubmissionResult> Completion)> m_pendingPoseHomes = new();
     private readonly List<InDoubtTransfer> m_inDoubtTransfers = [];
 
     /// <summary>Replays every delivery and callback recorded off the pump while the boundary window was closed: each
@@ -530,7 +531,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
 
         m_lookStepsBoot = stepsBoot;
         m_lookStepTicks = stepTicks;
-        m_seats.AdvanceSeatViews(carried: (m_carriesLookStep ??= CarriesLookStep), deltaSeconds: ((float)FixedTickConversion.ToSeconds(ticks: stepTicks)));
+        m_seats.AdvanceSeatViews(
+            carried: (m_carriesLookStep ??= CarriesLookStep),
+            deltaSeconds: ((float)FixedTickConversion.ToSeconds(ticks: stepTicks)),
+            remoteInPlaceTurn: m_routedTurns.Advance
+        );
 
         if (!stepsBoot) {
             return;

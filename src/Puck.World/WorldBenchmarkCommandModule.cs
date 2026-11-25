@@ -475,11 +475,30 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             m_companions.Add(item: Driver(seat: (slot + extra)));
         }
 
-        Puck.World.Client.WorldSeatDriver Driver(int seat) => new(program: program, route: (route with { Seat = (seat + 1) }), senses: senses, submit: text => {
-            var line = script.SubmitSeat(router: router, slot: seat, text: text);
+        bool PartyReachedStep(int step) {
+            if ((m_driver is { Ended: false } primary) && (primary.StepReached < step)) {
+                return false;
+            }
+            foreach (var companion in m_companions) {
+                if (!companion.Ended && (companion.StepReached < step)) {
+                    return false;
+                }
+            }
 
-            return () => line.Outcome;
-        });
+            return true;
+        }
+
+        Puck.World.Client.WorldSeatDriver Driver(int seat) => new(
+            program: program,
+            route: (route with { Seat = (seat + 1) }),
+            senses: senses,
+            submit: text => {
+                var line = script.SubmitSeat(router: router, slot: seat, text: text);
+
+                return () => line.Outcome;
+            },
+            canPressUntil: ((m_seatCount > 1) ? PartyReachedStep : null)
+        );
 
         var firstTick = Math.Max(val1: (script.CompletedTick + LeadTicks), val2: (at ?? 0UL));
 
@@ -495,8 +514,9 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         }
         script.Ticked += OnTicked;
 
-        // A route's length is known only as it plays; its chapters' time limits bound it.
-        var bound = (ulong)(chapters.Sum(selector: chapter => Math.Ceiling(a: (chapter.TimeoutSeconds * m_rateHz)) + GapTicks) * loops);
+        // A route's length is known only as it plays; its chapters' authority-tick time limits bound it, with headroom
+        // for a remote authority that steps slower than the client host under load.
+        var bound = ((ulong)(chapters.Sum(selector: chapter => Math.Ceiling(a: (chapter.TimeoutSeconds * m_rateHz)) + GapTicks) * loops) * 4UL);
 
         return Enter(budget: budget, firstTick: firstTick, label: (string.IsNullOrEmpty(value: prefix) ? route.Name : $"{route.Name}#{prefix}"), lastTick: (firstTick + bound), loops: loops, output: output, session: session, timeout: timeout);
     }

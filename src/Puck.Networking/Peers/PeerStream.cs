@@ -286,7 +286,7 @@ public sealed class PeerStream : Stream {
                 buffer = buffer[count..];
             }
         } catch {
-            if (started) { await DisposeAsync().ConfigureAwait(continueOnCapturedContext: false); }
+            if (started) { await m_link.DisposeAsync().ConfigureAwait(continueOnCapturedContext: false); }
             throw;
         } finally { m_writeGate.Release(); }
     }

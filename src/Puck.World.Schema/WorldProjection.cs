@@ -1264,7 +1264,8 @@ public static class WorldProjection {
             ReferenceEquals(objA: projection.Speakers, objB: previousProjection.Speakers) &&
             ReferenceEquals(objA: projection.Tunes, objB: previousProjection.Tunes) &&
             ReferenceEquals(objA: projection.Patches, objB: previousProjection.Patches) &&
-            ReferenceEquals(objA: projection.Music, objB: previousProjection.Music));
+            ReferenceEquals(objA: projection.Music, objB: previousProjection.Music) &&
+            ReferenceEquals(objA: projection.Hud, objB: previousProjection.Hud));
 
         if (!audioUnchanged && !WorldDefinitionValidator.TryValidateDeliveredAudio(definition: hydrated, reason: out reason)) {
             return false;

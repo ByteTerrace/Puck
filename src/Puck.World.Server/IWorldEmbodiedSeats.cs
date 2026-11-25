@@ -53,7 +53,8 @@ public interface IWorldEmbodiedSeats {
     /// thread and carry this step. A seat routed to such an endpoint holds its look step until
     /// <see cref="PresentSeatLook"/> names the endpoint, so a frame produced while the tick executes shows the look
     /// with the tick it still shows the body at.</param>
-    void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried);
+    /// <param name="remoteInPlaceTurn">Receives any yaw turn applied from a remote authority's in-place portal carry.</param>
+    void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried, Action<int, Puck.Maths.FixedQ4816>? remoteInPlaceTurn = null);
     /// <summary>Presents the look step held by every local seat routed to <paramref name="endpoint"/>, whose tick has
     /// been collected and its poses delivered.</summary>
     /// <param name="endpoint">The endpoint whose tick was collected, or <see langword="null"/> for every seat.</param>
@@ -73,7 +74,7 @@ public static class WorldEmbodiedSeats {
     private sealed class NoneSeats : IWorldEmbodiedSeats {
         public int SeatCount => 0;
 
-        public void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried) { }
+        public void AdvanceSeatViews(float deltaSeconds, Func<WorldAuthorityEndpoint, bool> carried, Action<int, Puck.Maths.FixedQ4816>? remoteInPlaceTurn = null) { }
         public void PresentSeatLook(WorldAuthorityEndpoint? endpoint) { }
         public void ClearAnalog() { }
         public void ClearHeld(int slot) { }

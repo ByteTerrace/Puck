@@ -149,7 +149,7 @@ public static partial class BenchmarkCommand {
                 "--federation-key-file", pair.KeyFile,
                 .. ((jitterMs > 0) ? new[] { "--peer-jitter-ms", jitterMs.ToString(CultureInfo.InvariantCulture), "--peer-jitter-seed", jitterSeed.ToString(CultureInfo.InvariantCulture) } : []),
             ],
-            ExitAfterSeconds = WorldLaunch.Backstop(TimeSpan.FromSeconds(Allowance(timeout))),
+            ExitAfterSeconds = WorldLaunch.Backstop(TimeSpan.FromSeconds(Allowance(timeout) + 1800)),
             Shape = WorldShape.Headless,
             StateDirectory = Path.Combine(directory, "state"),
             World = pair.Document,

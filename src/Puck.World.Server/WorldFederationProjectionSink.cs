@@ -49,12 +49,22 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     private readonly record struct Record(WorldFederationResponse Kind, ReadOnlyMemory<byte> Head,
         ReadOnlyMemory<byte> Bodies = default, ReadOnlyMemory<byte> Tail = default) {
         public async Task WriteAsync(Stream output, CancellationToken ct) {
-            var prefix = new byte[FrameCodec.PrefixBytes + Head.Length];
-            FrameCodec.WritePrefix(prefix, (byte)Kind, checked(Head.Length + Bodies.Length + Tail.Length));
-            Head.CopyTo(prefix.AsMemory(FrameCodec.PrefixBytes));
-            await output.WriteAsync(prefix, ct).ConfigureAwait(false);
-            if (!Bodies.IsEmpty) { await output.WriteAsync(Bodies, ct).ConfigureAwait(false); }
-            if (!Tail.IsEmpty) { await output.WriteAsync(Tail, ct).ConfigureAwait(false); }
+            var payloadLength = checked(Head.Length + Bodies.Length + Tail.Length);
+            if (payloadLength <= 65536) {
+                var packet = new byte[FrameCodec.PrefixBytes + payloadLength];
+                FrameCodec.WritePrefix(packet, (byte)Kind, payloadLength);
+                Head.CopyTo(packet.AsMemory(FrameCodec.PrefixBytes));
+                if (!Bodies.IsEmpty) { Bodies.CopyTo(packet.AsMemory(FrameCodec.PrefixBytes + Head.Length)); }
+                if (!Tail.IsEmpty) { Tail.CopyTo(packet.AsMemory(FrameCodec.PrefixBytes + Head.Length + Bodies.Length)); }
+                await output.WriteAsync(packet, ct).ConfigureAwait(false);
+            } else {
+                var prefix = new byte[FrameCodec.PrefixBytes + Head.Length];
+                FrameCodec.WritePrefix(prefix, (byte)Kind, payloadLength);
+                Head.CopyTo(prefix.AsMemory(FrameCodec.PrefixBytes));
+                await output.WriteAsync(prefix, ct).ConfigureAwait(false);
+                if (!Bodies.IsEmpty) { await output.WriteAsync(Bodies, ct).ConfigureAwait(false); }
+                if (!Tail.IsEmpty) { await output.WriteAsync(Tail, ct).ConfigureAwait(false); }
+            }
             await output.FlushAsync(ct).ConfigureAwait(false);
         }
     }

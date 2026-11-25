@@ -85,9 +85,10 @@ public sealed class WorldSeatViewState {
     private float m_pitch;
     private float m_yaw;
     private float? m_distance;
-    // The authority claim, pose epoch and heading of the body the live yaw last observed (ObserveBody).
+    // The authority claim, pose epoch, carry epoch and heading of the body the live yaw last observed (ObserveBody).
     private float m_observedHeading;
     private int m_observedPose;
+    private int m_observedCarry;
     private ulong m_observedRoute = ulong.MaxValue;
 
     /// <summary>Returns the requested boom distance, or the authored orbit distance before the first input.</summary>
@@ -546,6 +547,32 @@ public sealed class WorldSeatViewState {
     private static float BehindYaw(float heading, WorldSeatYawReference yawReference) => ((yawReference == WorldSeatYawReference.Body)
         ? 0f
         : VectorFunctions.WrapAngle(radians: heading));
+    /// <summary>Carries the seat's view through any in-place portal crossings (<see cref="Puck.World.Protocol.EntityContinuityKind.Carry"/>)
+    /// delivered by a remote authority under the current route claim, returning the net yaw turn applied.</summary>
+    public FixedQ4816 ObserveCarry(ulong routeEpoch, Puck.World.Protocol.WorldPoseCarries carries, int index, WorldSeatYawReference yawReference, bool clockOwnedHere) {
+        var current = carries.Epoch(index: index);
+        var turnApplied = FixedQ4816.Zero;
+
+        lock (m_gate) {
+            if (!clockOwnedHere && (m_observedRoute == routeEpoch) && (m_observedCarry != current)) {
+                if (carries.TrySince(index: index, since: m_observedCarry, carry: out var carry)) {
+                    var yawDelta = VectorFunctions.YawOf(attitude: carry.Rotation);
+
+                    if (yawDelta != 0f) {
+                        if (yawReference == WorldSeatYawReference.World) {
+                            m_yaw = VectorFunctions.WrapAngle(radians: (m_yaw + yawDelta));
+                        }
+                        m_boom.Rotate(rotation: carry.Rotation);
+                        CutTickStep();
+                        turnApplied = FixedQ4816.FromDouble(value: yawDelta);
+                    }
+                }
+            }
+            m_observedCarry = current;
+        }
+
+        return turnApplied;
+    }
     /// <summary>Carries a body that was moved discontinuously (posed, teleported, its model switched) into the live
     /// look, when the pose epoch the body is seen at differs from the last one observed under the same authority claim.
     /// A first-person look is the body's facing, and the facing it steers the body to, so the teleport's heading

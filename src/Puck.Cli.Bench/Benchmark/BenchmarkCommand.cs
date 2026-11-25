@@ -429,7 +429,11 @@ public static partial class BenchmarkCommand {
                 pair = RemotePair.Stage(directory: Path.Combine(directory, "remote"), pair: local, seats: leg.Seats, world: world);
             }
             if (local) {
-                authority = BootAuthority(build: build, budget: budget, directory: Path.Combine(directory, "authority"), pair: pair!, timeout: timeout, jitterMs: jitterMs, jitterSeed: (jitterSeed ^ 0x9E3779B97F4A7C15UL));
+                var authoritySeed = Puck.Maths.Fnv1aHash.Create();
+
+                authoritySeed.Add(value: jitterSeed);
+                authoritySeed.Add(value: "authority");
+                authority = BootAuthority(build: build, budget: budget, directory: Path.Combine(directory, "authority"), pair: pair!, timeout: timeout, jitterMs: jitterMs, jitterSeed: authoritySeed.Value);
             }
 
             var connect = (local ? pair!.Endpoint : leg.Remote);
