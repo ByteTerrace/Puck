@@ -1418,8 +1418,14 @@ meant to establish.
 - A document field that carries a state, zone, rule, table, pattern, topology,
   generator, field, or dynamics name is registered in `WorldNameRegistry`
   (`src/Puck.World.Schema`); `puck registry --check` fails on an unregistered
-  unclassified text position or a stale `docs/world-name-registry.md`, and
-  `puck registry` rewrites the table.
+  unclassified text position or a stale `docs/world-name-registry.md`.
+  After adding or changing a document-model member, run `puck schema --bootstrap`: one
+  command regenerates the JSON schemas, the portal's TypeScript, the model table
+  `WorldModelShape.generated.cs` and that registry from the source model, and a text member
+  without `[DocumentName]` or `[DocumentText]` refuses the run, naming the member and the
+  annotation. Rebuild afterwards. Until you do, a build of `Puck.World.Schema` fails with
+  `PUCKSCHEMA001` naming the same command; stage the regenerated files, since the check
+  compares them with the git index.
 - Derive descriptor counts, pool sizes, strides, and capacities from the data
   that defines them.
 - .NET 11 is the only target. Verify runtime behavior and measure before preserving a hand optimization or making a performance claim.

@@ -906,19 +906,19 @@ refine's masks and per-piece scratch) is in a lane under the
 [Bake proportional to change](open-items.md#bake-proportional-to-change)
 packet.
 
-3. **Irradiance blocks and the scene.** A `ProbeBlock` is one trace batch's
-   geometry words and a `LightBlock` one relight batch's light words, each
-   allocated per batch at LOH size on purpose (`SdfMeshIrradiance`'s private
-   block classes), and every cached probe is a slice of its
-   blocks, installed into the cache directly and retained while bounce
-   converges. The job and the landed result therefore cannot share
-   one reusable block. Decision: a block is rented from the account by the job
-   and **owned by the cache from landing**: the cache keeps a live-slice count
-   per block, decremented as its probes are replaced or their previous
-   measurement dropped, and frees the block at zero. Blocks go native under
-   that ownership; nothing reuses a block a probe still references.
-   `SdfMeshIrradianceScene`'s node and bound arrays go native and are owned by
-   the scene.
+3. **Irradiance blocks and the scene.** Built for the blocks, the volume and
+   the geometry copies. A `ProbeBlock` is one trace batch's geometry words and
+   a `LightBlock` one relight batch's light words (`SdfMeshIrradiance`'s
+   private block classes), and every cached probe is a slice of its blocks,
+   installed into the cache directly and retained while bounce converges. A
+   block is owned by the cache from landing: the cache counts the entries that
+   name it and retires it to the volume's reader epochs at zero, which free it
+   once no reader's hold can reach it. Blocks, the volume's slot words (retired
+   to the same epochs when replaced), a batch's passing hit words and each
+   trace geometry's copies of its mesh level are `OwnedBuffer` storage from the
+   residency's mesh library allocator. Still managed: the caches' tables
+   (their entries hold references to the blocks) and the scene's node and
+   bound arrays (`SdfMeshIrradianceScene`'s hierarchy and top level).
 4. **State, reference-free only.** `ArenaScratch` keeps its nesting and zeroed
    leases; leases of unmanaged element types get native backing per partition,
    and leases whose element type holds references stay managed, as the lease

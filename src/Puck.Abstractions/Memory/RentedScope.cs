@@ -40,9 +40,9 @@ public sealed class RentedScope(IAllocationObserver? owner = null, IAllocator? a
     /// <returns>The buffer, valid until the scope is disposed.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="length"/> is negative.</exception>
     public OwnedBuffer<T> Buffer<T>(int length, bool clear = false) where T : unmanaged {
-        var buffer = RentList<T>(capacity: length);
+        var buffer = OwnedBuffer<T>.OfLength(allocator: allocator, clear: clear, length: length, observer: owner);
 
-        buffer.Resize(clear: clear, length: length);
+        m_leases.Add(item: buffer);
         return buffer;
     }
     /// <summary>Creates an empty list whose storage the scope releases when disposed, charged to the scope's owner and

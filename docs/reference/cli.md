@@ -3868,9 +3868,12 @@ puck registry --check       regenerate in memory and compare against the file on
 puck registry -h / --help   this text
 ```
 
-Both modes report each unclassified text position. A property declares its module name
-kind and spelling, takes its binding from its type, or identifies its literal or local
-meaning. Run `puck schema` and rebuild after changing a declaration. Exit codes: **0** wrote or matched, **1**
+Both modes report each unclassified text position, naming the member and the annotation
+that classifies it. A property declares its module name kind and spelling, takes its binding
+from its type, or identifies its literal or local meaning. This verb walks the compiled
+model; after a model edit, `puck schema --bootstrap` writes this file with every other
+generated product from the source model, so there is no rebuild between the edit and the
+regeneration. Exit codes: **0** wrote or matched, **1**
 drift or an uncovered member, **2** usage error or missing repository root.
 
 ## `puck verbs`—console verb catalog
@@ -4332,13 +4335,19 @@ The same run writes the engine's model shape,
 `WorldDefinition` with its members, `$type` arms and element type, as the
 serializer's resolver describes it. The walks that read the model without
 serializing it read this table, so a process never describes a type at run
-time.
+time. It also writes the name registry (`docs/world-name-registry.md`, the page
+[`puck registry`](#puck-registryworld-name-registry) checks) from the same
+reflected table, so one run leaves every generated product of a model edit
+consistent. A text member with no `[DocumentName]` or `[DocumentText]` refuses
+the whole run before anything is written, naming the member and the annotation.
+A build of `Puck.World.Schema` whose model table lacks a public property fails
+with `PUCKSCHEMA001`, naming `puck schema --bootstrap`.
 
 ```text
 puck schema                          write the checked-in root, sections, common.schema.json,
                                      projection, silo, counters-report, release-profile and
-                                     frame-graph schemas, the portal's TypeScript, and the
-                                     engine's model shape
+                                     frame-graph schemas, the portal's TypeScript, the
+                                     engine's model shape, and the world name registry
 puck schema --check                  regenerate in memory and compare EVERY file against
                                      what's on disk; also catches a stale orphan section no
                                      current model produces; exit 1 on any drift
@@ -4350,8 +4359,9 @@ puck schema --bootstrap              build a private schema-only CLI from the cu
 puck schema -h / --help              this text
 ```
 
-When a model rename leaves `WorldModelShape.generated.cs` referring to a removed
-member, run `schema --bootstrap` from an existing CLI copy. It builds the current
+After any edit to a document-model type, and when a rename leaves
+`WorldModelShape.generated.cs` referring to a removed member, run `schema --bootstrap`
+from an existing CLI copy. It builds the current
 source with `PuckSchemaBootstrap=true`, excluding only that generated table,
 using a private artifacts directory for the whole build closure. The temporary
 CLI accepts only `schema`; a model-table read refuses explicitly. It runs the

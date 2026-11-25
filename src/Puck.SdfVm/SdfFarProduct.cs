@@ -77,8 +77,10 @@ public sealed class SdfFarProduct {
     /// <param name="options">What the product keeps.</param>
     /// <returns>The inputs, which <see cref="Build"/> consumes and releases; <see langword="null"/> when the frame
     /// holds no static draw.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="frame"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
     public static Inputs? Take(SdfFrame frame, SdfFarProductOptions options) {
         ArgumentNullException.ThrowIfNull(argument: frame);
+        ArgumentNullException.ThrowIfNull(argument: options);
 
         var rows = frame.DrawRows;
         var draws = new List<SdfMeshDraw>();
@@ -245,4 +247,6 @@ public sealed class SdfFarProduct {
 /// pixels they cover. Positive.</param>
 /// <param name="MinimumSize">The least size, in metres, a static draw's longest side reaches to enter the product: a far
 /// viewer resolves nothing smaller. Zero keeps every static draw.</param>
-public readonly record struct SdfFarProductOptions(float Cell = SdfFarProduct.DefaultCell, float MinimumSize = 0f);
+/// <remarks>A class, so <c>new SdfFarProductOptions()</c> takes the defaults above: a struct's parameterless
+/// <c>new</c> is its zero value, a cell of zero metres, which no product can be gathered into.</remarks>
+public sealed record SdfFarProductOptions(float Cell = SdfFarProduct.DefaultCell, float MinimumSize = 0f);

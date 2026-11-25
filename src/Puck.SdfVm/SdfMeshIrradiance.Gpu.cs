@@ -38,7 +38,7 @@ public sealed partial class SdfMeshIrradiance {
     // SlotWords is the sole mutation door. A job consumes these deltas under the volume gate, then owns them until
     // completion. Its GPU feedback is exactly the preceding completed batches, independent of display uploads.
     private readonly MarkedIndexSet m_gpuDirty = new();
-    private uint[]? m_gpuVolume;
+    private VolumeWords? m_gpuVolume;
     // The worker's GPU scratch, grown and kept across its batches, but for the answers' array, which a batch rents and
     // returns (BatchEnded). Only the worker task's body touches it, and a worker starts only once the last one completed,
     // so it takes no gate; a job reads the origins, input and updates before Submit returns, and the readback arrays are
@@ -151,7 +151,7 @@ public sealed partial class SdfMeshIrradiance {
     private bool ListGpu(in Snapshot snapshot, bool all, List<Candidate> candidates, List<float>? ages, bool interleave) {
         var layout = snapshot.Layout;
         using var hold = m_blocks.Enter();
-        uint[] records;
+        VolumeWords records;
         lock (m_gate) {
             if (!Stands(in snapshot)) { throw new OperationCanceledException(); }
             records = m_volume;
@@ -182,7 +182,7 @@ public sealed partial class SdfMeshIrradiance {
                         var present = m_levels[level].Cache.TryGetValue((x, y, z), out var probe, hold: in hold);
                         var center = new Vector3(x + .5f, y + .5f, z + .5f) * spacing;
                         var slot = layout.OffsetOf(level) + SlotOf(x, y, z, dims);
-                        var written = Holds(records.AsSpan(slot * SdfMeshIrradianceProbe.ProbeWords), (x, y, z));
+                        var written = Holds(records.Words[(slot * SdfMeshIrradianceProbe.ProbeWords)..], (x, y, z));
                         var phase = ProbePhase(x, y, z);
                         var token = m_hitOwners.TryGetValue((level, (x, y, z)), out var owner) && owner.Token == probe.GpuToken ? probe.GpuToken : 0;
                         var change = ChangeOf(in probe, snapshot.Lighting, spacing, center, snapshot.Scene, m_inputChanges);
@@ -341,11 +341,11 @@ public sealed partial class SdfMeshIrradiance {
         }
         SdfMeshProbeGpuWork.Deltas updates;
         int volumeWords;
-        uint[]? snapshotOf = null;
-        // The volume's full snapshot when the feedback must be rewritten whole, rented for this job alone: Relight answers
-        // or cancels the job before it returns or throws, so nothing reads it after, and the shared cache, which pressure
-        // trims, keeps it for the next rewrite rather than every irradiance holding a second volume for good.
-        uint[]? volumeSnapshot = null;
+        VolumeWords? snapshotOf = null;
+        // The volume's full snapshot when the feedback must be rewritten whole, allocated for this job alone from the
+        // volume's allocator: Relight answers or cancels the job before it returns or throws, so nothing reads it after,
+        // and no irradiance holds a second volume for good.
+        OwnedBuffer<uint>? volumeSnapshot = null;
         lock (m_gate) {
             if (!Stands(in snapshot)) { m_gpuVolume = null; return false; }
             for (var i = 0; i < count; i++) {
@@ -355,10 +355,11 @@ public sealed partial class SdfMeshIrradiance {
             volumeWords = m_volume.Length;
             if (!ReferenceEquals(m_gpuVolume, m_volume)) {
                 ArrayCapacity.EnsureScratch(ref m_gpuUpdateAt, 1);
-                volumeSnapshot = RentedArrays.Rent<uint>(minimumLength: m_volume.Length);
+                volumeSnapshot = new OwnedBuffer<uint>(allocator: m_allocator, capacity: volumeWords);
+                volumeSnapshot.CopyFrom(source: m_volume.Words);
+                _ = Interlocked.Add(location1: ref m_blockBytes, value: (((long)volumeSnapshot.Capacity) * sizeof(uint)));
                 m_gpuUpdateAt[0] = 0;
-                m_volume.CopyTo(array: volumeSnapshot, index: 0);
-                updates = new(Words: m_gpuUpdateAt, Data: volumeSnapshot.AsMemory(start: 0, length: m_volume.Length), Count: 1, Length: m_volume.Length);
+                updates = new(Words: m_gpuUpdateAt, Data: volumeSnapshot.Memory, Count: 1, Length: volumeWords);
                 m_gpuVolume = m_volume;
                 snapshotOf = m_volume;
             } else {
@@ -369,7 +370,7 @@ public sealed partial class SdfMeshIrradiance {
                 foreach (var slot in m_gpuDirty.Members) {
                     var word = slot * SdfMeshIrradianceProbe.ProbeWords;
                     m_gpuUpdateAt[i] = word;
-                    m_volume.AsSpan(word, SdfMeshIrradianceProbe.ProbeWords).CopyTo(m_gpuUpdateData.AsSpan(i * SdfMeshIrradianceProbe.ProbeWords, SdfMeshIrradianceProbe.ProbeWords));
+                    m_volume.Words.Slice(word, SdfMeshIrradianceProbe.ProbeWords).CopyTo(m_gpuUpdateData.AsSpan(i * SdfMeshIrradianceProbe.ProbeWords, SdfMeshIrradianceProbe.ProbeWords));
                     i++;
                 }
                 updates = new(Words: m_gpuUpdateAt, Data: m_gpuUpdateData, Count: dirty, Length: SdfMeshIrradianceProbe.ProbeWords);
@@ -389,7 +390,10 @@ public sealed partial class SdfMeshIrradiance {
             throw;
         }
         finally {
-            if (volumeSnapshot is not null) { RentedArrays.Return(array: volumeSnapshot); }
+            if (volumeSnapshot is not null) {
+                _ = Interlocked.Add(location1: ref m_blockBytes, value: -(((long)volumeSnapshot.Capacity) * sizeof(uint)));
+                volumeSnapshot.Dispose();
+            }
         }
         if (snapshotOf is not null) {
             lock (m_gate) {

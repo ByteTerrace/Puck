@@ -2,6 +2,7 @@ using System.CommandLine;
 using System.Text;
 
 using Puck.Cli.Qualification;
+using Puck.Cli.Registry;
 using Puck.Shaders;
 using Puck.World;
 
@@ -13,7 +14,8 @@ namespace Puck.Cli.Schema;
 // src/Puck.World.Schema/Schemas/schema/ — and of the TypeScript the dashboard portal types a world document with
 // (src/Puck.Dashboard/src/portal/src/document/worldDefinition.generated.ts, WorldSchema.ToTypeScript over the bundle),
 // and of the model shape the engine's model walks read instead of describing a type at run time
-// (src/Puck.World.Schema/WorldModelShape.generated.cs, WorldModelShapeSource). It also writes the unsplit schemas of
+// (src/Puck.World.Schema/WorldModelShape.generated.cs, WorldModelShapeSource), and of the name registry
+// (docs/world-name-registry.md, WorldNameRegistry.Over the same reflected model). It also writes the unsplit schemas of
 // the silo document, of the puck.counters.report.v1 report `puck counters` writes, of the puck.release.profile.v1
 // profile `puck qualify` reads, and of the puck.render.graph.v1 frame-graph document.
 // The schema generation and its dedup/split logic live in Puck.World.WorldSchema (src/Puck.World.Schema) and the
@@ -121,6 +123,19 @@ public static class SchemaCommand {
             );
         }
 
+        // The reflected table is the single description of the model this run writes from: the shape file renders it and
+        // the name registry walks it, so neither waits for a rebuild of the compiled table.
+        var shapes = WorldModelShapeSource.Reflect();
+        var shapeTable = shapes.ToDictionary(keySelector: static shape => shape.Type);
+        var registry = WorldNameRegistry.Over(shapeOf: type => shapeTable.GetValueOrDefault(key: (Nullable.GetUnderlyingType(nullableType: type) ?? type)));
+
+        if (registry.DescribeUncovered() is { } uncovered) {
+            Console.Error.WriteLine(value: $"schema: {uncovered}");
+            Console.Error.WriteLine(value: "schema: nothing was written.");
+
+            return CliExit.Failed;
+        }
+
         var sectionsDirectory = Path.Combine(
             path1: repositoryRoot,
             path2: SectionsRelativeDirectory
@@ -168,7 +183,11 @@ public static class SchemaCommand {
             ),
             new GeneratedFile(
                 RelativePath: WorldModelShapeSource.RelativePath,
-                Text: WorldModelShapeSource.Render(shapes: WorldModelShapeSource.Reflect())
+                Text: WorldModelShapeSource.Render(shapes: shapes)
+            ),
+            new GeneratedFile(
+                RelativePath: RegistryCommand.RelativePath,
+                Text: registry.Render()
             ),
         };
         var sections = split.Sections.Select(selector: s => new GeneratedFile(
@@ -225,10 +244,10 @@ public static class SchemaCommand {
         var bundleOption = new Option<bool>(name: "--bundle") {
             Description = "Emit the single-file schema, every cross-file $ref resolved through named $defs, instead of writing the checked-in files: to --output when given, else standard output.",
         };
-        var checkOption = CliOptions.Check(description: "Regenerate in memory and compare every checked-in schema file, the portal's TypeScript and the model shape with what is on disk; write nothing, exit 1 naming each missing, orphaned or stale file.");
+        var checkOption = CliOptions.Check(description: "Regenerate in memory and compare every checked-in schema file, the portal's TypeScript, the model shape and the name registry with what is on disk; write nothing, exit 1 naming each missing, orphaned or stale file.");
         var outputOption = CliOptions.Output(description: "Where --bundle writes the single-file schema.");
         var command = new Command(
-            description: "Generate the world, silo, counters-report, release-profile and frame-graph JSON Schemas, the dashboard's TypeScript types and the engine's model shape, or check them.",
+            description: "Generate the world, silo, counters-report, release-profile and frame-graph JSON Schemas, the dashboard's TypeScript types, the engine's model shape and the world name registry, or check them. After a model edit, run it with --bootstrap.",
             name: "schema"
         ) { bootstrapOption, bundleOption, checkOption, outputOption };
 
@@ -255,7 +274,14 @@ public static class SchemaCommand {
               src/Puck.World.Schema/WorldModelShape.generated.cs (every type reachable from
                 WorldDefinition with its members, arms and element type, the table the engine's
                 model walks read instead of describing a type at run time)
-            A section file no current model produces is deleted.
+              docs/world-name-registry.md (every document field that carries a name, walked over
+                the same reflected model, so it needs no rebuild of the model shape first)
+            A section file no current model produces is deleted. A text member the registry cannot
+            classify refuses the whole run before anything is written, naming the member and the
+            [DocumentName] or [DocumentText] annotation that classifies it.
+
+            One command leaves every generated product of a model edit consistent: run
+            `puck schema --bootstrap`, then rebuild.
 
             --bootstrap first builds the current source model in a private run directory, omitting
             only WorldModelShape.generated.cs. That temporary CLI accepts only schema; reading

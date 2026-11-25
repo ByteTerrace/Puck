@@ -847,17 +847,14 @@ public sealed partial class SdfMeshPathBake {
     // product stands in the mesh region. FinishReplacements retires the replaced group once the product has the draws.
     // Under the gate.
     private TierStart StartReplacement(Group group, Group old, int index) {
-        // A bake that draws stored rungs alone keeps drawing what it draws when the store lacks the rung asked: the
-        // group is asked again only once its demand names another tier (Group.RetierRefused). Live geometry has no
-        // stored rung to lack: its tiers bake as its steps do, and a tier of a live group is live.
+        // A tier of a live group is live: its tiers bake as its steps do, and no cache holds them.
         group.InheritLive(from: old);
+        // A bake that starts from a shipped cache counts each rung asked that the cache did not carry, before the stored
+        // rung below or a bake answers it.
         if ((Library.Policy == SdfMeshCachePolicy.Stored) && !group.Live && !Stores(group: group, identity: Identity.Value)) {
             CountRungMissed(asked: group, drawn: old.Tier, first: group.FirstDetail);
-            old.RetierRefused = true;
-            group.Retired = true;
-            return TierStart.None;
         }
-        // A bake that bakes its demand takes a stored rung that answers the tier asked before it bakes one the store lacks.
+        // A bake takes a stored rung that answers the tier asked before it bakes one the store lacks.
         if (DemandRung(drawn: old.Tier, identity: Identity.Value, planned: group) is { } rung) {
             rung.FirstDetail = group.FirstDetail;
             rung.RetierDeltaBytes = group.RetierDeltaBytes;
@@ -865,6 +862,12 @@ public sealed partial class SdfMeshPathBake {
             rung.InheritLive(from: old);
             group.Retired = true;
             group = rung;
+        } else if (group.FirstDetail && old.Stored && !group.Live && !Stores(group: group, identity: Identity.Value)) {
+            // A first detail raising a floor the store brought, whose tier no stored rung answers, is no arrival's own
+            // bake: the run that stored the floor held that tier back or never asked it. It is left to the tier
+            // decisions as an owed finer tier, under the hold and the budget, rather than baked outside them.
+            group.Retired = true;
+            return TierStart.None;
         }
         SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.TierStarts);
         group.TakeDemandBox();
