@@ -57,9 +57,12 @@ public sealed class HostMemoryRefusedException(string owner, long bytes)
 }
 /// <summary>Optional physical allocator readings; these include allocator slack and are not payload counts.</summary>
 public interface IAllocatorStatistics {
-    /// <summary>Reads the allocator's committed and reserved address-space bytes.</summary>
-    /// <returns>The committed and reserved byte readings, including allocator metadata and slack.</returns>
-    (long Committed, long Reserved) ReadStatistics();
+    /// <summary>Reads the allocator's committed and reserved address-space bytes, and the bytes its live allocations
+    /// hold.</summary>
+    /// <returns>The committed and reserved byte readings, including allocator metadata and slack, and the bytes of the
+    /// blocks live allocations hold (each block's size class, not the size asked for); committed less in-use is the
+    /// allocator's slack: free blocks in partly used pages and freed pages not yet given back.</returns>
+    (long Committed, long Reserved, long InUse) ReadStatistics();
     /// <summary>Asks the allocator to release idle storage. Live allocations are unaffected.</summary>
     void Collect();
 }

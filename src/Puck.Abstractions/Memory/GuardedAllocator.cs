@@ -110,7 +110,7 @@ public sealed unsafe class GuardedAllocator(IAllocator inner, long quarantineByt
     }
     /// <inheritdoc/>
     /// <remarks>Reads the inner allocator's statistics, quarantine and guard bytes included; zero when it keeps none.</remarks>
-    public (long Committed, long Reserved) ReadStatistics() => ((inner as IAllocatorStatistics)?.ReadStatistics() ?? default);
+    public (long Committed, long Reserved, long InUse) ReadStatistics() =>((inner as IAllocatorStatistics)?.ReadStatistics() ?? default);
     /// <inheritdoc/>
     /// <remarks>Checks every quarantined block first (<see cref="Verify"/>).</remarks>
     public void Collect() {

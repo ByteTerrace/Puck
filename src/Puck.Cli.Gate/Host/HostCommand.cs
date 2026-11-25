@@ -207,7 +207,7 @@ public static class HostCommand {
         foreach (var tenant in walk.Tenants) {
             Console.Out.WriteLine(value: FormattableString.Invariant($"tenant {System.Text.Json.JsonSerializer.Serialize(tenant.Type)} held-by={System.Text.Json.JsonSerializer.Serialize(tenant.Holder)} objects={tenant.Objects} bytes={tenant.Bytes} largest={tenant.Largest}"));
         }
-        Console.Out.WriteLine(value: FormattableString.Invariant($"small objects (under {ManagedHeapWalk.LargeObjectBytes} bytes) bytes={walk.SmallBytes} of live={walk.LiveBytes} | groups of at least {minimumMebibytes} MiB by type and first holder: {walk.SmallTenants.Count} holding {walk.SmallTenants.Sum(selector: static tenant => tenant.Bytes)} bytes"));
+        Console.Out.WriteLine(value: FormattableString.Invariant($"small objects (under {ManagedHeapWalk.LargeObjectBytes} bytes) bytes={walk.SmallBytes} of live={walk.LiveBytes} | groups of at least {minimumMebibytes} MiB by type and holders: {walk.SmallTenants.Count} holding {walk.SmallTenants.Sum(selector: static tenant => tenant.Bytes)} bytes"));
         foreach (var tenant in walk.SmallTenants) {
             Console.Out.WriteLine(value: FormattableString.Invariant($"small {System.Text.Json.JsonSerializer.Serialize(tenant.Type)} held-by={System.Text.Json.JsonSerializer.Serialize(tenant.Holder)} objects={tenant.Objects} bytes={tenant.Bytes}"));
         }
@@ -232,8 +232,8 @@ public static class HostCommand {
             large object heap's totals (objects of at least 85,000 bytes) and each tenant of at least --min-mib MiB by
             type and first holder (the type of an object referring to it, or the kind of root that keeps it), with
             the largest object's bytes, then the small objects' total beside every live byte and each group of
-            small objects of at least --min-mib MiB summed by type and first holder, so the bytes the large tenants
-            miss are named too. --depth names that holder's own first referrers too, as a chain
+            small objects of at least --min-mib MiB summed by type and chain of first referrers (to --depth, at most
+            three), so the bytes the large tenants miss are named too. --depth names that holder's own first referrers too, as a chain
             (`A <- B <- C`), so an array a list or a dictionary holds is traced to the type that keeps the list.
             Reading the stream takes seconds on a heap of a few gigabytes. Never attach during a frame-time reading:
             the pause is one long frame in the target's host.frames.
