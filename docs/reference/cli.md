@@ -1423,7 +1423,7 @@ read).
 
 ## `puck host samples`—where another process's threads spend their time, beneath a frame
 
-`puck host samples (--pid <pid> [--seconds <n>] [--output <file>] | --trace <file>) [--thread <id>] [--focus <text>] [--depth <n>] [--from <s>] [--to <s>] [--top <n>]`
+`puck host samples (--pid <pid> [--seconds <n>] [--output <file>] | --trace <file>) [--thread <id>] [--focus <text>] [--depth <n>] [--leaves <n>] [--from <s>] [--to <s>] [--top <n>]`
 attributes another .NET process's thread time by the runtime's sample
 profiler. With `--pid` the CLI records an EventPipe session on the target's
 diagnostics port for `--seconds` (default 6) with the sample profiler, plus
@@ -1436,7 +1436,10 @@ there. The report lists every thread's samples, named by its outermost engine
 frame, then, of the samples whose stack holds a frame naming `--focus` (its
 outermost such frame, so recursion counts once), the `callee` paths of
 `--depth` frames beneath it (default 1), with `self` for samples in the frame
-itself, each with its share of the focused samples. `--thread` reads one
+itself, each with its share of the focused samples. `--leaves <n>` names each
+focused sample by its `n` innermost frames instead, innermost first (`leaf`
+lines), so a copy, a clear or a wait is summed across every path that reached
+it and reads with the callers that asked for it. `--thread` reads one
 thread, and `--from` and `--to` read a window in seconds from the trace's
 start. A frame thread's parts read this way are attribution on a machine
 others share, never timings: for example `--focus
