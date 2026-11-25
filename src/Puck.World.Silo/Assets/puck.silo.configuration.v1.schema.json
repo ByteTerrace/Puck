@@ -39,29 +39,6 @@
               "keyFile": {
                 "description": "The path to the PKCS#8 private-key file this row signs its outbound federation claims and its own door\u0027s admission challenges with.",
                 "type": "string"
-              },
-              "authentication": {
-                "description": "Optional installed connection-identity provider, layered over this world\u0027s own federation credentials.",
-                "type": [
-                  "object",
-                  "null"
-                ],
-                "properties": {
-                  "type": {
-                    "description": "The case-sensitive key in the composition root\u0027s extension registry.",
-                    "type": "string"
-                  },
-                  "settings": {
-                    "description": "An object validated by the selected extension before host startup.",
-                    "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
-                  }
-                },
-                "required": [
-                  "type",
-                  "settings"
-                ],
-                "additionalProperties": false,
-                "title": "WorldSiloExtension"
               }
             },
             "required": [
@@ -292,6 +269,51 @@
         "null"
       ],
       "default": null
+    },
+    "issuer": {
+      "description": "The attestation issuer this silo runs for players, or null when it vouches for no one and admits only the keys its worlds\u0027 documents pin.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "keyFile": {
+          "description": "The path to the root\u0027s PKCS#8 P-256 private-key file. Its public key\u0027s SHA-256 fingerprint is the domain every vouched player namespace names.",
+          "type": "string"
+        },
+        "signIn": {
+          "description": "The installed sign-in provider a player presents a credential from, and its settings.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "description": "The case-sensitive key in the composition root\u0027s extension registry.",
+              "type": "string"
+            },
+            "settings": {
+              "description": "An object validated by the selected extension before host startup.",
+              "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+            }
+          },
+          "required": [
+            "type",
+            "settings"
+          ],
+          "additionalProperties": false,
+          "title": "WorldSiloExtension"
+        },
+        "subjectValiditySeconds": {
+          "description": "How long a player\u0027s issued key binding stays valid before the client asks for another; at most MaximumSubjectValiditySeconds, the verifier\u0027s own ceiling.",
+          "type": "integer",
+          "default": 3600
+        }
+      },
+      "required": [
+        "keyFile",
+        "signIn"
+      ],
+      "additionalProperties": false,
+      "default": null,
+      "title": "WorldIssuerConfiguration"
     },
     "schema": {
       "description": "Gets the document schema tag \u2014 SchemaVersion for a well-formed document.",

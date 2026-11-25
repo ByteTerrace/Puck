@@ -1011,7 +1011,7 @@ at MMO scale has no lever without it, and `Puck.Attestation` has none: a search
 for `revok`, `revoc`, `denylist`, `blocklist` finds nothing
 ([puck-today, section 3](puck-today.md#3-attestation)) **[record]**. The
 admission door's trust list sets no binding age and no replay horizon
-**[opened]** (`src/Puck.World.Schema/WorldAdmissionDoor.cs:91-96`):
+**[opened]** (`src/Puck.World.Schema/WorldAdmissionDoor.cs@bf4f360bb4:91-96`):
 
 ```csharp
         return new TrustList(
@@ -1180,7 +1180,7 @@ minutes long **[opened]** (`src/Puck.World.Protocol/Codecs/WorldAttestedAuthenti
 ```
 
 and, on the deployed silo, a bearer Entra token echoed beside the challenge
-**[opened]** (`src/Puck.World.Azure/EntraWorldAuthenticator.cs:140`):
+**[opened]** (`src/Puck.World.Azure/EntraWorldAuthenticator.cs@bf4f360bb4:140`):
 
 ```csharp
         return Encoding.UTF8.GetBytes(s: (((((Prefix + Convert.ToBase64String(challenge)) + "\n") + m_session) + "\n") + ReadClientToken()));
@@ -1199,7 +1199,7 @@ Guarantees that a namespace's key was issued under a root the verifier pins,
 with a validity window the issuer chose and the verifier may shorten. Never
 assumes the issuer is reachable at verification time. Today: the remote-issuer
 shape is named and unimplemented **[opened]**
-(`src/Puck.World.Protocol/Codecs/ISigningOracle.cs:9-11`):
+(`src/Puck.World.Protocol/Codecs/ISigningOracle.cs@bf4f360bb4:9-11`):
 
 ```csharp
 /// (<see cref="LocalKeySigningOracle"/>, a <see cref="AttestationTrustMode.SignsDirectly"/> claim with no chain) or

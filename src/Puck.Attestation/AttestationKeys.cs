@@ -19,17 +19,10 @@ public static class AttestationKeys {
     public static ECDsa ImportPkcs8PrivateKey(ReadOnlySpan<byte> pkcs8, string algorithm) {
         ArgumentNullException.ThrowIfNull(argument: algorithm);
 
-        if (
-            !AttestationAlgorithms.IsKnown(algorithm: algorithm) ||
-            (AttestationAlgorithms.Resolve(algorithm: algorithm).Role != AttestationKeyRole.Signing)
-        ) {
-            throw new ArgumentException(
-                message: $"'{algorithm}' is not an attestation SIGNING algorithm — only a signing key is imported here.",
-                paramName: nameof(algorithm)
-            );
-        }
-
-        var descriptor = AttestationAlgorithms.Resolve(algorithm: algorithm);
+        var descriptor = (SigningAlgorithm(algorithm: algorithm) ?? throw new ArgumentException(
+            message: $"'{algorithm}' is not an attestation SIGNING algorithm — only a signing key is imported here.",
+            paramName: nameof(algorithm)
+        ));
         var key = ECDsa.Create();
 
         try {
@@ -121,11 +114,7 @@ public static class AttestationKeys {
     // names; null otherwise, so no caller holds a key the name does not describe.
     private static ECDsa? TryImportPublicKey(ReadOnlySpan<byte> publicKeySubjectPublicKeyInfo, string algorithm, out HashAlgorithmName hash) {
         hash = default;
-        if (
-            (algorithm is null) ||
-            !AttestationAlgorithms.IsKnown(algorithm: algorithm) ||
-            (AttestationAlgorithms.Resolve(algorithm: algorithm) is not { Role: AttestationKeyRole.Signing, SignatureHash: { } signatureHash } descriptor)
-        ) {
+        if (SigningAlgorithm(algorithm: algorithm) is not { SignatureHash: { } signatureHash } descriptor) {
             return null;
         }
 
@@ -153,17 +142,18 @@ public static class AttestationKeys {
         return null;
     }
 
-    private static HashAlgorithmName SigningHash(string algorithm) {
-        if (
-            (algorithm is null) ||
-            !AttestationAlgorithms.IsKnown(algorithm: algorithm) ||
-            (AttestationAlgorithms.Resolve(algorithm: algorithm) is not { Role: AttestationKeyRole.Signing, SignatureHash: { } hash })
-        ) {
-            throw new ArgumentException(
-                message: $"'{algorithm}' is not an attestation SIGNING algorithm.",
-                paramName: nameof(algorithm)
-            );
-        }
-        return hash;
-    }
+    private static HashAlgorithmName SigningHash(string algorithm) => ((SigningAlgorithm(algorithm: algorithm) is { SignatureHash: { } hash })
+        ? hash
+        : throw new ArgumentException(
+            message: $"'{algorithm}' is not an attestation SIGNING algorithm.",
+            paramName: nameof(algorithm)
+        ));
+    // The one lookup every key operation here starts from: a known algorithm whose role is signing, or null.
+    private static AttestationAlgorithmDescriptor? SigningAlgorithm(string? algorithm) => (
+        (algorithm is not null) &&
+        AttestationAlgorithms.IsKnown(algorithm: algorithm) &&
+        (AttestationAlgorithms.Resolve(algorithm: algorithm) is { Role: AttestationKeyRole.Signing } descriptor)
+    )
+        ? descriptor
+        : null;
 }

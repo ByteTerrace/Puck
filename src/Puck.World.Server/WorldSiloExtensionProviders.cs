@@ -56,6 +56,12 @@ public interface IWorldSignInVerifier {
 }
 /// <summary>The client side of a sign-in provider: acquires the credential from the sign-in the provider documents.</summary>
 public interface IWorldSignInCredential {
+    /// <summary>Acquires and caches what the credential needs before an issuance exchange opens, so the exchange
+    /// itself never waits on the sign-in while the issuer's handshake deadline runs. A provider whose credential is
+    /// only a signature over the challenge has nothing to acquire.</summary>
+    /// <param name="cancellationToken">Cancels credential acquisition.</param>
+    /// <exception cref="InvalidOperationException">The provider could not obtain a credential.</exception>
+    void Acquire(CancellationToken cancellationToken);
     /// <summary>Presents a credential for one issuance exchange.</summary>
     /// <param name="challenge">The issuance exchange's transport-bound challenge.</param>
     /// <param name="cancellationToken">Cancels credential acquisition.</param>

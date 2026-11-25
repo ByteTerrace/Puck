@@ -70,9 +70,16 @@ public sealed class EntraSignIn : IWorldSignInVerifier, IWorldSignInCredential {
     public static TimeSpan MetadataTimeout { get; } = TimeSpan.FromSeconds(seconds: 10);
 
     /// <inheritdoc/>
-    /// <exception cref="InvalidOperationException">This instance acquires no tokens, the ambient credential produced
-    /// none, or it is not a user's.</exception>
-    public byte[] Present(ReadOnlySpan<byte> challenge, CancellationToken cancellationToken) {
+    /// <exception cref="InvalidOperationException">This instance acquires no tokens, or the ambient credential
+    /// produced none.</exception>
+    public void Acquire(CancellationToken cancellationToken) => _ = Token(cancellationToken: cancellationToken);
+    /// <inheritdoc/>
+    /// <exception cref="InvalidOperationException">This instance acquires no tokens, or the ambient credential
+    /// produced none.</exception>
+    public byte[] Present(ReadOnlySpan<byte> challenge, CancellationToken cancellationToken) => Encoding.UTF8.GetBytes(s: Token(cancellationToken: cancellationToken));
+
+    // The cached delegated token, acquired again once less than two minutes of it remain.
+    private string Token(CancellationToken cancellationToken) {
         if (m_credential is null) { throw new InvalidOperationException(message: "This host does not acquire user tokens."); }
         lock (m_tokenGate) {
             if (m_cachedToken.ExpiresOn <= m_clock.GetUtcNow().AddMinutes(minutes: 2)) {
@@ -85,7 +92,7 @@ public sealed class EntraSignIn : IWorldSignInVerifier, IWorldSignInCredential {
                     throw new InvalidOperationException(message: $"azure.api-users could not obtain a user token: {error.Message}", innerException: error);
                 }
             }
-            return Encoding.UTF8.GetBytes(s: m_cachedToken.Token);
+            return m_cachedToken.Token;
         }
     }
     /// <inheritdoc/>

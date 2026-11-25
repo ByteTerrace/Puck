@@ -63,8 +63,8 @@ reservation is `PeerAdmission: true`
 (`src/Puck.World.Server/WorldFederationCodec.cs:1363`); the consumed-epoch
 fence (`src/Puck.World.Server/WorldTransferEscrow.cs:2109-2111`); `Decide`'s
 grant lookup (`src/Puck.World.Server/WorldOwnedWorlds.cs:307-312`); the null
-binding ceilings and horizon (`src/Puck.World.Schema/WorldAdmissionDoor.cs:91-96`);
-the Entra proof concatenation (`src/Puck.World.Azure/EntraWorldAuthenticator.cs:140`);
+binding ceilings and horizon (`src/Puck.World.Schema/WorldAdmissionDoor.cs@bf4f360bb4:91-96`);
+the Entra proof concatenation (`src/Puck.World.Azure/EntraWorldAuthenticator.cs@bf4f360bb4:140`);
 `MaximumClaimAge` (`src/Puck.World.Protocol/Codecs/WorldAttestedAuthenticator.cs:38`);
 `Recall` and `Release` (`src/Puck.World.Server/WorldCrossingRecord.cs:127`,
 `:136`); `InstallCrossingLog` on the silo (`src/Puck.World.Silo/WorldSiloHost.cs:1474`);

@@ -104,6 +104,7 @@ public static class WorldAccountSignIn {
         }
     }
     private sealed class Client(ECDsa key, string subject) : IWorldSignInCredential {
+        public void Acquire(CancellationToken cancellationToken) { }
         public byte[] Present(ReadOnlySpan<byte> challenge, CancellationToken cancellationToken) => Encode(
             signature: AttestationKeys.Sign(algorithm: AttestationAlgorithms.EcdsaP256Sha256, data: challenge, key: key),
             subject: subject

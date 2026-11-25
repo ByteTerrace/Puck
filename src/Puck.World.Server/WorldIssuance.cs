@@ -326,6 +326,9 @@ public static class WorldIssuanceClient {
     private static async Task<WorldIssuedIdentity> IssueAsync(System.Net.EndPoint endpoint, string remoteKeyHash, IWorldSignInCredential credential, ECDsa key, TimeProvider clock, CancellationToken cancellationToken) {
         using var deadline = new OperationDeadline(caller: cancellationToken, timeout: ExchangeTimeout, timeProvider: clock);
         var ct = deadline.Token;
+
+        // The sign-in is acquired before the dial: the issuer's handshake deadline starts when the connection does.
+        credential.Acquire(cancellationToken: ct);
         // A network of its own: an ephemeral transport identity for one exchange, disposed with it.
         using var network = new WorldPeerNetwork(timeProvider: clock);
         await using var stream = await network.ConnectAsync(endpoint: endpoint, ct: ct).ConfigureAwait(continueOnCapturedContext: false);

@@ -423,12 +423,12 @@ about, and what invariant 1 implies.
   (`WorldAdmissionEntry.AnyAuthority`, `src/Puck.World.Schema/WorldAdmission.cs:165-167`)
   **[checked]**. Every subject the root vouches for is then an authenticated
   namespace that may land travellers (`WorldAdmissionDoor.TryAdmitArrival`,
-  `src/Puck.World.Schema/WorldAdmissionDoor.cs:206-260`) **[checked]**. A
+  `src/Puck.World.Schema/WorldAdmissionDoor.cs@bf4f360bb4:206-260`) **[checked]**. A
   banned or stolen key stays valid until its binding expires: attestation
   "performs no path discovery and fetches no missing certificates"
   (`docs/reference/attestation.md:261-262`), the connection door builds its
   trust list with `MaximumAge: null` per entry
-  (`src/Puck.World.Schema/WorldAdmissionDoor.cs:87`), and the 5-minute
+  (`src/Puck.World.Schema/WorldAdmissionDoor.cs@bf4f360bb4:87`), and the 5-minute
   `MaximumClaimAge` bounds the challenge claim, not the binding
   (`src/Puck.World.Protocol/Codecs/WorldAttestedAuthenticator.cs:36-38`)
   **[checked]**.
@@ -465,7 +465,7 @@ about, and what invariant 1 implies.
   sum of both speed ceilings (`src/Puck.World.Schema/WorldAdjacencies.cs:649-657`)
   **[checked]**, so a neighbour can widen the shared strip but never shrink
   it; its attested terms are "believed on the same keys a connection is"
-  (`src/Puck.World.Schema/WorldAdmissionDoor.cs:262-263`). Nothing checks that
+  (`src/Puck.World.Schema/WorldAdmissionDoor.cs@bf4f360bb4:262-263`). Nothing checks that
   the bodies a neighbour reports are plausible.
 - **Severity:** medium: griefing bounded to the seam strip, escalating through
   A2 and A3.
@@ -657,7 +657,7 @@ Each question names the attack that raises it and the lane the round assigned
    issuer issues identity keys and sets binding lifetimes. The question is
    asked of Puck's issuer abstraction (a key's lifetime and revocation), not
    of one provider's settings: Azure and Entra are today's implementation
-   (`src/Puck.World.Azure/EntraWorldAuthenticator.cs`,
+   (`src/Puck.World.Azure/EntraWorldAuthenticator.cs@bf4f360bb4:1`,
    `src/Puck.World.Azure/WorldApiCounterpartResolver.cs`, not read by this
    pass), and whatever the answer requires must hold for any replacement.
 8. **What does a visited world get to write?** (A2.) Lane A. How WoW, FFXIV
