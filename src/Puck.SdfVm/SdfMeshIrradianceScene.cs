@@ -1076,13 +1076,9 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
             var compacted = copies.Buffer<uint>(length: indices.Length);
             // Build workspace, freed on return, from the same allocator.
-            using var remap = new OwnedBuffer<int>(allocator: copies.Allocator, capacity: positions.Length);
-            using var sources = new OwnedBuffer<int>(allocator: copies.Allocator, capacity: Math.Min(val1: indices.Length, val2: positions.Length));
-
-            remap.Resize(clear: false, length: remap.Capacity);
-            sources.Resize(clear: false, length: sources.Capacity);
-
-            var count = SdfMesh.CompactVertices(compacted: compacted.GetSpan(), indices: indices, remap: remap.GetSpan()[..positions.Length], sources: sources.GetSpan());
+            using var remap = OwnedBuffer<int>.OfLength(allocator: copies.Allocator, clear: false, length: positions.Length);
+            using var sources = OwnedBuffer<int>.OfLength(allocator: copies.Allocator, clear: false, length: Math.Min(val1: indices.Length, val2: positions.Length));
+            var count = SdfMesh.CompactVertices(compacted: compacted.GetSpan(), indices: indices, remap: remap.GetSpan(), sources: sources.GetSpan());
             var copy = copies.Buffer<Vector3>(length: count);
             var into = copy.GetSpan();
             var from = sources.GetSpan();

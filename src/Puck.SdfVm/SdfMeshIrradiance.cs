@@ -3576,10 +3576,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         private readonly OwnedBuffer<uint> m_words;
 
-        public VolumeWords(IAllocator? allocator, IAllocationObserver? owner, int words) {
-            m_words = new OwnedBuffer<uint>(allocator: allocator, observer: owner);
-            m_words.Resize(length: words, clear: true);
-        }
+        public VolumeWords(IAllocator? allocator, IAllocationObserver? owner, int words) =>
+            m_words = OwnedBuffer<uint>.OfLength(allocator: allocator, clear: true, length: words, observer: owner);
 
         public int Length => m_words.Length;
         public long Bytes => (((long)m_words.Capacity) * sizeof(uint));
@@ -3591,10 +3589,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private abstract class ProbeStorage : Reclaimable {
         private int m_references = 1;
 
-        protected ProbeStorage(int length, IAllocator? allocator) {
-            m_floats = new OwnedBuffer<float>(allocator: allocator, capacity: length);
-            m_floats.Resize(length: length, clear: true);
-        }
+        protected ProbeStorage(int length, IAllocator? allocator) => m_floats = OwnedBuffer<float>.OfLength(allocator: allocator, clear: true, length: length);
 
         protected readonly OwnedBuffer<float> m_floats;
         // The volume whose block bytes this block is counted in (Charge), until it returns its words.
@@ -3663,13 +3658,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public override long Bytes => (FloatBytes + ((m_hits is { } hits) ? (((long)hits.Capacity) * sizeof(uint)) : 0L));
 
         // Hit words for `count` probes, unwritten.
-        public static OwnedBuffer<uint> HitBuffer(IAllocator? allocator, int count) {
-            var words = (count * SdfMeshProbeDepth.HitWords);
-            var hits = new OwnedBuffer<uint>(allocator: allocator, capacity: words);
-
-            hits.Resize(clear: false, length: words);
-            return hits;
-        }
+        public static OwnedBuffer<uint> HitBuffer(IAllocator? allocator, int count) => OwnedBuffer<uint>.OfLength(allocator: allocator, clear: false, length: (count * SdfMeshProbeDepth.HitWords));
         public void ReleaseHits() {
             var before = Bytes;
 
