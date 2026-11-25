@@ -71,7 +71,7 @@ public sealed partial class WorldTick {
 
         var radius = body.EngageReach(radius: screen.Route.EngageRadius);
 
-        if (PlanarDistanceSquared(body: body, screen: screen) > (radius * radius)) {
+        if ((PlanarDistanceSquared(body: body, screen: screen) > (radius * radius)) || !WithinStorey(body: body, height: FixedQ4816.FromDouble(value: screen.Origin.Y), radius: radius)) {
             if (describe) { reason = $"body {entityIndex} is outside screen {screen.Index}'s engage radius ({((double)radius).ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)} at its size)"; }
             return false;
         }
@@ -104,9 +104,11 @@ public sealed partial class WorldTick {
 
         var radius = body.EngageReach(radius: engage.Radius);
 
-        distanceSquared = PlanarDistanceSquared(body: body, centre: WorldTabletopFrame.Centre(topology: topology));
+        var centre = WorldTabletopFrame.Centre(topology: topology);
 
-        if (distanceSquared > (radius * radius)) {
+        distanceSquared = PlanarDistanceSquared(body: body, centre: centre);
+
+        if ((distanceSquared > (radius * radius)) || !WithinStorey(body: body, height: centre.Y, radius: radius)) {
             reason = (describe ? $"body {entityIndex} is outside tabletop '{placementId}''s engage radius ({((double)radius).ToString(format: "0.###", provider: System.Globalization.CultureInfo.InvariantCulture)} at its size)" : string.Empty);
 
             return false;
@@ -141,6 +143,9 @@ public sealed partial class WorldTick {
             Z: FixedQ4816.FromDouble(value: screen.Origin.Z)
         )
     );
+    // Whether a body stands within an engage radius of a target's height, so a reach measured on the ground plane never
+    // takes a screen or a table a floor above or below the body.
+    private static bool WithinStorey(WorldBody body, FixedQ4816 height, FixedQ4816 radius) => (FixedQ4816.Abs(value: (body.FixedPosition.Y - height)) <= radius);
     // The squared distance on the ground plane from a body to a point.
     private static FixedQ4816 PlanarDistanceSquared(WorldBody body, in FixedVector3 centre) {
         var position = body.FixedPosition;

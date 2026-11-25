@@ -42,6 +42,10 @@ public sealed partial class WorldDocument {
                     reason = WorldVerdict.RefuseWrite(row: existing);
                     return false;
                 }
+                if ((existing is { Follows: not null }) && (replace.Principal != Puck.Commands.Principal.World)) {
+                    reason = WorldStateFollow.RefuseWrite(row: existing);
+                    return false;
+                }
                 return Host.Arena.TryLoad(rows: [replace.Row], time: in time, reason: out reason);
             case WorldMutation.UpsertStateCell write:
                 return TryApplyCellUpsert(arena: Host.Arena, working: m_definition, mutation: write, time: in time, reason: out reason, evictedKey: out evicted);

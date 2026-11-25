@@ -276,28 +276,13 @@ public sealed partial class WorldDocument {
                 if (RefuseActivationMismatch(binding: binding, envelope: in envelope, expected: mutation.ExpectedActivation) is { } mismatch) {
                     return mismatch;
                 }
-                // The tape's one mutation ingress: fires here rather than at the loopback so a forwarded traveller's
-                // submission and an admitted peer's are captured on the same terms as a local one, each with the
-                // actor its own envelope stamped. See WorldServer.MutationTap.
-                Host.MutationTap?.Invoke(
-                    arg1: mutation.Value,
-                    arg2: envelope.Principal
-                );
-                EnqueueMutation(
+                EnqueueTapedMutation(
                     mutation: mutation.Value,
+                    actor: envelope.Principal,
                     connectionId: envelope.ConnectionId,
                     correlationId: envelope.CorrelationId,
                     binding: binding,
-                    completion: completion,
-                    // Threaded through the buffered op itself, never a generic drain-wide firing: only THIS dispatch
-                    // point — the one MutationTap above also covers — ever supplies a completion, so a guest's
-                    // decoded act and a rule's generate effect (both call EnqueueMutation directly) never produce one.
-                    outcomeObserved: ((Host.MutationOutcomeTap is { } outcomeTap)
-                    ? (applied => outcomeTap(
-                        arg1: mutation.Value,
-                        arg2: applied
-                    ))
-                    : null)
+                    completion: completion
                 );
 
                 // The typed mutation result is delivered from DrainPendingOps after actual apply. Returning null
@@ -2187,6 +2172,29 @@ public sealed partial class WorldDocument {
         entity = new int[capacity];
         principal = new Principal[capacity];
         collided = new bool[capacity];
+    }
+    // The tape's one mutation ingress: a submission (local, a forwarded traveller's, an admitted peer's) and a federated
+    // import's adoption, each captured with the actor that stamped it (WorldServer.MutationTap). The outcome is threaded
+    // through the buffered op itself, so only a taped mutation reports one: a guest's decoded act and a rule's generate
+    // effect call EnqueueMutation directly and re-derive in a drive.
+    internal void EnqueueTapedMutation(WorldMutation mutation, Principal actor, int connectionId = SubmissionEnvelope.LocalConnectionId, long correlationId = 0, WorldMutationBinding? binding = null, Action<WorldSubmissionResult>? completion = null) {
+        Host.MutationTap?.Invoke(
+            arg1: mutation,
+            arg2: actor
+        );
+        EnqueueMutation(
+            mutation: mutation,
+            connectionId: connectionId,
+            correlationId: correlationId,
+            binding: binding,
+            completion: completion,
+            outcomeObserved: ((Host.MutationOutcomeTap is { } outcomeTap)
+            ? (applied => outcomeTap(
+                arg1: mutation,
+                arg2: applied
+            ))
+            : null)
+        );
     }
     /// <summary>Buffers one live world mutation for the next <see cref="WorldServer.Step"/> (drained before intents). Retains the
     /// submitting envelope's connection/correlation identity so the eventual accept/reject <see cref="WorldEditEcho"/>

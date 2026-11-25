@@ -50,9 +50,15 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
         if (mode == 3) { MemoryMarshal.Cast<int, Vector3>(words[Samples..])[local] = gradient; }
     }
 
-    /// <summary>Gets the field evaluations the dispatch makes: five a sample that measures the gradient, one
-    /// otherwise.</summary>
-    public int Taps => (Gradients ? (5 * Samples) : Samples);
+    /// <summary>The work a sample that measures the gradient costs, in samples that do not: one walk of the field in
+    /// forward mode (sdf-mesh-bake-gradient.comp.hlsl), whose value carries three partials through every operation. A
+    /// sample whose walk meets an operation that keeps no derivatives still takes the stencil's five walks; the rate the
+    /// bake measures its batches at absorbs them.</summary>
+    public const int GradientCost = 2;
+
+    /// <summary>Gets the work the dispatch makes, in field walks of a sample that measures no gradient: one a sample, and
+    /// <see cref="GradientCost"/> a sample that measures the gradient.</summary>
+    public int Taps => (Gradients ? (GradientCost * Samples) : Samples);
 
     /// <summary>Gets the first plane along Z of its group's final lattice that a slab of it samples, or -1 for any other
     /// lattice. A slab keeps its final lattice's <see cref="Origin"/>: its sample at plane <c>z</c> of its own lies at
@@ -120,8 +126,8 @@ public sealed record SdfMeshBakeBatch(SdfMeshBakeRequest[] Lattices, object[] Ti
     public int SampledHandles { get; init; }
     /// <summary>Gets the byte length of the packed output of every lattice.</summary>
     public int OutputBytes => Lattices.Sum(static lattice => lattice.OutputBytes);
-    /// <summary>Gets the field evaluations the batch's lattices make (<see cref="SdfMeshBakeRequest.Taps"/>), the unit the
-    /// bake's GPU time is measured in.</summary>
+    /// <summary>Gets the work the batch's lattices make (<see cref="SdfMeshBakeRequest.Taps"/>), the unit the bake's GPU
+    /// time is measured in.</summary>
     public long Taps {
         get {
             var taps = 0L;
@@ -490,24 +496,34 @@ public sealed partial class SdfMeshPathBake {
     /// keeping the detail moving. A wait that releases unsettled prints it.</summary>
     /// <returns>The reasons, or an empty string when the bake is settled.</returns>
     public string DescribeUnsettled() {
+        const int NamedUnsettled = 4;
+
         using (EnterGate(site: BakeGate.Read)) {
             var parts = new List<string>();
 
             if (m_ahead.Count > 0) { parts.Add(item: $"{m_ahead.Count} product(s) landing ahead of the draws"); }
             if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { parts.Add(item: "a landed product the dressed frame has not taken"); }
             if (m_slice is not null) { parts.Add(item: "a field slice sampling"); }
-            if (m_successors > 0) { parts.Add(item: $"{m_successors} successor(s) waiting"); }
+            if (m_successors > 0) {
+                // The groups holding them, by what keeps each from done, since Promote starts a successor only once its
+                // group is.
+                var holders = m_inputReaders.Select(selector: index => m_groups[index]).Where(predicate: static group => group.Successor is not null).Take(count: NamedUnsettled).Select(selector: static group => group.State());
+
+                parts.Add(item: $"{m_successors} successor(s) waiting [{string.Join(separator: "; ", values: holders)}]");
+            }
             if (m_firstDetailsOwed > 0) { parts.Add(item: $"{m_firstDetailsOwed} first detail(s) owed"); }
 
             var baking = 0;
             var live = 0;
+            var named = new List<string>();
 
             for (var index = DoneThrough(); (index < m_groups.Count); index++) {
                 if (m_groups[index].Done) { continue; }
                 baking++;
                 if (m_groups[index].Live) { live++; }
+                if (named.Count < NamedUnsettled) { named.Add(item: m_groups[index].State()); }
             }
-            if (baking > 0) { parts.Add(item: $"{baking} group(s) baking ({live} live)"); }
+            if (baking > 0) { parts.Add(item: $"{baking} group(s) baking ({live} live) [{string.Join(separator: "; ", values: named)}]"); }
             if (!DetailSettled && m_detailHold.Holds) { parts.Add(item: $"detail held: {m_detailHold}"); }
             return string.Join(separator: "; ", values: parts);
         }
@@ -1784,6 +1800,19 @@ public sealed partial class SdfMeshPathBake {
             started.Begun(group: group, how: Start(group: group));
         }
     }
+    // The ops whose walk keeps no derivatives (SdfShaderAction.Dual), so a gradient sample whose walk meets one takes the
+    // stencil's five walks (sdf-mesh-bake-gradient.comp.hlsl), and a masked relief's rows, whose weight the dual reads as a
+    // constant.
+    private static readonly System.Collections.Frozen.FrozenSet<SdfOp> StencilOps = System.Collections.Frozen.FrozenSet.ToFrozenSet(source: SdfFieldOps.ShaderActions()
+        .Where(predicate: static action => ((action.Action.Code is not null) && !action.Action.Dual))
+        .Select(selector: static action => action.Value)
+        .Append(element: SdfOp.ReliefRow));
+    // The stencil ops a program holds, by name, or "none": with none, every gradient sample of the bake is one walk.
+    private static string StencilOpsOf(SdfProgram? program) {
+        var held = (program?.Instructions.Select(selector: static instruction => instruction.Op).Where(predicate: StencilOps.Contains).Distinct().Order().ToArray() ?? []);
+
+        return ((held.Length == 0) ? "none" : string.Join(separator: ',', values: held));
+    }
     // Opens the accounts and the start line of the work a restart, resample or promotion began, if any: a new program's, or
     // any once the bake before it reported, whose counts and clock start again; otherwise work added to the bake still
     // running, whose done line then covers it. A bake that began nothing and has every group done reports here or never.
@@ -1800,7 +1829,7 @@ public sealed partial class SdfMeshPathBake {
             m_loadsDone = 0;
             m_loadFirst = ((started.Loading > 0) ? restarted : 0);
             m_loadLast = 0;
-            SdfMeshBakeReport.Start(baking: started.Baking, cause: cause, disk: Library.Disk, dynamic: m_groups.Count(predicate: static group => group.Dynamic), groups: m_groups.Count, identity: Identity, instances: instances, joined: started.Joined, loading: started.Loading, named: started.Named, residency: Residency, residencyId: ResidencyId, shared: started.Shared);
+            SdfMeshBakeReport.Start(baking: started.Baking, cause: cause, disk: Library.Disk, dynamic: m_groups.Count(predicate: static group => group.Dynamic), groups: m_groups.Count, identity: Identity, instances: instances, joined: started.Joined, loading: started.Loading, named: started.Named, residency: Residency, residencyId: ResidencyId, shared: started.Shared, stencil: StencilOpsOf(program: Program));
         } else if (begun > 0) {
             m_accounts.Joined += started.Joined;
             m_loadsQueued += started.Loading;
@@ -2333,7 +2362,7 @@ public sealed partial class SdfMeshPathBake {
     // takes. Gradient taps are spaced by the contour's finest cell.
     private static SdfMeshBakeRequest FinalChunk(Group group, FinalLattice final) {
         var gradients = (final.Stage == FinalStage.Gradients);
-        var count = Math.Clamp(value: (LatticeTaps / (gradients ? 5 : 1)), min: 1, max: (final.Points.Length - final.Answered));
+        var count = Math.Clamp(value: (LatticeTaps / (gradients ? SdfMeshBakeRequest.GradientCost : 1)), min: 1, max: (final.Points.Length - final.Answered));
 
         return RequestOf(cell: final.Sampled!.ContourCell, dims: (count, 1, 1), gradients: gradients, group: group, origin: Vector3.Zero) with {
             WithMaterial = final.Stage == FinalStage.Refinement,
@@ -2470,7 +2499,7 @@ public sealed partial class SdfMeshPathBake {
     // The next chunk of the vertices a group's field check measures (gradients at taps the crease spacing apart) or of its
     // material points (values alone), as many as a frame's share of field evaluations takes.
     private static SdfMeshBakeRequest PointsChunk(Group group, bool gradients) {
-        var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: (LatticeTaps / (gradients ? 5 : 1)));
+        var count = Math.Min(val1: (group.Points!.Length - group.PointsAnswered), val2: (LatticeTaps / (gradients ? SdfMeshBakeRequest.GradientCost : 1)));
 
         return RequestOf(cell: (gradients ? group.CreaseSpacing : Vector3.One), dims: (count, 1, 1), gradients: gradients, group: group, origin: Vector3.Zero) with {
             MaterialOnly = !gradients,
@@ -2576,6 +2605,12 @@ public sealed partial class SdfMeshPathBake {
         Account(group: group, since: started, stage: BakeStage.Split);
         group.Contour = contour;
         group.Cut = cut;
+        // A contour whose cut samples no point (one material, no boundary to place) meshes now, as Advance does once its
+        // rounds are spent: a round of no points would be a lattice of no samples, whose dispatch copies nothing back.
+        if (points == 0) {
+            Build(group: group);
+            return;
+        }
         StagePoints(group: group, count: points);
         using (EnterGate(site: BakeGate.Split)) {
             group.Contouring = false;
@@ -3277,6 +3312,36 @@ public sealed partial class SdfMeshPathBake {
         public bool QueueWork() {
             lock (m_lifecycle) { if (Retired) { return false; } m_jobs++; return true; }
         }
+        // Where the group stands in its bake, for a wait that releases unsettled (SdfMeshPathBake.DescribeUnsettled): its
+        // place and tier, then each state that keeps it from done. Under the bake's gate.
+        public string State() {
+            var line = new System.Text.StringBuilder();
+
+            _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{Selector}/{(Dynamic ? "slot" : "instances")}{(Dynamic ? Slot : Instances)} tier{Tier} shape={(ulong)Shape:x16}");
+            if (Done) { _ = line.Append(value: " done"); }
+            if (Live) { _ = line.Append(value: " live"); }
+            if (!Listed) { _ = line.Append(value: " unlisted"); }
+            if (Retired) { _ = line.Append(value: " retired"); }
+            if (Leader is { } leader) { _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" leader={leader.Selector}{(leader.Done ? "(done)" : string.Empty)}{(leader.Retired ? "(retired)" : string.Empty)}"); }
+            if (Joined is { } joined) { _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" joined={joined.Bake.Residency}{(joined.Resolved ? "(resolved)" : string.Empty)}"); }
+            if (Share is not null) { _ = line.Append(value: " leads-share"); }
+            if (Contouring) { _ = line.Append(value: " contouring"); }
+            if (InFlight) { _ = line.Append(value: " in-flight"); }
+            if (Next is { } next) { _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" next=slab{next.Slab}"); }
+            if (Deferred is not null) { _ = line.Append(value: " deferred-lattice"); }
+            if (Final is not null) { _ = line.Append(value: " final"); }
+            if (Admitted) { _ = line.Append(value: " admitted"); }
+            if (AwaitsStage) { _ = line.Append(value: " awaits-stage"); }
+            if (DeferredReported) { _ = line.Append(value: " admission-deferred"); }
+            if (Replaces is { } replaced) { _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" replaces={replaced.Selector}/tier{replaced.Tier}"); }
+            if (Ahead) { _ = line.Append(value: " ahead"); }
+            if (Fill) { _ = line.Append(value: " fill"); }
+            if (Successor is { } successor) { _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" successor=tier{successor.Tier}"); }
+            if (LoadRetries > 0) { _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" load-retries={LoadRetries}"); }
+            if (Failed) { _ = line.Append(value: " failed"); }
+            _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" jobs={Volatile.Read(location: ref m_jobs)}");
+            return line.ToString();
+        }
         public void EndWork() {
             lock (m_lifecycle) { m_jobs--; TryRelease(); }
         }
@@ -3291,7 +3356,6 @@ public sealed partial class SdfMeshPathBake {
                     m_pointMaterials?.Dispose();
                     Contour = null; Cut = null; Creases = null; Projection?.Dispose(); Projection = null;
                     Next = null; Deferred = null;
-                    Skin?.Release();
                     Memory.Dispose();
                 }
                 if (Retired && !m_released) {

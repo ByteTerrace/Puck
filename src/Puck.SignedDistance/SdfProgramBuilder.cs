@@ -83,11 +83,18 @@ public sealed partial class SdfProgramBuilder {
     /// <summary>The smallest exponent a <see cref="Superellipsoid"/> admits — the ellipsoid itself, the exponent every
     /// ellipsoid in the ISA is emitted at; see its own remarks for the 1-Lipschitz proof this interval is sized to.</summary>
     public const float MinSuperellipsoidExponent = 2f;
-    /// <summary>The most screen surfaces one program may declare: the length of the kernels' per-screen tables and of
-    /// their <c>screenSources</c> array, which <c>Puck.SdfVm.SdfWorldTables.MaxScreenSurfaces</c> reads and the kernels read
-    /// as the generated <c>SDF_MAX_SCREEN_SURFACES</c>. A contract separate from the engine's viewport
-    /// capacity.</summary>
-    public const int MaxScreenSurfaces = 32;
+    /// <summary>The screen slots a residency holds at once, the members one screen mask holds: every set of resident
+    /// screens (bound, emitting, shown) is one <see cref="UInt128"/> mask over <see cref="BitWords"/>, walked by its set
+    /// bits, and the kernels read it as a <c>uint4</c>. It is the length of the kernels' per-screen tables and of their
+    /// <c>screenSources</c> array, which <c>Puck.SdfVm.SdfWorldTables.MaxScreenSurfaces</c> reads and the kernels read as
+    /// the generated <c>SDF_MAX_SCREEN_SURFACES</c>. It bounds no program: a program declares any number of screens, each
+    /// by an identity below <see cref="MaxScreenIdentities"/>, and a residency claims a slot for a screen only while it is
+    /// resident.</summary>
+    public const int MaxScreenSurfaces = BitWords.MaskBits;
+    /// <summary>The screen identity's format: a screen index is below this, 24 bits like a slot or draw index, so its
+    /// material id (<see cref="ScreenMaterialId"/> plus one plus the index) fits and the kernels' identity-to-slot map, one
+    /// word an identity, stays addressable. It is the index's width, not a count of screens.</summary>
+    public const int MaxScreenIdentities = 1 << 24;
     /// <summary>The reserved material identifier used by the plain screen material, unbound glass, which the kernels read
     /// as <c>SDF_SCREEN_MATERIAL</c>.</summary>
     public const int ScreenMaterialId = 65535;
@@ -117,6 +124,9 @@ public sealed partial class SdfProgramBuilder {
     private readonly List<SdfMaterialScope> m_materialScopes = [];
     private readonly List<SdfMaterial> m_materials;
     private readonly List<SdfScreenSurface> m_screenSurfaces;
+    // The indices m_screenSurfaces declares, so a declaration and a material's screen id are checked in constant time
+    // however many screens a program declares.
+    private readonly HashSet<int> m_screenIndices = [];
     // Every ConvexPolygon shape instruction's authored vertex list, paired with that instruction's index — the host
     // mirror SdfProgram packs into a side table appended to its own word stream (see SdfShapeType.ConvexPolygon) and
     // patches the instruction's Data0.x offset lane against, and that SdfFieldEvaluator reads directly (no packed-word
@@ -174,6 +184,7 @@ public sealed partial class SdfProgramBuilder {
         m_materialScopes.Clear();
         m_materials.Clear();
         m_screenSurfaces.Clear();
+        m_screenIndices.Clear();
         m_convexPolygonProfiles.Clear();
         m_paths.Clear();
         m_sampledBindings.Clear();
@@ -911,15 +922,7 @@ public sealed partial class SdfProgramBuilder {
             );
         }
     }
-    private bool DeclaresScreenIndex(int screenIndex) {
-        foreach (var surface in m_screenSurfaces) {
-            if (surface.ScreenIndex == screenIndex) {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    private bool DeclaresScreenIndex(int screenIndex) => m_screenIndices.Contains(item: screenIndex);
     private string DescribeScreenIndices() => ((m_screenSurfaces.Count == 0)
         ? "none"
         : string.Join(

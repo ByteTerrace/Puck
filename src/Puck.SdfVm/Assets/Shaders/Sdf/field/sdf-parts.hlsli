@@ -66,6 +66,9 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
     child.material = 0;
     child.instanceIndex = -1;
     child.frameSlot = SDF_TRANSFORM_SLOT_NONE;
+#ifdef SDF_FIELD_DUAL
+    child.gradient = float3(0.0, 0.0, 0.0);
+#endif
 
     uint leafCount = part.z & SDF_PART_LEAF_COUNT_MASK;
     if (!sdfProgramRange(part.x, leafCount, 1u) || !sdfProgramRange(part.y, leafCount, 1u)) {
@@ -81,11 +84,17 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
         uint4 binding = sdfProgramWord(part.y + leaf);
         float3 localPosition = worldPosition;
         int slot = SDF_TRANSFORM_SLOT_NONE;
+#ifdef SDF_FIELD_DUAL
+        float3x3 localJacobian = SDF_DUAL_IDENTITY;
+#endif
 #ifdef SDF_DYNAMIC_TRANSFORMS
         if (binding.x != SDF_TRANSFORM_SLOT_STATIC_WORD) {
             uint pose = (uint)SDF_TRANSFORM_SLOT_UNPACK(binding.x);
             slot = (int)pose;
             localPosition = sdfWorldPointInSlot(worldPosition, pose, root);
+#ifdef SDF_FIELD_DUAL
+            localJacobian = sdfdRotateJacobian(SDF_DUAL_IDENTITY, sdfDynamicTransformRow(3u * pose + 1u));
+#endif
         }
 #endif
 
@@ -104,13 +113,21 @@ void sdfComposePartProgram(inout SdfHit parent, float3 worldPosition, uint4 part
 
         float4 shapeData0 = sdfFieldData(dataOffset, code.x, 0u);
         float4 shapeData1 = sdfFieldData(dataOffset, code.x, 1u);
+#ifdef SDF_FIELD_DUAL
+        SdfDual candidate = sdfdMultiply(evaluateShape(SDF_INSTRUCTION_SHAPE(shape), sdfdMake(localPosition, localJacobian), shapeData0, shapeData1), distanceScale);
+#else
         float candidate = evaluateShape(SDF_INSTRUCTION_SHAPE(shape), localPosition, shapeData0, shapeData1) * distanceScale;
+#endif
         sdfComposeCandidate(child, candidate, SDF_INSTRUCTION_BLEND(shape), trackMaterial ? (int)binding.y : 0,
             instanceIndex, slot, shapeData1.x, 0.0, trackMaterial);
     }
 
     // Same hard-union PopField semantics as the generic scalar walk, through its baked candidate scale.
+#ifdef SDF_FIELD_DUAL
+    SdfDual candidate = sdfdMultiply(sdfdMake(child.distance, child.gradient), asfloat(part.w));
+#else
     float candidate = child.distance * asfloat(part.w);
+#endif
     sdfComposeCandidate(parent, candidate, SDF_BLEND_UNION, child.material, child.instanceIndex, child.frameSlot, 0.0, 0.0, trackMaterial);
 }
 

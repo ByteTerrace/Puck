@@ -262,6 +262,26 @@ public sealed class WorldSessionMirror : IClientSink {
         }
     }
 
+    /// <summary>Reads a row's slot cell as the delivering authority's latest delivery holds it, at an authoritative tick of
+    /// that authority: an advancing cell is read at <paramref name="engineTick"/> by its own trait, so a tick past the
+    /// latest delivery reads what that authority's row predicts for it. Exact: the value is the cell's raw bits, never a
+    /// presentation number.</summary>
+    /// <param name="rowName">The row's name in the delivering authority's document.</param>
+    /// <param name="tick">The delivering authority's simulation tick the read answers as of.</param>
+    /// <param name="engineTick">The delivering authority's engine tick the read answers as of.</param>
+    /// <param name="value">The cell's value, or the empty value when the delivery discloses no such row or cell.</param>
+    /// <returns><see langword="true"/> when the delivery carries the row and its slot cell holds a value.</returns>
+    public bool TryReadDelivered(string rowName, ulong tick, ulong engineTick, out CellValue value) {
+        value = default;
+        if (!m_synchronizedStateView.TryResolveRow(rowName: rowName, ordinal: out var ordinal) ||
+            !m_synchronizedStateView.TryRead(ordinal: ordinal, key: null, target: true, tick: tick, engineTick: engineTick, sample: out var sample) ||
+            !sample.Value.HasValue) {
+            return false;
+        }
+        value = sample.Value;
+        return true;
+    }
+
     private sealed class SynchronizedStateView(WorldSessionMirror owner) : IWorldStateView {
         public WorldPresentationManifest Manifest { get { lock (owner.m_followGate) { return owner.m_stateView.Manifest; } } }
 

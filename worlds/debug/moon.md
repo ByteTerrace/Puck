@@ -12,15 +12,40 @@ ship across at the same point of it.
 
 ## Through the painting
 
-`debug.go portal-moon` stands a body before the moon painting in the painting
-wing ([paintings.md](paintings.md)); walking ahead arrives out of the frame on
-the pad at the moon's north pole. Turning round and walking into the frame
-arrives back out of the painting. Headless, the lines are:
+The moon painting in the painting wing ([paintings.md](paintings.md)) is a door
+opened in play ([moon-door.puck](moon-door.puck)). Its curtain stays drawn
+until a seat presses the context button on the step before it: the press offers
+the moon a pairing, the moon's own rules grant it by opening the socket on its
+pad (a bronze frame on the pad's east rim), and the curtain draws aside while
+both stand. Walking in arrives out of the socket; walking back into the socket
+arrives before the painting. The offer lapses after 45 seconds and the moon's
+grant after 60, and only the seat that pressed may pass. Headless, the lines
+are:
 
 ```text
-body.pose 66 0.05 15.7 0 0 0
-body.fly 1 0 0 0 0 0 2
+body.pose 66 0.1 13.6 0 0 0 0
+player.signal keyboard.e press
+player.signal keyboard.e release
+world.wait 6
+world.state moonDoorOpen
+player.signal keyboard.w press
 ```
+
+The same door stands in the open on the launch field: a gilt frame east of the
+pad (`moon-door-valley`). A press on the ground before it makes the same offer,
+and while the door stands open walking through it arrives out of the same
+socket. Headless, `body.pose 100 0.3 78.9 0 0 0 0` stands a seat on its step.
+The socket's way back still leads to the painting.
+
+The frame at the moon's north pole is the moon's own way home: walking into it
+arrives before the painting whether or not the door is open.
+
+Beside the painting, the moon beacon switch ([moon-beacon.puck](moon-beacon.puck))
+lights the beacon on the moon's pad. The debug world owns the switch; the moon
+follows it and its own rule lights the lamp.
+
+The moon's `day` follows the debug world's, so writing `day` in the valley
+(`world.state.cell.set day $value 0.75`) moves the moon's sun too.
 
 The valley is on the moon's other side from the pole. Walking or flying round
 the moon brings a body to any other part of it: its feet stay toward the

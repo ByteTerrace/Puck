@@ -1,0 +1,34 @@
+// Followed rows (a state row's `follows`): this world's `day` and `pulls` hold the rows of the same names in
+// follows-leader.puck, whose own rules write them. `puck test worlds/debug/follows-tests.puck --reproduce` shows the
+// adoption, a write entering from another authority at a tick boundary, replays bit for bit.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "follows-tests"
+
+references [
+  { document: "follows-leader", name: "leader" }
+]
+
+destinations [
+  { durability: persisted, name: "leader", reference: "leader", scope: global }
+]
+
+state {
+  world [
+    { name: "day", kind: "Fixed", value: "0", advance { perSecondNumerator: 1, perSecondDenominator: 1440 }, follows { destination: "leader" } }
+    { name: "pulls", kind: "Int", value: 0, follows { destination: "leader" } }
+  ]
+}
+
+// The day starts at the leader's quarter, leaps half a day when the leader's rule does, and keeps step with it after;
+// the pull the leader counts arrives here as its own row's value.
+test "a followed row adopts its leader's day, its leap and its counter" {
+  when {
+    ticks 120
+  }
+  expect {
+    day > 0.75
+    day < 0.76
+    pulls == 1
+  }
+}

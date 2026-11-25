@@ -1775,10 +1775,16 @@ rtx2060`, Direct3D 12, a warm store, `world.benchmark run debug`:
   (`board-led`), and 6,731 groups holding 204 MB had no entry. A group's place
   on the board was read from its box after the bake's lattices narrowed it
   (`SdfMeshBakeGroup.Low`), which depends on the tier each residency baked or
-  loaded. Keyed by the planned box instead (`SdfMeshDemand.PlannedCenterOf`),
-  the board led 1,866 groups at the route's end and 5,477 still had no entry. Those groups carry
-  a shape (`SdfMeshBakeGroup.Shape`) the world's program does not, so the two
-  programs partition the same statics into groups differently **[inference]**.
+  loaded. Keyed by the planned box instead, the board led 1,866 groups at the
+  route's end and 5,477 still had no entry.
+- **[measurement]** A census of those 5,477 (a temporary per-fact trace of each
+  group's geometry hash, compared at the world's group of the same place) found
+  6,515 of 6,517 unled groups dynamic, and every one of them a shape
+  (`SdfMeshBakeGroup.Shape`) the world's residency also draws; only 17 shared a
+  place with a world group at all. The two programs group alike. A moving
+  group's place came from its slot's current pose, and the two scenes pose
+  their bodies on their own clocks and at their own rates, so no moving group
+  ever stood where the world's copy stood. The place key was the defect.
 - The trace scene built every static mesh's own triangles, 12.4 million in the
   world, where the probes resolve nothing under a twentieth of their finest
   spacing.
@@ -1797,11 +1803,13 @@ store's one door: the region places a mesh once whichever residencies name it
 (`SdfMeshRegionStore.Plan`); the library hands one mesh to every group of one
 geometry and tier; the trace scene takes the geometry another scene built of
 the same positions and level (`SdfMeshIrradianceScene.GeometryKey.Of`), and
-every bottom is claimed by geometry; the board answers a second scene's group
-by its shape and planned place, and the follower then draws the world's tier
-whatever its own demand asks (`SdfMeshPathBake.FollowedTiers`). The guarantee
-stops at a group the two programs shape differently, at the lighting, and at
-the shadows. A world's shadows bind its dynamic casters, which are instance
+every bottom is claimed by geometry; the board holds each shape's drawn tiers
+and answers a second scene's group with the drawn tier nearest its own demand
+(`SdfMeshLibrary.TierBoard.TryGet`, read by `SdfMeshPathBake.FollowedTiers`). A
+shape's mesh at a tier is one mesh however many copies draw it, so the set of
+tiers a shape is drawn at is all a follower must match to name only meshes the
+world holds; which copy draws which is no part of the content. The guarantee
+stops at a shape only one program draws, at the lighting, and at the shadows. A world's shadows bind its dynamic casters, which are instance
 state, so they stay per instance; this step makes them cost less instead.
 
 Built with it:
@@ -1835,25 +1843,212 @@ Built with it:
    exposure reads stay its own. Check: the follower's
    `trace-hits-device-bytes=0` beside the same irradiance revision, and its
    views' indirect light unchanged in a capture.
-2. **One partition of one content.** Find why the session's program shapes
-   5,477 of its groups differently from the world's, and make two programs of
-   one content group alike. Check: `board-unled` falls to the session's dynamic
-   groups, and the mesh store's `shared-saved` rises by the bytes it names.
-3. **A's overlay.** Once 1 and 2 stand, a second instance of one content
-   resolves to the first's residency with its own frame as an overlay of
-   tables. Check: `world.residency` lists one residency a content.
+2. **A's overlay.** Once 1 stands, a second instance of one content resolves
+   to the first's residency with its own frame as an overlay of tables. The
+   moon in the sky and the moon through its portal (`sky$moon`,
+   `routed$6~global4~moon`, 13 groups each, 40 MB and 59 MB named) are the
+   first pair: one is an infinity layer's entry, the other a routed scene, and
+   neither follows the other's tiers, since the board leads only a second
+   scene of the world the presentation draws (`SdfFrameContent.DemandWorld`).
+   Check: `world.residency` lists one residency a content.
 
-**Closes.** A board that led a second scene by where each bake had narrowed a
-group's box; a trace scene sized by view detail; a relayout holding two hit
-caches and two feedback tables; shadow memory fixed for every device.
-**Leaves open.** The three steps above; the display-sized storage of an
+**Settled with it.**
+
+- **A window of the world the presentation draws** (the former step 3). The
+  moon's session screens of the valley, the gallery's self paintings and the
+  routed worlds' paintings back to the valley each drew a second full
+  residency of the debug world (`routed$session$18$0$shared`, 7,163 to 7,343
+  groups), because the sessions are handed less than the whole scene: the
+  shedding table's card faces (`worlds/debug/shedding.puck`), which a reader
+  not allowed to read a card is dealt as a back. The lead's ruling kept
+  disclosure whole and funded the two gaps, so a window now draws its world
+  from the one residency that holds it.
+
+  **Where it stands.** The authority proves a second thing of each stream
+  (`WorldSceneProof.SharesContent`): it reads whole every row a scene reads
+  by name (`WorldRecipientView.ReadsSceneInputsWhole`) and its bodies are not
+  redacted, so its scene differs from a whole reader's only in the placements
+  the disclosure can vary (`WorldPlacementAudiences.Varies`: rows under a
+  deal template whose dealt or variant row can withhold, a card back dealt in
+  a withheld cell's place, a responding row whose condition reads such a
+  row). The run of such proofs continues across the identity changes every
+  deal makes (`WorldSceneProof.ContentFirst`), and the endpoint door admits
+  it (`WorldInstanceHost.TryWindowEndpoint`). The screen binder then films
+  the session as a view of the World's own residency with an audience of its
+  own (`SdfViewSnapshot.Audience`, allocated per session mirror in
+  `WorldScreenBinder.SettleSessionRoutes`), and hands the World's scene an
+  overlay for it (`WorldAudienceOverlay`): the session's own varying
+  placements, as its delivery deals them, which the rigid catalog places as
+  copies tagged for that audience alone (`WorldRigidAssets.ReconcileStatic`).
+  The presentation's own varying placements are tagged for its own viewers.
+
+  **The invariant and its door.** No view's draw list holds a draw disclosed
+  to another audience. Each draw carries its tag in its record's selection
+  flags (`SdfMeshDraw.Audience`, `SdfMeshRecord.AudienceShift`); each raster
+  pass's selection is staged with its view's audience
+  (`SdfMeshOcclusion.Stage`, whose audience argument has no default), and
+  the selection kernel filters a draw tagged for another audience as it
+  filters a motion filter's (`passes/sdf-mesh-occlusion.comp.hlsl`). A
+  tagged placement never merges into a bake group, since only a rigid copy
+  carries a tag: the binder homes a session only while every varying
+  placement of the World's document and of the session's delivery is a rigid
+  copy (`WorldRigidAssets.AudienceRefusal`), and narrates why it does not
+  otherwise. A tagged draw is never static (`SdfMeshDraw.IsStatic`), so the
+  irradiance volume, the distant shadow map and the far product
+  (`SdfFarProduct.Take`) hold nothing one viewer is withheld; the far product
+  is a function of disclosure-neutral content and needs no mask. An audience
+  is handed to another session only once no copy still carries it
+  (`WorldRigidAssets.CarriesAudience`).
+
+  **Derived views and shadows.** A window, mirror or portal of the world a
+  home view shows is a feed whose viewer is that home view
+  (`SessionFeed.ParentFeed`); it is drawn from the same residency for its
+  viewer's audience, through the same `Stage` door, whatever its own session
+  is handed (`WorldScreenBinder.SettleSessionRoutes`, which settles feeds
+  shallowest first so each reads its viewer's audience of the same frame).
+  The cameras a home view's level shows take its audience too. The
+  residency's shadow cascades are one set every view reads, so they select
+  their casters for the residency's own viewers only while every view of the
+  frame is theirs, and the neutral draws alone (`SdfMeshAudience.NeutralOnly`)
+  while any view draws for another audience (`SdfWorldShadows.Decide`, which
+  owes every entry whole when the choice changes; `world.residency`'s shadows
+  line prints `casters=own|neutral`). Per-audience cascades were the other
+  option: they keep every varying placement's shadow but cost a residency's
+  cascades once per audience, against the ruling that a world's shadows are
+  drawn once.
+
+  **Where the guarantee stops.** While a window of another disclosure shows
+  the world, no varying placement casts a shadow in any view, the
+  presentation's own included. An overlay's copy brings no light or medium;
+  the presentation's own copy lights every view. A feed nested in a home view
+  draws for its viewer's single audience, so where its own session is handed
+  less than its viewer, the difference is not drawn apart (one audience tag
+  cannot hold an intersection). A feed nested in a session that renders its
+  own scene renders its own scene too, under its own delivery. Overlays are
+  kept per session mirror, so sessions of one disclosure each place their
+  own copies of the same rows.
+
+  **Evidence.** **[capture]** On the RTX 2060, Direct3D 12, a self painting
+  of the gallery pointed live at a frame facing the shedding table: the
+  session's window shows the racks as backs where the direct view of the
+  same racks shows faces, from the south and from the north.
+  **[reading]** `world.benchmark run debug loops 2` then `world.benchmark
+  run moon` in one warm World each, the base head against this one, under
+  the `rtx2060` table at 1920 by 1080: `world.residency` listed
+  `routed$session$18$0$shared` at 7,343 groups in every base chapter from
+  the garden painting on and at the moon, and no such residency on this
+  head. The moon crossing's worst produce iterations fell from 555, 172 and
+  215 ms to 380 and 133 ms, and the return's from 878 and 560 ms to 183 and
+  158 ms; what remains is the moon scene's own capture and pack and a
+  collection. At the routes' ends the process held private bytes of 13.0 to
+  13.5 GB against 13.6 to 15.7 GB and a managed heap of 4.1 to 4.4 GB
+  against 4.7 to 6.3 GB; the working set was 8.4 to 8.6 GB against 8.3 to
+  8.9 GB. The device pool's peak did not fall (4.37 GB against 4.29 GB): the
+  shared scene parked while no window showed it, so its device storage was
+  never what set the peak. On Vulkan, `world.benchmark run debug loops 2` on
+  this head listed no shared session scene either, lost no device, and gave
+  route peaks of 3.96 GB and 4.18 GB with 20 over-limit grants at the end.
+
+- **One grouping a content** (the former step 2). The census above found the
+  programs group alike, and the board keyed by shape alone now leads them:
+  **[reading]** on the RTX 2060, Direct3D 12, `world.benchmark run debug loops
+  2` in one World, the session's scene stood at `board-led=7341` of 7,343
+  groups, `board-unled=2`, `board-unled-bytes=0B`, and the mesh store at
+  `shared=2857 shared-saved=312530360B`. The two routes' device peaks
+  (`deviceMemory.peakBytes`, a running process maximum) were 4.22 GB and
+  4.43 GB, under the 4.83 GB cap, where the same reading on the base gave
+  4.86 GB and 5.21 GB.
+- **An infinity layer is held once a content** (Option B's door applied to the
+  sky). Every session screen's sky planned its own entry of the moon layer
+  (`session$22$sky$moon` through `session$27$sky$moon`, each a residency, a
+  scene emitter and a frame source beside `sky$moon`), though each drew the
+  same hosted session through the same spec. An entry is now keyed by what it
+  shows (`WorldScreenBinder.InfinityContent`: the source mirror, the hosted
+  session's token, the spec, a far layer's prototypes and, for a world that
+  holds screens, the depth they open at), and the roots that plan one content
+  hold one entry whose views are every holder's consumers'. The invariant is
+  enforced at the two doors an entry enters and leaves a root by
+  (`JoinInfinity`, `LeaveInfinity`); an entry's views are indexed by the
+  consumer object, so two roots' consumers of one name never share a view.
+  Check: `world.residency` lists `sky$moon` alone among the sky layers.
+- **What grew between routes.** **[reading]** Diffing `host.memory families
+  0` at the garden painting's end, route 2 against route 1: the mesh region
+  held 782 MB against 389 MB and the compacted trace bottoms 153 MB against
+  43 MB, while the bake's points, readback and samples fell. Route 1 baked
+  cold, so the region and the bottoms follow the meshes that had landed; the
+  region fills toward its held limit (`SdfResidencyGrant.ReserveGrowth`),
+  which the pool's limit bounds, and gives back under pressure. No family
+  grew past what that bound allows on Direct3D 12, whose region is mapped and
+  grows in place.
+- **Vulkan passes the cap on the second route** **[reading]**: the same two
+  routes, warm, in one World gave 4.44 GB and 4.93 GB, the rise in the second
+  route's east wing. At that peak `host.memory peak` named the mesh region
+  (1.34 GB at the peak, 2.50 GB at its own peak, 7.08 GB allocated and
+  5.74 GB released over the run) and the probe lighting (hit cache 299 MB,
+  irradiance and feedback tables 231 MB each, compacted bottoms 162 MB, probe
+  scene 150 MB). Vulkan keeps a contiguous region, which grows and shrinks by
+  replacement, so a growth holds the old and the new buffer at once. The
+  growth reserves the replacement beside what stands
+  (`SdfResidencyGrant.ReserveGrowth`), yet the device ledger still passed the
+  pool's limit. On the next head (with the trace geometries pinning their
+  meshes and the bake identity narrowed) the same reading, three routes in one
+  World with the first baking cold, gave 3.87 GB, 4.39 GB and 4.63 GB, the two
+  warm routes under the cap, with no device loss; Direct3D 12 on that head
+  gave 4.26 GB, 4.40 GB and 4.56 GB. The device pool then read
+  `budget=4831838208 peak=4625296304 over-limit-grants=9
+  over-limit-granted-bytes=371880612`: grants past the limit stand, which is
+  where the earlier overshoot can come from. The benchmark's device peak
+  (`WorldBenchmarkCommandModule.DeviceLedger`) is now the device pool's own
+  peak, the most its blocks held at once, where it had summed each segment's
+  peak.
+- **What the device's over-limit grants are** **[reading]**, Vulkan, two
+  routes in one warm World: `host.memory`'s `over-limit-by` named the history
+  window (207 MB), two history surfaces (100 MB), the history colour (60 MB),
+  two irradiance tables (85 MB), the probe trace's hit cache (62 MB) and one
+  sky base of no bytes: view and lighting storage a graph or relayout cannot
+  run without, admitted past the limit as designed (`AdmitPastLimit`). The
+  grant of no bytes shows the door: such storage reserves its peak as a floor
+  whatever the pool holds, so its grant draws on that promise and passes the
+  pool's check, and it is the main segment's own limit (`EffectiveLimit`,
+  the system's budget less its margin and the usage beyond the ledger) that
+  the grant passes. At the same reading `world.residency` showed the shared
+  mesh region holding 1,007 MB against a held limit of 584 MB: it grew while
+  the pool had room, and when the views' storage took the room the share
+  fell, but a contiguous region can only give storage back through a smaller
+  replacement, which a full pool refuses (`SdfResidencyGrant.TryReserveReplacement`),
+  so the region stands and the views' storage passes the limit instead. The
+  cause is the contiguous region; the cure is the sparse destination for
+  Vulkan that [the backing](#step-7-the-backing) proposes, which gives chunks
+  back in place as Direct3D 12's mapped region does. The device pool's peak
+  stayed under the cap (4.35 GB at that reading). A segment the pool's
+  headroom would swallow (the 157 MB host-visible aperture) now keeps a
+  quarter of its budget as its margin (`MemoryAccount.SpendLimitOf`), so its
+  one block is no longer an over-limit grant, and a device pool's limit is
+  what its segments hold plus the roomiest segment's room
+  (`MemoryAccount.LimitOf`), so a small segment's room is never promised to
+  storage only the main segment places.
+- **Vulkan levels off under the cap** **[reading]**: four routes in one World,
+  the first baking cold, gave route peaks of 4.12 GB, 4.24 GB, 4.29 GB and
+  4.31 GB (the pool's own peak), each route adding less than the one before,
+  and the pool ended with one over-limit grant (`session/sdf.world$visibility`,
+  37 MB), a view's storage of the kind above. The run lost the device once,
+  in the second route as the city's routed scene and a 4-million-triangle
+  group landed, and recovered on the first attempt; the fault named
+  instruction pointers, not a freed buffer.
+
+**Closes.** A board that led a second scene by each copy's place; a trace
+scene sized by view detail; a relayout holding two hit caches and two
+feedback tables; shadow memory fixed for every device; the moon's sky layer
+resident once a session screen; a second residency of the presented world for
+every window whose session is withheld part of its placements.
+**Leaves open.** The two steps above; the display-sized storage of an
 infinity layer's views (`sky/sdf.world$visibility`, 66 MB at 1920 by 1080);
-and the moon resident eight times at the route's end, since each session
-screen's sky builds an infinity residency of its own (`session$22$sky$moon`
-through `session$27$sky$moon`, 13 groups each, beside `sky$moon` and
-`routed$6~global4~moon`), which step 3 resolves to one.
+one overlay for every session of one disclosure, keyed by what it is handed
+rather than by its mirror; and a window of a world other than the presented
+one (a routed scene) whose session is withheld part of its placements, which
+still draws a residency of its own.
 **Strongest case against.** B shares only what is keyed alike, so a content
-whose programs group differently pays twice until step 2. Sharing by content
+whose programs group differently pays twice. Sharing by content
 key is still the mechanism A needs, and every byte it keys alike is a byte A
 would have had to share the same way.
 
@@ -2186,8 +2381,7 @@ the fixed shares are gone.
   `GpuMemoryRefusedException`, which a region's growth and shrink catch.
   Fixed and floor storage is admitted past the limit and counted
   (`MemoryAdmissionReading.OverLimitGrants`), which is the presentation whose
-  least does not fit; a holder states its floor with its reservation, and a
-  mesh region's draw records are one (`SdfResidencyGrant.ReserveFloorGrowth`).
+  least does not fit; a holder states its floor with its reservation.
   A holder marks the allocations of a replacement it can do without
   (`GpuMemoryAdmissionScope`): inside the scope a fixed owner's allocation
   that finds no room is refused too. A mesh region's staging is named for an
@@ -3374,6 +3568,26 @@ hierarchy follow steps 5 and 9.
 
 **Replaces.** The library forgetting claimed meshes; the cached claim as a
 reason to keep host words.
+
+**Where it stands** **[reading]**. On the RTX 2060 under `world.device-profile
+rtx2060`, Vulkan, a warm boot and two routes in one World ended at
+`host.memory` `ws=7686 peak-ws=9178 private=11901 MiB`, a managed heap of
+4,227 MiB (2,676 MiB large objects, 1,550 MiB gen2), the native allocator at
+2,495 MB with 1,069 MB of it unnamed and 1,091 MB of runtime and driver
+memory: the 6 GiB play bar is far off, and most of the gap is unnamed. `puck
+host heap --min-mib 2` at that point found 2.13 GB of live large objects,
+1.04 GB of them in tenants of 2 MiB or more: the irradiance's CPU side (the
+probe data's publication arena 127 MB, light and probe blocks 130 MB,
+candidates and indices about 60 MB), programs held by several holders
+(`SdfPortalSight`, `WorldRenderSettings`, `SdfMeshSkinSource`, about 150 MB,
+some of them the same current program), the desktop capture's three frame
+buffers for two feeds (88 MB), the field deltas a session's delivery keeps
+(44 MB), composed images (62 MB), the region's mesh words (34 MB) and the
+bake's frustum watches (31 MB); the other 1.09 GB lies in large objects under
+2 MiB. A skinned group's source no longer pins its whole planned program
+(`SdfMeshSkinSource`), which at boot had held 8 programs, 160 MB. The next
+steps are a walk at a lower threshold, to name the large objects under 2 MiB,
+and owners with capacities for the irradiance's CPU tables.
 
 **Check.** Exists: account `live` and `cached`, `mesh-released-now`, the
 store's restores. First, the `[sdf.mesh-bake] start` line of a garden

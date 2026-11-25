@@ -12,7 +12,8 @@ namespace Puck.SdfVm;
 /// anything, since a job once taken cannot always be handed back unchanged (a probe query handed back is cancelled). With
 /// nothing queued and room in the frame the job is admitted whatever its price, cut to the allowance as far as its units
 /// allow, so a unit costlier than the whole allowance (a bake lattice, which is never split) still runs, alone; a frame
-/// over its period leaves no such room, and its jobs wait for it to come back under. The service counts a job
+/// over its period leaves no such room until the share has paid for the job (<see cref="SdfGpuWorkBudget.Hold"/>), which
+/// then runs alone as with room. The service counts a job
 /// that breaks the invariant (<see cref="SdfGpuWork.Describe"/>'s <c>over-deadline</c>).</para>
 /// </summary>
 /// <param name="Seconds">The GPU time, in seconds, the job is to fit: what is left of the frame allowance after the jobs

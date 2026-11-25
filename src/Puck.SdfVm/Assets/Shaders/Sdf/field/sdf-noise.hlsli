@@ -164,10 +164,9 @@ precise float sdfCellDistance(float3 q, uint seed, uint mode, float randomness) 
 // times per frame while programs build once, and a shared multiply keeps both DXC targets on the identical operation
 // (a varying-numerator divide contracted differently is a cross-backend fuzz-signature risk).
 
-// The value-noise lattice the weathering reads (sdfLatticeNoise3: the same corners, the quintic blend) with its analytic
-// gradient: (value in [-1, 1], its derivative along each lattice axis).
-precise float4 sdfLatticeNoiseGradient3(float3 q, uint seed) {
-    uint3 seeds = sdfLatticeSeeds(seed);
+// The value-noise lattice (sdfValueNoise3Cells' corners and quintic blend) with its analytic gradient: (value in
+// [-1, 1], its derivative along each lattice axis).
+float4 sdfValueNoise3Gradient(float3 q, uint3 seeds) {
     float3 cellFloor = floor(q);
     int3 cell = int3(cellFloor);
     float3 f = (q - cellFloor);
@@ -194,5 +193,9 @@ precise float4 sdfLatticeNoiseGradient3(float3 q, uint seed) {
         (((k2 + (k4 * u.x)) + (k6 * u.z)) + ((k7 * u.x) * u.z)),
         (((k3 + (k5 * u.x)) + (k6 * u.y)) + ((k7 * u.x) * u.y))));
     return (float4(value, gradient) * 2.0) - float4(1.0, 0.0, 0.0, 0.0);
+}
+// The value-noise lattice the weathering reads (sdfLatticeNoise3) with its analytic gradient.
+precise float4 sdfLatticeNoiseGradient3(float3 q, uint seed) {
+    return sdfValueNoise3Gradient(q, sdfLatticeSeeds(seed));
 }
 #endif

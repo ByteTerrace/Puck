@@ -9,16 +9,19 @@ public static class SdfFieldHlsl {
     private const string Directory = SdfKernelInterfaces.KernelDirectory + "/isa/";
 
     internal static IReadOnlyList<ShaderDeclaration> Declarations { get; } = [
-        Dispatch("map", "SDF_OP", SdfFieldOps.ShaderActions),
+        Dispatch("map", "SDF_OP", SdfFieldOps.ShaderActions, marksUncovered: true),
         Dispatch("rigid", "SDF_OP", SdfFieldOps.RigidShaderActions),
-        Dispatch("parts", "SDF_OP", SdfFieldOps.PartShaderActions),
+        Dispatch("parts", "SDF_OP", SdfFieldOps.PartShaderActions, marksUncovered: true),
         new ShaderDeclaration(Path: Directory + "sdf-field-op-formulas.hlsli", Generate: () => Banner + SdfFieldOps.GenerateFormulasHlsl()),
+        new ShaderDeclaration(Path: Directory + "sdf-field-op-dual.hlsli", Generate: () => Banner + SdfFieldOps.GenerateDualFormulasHlsl()),
         new ShaderDeclaration(Path: Directory + "sdf-field-relief-formulas.hlsli", Generate: () => Banner + SdfFieldReliefRows.GenerateFormulasHlsl()),
         Dispatch("shapes", "SDF_SHAPE", SdfFieldShapes.ShaderActions),
         new ShaderDeclaration(Path: Directory + "sdf-field-shape-formulas.hlsli", Generate: () => Banner + SdfFieldShapes.GenerateFormulasHlsl()),
+        new ShaderDeclaration(Path: Directory + "sdf-field-shape-dual.hlsli", Generate: () => Banner + SdfFieldShapes.GenerateDualFormulasHlsl()),
         Dispatch("relief-shapes", "SDF_SHAPE", SdfFieldShapes.ReliefShaderActions),
         Dispatch("blends", "SDF_BLEND", SdfFieldBlends.ShaderActions),
         new ShaderDeclaration(Path: Directory + "sdf-field-blend-formulas.hlsli", Generate: () => Banner + SdfFieldBlends.GenerateFormulasHlsl()),
+        new ShaderDeclaration(Path: Directory + "sdf-field-blend-dual.hlsli", Generate: () => Banner + SdfFieldBlends.GenerateDualFormulasHlsl()),
         Dispatch("material", "SDF_BLEND", SdfFieldBlends.MaterialShaderActions),
         Dispatch("relief-rows", "SDF_RELIEF_ROW_KIND", SdfFieldReliefRows.ShaderActions),
         new ShaderDeclaration(Path: Directory + "sdf-field-operands.hlsli", Generate: EmitOperands),
@@ -26,10 +29,12 @@ public static class SdfFieldHlsl {
 
     internal static string FingerprintText() => string.Concat(Declarations.Select(static file => file.Generate()));
 
-    private static ShaderDeclaration Dispatch<T>(string name, string prefix, Func<IEnumerable<(T, SdfShaderAction)>> read) where T : struct, Enum =>
-        new(Path: $"{Directory}sdf-field-{name}.hlsli", Generate: () => Emit(prefix, read()));
+    // A walk that carries the gradient reader's derivatives (map, parts) marks a sample uncovered in every arm that does
+    // not keep them (SdfShaderAction.Dual), so the bake answers that sample's gradient by its stencil instead.
+    private static ShaderDeclaration Dispatch<T>(string name, string prefix, Func<IEnumerable<(T, SdfShaderAction)>> read, bool marksUncovered = false) where T : struct, Enum =>
+        new(Path: $"{Directory}sdf-field-{name}.hlsli", Generate: () => Emit(prefix, read(), marksUncovered));
 
-    private static string Emit<T>(string prefix, IEnumerable<(T Value, SdfShaderAction Action)> actions) where T : struct, Enum {
+    private static string Emit<T>(string prefix, IEnumerable<(T Value, SdfShaderAction Action)> actions, bool marksUncovered) where T : struct, Enum {
         var output = new StringBuilder(Banner);
 
         // Consecutive labels share a body. DXC can otherwise inline a large shared primitive per label.
@@ -41,6 +46,7 @@ public static class SdfFieldHlsl {
             output.Append("{\n");
             if ((group.Key.Operands & SdfShaderOperands.Data0) != 0) { output.Append("    SDF_VM_LOAD_DATA0;\n"); }
             if ((group.Key.Operands & SdfShaderOperands.Data1) != 0) { output.Append("    SDF_VM_LOAD_DATA1;\n"); }
+            if (marksUncovered && !group.Key.Dual) { output.Append("    SDF_FIELD_DUAL_UNCOVERED;\n"); }
             foreach (var line in group.Key.Code!.Split('\n')) {
                 if (line.Length > 0 && line[0] != '#') { output.Append("    "); }
                 output.Append(line).Append('\n');

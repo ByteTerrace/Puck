@@ -13,10 +13,12 @@ namespace Puck.World.Server;
 public sealed class WorldSceneProof {
     private readonly WorldServer m_server;
 
-    internal WorldSceneProof(WorldServer server, ContentPin scene, bool sharesAuthority, ulong first) {
+    internal WorldSceneProof(WorldServer server, ContentPin scene, bool sharesAuthority, bool sharesContent, ulong first, ulong contentFirst) {
         m_server = server;
         Scene = scene;
         SharesAuthority = sharesAuthority;
+        SharesContent = (sharesAuthority || sharesContent);
+        ContentFirst = contentFirst;
         First = first;
     }
 
@@ -28,6 +30,16 @@ public sealed class WorldSceneProof {
     /// operator's, and its world's observer disclosure redacts no body. A viewer may then draw the session from the
     /// world's own residency.</summary>
     public bool SharesAuthority { get; }
+    /// <summary>Gets whether the stream is handed what a whole reader is handed except, at most, the placements its
+    /// disclosure varies (<see cref="WorldPlacementAudiences.Varies"/>): it reads whole every row a scene reads by name
+    /// (<see cref="WorldRecipientView.ReadsSceneInputsWhole"/>) and its world's observer disclosure redacts no body. A
+    /// viewer may then draw the session from the world's own residency with the varying placements drawn from the
+    /// session's own delivery for its audience alone. Implied by <see cref="SharesAuthority"/>.</summary>
+    public bool SharesContent { get; }
+    /// <summary>Gets the authority tick of the first delivery of the unbroken run of proofs, this one last, that each
+    /// held <see cref="SharesContent"/>: the varying placements change the scene identity at every deal, while what the
+    /// stream shares with a whole reader holds across the run.</summary>
+    public ulong ContentFirst { get; }
     /// <summary>Gets the authority tick of the first delivery the proof covers.</summary>
     public ulong First { get; }
     /// <summary>Gets the authority tick of the first delivery past the proof's range, or <see langword="null"/> while
@@ -37,7 +49,14 @@ public sealed class WorldSceneProof {
     /// <summary>Returns whether the proof covers the delivery of an authority tick.</summary>
     /// <param name="tick">The authority tick of the delivery a viewer's latched scene was composed from.</param>
     /// <returns><see langword="true"/> when <paramref name="tick"/> lies in the proof's range.</returns>
-    public bool Covers(ulong tick) => ((tick >= First) && ((End is not { } end) || (tick < end)));
+    public bool Covers(ulong tick) => Within(first: First, tick: tick);
+    /// <summary>Returns whether the run of content-sharing proofs this one ends covers the delivery of an authority tick
+    /// (<see cref="ContentFirst"/>), so what the stream shares with a whole reader at that delivery is a whole reader's.</summary>
+    /// <param name="tick">The authority tick of the delivery a viewer's latched scene was composed from.</param>
+    /// <returns><see langword="true"/> when the proof shares content and <paramref name="tick"/> lies in its run.</returns>
+    public bool CoversContent(ulong tick) => (SharesContent && Within(first: ContentFirst, tick: tick));
+    // Whether a tick lies from a first delivery up to the end of the proof's range.
+    private bool Within(ulong first, ulong tick) => ((tick >= first) && ((End is not { } end) || (tick < end)));
     /// <summary>Returns whether the proof was issued by a world.</summary>
     /// <param name="server">The world's authority.</param>
     /// <returns><see langword="true"/> when <paramref name="server"/> issued the proof.</returns>

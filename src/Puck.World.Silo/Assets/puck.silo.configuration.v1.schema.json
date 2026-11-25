@@ -217,6 +217,30 @@
           "description": "Maximum external mutations waiting for durable journal publication, per row.",
           "type": "integer",
           "default": 1024
+        },
+        "telemetry": {
+          "description": "Optional installed extension the silo\u0027s logs and narration are also written to, so a host that is deleted after it fails leaves its evidence behind; absent means only the process\u0027s own output.",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "type": {
+              "description": "The case-sensitive key in the composition root\u0027s extension registry.",
+              "type": "string"
+            },
+            "settings": {
+              "description": "An object validated by the selected extension before host startup.",
+              "$comment": "Open payload: this member\u0027s shape is decided by an id named elsewhere in the document, never by this generator."
+            }
+          },
+          "required": [
+            "type",
+            "settings"
+          ],
+          "additionalProperties": false,
+          "default": null,
+          "title": "WorldSiloExtension"
         }
       },
       "required": [

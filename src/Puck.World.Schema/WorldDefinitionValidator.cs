@@ -1407,6 +1407,10 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        ValidateStateFollows(
+            definition: definition,
+            errors: errors
+        );
 
         ValidateAdjacencies(
             definition: definition,
@@ -1649,21 +1653,15 @@ public static partial class WorldDefinitionValidator {
         // dict-fill, so the range is carved out of the authored screen-index space here. The membership test itself is
         // WorldPrototypeFacets.IsReservedFaceIndex — shared with the authoring-headroom scan, which excludes the same
         // band; these two are the only rules that hand out a screen index, and they must exclude ONE set.
-        if ((WorldPlacementPolicy.DerivedFaceBase(definition: definition) + definition.DerivedFaceScreens) > SdfProgramBuilder.MaxScreenSurfaces) {
-            errors.Add(item: $"Authored screens and {definition.DerivedFaceScreens} derived-face bindings exceed the {SdfProgramBuilder.MaxScreenSurfaces} screen bindings.");
-        }
+        // A world declares any number of screens: a residency holds a slot only for those resident at once
+        // (SdfWorldTables.SettleScreenSlots), so only the identity's format bounds the indices.
         foreach (var screen in definition.Screens) {
-            if (screen is { Index: >= 0 and < SdfProgramBuilder.MaxScreenSurfaces } && !screenIndices.Add(screen.Index)) {
+            if (screen is { Index: >= 0 and < SdfProgramBuilder.MaxScreenIdentities } && !screenIndices.Add(screen.Index)) {
                 errors.Add(item: $"screens index {screen.Index} is duplicated.");
             }
         }
-        var availableHeadroom = ((SdfProgramBuilder.MaxScreenSurfaces - definition.DerivedFaceScreens) - screenIndices.Count);
-
-        if (authoring.AuthoringHeadroomScreens > availableHeadroom) {
-            errors.Add(item: $"placements.policy.authoringHeadroomScreens asks for {authoring.AuthoringHeadroomScreens} slot(s), but only {Math.Max(
-                val1: 0,
-                val2: availableHeadroom
-            )} remain after {screenIndices.Count} authored screen(s) and {definition.DerivedFaceScreens} derived-face reservation(s).");
+        if (((long)WorldPlacementPolicy.ScreenSpan(definition: definition) + authoring.AuthoringHeadroomScreens) > SdfProgramBuilder.MaxScreenIdentities) {
+            errors.Add(item: $"Authored screens, {definition.DerivedFaceScreens} derived-face binding(s) and {authoring.AuthoringHeadroomScreens} headroom screen(s) reach past the screen index format ({SdfProgramBuilder.MaxScreenIdentities}).");
         }
 
         ValidateMachines(
@@ -1780,7 +1778,7 @@ public static partial class WorldDefinitionValidator {
             }
             if (errors.Count > 0) { return null; }
 
-            ValidateSearch(definition: definition, errors: errors, recurringWork: work.Budget.WorkUnitsPerTick, rules: rules);
+            ValidateSearch(definition: definition, errors: errors, rules: rules);
             if ((errors.Count > 0) || !run.RetainCompilation) { return null; }
 
             tables = WorldRuleCompilation.CompileTables(definition, context);

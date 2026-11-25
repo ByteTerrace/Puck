@@ -30,8 +30,12 @@ public static partial class AzureCommand {
         // reset's target may change (a world added starts fresh; a world removed keeps its protected root).
         private readonly WorldAuthorityIdentity[] m_sourceIdentities = (source ?? target).Manifest.Definitions.Keys.Select(selector: WorldAuthorityIdentity.ParseRootKey).ToArray();
 
-        private async Task CheckWorkerAsync(string worker, AzureWorldReleaseDeployment deployment) {
-            var process = await InspectAsync(worker: worker).ConfigureAwait(continueOnCapturedContext: false);
+        // Checks a worker in one guest round trip: its container runs the exact image, its release status names the
+        // retained release and group, and private health answers. Each Run Command costs tens of seconds, which a release's
+        // repeated checks across its phases once multiplied into most of its post-boot time.
+        private async Task CheckWorkerAsync(string worker, AzureWorldReleaseDeployment deployment, JsonNode? probe = null) {
+            probe ??= await ProbeWorkerAsync(deployment: deployment, worker: worker).ConfigureAwait(continueOnCapturedContext: false);
+            var process = probe["process"]!;
 
             if (
                 (process["running"]?.GetValue<bool>() != true) ||
@@ -39,25 +43,23 @@ public static partial class AzureCommand {
             ) {
                 throw new InvalidDataException(message: $"the container on {worker} does not match the retained exact image {deployment.Image}: {process.ToJsonString()}");
             }
-            var response = await RequestAsync(
-                worker,
-                deployment,
-                "GET",
-                "/release/status"
-            ).ConfigureAwait(continueOnCapturedContext: false);
-            var status = response.Deserialize<WorldReleaseWorkerStatus>(options: Json);
+            WorldReleaseWorkerStatus? status = null;
 
+            try { status = JsonSerializer.Deserialize<WorldReleaseWorkerStatus>(json: Text(value: probe["status"]!["body"]), options: Json); } catch (JsonException) { }
             if (
                 (status?.Release != deployment.Manifest.Identity) ||
                 (status.Group != scaleSet)
-            ) { throw new InvalidDataException(message: $"the worker on {worker} does not match the retained release {deployment.Manifest.Identity} in {scaleSet}: {response.ToJsonString()}"); }
-            await WorldHealthAsync(
-                group: resourceGroup,
-                port: deployment.HealthPort,
-                route: "/private-healthz",
-                worker: worker
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            ) { throw new InvalidDataException(message: $"the worker on {worker} does not match the retained release {deployment.Manifest.Identity} in {scaleSet}: {probe["status"]!.ToJsonString()}"); }
+            if (probe["health"]!["code"]!.GetValue<int>() != 200) {
+                throw new InvalidOperationException(message: $"the worker on {worker} is not privately healthy: {Text(value: probe["health"]!["body"])}");
+            }
         }
+        // One Run Command reading the container's image and state, the release status and private health.
+        private Task<JsonNode> ProbeWorkerAsync(string worker, AzureWorldReleaseDeployment deployment) => WorldGuestJsonAsync(
+            group: resourceGroup,
+            script: WorldProbeScript.Replace(oldValue: "__PORT__", newValue: deployment.HealthPort.ToString(provider: System.Globalization.CultureInfo.InvariantCulture), comparisonType: StringComparison.Ordinal),
+            worker: worker
+        );
         // Runs the deployment's retained bootstrap under the operation's current phase. A worker already running the exact
         // image is only checked; any other worker is replaced with fresh compute, never reconfigured in place. Azure
         // re-runs a VM extension only when its configuration changes, so applying the model a worker already carries (a
@@ -76,7 +78,8 @@ public static partial class AzureCommand {
             if (workers.Length > 1) { throw new InvalidOperationException(message: "release requires one authoritative worker"); }
             if (workers.Length == 1) {
                 var worker = Text(value: workers[0]!["name"]);
-                var process = await InspectAsync(worker: worker).ConfigureAwait(continueOnCapturedContext: false);
+                var probe = await ProbeWorkerAsync(deployment: deployment, worker: worker).ConfigureAwait(continueOnCapturedContext: false);
+                var process = probe["process"]!;
 
                 if (
                     (process["running"]?.GetValue<bool>() == true) &&
@@ -84,6 +87,7 @@ public static partial class AzureCommand {
                 ) {
                     await CheckWorkerAsync(
                         deployment: deployment,
+                        probe: probe,
                         worker: worker
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     return;
@@ -242,14 +246,6 @@ public static partial class AzureCommand {
                 throw new InvalidOperationException(message: "the durable release operation changed before the Azure worker effect");
             }
         }
-        private void ValidateRoots(IReadOnlyDictionary<string, string> roots) {
-            if (
-                (roots.Count != m_sourceIdentities.Length) ||
-                !roots.Keys.ToHashSet(comparer: StringComparer.Ordinal).SetEquals(other: m_sourceIdentities.Select(selector: identity => identity.RootKey))
-            ) {
-                throw new InvalidDataException(message: "protected source roots do not match the release inventory");
-            }
-        }
         private async Task<string> WorkerAsync() {
             var workers = await WorkersAsync(
                 group: resourceGroup,
@@ -347,7 +343,7 @@ public static partial class AzureCommand {
 
                     roots = (response.Deserialize<Dictionary<string, string>>(options: Json) ?? throw new InvalidDataException(message: "source drain returned no protected roots"));
                 }
-                ValidateRoots(roots: roots);
+                WorldReleaseRoots.Validate(identities: m_sourceIdentities, roots: roots);
                 // The drain endpoint retains the frozen host for retries. Stop only after its immutable roots exist.
                 await RequireAsync(
                     cancellationToken: cancellationToken,
@@ -425,38 +421,17 @@ public static partial class AzureCommand {
                 expected: operation,
                 phases: [WorldReleaseOperationPhase.Recover]
             ).ConfigureAwait(continueOnCapturedContext: false);
-            ValidateRoots(roots: operation.RecoveryRoots);
-            // Validate the entire protected inventory before the first maintenance takeover.
-            foreach (var identity in m_sourceIdentities) {
-                _ = (await authority.LoadRecoveryRootAsync(
-                    identity,
-                    operation.RecoveryRoots[identity.RootKey],
-                    operation.PendingOperationId!.Value,
-                    cancellationToken
-                ).ConfigureAwait(continueOnCapturedContext: false)
-                    ?? throw new InvalidDataException(message: "a protected source root is missing"));
-            }
-            foreach (var identity in m_sourceIdentities) {
-                await RequireAsync(
-                    cancellationToken: cancellationToken,
+            await WorldReleaseRoots.RestoreSourceAsync(
+                authority: authority,
+                cancellationToken: cancellationToken,
+                guard: token => RequireAsync(
+                    cancellationToken: token,
                     expected: operation,
                     phases: [WorldReleaseOperationPhase.Recover]
-                ).ConfigureAwait(continueOnCapturedContext: false);
-                var fence = (await authority.AcquireActivationAsync(
-                    cancellationToken: cancellationToken,
-                    identity: identity
-                ).ConfigureAwait(continueOnCapturedContext: false)
-                    ?? throw new IOException(message: "source recovery could not acquire maintenance ownership"));
-                var restored = await authority.RestoreRecoveryRootAsync(
-                    identity,
-                    operation.RecoveryRoots[identity.RootKey],
-                    operation.PendingOperationId!.Value,
-                    fence,
-                    cancellationToken
-                ).ConfigureAwait(continueOnCapturedContext: false);
-
-                if (!restored.Ok) { throw new IOException(message: $"source recovery failed for '{identity.World}': {restored.Detail}"); }
-            }
+                ),
+                identities: m_sourceIdentities,
+                operation: operation
+            ).ConfigureAwait(continueOnCapturedContext: false);
             return new(
                 true,
                 "protected source roots restored under fresh fences"
@@ -477,45 +452,19 @@ public static partial class AzureCommand {
                         operation: operation,
                         token: cancellationToken
                     ).ConfigureAwait(continueOnCapturedContext: false);
-                } else if (operation.PendingStateReset is not null) {
-                    foreach (var identity in m_identities) {
-                        var reset = await authority.PrepareReleaseResetAsync(
-                            identity,
-                            operation,
-                            target.Manifest,
-                            archive,
-                            cancellationToken
-                        ).ConfigureAwait(continueOnCapturedContext: false);
-
-                        if (!reset.Ok) {
-                            return new(
-                                false,
-                                $"'{identity.World}' release reset refused: {reset.Detail}"
-                            );
-                        }
-                    }
-                } else {
-                    foreach (var identity in m_identities) {
-                        var key = identity.RootKey;
-
-                        if (!operation.ReturnsToPreviousRelease && source.Manifest.Definitions[key] == target.Manifest.Definitions[key]) { continue; }
-                        var publication = await authority.PrepareReleaseMetadataAsync(
-                            identity,
-                            operation,
-                            source.Manifest,
-                            target.Manifest,
-                            archive,
-                            cancellationToken,
-                            CliWorldVocabulary.EnsureInstalled()
-                        ).ConfigureAwait(continueOnCapturedContext: false);
-
-                        if (!publication.Ok) {
-                            return new(
-                                false,
-                                $"'{identity.World}' release definition publication refused: {publication.Detail}"
-                            );
-                        }
-                    }
+                } else if (await WorldReleaseRoots.PrepareCandidateAsync(
+                    archive: archive,
+                    authority: authority,
+                    cancellationToken: cancellationToken,
+                    identities: m_identities,
+                    operation: operation,
+                    source: source.Manifest,
+                    target: target.Manifest
+                ).ConfigureAwait(continueOnCapturedContext: false) is { } refused) {
+                    return new(
+                        false,
+                        refused
+                    );
                 }
             }
             await EnsureWorkerAsync(
@@ -629,6 +578,26 @@ public static partial class AzureCommand {
           if systemctl is-active --quiet puck-world.service; then echo 'puck-world.service is still active after its stop' >&2; exit 1; fi
         fi
         if docker inspect puck-world >/dev/null 2>&1; then docker rm -f puck-world >/dev/null; fi
+        """;
+    // Reads, in one Run Command, the world container's image and state, then (when it runs) the release status and
+    // private health from the lifecycle listener on loopback, as one JSON object: {process, status:{code, body},
+    // health:{code, body}}; a route that does not answer has code 0 and the error as its body.
+    private const string WorldProbeScript = """
+        python3 - <<'PROBE'
+        import json, subprocess, urllib.error, urllib.request
+        def get(path):
+            try:
+                with urllib.request.urlopen('http://127.0.0.1:__PORT__' + path, timeout=30) as response:
+                    return {'code': response.status, 'body': response.read().decode('utf-8', 'replace')}
+            except urllib.error.HTTPError as error:
+                return {'code': error.code, 'body': error.read().decode('utf-8', 'replace')}
+            except Exception as error:
+                return {'code': 0, 'body': str(error)}
+        inspected = subprocess.run(['docker', 'inspect', '--format', '{"image":{{json .Config.Image}},"running":{{.State.Running}}}', 'puck-world'], capture_output=True, text=True)
+        process = json.loads(inspected.stdout) if inspected.returncode == 0 else {'image': None, 'running': False}
+        idle = {'code': 0, 'body': 'the container is not running'}
+        print(json.dumps({'process': process, 'status': get('/release/status') if process['running'] else idle, 'health': get('/private-healthz') if process['running'] else idle}))
+        PROBE
         """;
     // The worker's loopback release-control request, bounded by the deployment's shutdown allowance. --fail-with-body keeps
     // the worker's refusal reason, the 409 body WorldSiloReleaseControl writes, in a failed request's output.

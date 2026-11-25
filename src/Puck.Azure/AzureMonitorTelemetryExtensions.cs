@@ -56,34 +56,46 @@ public static class AzureMonitorTelemetryExtensions {
         return builder;
     }
 
-    // A provider's ForceFlush returns once its batch has left the buffer, before the send, so only Shutdown, which joins
-    // the export thread, waits for delivery. It runs in StoppedAsync, after every hosted service's StopAsync, so the
-    // telemetry those services record while stopping is in the batches it waits on.
+    /// <summary>Shuts down every OpenTelemetry provider <paramref name="services"/> holds (traces, metrics, logs) side by
+    /// side, each waiting up to <see cref="ShutdownBudget"/> for the send in flight, so the whole wait takes one budget.
+    /// A provider's ForceFlush returns once its batch has left the buffer, before the send, so only Shutdown, which
+    /// joins the export thread, waits for delivery.</summary>
+    /// <param name="services">The container that owns the providers.</param>
+    /// <param name="cancellationToken">The token that ends the wait early; the providers keep shutting down.</param>
+    /// <returns>The signals (<c>traces</c>, <c>metrics</c>, <c>logs</c>) whose shutdown did not finish within the budget,
+    /// empty when every one did.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
+    /// <exception cref="OperationCanceledException"><paramref name="cancellationToken"/> was cancelled first.</exception>
+    public static async Task<IReadOnlyList<string>> ShutdownAsync(IServiceProvider services, CancellationToken cancellationToken) {
+        ArgumentNullException.ThrowIfNull(argument: services);
+        var budget = ((int)ShutdownBudget.TotalMilliseconds);
+        var shutdowns = new List<Task<(string Signal, bool Settled)>>(capacity: 3);
+
+        if (services.GetService<TracerProvider>() is { } tracer) {
+            shutdowns.Add(item: Task.Run(function: () => ("traces", tracer.Shutdown(timeoutMilliseconds: budget)), cancellationToken: CancellationToken.None));
+        }
+        if (services.GetService<MeterProvider>() is { } meter) {
+            shutdowns.Add(item: Task.Run(function: () => ("metrics", meter.Shutdown(timeoutMilliseconds: budget)), cancellationToken: CancellationToken.None));
+        }
+        if (services.GetService<LoggerProvider>() is { } logs) {
+            shutdowns.Add(item: Task.Run(function: () => ("logs", logs.Shutdown(timeoutMilliseconds: budget)), cancellationToken: CancellationToken.None));
+        }
+        var results = await Task.WhenAll(tasks: shutdowns).WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+
+        return [.. results.Where(predicate: static result => !result.Settled).Select(selector: static result => result.Signal)];
+    }
+
+    // Runs in StoppedAsync, after every hosted service's StopAsync, so the telemetry those services record while
+    // stopping is in the batches it waits on.
     private sealed class TelemetryShutdown(IServiceProvider services, ILogger<TelemetryShutdown> logger) : IHostedLifecycleService {
         public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task StartedAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task StartingAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
         public async Task StoppedAsync(CancellationToken cancellationToken) {
-            var budget = ((int)ShutdownBudget.TotalMilliseconds);
-            var shutdowns = new List<Task<(string Signal, bool Settled)>>(capacity: 3);
-
-            // Each provider has its own exporter, so the three shut down side by side and the whole wait takes one budget.
-            if (services.GetService<TracerProvider>() is { } tracer) {
-                shutdowns.Add(item: Task.Run(function: () => ("traces", tracer.Shutdown(timeoutMilliseconds: budget)), cancellationToken: CancellationToken.None));
-            }
-            if (services.GetService<MeterProvider>() is { } meter) {
-                shutdowns.Add(item: Task.Run(function: () => ("metrics", meter.Shutdown(timeoutMilliseconds: budget)), cancellationToken: CancellationToken.None));
-            }
-            if (services.GetService<LoggerProvider>() is { } logs) {
-                shutdowns.Add(item: Task.Run(function: () => ("logs", logs.Shutdown(timeoutMilliseconds: budget)), cancellationToken: CancellationToken.None));
-            }
-
             try {
-                foreach (var (signal, settled) in await Task.WhenAll(tasks: shutdowns).WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false)) {
-                    if (!settled) {
-                        logger.LogWarning(message: "Azure Monitor {Signal} did not finish exporting within the {Budget} shutdown budget.", signal, ShutdownBudget);
-                    }
+                foreach (var signal in await ShutdownAsync(cancellationToken: cancellationToken, services: services).ConfigureAwait(continueOnCapturedContext: false)) {
+                    logger.LogWarning(message: "Azure Monitor {Signal} did not finish exporting within the {Budget} shutdown budget.", signal, ShutdownBudget);
                 }
             } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
                 logger.LogWarning(message: "The host's shutdown timeout ended the Azure Monitor shutdown before its {Budget} budget.", ShutdownBudget);

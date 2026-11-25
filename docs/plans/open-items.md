@@ -2120,12 +2120,6 @@ check; this packet holds the defects beside it.
   `SdfMeshStore.WorkspacePatience` is a miss. A native mesh restoring its
   parts (`SdfMesh`'s restore) then ends lost and bakes its groups again; it
   could wait as a deferred job does instead.
-- [low] A mesh region whose draw records pass the buffer it holds grows for
-  them whatever the pool holds (`SdfResidencyGrant.ReserveFloorGrowth`), and
-  the meshes the old buffer could not hold are refused until a later plan. If
-  the device itself refuses that growth the region throws
-  (`SdfMeshRegionStore.EnsureCapacity`): the draw records are the floor
-  and have no smaller form.
 - [medium] A fixed reservation (a shader pipeline's replacement) is refused
   when its pool is full, and elastic storage does not yet give way for it: a
   resize or reload at a full pool keeps the installed graph
@@ -2143,6 +2137,15 @@ check; this packet holds the defects beside it.
   Whether either is intended is not confirmed.
 - `world.residency`'s per-group `resident` count and `all-resident` stamp are
   not reset by a device loss; its region line's `owed` is the truth.
+- [unconfirmed] Vulkan loses the device now and then on the benchmark route
+  (once near tick 9200 of a run on the RTX 2060), and recovers on the first
+  attempt. `VK_EXT_device_fault` named instruction pointers, not a freed
+  buffer, so it is no use-after-retire of a replaced buffer; the last
+  checkpoint was the beacon eye's depth pyramid pass
+  (`beacon-eye/sdf.world$pyramid`). Read the World's `stderr.log` at the
+  next loss: if the fault names the same pass again, look in the ambient
+  occlusion's depth pyramid (`passes/sdf-mesh-pyramid.comp.hlsl`) for an
+  out-of-range read on that view's extent.
 - [unconfirmed] The pane-mapping law the plan's step 4 deletes fails because
   its fake host's boot session is never reached from the walk's seeds. Check
   whether an authored root leaves a world's views unseeded in a real World
@@ -3961,42 +3964,23 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
-- [high, M1] **The first replace deploy.** A deploy over scratch hosted data
-  replaces the hosted world
-  ([the decision](../decisions/runtime-and-delivery.md#releases)), and CI's
-  container verification rehearses the image's managed start
-  (`puck world release rehearse --image`). Next: the release from `main`
-  exercises the replace path, including its live policy read, the identity
-  scope check of the worker stop, and the version-expiry lifecycle rule.
-- [medium] **Release time.** The failed release of run 45422220920 spent 92
-  minutes: about 21 on the .NET artifacts, 8.5 on the infrastructure
-  reconcile (it plans and applies on every push, changed or not), and 54 in
-  the world release, of which 3.6 went to four qualification legs of one image
-  for a bootstrap, 5.5 to a graceful worker delete, about 10 to provisioning
-  the new worker's disk, and 23 to a readiness wait over a silo that had exited
-  at its first start. The wait now ends at the first exit, a replace deploy
-  skips the export, drain and source recovery, and the worker is
-  force-deleted. Left: skip the infrastructure apply when the compiled
-  template and parameters equal the last deployment's; weigh whether a
-  bootstrap needs both of its qualification pairs, which for one image are two
-  determinism checks (two imports of the seed, then two imports of the state
-  the first continuation wrote); and measure whether reusing
-  the worker VM (stop the container, rerun the extension) beats a fresh one,
-  which costs a delete and a create on every deploy.
-- [medium] **Silo telemetry.** A failed worker is deleted after its attempt,
-  and the silo sends nothing to the deployment's Log Analytics, so only the
-  start script's printed tail survives. Give the silo a provider-neutral
-  telemetry selection (a `telemetry` type and settings in the silo document,
-  contributed by an installed extension, as `lifecycle.observer` is), let
-  `Puck.World.Azure` contribute the Azure Monitor exporter
-  (`AzureMonitorTelemetryExtensions`, Entra authentication with the silo
-  identity), and grant the silo identity Monitoring Metrics Publisher on the
-  environment's Application Insights in `main.bicep`; the deployment's silo
-  document names its connection string from an output.
-- [low] The rehearsal covers a first deployment. A rehearsal of the durable
-  path (a source silo, its drain and capture, then a reset or metadata
-  transition) would run that path before the owner declares hosted data
-  durable, which no deploy runs today.
+- [high, M1] **The release after the first replace deploy.** The first
+  replace deploy succeeded
+  ([the decision](../decisions/runtime-and-delivery.md#releases)). Next: a
+  release from `main` runs what has not yet run on Azure: the platform
+  reconcile's skip of unchanged inputs, the one-Run-Command worker probe, the
+  side-by-side qualification pairs, and the silo's `azure.monitor` telemetry
+  sink, whose records must reach the containers Application Insights (its
+  `traces` table) from a worker that is then deleted.
+- [medium] **Release time.** The skip of an unchanged platform reconcile, the
+  one-round-trip worker probe and the side-by-side qualification pairs
+  ([CI](../development/ci.md#azure-production-deployment)) are unmeasured
+  until the next release. Left: weigh whether a bootstrap needs both of its
+  qualification pairs, which for one image are two determinism checks (two
+  imports of the seed, then two imports of the state the first continuation
+  wrote); and measure whether reusing the worker VM (stop the container, rerun
+  the extension) beats a fresh one, which costs a delete and a create on every
+  deploy.
 
 - [high] No release has passed its public probe, and no player build has
   reached the RTX 2060 through the hosted channel: its one run was a local

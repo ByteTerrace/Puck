@@ -5,7 +5,7 @@ namespace Puck.SdfVm;
 /// <summary>
 /// The identity a bake keys the meshes it stores by (<see cref="SdfMeshStore"/>), with what it is made of: the code the
 /// bake runs on the CPU (<see cref="SdfMeshBakeClosure"/>) and the bytecode of the kernels that sample a group's field,
-/// <see cref="SdfKernel.MeshBakeMask"/> and <see cref="SdfKernel.MeshBake"/>, which hold the field interpreter and differ
+/// <see cref="SdfKernel.MeshBakeMask"/>, <see cref="SdfKernel.MeshBake"/> and <see cref="SdfKernel.MeshBakeGradient"/>, which hold the field interpreter and differ
 /// by backend, and the store's entry format version (<see cref="EntryVersion"/>), which owns what an entry's bytes mean to
 /// the decode the closure leaves out. A store records each identity's parts beside its entries, so a bake that misses names the part that
 /// changed (<see cref="SdfMeshStore.ExplainMisses"/>). Immutable.
@@ -79,7 +79,8 @@ public sealed class SdfMeshBakeIdentity {
     public int CodeRevision { get; }
     /// <summary>Gets the hash of the mask kernel's bytecode, or zero for a value alone.</summary>
     public UInt128 MaskKernel { get; }
-    /// <summary>Gets the hash of the bake kernel's bytecode, or zero for a value alone.</summary>
+    /// <summary>Gets the hash of the two sampling kernels' bytecode (<see cref="SdfKernel.MeshBake"/>, then
+    /// <see cref="SdfKernel.MeshBakeGradient"/>), or zero for a value alone.</summary>
     public UInt128 BakeKernel { get; }
     /// <summary>Gets the code's members with their hashes (<see cref="SdfMeshBakeClosure.Members"/>); none for a value
     /// alone.</summary>
@@ -98,10 +99,17 @@ public sealed class SdfMeshBakeIdentity {
 
         return new SdfMeshBakeIdentity(
             applied: Puck.Abstractions.CodeRevision.AppliedTo(reads: code.Reads),
-            bakeKernel: XxHash128.HashToUInt128(source: kernels[SdfKernel.MeshBake].Span),
+            bakeKernel: SamplersOf(kernels: kernels),
             code: code,
             maskKernel: XxHash128.HashToUInt128(source: kernels[SdfKernel.MeshBakeMask].Span)
         );
+    }
+    private static UInt128 SamplersOf(SdfKernelSet kernels) {
+        var hash = new XxHash128();
+
+        hash.Append(source: kernels[SdfKernel.MeshBake].Span);
+        hash.Append(source: kernels[SdfKernel.MeshBakeGradient].Span);
+        return hash.GetCurrentHashAsUInt128();
     }
     /// <summary>Returns this identity as the running code derives it: itself while no update was applied since it was
     /// derived, otherwise the same closure and kernels with the applied update folded in again

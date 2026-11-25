@@ -182,7 +182,7 @@ bool sampleScreenSurface(int material, float3 hitPoint, float3 rayDirection, flo
         return false;
     }
 
-    uint screenIndex = (uint)(material - SDF_SCREEN_MATERIAL - 1);
+    uint screenIndex = sdfScreenSlotOfMaterial(material);
 
     ScreenSurfaceData surface = worldScreenSurface(screenIndex);
     float3 local = (hitPoint - surface.origin.xyz);

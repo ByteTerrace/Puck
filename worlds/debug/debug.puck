@@ -57,6 +57,8 @@ import "shedding"
 import "deduction"
 import "skirmish"
 import "paintings"
+import "moon-beacon"
+import "moon-door"
 import "wonderland"
 import "camera-course"
 import "probe-beacon"
@@ -442,10 +444,10 @@ render {
   }
   farDistance: 6000
   // What the valley shows of itself from the moon's sky: the nearest far viewer stands at the sky seam, a couple of
-  // kilometres up, where a pixel spans about two metres, so smaller parts stay out and the product's finest level is
-  // a metre from the drawn surface.
+  // kilometres up, where a pixel spans about two metres, so smaller parts stay out, and the product gathers the ground
+  // into four-metre cells, a couple of pixels there and under one from the moon.
   farProduct {
-    cell: 1
+    cell: 4
     minimumSize: 2
   }
   temporal: true

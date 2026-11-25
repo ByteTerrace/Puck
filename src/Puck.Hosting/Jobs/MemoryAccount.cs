@@ -730,8 +730,11 @@ public sealed class MemoryAccount {
 
         return ((segments.Length == 0) ? named : Math.Min(val1: segments.Sum(selector: static limit => limit.Budget), val2: (named ?? long.MaxValue)));
     }
-    // The budget less the larger of a tenth of it and the headroom: what may be spent of a segment's budget.
-    private long SpendLimitOf(long budget) => Math.Max(val1: 0L, val2: (budget - Math.Max(val1: (budget / 10), val2: Headroom)));
+    // The budget less the larger of a tenth of it and the headroom, what may be spent of a segment's budget. The headroom
+    // is a pool's margin: a segment it would swallow (a discrete adapter's host-visible aperture, a few hundred
+    // megabytes) keeps a quarter of its budget instead, so storage placed there is admitted under its limit rather than
+    // every allocation in it reading as past a limit of nothing.
+    private long SpendLimitOf(long budget) => Math.Max(val1: 0L, val2: (budget - Math.Max(val1: (budget / 10), val2: Math.Min(val1: Headroom, val2: (budget / 4)))));
     // Under m_gate: what every backend's ledger holds in a segment now.
     private long LedgerHeldLocked(GpuMemorySegment segment) {
         var held = 0L;
@@ -880,18 +883,28 @@ public sealed class MemoryAccount {
 
             return Math.Max(val1: 0L, val2: play);
         }
+        // A device pool spans its segments, and one allocation lands in one of them: the pool's limit is what its segments
+        // hold, each up to its own limit, and the room of the roomiest segment alone. Summing every segment's limit would
+        // promise a small segment's room (a host-visible aperture) to storage only the main segment can place, which that
+        // segment's own limit then admits past.
         long? limit = null;
+        var room = 0L;
 
         foreach (var recorded in m_segmentLimits) {
             if (recorded.Segment.Pool != pool) { continue; }
 
             var spend = recorded.SpendLimit;
+            var used = 0L;
 
             foreach (var state in m_segments.Values) {
-                if ((state.Segment == recorded.Segment) && (RefusedLimitOf(state: state) is { } refused)) { spend = Math.Min(val1: spend, val2: refused); }
+                if (state.Segment != recorded.Segment) { continue; }
+                if (RefusedLimitOf(state: state) is { } refused) { spend = Math.Min(val1: spend, val2: refused); }
+                used += (state.Owner.HeldLocked + state.Granted);
             }
-            limit = ((limit ?? 0L) + spend);
+            limit = ((limit ?? 0L) + Math.Min(val1: spend, val2: used));
+            room = Math.Max(val1: room, val2: (spend - used));
         }
+        if (limit is { } held) { limit = (held + room); }
 
         // A cap, and what a profile's bar leaves once its headroom is taken, lower the limit the segments' readings
         // derive and bound a pool no reading names.

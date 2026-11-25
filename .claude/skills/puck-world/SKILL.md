@@ -998,7 +998,7 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 
 ## Limits worth knowing
 
-- Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screen bindings 32 and bounded volumes 64; representation overflow refuses explicitly.
+- Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screens are unbounded (a residency holds `SdfProgramBuilder.MaxScreenSurfaces` slots for the resident ones) and bounded volumes 64; representation overflow refuses explicitly.
 - XInput caps at four pads locally; HID pads are uncapped.
 - Inhabitants are numbered from the top of `bodies.capacity` down, the first
   inhabited placement highest (`cardtable.puck`'s `cardsTop`). A rule row keyed

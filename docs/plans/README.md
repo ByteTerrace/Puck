@@ -64,6 +64,7 @@ Decisions: [worlds and federation](../decisions/worlds-and-federation.md), [play
 - [Port the experimental worlds' features](port-experimental.md): what the quarantined worlds have that the debug world lacks, as port lanes.
 - [The debug world as one valley](debug-world-composition.md): where every place sits in the valley, the domain each one forces, and the seams where they compose.
 - [The valley, the moons and the flight between](valley-and-moons.md): the phases from the valley to a round trip to a moon.
+- [Cross-world interaction](cross-world.md): reading, crossing and acting across worlds in the debug world (followed rows, the moon's day, the moon door and beacon), with each interaction's check and what is left.
 - [Portals in play](portals-in-play.md): doors a player places where they aim, that move, that rays follow, and that open onto another world under a lease; the design, its build order, and [the evidence](portals-in-play/evidence.md) from the code and from other games.
 - [The terrain pass](terrain-pass.md): terrain-scale relief, contact on the drawn relief, terrain materials, aerial perspective and far shadows. [The relief mask design](terrain-pass/relief-mask-design.md) replaces the mask's in-stream scope with an operand of its relief and answers both adversarial reviews of the built form; [its step back](terrain-pass/relief-mask-design.md#the-step-back) recommends a smaller form after a second review of that design.
 
@@ -80,6 +81,7 @@ Decisions: [rendering](../decisions/rendering.md), [residency](../decisions/resi
 - [Bake detail bounded by demand](bake-demand-tiers.md): the demand tiers' remaining steps and the region's budget.
 - [Blends between parts that move](moving-blends.md): a blended seam that holds under continuous motion, as a skinned seam.
 - [Arrival work proportional to change](arrival-proportional.md): draw rows that keep their place, the trace scene's top level, and what a hand-over rewrites.
+- [Mathematics in place of brute force](efficiency.md): the bake's gradients from one forward-mode walk and what it still answers by stencil, final-lattice blocks a bound can skip, the generators' jump-ahead and where pairing functions do not pay.
 - [Field programs](field-programs.md): the SDF programs the bake, CPU queries, contact and the editor still interpret, one definition per field op generating every reader, and the bake kernel's cost.
 - [Presentation field queries](field-queries.md): the camera's clearance and the effectors' probes weighed between a GPU batch answered late and the CPU; region tapes, which are built, the wide reader that answers a normal's taps as one walk, and the design review's findings answered one by one.
 - [Ink](ink.md): outlines as edge signals the engine computes per view and an ink phase authors write in the shade program.

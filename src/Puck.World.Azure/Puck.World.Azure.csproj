@@ -11,6 +11,7 @@
         <PackageReference Include="Azure.ResourceManager" Version="[1.*,2.0)" />
         <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="[8.*,9.0)" />
         <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="[8.*,9.0)" />
+        <ProjectReference Include="../Puck.Azure/Puck.Azure.csproj" />
         <ProjectReference Include="../Puck.Embeddings.Azure/Puck.Embeddings.Azure.csproj" />
         <ProjectReference Include="../Puck.Storage.Azure/Puck.Storage.Azure.csproj" />
         <ProjectReference Include="../Puck.World.Server/Puck.World.Server.csproj" />

@@ -598,6 +598,15 @@ The fourth row is a convention and not a guarantee, and is stated as one.
 Each step lands on its own and names the check that shows it worked. Scenario
 files are run by name with `puck test <file> --jobs 1 --reproduce`.
 
+Built so far, on static doors: `portal.open` (`WorldPlacementPortal.Open`,
+with the closed door's wall restored through `WorldPortalClosures`),
+`portal.gate` (`WorldPortalGate`, read at the traveller's body index), and the
+offer, the socket and both leases as rows each world owns and the other
+follows ([cross-world interaction](cross-world.md#2-a-door-opened-in-play)).
+The debug world's moon painting is the first door opened in play. What steps
+1, 11 and 12 still owe is the moving door: a door on a body with latched
+frames, and a socket posed where the destination's rules put it.
+
 1. **Live door frames.** Latch each door's frame and previous frame once a
    tick; resolve an attached row's frame from its body's whole orientation;
    route the scan, the opening layer and the in-place map through the table;

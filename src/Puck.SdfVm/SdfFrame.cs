@@ -23,6 +23,10 @@ public readonly record struct SdfViewSnapshot(CameraSnapshot Camera, NormalizedR
     /// <summary>A pose of one stamp drawn in this view only: its transform slots read their rows from the overlay's rows.
     /// Default reads every slot's own row.</summary>
     public SdfPoseOverlay PoseOverlay { get; init; }
+    /// <summary>Gets the audience whose disclosure this view draws (<see cref="SdfMeshAudience"/>): zero, the default, for
+    /// the residency's own viewers, otherwise a viewer of another disclosure, whose view selects the neutral draws and
+    /// those tagged for its audience alone.</summary>
+    public byte Audience { get; init; }
 
     /// <summary>The infinity layers fitted to this consumer's camera, identified by their authored names.
     /// Their producer names identify existing render-graph outputs; the sky recorder binds them under the frame's

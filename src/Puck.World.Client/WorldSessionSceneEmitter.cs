@@ -199,6 +199,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_decals = new WorldScreenDecals(
             catalog: TextCatalog,
             colors: new WorldBakedColors(mirror: mirror.FollowState()),
+            screens: ((mirror.Definition is { } definition) ? WorldPlacementPolicy.ScreenSpan(definition: definition) : 0),
             textAt: TextAt
         );
     }
@@ -451,7 +452,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
 
         // The mirrored world's own sky and lighting, its keys on the mirrored world's own clocks; a view clock of it
         // measures the camera this scene is drawn from, in the mirrored world's coordinates.
-        m_mirror.FollowState().ViewPoint = camera.Position;
+        m_mirror.FollowState().ViewPoint = (ViewPointOf?.Invoke() ?? camera.Position);
 
         var environment = m_environment.Resolve(
             definition: m_mirror.Definition,
@@ -575,12 +576,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var colors = BakedColors();
 
         colors.Begin();
-        // The destination's creations' text runs are not emitted: only its text screens draw text, as decals
-        // (ScreenDecals).
+        // The destination's creations' lettering is emitted from its own font catalog, as the World's scene emits its own;
+        // its text screens draw as decals (ScreenDecals).
         var meshDraws = new List<SdfMeshDraw>();
 
         WorldPlacementStamper.EmitStatic(
             builder: builder,
+            textCatalog: TextCatalog(),
             colors: colors,
             definition: definition,
             creations: definition.Creations,
@@ -661,6 +663,11 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     /// <see cref="ResolveCamera"/>'s ordinary named/default projection for that frame.</summary>
     /// <param name="fit">The window's fit, or <see langword="null"/> for a session that is not a window.</param>
     public void SetWindowFit(Func<WorldWindowFit?>? fit) => m_windowFit = fit;
+    /// <summary>Gets or sets what answers the point the mirrored world's view clocks measure from, for a scene whose frames
+    /// are rendered from cameras other than the one it resolves (an infinity view's fitted cameras), in the mirrored world's
+    /// coordinates; it answers <see langword="null"/> while it has none. <see langword="null"/>, the default, measures
+    /// from the camera the scene resolves, so a view clock of the height reads where its viewer stands.</summary>
+    public Func<Vector3?>? ViewPointOf { get; set; }
     /// <summary>Finds the camera the last frame <see cref="Dress"/> dressed renders from, in the destination's own
     /// space: a window's fitted camera, its shear included, or the named or default projection. A hit on the session's
     /// image continues through it into the destination.</summary>

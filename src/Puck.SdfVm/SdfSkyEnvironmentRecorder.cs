@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
+using Puck.Maths;
 using Puck.Shaders;
 using Puck.SignedDistance;
 
@@ -62,11 +63,15 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
 
         tables.BindSkyEnvironment(set: set, bindings: m_context.Services.Bindings);
         var emissionMask = m_built.Residency.BindScreenImages(view: m_built.View,
-            shown: (Reduces ? default : (Screens ? tables.ScreenEmissionScreens : tables.SkyEnvironmentScreens)), recording: in recording,
+            shown: (Reduces ? UInt128.Zero : (Screens ? tables.ScreenEmissionScreens : tables.SkyEnvironmentScreens)), tables: tables, recording: in recording,
             bindings: m_context.Services.Bindings, binding: m_sets.BindingOf(member: SdfWorldPackage.ScreenSources), set: set,
             filler: tables.SampledFiller.ImageViewHandle, bound: default);
         SdfWorldInterfaces.EnvironmentParameters.WriteExtent(block: recording.PassBlock, width: SdfSkyEnvironment.Size, height: SdfSkyEnvironment.Size);
-        BinaryPrimitives.WriteUInt32LittleEndian(destination: recording.PassBlock[((int)SdfWorldInterfaces.EnvironmentParameters.BlockOffsetOf(member: SdfKernelInterfaces.ScreenEmissionMask))..], value: emissionMask);
+        var maskBlock = recording.PassBlock[((int)SdfWorldInterfaces.EnvironmentParameters.BlockOffsetOf(member: SdfKernelInterfaces.ScreenEmissionMask))..];
+
+        for (var word = 0; (word < 4); word++) {
+            BinaryPrimitives.WriteUInt32LittleEndian(destination: maskBlock[(word * sizeof(uint))..], value: BitWords.Word32(mask: emissionMask, word: word));
+        }
         m_work.Write(passSet: set, recording: recording);
         var pipeline = tables.Pipeline(kernel: Kernel);
 
@@ -75,7 +80,12 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
             pipelineLayout: pipeline.LayoutHandle, slot: recording.Slot);
         var groups = (Reduces ? 1u : (SdfSkyEnvironment.Size / 8u));
 
-        recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: (Screens ? SdfWorldTables.MaxScreenSurfaces : groups),
+        // The screen reduction runs a group a slot up to the highest bound screen, the screens shading reads
+        // (sdfScreenLightCount), so a bound slot with no acquired image this frame writes zero rather than keeping an old
+        // record.
+        var screenGroups = (uint)Math.Max(val1: 1, val2: Math.Max(val1: BitWords.Span(mask: emissionMask), val2: (int)tables.BoundScreenCount()));
+
+        recording.Recorder.Dispatch(commandBufferHandle: recording.CommandBuffer, groupCountX: (Screens ? screenGroups : groups),
             groupCountY: (Screens ? 1u : groups), groupCountZ: 1);
         // The views of this residency record after this pass on this thread (RecordingDomain), so they classify the buffer
         // they sample by what this recording writes, before the node commits it.

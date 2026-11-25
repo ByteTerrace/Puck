@@ -128,8 +128,14 @@ public sealed class WorldPresentationProbe(TimeProvider? time = null) {
         hash.Add(value: ((uint)program.WordCount));
         foreach (var word in program.FieldWords) { hash.Add(value: word); }
         foreach (var word in program.ShadingWords) { hash.Add(value: word); }
-        hash.Add(value: ((uint)program.Appearance.ScreenSurfaceWords.Length));
-        foreach (var word in program.Appearance.ScreenSurfaceWords) { hash.Add(value: word); }
+        hash.Add(value: ((uint)program.Appearance.ScreenSurfaces.Count));
+        foreach (var surface in program.Appearance.ScreenSurfaces) {
+            hash.Add(value: (uint)surface.ScreenIndex);
+            hash.AddBits(value: surface.Origin.X); hash.AddBits(value: surface.Origin.Y); hash.AddBits(value: surface.Origin.Z);
+            hash.AddBits(value: surface.Right.X); hash.AddBits(value: surface.Right.Y); hash.AddBits(value: surface.Right.Z);
+            hash.AddBits(value: surface.Up.X); hash.AddBits(value: surface.Up.Y); hash.AddBits(value: surface.Up.Z);
+            hash.AddBits(value: surface.HalfWidth); hash.AddBits(value: surface.HalfHeight);
+        }
         return hash.Value;
     }
     private static ulong ViewsHash(SdfFrame frame) {

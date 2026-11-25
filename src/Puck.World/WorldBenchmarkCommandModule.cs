@@ -1085,19 +1085,15 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
 
         return reasons;
     }
-    // The device's own memory now: the most its ledger has held at once, what the system budgets the process there, and
-    // what the system counts in use beyond what the ledger holds (the driver's and the swapchain's). Zeroes on unified
-    // memory and without a device.
+    // The device's own memory now: the most its ledger has held at once across every device segment (the pool's own
+    // peak, not a sum of each segment's peak, which reached at different moments overstates it), what the system budgets
+    // the process there, and what the system counts in use beyond what the ledger holds (the driver's and the
+    // swapchain's). Zeroes on unified memory and without a device.
     private static (long Peak, long Budget, long Beyond) DeviceLedger() {
         var pools = Puck.Hosting.Jobs.MemoryAccount.Shared.ReadPools();
-        var (peak, held, budget, usage) = (0L, 0L, 0L, 0L);
+        var (peak, held) = (pools.Device.Admission.Peak, pools.Device.Admission.Held);
+        var (budget, usage) = (0L, 0L);
 
-        foreach (var segment in pools.SegmentAdmissions) {
-            if (segment.Segment.Pool == PhysicalMemory.Device) {
-                peak += segment.Peak;
-                held += segment.Held;
-            }
-        }
         foreach (var segment in pools.DeviceReading.Segments) {
             if (segment.Segment.Pool == PhysicalMemory.Device) {
                 budget += (long)segment.Budget;

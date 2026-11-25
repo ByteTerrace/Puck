@@ -223,6 +223,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         rig.Render();
         var work = rig.Engine.GpuWork;
         var budget = rig.Engine.Grant.Selector.Work;
+        var reader = budget.Join(name: "reader");
         // Each job is priced past half the allowance: the credit would let two fly, and four slots are free.
         var client = new PricedClient(gpu: rig.Gpu.Services, seconds: (0.55 * budget.FrameAllowanceSeconds)) { Remaining = 3 };
 
@@ -235,7 +236,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
             // One job is queued ahead of the next frame; the second waits for it rather than overrun the deadline.
             Assert.Equal(1, work.InFlight);
             Assert.Equal(2, client.Remaining);
-            Assert.True(condition: budget.Allowance.Queued);
+            Assert.True(condition: budget.AllowanceOf(turn: reader).Queued);
             Assert.Equal(expected: (0.55 * budget.FrameAllowanceSeconds), actual: budget.QueuedSeconds, precision: 12);
             Assert.Equal(expected: (held + 1L), actual: Holds(work: work));
             work.Pump(tables: rig.Engine);
@@ -253,7 +254,7 @@ public sealed partial class SdfWorldTablesWorkLawTests {
         work.Dispose();
         // A disposed service's abandoned job leaves the queue too.
         Assert.Equal(expected: 0.0, actual: budget.QueuedSeconds);
-        Assert.False(condition: budget.Allowance.Queued);
+        Assert.False(condition: budget.AllowanceOf(turn: reader).Queued);
     }
 
     [Fact]

@@ -117,6 +117,11 @@ internal sealed class SdfWorldShadows : IDisposable {
     private SdfFrame? m_decidedFrame;
     private bool m_decided;
     private bool m_frozen;
+    // The audience the casters are selected for (SdfMeshAudience): the residency's own while every view of the decided
+    // frame is its own viewers', and the neutral draws alone while any view draws for another audience, since every view
+    // reads the one set of layers. Decided with the frame (Decide); a change owes every entry that follows motion whole.
+    private byte m_casterAudience;
+    private long m_castersChanged;
     private ulong m_uploads;
     // Each view's anchor, -1 for none, and the cascade set it reads; the cascade set of a view with no anchor is empty.
     private int[] m_viewAnchors = [];
@@ -337,7 +342,16 @@ internal sealed class SdfWorldShadows : IDisposable {
         if (Interlocked.Exchange(location1: ref m_trimRequested, value: 0) != 0) { Trim(); }
 
         var views = frame.Views.Count;
+        var casters = (byte)0;
 
+        for (var view = 0; (view < views); view++) {
+            if (frame.Views[view].Audience != 0) { casters = SdfMeshAudience.NeutralOnly; break; }
+        }
+        if (casters != m_casterAudience) {
+            m_casterAudience = casters;
+            m_castersChanged++;
+            MovedEverywhere();
+        }
         if (m_viewAnchors.Length != views) {
             Array.Resize(array: ref m_viewAnchors, newSize: views);
             Array.Resize(array: ref m_viewReaders, newSize: views);
@@ -722,7 +736,7 @@ internal sealed class SdfWorldShadows : IDisposable {
     /// each serves, and each entry's camera, texels, holds, redraw, owed rectangles and measured triangles.</summary>
     /// <returns>The description.</returns>
     public string Describe() => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
-        handler: $"uploads={m_uploads} gpu={((m_gpuSamples > 0) ? (m_gpuSum / m_gpuSamples) : 0d):0.000}ms/{m_gpuSamples}timed/most{m_gpuMost:0.000}ms recent={RecentMean():0.000}ms/most{RecentMost():0.000}ms moved={m_movedChanges}changes/{m_movedJudged}judged/{m_movedUnbounded}unbounded finest={m_finestTexel * 1000f:0.#}mm bytes={m_bytes} spares={m_spares.Count}/{LentPairs()}lent trims={m_trims} unseen-releases={m_unseenReleases} anchors={m_anchors.Count(predicate: static anchor => (anchor.View >= 0))}/{m_anchors.Count} views={string.Join(separator: ',', values: m_viewAnchors)} {m_distant.Describe()} {string.Join(separator: ' ', values: m_anchors.SelectMany(selector: static anchor => anchor.Entries).Select(selector: static entry => entry.Describe()))}");
+        handler: $"uploads={m_uploads} gpu={((m_gpuSamples > 0) ? (m_gpuSum / m_gpuSamples) : 0d):0.000}ms/{m_gpuSamples}timed/most{m_gpuMost:0.000}ms recent={RecentMean():0.000}ms/most{RecentMost():0.000}ms moved={m_movedChanges}changes/{m_movedJudged}judged/{m_movedUnbounded}unbounded casters={((m_casterAudience == 0) ? "own" : "neutral")}/{m_castersChanged}changes finest={m_finestTexel * 1000f:0.#}mm bytes={m_bytes} spares={m_spares.Count}/{LentPairs()}lent trims={m_trims} unseen-releases={m_unseenReleases} anchors={m_anchors.Count(predicate: static anchor => (anchor.View >= 0))}/{m_anchors.Count} views={string.Join(separator: ',', values: m_viewAnchors)} {m_distant.Describe()} {string.Join(separator: ' ', values: m_anchors.SelectMany(selector: static anchor => anchor.Entries).Select(selector: static entry => entry.Describe()))}");
 
     // The mean and the most of the recent measured uploads.
     private double RecentMean() {
@@ -1610,7 +1624,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             tables.WriteMeshBuffer(bound: ref bound[MeshSetGlassSums], buffer: tables.DummyBuffer, member: SdfWorldPackage.GlassSumsWritten, set: set);
             SdfMeshOcclusion.Unbind(bound: m_meshSetOcclusion[kind][slot], boundTarget: ref m_meshSetTargets[kind][slot], first: 0, set: set, tables: tables);
             selection.Stage(tables: tables, count: count, width: (uint)m_texels, height: (uint)m_texels, slot: slot, cull: in cull, detail: in detail, held: tables.HoldsFrame,
-                glass: false, occlude: false, splitExit: true, motion: motion, slice: share, slices: slices, tag: tag);
+                glass: false, occlude: false, audience: m_owner.m_casterAudience, splitExit: true, motion: motion, slice: share, slices: slices, tag: tag);
             selection.BindDraws(tables: tables, set: set, bound: m_meshSetOcclusion[kind][slot]);
             for (var phase = 0; (phase < OcclusionSets); phase++) {
                 var at = OcclusionSetOf(kind: kind, slot: slot, phase: phase);

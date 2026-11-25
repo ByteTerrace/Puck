@@ -27,7 +27,12 @@ public static class SearchCapacity {
     public const int MaxMovePatterns = 64;
     /// <summary>The most offsets one move pattern steps along; resolving a candidate may walk each ray.</summary>
     public const int MaxMoveOffsets = 32;
-    /// <summary>The most relocations one job judges per tick, whatever the work sheet leaves. A jump chain may
+    /// <summary>The work units one search step may spend: the search lane of a tick, apart from the rules' sheet
+    /// (<c>RuleCapacity.MaxWorkUnitsPerTick</c>). A tick steps one job with work to do, so this is the most a tick
+    /// spends walking, and every job is priced against it alone, less its own per-tick upkeep: no rule and no other
+    /// job changes what one job may spend, so adding either never refuses an unrelated search.</summary>
+    public const long MaxWorkUnitsPerStep = 1L << 20;
+    /// <summary>The most relocations one job judges per tick, whatever its allowance leaves. A jump chain may
     /// enumerate no more candidates per token than this, which is what bounds how long a chain may be.</summary>
     public const int MaxNodesPerTick = 4_096;
     /// <summary>The most codes one <c>promote</c> shape offers; each multiplies the shape's candidates, which the

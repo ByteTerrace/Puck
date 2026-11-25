@@ -284,6 +284,17 @@ public static partial class AzureCommand {
                 ["settings"] = new JsonObject { ["pollSeconds"] = siloLifecycle["pollSeconds"]!.DeepClone() },
             };
         }
+        // A worker the deploy deletes after it fails takes its journal with it; its logs and narration also reach the
+        // deployment's Application Insights, which the silo identity publishes to.
+        lifecycle["telemetry"] = new JsonObject {
+            ["type"] = "azure.monitor",
+            ["settings"] = new JsonObject {
+                ["connectionString"] = Text(value: Value(
+                    key: "worldSiloTelemetryConnectionString",
+                    outputs: outputs
+                )),
+            },
+        };
         var silo = SiloDocument(
             documentDirectory: WorldSiloImageLayout.WorldsDirectory,
             keyFile: "/configuration/federation.pk8",

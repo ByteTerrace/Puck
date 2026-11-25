@@ -39,7 +39,7 @@ public static class MeshCpuBake {
     /// <param name="farDistance">The far distance the world renders to.</param>
     /// <param name="groups">The groups to bake.</param>
     /// <param name="evaluations">Receives the field evaluations each group's lattices took by its selector (a gradient
-    /// sample counting five, as the bake's taps do), or <see langword="null"/> to count none.</param>
+    /// sample counting <see cref="SdfMeshBakeRequest.GradientCost"/>, as the bake's batches do), or <see langword="null"/> to count none.</param>
     /// <param name="taps">Receives how each group's gradient taps were answered by its selector, or
     /// <see langword="null"/> to count none.</param>
     /// <param name="tier">The tier each group bakes at (<see cref="SdfMeshPathBake.PlannedTier"/>); <see langword="null"/>

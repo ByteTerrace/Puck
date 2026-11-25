@@ -520,7 +520,7 @@ Six steps run in order:
    - *Deadline admission.* Built: the jobs queued ahead of one frame together
      fit one frame allowance. The service's one take hands every client what
      is left of the live allowance after the charged jobs still in flight on
-     the presentation's queue (`SdfGpuWorkBudget.Allowance`; no bound for a held
+     the presentation's queue (`SdfGpuWorkBudget.AllowanceOf`; no bound for a held
      frame), and while work is queued a client takes no job priced past it, so
      neither `SdfGpuWork.SlotCount` allowance-sized jobs nor credit banked over
      a long gap (`SdfGpuWorkBudget.MostBankSeconds` times the share) queue more
@@ -566,7 +566,8 @@ Six steps run in order:
    and a slow device does less lighting work a second. The GPU time those
    probes cost is charged by their jobs' timestamps to the one wall-clock
    budget, and a frame over its period (`SdfGpuWorkBudget.FrameOver`) holds
-   even an unqueued job to the frame allowance, so a higher count lowers the
+   even an unqueued job to the frame allowance until the share has paid for it
+   (`SdfGpuWorkBudget.Hold`), so a higher count lowers the
    lighting's age only while the frame leaves time free. A drain ignores the
    grant, so its result does not depend on the play rate. Still to do: mesh
    upload time measured per device beside the bytes-per-second staging cap, and

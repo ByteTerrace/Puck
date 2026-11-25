@@ -35,6 +35,32 @@ ScreenRippleData worldScreenRipple(uint screenIndex) {
     data.contacts[3] = screenMappings[(row + 4u)];
     return data;
 }
+// A screen's identity is the authored index its material id carries (SDF_SCREEN_MATERIAL + 1 + identity) or a sky layer
+// names, with no count limit; a slot is one of the SDF_MAX_SCREEN_SURFACES rows every per-screen table holds, which the
+// host claims for a resident screen (SdfWorldTables.SettleScreenSlots). The identity-to-slot map follows the slots'
+// records in screenMappings: one word an identity, four a row, holding the slot plus one, so zero (and a row past the
+// table) is a screen holding no slot, which shades as one with no source. KEEP IN SYNC with
+// SdfWorldTables.ScreenSlotMapOffset.
+static const uint SdfNoScreenSlot = 0xFFFFFFFFu;
+uint sdfScreenSlot(int identity) {
+    if (identity < 0) {
+        return SdfNoScreenSlot;
+    }
+
+    uint rows;
+    uint stride;
+    screenMappings.GetDimensions(rows, stride);
+
+    uint row = ((SDF_MAX_SCREEN_SURFACES * WorldScreenMappingRows) + ((uint)identity / 4u));
+
+    if (row >= rows) {
+        return SdfNoScreenSlot;
+    }
+
+    uint held = asuint(screenMappings[row][(uint)identity % 4u]);
+
+    return ((held == 0u) || (held > SDF_MAX_SCREEN_SURFACES)) ? SdfNoScreenSlot : (held - 1u);
+}
 ScreenMappingData worldScreenMapping(uint screenIndex) {
     uint row = (screenIndex * WorldScreenMappingRows);
     ScreenMappingData data;

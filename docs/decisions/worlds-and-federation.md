@@ -387,6 +387,60 @@ count and sizes are functions of its own view.
 and [decision 4](../plans/replication.md#decision-4-what-a-delta-is-a-difference-against),
 with the sources read for them; [disclosure, decision 5](../plans/disclosure.md#5-a-delta-is-a-difference-of-views-owned-by-the-stream).
 
+## Reading and acting across worlds
+
+**Decided.** A world reads another world's value through a followed row
+(`WorldStateFollow`): a state row of its own that names a destination and a row
+of that world, which the following authority adopts from its session
+observation of the leader at a tick boundary, as a taped write the world's own
+program makes. Only the leader writes the value; every other writer of a
+followed row is refused by name. An action in one world with an effect in
+another is the same thing turned round: the acting world owns a row, the other
+world follows it, and the other world's own rules decide what it does there. A
+door opened onto another world is two doors paired this way: the source offers
+in a row, the destination grants in a row of its own under its own lease and
+refusal, each follows the other, and each door opens only while both stand.
+Several frames may stand for one pairing (the debug world's moon painting and
+its valley frame share the offer, the pass and the socket), and a door that
+stands shut holds no session onto the far world: its owner's observation
+through the glass closes with the door and opens with it, so a shut door costs
+its registration alone.
+
+**Options weighed.**
+
+| Option | What it is | What it closes | What it leaves open |
+|---|---|---|---|
+| A. A shared authored clock | Both documents count one engine tick from one start | Nothing to transport | Agrees only while both authorities share an engine tick and a start, which a remote authority does not; cannot be written, so it takes away the lever for moving the time; serves clocks only |
+| B. A presentation-side follow | A clock or value read through the presenting client's session of the other world | The look on a client that holds the session | The follower's rules, its other recipients and a client holding no session each read another value; no rule can act on it |
+| C. An authority-side followed row | This decision | One value for every reader of the follower, rules included; replay from the tape; acting by reading | A rule writing a followed row is not refused yet (the next adoption restores the leader's value); an action that carries who acted needs addressed effects |
+| D. A message one world sends into another's rules | An addressed event | Carries the actor | A second transport beside sessions, and the interaction settlement the world model names as unbuilt |
+
+**Why.** A followed row reuses the doors that already hold: the destination's
+admission and disclosure decide what the follower may read (a row the leader
+does not disclose is never adopted), the session observation is
+remote-capable, and the taped mutation door gives replay without a new tape
+entry. It keeps the invariant that no world writes another's state, and it
+places the one writer of each value with the authority that owns it, wherever
+the value is read.
+
+**Attacks it closes.** A leader can lie only about its own row, and what it
+sends is input the follower's rules bound. A follower cannot move the leader's
+value. A spammed offer costs the destination a row it reads and a rule it
+decides with; its socket opens only by its own rule, under its own lease, and
+frees itself when the source falls silent. A door bound to its opener admits
+no one else, by the source's gate, and the destination's admission still judges
+every traveller.
+
+**Rulings it rests on.** Cross-world interaction is a flagship feature
+(AGENTS.md, "Puck's purpose"); authors rule (every policy is a row and a rule);
+Puck code over engine code (the handshake is rules); the world model's
+invariants that one authority simulates a body and that foreign state enters at
+one boundary.
+
+**Evidence.** [Cross-world interaction](../plans/cross-world.md);
+[portals in play, section 4](../plans/portals-in-play.md#4-a-door-onto-another-world-opened-in-play);
+`worlds/debug/follows-tests.puck`.
+
 ## The tables
 
 **Decided.**

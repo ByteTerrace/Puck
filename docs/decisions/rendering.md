@@ -64,8 +64,10 @@ price what the mesh pipeline costs instead:
   indices, 24-bit slot, draw and triangle indices, exact-float ranges, the
   material sentinel and region addresses. A guard is never exceeded silently;
   past it a document is refused by name.
-- **Kept as work bounds:** 64 volumes (still marched per pixel), the 32 screen
-  bindings with the derived-face band following the authored screens, lights,
+- **Kept as work bounds:** 64 volumes (still marched per pixel), the resident
+  screen slots (`SdfProgramBuilder.MaxScreenSurfaces`, one `UInt128` mask; a
+  world declares any number of screens) with the derived-face band following
+  the authored screens, lights,
   sky layers and nested views, 4,096 bodies, and 32,768 solid placement
   colliders per world. `SDF_MAX_INSTANCES` bounds one bake program, not a
   world.
@@ -1479,6 +1481,43 @@ reference tier, `high`, and its `bound` station's pixels depend on a bound row
 the world's own rules move. Hardware observations also run at `high` and meet
 that device's worst-frame bar.
 
+## A far viewer draws a world's far product
+
+**What a world shows of itself from far away is a product of its own, never a residency of the world.** At MMO scale
+every zone, moon and server is a world and a player sees many at once, so seeing a world cannot cost holding it. A
+sky `view` layer that asks for it (`farProduct: true`, `InfinityViewSpec.FarProduct`) draws the destination's far
+product (`SdfFarProduct`): the world's settled static scene (`SdfMeshDraw.InStaticScene`), each mesh at the coarsest
+level it carries, placed in the world, its vertices gathered into cells (`SdfMeshCluster`, vertex clustering binned by
+facing so thin walls keep both faces), then chunked and levelled (`SdfMeshChunks.Bake`) so the view's draws pick a level
+by the pixels they cover. Its materials are the source program's, renumbered into the product's own. Dynamic content
+(bodies, skinned or displaced meshes, glass, screens) is absent: a far viewer sees ground and standing masses, never
+motion.
+
+**It is a cache derived from what a residency already drew.** A product is taken on the frame thread from a settled
+residency's frame (claims hold its meshes) and built on a worker, named by a digest of its inputs, never recorded, and
+built once per document version of the world (`WorldDocumentVersion`). The boot world's comes from the presentation's
+own residency; a view of a world no residency here holds draws that world whole once and builds the product from that
+residency, then swaps to it (the derive on a miss). The publishing world authors what it shows (`render.farProduct`:
+the cell, and the smallest part kept), since a far look is the author's choice.
+
+**Its residency composes the product alone.** The view's scene is one emitter that emits the product's materials and
+one static draw per piece (`WorldFarProductEmitter`), so the residency plans no bake group and bakes nothing; the
+world's session emitter only dresses the frame with that world's sky, lights and exposure, measured from the fitted
+camera (`WorldSessionSceneEmitter.ViewPointOf`). A view that draws geometry alone nests no view of its world's sky.
+
+**The hand-over is the seam.** A sky view across a seam shows the far product; crossing the seam moves the seat into
+that world, whose own residency draws it. Both draw the same meshes (the product is built from the drawn ones), and
+the authored minimum size is what a pixel spans at the nearest far viewer, so what the product leaves out is under a
+pixel where the hand-over happens.
+
+Options weighed: following the source world's tier board in a scoped residency (the second-scene path) still plans a
+group per placement and bakes whatever the board does not lead; reusing the world's own residency for the far view
+keeps the whole world resident and unparked; per-group far tiers in the mesh store cost a draw and a bake per group
+for every far world. The merged product holds one mesh a world, bakes nothing, and its triangle count is bounded by
+the surface area over the cell squared. Invariant: a far entry draws only a product built from the document version
+its source residency's world holds now, enforced at `WorldScreenBinder.FarProductOf`; where it stops, a product is not
+yet persisted in the mesh store, so each process derives it once.
+
 ## The frame graph and nesting
 
 **The frame graph is the centre of rendering, and the SDF engine is one pass
@@ -1996,6 +2035,71 @@ is that a change touches no program and no mesh. What it does not yet reach is
 recorded with the open items: a text is the world's, not a body's, and the
 slots are a fixed band.
 
+### A screen is an identity; a slot is a cache entry
+
+**A world declares any number of screens; a residency holds a slot for the ones
+resident now.** A screen's identity is the authored index its material id
+carries (`SdfProgramBuilder.MaxScreenIdentities` bounds the index's format, as
+24 bits bound a draw index, never a count). A slot is one of the
+`SdfProgramBuilder.MaxScreenSurfaces` rows every per-screen table holds
+(surfaces, mappings, emission, decal descriptors, source images). Each frame the
+residency settles which screens hold slots (`SdfWorldTables.SettleScreenSlots`):
+a screen that shows a source or a glyph grid is wanted, the nearest to the
+frame's first camera first when more are wanted than the slots hold, a screen
+still wanted keeps the slot it held, and one no longer wanted gives it back. A
+screen wanted past the slots holds none and shades as a screen with no source
+until a nearer one leaves, so no author ever meets a capacity refusal. The
+kernels read the identity-to-slot map from the tail of the mapping table
+(`sdfScreenSlot`, one word an identity holding the slot plus one), so a released
+screen reads zero and every table read goes through a slot it holds.
+`sdf.screens.resident`, `.degraded`, `.claims` and `.releases`
+(`SdfCadenceWork`) count the door's work.
+
+**Every set of resident screens is one `UInt128` mask, walked by its set bits.**
+The bound, emitting, sampled and changed slots and a light tile's lit screens
+are each one 128-bit mask over `BitWords`; the kernels read the same bits as a
+`uint4`, exactly as they read the light mask, and a tile holds four light words
+and four screen words (`SdfWorldPackage.ShadeTileLightWords`). Per-frame work
+follows the members, not the slots: the change watch compares only the slots
+read now or at the last render, the emission reduction dispatches up to the
+highest bound slot, and a light walk or tile visits set bits.
+
+The options weighed, for a debug world that had used all 32 slots and an MMO
+zone that authors hundreds or thousands of screens, portals and windows:
+
+- *A wider fixed slot space (64, 128).* Rejected as the authored limit: the next
+  door refuses again. Kept as the resident width, which is the GPU's shape.
+- *Per-region programs, each with its own slots.* Rejected: a program per
+  region multiplies residencies and their tables to dodge a count that only
+  residency should decide, and a screen near a region's edge would still need
+  two.
+- *Per-tile screen lists on the GPU.* Rejected: the tile already carries light
+  masks, and a list there is a second walk with its own bound, where one more
+  mask word set walks with the light code it shares.
+- *Identity and resident slot (chosen).* The material id keeps the identity, so
+  no mesh bakes again when a screen comes or goes; the slot table and the masks
+  stay one fixed GPU shape; and residency, which already decides what is drawn,
+  decides which screens hold slots.
+
+**The door's invariant.** A slot names at most one resident screen, no table is
+read through a released slot, and no screen is refused for capacity.
+`SettleScreenSlots` is the one writer of the map, its CPU twin and the resident
+mask; every per-screen write resolves its slot through `SlotOfScreen` first, so
+a write for a screen holding none lands nowhere; and a release zeroes the
+screen's map word, clears the slot's bound flag and decal and forgets its cached
+mapping before the slot can be claimed again. One residency packs its tables on
+one thread at a time, so the door takes no lock.
+
+**The glyph cells are a pool, not a run per slot.** A screen's glyph grid
+claims a run of its grid's size from one cell pool (`GpuRangeAllocator`, the
+one door that hands out runs), sized for `SdfWorldTables.MaxScreenDecalScreens`
+full grids, so the decal buffer's bytes do not grow with the screen count.
+
+**A closed door keeps its identity and nothing else.** A portal face's index is
+assigned when its document composes (`WorldFaceCatalog`); while its door is shut
+(`WorldPortalClosures`) its owner holds no session through it, so it shows no
+picture, wants no slot and asks for no image
+([portals in play](../plans/portals-in-play.md#6-rendering-and-memory)).
 ## What the state-of-the-art audit found ahead, and what stays rejected
 
 An audit of the renderer's algorithms against published and shipped practice

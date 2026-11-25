@@ -43,7 +43,8 @@ public readonly record struct SdfScreenTreatment(float Scanlines, float Subpixel
 /// so an implementation answers without allocating.
 /// </summary>
 public interface ISdfScreenSources {
-    /// <summary>Gets the program-declared screen indices the node binds each frame, fixed for the node's lifetime.</summary>
+    /// <summary>Gets the program-declared screen indices the node may bind, any number of them: each frame the residency
+    /// holds a slot for those that show a source or a glyph grid (<see cref="SdfWorldTables.SettleScreenSlots"/>).</summary>
     IReadOnlyList<int> Screens { get; }
 
     /// <summary>Returns whether this screen's acquired image can emit light. A camera viewing its own world does not

@@ -60,8 +60,6 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
     // screens the residency declares and the frame's sky samples.
     private readonly nint[][] m_screens;
 
-    private readonly bool[] m_declaredScreens = new bool[SdfWorldTables.MaxScreenSurfaces];
-    private readonly bool[] m_sampledScreens = new bool[SdfWorldTables.MaxScreenSurfaces];
 
     private bool m_disposed;
     // The composite's image meter, one slot each; empty for the sky.
@@ -98,7 +96,6 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
         for (var slot = 0; (slot < m_screens.Length); slot++) {
             m_screens[slot] = new nint[SdfWorldTables.MaxScreenSurfaces];
         }
-        DeclareScreens(residency: view.Residency);
         m_sets = new RenderGraphPackageSets(context: context, groups: groups, groupLayoutHandles: view.Residency.Tables!.Pipeline(kernel: m_kernel).GroupLayoutHandles);
         m_work = new RenderGraphPackageWorkCounters(context: context, sets: m_sets);
         m_meters = [];
@@ -160,7 +157,7 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
         }
         return hash.Value;
     }
-    private protected override void FollowedResidency() => DeclareScreens(residency: m_view.Residency);
+    private protected override void FollowedResidency() { }
     public RenderGraphPackageOutcome Record(in RenderGraphPackageRecording recording) {
         var residency = m_view.Residency;
         var tables = residency.Staged(context: recording.Context);
@@ -296,13 +293,10 @@ internal sealed class SdfSkyRecorder : SdfViewRecorder, IRenderGraphPackageRecor
         Array.Clear(array: m_screens[slot]);
         m_portTables[slot] = tables;
     }
-    private void DeclareScreens(SdfWorldResidency residency) => residency.DeclareScreens(declared: m_declaredScreens);
     // Writes each declared screen the frame's sky samples into the slot's pass set. The image is the one the views pass
     // binds, under the lease it already holds.
     private void BindScreens(SdfFrame frame, in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) {
-        frame.Sky.MarkScreens(screens: m_sampledScreens);
-        for (var screen = 0; (screen < m_sampledScreens.Length); screen++) { m_sampledScreens[screen] &= m_declaredScreens[screen]; }
-        _ = m_view.Residency.BindScreenImages(view: m_view.View, shown: m_sampledScreens, recording: in recording, bindings: m_context.Services.Bindings,
+        _ = m_view.Residency.BindScreenImages(view: m_view.View, shown: tables.SlotsOfSky(sky: frame.Sky), tables: tables, recording: in recording, bindings: m_context.Services.Bindings,
             binding: m_sets.BindingOf(member: SdfWorldPackage.ScreenSources), set: set, filler: tables.SampledFiller.ImageViewHandle,
             bound: m_screens[recording.Slot]);
     }

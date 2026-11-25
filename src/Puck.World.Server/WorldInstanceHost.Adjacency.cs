@@ -428,9 +428,29 @@ public sealed partial class WorldInstanceHost {
     // nor cross it, so it takes the outside observation without the region test, and only a body that holds a latch
     // somewhere is observed at all: the scan costs a bounds compare per body and face, and a region test only near a
     // face.
+    //
+    // A door authored `open` fires only while its condition holds: closed, every body reads as outside it, so a body that
+    // stands in it when it closes keeps the side it is on and a body walking into it meets the frame alone. A door's
+    // `gate` reads the traveller's own cell of its row once a crossing fires; a body it refuses passes the frame without
+    // crossing, and its latch keeps that one crossing from firing again until it leaves the face.
     private void ScanPortalFace(WorldInstance instance, WorldPopulation population, WorldPlacement placement, WorldPlacementFace face, WorldPlacementPortal portal, WorldFaceAperture aperture, PortalEdgeHit?[] winners) {
         var bounds = ((aperture is WorldFaceAperture.Box box) ? box.Bounds : FixedAabb.Everywhere);
         var occupancy = instance.PortalOccupancy;
+        var server = instance.Server;
+
+        var closed = ((portal.Open is WorldPlacementResponseCondition.StateCondition open) && !open.Holds(arena: server.Arena, definition: server.Configuration, engineTick: server.CompletedEngineTicks, tick: server.CompletedTick));
+
+        population.PortalClosures.Set(closed: closed, face: face.Face, placementId: placement.Id);
+        instance.PortalClosures = population.PortalClosures;
+        if (closed) {
+            for (var seat = 0; (seat < population.Capacity); seat++) {
+                if (occupancy.Holds(seat: seat)) {
+                    _ = occupancy.Observe(placementId: placement.Id, faceName: face.Face, seat: seat, inside: false, crossed: false);
+                }
+            }
+
+            return;
+        }
 
         for (var seat = 0; (seat < population.Capacity); seat++) {
             if (!WorldAdjacencyOwnership.TryTraveller(
@@ -481,6 +501,16 @@ public sealed partial class WorldInstanceHost {
             );
 
             if (!fired) {
+                continue;
+            }
+            if ((portal.Gate is { } gate) && !gate.Admits(arena: server.Arena, bodyIndex: seat, definition: server.Configuration, engineTick: server.CompletedEngineTicks, tick: server.CompletedTick)) {
+                if (server.Output.HasNarrationSink) {
+                    server.Output.Narrate(
+                        channel: "world.portal",
+                        text: $"[world.portal: '{instance.Name}/{placement.Id}/{face.Face}' gate '{gate.State}' refuses {TravellerName(index: seat, localSeatCount: population.LocalSeatCount)}; it passes the frame without crossing]"
+                    );
+                }
+
                 continue;
             }
 

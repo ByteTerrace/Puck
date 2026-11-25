@@ -56,9 +56,11 @@ public static class BoardQueries {
         }
 
         var count = query.Topology.CellCount;
-        using var marks = scratch.Rent<int>(count);
+        var words = BitWords.WordsFor(members: count);
+        using var visited = scratch.Rent<ulong>(words);
+        using var seen = scratch.Rent<ulong>(words);
         using var stack = scratch.Rent<int>(count);
-        var flood = new BoardFlood(query.Topology, values, (query.Lower, query.Upper), boundary, marks.Span, stack.Span, query.MaxVisits);
+        var flood = new BoardFlood(query.Topology, values, (query.Lower, query.Upper), boundary, visited.Span[..words], seen.Span[..words], stack.Span, query.MaxVisits);
 
         if (enclosed) {
             return flood.EnclosedBeside(source, default);
@@ -66,25 +68,31 @@ public static class BoardQueries {
         if (!placement && !flood.CanStart(source)) {
             return 0;
         }
-        var members = flood.Visit(source, query.Kind == BoardQueryKind.Component ? 0 : 1, default, out var free);
+        var members = flood.Visit(source, query.Kind != BoardQueryKind.Component, out var free);
         return ((members < 0 || query.Kind == BoardQueryKind.Component) ? members : free);
     }
 
     private static bool InRange(long value, (long Lower, long Upper) range) =>
         value >= range.Lower && value <= range.Upper;
 
-    // Members stay marked across groups. A positive stamp makes boundary marks local to one group.
+    // A flood over word bitsets (BitWords): `visited` marks every member settled, and the origin of an enclosure test,
+    // across groups, so a group reached from two sides floods once; `seen` marks the boundary cells one group counted,
+    // cleared when the next group starts, so a liberty beside two members counts once. The stack holds a group's members
+    // in the order it settles them, which a caller collecting a group reads back.
     private ref struct BoardFlood(CompiledTopology topology, ReadOnlySpan<long> values, (long, long) members,
-        (long, long) boundary, Span<int> marks, Span<int> stack, int budget) {
+        (long, long) boundary, Span<ulong> visited, Span<ulong> seen, Span<int> stack, int budget) {
         private readonly ReadOnlySpan<long> m_values = values;
-        private readonly Span<int> m_marks = marks;
+        private readonly Span<ulong> m_visited = visited;
+        private readonly Span<ulong> m_seen = seen;
         private readonly Span<int> m_stack = stack;
         private int m_remaining = budget;
 
-        public bool CanStart(int cell) => cell >= 0 && m_marks[cell] >= 0 && InRange(m_values[cell], members);
+        public bool CanStart(int cell) => cell >= 0 && !BitWords.Contains(words: m_visited, index: cell) && InRange(m_values[cell], members);
 
-        public int EnclosedBeside(int origin, scoped Span<int> cleared) {
-            m_marks[origin] = -1;
+        // The members of every group beside the origin with no boundary cell, counted, and set in `cleared` when it is not
+        // empty; negative when the visit budget ran out.
+        public int EnclosedBeside(int origin, scoped Span<ulong> cleared) {
+            BitWords.Add(words: m_visited, index: origin);
             var total = 0;
 
             for (var direction = 0; direction < topology.DirectionCount; direction++) {
@@ -92,45 +100,50 @@ public static class BoardQueries {
                 if (!CanStart(start)) {
                     continue;
                 }
-                var size = Visit(start, direction + 1, cleared.IsEmpty ? default : cleared[total..], out var free);
+                var size = Visit(start, true, out var free);
                 if (size < 0) {
                     return size;
                 }
                 if (free == 0) {
                     total += size;
+                    if (!cleared.IsEmpty) {
+                        foreach (var cell in m_stack[..size]) { BitWords.Add(words: cleared, index: cell); }
+                    }
                 }
             }
             return total;
         }
 
-        public int Visit(int start, int stamp, scoped Span<int> ordinals, out int free) {
+        // Floods the group holding `start`, leaving its members in the stack's first `settled` entries in the order it
+        // settled them, and counts its boundary cells in `free` when `countsBoundary`.
+        public int Visit(int start, bool countsBoundary, out int free) {
             var pending = 1;
             var settled = 0;
             free = 0;
-            m_marks[start] = -1;
+            if (countsBoundary) { m_seen.Clear(); }
+            BitWords.Add(words: m_visited, index: start);
             m_stack[0] = start;
 
-            while (pending > 0) {
-                var cell = m_stack[--pending];
+            // The stack grows from the front as members are pushed and is read from `settled` up: a member, once
+            // settled, stays at its settled position, so the group's members end in m_stack[0..settled).
+            while (pending > settled) {
+                var cell = m_stack[settled];
                 if (m_remaining-- == 0) {
                     return -2;
-                }
-                if (!ordinals.IsEmpty) {
-                    ordinals[settled] = cell;
                 }
                 settled++;
 
                 for (var direction = 0; direction < topology.DirectionCount; direction++) {
                     var next = topology.Neighbour(cell: cell, direction: direction);
-                    if (next < 0 || m_marks[next] < 0) {
+                    if (next < 0 || BitWords.Contains(words: m_visited, index: next)) {
                         continue;
                     }
                     var value = m_values[next];
                     if (InRange(value, members)) {
-                        m_marks[next] = -1;
+                        BitWords.Add(words: m_visited, index: next);
                         m_stack[pending++] = next;
-                    } else if (stamp != 0 && m_marks[next] != stamp && InRange(value, boundary)) {
-                        m_marks[next] = stamp;
+                    } else if (countsBoundary && !BitWords.Contains(words: m_seen, index: next) && InRange(value, boundary)) {
+                        BitWords.Add(words: m_seen, index: next);
                         free++;
                     }
                 }
@@ -239,14 +252,30 @@ public static class BoardQueries {
         );
     }
 
-    /// <summary>Finds groups beside a filled cell that have no boundary cells in the given inclusive range.
-    /// Writes their ordinals into a buffer of at least the topology's cell count and returns the filled length.</summary>
+    /// <summary>Finds groups beside a filled cell that have no boundary cells in the given inclusive range, and sets
+    /// their members in <paramref name="cleared"/>, a cell a bit (<see cref="BitWords"/>), so a caller reads them in
+    /// ascending order without sorting.</summary>
+    /// <param name="topology">The compiled topology.</param>
+    /// <param name="values">One value per cell.</param>
+    /// <param name="source">The filled cell the groups lie beside.</param>
+    /// <param name="lower">The inclusive lower bound of a group cell's value.</param>
+    /// <param name="upper">The inclusive upper bound of a group cell's value.</param>
+    /// <param name="boundaryLower">The inclusive lower bound of a boundary cell's value.</param>
+    /// <param name="boundaryUpper">The inclusive upper bound of a boundary cell's value.</param>
+    /// <param name="cleared">The cleared set, at least <c>BitWords.WordsFor(topology.CellCount)</c> words, cleared.</param>
+    /// <param name="scratch">The working storage the flood borrows its bitsets and stack from.</param>
+    /// <returns>The members set.</returns>
     public static int FindEnclosed(CompiledTopology topology, ReadOnlySpan<long> values, int source, long lower, long upper,
-        long boundaryLower, long boundaryUpper, Span<int> cleared, ArenaScratch scratch) {
+        long boundaryLower, long boundaryUpper, Span<ulong> cleared, ArenaScratch scratch) {
+        ArgumentNullException.ThrowIfNull(argument: topology);
+        ArgumentNullException.ThrowIfNull(argument: scratch);
+
         var count = topology.CellCount;
-        using var marks = scratch.Rent<int>(count);
+        var words = BitWords.WordsFor(members: count);
+        using var visited = scratch.Rent<ulong>(words);
+        using var seen = scratch.Rent<ulong>(words);
         using var stack = scratch.Rent<int>(count);
-        var flood = new BoardFlood(topology, values, (lower, upper), (boundaryLower, boundaryUpper), marks.Span, stack.Span, count);
+        var flood = new BoardFlood(topology, values, (lower, upper), (boundaryLower, boundaryUpper), visited.Span[..words], seen.Span[..words], stack.Span, count);
         return flood.EnclosedBeside(source, cleared);
     }
 

@@ -948,7 +948,7 @@
           ],
           "properties": {
             "cell": {
-              "description": "The error, in metres, the product\u0027s finest level is levelled against; its coarser levels, which a far view\u0027s draws choose between by the pixels they cover, stay within multiples of it. Within [0.01, 1024]. Absent is one metre.",
+              "description": "The side, in metres, of the cells the product gathers its vertices into, so its finest level holds about two triangles a cell of surface; its coarser levels, which a far view\u0027s draws choose between by the pixels they cover, stay within multiples of it. Within [0.01, 1024]. Absent is one metre.",
               "type": "number",
               "default": 1
             },
@@ -977,7 +977,7 @@
         ],
         "properties": {
           "index": {
-            "description": "The engine screen-surface index (0..MaxScreenSurfaces\u22121) this slab declares \u2014 the key the source/light providers bind under.",
+            "description": "The screen\u0027s identity (0..MaxScreenIdentities\u22121), unique in the world, which this slab declares \u2014 the key the source/light providers bind under. A world declares any number of screens; a presentation holds a slot only for those resident at once.",
             "type": "integer"
           },
           "origin": {
@@ -11431,7 +11431,7 @@
           "default": null
         },
         "farProduct": {
-          "description": "Whether the view draws the destination\u0027s far product (its settled static scene, merged at the coarse levels its own render.farProduct asks for) rather than a residency of the whole destination: no bake, none of its bodies, creations or screens, and only the product\u0027s triangles held. A view that asks for it and has no product yet draws the destination whole until one is built from that residency. Absent is not.",
+          "description": "Whether the view draws the destination\u0027s far product (its settled static scene, gathered at the cell its own render.farProduct asks for) rather than a residency of the whole destination: no bake, none of its bodies, creations or screens, and only the product\u0027s triangles held. A view that asks for it and has no product yet draws the destination whole until one is built from that residency. Absent is not.",
           "type": [
             "boolean",
             "null"
@@ -15925,6 +15925,134 @@
         "mapped"
       ]
     },
+    "WorldPlacementResponseConditionFieldCondition": {
+      "description": "The original lattice-field condition, unchanged from before this union existed: the named field read at the placement\u0027s own coupled cell, compared against a literal or another row\u0027s slot cell.",
+      "properties": {
+        "$type": {
+          "const": "field"
+        },
+        "field": {
+          "description": "The field read at the cell.",
+          "type": "string"
+        },
+        "comparison": {
+          "$ref": "#/$defs/ExpressionComparisonNonNullable",
+          "description": "The comparison."
+        },
+        "value": {
+          "description": "The scalar compared against (literal or state-row reference) \u2014 the same WorldLatticeScalar grammar a fields.reactions Transform/Expose condition already uses.",
+          "title": "WorldLatticeScalar"
+        }
+      },
+      "required": [
+        "field",
+        "comparison",
+        "value"
+      ],
+      "additionalProperties": false,
+      "title": "WorldPlacementResponseConditionFieldCondition"
+    },
+    "WorldPlacementResponseConditionStateCondition": {
+      "description": "A state-cell condition: compares State\u0027s cell (its slot cell when Key is absent, else the cell at Key) against Value, or \u2014 when ComparandState is authored instead \u2014 against another declared row\u0027s cell, read live at the same evaluation. Exactly one of Value and ComparandState may be present, the same one-comparand rule CompareState already enforces for a rule\u0027s own gate \u2014 this facet reuses that field convention rather than inventing a second reading of \u0022compare a state cell.\u0022 Independent of the placement\u0027s position, and of whether the document declares a fields section at all.",
+      "properties": {
+        "$type": {
+          "const": "state"
+        },
+        "state": {
+          "description": "The state row compared \u2014 any declared state.world row of a numeric kind (never Text).",
+          "type": "string"
+        },
+        "comparison": {
+          "$ref": "#/$defs/ExpressionComparisonNonNullable",
+          "description": "The comparison."
+        },
+        "value": {
+          "description": "The literal comparand, or null when ComparandState spells the comparand instead.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "key": {
+          "description": "The cell inside State, or null for its slot cell. Refused when State is keyed and this is absent, or unkeyed and this is present.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "comparandState": {
+          "description": "Another declared state.world row, read live and compared instead of Value. Must share State\u0027s cell kind (refused by name otherwise).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "comparandKey": {
+          "description": "The cell inside ComparandState, on the same terms as Key. Refused when ComparandState is absent.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state",
+        "comparison"
+      ],
+      "additionalProperties": false,
+      "title": "WorldPlacementResponseConditionStateCondition"
+    },
+    "WorldPlacementResponseCondition": {
+      "description": "The closed union a response entry\u0027s When speaks. Both arms evaluate against the SAME per-tick document the rule frame folds a rule\u0027s writes into before this sweep runs (Server.WorldTick.SweepPlacementResponses runs after EvaluateWorldRules\u0027 own end-of-tick fold), so a cell a rule wrote this tick already reads through StateCondition on the same tick\u0027s sweep.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorldPlacementResponseConditionFieldCondition"
+        },
+        {
+          "$ref": "#/$defs/WorldPlacementResponseConditionStateCondition"
+        }
+      ],
+      "title": "WorldPlacementResponseCondition"
+    },
+    "WorldPortalGate": {
+      "description": "A door\u0027s gate (Gate): a row keyed by body index whose cell at a traveller\u0027s index decides whether that traveller passes. The author\u0027s rules write the row: a door bound to its opener writes the opener\u0027s cell, a party door writes each member\u0027s, so who may pass is a rule of play, never an engine choice.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "state": {
+          "description": "The keyed numeric row read, one cell per body index (key \u00220\u0022, \u00221\u0022, \u2026).",
+          "type": "string"
+        },
+        "comparison": {
+          "$ref": "#/$defs/ExpressionComparisonNonNullable",
+          "description": "The comparison the traveller\u0027s cell must satisfy."
+        },
+        "value": {
+          "description": "The literal the cell is compared against; a cell the row does not hold reads as no value and refuses.",
+          "type": "number"
+        }
+      },
+      "required": [
+        "state",
+        "comparison",
+        "value"
+      ],
+      "additionalProperties": false,
+      "title": "WorldPortalGate"
+    },
     "WorldPlacementPortal": {
       "description": "A WorldPlacementFace\u0027s portal facet \u2014 the authored decision that a face is a door: which WorldDestination row it leads to, and under what travel scope. Absent (the default) means the face is not a door \u2014 nothing here fires anything by itself; turning the decision into a diegetic step-into trigger is WorldInstanceHost\u0027s job (its per-tick portal scan, ScanInstancePortals, then ResolveAndEnqueueCoalescedTransfers), never this facet\u0027s. Durability, scope, and process-local instance selection live on the named WorldDestination row this facet points at, not here \u2014 a facet composes one destination selection with a travel scope, never re-authors how that destination is minted. Extensible deliberately (an optional-member record, the same widen-without-moving-existing-members shape WorldLatticeMedium\u0027s own remarks describe): a future fact-gate field (an authored predicate a traveler must satisfy to pass) adds cleanly as a new trailing member.",
       "type": [
@@ -15960,6 +16088,16 @@
             "integer",
             "null"
           ],
+          "default": null
+        },
+        "open": {
+          "$ref": "#/$defs/WorldPlacementResponseCondition",
+          "description": "The state condition (StateCondition, the condition a placement\u0027s respond reads) under which the door is open, read each tick the authority scans its doors; null for a door always open. A closed door fires nothing: a body that walks into it meets the frame as though no door hung there, and a body standing in it when it closes stays on the side it is on.",
+          "default": null
+        },
+        "gate": {
+          "$ref": "#/$defs/WorldPortalGate",
+          "description": "Who may pass: a condition on a row keyed by body index, read at the traveller\u0027s own index (Admits); null admits every traveller the destination admits. A body the gate refuses walks through the frame without crossing. The destination\u0027s admission still judges every body the gate lets in.",
           "default": null
         }
       },
@@ -16170,88 +16308,7 @@
       "additionalProperties": false,
       "title": "WorldPlacementContribution"
     },
-    "WorldPlacementResponseConditionFieldCondition": {
-      "description": "The original lattice-field condition, unchanged from before this union existed: the named field read at the placement\u0027s own coupled cell, compared against a literal or another row\u0027s slot cell.",
-      "properties": {
-        "$type": {
-          "const": "field"
-        },
-        "field": {
-          "description": "The field read at the cell.",
-          "type": "string"
-        },
-        "comparison": {
-          "$ref": "#/$defs/ExpressionComparisonNonNullable",
-          "description": "The comparison."
-        },
-        "value": {
-          "description": "The scalar compared against (literal or state-row reference) \u2014 the same WorldLatticeScalar grammar a fields.reactions Transform/Expose condition already uses.",
-          "title": "WorldLatticeScalar"
-        }
-      },
-      "required": [
-        "field",
-        "comparison",
-        "value"
-      ],
-      "additionalProperties": false,
-      "title": "WorldPlacementResponseConditionFieldCondition"
-    },
-    "WorldPlacementResponseConditionStateCondition": {
-      "description": "A state-cell condition: compares State\u0027s cell (its slot cell when Key is absent, else the cell at Key) against Value, or \u2014 when ComparandState is authored instead \u2014 against another declared row\u0027s cell, read live at the same evaluation. Exactly one of Value and ComparandState may be present, the same one-comparand rule CompareState already enforces for a rule\u0027s own gate \u2014 this facet reuses that field convention rather than inventing a second reading of \u0022compare a state cell.\u0022 Independent of the placement\u0027s position, and of whether the document declares a fields section at all.",
-      "properties": {
-        "$type": {
-          "const": "state"
-        },
-        "state": {
-          "description": "The state row compared \u2014 any declared state.world row of a numeric kind (never Text).",
-          "type": "string"
-        },
-        "comparison": {
-          "$ref": "#/$defs/ExpressionComparisonNonNullable",
-          "description": "The comparison."
-        },
-        "value": {
-          "description": "The literal comparand, or null when ComparandState spells the comparand instead.",
-          "type": [
-            "number",
-            "null"
-          ],
-          "default": null
-        },
-        "key": {
-          "description": "The cell inside State, or null for its slot cell. Refused when State is keyed and this is absent, or unkeyed and this is present.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "comparandState": {
-          "description": "Another declared state.world row, read live and compared instead of Value. Must share State\u0027s cell kind (refused by name otherwise).",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        },
-        "comparandKey": {
-          "description": "The cell inside ComparandState, on the same terms as Key. Refused when ComparandState is absent.",
-          "type": [
-            "string",
-            "null"
-          ],
-          "default": null
-        }
-      },
-      "required": [
-        "state",
-        "comparison"
-      ],
-      "additionalProperties": false,
-      "title": "WorldPlacementResponseConditionStateCondition"
-    },
-    "WorldPlacementResponseCondition": {
+    "WorldPlacementResponseConditionNonNullable": {
       "description": "The closed union a response entry\u0027s When speaks. Both arms evaluate against the SAME per-tick document the rule frame folds a rule\u0027s writes into before this sweep runs (Server.WorldTick.SweepPlacementResponses runs after EvaluateWorldRules\u0027 own end-of-tick fold), so a cell a rule wrote this tick already reads through StateCondition on the same tick\u0027s sweep.",
       "type": "object",
       "required": [
@@ -16275,7 +16332,7 @@
       ],
       "properties": {
         "when": {
-          "$ref": "#/$defs/WorldPlacementResponseCondition",
+          "$ref": "#/$defs/WorldPlacementResponseConditionNonNullable",
           "description": "The condition tested every sweep \u2014 a lattice-field read or a state-cell read."
         },
         "prototypeId": {

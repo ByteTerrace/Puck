@@ -195,6 +195,10 @@ public sealed class WorldInstance : IDisposable {
     /// <see cref="WorldInstanceHost.TryRetire"/> starts a brand-new instance with a brand-new latch rather than
     /// inheriting a departed instance's occupancy, exactly like every other per-instance table here.</summary>
     public WorldPortalOccupancy PortalOccupancy { get; } = new();
+    /// <summary>Gets the closures the boundary scan last wrote (the population's <see cref="WorldPortalClosures"/>), which
+    /// the screen sessions settled right after the scan, on the same thread, read; <see langword="null"/> before the
+    /// first scan.</summary>
+    public WorldPortalClosures? PortalClosures { get; internal set; }
     /// <summary>Called with this row's own completed tick count after every step — a console wait gate's tick clock
     /// on the desktop, a no-op for a row nothing is waiting on.</summary>
     public Action<ulong> PublishTick { get; set; } = static _ => { };

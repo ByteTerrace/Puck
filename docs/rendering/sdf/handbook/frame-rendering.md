@@ -347,7 +347,7 @@ views and screens one frame updated over the same window.
 
 ## What each pass costs
 
-The passes scale with different things. The bake's two kernels are no pass of
+The passes scale with different things. The bake's kernels are no pass of
 the frame: they run as the residency's background GPU work, by each job's
 measured timestamps, and only while a bake is pending ([the bake](#the-bake)).
 Background work takes the share of the GPU's time the frame's own work leaves
@@ -368,14 +368,20 @@ background job whole before the frame submitted after it, so the jobs queued
 ahead of one frame together fit one frame's allowance: each take is handed what
 is left of `SdfGpuWorkBudget.FrameAllowanceSeconds` after the charged jobs
 still in flight on the queue, whichever residency's service submitted them
-(`SdfGpuWorkBudget.Allowance`, an `SdfGpuWorkAllowance`), and while work is
+(`SdfGpuWorkBudget.AllowanceOf`, an `SdfGpuWorkAllowance`), and while work is
 queued a client takes no job priced past it, deciding before it takes
 anything. A client whose job waits for room keeps its turn in its service, so
 the bake's batches, cut to whatever is left, do not starve the irradiance
 volume's queries, which the coordinator cuts to the whole allowance. A job with
 nothing queued ahead of it runs whatever its price, so a
 bake lattice larger than the allowance (a lattice is never split) still runs,
-alone. Jobs are cut at their kind's measured rate (`SdfGpuWorkRate`): the
+alone. The first service whose job does not fit what is left holds the
+presentation's budget (`SdfGpuWorkBudget.Hold`, `holds:` and `holding:` on
+the `work-budget` line): every other budgeted job waits, so the queue drains
+for it, and while the frame is over its period (`over-period:yes`) the credit
+also banks the job's price at the share's rate before it runs. Another
+residency's busy queue or frames that stay over their period so delay a large
+lattice, never strand it, and the bakes settle. Jobs are cut at their kind's measured rate (`SdfGpuWorkRate`): the
 irradiance volume's traces and relights, and the bake's batches, whose rate
 follows the mean because a batch mixes groups whose evaluations differ in
 cost. The `work-budget` line prints what is queued (`queued:`), and the

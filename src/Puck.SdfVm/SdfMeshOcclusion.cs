@@ -222,8 +222,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // its visibility history, so a static and a dynamic staging of one list do not erase each other's. A pass staged with a share of `slices` (a
     // distant map redraw spread over several frames) keeps only the draws whose index leaves that share's remainder, so the
     // shares of one draw list draw each of its draws exactly once. The kernel reads the count and the share from eight bits
-    // each of the controls' fourth word (MaxSlices).
-    public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, bool splitExit = false, bool skipsDepth = false, bool skipsExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default, SdfMeshMotion motion = SdfMeshMotion.Any, int slice = 0, int slices = 1, long tag = 0L) {
+    // each of the controls' fourth word (MaxSlices). The audience is the view audience whose draws the pass may select
+    // besides the neutral ones (SdfMeshAudience): the one door a view's disclosure reaches its selection through, so it
+    // has no default; a cascade passes its residency's caster audience (SdfWorldShadows.Decide).
+    public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, byte audience, bool splitExit = false, bool skipsDepth = false, bool skipsExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default, SdfMeshMotion motion = SdfMeshMotion.Any, int slice = 0, int slices = 1, long tag = 0L) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: slices, other: 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: slices, other: MaxSlices);
         ArgumentOutOfRangeException.ThrowIfNegative(value: slice);
@@ -254,7 +256,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         words[1] = m_levels;
         words[2] = (occlude ? 1u : 0u) | (splitExit ? 2u : 0u) | (m_argumentPhases << 2);
         words[3] = (glass ? 1u : 0u) | (skipsDepth ? 2u : 0u) | (skipsExit ? 4u : 0u) | (m_marking ? 8u : 0u) | ((motion == SdfMeshMotion.Static) ? 16u : 0u) | ((motion == SdfMeshMotion.Dynamic) ? 32u : 0u) | (m_optical ? 64u : 0u) |
-            (NearChain(occlude: occlude) ? 128u : 0u) | (((uint)(slices - 1)) << 8) | (((uint)slice) << 16);
+            (NearChain(occlude: occlude) ? 128u : 0u) | (((uint)(slices - 1)) << 8) | (((uint)slice) << 16) | (((uint)audience) << SdfMeshAudience.ControlShift);
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
         EnsureBuffers(depth: occlude, draws: count);

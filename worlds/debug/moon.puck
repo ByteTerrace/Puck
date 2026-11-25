@@ -98,6 +98,13 @@ adjacencies [
   }
 ]
 
+// How long this world grants a pairing with the valley's moon door before its socket closes on its own.
+let socketLease = 60s
+
+// The beacon's mast height over the pad and its lamp's luminous power while lit.
+let beaconHeight = 4
+let beaconLumens = 40000
+
 // The moon holds more than a traveller's own body: a ship and its pilot arrive as two.
 bodies {
   capacity: 16
@@ -185,6 +192,59 @@ placements {
     solid
   }
 
+  // The socket the valley's moon door pairs with (moon-door.puck, the painting wing's moon painting), on the pad's east
+  // rim facing west across the pad: a door this world owns, open only while it grants the valley's offer, its stone
+  // leaf standing aside while it does. Its glass shows the painting wing and leads back before the painting.
+  placement "moon-socket" {
+    prototype: "moon-socket"
+    position [(padRadius - 2), (moonRadius + padTop), 0]
+    yawDegrees: 90
+    faceSources [
+      {
+        face: "glass"
+        filter: linear
+        portal {
+          arrival: "mapped"
+          counterpart: "painting-moon/glass"
+          destination: "debug"
+          travel: "body"
+          open: state(state: moonSocket, comparison: Equal, value: 1)
+        }
+        source {
+          $type: "session"
+          destination: "debug"
+          fallback: "#D8D2C6"
+          projection: window
+        }
+      }
+    ]
+  }
+
+  placement "moon-socket-leaf" {
+    prototype: "moon-socket-leaf-shut"
+    position [(padRadius - 2), (moonRadius + padTop), 0]
+    yawDegrees: 90
+    respond [
+      {
+        when: state(state: moonSocket, comparison: Equal, value: 1)
+        prototypeId: "moon-socket-leaf-open"
+      }
+    ]
+  }
+
+  // The beacon on the pad's far rim, behind the arrival frame: a mast whose lamp burns while the valley's switch is on.
+  placement "moon-beacon" {
+    prototype: "moon-beacon-dark"
+    position [0, (moonRadius + padTop), (0 - padRadius)]
+    solid
+    respond [
+      {
+        when: state(state: moonBeacon, comparison: Equal, value: 1)
+        prototypeId: "moon-beacon-lit"
+      }
+    ]
+  }
+
   // The moon painting's counterpart, facing -Z like it, so a crossing turns the traveller about. Its glass is the way
   // back: walking +Z into it arrives out of the painting walking -Z, into the wing.
   placement "arrival" {
@@ -241,6 +301,51 @@ prototypes {
     }
   }
 
+  for lamp in [{ name: "dark", glow: 0 }, { name: "lit", glow: 2500 }] {
+    prototype $"moon-beacon-{lamp.name}" {
+      document {
+        name: $"moon-beacon-{lamp.name}"
+        schema: "puck.creation.v1"
+        palette [
+          { color: "#5A5E66", roughness: 0.5, specular: 0.3 }
+          { color: "#FFB347", roughness: 0.3, emissive: lamp.glow }
+        ]
+        shape Cylinder "mast" {
+          material: 0
+          position [0, (beaconHeight / 2), 0]
+          scale [0.12, (beaconHeight / 2), 0.12]
+        }
+        shape Sphere "lamp" {
+          material: 1
+          position [0, beaconHeight, 0]
+          scale [0.45, 0.45, 0.45]
+        }
+      }
+    }
+  }
+
+  // The socket: a bronze frame, and its stone leaf, which fills the frame while this world has not granted the pairing
+  // and stands open beside it while it has.
+  prototype "moon-socket" {
+    document {
+      arrivalFrame(color: "#8C6A3F", roughness: 0.4, specular: 0.4, post: 0.12)
+    }
+  }
+  for leaf in [{ name: "shut", x: 0, z: -0.08, sx: 1.1, sz: 0.03 }, { name: "open", x: 1.28, z: -0.62, sx: 0.03, sz: 0.55 }] {
+    prototype $"moon-socket-leaf-{leaf.name}" {
+      document {
+        name: $"moon-socket-leaf-{leaf.name}"
+        palette [{ color: "#9A958C", roughness: 0.85, specular: 0.05 }]
+        schema: "puck.creation.v1"
+        shape Box "leaf" {
+          material: 0
+          position [leaf.x, 1.3, leaf.z]
+          scale [leaf.sx, 1.4, leaf.sz]
+        }
+      }
+    }
+  }
+
   // The way back: the shared arrival frame (painting-kit.puck) in pale stone.
   prototype "frame" {
     document {
@@ -249,7 +354,10 @@ prototypes {
   }
 }
 
-// The day the two worlds share (moon-frame.puck): this world's own row of it, from the same start at the same rate.
+// The day the two worlds share (moon-frame.puck): the debug world's own `day`, which this row follows. The debug
+// world owns the hour; this authority adopts it from that world's delivery whenever the two read apart, so writing
+// `day` there moves the moon's sun too, and writing it here is refused. Between adoptions the row advances at the
+// shared rate, as the debug world's does, so the two read alike every tick.
 timeline {
   clocks [{ name: day, state: day, spanSeconds: 24h }]
 }
@@ -261,8 +369,47 @@ state {
       kind: "Fixed"
       value: $"{sharedDayStart / 24}"
       advance { perSecondNumerator: 1, perSecondDenominator: sharedDaySeconds }
+      follows { destination: "debug" }
     }
+    // The beacon switch beside the moon painting in the debug world (moon-beacon.puck): the debug world owns it, this
+    // row follows it, and the rules below decide what it does here.
+    { name: "moonBeacon", kind: "Int", value: 0, min: 0, max: 1, follows { destination: "debug" } }
+    // The beacon's light, in lumens, which this world's own rules write from the switch's state.
+    { name: "beaconPower", kind: "Fixed", value: "0" }
+    // The valley's moon door (moon-door.puck): its offer, which this row follows, and this world's answer, the socket on
+    // the pad's east rim, open while this world grants the offer and for no longer than its own lease.
+    { name: "doorOffer", kind: "Int", value: 0, min: 0, max: 1, follows { destination: "debug", row: "moonDoorOffer" } }
+    { name: "moonSocket", kind: "Int", value: 0, min: 0, max: 1 }
+    { name: "moonSocketUntil", kind: "Int", value: 0 }
+    // This world's own say over visitors through the socket: while it reads 1, no offer is granted.
+    { name: "socketRefuses", kind: "Int", value: 0, min: 0, max: 1 }
   ]
+}
+
+// The socket answers the valley's offer by this world's rules: granted unless this world refuses, for a lease it counts
+// itself, so a socket whose source went quiet frees itself.
+rule "socket-grants" {
+  when doorOffer == 1 and socketRefuses == 0
+  mode: Edge
+  moonSocket = 1
+  schedule moonSocketUntil in socketLease
+}
+rule "socket-closes" {
+  when moonSocket == 1 and (doorOffer == 0 or socketRefuses == 1 or $tick >= moonSocketUntil)
+  mode: Edge
+  moonSocket = 0
+}
+
+// What the valley's switch does on the moon is this world's to decide: the pad's beacon burns while it is on.
+rule "beacon-lit" {
+  when moonBeacon == 1
+  mode: Edge
+  beaconPower = beaconLumens
+}
+rule "beacon-dark" {
+  when moonBeacon == 0
+  mode: Edge
+  beaconPower = 0
 }
 
 // Vacuum: a hard sun over a black sky of stars, and no air between the eye and the far crater walls. The sun is the
@@ -280,6 +427,7 @@ render {
         shadow: always,
         angularRadius: 0.0046
       )
+      point(name: "beacon", position: [0, (moonRadius + padTop + beaconHeight), (0 - padRadius)], temperature: 2200K, power: "state.beaconPower")
     ]
     clock: day
     keys: map(range(0, 24), h => {

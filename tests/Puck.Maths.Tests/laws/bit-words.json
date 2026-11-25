@@ -1,0 +1,51 @@
+[
+  {
+    "Id": "bit-words.members-bit-oracle",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.BitWords", "Name": "Bit" },
+      { "Type": "Puck.Maths.BitWords", "Name": "Contains" },
+      { "Type": "Puck.Maths.BitWords", "Name": "Count" },
+      { "Type": "Puck.Maths.BitWords", "Name": "Span" },
+      { "Type": "Puck.Maths.BitWords", "Name": "Word32" },
+      { "Type": "Puck.Maths.BitWords", "Name": "Members" },
+      { "Type": "Puck.Maths.BitWords+MaskMembers", "Name": "MoveNext" },
+      { "Type": "Puck.Maths.BitWords+MaskMembers", "Name": "GetEnumerator" },
+      { "Type": "Puck.Maths.BitWords+MaskMembers", "Name": "Current" },
+      { "Type": "Puck.Maths.BitWords+WordMembers", "Name": "MoveNext" },
+      { "Type": "Puck.Maths.BitWords+WordMembers", "Name": "GetEnumerator" },
+      { "Type": "Puck.Maths.BitWords+WordMembers", "Name": "Current" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "BitWords over a random 128-bit mask and a sparse mask built from it, each read as a UInt128 and as the same bits in two 64-bit words: the members both enumerators visit, Count, Span, Contains from -1 through 128, Bit and every Word32.",
+        "Against": "A bit-by-bit test of the two raw words by shift and mask, which calls no BitWords member: the ascending list of set positions, its length, one past its last entry, and each 32-bit quarter of the raw words.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  },
+  {
+    "Id": "bit-words.set-and-refusals",
+    "Tier": "Default",
+    "Members": [
+      { "Type": "Puck.Maths.BitWords", "Name": "Add" },
+      { "Type": "Puck.Maths.BitWords", "Name": "Remove" },
+      { "Type": "Puck.Maths.BitWords", "Name": "WordsFor" }
+    ],
+    "Legs": [
+      {
+        "Kind": "Classical",
+        "Flavor": "None",
+        "Subject": "Add and Remove over three words, Contains past the span and below zero, WordsFor at the word boundaries, and the refusals of Bit, Word32 and WordsFor outside their ranges.",
+        "Against": "Every seventh position set by construction and the known count after one removal; the word counts of the ceiling division by 64 written out.",
+        "Shared": "",
+        "Citation": "",
+        "Absolute": ""
+      }
+    ]
+  }
+]

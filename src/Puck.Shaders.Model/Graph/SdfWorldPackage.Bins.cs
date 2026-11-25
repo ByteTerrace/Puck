@@ -33,10 +33,11 @@ public static partial class SdfWorldPackage {
     /// scatter cursor. <c>SdfIsaHlsl</c> generates it as <c>SDF_SHADE_TILE_HEADER_WORDS</c>.</summary>
     public const uint ShadeTileHeaderWords = (3 * ShadeBins);
     /// <summary>The words of one tile's light masks in the shade bins: a bit for each light of the lights table the tile's
-    /// walks visit (four words, one for every 32 lights of the table's capacity), then a bit for each bound screen. The
-    /// filter pass writes them and the binned views kernels walk by them (<c>sdf-views-lights.hlsli</c>).
-    /// <c>SdfIsaHlsl</c> generates it as <c>SDF_SHADE_TILE_LIGHT_WORDS</c>.</summary>
-    public const uint ShadeTileLightWords = 5;
+    /// walks visit (four words, one for every 32 lights of the table's capacity), then a bit for each bound screen (four
+    /// words, one for every 32 screens of <see cref="ScreenSourceCount"/>). The filter pass writes them and the binned
+    /// views kernels walk by them (<c>sdf-views-lights.hlsli</c>). <c>SdfIsaHlsl</c> generates it as
+    /// <c>SDF_SHADE_TILE_LIGHT_WORDS</c>.</summary>
+    public const uint ShadeTileLightWords = 8;
     /// <summary>The words of one pixel's views filter record. <c>SdfIsaHlsl</c> generates it as
     /// <c>SDF_VIEWS_FILTER_WORDS</c>.</summary>
     public const uint ViewsFilterWords = 3;

@@ -28,9 +28,12 @@ public enum SdfKernel {
     ProbeCameraSampleRays,
     /// <summary>The mesh bake's instance mask, selecting one bake group's instances.</summary>
     MeshBakeMask,
-    /// <summary>The mesh bake's field sampler over one group's lattice: the frame's one walk of the SDF program, run
-    /// only while a bake is pending. Full instruction set.</summary>
+    /// <summary>The mesh bake's field sampler over the lattices that ask no gradient: the frame's walk of the SDF
+    /// program, run only while a bake is pending. Full instruction set.</summary>
     MeshBake,
+    /// <summary>The mesh bake's field sampler over the lattices that ask a gradient: the same walk in forward mode, a
+    /// value and its analytic gradient from one interpretation (field/sdf-dual.hlsli).</summary>
+    MeshBakeGradient,
     /// <summary>The pyramid pass: the mesh depth pyramid the surface pass's occlusion reads, from the mesh target.</summary>
     MeshPyramid,
     /// <summary>The surface pass: every pixel's visibility record from the mesh target, screen-space occlusion and the

@@ -1,5 +1,4 @@
 using Puck.SdfVm;
-using Puck.SignedDistance;
 using Puck.Text;
 
 namespace Puck.World.Client;
@@ -24,8 +23,11 @@ public sealed class WorldScreenDecals {
     /// <param name="textAt">The text a screen shows now, by screen index, or <see langword="null"/> for none.</param>
     /// <param name="catalog">The world's resolved font catalog, or <see langword="null"/> while it has none.</param>
     /// <param name="colors">The ink colors bound in the world's state mirror, which a moved binding rebakes.</param>
+    /// <param name="screens">The screen indices that may show text, one past the highest
+    /// (<see cref="WorldPlacementPolicy.ScreenSpan"/>).</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldScreenDecals(Func<int, WorldScreenSource.Text?> textAt, Func<PackedFontAtlasCatalog?> catalog, WorldBakedColors colors) {
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="screens"/> is negative.</exception>
+    public WorldScreenDecals(Func<int, WorldScreenSource.Text?> textAt, Func<PackedFontAtlasCatalog?> catalog, WorldBakedColors colors, int screens) {
         ArgumentNullException.ThrowIfNull(argument: textAt);
         ArgumentNullException.ThrowIfNull(argument: catalog);
         ArgumentNullException.ThrowIfNull(argument: colors);
@@ -34,14 +36,15 @@ public sealed class WorldScreenDecals {
         m_catalog = catalog;
         m_colors = colors;
 
-        for (var index = 0; (index < SdfProgramBuilder.MaxScreenSurfaces); index++) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: screens);
+        for (var index = 0; (index < screens); index++) {
             var screen = index;
 
             m_providers[index] = () => Resolve(index: screen);
         }
     }
 
-    /// <summary>Gets the provider of every engine screen slot, keyed by screen index.</summary>
+    /// <summary>Gets the provider of every screen index that may show text, keyed by screen index.</summary>
     public IReadOnlyDictionary<int, Func<SdfScreenDecalFrame?>> Providers => m_providers;
 
     /// <summary>Rebakes every screen's decal at its next frame: a delivery may have changed its text.</summary>

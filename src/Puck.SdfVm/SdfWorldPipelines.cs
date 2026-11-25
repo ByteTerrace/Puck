@@ -434,7 +434,7 @@ public sealed partial class SdfWorldPipelines : IDisposable {
 
         return ready;
     }
-    private static readonly SdfKernel[] TableKernelSet = [SdfKernel.MeshBakeMask, SdfKernel.MeshBake];
+    private static readonly SdfKernel[] TableKernelSet = [SdfKernel.MeshBakeMask, SdfKernel.MeshBake, SdfKernel.MeshBakeGradient];
     private static bool IsTableKernel(SdfKernel kernel) => (Array.IndexOf(array: TableKernelSet, value: kernel) >= 0);
     internal static async Task WaitAllAsync(IReadOnlyList<Slot?> slots, CancellationToken cancellationToken) {
         List<(string Name, Exception Failure)>? failures = null;

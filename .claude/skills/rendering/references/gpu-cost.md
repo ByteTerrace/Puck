@@ -322,7 +322,7 @@ lanes masked. Control flow that ends at a barrier must be reached by every lane.
   the render extent included, because it ends at the group's barrier
   (`sdfViewsGatherFilter` in [`sdf-views-filter.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-views-filter.hlsli)).
   The bake maps adjacent threads to adjacent lattice samples
-  (the lattice search in [`sdf-mesh-bake.comp.hlsl`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-mesh-bake.comp.hlsl)),
+  (the lattice search in [`sdf-mesh-bake-stage.hlsli`](../../../../src/Puck.SdfVm/Assets/Shaders/Sdf/passes/sdf-mesh-bake-stage.hlsli)),
   so a wave's instance masks and `mapCore` walks agree where the field is
   coherent.
 - **One walk in `mapCore`** ([SKILL](../SKILL.md#editing-kernels)): a second

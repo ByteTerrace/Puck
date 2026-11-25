@@ -104,10 +104,10 @@ public sealed class SdfKernelInterfaces {
     /// softest shadow edge a cascade draws spreads over, which the world's shadows weigh a held layer's lag against
     /// (<c>SdfWorldShadows</c>).</summary>
     public const float MeshShadowFilterTexels = 14f;
-    /// <summary>The first selection mark word in the raster selection's counts, past every portal sight verdict: on a
-    /// marked frame each draw a phase emits a command for ORs its level plus one into two bits, sixteen draws a
-    /// word, the lowest draw in the lowest bits.</summary>
-    public const int MeshMarkBase = 64;
+    /// <summary>The first selection mark word in the raster selection's counts, past every portal sight verdict (one a
+    /// screen) and the vertex words: on a marked frame each draw a phase emits a command for ORs its level plus one into
+    /// two bits, sixteen draws a word, the lowest draw in the lowest bits.</summary>
+    public const int MeshMarkBase = ((MeshSightCountBase + SdfProgramBuilder.MaxScreenSurfaces) + MeshShadowPhases);
     /// <summary>The selection dispatch's groups per row, within both backends' per-axis limit.</summary>
     public const uint MeshSelectionGroupsPerRow = 65535u;
     /// <summary>The raster pass's GPU selection controls: one header, three level-choice rows, ten cull rows and the
@@ -311,7 +311,7 @@ public sealed class SdfKernelInterfaces {
     /// reads the same allocation through a read-only descriptor, matching its declared graph input access. The screen
     /// reduction reads acquired image descriptors and writes its separate cell and whole-image means.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> EnvironmentMembers { get; } = [
-        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: ScreenEmissionMask, type: ShaderValueType.Uint),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: ScreenEmissionMask, type: ShaderValueType.Uint4),
         ShaderWorkCounters.RowMember,
         ShaderWorkCounters.DetailRowMember,
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),

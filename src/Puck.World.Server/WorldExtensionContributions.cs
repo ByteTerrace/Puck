@@ -49,6 +49,14 @@ public static class WorldExtensionContributions {
         contribution: provider,
         key: provider.Type
     );
+    /// <summary>Adds a telemetry sink provider under its <see cref="WorldSiloTelemetryProvider.Type"/>.</summary>
+    /// <param name="registry">The registering extension's registry.</param>
+    /// <param name="provider">The provider.</param>
+    /// <exception cref="PuckExtensionException">Another registration holds the key.</exception>
+    public static void AddTelemetry(this IPuckExtensionRegistry registry, WorldSiloTelemetryProvider provider) => registry.Add(
+        contribution: provider,
+        key: provider.Type
+    );
     /// <summary>Adds a persistence provider under its <see cref="WorldStorageProvider.Type"/>.</summary>
     /// <param name="registry">The registering extension's registry.</param>
     /// <param name="provider">The provider.</param>
@@ -59,7 +67,8 @@ public static class WorldExtensionContributions {
     );
 }
 /// <summary>The built-in world-hosting extension every world host composes: the <c>directory</c> persistence provider,
-/// whose settings hold exactly one nonempty <c>path</c>, and the <c>observation.fixture</c> provider
+/// whose settings hold exactly one nonempty <c>path</c>, the <c>file</c> telemetry sink
+/// (<see cref="WorldFileTelemetrySink"/>), and the <c>observation.fixture</c> provider
 /// (<see cref="WorldFixtureObservationProvider"/>).</summary>
 public sealed class WorldServerExtension : IPuckExtension {
     /// <inheritdoc/>
@@ -69,6 +78,7 @@ public sealed class WorldServerExtension : IPuckExtension {
     public void Register(IPuckExtensionRegistry registry) {
         ArgumentNullException.ThrowIfNull(argument: registry);
         registry.AddOperation(provider: WorldFixtureObservationProvider.Registration);
+        registry.AddTelemetry(provider: WorldFileTelemetrySink.Provider);
         registry.AddStorage(provider: new(
             "directory",
             static settings => {
