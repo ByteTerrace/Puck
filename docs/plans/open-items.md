@@ -880,9 +880,11 @@ steps; this packet holds what is unread and what the plan does not own.
 A consumer build never bakes (AGENTS.md, the bars). The RTX 2060's local run
 of a prerelease player build baked throughout, because the producer had
 stored one tier of each mesh. The replacement is built: the producer fills
-every tier (`SdfMeshCachePolicy.Ladder`), a player's build draws stored tiers
-alone (`SdfMeshCachePolicy.Stored`), and `puck world player` refuses a folder
-whose check boots did not settle with no tier missed.
+every tier (`SdfMeshCachePolicy.Ladder`), a player's build starts from its
+stored tiers and bakes only what they lack, on its play bar
+(`SdfMeshCachePolicy.Stored`, a warm start by the owner's ruling), and `puck
+world player` refuses a folder whose check boots did not settle with no tier
+missed.
 
 - [high] Both backends' fills and all four target checks
   (`rtx2060@1920x1080`, `rtx4070@2560x1440`) have run complete on the RTX

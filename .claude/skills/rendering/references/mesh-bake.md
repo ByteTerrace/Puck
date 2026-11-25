@@ -1643,7 +1643,11 @@ laws exercise that boundary.
   floor: the first detail is the arrival's own step, outside the budget, so
   what it would bake past the store is left to an owed finer tier the budget
   governs, and a warm boot's arrivals do not overrun the region before its
-  bias has measured anything. Live geometry (`Group.Live`): a group that reads
+  bias has measured anything. A first detail of a floor the store brought
+  (`Group.Stored`) that no stored rung answers starts nothing
+  (`StartReplacement`): the run that stored the floor held that tier back or
+  never asked it, so it waits as an owed finer tier, under the hold and the
+  budget. Live geometry (`Group.Live`): a group that reads
   an operand's pose, or one planned again because a sampled field it reads
   published another snapshot. The world makes that geometry as it runs, so no
   cache holds it; it bakes under every policy, has no ladder filled and is

@@ -862,6 +862,12 @@ public sealed partial class SdfMeshPathBake {
             rung.InheritLive(from: old);
             group.Retired = true;
             group = rung;
+        } else if (group.FirstDetail && old.Stored && !group.Live && !Stores(group: group, identity: Identity.Value)) {
+            // A first detail raising a floor the store brought, whose tier no stored rung answers, is no arrival's own
+            // bake: the run that stored the floor held that tier back or never asked it. It is left to the tier
+            // decisions as an owed finer tier, under the hold and the budget, rather than baked outside them.
+            group.Retired = true;
+            return TierStart.None;
         }
         SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.TierStarts);
         group.TakeDemandBox();
