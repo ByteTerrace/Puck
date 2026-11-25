@@ -222,8 +222,27 @@ lanes; structure of arrays for the body step and fact derivation; the audio
 mixer's and the emulators' pixel loops. Each is judged by its count before it
 is built.
 
-**Interval consumers judged.** Physics already reads the box walk: a regional
-evaluator's `TryDistanceBounds` is what contact's clearance proofs read, so
-the broad phase consumes the interval lowering today. Render culling, the far
-product and rules over ranges are not taken: no count yet shows a tile, group
-or rule that an interval would skip.
+## 7. The toolbox, structure by structure
+
+Each structure the sweep weighed, at the hot path where it would pay most:
+used (with its count), already in place, judged not to pay (with the reason),
+or open (with what decides it).
+
+| Structure | Hot path weighed | Verdict |
+|---|---|---|
+| Intervals | The bake's grid lattices | Used (step 2): the moth's samples fall from 66,499,882 to 64,618,835 for 536,331 walks, meshes identical. |
+| Intervals | Physics broad phase and sweeps | Already in place: the contact solver reads the field's enclosure over a body's box (`FixedFieldContactSolver`'s `IFieldBounds`, joined with the moving solids' through `FieldBoundsUnion`), and a regional evaluator's box queries cost what stands near the box. |
+| Intervals | Render culling of empty or solid tiles | Judged not to pay: the frame draws baked meshes, whose host boxes already cull per draw (`SdfMeshCull`), and no frame pass walks the field. |
+| Intervals | Residency and far-product planning | Open: a far product holds a settled residency's static draws, already boxed; an interval pays only for a group whose box overstates its content, which no count shows yet. |
+| Intervals | Rules over ranges | Open: no rule the state system runs evaluates a field over a range today. |
+| Duals | Contact gradients | Used (step 5): a debug-world boot reads 4,338 gradients as 4,338 walks and no taps, where it read 26,028 taps. |
+| Duals | The bake's crossings | Open, first in step 2's list: a dual round per crossing in place of two value rounds. |
+| Duals and jets | Wide normals, physics solves, motion velocities, rig Jacobians, curvature | Open (step 5's list), each by the count of its differencing. |
+| Peano and successor arithmetic | Forward differencing along lattice rows | Judged not to pay: a lattice sample walks the whole program, whose terms are not polynomials of the sample's index; differencing would hold only for a single affine shape. |
+| Space-filling orders | Probe, bake-block and dispatch order | Already in place where locality pays: the irradiance worker orders probes by Morton cell within a band (`SdfMeshIrradiance.CompareSpatial`, over `BinaryIntegerFunctions`' interleave), and `HilbertCurve` serves the state system. The bounds' blocks are classified by halving boxes, which is already local; a block lattice's order inside one dispatch does not move a count. A Peano curve is not added: no consumer here. |
+| Complex numbers and rotors | Yaw, spawn rings, twist, oscillators | Already in place for the synth (`VoiceSynth`'s `FixedComplex` rotor, one multiply a sample). Judged not to pay for a body's yaw (`WorldBody.Step`, one `SinCos` a step) or a spawn ring (`WorldPopulation.Step`, one a spawn): one fixed-point `SinCos` per event, and storing yaw as a unit complex would change the state's format for no counted gain. A twist's per-sample `SinCos` in the field (`WarpPoint`) varies with the point, so no successive angle steps it. |
+| Numeration and quasi-periodic sequences | Which rated views, captures and bodies update on which frame | Open: `SdfUpdateRates` holds a tier's items to one period; whether they share a frame or spread over it is printed (`world.rates`), and a Beatty or Sturmian phase per item pays only where a tier's items bunch, which a reading shows. |
+| Rationals and continued fractions | Tick-to-frame ratios | Already in place: the fixed-step pump accumulates whole engine ticks (`FixedStepPump`), and the machines pace by `RationalRateAccumulator`. |
+| Finite fields and transforms | Many normalizations, transfer redundancy, convolutions | Judged not to pay today: no engine loop normalizes many vectors at once (`BatchInverseKernel` pays from tens of inverses in one batch); `ReedSolomon` already backs the asset store; the mixer's filters are short recursive ones, so an NTT or FFT convolution has no long kernel to replace. |
+| Exact geometry | Quadratic integers, hexagonal coordinates | Already in place in the state system (`HexagonalCoordinate` boards); no field or physics path carries a √2 or √3 relation it re-corrects. |
+| Wide lanes and structure of arrays | Items 6 to 8: a wide fixed-point lowering, the body step's and fact derivation's layouts, the mixer's and emulators' loops | Open. The mixer accumulates in integers (`AudioMixer`'s `Span<int>` planes), so its lanes are `Vector<int>`, not `TensorPrimitives` over floats. The wide fixed-point lowering is one more carrier of section 5's emitter. |
