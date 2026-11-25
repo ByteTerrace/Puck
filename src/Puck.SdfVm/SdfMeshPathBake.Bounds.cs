@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Numerics;
 using Puck.Maths;
 using Puck.SignedDistance;
@@ -6,26 +7,28 @@ using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
 
 namespace Puck.SdfVm;
 
-// The final lattice's blocks the surface cannot reach, proved before any slab is sampled. The lattice is cut into blocks
-// of BoundBlock samples a side (the last block of an axis ends on the lattice's last plane, overlapping its neighbour),
-// and the group's own field (SdfMeshAudit.Field, the render reading the audit measures a mesh against) encloses every
-// value its fixed-point evaluator answers over a box of blocks (SdfFieldEvaluator.TryDistanceBounds), splitting the box
-// where the enclosure straddles the band, down to one block. A block whose enclosure lies wholly past the band, outside or
-// inside, is never sampled: the host writes each of its samples the enclosure's nearer end, which keeps the sample's sign
-// and holds it at least the band from zero, so no reader of the lattice (the crossed cells and their ring, a refinement's
-// sheet and gap tests, the crossings and their gradients) takes it for a sample near the surface. Every other block is
-// sampled as a block slab (SdfMeshBakeRequest.Blocks).
+// The grid lattices' blocks the surface cannot reach, proved before the lattice is sampled: a coarse search's lattice
+// (Refine) and a final lattice (its slabs). The lattice is cut into blocks of BoundBlock samples a side (the last block
+// of an axis ends on the lattice's last sample, overlapping its neighbour), and the group's own field (SdfMeshAudit.Field,
+// the render reading the audit measures a mesh against) encloses every value its fixed-point evaluator answers over a box
+// of blocks (SdfFieldEvaluator.TryDistanceBounds), splitting the box where the enclosure straddles the band, down to one
+// block. A block whose enclosure lies wholly past the band, outside or inside, is never sampled: the host writes each of
+// its samples the enclosure's nearer end, which keeps the sample's sign and holds it at least the band from zero. Every
+// other block is sampled as a block lattice (SdfMeshBakeRequest.Blocks).
 //
-// Invariant: no block holding a sample within the band of the surface is skipped. Enforced by the one function that
-// classifies a box (Classify), whose only skip is an enclosure that excludes [-band, band]; the enclosure is certified
-// over the box padded past every sample position the kernel computes in float. Where it stops: the enclosure is of the CPU
+// Invariant: no lattice cell with a corner in a skipped block holds a zero, and every skipped sample reads at least the
+// band from zero with its true sign. Every reader of a lattice judges a sample near the surface only by a small value or
+// a sign change across a cell (Refine's narrowing, SdfSampledLattice's crossed cells, rings, sheet and gap tests), so it
+// judges the lattice exactly as it judges the fully sampled one. Enforced by the one function that classifies a box
+// (Classify): its only skip is an enclosure that excludes [-band, band] over the block's samples widened by one cell on
+// every side and padded past every float position the kernel computes. Where it stops: the enclosure is of the CPU
 // evaluator's field, so a group whose GPU field the CPU cannot read (glyph thickening, a sampled snapshot, slot lanes, an
 // op the render reading refuses) samples every block, and the band absorbs the two readers' rounding apart.
 public sealed partial class SdfMeshPathBake {
     // A block's edge, in samples.
-    private const int BoundBlock = 8;
-    // A final lattice of fewer samples is sampled whole: its bounds would cost more walks than the samples they save.
-    private const int BoundLeastSamples = (8 * BoundBlock * BoundBlock * BoundBlock);
+    private const int BoundBlock = 4;
+    // A lattice of fewer samples is sampled whole: its bounds would cost more walks than the samples they save.
+    private const int BoundLeastSamples = 4096;
     // The band, in cell diagonals, a sampled block's samples may lie within of the surface: the crossed cells' corners lie
     // within one diagonal of a zero, and their ring, sheet and gap tests read one more cell about them.
     private const float BoundBandDiagonals = 3f;
@@ -35,9 +38,9 @@ public sealed partial class SdfMeshPathBake {
     // A group's CPU field, or none where it cannot be read, as CpuField built it.
     internal sealed record CpuFieldHold(SdfFieldEvaluator? Evaluator);
 
-    // The final lattice's blocks and what each takes: NaN for a sampled block, else the value every sample of it takes.
-    private sealed class FinalBlocks {
-        public FinalBlocks((int X, int Y, int Z) dims) {
+    // A grid lattice's blocks and what each takes: NaN for a sampled block, else the value every sample of it takes.
+    internal sealed class LatticeBlocks {
+        public LatticeBlocks((int X, int Y, int Z) dims) {
             Size = (Math.Min(val1: BoundBlock, val2: dims.X), Math.Min(val1: BoundBlock, val2: dims.Y), Math.Min(val1: BoundBlock, val2: dims.Z));
             Count = (Blocks(samples: dims.X), Blocks(samples: dims.Y), Blocks(samples: dims.Z));
             Dims = dims;
@@ -49,6 +52,9 @@ public sealed partial class SdfMeshPathBake {
         public (int X, int Y, int Z) Count { get; }
         public float[] Fill { get; }
         public int Sampled { get; set; }
+        public int PerBlock => ((Size.X * Size.Y) * Size.Z);
+        // The samples no block samples, counted once however many blocks overlap them.
+        public long Skipped => Math.Max(val1: 0L, val2: ((((long)Dims.X * Dims.Y) * Dims.Z) - ((long)Sampled * PerBlock)));
 
         private static int Blocks(int samples) => ((samples + BoundBlock - 1) / BoundBlock);
 
@@ -56,6 +62,12 @@ public sealed partial class SdfMeshPathBake {
 
         // A block's low corner along an axis: its multiple of the block edge, the last pulled back to end on the last sample.
         public static int Corner(int block, int size, int samples) => Math.Min(val1: (block * BoundBlock), val2: (samples - size));
+
+        public Vector3 CornerOf(int x, int y, int z) => new(
+            x: Corner(block: x, samples: Dims.X, size: Size.X),
+            y: Corner(block: y, samples: Dims.Y, size: Size.Y),
+            z: Corner(block: z, samples: Dims.Z, size: Size.Z)
+        );
 
         public int SampledIn(int layer) {
             var sampled = 0;
@@ -67,22 +79,92 @@ public sealed partial class SdfMeshPathBake {
             }
             return sampled;
         }
+
+        // The block lattice of `lattice` sampling the sampled blocks of layers [first, end), or of every layer.
+        public SdfMeshBakeRequest Request(in SdfMeshBakeRequest lattice, int first, int end) {
+            var rows = new Vector4[Enumerable.Range(start: first, count: (end - first)).Sum(selector: SampledIn)];
+            var at = 0;
+
+            for (var z = first; (z < end); z++) {
+                for (var y = 0; (y < Count.Y); y++) {
+                    for (var x = 0; (x < Count.X); x++) {
+                        if (float.IsNaN(f: Fill[Index(x: x, y: y, z: z)])) { rows[at++] = new Vector4(value: CornerOf(x: x, y: y, z: z), w: 0f); }
+                    }
+                }
+            }
+
+            return lattice with { Dims = (Size.X, Size.Y, (Size.Z * rows.Length)), Blocks = rows, BlockFill = this };
+        }
+
+        // Writes a block lattice's answer into the whole lattice's values (and materials, when given): first the skipped
+        // blocks of layers [first, end), each sample its block's fill and material zero, then every sampled block's samples
+        // over them, so a sample two blocks share takes its measure.
+        public void Expand(in SdfMeshBakeRequest request, ReadOnlySpan<int> words, int first, int end, Span<float> values, Span<int> materials) {
+            var (dx, dy, dz) = Dims;
+
+            for (var bz = first; (bz < end); bz++) {
+                var cz = Corner(block: bz, samples: dz, size: Size.Z);
+
+                for (var by = 0; (by < Count.Y); by++) {
+                    var cy = Corner(block: by, samples: dy, size: Size.Y);
+
+                    for (var bx = 0; (bx < Count.X); bx++) {
+                        var fill = Fill[Index(x: bx, y: by, z: bz)];
+
+                        if (float.IsNaN(f: fill)) { continue; }
+
+                        var cx = Corner(block: bx, samples: dx, size: Size.X);
+
+                        for (var z = 0; (z < Size.Z); z++) {
+                            for (var y = 0; (y < Size.Y); y++) {
+                                var row = (cx + (dx * ((cy + y) + (dy * (cz + z)))));
+
+                                values.Slice(start: row, length: Size.X).Fill(value: fill);
+                                if (!materials.IsEmpty) { materials.Slice(start: row, length: Size.X).Clear(); }
+                            }
+                        }
+                    }
+                }
+            }
+
+            var count = request.Samples;
+            var corners = request.Blocks.Span;
+
+            for (var local = 0; (local < count); local++) {
+                var (block, x, y, z) = request.BlockSample(local: local);
+                var corner = corners[block];
+                var index = (((int)corner.X + x) + (dx * (((int)corner.Y + y) + (dy * ((int)corner.Z + z)))));
+
+                values[index] = BitConverter.Int32BitsToSingle(value: words[local]);
+                if (!materials.IsEmpty) { materials[index] = words[count + local]; }
+            }
+        }
     }
 
     // Whether a group's GPU field is one its CPU field reads, so its bounds may stand in for samples.
     private static bool Boundable(Group group) => ((group.GlyphCell <= 0f) && !group.Geometry.ContainsGlyph && (group.SampledSnapshots.Length == 0));
 
-    // In the take, under the gate: hands a group's final lattice to the pool to be bounded before its first slab, once.
-    // True when the group is held by that job (or retired), so the take passes it by.
-    private bool QueueBounds(Group group, FinalLattice final) {
-        final.Bounded = true;
-        if ((final.Lattice.Samples < BoundLeastSamples) || !Boundable(group: group) || (m_program is not { } program)) { return false; }
+    // In the take, under the gate: hands a group's grid lattice to the pool to be bounded before it is sampled, once: a
+    // coarse search's lattice, or a final lattice before its first slab. True when the group is held by that job (or
+    // retired), so the take passes it by.
+    private bool QueueBounds(Group group, in SdfMeshBakeRequest next) {
+        var final = ((next.Slab >= 0) ? group.Final : null);
+
+        if (final is not null) { final.Bounded = true; }
+
+        var lattice = (final?.Lattice ?? next);
+
+        if ((lattice.Samples < BoundLeastSamples) || !Boundable(group: group) || (m_program is not { } program)) {
+            if (final is null) { group.Next = (next with { Bounded = true }); }
+            return false;
+        }
         if (!group.QueueWork()) { return true; }
 
         var field = Volatile.Read(location: ref m_field);
+        var request = next;
 
         group.Contouring = true;
-        Enqueue(group: group, urgent: true, work: () => Bound(field: field, final: final, group: group, program: program));
+        Enqueue(group: group, urgent: true, work: () => Bound(field: field, final: final, group: group, program: program, request: request));
         return true;
     }
 
@@ -123,22 +205,13 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
-    // Encloses the field over a box, padded; false where the evaluator refuses the box or answers it unbounded.
-    private static bool TryBounds(SdfFieldEvaluator evaluator, Vector3 low, Vector3 high, Vector3 pad, out float lower, out float upper) {
-        if (evaluator.TryDistanceBounds(lower: Fixed(point: (low - pad)), upper: Fixed(point: (high + pad)), distance: out var bounds) && !bounds.IsUnbounded) {
-            (lower, upper) = (((float)((double)bounds.Lower)), ((float)((double)bounds.Upper)));
-            return true;
-        }
-        (lower, upper) = (float.NegativeInfinity, float.PositiveInfinity);
-        return false;
-    }
-
-    // On the pool, holding the group: classifies the final lattice's blocks and gives the group its first slab, or finishes
-    // it as empty when no block can hold the surface.
-    private void Bound(Group group, FinalLattice final, SdfProgram program, long field) {
+    // On the pool, holding the group: classifies the lattice's blocks and gives the group the lattice it samples next (the
+    // coarse lattice's blocks, or the final lattice's first slab), or finishes the group as empty when no block can hold the
+    // surface.
+    private void Bound(Group group, FinalLattice? final, in SdfMeshBakeRequest request, SdfProgram program, long field) {
         var evaluator = CpuField(field: field, group: group, program: program);
         var walks = 0L;
-        var blocks = ((evaluator is null) ? null : Classify(evaluator: evaluator, final: final, walks: out walks));
+        var blocks = ((evaluator is null) ? null : Classify(evaluator: evaluator, lattice: (final?.Lattice ?? request), walks: out walks));
         var empty = (blocks is { Sampled: 0 });
 
         if (empty) { StoreEmpty(group); }
@@ -150,47 +223,56 @@ public sealed partial class SdfMeshPathBake {
             if (!GroupList.Holds(group: group) || !ReferenceEquals(objA: group.Final, objB: final)) { return; }
             m_accounts.BoundWalks += walks;
             // A field adopted since the bounds' program was read may have moved the surface: the lattice samples whole.
-            if ((blocks is not null) && (Volatile.Read(location: ref m_field) == field)) {
-                m_accounts.BoundGroups++;
-                if (empty) {
-                    m_accounts.BoundSkipped += final.Lattice.Samples;
-                    emptied = EndEmptyFinal(group: group);
-                } else {
-                    final.Blocks = blocks;
-                    m_accounts.BoundSkipped += Math.Max(val1: 0L, val2: (final.Lattice.Samples - ((long)blocks.Sampled * ((blocks.Size.X * blocks.Size.Y) * blocks.Size.Z))));
-                }
+            var bounded = ((blocks is not null) && (Volatile.Read(location: ref m_field) == field));
+
+            if (bounded) {
+                m_accounts.BoundLattices++;
+                m_accounts.BoundSkipped += blocks!.Skipped;
             } else {
                 m_accounts.BoundRefused++;
             }
-            if (emptied is null) { group.Next = SlabOf(group: group); }
+            if (final is not null) {
+                if (bounded && empty) {
+                    emptied = EndEmptyFinal(group: group);
+                } else {
+                    final.Blocks = (bounded ? blocks : null);
+                    group.Next = SlabOf(group: group);
+                }
+            } else if (bounded && empty) {
+                group.FoundNoSurface(how: $" after {group.Refinements} refinements, by its bounds");
+                group.Next = null;
+                group.Done = true;
+                group.Mesh = null;
+                Finish();
+            } else {
+                group.Next = (bounded ? blocks!.Request(end: blocks.Count.Z, first: 0, lattice: in request) : request) with { Bounded = true };
+            }
         }
         emptied?.Dispose();
     }
 
-    // The final lattice's blocks, each sampled or skipped with its fill.
-    private static FinalBlocks Classify(SdfFieldEvaluator evaluator, FinalLattice final, out long walks) {
-        var lattice = final.Lattice;
-        var blocks = new FinalBlocks(dims: lattice.Dims);
-        var band = (BoundBandDiagonals * lattice.Cell.Length());
+    // The lattice's blocks, each sampled or skipped with its fill.
+    private static LatticeBlocks Classify(SdfFieldEvaluator evaluator, in SdfMeshBakeRequest lattice, out long walks) {
+        var blocks = new LatticeBlocks(dims: lattice.Dims);
+        var (origin, cell) = (lattice.Origin, lattice.Cell);
+        var band = (BoundBandDiagonals * cell.Length());
         // Past every float position the kernel computes for a sample in the box (origin + index · cell, two roundings).
-        var pad = new Vector3(value: ((1.0e-5f * (lattice.Origin.Length() + (lattice.Cell.Length() * lattice.Dims.X))) + (2f / 65536f)));
+        var pad = new Vector3(value: ((1.0e-5f * (origin.Length() + (cell.Length() * Math.Max(val1: lattice.Dims.X, val2: Math.Max(val1: lattice.Dims.Y, val2: lattice.Dims.Z))))) + (2f / 65536f)));
+        var size = new Vector3(x: blocks.Size.X, y: blocks.Size.Y, z: blocks.Size.Z);
         var count = 0L;
-
-        Vector3 SampleOf(int x, int y, int z) => new(
-            x: FinalBlocks.Corner(block: x, samples: blocks.Dims.X, size: blocks.Size.X),
-            y: FinalBlocks.Corner(block: y, samples: blocks.Dims.Y, size: blocks.Size.Y),
-            z: FinalBlocks.Corner(block: z, samples: blocks.Dims.Z, size: blocks.Size.Z)
-        );
 
         Descend(high: blocks.Count, low: (0, 0, 0), settles: (from, to, last) => {
             // One cell past its blocks' samples on every side, so each lattice cell with a corner in a skipped block lies
             // in that block's box: a zero between two skipped blocks' facing samples is in both boxes.
-            var low = (lattice.Origin + ((SampleOf(x: from.X, y: from.Y, z: from.Z) - Vector3.One) * lattice.Cell));
-            var high = (lattice.Origin + ((SampleOf(x: (to.X - 1), y: (to.Y - 1), z: (to.Z - 1)) + new Vector3(x: blocks.Size.X, y: blocks.Size.Y, z: blocks.Size.Z)) * lattice.Cell));
+            var low = ((origin + ((blocks.CornerOf(x: from.X, y: from.Y, z: from.Z) - Vector3.One) * cell)) - pad);
+            var high = ((origin + ((blocks.CornerOf(x: (to.X - 1), y: (to.Y - 1), z: (to.Z - 1)) + size) * cell)) + pad);
             var fill = float.NaN;
 
             count++;
-            if (TryBounds(evaluator: evaluator, high: high, low: low, lower: out var lower, pad: pad, upper: out var upper)) {
+            if (evaluator.TryDistanceBounds(lower: Fixed(point: low), upper: Fixed(point: high), distance: out var bounds) && !bounds.IsUnbounded) {
+                var lower = ((float)((double)bounds.Lower));
+                var upper = ((float)((double)bounds.Upper));
+
                 if (lower > band) {
                     fill = lower;
                 } else if (upper < -band) {
@@ -217,8 +299,7 @@ public sealed partial class SdfMeshPathBake {
     // The next slab of a bounded final lattice: whole layers of blocks from the plane its last slab ended at, the sampled
     // blocks of as many layers as LatticeTaps takes (at least one sampled block), and every later layer when none of them
     // samples a block.
-    private static SdfMeshBakeRequest BlockSlabOf(FinalLattice final, FinalBlocks blocks) {
-        var perBlock = ((blocks.Size.X * blocks.Size.Y) * blocks.Size.Z);
+    private static SdfMeshBakeRequest BlockSlabOf(FinalLattice final, LatticeBlocks blocks) {
         var first = (final.Planes / BoundBlock);
         var end = first;
         var sampled = 0;
@@ -226,7 +307,7 @@ public sealed partial class SdfMeshPathBake {
         while (end < blocks.Count.Z) {
             var layer = blocks.SampledIn(layer: end);
 
-            if ((sampled > 0) && (((long)(sampled + layer) * perBlock) > LatticeTaps)) { break; }
+            if ((sampled > 0) && (((long)(sampled + layer) * blocks.PerBlock) > LatticeTaps)) { break; }
             sampled += layer;
             end++;
         }
@@ -236,76 +317,37 @@ public sealed partial class SdfMeshPathBake {
         while ((rest < blocks.Count.Z) && (blocks.SampledIn(layer: rest) == 0)) { rest++; }
         if (rest == blocks.Count.Z) { end = rest; }
 
-        var rows = new Vector4[sampled];
-        var at = 0;
-
-        for (var z = first; (z < end); z++) {
-            for (var y = 0; (y < blocks.Count.Y); y++) {
-                for (var x = 0; (x < blocks.Count.X); x++) {
-                    if (!float.IsNaN(f: blocks.Fill[blocks.Index(x: x, y: y, z: z)])) { continue; }
-                    rows[at++] = new Vector4(
-                        x: FinalBlocks.Corner(block: x, samples: blocks.Dims.X, size: blocks.Size.X),
-                        y: FinalBlocks.Corner(block: y, samples: blocks.Dims.Y, size: blocks.Size.Y),
-                        z: FinalBlocks.Corner(block: z, samples: blocks.Dims.Z, size: blocks.Size.Z),
-                        w: 0f
-                    );
-                }
-            }
-        }
-
-        return final.Lattice with {
-            Dims = (blocks.Size.X, blocks.Size.Y, (blocks.Size.Z * sampled)),
+        return blocks.Request(end: end, first: first, lattice: final.Lattice) with {
             Slab = (first * BoundBlock),
             BlockPlanes = (Math.Min(val1: (end * BoundBlock), val2: blocks.Dims.Z) - (first * BoundBlock)),
-            Blocks = rows,
         };
     }
 
-    // Copies a block slab's answer into its final lattice: first the skipped blocks of its layers, each sample its block's
-    // fill and material zero, then every sampled block's samples over them, so a sample two blocks share takes its measure.
+    // Copies a block slab's answer into its final lattice's layers.
     private static void DecodeBlocks(FinalLattice final, in SdfMeshBakeRequest request, ReadOnlySpan<int> words) {
-        var blocks = final.Blocks!;
-        var values = final.Values;
-        var materials = final.Materials;
-        var (dx, dy, dz) = blocks.Dims;
-        var first = (request.Slab / BoundBlock);
-        var end = Math.Min(val1: blocks.Count.Z, val2: ((request.Slab + request.SlabPlanes + BoundBlock - 1) / BoundBlock));
+        var blocks = request.BlockFill!;
 
-        for (var bz = first; (bz < end); bz++) {
-            var cz = FinalBlocks.Corner(block: bz, samples: dz, size: blocks.Size.Z);
+        blocks.Expand(
+            end: Math.Min(val1: blocks.Count.Z, val2: ((request.Slab + request.SlabPlanes + BoundBlock - 1) / BoundBlock)),
+            first: (request.Slab / BoundBlock),
+            materials: final.Materials,
+            request: in request,
+            values: final.Values,
+            words: words
+        );
+    }
 
-            for (var by = 0; (by < blocks.Count.Y); by++) {
-                var cy = FinalBlocks.Corner(block: by, samples: dy, size: blocks.Size.Y);
+    // Refines a group from a coarse block lattice's answer, expanded into the whole lattice's values.
+    private void RefineBlocks(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<float> answered) {
+        var blocks = request.BlockFill!;
+        var whole = (request with { Dims = blocks.Dims, Blocks = default, BlockFill = null });
+        var values = ArrayPool<float>.Shared.Rent(minimumLength: whole.Samples);
 
-                for (var bx = 0; (bx < blocks.Count.X); bx++) {
-                    var fill = blocks.Fill[blocks.Index(x: bx, y: by, z: bz)];
-
-                    if (float.IsNaN(f: fill)) { continue; }
-
-                    var cx = FinalBlocks.Corner(block: bx, samples: dx, size: blocks.Size.X);
-
-                    for (var z = 0; (z < blocks.Size.Z); z++) {
-                        for (var y = 0; (y < blocks.Size.Y); y++) {
-                            var row = (cx + (dx * ((cy + y) + (dy * (cz + z)))));
-
-                            values.Slice(start: row, length: blocks.Size.X).Fill(value: fill);
-                            materials.Slice(start: row, length: blocks.Size.X).Clear();
-                        }
-                    }
-                }
-            }
-        }
-
-        var count = request.Samples;
-        var corners = request.Blocks.Span;
-
-        for (var local = 0; (local < count); local++) {
-            var (block, x, y, z) = request.BlockSample(local: local);
-            var corner = corners[block];
-            var index = (((int)corner.X + x) + (dx * (((int)corner.Y + y) + (dy * ((int)corner.Z + z)))));
-
-            values[index] = BitConverter.Int32BitsToSingle(value: words[local]);
-            materials[index] = words[count + local];
+        try {
+            blocks.Expand(end: blocks.Count.Z, first: 0, materials: default, request: in request, values: values, words: System.Runtime.InteropServices.MemoryMarshal.Cast<float, int>(answered));
+            Refine(dispatched: request.Samples, group: group, request: in whole, values: values.AsSpan(start: 0, length: whole.Samples));
+        } finally {
+            ArrayPool<float>.Shared.Return(array: values);
         }
     }
 

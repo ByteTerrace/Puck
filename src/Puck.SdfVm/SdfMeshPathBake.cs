@@ -102,6 +102,11 @@ public readonly record struct SdfMeshBakeRequest(Vector3 Origin, Vector3 Cell, (
 
     internal int BlockPlanes { get; init; }
 
+    // Whether the bake has asked the lattice's bounds (SdfMeshPathBake.QueueBounds), and the blocks' fills a block lattice
+    // expands its answer with.
+    internal bool Bounded { get; init; }
+    internal SdfMeshPathBake.LatticeBlocks? BlockFill { get; init; }
+
     /// <summary>Gets a block's depth along Z, in samples: <see cref="Dims"/>' Z over the blocks.</summary>
     public int BlockDepth => (Blocks.IsEmpty ? 0 : (Dims.Z / Blocks.Length));
 
@@ -1151,8 +1156,9 @@ public sealed partial class SdfMeshPathBake {
                     admitted++;
                     awaiting++;
                 }
-                // A final lattice is bounded once, on the pool, before its first slab is sampled.
-                if ((next.Slab >= 0) && (group.Final is { Bounded: false } unbounded) && QueueBounds(final: unbounded, group: group)) { continue; }
+                // A grid lattice (a coarse search's, or a final lattice before its first slab) is bounded once, on the pool,
+                // before it is sampled.
+                if (next.Points.IsEmpty && next.Blocks.IsEmpty && ((next.Slab >= 0) ? (group.Final is { Bounded: false }) : !next.Bounded) && QueueBounds(group: group, next: in next)) { continue; }
 
                 var keys = SampleKeysOf(group: group);
 
@@ -1413,7 +1419,7 @@ public sealed partial class SdfMeshPathBake {
     // The ticket (or checkpoint worker) owns this group's slab until AnswerGroup publishes its successor. A slab is copied
     // into the group's final lattice, which its admission covers; every other answer reads the samples in place.
     private static Answer Decode(Group group, in SdfMeshBakeRequest request, AnsweredSamples samples, int offset) {
-        if (!request.Blocks.IsEmpty) {
+        if (!request.Blocks.IsEmpty && (request.Slab >= 0)) {
             DecodeBlocks(final: group.Final!, request: in request, words: MemoryMarshal.Cast<byte, int>(samples.Span.Slice(length: request.OutputBytes, start: offset)));
         } else if (request.Slab >= 0) {
             var count = request.Samples;
@@ -1443,8 +1449,10 @@ public sealed partial class SdfMeshPathBake {
             }
         } else if (request.Slab >= 0) {
             AnswerSlab(group, in request);
+        } else if (!request.Blocks.IsEmpty) {
+            RefineBlocks(answered: values, group: group, request: in request);
         } else {
-            Refine(group: group, request: in request, values: values);
+            Refine(dispatched: request.Samples, group: group, request: in request, values: values);
         }
         Account(since: answered, stage: BakeStage.Answer);
     }
@@ -1978,7 +1986,7 @@ public sealed partial class SdfMeshPathBake {
     // lattice steps over the plate). A pair with a sample within reach is left to that sample, so the pair test moves
     // the box only where the distance test loses the sheet. A group with no such cell has no surface. Once the box
     // stops shrinking, the group's next lattice is the final one.
-    private void Refine(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<float> values) {
+    private void Refine(Group group, in SdfMeshBakeRequest request, ReadOnlySpan<float> values, int dispatched) {
         var (sx, sy, sz) = request.Dims;
         var near = (0.5f * MathF.Min(x: request.Cell.X, y: MathF.Min(x: request.Cell.Y, y: request.Cell.Z)));
         var low = new Vector3(value: float.PositiveInfinity);
@@ -2033,7 +2041,7 @@ public sealed partial class SdfMeshPathBake {
         using (EnterGate(site: BakeGate.Refine)) {
             group.InFlight = false;
             if (!GroupList.Holds(group: group)) { return; }
-            m_accounts.KindSamples[0] += request.Samples;
+            m_accounts.KindSamples[0] += dispatched;
             if (empty) {
                 group.FoundNoSurface(how: $" after {group.Refinements} refinements");
                 group.Next = null;
@@ -3625,7 +3633,7 @@ public sealed partial class SdfMeshPathBake {
         public int Planes { get; set; }
         // Whether the take handed the lattice to be bounded (QueueBounds), and the blocks its bounds skip, when they skip.
         public bool Bounded { get; set; }
-        public FinalBlocks? Blocks { get; set; }
+        public LatticeBlocks? Blocks { get; set; }
         public SdfSampledLattice? Sampled { get; set; }
         public FinalStage Stage { get; set; }
         // The current round, the lattice's own storage (SdfSampledLattice.Refine): all chunks of a round finish before the
