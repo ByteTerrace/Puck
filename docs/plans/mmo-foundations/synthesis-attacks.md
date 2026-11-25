@@ -86,7 +86,7 @@ document id (`WorldTick.StepCore` in
 
 A screen onto a nested destination observes as the owning world's
 authority, into the owning world's mirror
-(`src/Puck.World.Server/WorldInstanceHost.ScreenSessions.cs:304-307`):
+(`src/Puck.World.Server/WorldInstanceHost.ScreenSessions.cs:316-319`):
 
 ```csharp
         if (target!.Server.TryObserveAsSession(
