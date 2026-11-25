@@ -91,7 +91,7 @@ public sealed class WorldBindingBarControl {
             token: token
         ) ?? -1);
 
-        return (((slot >= 0) && (mirror!.Sample(slot: slot).Value is { Kind: CellKind.Text } text))
+        return (((slot >= 0) && (mirror!.Sample(slot: slot).Value is { HasValue: true, Kind: CellKind.Text } text))
             ? text.AsText
             : null
         );

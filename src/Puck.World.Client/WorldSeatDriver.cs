@@ -46,7 +46,8 @@ public sealed class WorldSeatDriver {
     /// a control to cross to a remote authority and its effect to come back. Counted in delivered ticks, so a span the
     /// client was delivered nothing in says nothing about a wall.</summary>
     public const int StallTicks = 20;
-    /// <summary>The planar distance, in metres, a body moves to count as moving under a deflected stick.</summary>
+    /// <summary>The distance, in metres, a body moves in any direction to count as moving under a deflected stick: a
+    /// craft climbing or descending under a held stick is moving, though it gains no ground.</summary>
     public const double StallMetres = 0.05;
 
     private enum Phase { Idle, Running, Arrived, Failed }
@@ -352,7 +353,7 @@ public sealed class WorldSeatDriver {
         var stallThreshold = (FixedQ4816.FromDouble(value: StallMetres) * scale);
         var watched = ((m_commandedSpeed * FixedQ4816.FromDouble(value: ((double)StallTicks / rateHz))) >= (stallThreshold * FixedQ4816.FromInteger(value: 2)));
         if (!m_driving || !watched || m_yielding || !moveAnswered || !string.Equals(a: m_stallAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal) ||
-            (read.Body.Tick < m_stallTick) || (Planar(from: m_stallOrigin, to: read.Position) > stallThreshold)) {
+            (read.Body.Tick < m_stallTick) || !(read.Position - m_stallOrigin).IsWithin(radius: stallThreshold)) {
             m_stallOrigin = read.Position;
             m_stallTick = read.Body.Tick;
             m_stallAuthority = read.Endpoint.Authority;
