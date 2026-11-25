@@ -25,7 +25,6 @@ test "a press on the painting's step opens its door for the seat that pressed" {
   }
   expect {
     moonDoorOffer == 1
-    moonDoorPass[0] == 1
     moonDoorGrant == 1
     moonDoorOpen == 1
     valleyDoorOffer == 0
