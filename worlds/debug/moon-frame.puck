@@ -31,7 +31,8 @@ let moonMass = (moonGravity * moonRadius * moonRadius)
 // pulls balance `moonHold` metres from the moon's centre (the distance apart over one plus the root of the masses'
 // ratio), and the seam is level with that point. Editing either world's gravity or radius moves it.
 let centresApart = squareRoot(
-  ((moonCentre[0] * moonCentre[0]) + ((moonCentre[1] + planetRadius) * (moonCentre[1] + planetRadius))) + (moonCentre[2] * moonCentre[2])
+  ((moonCentre[0] * moonCentre[0]) + ((moonCentre[1] + planetRadius) * (moonCentre[1] + planetRadius))) +
+    (moonCentre[2] * moonCentre[2])
 )
 let moonHold = (centresApart / (1 + squareRoot(planetMass / moonMass)))
 let skySeamAltitude = (moonCentre[1] - ((moonHold * (moonCentre[1] + planetRadius)) / centresApart))
@@ -44,9 +45,13 @@ let sunCentre = [-9000, 12000, 0]
 let sunGravity = 30
 let sunRadius = 1500
 let influenceSpeed = 2500
-let sunToPlanet = squareRoot(((sunCentre[0] * sunCentre[0]) + (sunCentre[1] * sunCentre[1])) + (sunCentre[2] * sunCentre[2]))
+let sunToPlanet = squareRoot(
+  ((sunCentre[0] * sunCentre[0]) + (sunCentre[1] * sunCentre[1])) + (sunCentre[2] * sunCentre[2])
+)
 let sunToMoon = squareRoot(
-  (((sunCentre[0] - moonCentre[0]) * (sunCentre[0] - moonCentre[0])) + ((sunCentre[1] - moonCentre[1]) * (sunCentre[1] - moonCentre[1]))) + ((sunCentre[2] - moonCentre[2]) * (sunCentre[2] - moonCentre[2]))
+  (((sunCentre[0] - moonCentre[0]) * (sunCentre[0] - moonCentre[0])) +
+    ((sunCentre[1] - moonCentre[1]) * (sunCentre[1] - moonCentre[1]))) +
+    ((sunCentre[2] - moonCentre[2]) * (sunCentre[2] - moonCentre[2]))
 )
 // The delays, rounded to a thirtieth of a second so each is a whole number of both worlds' ticks.
 let sunDelayPlanet = (round((sunToPlanet / influenceSpeed) * 30) / 30)

@@ -721,6 +721,19 @@ a followed row is not refused, and the next adoption restores the leader's
 value. `world.counters world.federation` counts reads and adoptions;
 `world.follows` narrates a leader's row it cannot adopt.
 
+`follows { ..., delaySeconds }` delays the adoption: the row reads what the
+leader's row read that long ago. The same boundary keeps a line of values in
+flight for the row (`AdoptDelayed`): a leader's write joins the back of the
+line with its arrival tick (this authority's tick plus the delay), and only
+the front is written, through the same taped door. A write is told from the
+row's own advance by reading the latest delivery back at the tick of the last
+observation. The row keeps its authored value until the first one arrives. The
+line is host memory, not checkpointed: a restored authority delays again from
+its next observation, never earlier than the delay allows. At most
+`WorldAdjacencyFields.MaxFollowValuesInFlight` values wait; past that the
+newest gives way (`follow-delay-overflows`), and `follow-delayed` counts the
+writes put in flight.
+
 A door's `portal.open` and `portal.gate` (`WorldPlacementPortal.Open`,
 `WorldPortalGate`) are read in `ScanPortalFace`; a closed door's opening is a
 wall again through `WorldPopulation.PortalClosures`. The debug world's moon

@@ -44,7 +44,14 @@ destinations [
 state {
   world [
     // The debug world's switch, read here as long after it was thrown as the distance takes.
-    { name: "sunSwitch", kind: "Int", value: 1, min: 0, max: 1, follows { destination: "debug", delaySeconds: sunDelayPlanet } }
+    {
+      name: "sunSwitch"
+      kind: "Int"
+      value: 1
+      min: 0
+      max: 1
+      follows { destination: "debug", delaySeconds: sunDelayPlanet }
+    }
     // What this world publishes: its light and its mass, each a share of the whole.
     { name: "sunLight", kind: "Fixed", value: "1", min: "0", max: "1" }
     { name: "sunMass", kind: "Fixed", value: "1", min: "0", max: "1" }

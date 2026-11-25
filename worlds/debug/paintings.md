@@ -1,6 +1,6 @@
 # Painting wing
 
-[paintings.puck](paintings.puck) hangs six paintings in the gallery hall's east
+[paintings.puck](paintings.puck) hangs eight paintings in the gallery hall's east
 wing, on level 0: framed canvases that are doors, as in Mario 64. Walk or jump
 into a canvas and you pass through it; until you do, its glass shows where it
 leads. Each canvas ripples like an event horizon (see
@@ -12,6 +12,8 @@ leads. Each canvas ripples like an event horizon (see
 | North wall, x = 64 | `painting-night`, gallery frame (white mat in a black frame) | Opens onto the night field ([night.puck](night.puck)), a snowfield under stars. Its `arrival` frame is the way back. |
 | South wall, x = 60 | `painting-city`, ornate frame | Opens onto the city ([city.puck](city.puck)), a town on a river bend. Its teal `arrival` frame is the way back. |
 | South wall, x = 66 | `painting-moon`, gallery frame behind a curtain | A door opened in play onto the moon ([moon-door.puck](moon-door.puck), [moon.md](moon.md#through-the-painting)): a press on its step asks the moon, the moon's rules open the socket on its pad, and the curtain draws aside for the seat that pressed. The switch to its left lights the moon's beacon. |
+| South wall, x = 54 | `painting-galaxy`, brass frame | Opens onto the planetoid field ([galaxy.puck](galaxy.puck), [galaxy.md](galaxy.md)): six small bodies in open space, each with gravity of its own shape, toured by launch pad. The frame on the first one is the way back. |
+| West wall, z = 18 | `painting-globe`, gilt frame | Opens onto the bottle world ([globe.puck](globe.puck)), a closed room whose gravity this world owns. The post two metres before it is its lever ([globe-lever.puck](globe-lever.puck)): each press turns the room's pull a quarter turn, a second later, with whoever is inside. |
 | West and east walls, z = 34.5 | `painting-link-west` and `painting-link-east`, brass frames | Two paintings facing each other 18 m apart across the room: step into either and step out of the other, facing out of it. |
 | Floor and ceiling, (66, 22.6) | `painting-fall-floor` and `painting-fall-ceiling`, gilt squares | The endless fall: a body that steps onto the floor glass drops out of the ceiling glass still falling, and falls through the floor again, forever. |
 
@@ -27,8 +29,8 @@ ceiling painting (below).
 `debug.go painting-room` stands a body just inside the doorway, looking
 across the room, and `debug.go portals` before the north wall, where the chase
 camera frames the garden and night paintings either side of her. `debug.go
-portal-garden`, `portal-night`, `portal-city`, `portal-link` and `portal-fall`
-stand it before each painting, facing it.
+portal-garden`, `portal-night`, `portal-city`, `portal-galaxy`, `portal-globe`,
+`portal-link` and `portal-fall` stand it before each painting, facing it.
 
 The brass diamond on a teal keel beside the linked paintings is the
 [portal row witness](portal-rows.puck): authored triangles and a field carried

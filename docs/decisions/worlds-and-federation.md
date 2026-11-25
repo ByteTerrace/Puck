@@ -461,8 +461,11 @@ follows, delivered late, and reduced before it touches a body:
   followed row with a delay and an eclipse is a rule over delayed rows.
 - **An unwatched body rides a closed form.** An orbit is a conic whose phase is
   an exact rational of the engine tick, so its position at any tick is computed
-  without stepping the ticks between. A body leaves the rails by the author's
-  rule and rejoins on a conic fitted to where it then is.
+  without stepping the ticks between. Whether a body rides is a state row the
+  author's rules write, so leaving the rails and rejoining them is the
+  author's policy. A body rejoining closes on the orbit at an authored speed;
+  rejoining on a conic fitted to where a perturbed body then is, is the
+  [plan's first open item](../plans/cross-world.md#left-open).
 - **A seam between two pulls is derived.** Where two worlds' pulls balance
   follows from their masses and separation; the author computes it in the
   document, so a seam moves when a mass is edited.
@@ -500,9 +503,11 @@ across it is felt inside it.
   built in one function and applied in the gravity fold, so no caller can add a
   far source's whole pull.
 - An orbit's position is a function of the engine tick and its elements alone.
-  The elements are authored values or cells of one state row, and the phase is
-  an integer division of ticks, so a checkpoint, a replay and a world that
-  skipped ticks all read the same position.
+  The elements are authored values and the phase is an integer division of
+  ticks, and the orbit field (`WorldOrbitField`) holds no state between steps,
+  so a checkpoint, a replay and a world that skipped ticks all read the same
+  position. A body off its orbit closes on it by a rule that reads only where
+  the body and the orbit stand that tick.
 
 **Attacks it closes.** A hostile leader can lie only about its own rows: an
 absurd mass is input the follower's own gravity section scales and its rules

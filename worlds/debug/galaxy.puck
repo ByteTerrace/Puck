@@ -313,12 +313,36 @@ placements {
   // The tour's pads and landings. A pad is a region a body's feet stand in; a landing is the point a launch ends at,
   // a little off the surface it falls to.
   for stop in [
-    { name: "home-ring", pad [3.5, 0.7, 0], land [(ringCentre[0] - ringMajor), (ringCentre[1] + ringMinor + 3), ringCentre[2]] }
-    { name: "ring-cube", pad [(ringCentre[0] + ringMajor), (ringCentre[1] + ringMinor + 0.5), ringCentre[2]], land [cubeCentre[0], (cubeCentre[1] + cubeHalf + 3), cubeCentre[2]] }
-    { name: "cube-coin", pad [(cubeCentre[0] + 2.5), (cubeCentre[1] + cubeHalf + 0.5), (cubeCentre[2] + 2.5)], land [coinCentre[0], (coinCentre[1] + coinThick + 2.6), coinCentre[2]] }
-    { name: "coin-turnover", pad [(coinCentre[0] + 3), (coinCentre[1] - coinThick - 0.5), coinCentre[2]], land [turnoverFloor[0], (turnoverFloor[1] + 4), (turnoverFloor[2] + 5)] }
-    { name: "turnover-pipe", pad [(turnoverFloor[0] - 3.8), (turnoverFloor[1] + turnoverHalf[1] + 0.5), turnoverFloor[2]], land [(pipeCentre[0] + pipeHalf - 1.5), (pipeCentre[1] - 1.5), pipeCentre[2]] }
-    { name: "pipe-home", pad [(pipeCentre[0] + pipeHalf - 2), (pipeCentre[1] + pipeInner - 0.5), pipeCentre[2]], land [0, 3.3, 1] }
+    {
+      name: "home-ring"
+      pad [3.5, 0.7, 0]
+      land [(ringCentre[0] - ringMajor), (ringCentre[1] + ringMinor + 3), ringCentre[2]]
+    }
+    {
+      name: "ring-cube"
+      pad [(ringCentre[0] + ringMajor), (ringCentre[1] + ringMinor + 0.5), ringCentre[2]]
+      land [cubeCentre[0], (cubeCentre[1] + cubeHalf + 3), cubeCentre[2]]
+    }
+    {
+      name: "cube-coin"
+      pad [(cubeCentre[0] + 2.5), (cubeCentre[1] + cubeHalf + 0.5), (cubeCentre[2] + 2.5)]
+      land [coinCentre[0], (coinCentre[1] + coinThick + 2.6), coinCentre[2]]
+    }
+    {
+      name: "coin-turnover"
+      pad [(coinCentre[0] + 3), (coinCentre[1] - coinThick - 0.5), coinCentre[2]]
+      land [turnoverFloor[0], (turnoverFloor[1] + 4), (turnoverFloor[2] + 5)]
+    }
+    {
+      name: "turnover-pipe"
+      pad [(turnoverFloor[0] - 3.8), (turnoverFloor[1] + turnoverHalf[1] + 0.5), turnoverFloor[2]]
+      land [(pipeCentre[0] + pipeHalf - 1.5), (pipeCentre[1] - 1.5), pipeCentre[2]]
+    }
+    {
+      name: "pipe-home"
+      pad [(pipeCentre[0] + pipeHalf - 2), (pipeCentre[1] + pipeInner - 0.5), pipeCentre[2]]
+      land [0, 3.3, 1]
+    }
   ] {
     placement $"pad-{stop.name}" {
       prototype: "pad"

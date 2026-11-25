@@ -105,6 +105,13 @@ frames built from boxes.
 and run, and `stillMotion`, a body the rules pose), and the kits of a piece that stays where it is put (`pieceKit` for
 a rigid piece the physics settles, `heldKit` for a cursor the rules pose).
 
+`gravity.puck` is a library of gravity designs for a world of planetoids: a gravity area row for each shape of pull
+(`ballPull` for a ball, `shapePull` toward the nearest solid surface, `axisPull` for a log or the inside of a pipe,
+`slabPull` for a slab walked on both faces, `roomPull` for a room whose gravity a state row scales, `driftPull` for
+the faint pull of open space), the launch pad that carries a body standing in a region to a landing along an arc
+(`launchPad`), and the pad that writes a gravity row (`gravitySwitch`). The debug world's planetoid field
+(`../debug/galaxy.puck`) is built from them.
+
 `seat.puck` is a library of a seated player's buttons at a table game: the buttons and the channel each reads
 (`seatButtons`, `seatSteps`), whether one is held past half way (`seatHeld`), and the rule template that records its
 press in a seat row's `<button>Edge` and `<button>Down` cells (`seatPress`), which a game's presses rule calls in a

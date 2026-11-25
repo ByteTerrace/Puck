@@ -275,7 +275,10 @@ for b in range(1, (seatPopulation + visitorPopulation)) {
     setBodyState(key: $"{b}", state: "flightFuel", expression: 0)
   }
   rule $"fly-body-{b}" {
-    when channel(body, b, rise) >= 1 and channel(body, b, jump) == 0 and bodyState(body, b, flightFuel) == 0 and bodyState(body, b, suit) == 1
+    when (channel(body, b, rise) >= 1 and
+      channel(body, b, jump) == 0 and
+      bodyState(body, b, flightFuel) == 0 and
+      bodyState(body, b, suit) == 1)
     mode: Level
     setBodyState(key: $"{b}", state: "flightFuel", expression: 1000)
   }

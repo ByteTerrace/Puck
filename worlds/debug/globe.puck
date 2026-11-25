@@ -128,9 +128,24 @@ gravity {
 state {
   world [
     // The pull, as the debug world last wrote it and as it has arrived here.
-    { name: "pullX", kind: "Fixed", value: "0", follows { destination: "debug", row: "globePullX", delaySeconds: leverDelay } }
-    { name: "pullY", kind: "Fixed", value: "-14", follows { destination: "debug", row: "globePullY", delaySeconds: leverDelay } }
-    { name: "pullZ", kind: "Fixed", value: "0", follows { destination: "debug", row: "globePullZ", delaySeconds: leverDelay } }
+    {
+      name: "pullX"
+      kind: "Fixed"
+      value: "0"
+      follows { destination: "debug", row: "globePullX", delaySeconds: leverDelay }
+    }
+    {
+      name: "pullY"
+      kind: "Fixed"
+      value: "-14"
+      follows { destination: "debug", row: "globePullY", delaySeconds: leverDelay }
+    }
+    {
+      name: "pullZ"
+      kind: "Fixed"
+      value: "0"
+      follows { destination: "debug", row: "globePullZ", delaySeconds: leverDelay }
+    }
   ]
 }
 

@@ -99,9 +99,36 @@ prototypes {
           { color: "#3A3F47", roughness: 0.6, specular: 0.15 }
           { color: turn.indicator, roughness: 0.4, emissive: 300 }
         ]
-        boundsBox(label: "post", x0: (leverPostX - 0.09), x1: (leverPostX + 0.09), y0: 0, y1: 1.05, z0: (leverPostZ - 0.09), z1: (leverPostZ + 0.09), slot: 0)
-        boundsBox(label: "handle", x0: (leverPostX - 0.03), x1: (leverPostX + 0.03), y0: 1.05, y1: 1.3, z0: (leverPostZ - 0.03), z1: (leverPostZ + 0.03), slot: 1)
-        boundsBox(label: "lamp", x0: (leverPostX - 0.06), x1: (leverPostX + 0.06), y0: 1.3, y1: 1.4, z0: (leverPostZ - 0.06), z1: (leverPostZ + 0.06), slot: 2)
+        boundsBox(
+          label: "post",
+          x0: (leverPostX - 0.09),
+          x1: (leverPostX + 0.09),
+          y0: 0,
+          y1: 1.05,
+          z0: (leverPostZ - 0.09),
+          z1: (leverPostZ + 0.09),
+          slot: 0
+        )
+        boundsBox(
+          label: "handle",
+          x0: (leverPostX - 0.03),
+          x1: (leverPostX + 0.03),
+          y0: 1.05,
+          y1: 1.3,
+          z0: (leverPostZ - 0.03),
+          z1: (leverPostZ + 0.03),
+          slot: 1
+        )
+        boundsBox(
+          label: "lamp",
+          x0: (leverPostX - 0.06),
+          x1: (leverPostX + 0.06),
+          y0: 1.3,
+          y1: 1.4,
+          z0: (leverPostZ - 0.06),
+          z1: (leverPostZ + 0.06),
+          slot: 2
+        )
       }
     }
   }

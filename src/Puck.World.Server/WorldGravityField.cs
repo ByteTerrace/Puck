@@ -478,22 +478,12 @@ public readonly record struct WorldGravityInputs(WorldDefinition Definition, ulo
     /// <param name="key">The cell, or <see langword="null"/> for the row's slot cell.</param>
     /// <param name="fallback">The value a row or cell that does not read answers.</param>
     /// <returns>The cell's value, or <paramref name="fallback"/>.</returns>
-    public FixedQ4816 ReadFixed(string row, string? key, FixedQ4816 fallback) => (
-        (
-            WorldStateReader.TryRead(
-                definition: Definition,
-                engineTick: EngineTick,
-                key: key,
-                rawValue: out var raw,
-                row: out var found,
-                rowName: row,
-                text: out _,
-                tick: Tick
-            ) &&
-            (found.Kind == Puck.State.CellKind.Fixed) &&
-            (raw is { } value)
-        )
-        ? FixedQ4816.FromRawBits(value: value)
-        : fallback
+    public FixedQ4816 ReadFixed(string row, string? key, FixedQ4816 fallback) => WorldStateReader.ReadFixed(
+        definition: Definition,
+        engineTick: EngineTick,
+        fallback: fallback,
+        key: key,
+        rowName: row,
+        tick: Tick
     );
 }

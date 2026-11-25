@@ -191,7 +191,11 @@ placements {
   // Where the planet's centre and the sun stand in this world's coordinates: the sources of the tide.
   placement "planet-core" {
     prototype: "place"
-    position [(debugOrigin[0] + planetCentre[0]), (debugOrigin[1] + planetCentre[1]), (debugOrigin[2] + planetCentre[2])]
+    position [
+      (debugOrigin[0] + planetCentre[0]),
+      (debugOrigin[1] + planetCentre[1]),
+      (debugOrigin[2] + planetCentre[2])
+    ]
   }
   placement "sun-core" {
     prototype: "place"
@@ -361,7 +365,10 @@ prototypes {
       arrivalFrame(color: "#8C6A3F", roughness: 0.4, specular: 0.4, post: 0.12)
     }
   }
-  for leaf in [{ name: "shut", x: 0, z: -0.08, sx: 1.1, sz: 0.03 }, { name: "open", x: 1.28, z: -0.62, sx: 0.03, sz: 0.55 }] {
+  for leaf in [
+    { name: "shut", x: 0, z: -0.08, sx: 1.1, sz: 0.03 }
+    { name: "open", x: 1.28, z: -0.62, sx: 0.03, sz: 0.55 }
+  ] {
     prototype $"moon-socket-leaf-{leaf.name}" {
       document {
         name: $"moon-socket-leaf-{leaf.name}"
@@ -455,7 +462,7 @@ rule "beacon-dark" {
 
 // The moon lights itself from the sun's light as it has arrived here, never from the sun's world directly.
 rule "sun-dial" {
-  when sunDial != sunLight / 2
+  when sunDial != (sunLight / 2)
   mode: Level
   sunDial = sunLight / 2
 }
@@ -483,7 +490,12 @@ render {
         shadow: always,
         angularRadius: 0.0046
       )
-      point(name: "beacon", position: [0, (moonRadius + padTop + beaconHeight), (0 - padRadius)], temperature: 2200K, power: "state.beaconPower")
+      point(
+        name: "beacon",
+        position: [0, (moonRadius + padTop + beaconHeight), (0 - padRadius)],
+        temperature: 2200K,
+        power: "state.beaconPower"
+      )
     ]
     clock: day
     keys: map(range(0, 24), h => {

@@ -663,6 +663,18 @@ new move replaces the current one. The recipient must use a yaw-frame
 program with `CommitPose`, such as `walk`. A kit action acts on its own
 body, and a world rule supplies `key`.
 
+Three more members carry a body off its plane. `up` travels along the body's
+up at the launch. `arc` is the height the path stands off the straight line at
+its middle, along that same up, a parabola that leaves and arrives on the line.
+`exclusive: true` gives the move the body's translation while it runs: the
+walk and the fall add nothing, the body is off its support throughout (the
+ground snap does not hold it), and it ends at rest. A world rule may name
+`toward`, a placement, with an optional `towardOffset`: the travel is then
+from where the body stands when the effect fires to that placement's position,
+in world axes, in place of `right`, `forward` and `up`. The standard's
+`launchPad` template (`worlds/standard/gravity.puck`) is that rule over a
+region's occupants.
+
 ## Timed planar impulses
 
 `planarImpulse` adds an authored-speed displacement for an exact engine-tick
