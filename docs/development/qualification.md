@@ -43,8 +43,8 @@ run directory and qualifies that copy. It runs in two halves:
    profile named every `pipeline-*` canary, `no-device-compile` and the other
    offscreen GPU proofs.
 2. **The stability matrix**: every workload at every resolution on every
-   backend, offscreen. Each cell boots from a fresh state root, so its
-   pipeline cache starts cold. It boots an overlay document written beside the
+   backend, offscreen. Each cell boots from a fresh state root; its pipelines
+   come from the device cache root, which every boot shares. It boots an overlay document written beside the
    workload's world, which takes the world as its basis and sets only the
    offscreen presentation and the cell's extent.
 

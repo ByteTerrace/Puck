@@ -211,13 +211,13 @@ public static partial class CanaryCommand {
             : CanaryLegEnding.Other)
     );
     // The run's measured counts, in the same terms PrintPlan uses, so the two outputs compare line for line.
-    private static void PrintTally(CanaryPlan plan, CanaryTally tally, CanaryPipelineCacheSeed seed, bool built, IReadOnlyList<CanaryLegEnding> endings) {
+    private static void PrintTally(CanaryPlan plan, CanaryTally tally, bool built, IReadOnlyList<CanaryLegEnding> endings) {
         var boots = (tally.WorldProcesses + tally.StubWorldBoots);
         var spawns = ((tally.WorldProcesses + tally.StubLaunches) + tally.PackageSpawns);
 
         Console.WriteLine(value: $"canary counts: {boots} World boot(s) (planned {plan.WorldBoots}); {spawns} leg process spawn(s) (planned {plan.LegSpawns}): {tally.WorldProcesses} World, {tally.StubLaunches} Puck.Launcher.Stub, {tally.PackageSpawns} shaders package; build(s): Puck.World {(built ? 1 : 0)}, Puck.Launcher.Stub {plan.StubBuilds}.");
         if (plan.Warm is not null) {
-            Console.WriteLine(value: $"canary counts: {tally.WarmBoots} pipeline-cache warm boot(s) (planned {plan.WarmBoots}); {seed.Seeded} leg(s) started from the warmed cache, {seed.Unchanged} of them built no pipeline outside it.");
+            Console.WriteLine(value: $"canary counts: {tally.WarmBoots} pipeline-cache warm boot(s) (planned {plan.WarmBoots}).");
         }
 
         Console.WriteLine(value: $"canary counts: {endings.Count} leg(s) reported: {endings.Count(predicate: static ending => (ending == CanaryLegEnding.ScriptEnd))} ended at their script's quit, {endings.Count(predicate: static ending => (ending == CanaryLegEnding.Timeout))} at their timeout, {endings.Count(predicate: static ending => (ending == CanaryLegEnding.Other))} otherwise.");

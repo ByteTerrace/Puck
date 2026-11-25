@@ -41,7 +41,7 @@ public sealed unsafe class DirectXPipelineLibrary : IDisposable {
         m_library = library;
 
         if (null != library) {
-            file.Attach(serialize: SerializeUnlessDisposed);
+            file.Attach(serialize: _ => SerializeUnlessDisposed());
         }
     }
 

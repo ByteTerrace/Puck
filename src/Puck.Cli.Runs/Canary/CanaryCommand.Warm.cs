@@ -53,11 +53,11 @@ public static partial class CanaryCommand {
     private static bool IsPlainLeg(CanaryLeg leg) =>
         ((leg.Authorities.Count == 0) && (leg.AuthorityWorldPath is null) && !leg.Connect && (leg.Entry is null) && (leg.Package is null) && !leg.HideShaderCompiler);
     // Boots the warm world once per backend into one shared state directory, each boot waiting for the engine to be
-    // ready, capturing one frame through the display encode and reading its pipeline-cache counts, then hands the
-    // cache it persisted to the seed. The first boot that fails (WarmRefusal) ends the warm with its refusal, and the
-    // selection fails without starting a leg.
+    // ready, capturing one frame through the display encode and reading its pipeline-cache counts. The boots fill the
+    // device cache root's pipeline caches, which every leg's World reads whatever its state directory. The first boot
+    // that fails (WarmRefusal) ends the warm with its refusal, and the selection fails without starting a leg.
     private static string? WarmPipelineCache(CanaryWarm warm, string artifact, CanaryBudget budget) {
-        // A warm that refuses keeps its transcripts, named; one that succeeds is deleted once the seed holds its cache.
+        // A warm that refuses keeps its transcripts, named; one that succeeds is deleted.
         using var run = RunDirectory.Create(prefix: $"{ScratchPrefix}{WarmRunId}-pipeline-cache-");
         var runDirectory = run.Path;
         var stateDirectory = Path.Combine(
@@ -121,10 +121,6 @@ public static partial class CanaryCommand {
             Console.WriteLine(value: $"canary: warmed the pipeline cache on {backend} from {warm.Manifest.Id}'s positive world: {CountOf(kind: "gpu.created.pipelines", lines: stdout)} pipeline(s) created, {CountOf(kind: "gpu.pipeline-cache.misses", lines: stdout)} built outside the cache.");
         }
 
-        budget.Seed.Capture(directory: Path.Combine(
-            path1: stateDirectory,
-            path2: "pipeline-cache"
-        ));
         run.Conclude(passed: true);
 
         return null;
@@ -179,83 +175,5 @@ public static partial class CanaryCommand {
         }
 
         return null;
-    }
-
-    /// <summary>The pipeline cache the warm boots persisted, which every GPU leg's state directory starts from, and how
-    /// many of those legs wrote nothing back to it. The files are captured once, before any leg starts; the counts are
-    /// updated from the legs' own threads.</summary>
-    public sealed class CanaryPipelineCacheSeed {
-        private IReadOnlyDictionary<string, byte[]> m_files = new Dictionary<string, byte[]>(comparer: StringComparer.Ordinal);
-        private int m_seeded;
-        private int m_unchanged;
-
-        /// <summary>Gets the legs whose state directory started from the cache.</summary>
-        public int Seeded => Volatile.Read(location: ref m_seeded);
-        /// <summary>Gets the seeded legs whose cache held the same files, byte for byte, when their World exited: no
-        /// pipeline was built outside it, since a pipeline the cache did not answer is written back to it.</summary>
-        public int Unchanged => Volatile.Read(location: ref m_unchanged);
-
-        /// <summary>Captures the cache files under <paramref name="directory"/>.</summary>
-        /// <param name="directory">A state directory's <c>pipeline-cache</c> directory.</param>
-        public void Capture(string directory) =>
-            m_files = Read(directory: directory);
-        /// <summary>Writes the captured files into <paramref name="stateDirectory"/>'s <c>pipeline-cache</c> directory.</summary>
-        /// <param name="stateDirectory">A leg's state directory, before its World boots.</param>
-        /// <returns>Whether there was a cache to write.</returns>
-        public bool TrySeed(string stateDirectory) {
-            if (m_files.Count == 0) {
-                return false;
-            }
-
-            foreach (var (name, bytes) in m_files) {
-                var path = Path.Combine(
-                    path1: stateDirectory,
-                    path2: "pipeline-cache",
-                    path3: name
-                );
-
-                Directory.CreateDirectory(path: Path.GetDirectoryName(path: path)!);
-                File.WriteAllBytes(
-                    bytes: bytes,
-                    path: path
-                );
-            }
-
-            Interlocked.Increment(location: ref m_seeded);
-
-            return true;
-        }
-        /// <summary>Counts a seeded leg whose cache still holds exactly the captured files.</summary>
-        /// <param name="stateDirectory">The seeded leg's state directory, after its World exited.</param>
-        public void Observe(string stateDirectory) {
-            var files = Read(directory: Path.Combine(
-                path1: stateDirectory,
-                path2: "pipeline-cache"
-            ));
-
-            if (
-                (files.Count == m_files.Count) &&
-                files.All(predicate: file => (m_files.TryGetValue(key: file.Key, value: out var captured) && file.Value.AsSpan().SequenceEqual(other: captured)))
-            ) {
-                Interlocked.Increment(location: ref m_unchanged);
-            }
-        }
-
-        // Every cache file under directory, by its path relative to it with forward slashes; a temporary another
-        // writer is still renaming is not a cache file.
-        private static Dictionary<string, byte[]> Read(string directory) => (Directory.Exists(path: directory)
-            ? Directory.EnumerateFiles(
-                path: directory,
-                searchOption: SearchOption.AllDirectories,
-                searchPattern: "*.bin"
-            ).ToDictionary(
-                comparer: StringComparer.Ordinal,
-                elementSelector: File.ReadAllBytes,
-                keySelector: path => Puck.Abstractions.PuckPaths.Relative(
-                    path: path,
-                    relativeTo: directory
-                )
-            )
-            : new Dictionary<string, byte[]>(comparer: StringComparer.Ordinal));
     }
 }

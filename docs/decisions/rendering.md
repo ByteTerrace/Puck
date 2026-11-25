@@ -1123,6 +1123,34 @@ stepping again. Until that latch exists the pipeline is not built, since
 without it look would gain a frame; the frame's own chain is shortened inside
 its interval instead ([frame production](../plans/frame-production.md#the-steps)).
 
+**A frame costs what changed and what the display shows.** The bars are met
+by the frame's architecture, never by a lower quality, so the architecture
+has to make each kind of work follow its own rate of change. Four rules do,
+and [the frame's plan](../plans/frame-production.md#the-whole-frame-as-one-architecture)
+orders their build:
+
+- The scene is resident on the device and changes by deltas. A transform slot
+  has one writer, chosen when its creation is registered: the host for a
+  still or simulated slot, and for authored presentation motion a kernel that
+  runs the compiled motion program on the device. The program stays authored
+  Puck; the kernel is machinery, as the shading interpreter is
+  ([authored shading](#authored-shading)). Rejected: a hand-written kernel per
+  kind of motion (grass, banners), which is a feature in engine code.
+- A raster pass's commands are its draws: the selection kernel compacts its
+  survivors in slot order (built, `SdfMeshOcclusion`).
+- A pixel's lighting inputs are refreshed when the receivers they were built
+  for change and otherwise over the frames of one jitter period, by tile and
+  as a dispatched list, since a kernel saves time by wave and never by lane.
+  Visibility is taken every frame. Rejected for the bar devices: fewer shaded
+  samples (a render scale under one, a coarser shading rate), which lowers
+  what every pixel shows, where a held lighting input changes only how late a
+  change of light arrives, inside the window the temporal resolve already
+  spreads it over.
+- The device's caches of derived products are never state. Compiled
+  pipelines, like meshes and compiles, live in the device cache root
+  (`WorldCacheRoots`), keyed by their inputs, so a boot with a new state
+  directory still starts warm.
+
 **Worlds are mostly static, and sculpting happens in the editor.** Most of a
 world's geometry never changes while it is played, and editor mode is where a
 creation's field is sculpted. The cost of evaluating an authored field therefore
@@ -1679,8 +1707,37 @@ instance's reads. Separate residencies per seat have these costs:
   re-bake, but every seat would still hold its own region of the same meshes.
 
 N seats cost N instances' passes rather than one dispatch whose Z dimension is
-N, and the counted work shows that cost. Layered views return only if the
-counts call for them.
+N, and the counted work shows that cost. That holds for seats, which are few
+and large.
+
+**Secondary views are one view system, and a view earns its rate from what
+moves in it.** A session window, a portal, a mirror, a screen's camera and a
+sky view of another world are many and small, and a hub shows dozens, so one
+instance a view makes the frame thread's recording, the device's fixed
+storage and the installs on a window's growth all scale with the views a
+client holds. Three rules replace that, built in the order
+[the frame's plan](../plans/frame-production.md#2-secondary-views-are-one-view-system)
+gives:
+
+- A view's cadence follows the motion in its image under the perceptible
+  step (`SdfUpdateRateTiers.PerceptibleStepPixels`): its camera's measured
+  motion across the image and the fastest content its world reports, never an
+  assumed parallax. Rejected: a fixed budget of views a frame, which makes a
+  view's rate depend on how many others are in sight, so the same window
+  judders in a hall and not in a corridor.
+- A view owns its published image and its history. The working storage of its
+  pass family is leased by extent octave from one pool a device, for the
+  frames the view renders. Rejected: shrinking a held view's own storage
+  (built, `WorldViewGraphHost.ReserveShrinks`), which still installs a graph a
+  view and an extent.
+- The views of one residency due in a frame render through one pass family
+  over an atlas, a tile naming its view. Rejected: one dispatch a view with
+  the recording made cheaper, which keeps the per-view barriers, binds and
+  command lists that a hub multiplies.
+
+The invariant is that a view's image comes from one camera and one frame of
+its residency whatever storage it shares; the lease a view holds from its
+recording to its submission's retirement is the door.
 
 **The lights and the sky are generated records in World-group tables.** A
 hand-numbered environment table is a second hand-kept layout beside the frame

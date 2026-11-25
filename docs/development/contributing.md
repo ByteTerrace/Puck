@@ -265,7 +265,8 @@ subdirectory there. Every cache among them is bounded:
 
 | Subdirectory | Owner | Bound |
 |---|---|---|
-| `world` | The game's state root: profiles and replays (`--state-dir` replaces it) | none for its state; its `pipeline-cache` keeps 8 files per backend, and its `pipelines` shader cache is bounded as `shaders` is |
+| `world` | The game's state root: profiles and replays (`--state-dir` replaces it) | none for its state; its `pipelines` shader cache is bounded as `shaders` is |
+| `pipelines` | Each device's driver pipeline cache, shared by every boot whatever its state root (`--cache-dir` replaces it) | 8 files per backend |
 | `projections` | Content-addressed prototype bodies shared by projection recipients across joins and worlds | 4096 objects, 256 MiB |
 | `compiled-worlds` | The compiled worlds boots derive, shared by every boot whatever its state root | 1024 files, 256 MiB |
 | `world-builds` | The shared Release builds of `Puck.World` the CLI gates run | 4 builds |

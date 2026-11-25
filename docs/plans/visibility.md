@@ -43,12 +43,12 @@ in the tree.
   `SdfMeshOcclusion`'s counted indirect draws for every raster pass: opaque in
   its two phases, each cascade and glass in one. It keeps the 1/1.1 display
   pixel band and per-draw level history on the GPU and removes CPU `Choose`.
-- **Every phase writes one command per candidate, empty or not**, and sets its
-  count to every candidate (`Assets/Shaders/Sdf/passes/sdf-mesh-occlusion.comp.hlsl:184-192`;
-  the same on R2). On R2 the glass pass costs more on the GPU for a couple of real
-  draws among thousands of candidates than the CPU path did: tens of
-  nanoseconds per candidate for selection and the empty-command walk. The
-  opaque pass pays it twice and each cascade once.
+- **Every phase executes a compact list of the commands it draws.** A phase
+  writes one command a candidate at the candidate's slot, then a count step
+  and a compact step copy the commands that draw, in slot order, to the
+  phase's compact list and write its draw count
+  (`Assets/Shaders/Sdf/passes/sdf-mesh-occlusion.comp.hlsl`). V1a's ordered
+  compaction is this; the buckets and the record split (V1b) are not built.
 - **The meadow** (`debug.go meadow`) holds 1,994 two-part blades: 4,004
   dynamic slots and 4,215 retained draws from 288 geometries, 14.6 draws per
   geometry. Its mesh pass reads 3,906 draws and 5.55 M vertices, drawn

@@ -2,7 +2,7 @@ namespace Puck.World;
 
 /// <summary>
 /// The device caches a boot reads and fills: the compiled worlds it derives, the <c>.puck</c> compiles its sources
-/// produce, and the meshes its presentation bakes. Each holds a pure function of its inputs and the build, never of
+/// produce, the meshes its presentation bakes, and the pipelines its device's driver compiles. Each holds a pure function of its inputs and the build, never of
 /// a run's state, so they live outside the state root and every boot that names the same directories shares them. The
 /// desktop World's entry point names the per-user directories (<see cref="Puck.Abstractions.PuckUserDirectory"/>) and
 /// nothing else does; the boot registers the roots it was handed and every consumer takes them from there, so a host
@@ -14,16 +14,20 @@ public sealed class WorldCacheRoots {
     /// <param name="compiledWorlds">The directory derived compiled worlds are written to, made absolute here.</param>
     /// <param name="compilations">The directory held <c>.puck</c> compiles persist in, made absolute here.</param>
     /// <param name="meshes">The directory the baked-mesh store keeps its entries in, made absolute here.</param>
-    /// <exception cref="ArgumentException"><paramref name="compiledWorlds"/>, <paramref name="compilations"/> or
-    /// <paramref name="meshes"/> is <see langword="null"/>, empty or white space.</exception>
-    public WorldCacheRoots(string compiledWorlds, string compilations, string meshes) {
+    /// <param name="pipelines">The directory each device's pipeline-cache files live under, made absolute here.</param>
+    /// <exception cref="ArgumentException"><paramref name="compiledWorlds"/>, <paramref name="compilations"/>,
+    /// <paramref name="meshes"/> or <paramref name="pipelines"/> is <see langword="null"/>, empty or white
+    /// space.</exception>
+    public WorldCacheRoots(string compiledWorlds, string compilations, string meshes, string pipelines) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: compiledWorlds);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: compilations);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: meshes);
+        ArgumentException.ThrowIfNullOrWhiteSpace(argument: pipelines);
 
         Compilations = Path.GetFullPath(path: compilations);
         CompiledWorlds = Path.GetFullPath(path: compiledWorlds);
         Meshes = Path.GetFullPath(path: meshes);
+        Pipelines = Path.GetFullPath(path: pipelines);
     }
 
     /// <summary>Gets the absolute directory held <c>.puck</c> compiles persist in.</summary>
@@ -33,6 +37,10 @@ public sealed class WorldCacheRoots {
     /// <summary>Gets the absolute directory the baked-mesh store (<see cref="Puck.SdfVm.SdfMeshStore"/>) keeps its
     /// entries in.</summary>
     public string Meshes { get; }
+    /// <summary>Gets the absolute directory each device's driver pipeline cache persists under
+    /// (<see cref="Puck.Abstractions.Gpu.GpuPipelineCacheFile"/>): one file a backend, device and kernel set, so a boot
+    /// with a new state directory creates its pipelines from the cache an earlier boot of the same build left.</summary>
+    public string Pipelines { get; }
     /// <summary>Gets what the presentation's bakes do about a tier of a mesh the store lacks
     /// (<see cref="Puck.SdfVm.SdfMeshCachePolicy"/>): bake what the view demands, an author's boot; bake every tier of
     /// what it draws, the producer of a shipped cache; or draw stored tiers alone, the build that ships one.</summary>

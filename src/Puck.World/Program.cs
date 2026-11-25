@@ -350,7 +350,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     var caches = new WorldCacheRoots(
         compilations: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "compilations") : Path.Join(path1: cacheRoot, path2: "compilations")),
         compiledWorlds: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "compiled-worlds") : Path.Join(path1: cacheRoot, path2: "compiled-worlds")),
-        meshes: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "meshes") : Path.Join(path1: cacheRoot, path2: "meshes"))
+        meshes: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "meshes") : Path.Join(path1: cacheRoot, path2: "meshes")),
+        pipelines: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "pipelines") : Path.Join(path1: cacheRoot, path2: "pipelines"))
     ) {
         // A player's build ships its meshes and never bakes one the store holds another tier of; a producer or a check
         // boot of a folder not yet marked complete names its policy.

@@ -1460,7 +1460,7 @@ public static class WorldBootComposition {
         ));
         services.TryAddSingleton(implementationFactory: static sp => new GpuPipelineCacheStore(
             contentKey: sp.GetRequiredService<SdfWorldPipelineCatalog>().LoadDeployed(target: ShaderTargets.Of(hostsOnDirectX: sp.GetRequiredService<WorldHostSettings>().HostsOnDirectX)).ContentKey(),
-            directory: sp.GetRequiredService<WorldStateRoot>().PathOf(name: "pipeline-cache")
+            directory: sp.GetRequiredService<WorldCacheRoots>().Pipelines
         ));
     }
     /// <summary>Registers the shader compiler every presentation shape's pipelines compile through, under the state
