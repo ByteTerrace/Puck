@@ -543,7 +543,7 @@ records the options weighed.
   `SdfWorldShadows.Moved` before the scopes' early return; keep that call first, or a staging whose scopes are all met
   drops the change. `Moved` skips a change whose box lies within the finest judged texel of the box the entries last
   judged the row by (`m_judged`), for a standalone row or a rigid slot (one box its pose carries, decided in
-  `SdfWorldTables.JudgeMotionSlot`); any other slot is a union that can hide motion, and owes both ends whenever it
+  `SdfWorldTables.DecideMotionSlot`); any other slot is a union that can hide motion, and owes both ends whenever it
   moves. A slot judged rigid that is not would let its casters drift a texel unseen, so a new member kind of a slot
   (a second carry, a fixed member) must leave `rigid` false. With every motion scope met, a rigid slot is not placed
   at all while its pose change bounds its box's displacement from the shadows' judged box (`TryJudged`) under
@@ -811,7 +811,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   (`sdfMeshPoseOf`) and derive its world box the same way (`sdfSelectionBox`), so
   a body that moves rewrites its slot's row and no record. The host judges it by
   `SdfMeshBox.Ridden`, the box's twin, held per row as last judged
-  (`SdfWorldTables.RowSelection`) and moved as its slot moves (`NoteMovedSlots`).
+  (`SdfWorldTables.RowSelection`) and moved as its slot moves (`CollectMovedSlots`, `DecideMotionSlot`).
   A moving draw riding its slot (`SdfMeshDraw.PlacedBySlot`) keeps its scale and
   no pose: every CPU reader places it through one door, `SdfMeshDraw.PlacementIn`
   (the frame's transform rows), and `SdfMeshDraw.FixedPlacement`, which a static

@@ -12,7 +12,7 @@ namespace Puck.SdfVm;
 //
 // What a view's passes read of a draw, and where a change to each is judged:
 //   - its record (pose, mesh, material, clip, carry) : NoteStagedRow judges standalone draws and marks changed slots.
-//   - its frame slot's row (the pose of a draw riding the slot, its material frame and its lanes) : JudgeMotionSlot
+//   - its frame slot's row (the pose of a draw riding the slot, its material frame and its lanes) : DecideMotionSlot
 //                          judges the union of the old and new rosters under the respective poses.
 //   - its members' slots (a skinned mesh) : no record changes as a member moves, so NoteSkinnedRows judges each
 //                          skinned row a changed slot may pose by a host bound (SdfMeshBox.TryOfSkin, under the shared

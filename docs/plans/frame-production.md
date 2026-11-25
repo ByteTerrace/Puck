@@ -352,7 +352,7 @@ across a benchmark chapter and divided by the frames.
    weighs the pipeline again.
 9. **Judge rigid motion by slot.** Built. The previous draw-row judgement
    raised `sdf.residency.motion.rows` by 1,332,578 over 120 ticks of the
-   east-wing route. `SdfWorldTables.NoteMovedSlots` now judges each moved
+   east-wing route. `SdfWorldTables.CollectMovedSlots` now judges each moved
    slot once. Its union meets every scope and owes every rectangle its rows
    would have owed. The shadow entries keep their drawn and judged bounds
    by slot.
@@ -437,7 +437,7 @@ across a benchmark chapter and divided by the frames.
       boxes that can hide motion inside it, so every moved slot owed both of
       its ends at every shadow entry, however little it moved. A slot whose two
       boxes are one box its pose carries (one carry, no fixed member, no member
-      added or gone, `SdfWorldTables.JudgeMotionSlot`) moves every caster point
+      added or gone, `SdfWorldTables.DecideMotionSlot`) moves every caster point
       with the box, so the box's displacement bounds the caster's and it takes
       the standalone row's rule: drift under a texel of the finest entry costs
       nothing until it gathers (`SdfWorldShadows.Moved`'s `rigid`). Decision:
@@ -565,7 +565,7 @@ across a benchmark chapter and divided by the frames.
     - **A rigid slot under met scopes is placed only past a texel.** With
       every motion scope met (`m_motionOpen == 0`) only the shadows read a
       slot's change, and a rigid slot's box is a function of its pose, so
-      `SdfWorldTables.JudgeMotionSlot` leaves an unmoved slot unplaced, and
+      `SdfWorldTables.DecideMotionSlot` leaves an unmoved slot unplaced, and
       a moved one whose pose change bounds its box's displacement from the
       shadows' judged box under their finest texel
       (`CarriedBound.Displacement` against `SdfWorldShadows.StillDisplacement`).
@@ -585,6 +585,27 @@ across a benchmark chapter and divided by the frames.
       counts the shapes not composed again. Moving the drivers' evaluation to
       the GPU stays the structural cut, since the bake and the draws already
       read each slot's transform.
+
+15. **The moved slots decide side by side.** Built. In motion every motion
+    scope stays open, so the slot's sparing (step 14) rarely applies, and the
+    host's pack placed and judged about 3,700 moved slots a staging on the
+    pack's one lane (`sdf.residency.motion.rows` against `rows-spared`), which
+    the frame thread then waited for in `SdfWorldResidency.JoinPack`. A slot's
+    judgement is now two halves. `SdfWorldTables.DecideMotionSlot` places the
+    slot's boxes, or spares it, reading only the slot's own `SlotMotion`, the
+    frame's poses, the draw records and the shadows' judged boxes, so the
+    staging's slots decide as the partitions of one `JobClass.Frame` fork
+    (`SdfWorldTables.Jobs`, set as the residency begins its pack).
+    `SettleMotionSlot` hands each decided change to the scopes and the shadows
+    (`NoteMotion`), which every slot shares, on the packing thread in the order
+    `CollectMotionSlot` gathered them. Invariant: no decision writes what
+    another decision reads. Door: nothing a decision reads is written until
+    the fork joins, since every write to the scopes, the shadows' judged boxes
+    and the slot table sits in the settle. The open scope count a decision
+    spares by is the one the staging began with, so a scope a settle meets
+    spares nothing more until the next staging, which only places more slots.
+    What shows it: `host.frames`' `pack` part and the frame thread's samples
+    in `JoinPack` (`puck host samples --focus ProduceFrameBatched`).
 
 ## Systems considered
 
