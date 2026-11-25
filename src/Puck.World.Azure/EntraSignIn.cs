@@ -20,6 +20,7 @@ namespace Puck.World.Azure;
 /// token's <c>groups</c> claim must carry) and <c>scope</c> (the one delegated scope a token's <c>scp</c> claim must
 /// carry). The client acquires its token from the ambient Azure sign-in with the API's <c>/.default</c> scope.</remarks>
 public sealed class EntraSignIn : IWorldSignInVerifier, IWorldSignInCredential {
+    private readonly TimeSpan m_acquisitionTimeout;
     private readonly string m_audience;
     private readonly TimeProvider m_clock;
     private readonly IConfigurationManager<OpenIdConnectConfiguration> m_configuration;
@@ -56,7 +57,17 @@ public sealed class EntraSignIn : IWorldSignInVerifier, IWorldSignInCredential {
         ArgumentException.ThrowIfNullOrWhiteSpace(m_scope);
         if (m_scope.Contains(value: ' ')) { throw new ArgumentException(message: "scope must name one delegated API scope."); }
         if (client) {
-            m_credential = (credential ?? new DefaultAzureCredential());
+            // A player without a developer sign-in (no Azure CLI, no environment credential) signs in through the
+            // system browser. The default chain excludes it, so it follows the chain here; its token cache persists so
+            // a later start renews silently. Its default client is the Azure CLI's, which the deployment preauthorizes.
+            m_credential = (credential ?? new ChainedTokenCredential(
+                new DefaultAzureCredential(),
+                new InteractiveBrowserCredential(new InteractiveBrowserCredentialOptions {
+                    TenantId = m_tenant,
+                    TokenCachePersistenceOptions = new TokenCachePersistenceOptions { Name = "puck.world.azure" },
+                })
+            ));
+            m_acquisitionTimeout = ((credential is null) ? InteractiveTokenAcquisitionTimeout : TokenAcquisitionTimeout);
         }
         m_configuration = (configuration ?? new ConfigurationManager<OpenIdConnectConfiguration>(
             $"https://login.microsoftonline.com/{m_tenant}/v2.0/.well-known/openid-configuration",
@@ -64,8 +75,11 @@ public sealed class EntraSignIn : IWorldSignInVerifier, IWorldSignInCredential {
         ));
     }
 
-    /// <summary>Gets how long, on the host clock, a client waits for its user token.</summary>
+    /// <summary>Gets how long, on the host clock, a client with a supplied credential waits for its user token.</summary>
     public static TimeSpan TokenAcquisitionTimeout { get; } = TimeSpan.FromSeconds(seconds: 15);
+    /// <summary>Gets how long, on the host clock, a client on the default chain waits for its user token, which may
+    /// mean a person signing in through the system browser.</summary>
+    public static TimeSpan InteractiveTokenAcquisitionTimeout { get; } = TimeSpan.FromMinutes(minutes: 3);
     /// <summary>Gets how long, on the host clock, an issuer waits for the tenant's signing metadata.</summary>
     public static TimeSpan MetadataTimeout { get; } = TimeSpan.FromSeconds(seconds: 10);
 
@@ -83,7 +97,7 @@ public sealed class EntraSignIn : IWorldSignInVerifier, IWorldSignInCredential {
         if (m_credential is null) { throw new InvalidOperationException(message: "This host does not acquire user tokens."); }
         lock (m_tokenGate) {
             if (m_cachedToken.ExpiresOn <= m_clock.GetUtcNow().AddMinutes(minutes: 2)) {
-                using var timeout = new CancellationTokenSource(delay: TokenAcquisitionTimeout, timeProvider: m_clock);
+                using var timeout = new CancellationTokenSource(delay: m_acquisitionTimeout, timeProvider: m_clock);
                 using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
 
                 try {
