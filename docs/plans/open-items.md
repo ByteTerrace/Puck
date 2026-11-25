@@ -747,6 +747,15 @@ next frame is slower again. Five replacements change that shape. The cuts in
 [frame-time findings](#other-frame-time-findings) that tune what these replace
 wait behind them.
 
+The clean window on both machines read the GPU as the binding limit and the
+frame thread as scaling with the worlds and views a client holds. The CPU
+frame and the GPU frame are now one design,
+[the whole frame as one architecture](frame-production.md#the-whole-frame-as-one-architecture),
+whose [remainder](frame-production.md#what-is-left-of-the-architecture) orders
+what is left: the main view in motion, cadence by motion and pooled storage
+for secondary views, the motion kernel, the view atlas, the pipeline with its
+camera latch, and Vulkan's capture copy and record fork.
+
 1. **The authority's step leaves the frame thread.** The in-process authority
    steps on a thread of its own and the frame presents the latest completed
    tick, as a client of a remote authority already does. A frame then costs
