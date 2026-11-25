@@ -28,6 +28,9 @@ public static class WorldCachesCommand {
     public const string RecordName = "cache-set.json";
     /// <summary>The archive's file name, the one asset of a cache set's release.</summary>
     public const string AssetName = "cache-set.zip";
+    // A release asset is refused at 2 GiB, and one backend's set of the debug world is already larger, so a set past this
+    // size is uploaded as numbered parts of it (cache-set.zip.part000, …), which fetch joins in order.
+    private const long PartBytes = (1L << 30);
     private const string Schema = "puck.player-cache-set.v1";
     private const string TagPrefix = "caches/";
     private static readonly JsonSerializerOptions RecordFormat = new() { WriteIndented = true };
@@ -178,13 +181,62 @@ public static class WorldCachesCommand {
                         "--notes", $"A player build's baked mesh store for one backend, named by its mesh bake identity. Produced by `puck world caches produce --push` from commit {record["commit"]}; the release pipeline's `puck world caches fetch` unpacks it into a release whose build has the same identity. A cache: never the truth, never committed."]).ConfigureAwait(continueOnCapturedContext: false);
             }
             // The archive first: a reader that finds the record finds the set it describes.
-            _ = await CliProcess.RunCheckedAsync(arguments: ["release", "upload", tag, archive, "--clobber"], cancellationToken: cancellationToken, fileName: "gh").ConfigureAwait(continueOnCapturedContext: false);
+            foreach (var part in SplitArchive(archive: archive)) {
+                _ = await CliProcess.RunCheckedAsync(arguments: ["release", "upload", tag, part, "--clobber"], cancellationToken: cancellationToken, fileName: "gh").ConfigureAwait(continueOnCapturedContext: false);
+            }
             _ = await CliProcess.RunCheckedAsync(arguments: ["release", "upload", tag, Path.Combine(path1: Path.GetDirectoryName(path: archive)!, path2: RecordName), "--clobber"], cancellationToken: cancellationToken, fileName: "gh").ConfigureAwait(continueOnCapturedContext: false);
             Console.Out.WriteLine(value: $"{Verb}: pushed {count} meshes as {tag}.");
         }
         return 0;
     }
 
+    // The files a set's archive uploads as: the archive itself when it fits one asset, otherwise its parts, each at most
+    // PartBytes, written beside it.
+    private static IReadOnlyList<string> SplitArchive(string archive) {
+        var length = new FileInfo(fileName: archive).Length;
+
+        if (length <= PartBytes) { return [archive]; }
+        var parts = new List<string>();
+        var buffer = new byte[1 << 20];
+
+        using var input = File.OpenRead(path: archive);
+        for (var index = 0; (input.Position < length); index++) {
+            var part = string.Create(provider: CultureInfo.InvariantCulture, handler: $"{archive}.part{index:000}");
+            using var output = File.Create(path: part);
+            var left = Math.Min(val1: PartBytes, val2: (length - input.Position));
+
+            while (left > 0) {
+                var read = input.Read(buffer: buffer, offset: 0, count: (int)Math.Min(val1: buffer.Length, val2: left));
+                if (read == 0) { throw new EndOfStreamException(message: $"{archive} ended before its length."); }
+                output.Write(buffer: buffer, offset: 0, count: read);
+                left -= read;
+            }
+            parts.Add(item: part);
+        }
+        return parts;
+    }
+    // Downloads a set's archive, whole or as the parts SplitArchive uploaded, which it joins in order; null when the
+    // release holds neither.
+    private static async Task<string?> DownloadArchiveAsync(string tag, string directory, CancellationToken cancellationToken) {
+        if (await DownloadAssetAsync(asset: AssetName, cancellationToken: cancellationToken, directory: directory, tag: tag).ConfigureAwait(continueOnCapturedContext: false) is { } whole) {
+            return whole;
+        }
+        _ = await DownloadAssetAsync(asset: $"{AssetName}.part*", cancellationToken: cancellationToken, directory: directory, tag: tag).ConfigureAwait(continueOnCapturedContext: false);
+        var parts = Directory.GetFiles(path: directory, searchPattern: $"{AssetName}.part*").Order(comparer: StringComparer.Ordinal).ToArray();
+
+        if (parts.Length == 0) { return null; }
+        var archive = Path.Combine(path1: directory, path2: AssetName);
+
+        await using (var output = File.Create(path: archive)) {
+            foreach (var part in parts) {
+                await using (var input = File.OpenRead(path: part)) {
+                    await input.CopyToAsync(destination: output, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+                }
+                File.Delete(path: part);
+            }
+        }
+        return archive;
+    }
     // Downloads one asset of a cache set's release into a directory; returns the downloaded file, null when the release or
     // the asset does not exist, and throws on any other gh failure.
     private static async Task<string?> DownloadAssetAsync(string tag, string asset, string directory, CancellationToken cancellationToken) {
@@ -278,7 +330,7 @@ public static class WorldCachesCommand {
 
             if (from is null) {
                 try {
-                    archive = (await DownloadAssetAsync(asset: AssetName, cancellationToken: cancellationToken, directory: download.Path, tag: tag).ConfigureAwait(continueOnCapturedContext: false)) ?? Path.Combine(path1: download.Path, path2: AssetName);
+                    archive = (await DownloadArchiveAsync(cancellationToken: cancellationToken, directory: download.Path, tag: tag).ConfigureAwait(continueOnCapturedContext: false)) ?? Path.Combine(path1: download.Path, path2: AssetName);
                 } catch (IOException failure) {
                     Console.Error.WriteLine(value: $"{Verb}: {failure.Message}");
                     return (1, held, lines, outcomes);
