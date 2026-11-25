@@ -7,6 +7,9 @@
 static const uint PuckR2AlphaX = 3242174889u;
 static const uint PuckR2AlphaY = 2447445414u;
 
+// The golden angle in radians, pi * (3 - sqrt(5)): the turn between consecutive taps of a golden spiral.
+static const float PuckGoldenAngle = 2.3999632297286535;
+
 // One R2 dither sample in [0, 1] from integer pixel coordinates, in fixed point so both backends add the identical
 // pattern: the unsigned product wraps mod 2^32, which is the fractional part of the additive recurrence.
 precise float puckR2Dither(uint2 pixel) {

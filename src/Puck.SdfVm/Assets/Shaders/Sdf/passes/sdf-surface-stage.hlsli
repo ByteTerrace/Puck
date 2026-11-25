@@ -41,7 +41,7 @@ static const float SdfMeshShadowNearTexels = 1.5;
 // occludes in proportion to its excess up to this, so the clearance cone around a caster texel fades out rather than
 // cutting a hard-edged disc, which a jagged silhouette standing a little above its receiver prints as a row of discs.
 static const float SdfMeshShadowSoftTexels = 1.0;
-static const float SdfGoldenAngle = 2.39996323;
+#include "Shared/low-discrepancy.hlsli"
 
 // The pixel pattern the occlusion's and the shadows' taps follow: a rotation and a radial offset, each in [0, 1). Each
 // pixel takes its cell of a 4x4 ordered-dither tile, so any 4x4 window of pixels holds each of the tile's sixteen
@@ -92,7 +92,7 @@ float sdfMeshAmbient(SdfPixel p, float3 surfacePoint, float3 normal, float t) {
 
     [loop]
     for (uint index = 0u; (index < SdfMeshAoSamples); index++) {
-        float angle = ((float(index) * SdfGoldenAngle) + rotation);
+        float angle = ((float(index) * PuckGoldenAngle) + rotation);
         float reach = (((float(index) + pattern.y) / float(SdfMeshAoSamples)) * pixels);
         float2 tap = floor((float2(p.pixel) + 0.5) + (float2(cos(angle), sin(angle)) * reach));
 
@@ -298,7 +298,7 @@ float2 sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint role) {
         [loop]
         for (uint tap = 0u; (tap < SdfMeshShadowSearchTaps); tap++) {
             float r = sqrt((float(tap) + pattern.y) / float(SdfMeshShadowSearchTaps));
-            float angle = ((float(tap) * SdfGoldenAngle) + rotation);
+            float angle = ((float(tap) * PuckGoldenAngle) + rotation);
             float3 gap = sdfMeshShadowGap(opticalPresent, cascade, c, texel, (float2(cos(angle), sin(angle)) * (r * searchTexels)), receiver, gradient, texelWorld, 0.0, cone, exit);
             if (gap.x > 0.0) {
                 nearest = min(nearest, gap.x);
@@ -323,7 +323,7 @@ float2 sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint role) {
         [loop]
         for (uint tap = 0u; (tap < SdfMeshShadowFilterTaps); tap++) {
             float r = sqrt((float(tap) + pattern.y) / float(SdfMeshShadowFilterTaps));
-            float angle = ((float(tap) * SdfGoldenAngle) + rotation);
+            float angle = ((float(tap) * PuckGoldenAngle) + rotation);
             float3 gap = sdfMeshShadowGap(opticalPresent, cascade, c, texel, (float2(cos(angle), sin(angle)) * (r * filterTexels)), receiver, gradient, texelWorld, SdfMeshShadowSlopeBias, cone, exit);
             float caster = saturate(gap.x / soft) * gap.z;
             float open = (1.0 - caster);

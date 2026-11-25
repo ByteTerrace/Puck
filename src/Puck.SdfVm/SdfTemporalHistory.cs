@@ -1,5 +1,6 @@
 using System.Numerics;
 using Puck.Abstractions.Cameras;
+using Puck.Maths;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -79,7 +80,7 @@ public sealed class SdfTemporalHistory {
     /// <returns>The render-pixel ray offset.</returns>
     public static Vector2 Sample(uint index) {
         index %= SdfWorldPackage.TemporalPeriod;
-        return ((index == 0) ? Vector2.Zero : new Vector2(x: (RadicalInverse(index: index, radix: 2) - 0.5f), y: (RadicalInverse(index: index, radix: 3) - 0.5f)));
+        return ((index == 0) ? Vector2.Zero : new Vector2(x: (((float)LowDiscrepancy.RadicalInverse(index: index, radix: 2)) - 0.5f), y: (((float)LowDiscrepancy.RadicalInverse(index: index, radix: 3)) - 0.5f)));
     }
     /// <summary>Returns whether a pass in an epoch reads the previous view and the previous transform tables: the
     /// <c>motion</c> debug view does.</summary>
@@ -220,17 +221,6 @@ public sealed class SdfTemporalHistory {
     );
     private static bool Sampling(SdfTemporalEpoch epoch) => (epoch.Enabled && (epoch.Debug == 0));
     private static Vector2 JitterAt(SdfTemporalEpoch epoch, uint frames) => (Sampling(epoch: epoch) ? Sample(index: frames) : Vector2.Zero);
-    private static float RadicalInverse(uint index, uint radix) {
-        var value = 0f;
-        var fraction = (1f / radix);
-
-        while (index != 0) {
-            value += ((index % radix) * fraction);
-            index /= radix;
-            fraction /= radix;
-        }
-        return value;
-    }
 
     private readonly record struct Inputs(Vector2 Jitter, bool HasPreviousView, SdfReprojectionView PreviousView, long PreviousPoses);
 }

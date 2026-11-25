@@ -63,6 +63,18 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
 
 ## Contouring
 
+- **A grid lattice skips the blocks its bounds clear.** A coarse search's
+  lattice and a final lattice are bounded once on the pool before dispatch
+  (`SdfMeshPathBake.QueueBounds`, `SdfMeshPathBake.Bounds.cs`): blocks of four
+  samples whose CPU-field enclosure, one cell past their samples, clears three
+  cell diagonals are filled on the host with the enclosure's nearer end, and the
+  rest dispatch as a block lattice (`SdfMeshBakeRequest.Blocks`, mode 1). Every
+  lattice reader judges nearness by small values or sign changes across a cell,
+  so a skipped sample never changes what it reads; a new reader that reads a far
+  sample's magnitude (a distance-weighted average, an SDF-valued blur) breaks
+  that and must sample the lattice whole. The done line's `bound=[…]` counts the
+  lattices bounded, refused (a field the CPU cannot read), walks and skipped
+  samples.
 - **Count ownership classes, then fill owned indexes.** `SdfSampledLattice.Refine`
   counts distinct samples by the cell faces they touch: low boundary, interior,
   or high boundary on each axis. Every interior coordinate has the same holders,
