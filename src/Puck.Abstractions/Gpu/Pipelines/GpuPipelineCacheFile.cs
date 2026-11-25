@@ -136,12 +136,11 @@ public sealed class GpuPipelineCacheFile {
         foreach (var eviction in CacheRetention.SelectEvictions(bound: CacheBound.Entries(maxEntries: RetainedFiles), entries: candidates, inUse: inUse)) {
             var device = deviceOf[eviction.Path];
 
-            try {
-                File.Delete(path: eviction.Path);
+            if (FileRemoval.TryDelete(failure: out var failure, path: eviction.Path)) {
                 remaining[device]--;
                 work.CountPruned();
-            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-                Console.Error.WriteLine(value: $"[pipeline-cache] not pruned {eviction.Path}: {exception.Message}");
+            } else {
+                Console.Error.WriteLine(value: $"[pipeline-cache] not pruned {eviction.Path}: {failure.Message}");
             }
         }
 

@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using System.Globalization;
 
 namespace Puck.Cli;
@@ -32,7 +33,7 @@ public static class StartIdleness {
     /// <param name="processId">The process id.</param>
     /// <param name="startTicks">The process's UTC start ticks.</param>
     public static void Clear(string root, int processId, long startTicks) {
-        try { File.Delete(path: Path.Combine(path1: Directory(root: root), path2: ProcessMarks.Name(processId: processId, startTicks: startTicks))); } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) { }
+        _ = FileRemoval.TryDelete(path: Path.Combine(path1: Directory(root: root), path2: ProcessMarks.Name(processId: processId, startTicks: startTicks)));
     }
     /// <summary>Reads the idle starts among the running processes, and, with <paramref name="prune"/>, removes the marks of
     /// processes no longer running.</summary>

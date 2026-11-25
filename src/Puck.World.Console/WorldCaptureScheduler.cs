@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using System.Globalization;
 using System.Numerics;
 using System.Text.Json;
@@ -1028,10 +1029,8 @@ public sealed class WorldCaptureScheduler {
         );
     }
     private static void TryDelete(string path) {
-        try {
-            File.Delete(path: path);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            Console.Error.WriteLine(value: $"[captures] could not remove {path} ({exception.Message}).");
+        if (!FileRemoval.TryDelete(failure: out var failure, path: path)) {
+            Console.Error.WriteLine(value: $"[captures] could not remove {path} ({failure.Message}).");
         }
     }
     private void WriteManifest() {

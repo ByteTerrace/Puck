@@ -1,3 +1,4 @@
+using Puck.Confinement;
 using Puck.Abstractions;
 using Puck.Networking;
 using System.Collections.Concurrent;
@@ -258,7 +259,7 @@ public sealed class LocalControlServer : IAsyncDisposable, IDisposable {
         m_listener.Stop();
         foreach (var client in m_clients.Keys) { client.Dispose(); }
         m_descriptorFile.Dispose();
-        try { File.Delete(path: AttachmentPath); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        _ = FileRemoval.TryDelete(path: AttachmentPath);
     }
     /// <summary>Stops the server as <see cref="Dispose"/> does and waits for <see cref="Completion"/>.</summary>
     /// <returns>A task that completes when no worker of this server is running.</returns>

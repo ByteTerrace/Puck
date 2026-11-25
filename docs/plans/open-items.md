@@ -4924,9 +4924,6 @@ their lane order; this packet keeps the single duplicates and leads.
   into one bytes entry point there; its `TryCanonicalHash` also reads through
   `File` where the compile's inputs door would let the browser resolve
   `hash: auto`.
-- A "delete this file, ignoring a failure" helper is written four times
-  (`WorldArtifactStore.TryDeleteFile`, `WorldCaptureScheduler`,
-  `CacheRetention`, `StartIdleness`). One home in the file-system primitives.
 - [low] What a scene reads is listed twice: `WorldSceneInputs`' rows omit the
   look lanes and the poses, which a second list holds. One shared list of a
   scene's reads, by the lane's report.

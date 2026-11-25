@@ -449,7 +449,7 @@ public sealed class CliLease : IDisposable {
             AtomicFile.WriteAllText(path: path, contents: Sidecar(metadata: metadata, values: checkout));
             foreach (var sidecar in Directory.EnumerateFiles(path: directory)) {
                 if ((Path.GetExtension(path: sidecar).Length == 0) && !File.Exists(path: Path.Combine(path1: queue, path2: Path.GetFileName(path: sidecar)))) {
-                    try { File.Delete(path: sidecar); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                    _ = FileRemoval.TryDelete(path: sidecar);
                 }
             }
         } catch (IOException) { } catch (UnauthorizedAccessException) { }
@@ -528,19 +528,12 @@ public sealed class CliLease : IDisposable {
 
         foreach (var file in Directory.EnumerateFiles(path: Path.GetDirectoryName(path: ticket)!).Order(comparer: StringComparer.Ordinal)) {
             var id = Path.GetFileName(path: file);
-            string[]? lines = null;
+            var lines = ReadLines(path: file);
             var recognized = false;
 
-            try {
-                using var stream = new FileStream(access: FileAccess.Read, mode: FileMode.Open, path: file, share: FileShare.ReadWrite | FileShare.Delete);
-                using var reader = new StreamReader(stream: stream);
-
-                lines = reader.ReadToEnd().Split(options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries, separator: '\n');
-            } catch (Exception error) when ((error is IOException or UnauthorizedAccessException)) {
-                // Vanished, being written, or deleted but still held open (Windows answers access denied): a ticket we
-                // cannot read yet is counted, never skipped.
-                if (!File.Exists(path: file)) { continue; }
-            }
+            // Vanished, being written, or deleted but still held open (Windows answers access denied): a ticket we cannot
+            // read yet is counted, never skipped.
+            if ((lines is null) && !File.Exists(path: file)) { continue; }
             if (lines is not null) {
                 var exited = ProcessGone(lines: lines, now: now);
 
@@ -549,7 +542,10 @@ public sealed class CliLease : IDisposable {
                 if (exited ?? ((DateTime.UtcNow - File.GetLastWriteTimeUtc(path: file)) > TimeSpan.FromSeconds(seconds: 10))) {
                     if (!drop) { continue; }
                     // A ticket the OS will not let go of yet (Windows holds a deleted file open elsewhere) stays counted.
-                    try { File.Delete(path: file); Leave(file); continue; } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                    if (FileRemoval.TryDelete(path: file)) {
+                        Leave(ticket: file);
+                        continue;
+                    }
                 }
             }
             if (eligibleOnly && File.Exists(path: BlockedPath(file))) { continue; }
@@ -617,9 +613,9 @@ public sealed class CliLease : IDisposable {
     }
     private static void Leave(string? ticket) {
         if (ticket is null) { return; }
-        try { File.Delete(path: ticket); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        try { File.Delete(path: TicketCheckoutPath(ticket: ticket)); } catch (IOException) { } catch (UnauthorizedAccessException) { }
-        try { File.Delete(path: BlockedPath(ticket)); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        _ = FileRemoval.TryDelete(path: ticket);
+        _ = FileRemoval.TryDelete(path: TicketCheckoutPath(ticket: ticket));
+        _ = FileRemoval.TryDelete(path: BlockedPath(ticket));
     }
     private static string BlockedPath(string ticket) => Path.Combine(Path.GetDirectoryName(ticket) + ".blocked", Path.GetFileName(ticket));
     private static void Block(string ticket) {
