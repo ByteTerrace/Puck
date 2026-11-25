@@ -45,6 +45,15 @@ public static class SdfCadenceWork {
     /// <summary>Counts the scopes those changes were judged against, each up to two box tests.</summary>
     public static readonly WorkKind ScopeTests = new(name: "sdf.cadence.scopes.tests", unit: "tests", workClass: WorkClass.Pacing);
 
-    /// <summary>Gets the process's cadence counts.</summary>
-    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.cadence", kinds: [Signatures, Forced, Resampled, Blocks, Fits, LightSelections, Scopes, ScopesMet, ScopesLit, ScopeUnbounded, ScopeCulls, ScopeChanges, ScopeTests]);
+    /// <summary>A screen slot a resident screen claimed (SdfWorldTables.SettleScreenSlots).</summary>
+    public static readonly WorkKind ScreenSlotClaims = new(name: "sdf.screens.claims", unit: "slots", workClass: WorkClass.Pacing);
+    /// <summary>A screen slot a screen that left residency gave back.</summary>
+    public static readonly WorkKind ScreenSlotReleases = new(name: "sdf.screens.releases", unit: "slots", workClass: WorkClass.Pacing);
+    /// <summary>The screens holding a slot, summed over every settle: divided by the settles, the screens resident at once.</summary>
+    public static readonly WorkKind ScreensResident = new(name: "sdf.screens.resident", unit: "screens", workClass: WorkClass.Pacing);
+    /// <summary>The screens wanted resident that held no slot because more were wanted than the slots hold, summed over
+    /// every settle.</summary>
+    public static readonly WorkKind ScreensDegraded = new(name: "sdf.screens.degraded", unit: "screens", workClass: WorkClass.Pacing);
+    /// <summary>Gets the process's cadence and screen-slot counts.</summary>
+    public static WorkCounterSet ProcessWork { get; } = new(name: "sdf.cadence", kinds: [Signatures, Forced, Resampled, Blocks, Fits, LightSelections, Scopes, ScopesMet, ScopesLit, ScopeUnbounded, ScopeCulls, ScopeChanges, ScopeTests, ScreenSlotClaims, ScreenSlotReleases, ScreensResident, ScreensDegraded]);
 }

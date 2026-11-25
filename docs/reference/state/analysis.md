@@ -709,7 +709,7 @@ ceiling and how they behave.
 - [Rules and firing](rules.md): the evaluation these analyses describe.
 - [Host and extend the state engine](hosting.md): how your own facts report
   their reads, writes, and cost.
-- [Search](search.md): how a judge run is priced against what the sheet leaves.
+- [Search](search.md): how a judge run is priced against a job's own step lane.
 
 ## See also
 

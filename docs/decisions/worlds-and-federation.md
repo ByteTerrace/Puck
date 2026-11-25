@@ -400,6 +400,11 @@ world follows it, and the other world's own rules decide what it does there. A
 door opened onto another world is two doors paired this way: the source offers
 in a row, the destination grants in a row of its own under its own lease and
 refusal, each follows the other, and each door opens only while both stand.
+Several frames may stand for one pairing (the debug world's moon painting and
+its valley frame share the offer, the pass and the socket), and a door that
+stands shut holds no session onto the far world: its owner's observation
+through the glass closes with the door and opens with it, so a shut door costs
+its registration alone.
 
 **Options weighed.**
 

@@ -89,7 +89,10 @@ void sdfViewsFilterStage(SdfPixel p) {
         sdfShadeTilesRW[word + 1u] = lights.lights.y;
         sdfShadeTilesRW[word + 2u] = lights.lights.z;
         sdfShadeTilesRW[word + 3u] = lights.lights.w;
-        sdfShadeTilesRW[word + 4u] = lights.screens;
+        sdfShadeTilesRW[word + 4u] = lights.screens.x;
+        sdfShadeTilesRW[word + 5u] = lights.screens.y;
+        sdfShadeTilesRW[word + 6u] = lights.screens.z;
+        sdfShadeTilesRW[word + 7u] = lights.screens.w;
     }
 }
 

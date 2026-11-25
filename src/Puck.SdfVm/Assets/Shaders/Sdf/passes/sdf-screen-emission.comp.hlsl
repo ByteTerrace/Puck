@@ -1,9 +1,10 @@
-// One group per acquired image. Four lanes sum each of the sixteen cells over at most a 32 x 32 grid of evenly
+// One group per screen slot below the highest acquired image (the mask's span, which the host dispatches). Four lanes sum each of the sixteen cells over at most a 32 x 32 grid of evenly
 // spaced pixel centres, so the cost is bounded however large the image grows; a fixed reduction tree publishes the
 // whole-image mean, in nits. No CPU color or displayed-frame guess is read.
 #include "../isa/sdf-sky-environment.interface.hlsli"
 #include "../isa/sdf-render.hlsli"
 #include "../frame/sdf-screen-mapping.hlsli"
+#include "../field/sdf-component.hlsli"
 #include "Shared/transfer.hlsli"
 
 groupshared float4 sdfScreenSums[64];
@@ -14,7 +15,7 @@ void CSMain(uint3 group : SV_GroupID, uint lane : SV_GroupIndex) {
     uint cell = lane / 4u;
     ScreenMappingData mapping = worldScreenMapping(screen);
     uint2 extent = uint2(0u, 0u);
-    bool bound = (passGroup.screenEmissionMask & (1u << screen)) != 0u &&
+    bool bound = (sdfComponent(passGroup.screenEmissionMask, (screen / 32u)) & (1u << (screen % 32u))) != 0u &&
         mapping.state.x != 0.0 && mapping.state.z != 0.0 && mapping.imageU.w != 0.0;
     if (bound) { screenSources[screen].GetDimensions(extent.x, extent.y); }
     uint2 cellXY = uint2(cell % SDF_SCREEN_EMISSION_EDGE, cell / SDF_SCREEN_EMISSION_EDGE);

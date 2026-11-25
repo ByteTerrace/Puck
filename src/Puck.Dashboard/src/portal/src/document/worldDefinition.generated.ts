@@ -10691,7 +10691,7 @@ export type WorldPlacementMirror = {
 
 export type WorldPlacementPolicyDefaults = {
   /**
-   * Boot-consumed. The extra screen slots the probe reserves, bounded by the engine's MaxScreenSurfaces ceiling.
+   * Boot-consumed. The extra screen indices the probe reserves, bounded only by the screen index's format (MaxScreenIdentities).
    */
   authoringHeadroomScreens: number;
   /**
@@ -13572,7 +13572,7 @@ export type WorldScopedReplayInput = {
 
 export type WorldScreen = {
   /**
-   * The engine screen-surface index (0..MaxScreenSurfaces−1) this slab declares — the key the source/light providers bind under.
+   * The screen's identity (0..MaxScreenIdentities−1), unique in the world, which this slab declares — the key the source/light providers bind under. A world declares any number of screens; a presentation holds a slot only for those resident at once.
    */
   index: number;
   /**
@@ -13992,7 +13992,7 @@ export type WorldSearchRow = {
    */
   counts?: string | null;
   /**
-   * The relocations judged per tick, at most what the work sheet leaves; absent derives that.
+   * The relocations judged per tick, at most what the job's step allowance admits; absent derives that.
    */
   nodes?: number | null;
   /**

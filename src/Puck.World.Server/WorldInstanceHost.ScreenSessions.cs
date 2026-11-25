@@ -81,8 +81,8 @@ public sealed class WorldObservationSession {
     internal WorldPortalInputProducer? Input { get; set; }
 }
 public sealed partial class WorldInstanceHost {
-    // Each owning instance's observations, and the definition they were reconciled against.
-    private readonly Dictionary<string, (WorldDefinition? Reconciled, SortedList<WorldObservationSite, WorldObservationSession> Rows)> m_screenSessions = new(comparer: StringComparer.Ordinal);
+    // Each owning instance's observations, and the definition and door closures they were reconciled against.
+    private readonly Dictionary<string, (WorldDefinition? Reconciled, long Closures, SortedList<WorldObservationSite, WorldObservationSession> Rows)> m_screenSessions = new(comparer: StringComparer.Ordinal);
 
     // Both indexes publish together. Presentation's per-frame lookups use value keys, so reading an existing session
     // does not construct another observation identity.
@@ -112,8 +112,10 @@ public sealed partial class WorldInstanceHost {
     public WorldObservationSession? InfinitySession(string instanceName, string layerName) => m_publishedScreenSessions.InfinityLayers.GetValueOrDefault(key: (instanceName, layerName));
 
     // Every authored observation: screens, placement faces and named infinity layers. Their destinations all use the
-    // same resolver and the owning authority's principal; presentation never opens an observation itself.
-    private static SortedList<WorldObservationSite, WorldScreenSource.Session> DeclaredSessions(WorldDefinition definition) {
+    // same resolver and the owning authority's principal; presentation never opens an observation itself. A face whose
+    // door stands closed (WorldPortalClosures) observes nothing: its session closes when the door shuts and opens again
+    // when it opens, so a shut door holds no session and its glass shows no picture.
+    private static SortedList<WorldObservationSite, WorldScreenSource.Session> DeclaredSessions(WorldDefinition definition, WorldPortalClosures? closures) {
         var declared = new SortedList<WorldObservationSite, WorldScreenSource.Session>();
 
         foreach (var screen in definition.Screens) {
@@ -125,7 +127,8 @@ public sealed partial class WorldInstanceHost {
         foreach (var row in WorldFaceCatalog.For(definition: definition).Rows) {
             if (
                 (row.ScreenIndex >= 0) &&
-                (row.Source is WorldScreenSource.Session session)
+                (row.Source is WorldScreenSource.Session session) &&
+                (closures?.IsClosed(placementId: row.PlacementId, face: row.FaceName) != true)
             ) {
                 declared[new WorldObservationSite.Screen(Index: row.ScreenIndex)] = session;
             }
@@ -272,8 +275,9 @@ public sealed partial class WorldInstanceHost {
     }
     // Opens one declared session: resolves its destination through the observation door, then observes it through the
     // destination's own admission. A refusal that leaves a destination this resolution started with nobody in it stops
-    // that instance again.
-    private WorldObservationSession OpenScreenSession(WorldInstance owner, WorldObservationSite site, WorldScreenSource.Session source) {
+    // that instance again. A destination still inside its own tick (another row of the wave) cannot admit an observer
+    // now: the open answers null and the settle asks again after the destination's tick.
+    private WorldObservationSession? OpenScreenSession(WorldInstance owner, WorldObservationSite site, WorldScreenSource.Session source) {
         // Only a presentation reads a session's mirror; in a host that presents nothing the destination still runs
         // and discloses, and the mirror drops what it is sent.
         var session = new WorldObservationSession(
@@ -294,6 +298,10 @@ public sealed partial class WorldInstanceHost {
             NarrateScreenSession(text: $"[world.screen: {owner.Name} session {site} refused ({reason})]");
 
             return session;
+        }
+
+        if (!resolved.IsNewGeneration && (target!.Server.Tick.PendingReason is not null)) {
+            return null;
         }
 
         session.GenerationId = resolved.GenerationId;
@@ -549,14 +557,17 @@ public sealed partial class WorldInstanceHost {
             key: instance.Name,
             value: out var owned
         )) {
-            owned = (null, new SortedList<WorldObservationSite, WorldObservationSession>());
+            owned = (null, -1L, new SortedList<WorldObservationSite, WorldObservationSession>());
         }
 
         var definition = instance.Server.Configuration;
+        // The door scan is the closures' one writer, and it runs on this thread just before the settle.
+        var closures = instance.PortalClosures;
+        var closed = (closures?.Revision ?? owned.Closures);
         var changed = false;
 
-        if ((owned.Reconciled is null) || !SameSessionDeclarations(after: definition, before: owned.Reconciled)) {
-            var declared = DeclaredSessions(definition: definition);
+        if ((owned.Reconciled is null) || (closed != owned.Closures) || !SameSessionDeclarations(after: definition, before: owned.Reconciled)) {
+            var declared = DeclaredSessions(closures: closures, definition: definition);
 
             foreach (var screen in owned.Rows.Keys.ToList()) {
                 if (
@@ -578,21 +589,24 @@ public sealed partial class WorldInstanceHost {
                 }
             }
 
+            var deferred = false;
+
             foreach (var (screen, source) in declared) {
                 if (!owned.Rows.ContainsKey(key: screen)) {
-                    owned.Rows[screen] = OpenScreenSession(
-                        owner: instance,
-                        site: screen,
-                        source: source
-                    );
-                    changed = true;
+                    if (OpenScreenSession(owner: instance, site: screen, source: source) is { } opened) {
+                        owned.Rows[screen] = opened;
+                        changed = true;
+                    } else {
+                        deferred = true;
+                    }
                 }
             }
 
-            owned = (definition, owned.Rows);
+            // A deferred open leaves the reconciliation owed, so the next settle opens it.
+            owned = (deferred ? null : definition, closed, owned.Rows);
             m_screenSessions[instance.Name] = owned;
         } else if (!ReferenceEquals(objA: definition, objB: owned.Reconciled)) {
-            owned = (definition, owned.Rows);
+            owned = (definition, closed, owned.Rows);
             m_screenSessions[instance.Name] = owned;
         }
 

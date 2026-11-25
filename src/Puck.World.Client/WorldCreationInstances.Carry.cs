@@ -140,14 +140,16 @@ public sealed partial class WorldCreationInstances {
     /// answers <see langword="null"/> and keeps the frame its program declares.</summary>
     /// <param name="client">The client whose definition names the screens and whose interpolated body poses root the
     /// body-rooted stamps.</param>
-    /// <returns>One provider per slot below <see cref="SdfProgramBuilder.MaxScreenSurfaces"/>, keyed by screen index.</returns>
+    /// <returns>One provider per screen index the client's definition declares (<see cref="WorldPlacementPolicy.ScreenSpan"/>),
+    /// keyed by screen index.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="client"/> is <see langword="null"/>.</exception>
     public IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>> ScreenSurfaceTransforms(IWorldStampSource client) {
         ArgumentNullException.ThrowIfNull(argument: client);
 
-        var providers = new Dictionary<int, Func<SdfScreenSurfaceTransform?>>(capacity: SdfProgramBuilder.MaxScreenSurfaces);
+        var span = WorldPlacementPolicy.ScreenSpan(definition: client.Definition);
+        var providers = new Dictionary<int, Func<SdfScreenSurfaceTransform?>>(capacity: span);
 
-        for (var index = 0; (index < SdfProgramBuilder.MaxScreenSurfaces); index++) {
+        for (var index = 0; (index < span); index++) {
             var slot = index;
 
             providers[index] = () => SurfaceTransform(

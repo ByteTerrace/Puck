@@ -30,9 +30,9 @@ A few rules apply to every limit on this page:
 > a tick at rest plus one change for each rule the evaluator judges by change,
 > and every binding for each other line; it doesn't guarantee how long a tick
 > takes, and a tick in which many things change at once costs more, up to the
-> worst tick the sheet reports. The search jobs share the same ceiling: what
-> the rules' sheet leaves is
-> their allowance, so an over-priced rule shrinks every search. A rule that fires
+> worst tick the sheet reports. Search jobs are priced apart from the sheet,
+> each against its own step lane (`SearchCapacity.MaxWorkUnitsPerStep`) less its
+> own upkeep, so no rule shrinks a search. A rule that fires
 > only a few of its bindings is priced by its enforced `maxFirings`. See
 > [Rule analysis, scheduling, and work budgets](analysis.md).
 
@@ -169,6 +169,7 @@ A few rules apply to every limit on this page:
 | Promotion codes per promote shape | 16 | `SearchCapacity.MaxPromotions` | [Search](search.md) |
 | Search depth | 64 plies | `SearchCapacity.MaxDepth` | [Search](search.md) |
 | Candidates judged per step | 4,096 | `SearchCapacity.MaxNodesPerTick` | [Search](search.md#work-is-priced-in-units) |
+| Work units one search step spends, its upkeep included | 1,048,576 | `SearchCapacity.MaxWorkUnitsPerStep` | [Search](search.md#work-is-priced-in-units) |
 | Transposition entries per scored negamax job | 8,192 | `SearchCapacity.TranspositionEntries` | [Search](search.md#negamax) |
 | Tree search node pool | 8,192 | `SearchCapacity.TreeNodes` | [Search](search.md#monte-carlo-tree-search) |
 | Tree search iterations | 65,536 | `SearchCapacity.MaxIterations` | [Search](search.md#monte-carlo-tree-search) |

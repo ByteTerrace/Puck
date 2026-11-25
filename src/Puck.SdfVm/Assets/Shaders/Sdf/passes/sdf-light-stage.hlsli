@@ -37,7 +37,7 @@ float3 sdfScreenImagePoint(SdfPixel p, int material, float3 surfacePoint, out fl
     view.lens.yz = passGroup.frustumOffset;
 
     float3 direction = cameraRayDirection(view, ((float2(p.pixel) + 0.5) / float2(worldViewDims(view))));
-    ScreenSurfaceData surface = worldScreenSurface((uint)(material - SDF_SCREEN_MATERIAL - 1));
+    ScreenSurfaceData surface = worldScreenSurface(sdfScreenSlotOfMaterial(material));
     float3 normal = cross(surface.right.xyz, surface.up.xyz);
     float facing = dot(direction, normal);
 
@@ -87,7 +87,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             // is as steady as the device around it, and keeps its history, so the face's jittered edge resolves like any
             // other edge. An opening that ripples is the one
             // reactive opening: its refraction moves on its own, and a history would smear it.
-            uint screenIndex = (uint)(material - SDF_SCREEN_MATERIAL - 1);
+            uint screenIndex = sdfScreenSlotOfMaterial(material);
             ScreenMappingData opening = worldScreenMapping(screenIndex);
             bool isOpening = ((opening.imageU.w != 0.0) && (opening.state.w == 0.0));
             bool ripples = (isOpening && (worldScreenRipple(screenIndex).state.x > 0.0));

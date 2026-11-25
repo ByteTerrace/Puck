@@ -691,7 +691,7 @@ decision, no world-only read), accepting when the verdict reads
 `accept` and the turn changed. This root walk never prunes and never skips a
 valid candidate, so the root outputs are unaffected by `depth`/`score`. It
 restarts when a row it reads (its plan's rows, its judge's and score's reads, its held and revision slots) changes, its outputs excepted. Quota derives
-from what the work sheet leaves divided by the judge's cost (`nodes` may only
+from the job's own step lane (`SearchCapacity.MaxWorkUnitsPerStep` less its upkeep) divided by the judge's cost (`nodes` may only
 lower it, and a deeper search spends the same quota over more ticks); progress
 hashes and checkpoints. `world.search` narrates each job. Sharp edge: a token
 row whose `min` is a cell ordinal is refused — the off-board value must be no

@@ -23,7 +23,7 @@ uint sdfRateCode(SdfSurfaceSample s) {
         return SDF_RATE_NONE;
     }
     if (sdfScreenSurfaceShades(s.material)) {
-        return (uint)round(worldScreenRipple((uint)(s.material - SDF_SCREEN_MATERIAL - 1)).state.z);
+        return (uint)round(worldScreenRipple(sdfScreenSlotOfMaterial(s.material)).state.z);
     }
     if (s.frameSlot != SDF_TRANSFORM_SLOT_NONE) {
         return (uint)round(sdfDynamicTransforms[3u * (uint)s.frameSlot].w);

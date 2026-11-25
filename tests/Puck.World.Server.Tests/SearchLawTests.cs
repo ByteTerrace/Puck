@@ -173,7 +173,7 @@ public sealed partial class SearchLawTests {
     // do, and an allowance that cannot cover a restart, a full replay and one unit is refused by that sum rather than
     // left to stall.
     [Fact]
-    public void AJobsAllowanceIsWhatTheSheetLeavesAndTooSmallAnAllowanceIsRefusedByItsSum() {
+    public void AJobsAllowanceIsTheSearchLaneLessItsOwnUpkeepAndTooSmallAnAllowanceIsRefusedByItsSum() {
         var one = MiniNegamaxWorld(depth: 3);
         var two = one with {
             SearchRaw = new WorldSearchSection(Jobs: [one.Search.Rows[0], one.Search.Rows[0] with { Name = "second" }]),
@@ -197,11 +197,15 @@ public sealed partial class SearchLawTests {
         var alone = Plans(definition: one)[0].Work;
         var shared = Plans(definition: two);
 
-        Assert.True(condition: (alone.Allowance < RuleCapacity.MaxWorkUnitsPerTick));
-        Assert.True(condition: (alone.Allowance >= alone.Minimum));
-        // Both jobs fold four cells, and bound two audience checks over those cells and their three rows.
+        // The job folds four cells, and bounds two audience checks over those cells and their three rows; a second job
+        // takes nothing from it.
         Assert.Equal(
-            (alone.Allowance - (4L + (2L * (4L + 3L)))),
+            (SearchCapacity.MaxWorkUnitsPerStep - (4L + (2L * (4L + 3L)))),
+            alone.Allowance
+        );
+        Assert.True(condition: (alone.Allowance >= alone.Minimum));
+        Assert.Equal(
+            alone.Allowance,
             shared[0].Work.Allowance
         );
         Assert.Equal(

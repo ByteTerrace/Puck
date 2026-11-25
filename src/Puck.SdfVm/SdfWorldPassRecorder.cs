@@ -92,7 +92,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     private readonly bool m_binned;
 
     // Which screen indices the residency binds.
-    private readonly bool[] m_declaredScreens = new bool[SdfWorldTables.MaxScreenSurfaces];
 
     // A compute part's frame and pass sets, one of each per frame slot.
     private readonly RenderGraphPackageSets? m_sets;
@@ -205,7 +204,6 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         m_resolved = m_outputs.Contains(value: SdfWorldPackage.CurrentColor);
         m_binned = SdfWorldPasses.ShadesInBins(context: context);
 
-        DeclareScreens(residency: view.Residency);
 
         var slots = context.InFlightFrames;
         var tables = (view.Residency.Tables ?? throw new InvalidOperationException(message: $"Residency '{view.Residency.Name}' has no tables for pass '{context.Pass}'."));
@@ -554,7 +552,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
 
         Span<System.Numerics.Vector4> windows = stackalloc System.Numerics.Vector4[SdfWorldPackage.ScreenSourceCount];
 
-        m_owner.ScreenWindowsOf(residency: residency, view: view, windows: windows);
+        m_owner.ScreenWindowsOf(residency: residency, tables: tables, view: view, windows: windows);
         SdfFrameBlock.WriteScreenWindows(block: recording.PassBlock, windows: windows);
         SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
         SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
@@ -677,19 +675,17 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     // (SdfWorldPasses.CanFollow); one they cannot record rebuilds them instead. A counter change holds recording until
     // matching passes install. The ports and screens rebind for another residency's tables on this recording.
     private protected override void FollowedResidency() {
-        DeclareScreens(residency: m_view.Residency);
         foreach (var screens in m_screens) {
             Array.Clear(array: screens);
         }
     }
-    private void DeclareScreens(SdfWorldResidency residency) => residency.DeclareScreens(declared: m_declaredScreens);
     // Decides a compute part's frame: the screens' images it samples (taking their leases), the views' and filter's
     // shading plans and the kernels they record with, the bins' committed plan in the pass block, and the tables' World
     // set, written now so the emission only binds it.
     private void DecideCompute(in RenderGraphPackageRecording recording, SdfWorldTables tables) {
         var residency = m_view.Residency;
 
-        residency.TakeScreenImages(images: m_screenImages, recording: in recording, shown: m_declaredScreens, view: m_view.View);
+        _ = residency.TakeScreenImages(images: m_screenImages, recording: in recording, shown: tables.ResidentScreens, tables: tables, view: m_view.View);
         switch (m_part) {
             case SdfWorldPackage.Parts.Views: {
                     // The views kernels are the residency's shading selection, pinned for this recording's submission. A
@@ -1095,7 +1091,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     }
     // Writes each declared screen's image, which the decision took (DecideCompute), into the slot's pass set.
     private void BindScreens(in RenderGraphPackageRecording recording, nint set, SdfWorldTables tables) =>
-        _ = SdfWorldResidency.WriteScreenImages(images: m_screenImages, bindings: tables.Bindings,
+        SdfWorldResidency.WriteScreenImages(images: m_screenImages, bindings: tables.Bindings,
             binding: ScreenSourcesBinding, set: set, filler: tables.SampledFiller.ImageViewHandle, bound: m_screens[recording.Slot]);
     // Where a part counts its march steps and texels written: every one counts
     // (RenderGraphFragmentPass.CountsKernelWork), so its node always hands it a row.

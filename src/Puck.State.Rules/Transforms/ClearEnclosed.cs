@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.State.Rules;
 
 public static partial class ArenaTransforms {
@@ -70,12 +72,13 @@ public static partial class ArenaTransforms {
             return Applied(refusal: out refusal);
         }
 
-        using var cleared = arena.Scratch.Rent<int>(topology.CellCount);
-        var count = BoardQueries.FindEnclosed(topology, values, origin, enclosed.Lower, enclosed.Upper,
-            enclosed.BoundaryLower, enclosed.BoundaryUpper, cleared.Span, arena.Scratch);
-        var cells = cleared.Span[..count];
-        cells.Sort();
-        foreach (var cell in cells) {
+        // The cleared groups come back as a cell set, so they are written in ascending cell order without a sort.
+        var words = BitWords.WordsFor(members: topology.CellCount);
+        using var cleared = arena.Scratch.Rent<ulong>(words);
+
+        _ = BoardQueries.FindEnclosed(topology, values, origin, enclosed.Lower, enclosed.Upper,
+            enclosed.BoundaryLower, enclosed.BoundaryUpper, cleared.Span[..words], arena.Scratch);
+        foreach (var cell in BitWords.Members(words: cleared.Span[..words])) {
             if (!arena.TryWriteBoardCell(
                 cell: cell,
                 reason: out var reason,
