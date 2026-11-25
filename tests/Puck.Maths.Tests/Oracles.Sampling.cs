@@ -112,7 +112,7 @@ internal static partial class Oracles {
 
         return ((long)quotient);
     }
-    /// <summary>The exact trilinear blend <see cref="Pcg3dLatticeNoise.ValueNoise3"/> rounds: the eight corners' fractions
+    /// <summary>The exact trilinear blend <see cref="Pcg3dLatticeNoise.ValueNoise3(FixedVector3, uint, uint, uint)"/> rounds: the eight corners' fractions
     /// from <see cref="Pcg3dReference"/> weighed by <see cref="QuinticFadeReference"/>'s fades at the point's fractions,
     /// in <see cref="BigInteger"/>, without rounding.</summary>
     /// <param name="q">The point in lattice cells.</param>
