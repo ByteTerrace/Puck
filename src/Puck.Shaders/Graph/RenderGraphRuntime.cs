@@ -1114,9 +1114,12 @@ public sealed partial class RenderGraphRuntime : ICaptureRequestTarget, IDisposa
     }
     // Records a stand-in bound for a read the schedule shows this frame, which a capture of the consumer waits out. A
     // read the frame does not show (no footprint, or the producer off view) samples nothing a capture would see. A source
-    // that is absent (IsAbsent) has no image to wait for: its stand-in is what its readers draw, so nothing is noted.
+    // that is absent (IsAbsent) has no image to wait for: its stand-in is what its readers draw, so nothing is noted. Nor
+    // is one for a producer that stands (Stands: a paused node, such as a view its viewer may not see now, which renders
+    // nothing while it publishes nothing): it presents its last image on purpose, and with none the stand-in is what its
+    // readers draw until it renders again, so no frame completion or capture waits on it.
     private void NoteStandIn(int index, int producer, long frame) {
-        if ((frame >= 0) && !IsAbsent(index: producer)) {
+        if ((frame >= 0) && !IsAbsent(index: producer) && !Stands(index: producer)) {
             m_standInReads[index] = m_set.Instances[producer].Name;
         }
     }
