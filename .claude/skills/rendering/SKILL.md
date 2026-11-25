@@ -480,8 +480,15 @@ A residency no reader asked for parks on a live device (`SdfWorldResidency.Park`
 system's budget less the usage the ledgers do not hold): `m_tables` is cleared between frames and the tables go to the
 device's retirement, keeping the bake, the lighting's measured words (for `SdfWorldResidency.ForgetLightingSeconds`, after which the residency's upkeep disposes the volume and a wake lights the world from nothing), the frame and the leased pipeline set. Every
 path that reaches the tables goes through `m_tables`, so a reader that comes for a parked residency prepares it, which
-builds new tables, and its views keep their last images while `SdfWorldResidency.Waking` stands. A park while
+builds new tables, and its views keep their last images while `SdfWorldResidency.Waking` stands. Every staging
+(`Stage`, `BeginStage`) claims the wake before it prepares (`ClaimWake`, which `Observe` and `Want` share), and a
+preparation that finds the residency standing parked settles nothing for the frame (`BeginPack`), so whichever door
+prepared it first, a render's staging builds the tables in the same frame; a new door that prepares a residency for a
+render goes through a staging, or its recording reaches `Staged` with no tables. A park while
 `OwesPreparation` would rebuild at once, so a parked residency owes nothing and has nothing arriving.
+A view its viewer may not see now is paused (`WorldViewGraphHost.ApplyPause`) and publishes nothing; the render graph
+treats such a producer with no image as it does an absent source (`RenderGraphRuntime.NoteStandIn`), so a reader drawing
+its stand-in (a shut portal's glass) holds no frame completion, engine readiness or capture.
 A world behind glass is observed by the presentation's sight, not by being read (`WorldViewGraphHost.WantSightedWorlds`
 through `SdfWorldResidency.Want`): only a consumer whose image renders this frame judges its world's glasses, so the
 walk passes on through a window only when its glass is seen or of unknown sight, never through one out of sight, held

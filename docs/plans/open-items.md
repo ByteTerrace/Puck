@@ -483,8 +483,9 @@ measured.**
    both are closed the 2060 would join a debug world whose paintings, press,
    cabinets and chess screens are blank.
 9. [high, M1] [The player build never bakes](#the-player-build-never-bakes):
-   the whole cache and the stored-only draw are built; the Vulkan run and the
-   RTX 2060's own boots are owed.
+   the whole cache and the stored-only draw are built, and a complete set of
+   both backends and both targets is produced; its push and the RTX 2060's own
+   boots are owed.
 10. [high, M2] [A multi-seat client](#a-multi-seat-client): the design memo
     to the owner's direction, before any code.
 11. [high] [The debug world at MMO scale](#the-debug-world-at-mmo-scale): the
@@ -883,26 +884,16 @@ every tier (`SdfMeshCachePolicy.Ladder`), a player's build draws stored tiers
 alone (`SdfMeshCachePolicy.Stored`), and `puck world player` refuses a folder
 whose check boots did not settle with no tier missed.
 
-- [high] Both backends' fills and the `rtx2060@1920x1080` checks have run
-  complete on the RTX 4070; the `rtx4070@2560x1440` checks have not run since.
-  Owed: the cache sets of a run that names both targets
-  (`puck world player worlds/debug --output <folder> --extension src/Puck.World.Azure --backend directx --backend vulkan --target rtx2060@1920x1080 --target rtx4070@2560x1440`,
-  `player.json` saying `complete`), then the 2060 itself, at rest and over the
-  route, reading `world.counters sdf.mesh-cache` at the end. Check:
+- [high] Both backends' fills and all four target checks
+  (`rtx2060@1920x1080`, `rtx4070@2560x1440`) have run complete on the RTX
+  4070, settling at every authored place with no tier missed but live ones.
+  Owed: that set pushed (`puck world caches produce <folder> --push`, the
+  lead's), then the 2060 itself, at rest and over the route, reading
+  `world.counters sdf.mesh-cache` at the end. Check:
   `rungs-missed` less `rungs-missed-live` is zero and every group baked is
   geometry a rule made. A check that does not settle names what holds each
   bake in `player.json`'s `unsettled` (`SdfMeshPathBake.DescribeUnsettled`),
   and one that misses names each tier in its `missed` list.
-- [high] The Direct3D 12 fill wedges at the `launch` spawn point after its
-  spawn settles: a screen session (`session$18`) records a view of the parked
-  garden residency (`routed$6~global6~garden`), `SdfWorldResidency.Staged`
-  refuses it ("has no tables to render ... building (28 of 28 pipelines
-  created)"), the render graph stops committing frames, and the console stops
-  answering, so `world.wait bakes` never returns. The residency's parking
-  invariant (`SdfWorldResidency.Parking.cs`) says no schedule records a view
-  of a parked residency; this one does. Owner: residency, with frame
-  production. Check: a Direct3D 12 ladder boot of the debug world posed at
-  `hero`, `stage`, then `launch` keeps answering `world.wait bakes`.
 - [medium] One cache set for both backends would halve the fill and the
   shipped bytes: the mesh bake identity hashes each backend's kernel bytecode
   (`SdfMeshBakeIdentity`), so the same HLSL compiled to DXIL and to SPIR-V
