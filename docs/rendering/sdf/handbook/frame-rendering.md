@@ -971,7 +971,8 @@ demands nothing of its writer, and device loss starts from none.
   adjacent pixels in one transaction.
 - The **stationary window** (`SdfWorldPackage.HistoryWindowWritten`,
   `SdfWorldPackage.HistoryWindowWords` words a pixel in the same planes) holds a
-  phase mask and eight phase samples, each holding color/coverage and transport
+  phase mask, with the sum of the phases' packed weights above it, and eight
+  phase samples, each holding color/coverage and transport
   as halves and its Gaussian weight. It is not history: it is one retained
   buffer the resolve updates in place, zeroed once. A pixel reads and writes
   only its own window words, and keeps its window only while its history comes
@@ -979,7 +980,12 @@ demands nothing of its writer, and device loss starts from none.
   dispatch; a pixel whose history comes from anywhere else restarts its window
   at this frame's phase. Each frame writes only the current phase's samples and
   the mask, rather than copying the whole window into a second copy. A complete
-  stationary window shows its own mean and reads no reprojected history.
+  stationary window shows its own mean and reads no reprojected history. It
+  sums its eight phases once a period, on a frame its 8 by 8 group of pixels
+  shares, and on the other frames keeps the mean the frame before stored at
+  the pixel and moves it by the replaced phase's weight share of the
+  difference between that phase's new sample and its old one, so a still
+  pixel reads one phase's words a frame.
 
 The views pass also writes a one-channel **reactivity** buffer at the render
 extent, which only the resolve reads: one where a display screen's picture covers the

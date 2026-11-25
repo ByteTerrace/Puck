@@ -45,7 +45,9 @@ public static partial class SdfWorldPackage {
     public const string HistoryWindowWritten = "historyWindowRW";
     /// <summary>The number of jitter phases in a complete temporal sample window.</summary>
     public const uint TemporalPeriod = 8;
-    /// <summary>The first word of a pixel's stationary samples in the window, following its phase mask.</summary>
+    /// <summary>The first word of a pixel's stationary samples in the window, following its first word: the phase mask
+    /// in the low <see cref="TemporalPeriod"/> bits and, above it, the sum of the present phases' packed weights, which a
+    /// complete window's mean is divided by when one phase's term is replaced.</summary>
     public const uint HistoryWindowOffset = 1;
     /// <summary>The words per stationary phase (<c>sdfPackWindowSample</c> in <c>passes/sdf-resolve.comp.hlsl</c>): its
     /// color as one shared-exponent word; its coverage and its Gaussian weight, each ten bits, under the high bits of
