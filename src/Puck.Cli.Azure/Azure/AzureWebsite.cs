@@ -227,16 +227,19 @@ public static partial class AzureCommand {
                     values: exclude
                 )}");
             }
-            await RunAsync(
-                arguments: arguments,
-                executable: "azcopy"
-            );
+            await AzCopyAsync(arguments: arguments);
         }
+    }
+    // AzCopy signs in as the Azure CLI's account, the identity every other step of this provider uses: a workflow's OIDC
+    // login, or a developer's own sign-in on the machine that produces cache sets.
+    private static Task<string> AzCopyAsync(IEnumerable<string> arguments) {
+        Environment.SetEnvironmentVariable(value: "AZCLI", variable: "AZCOPY_AUTO_LOGIN_TYPE");
+        return RunAsync(arguments: arguments, executable: "azcopy");
     }
     private static Task CopyBlobsAsync(string commit, string contentType, string destination, string source, string cache = "no-cache", string? contentEncoding = null, bool immutable = false) =>
         // AzCopy owns concurrency, retries and transfer validation. Mutable paths always
         // overwrite: extraction timestamps do not identify releases or safe rollbacks.
-        RunAsync(
+        AzCopyAsync(
             arguments: [
             "copy", LocalPath(path: source), destination, "--from-to=LocalBlob", "--as-subdir=false", "--recursive=true",
             $"--overwrite={(immutable
@@ -247,8 +250,7 @@ public static partial class AzureCommand {
             : cache)}",
             .. ((contentEncoding is null) ? Array.Empty<string>() : [$"--content-encoding={contentEncoding}"]),
             $"--metadata=commit={commit}", "--log-level=ERROR", "--output-level=essential",
-        ],
-            executable: "azcopy"
+        ]
         );
     // Brotli at its highest quality: the bytes are compressed once, at publish, and downloaded by every visitor.
     private static byte[] Brotli(byte[] bytes) {

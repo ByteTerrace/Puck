@@ -1,92 +1,110 @@
 using System.CommandLine;
 using System.Globalization;
-using System.IO.Compression;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Puck.Assets;
+using Puck.Cli.Channel;
 using Puck.Cli.Mesh;
 using Puck.Launcher.Release;
 
 namespace Puck.Cli.Automation;
 
 /// <summary><c>puck world caches</c>: carries a player build's baked mesh store, which only a machine with a GPU can
-/// produce, to the release pipeline that has none. <c>produce</c> packs a baked player folder's mesh sets, one cache set
-/// per backend named by the build's mesh bake identity, and with <c>--push</c> uploads each as the asset of a GitHub
-/// prerelease tagged <c>caches/&lt;backend&gt;-&lt;identity&gt;</c>; <c>fetch</c>, in the release job, finds the cache set
-/// whose identity matches the release's own build, verifies every file's content pin and unpacks it into the folder, then
-/// checks, with no device, that the set was produced for the groups the release's own world plans
-/// (<see cref="WorldCachePlan"/>). A backend with no matching set, or whose set was produced for another world, holds the
-/// channel's publish: the verb names it and exits non-zero, since a player never bakes.</summary>
+/// produce, to the release pipeline that has none, through the release channel's own store. <c>produce</c> writes a baked
+/// player folder's meshes as content-addressed objects (<c>objects/sha256/…</c>, the objects every release on the channel
+/// shares) and, for each backend, a cache set's manifest named by the build's mesh bake identity
+/// (<c>caches/&lt;backend&gt;-&lt;identity&gt;/manifest.json</c>), then with <c>--host</c> or <c>--to</c> writes them through
+/// a channel host, objects the store lacks first and manifests last. <c>status</c> reads only the manifests; <c>fetch</c>, in
+/// the release job, reads the manifest whose identity matches the release's own build, checks with no device that the set
+/// was produced for the groups the release's world plans (<see cref="WorldCachePlan"/>), and only then takes every mesh its
+/// folder lacks, each verified against its pin. A backend with no matching set, or whose set was produced for another
+/// world, holds the channel's publish: the verb names it and exits non-zero, since a player never bakes.</summary>
 /// <remarks>A cache set is a cache: its entries are keyed by the bake identity and each group's geometry, so a set baked
 /// from an older world document only misses the groups that changed. The identity, never a commit, decides whether a set
 /// fits: it is the hash of the bake's code and kernel bytecode the store keys sets by (<see cref="MeshBuildIdentity"/>),
 /// equal on every machine that built the same bake from the same sources. The plan the set records is what decides whether
-/// a matching set is whole.</remarks>
+/// a matching set is whole. A mesh is stored once by its bytes, so a new identity whose bake writes the same bytes, the
+/// other backend's identical meshes, and the release that later ships the set all reuse the objects already stored.</remarks>
 public static class WorldCachesCommand {
     private const string Verb = "world caches";
-    /// <summary>The cache set's record inside its archive.</summary>
-    public const string RecordName = "cache-set.json";
-    /// <summary>The archive's file name, the one asset of a cache set's release.</summary>
-    public const string AssetName = "cache-set.zip";
-    // A release asset is refused at 2 GiB, and one backend's set of the debug world is already larger, so a set past this
-    // size is uploaded as numbered parts of it (cache-set.zip.part000, …), which fetch joins in order.
-    private const long PartBytes = (1L << 30);
-    private const string Schema = "puck.player-cache-set.v1";
-    private const string TagPrefix = "caches/";
-    private static readonly JsonSerializerOptions RecordFormat = new() { WriteIndented = true };
+    private const string Schema = "puck.player-cache-set.v2";
+    // A channel tree holds its cache sets beside its channels, each read as a channel's latest document is.
+    private const string SetsDirectory = "caches";
+    // A mesh the source fails to send is asked again this many times before the fetch fails: thousands of objects ride one
+    // fetch, and one dropped connection should not fail the release.
+    private const int FetchAttempts = 3;
     private static readonly TimeSpan PollInterval = TimeSpan.FromMinutes(minutes: 1);
 
     /// <summary>Creates the <c>caches</c> verb and its <c>produce</c>, <c>status</c> and <c>fetch</c> subverbs.</summary>
     /// <param name="clock">The CLI host's clock, which a fetch's wait runs on.</param>
     /// <returns>The verb.</returns>
-    public static Command Create(TimeProvider clock) => new(name: "caches", description: "Carry a player build's baked mesh store from a GPU machine to the release pipeline as identity-named cache sets.") {
+    public static Command Create(TimeProvider clock) => new(name: "caches", description: "Carry a player build's baked mesh store from a GPU machine to the release pipeline as identity-named cache sets in the release channel's store.") {
         ProduceCommand(), StatusCommand(), FetchCommand(clock: clock),
     };
 
-    /// <summary>Returns the release tag a backend's cache set is published under.</summary>
+    /// <summary>Returns the name a backend's cache set is stored under in a channel tree: the directory of its manifest,
+    /// read as a channel's latest document is (<see cref="IReleaseSource.TryGetLatestManifestAsync"/>).</summary>
     /// <param name="backend">The backend token (<c>directx</c> or <c>vulkan</c>).</param>
     /// <param name="identity">The mesh bake identity.</param>
-    /// <returns>The tag.</returns>
-    public static string Tag(string backend, UInt128 identity) => $"{TagPrefix}{backend}-{identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture)}";
+    /// <returns>The set's name, <c>caches/&lt;backend&gt;-&lt;identity&gt;</c>.</returns>
+    public static string SetName(string backend, UInt128 identity) => $"{SetsDirectory}/{backend}-{Hex(identity: identity)}";
 
     private static Command ProduceCommand() {
         var folder = new Argument<string>(name: "folder") { Description = "A player folder `puck world player` baked (its player.json complete)." };
-        var output = CliOptions.Output(description: "Where the cache sets are written, one directory per backend. Absent, the folder's player-caches/.", required: false);
-        var push = new Option<bool>(name: "--push") { Description = "Upload each cache set with gh: a prerelease tagged caches/<backend>-<identity>, created when missing, whose cache-set.zip asset is replaced." };
-        var command = new Command(name: "produce", description: "Pack a baked player folder's mesh sets into one cache set per backend, named by the build's mesh bake identity; --push uploads them.") { folder, output, push };
+        var output = CliOptions.Output(description: "Where the store's tree is staged: every mesh as an object (objects/sha256/…) and each set's manifest (caches/<backend>-<identity>/manifest.json). Absent, the folder's player-caches/.", required: false);
+        var host = new Option<string?>(name: "--host") { Description = "Write the sets through this installed channel host (a deployment provider's, such as azure): every object the store lacks, then each set's manifest." };
+        var to = new Option<string?>(name: "--to") { Description = "Write the sets into this directory's channel tree instead of a provider's host: a local store that status and fetch read with --store." };
+        var command = new Command(name: "produce", description: "Write a baked player folder's meshes as content-addressed objects and one cache set manifest per backend, named by the build's mesh bake identity; --host or --to writes them to a store.") { folder, output, host, to };
 
         command.SetAction(action: async (parse, cancellationToken) => {
             var root = Path.GetFullPath(path: parse.GetRequiredValue(argument: folder));
             var target = Path.GetFullPath(path: (parse.GetValue(option: output) ?? Path.Combine(path1: root, path2: "player-caches")));
+            var name = parse.GetValue(option: host);
+            var directory = parse.GetValue(option: to);
+            ReleaseChannelHost? store = null;
 
-            return await ProduceAsync(cancellationToken: cancellationToken, folder: root, output: target, push: parse.GetValue(option: push)).ConfigureAwait(continueOnCapturedContext: false);
+            if ((name is not null) && (directory is not null)) { return CliExit.Refuse(verb: Verb, what: "--host", why: "and --to both name a store; give one."); }
+            if ((name is not null) || (directory is not null)) {
+                try {
+                    store = ReleaseChannelHost.Open(directory: ((directory is null) ? null : Path.GetFullPath(path: directory)), name: name);
+                } catch (InvalidOperationException exception) {
+                    return CliExit.Refuse(verb: Verb, what: "--host", why: exception.Message);
+                }
+            }
+            return await ProduceAsync(cancellationToken: cancellationToken, folder: root, output: target, store: store).ConfigureAwait(continueOnCapturedContext: false);
         });
         return command;
     }
+    private static Option<string> StoreOption() => new(name: "--store") {
+        Description = "The store the cache sets live in: a release channel tree's root, as an https URL (the deployment's channel, such as <officialContentBaseUrl>/releases) or a directory `produce --to` wrote.",
+        Required = true,
+    };
     private static Command StatusCommand() {
         var world = new Argument<string>(name: "world") { Description = "The world a release would ship: an asset package folder, or a .puck source or .world.json document." };
         var backends = new Option<string[]>(name: "--backend") { AllowMultipleArgumentsPerToken = true, DefaultValueFactory = static _ => ["directx", "vulkan"], Description = "The backends a release ships, each needing its own set: directx and vulkan by default, as a Windows player build bakes." };
         var build = new Option<string?>(name: "--build") { Description = "The World build whose mesh bake identity names the sets (its Puck.SdfVm.dll's directory, with its bake kernels for each backend); absent, this tool's own build." };
-        var command = new Command(name: "status", description: "Report, with no device and without downloading a set, whether a whole mesh cache set exists for a build and the world: the set named by the build's mesh bake identity, recorded as produced for the groups the world plans. Exit 1 names each backend that lacks one and what to run.") { world, backends, build };
+        var store = StoreOption();
+        var command = new Command(name: "status", description: "Report, with no device and without downloading a mesh, whether a whole mesh cache set exists in the store for a build and the world: the set named by the build's mesh bake identity, recorded as produced for the groups the world plans. Exit 1 names each backend that lacks one and what to run.") { world, backends, build, store };
 
         command.SetAction(action: async (parse, cancellationToken) =>
             await StatusAsync(backends: parse.GetValue(option: backends)!, build: Path.GetFullPath(path: (parse.GetValue(option: build) ?? AppContext.BaseDirectory)), cancellationToken: cancellationToken,
-                world: Path.GetFullPath(path: parse.GetRequiredValue(argument: world))).ConfigureAwait(continueOnCapturedContext: false));
+                store: parse.GetRequiredValue(option: store), world: Path.GetFullPath(path: parse.GetRequiredValue(argument: world))).ConfigureAwait(continueOnCapturedContext: false));
         return command;
     }
     private static Command FetchCommand(TimeProvider clock) {
         var folder = new Argument<string>(name: "folder") { Description = "A player folder assembled without baking (`puck world player --no-bake`)." };
         var notes = new Option<string?>(name: "--notes") { Description = "A file to write the release-notes line into: each backend's cache set, or, when the publish is held, why and what to run." };
-        var from = new Option<string?>(name: "--from") { Description = "Read the cache sets from a directory `produce` wrote (<from>/<backend>-<identity>/cache-set.zip) instead of downloading them with gh: a producer in the same job, or a local check." };
+        var store = StoreOption();
         var wait = CliOptions.Count(defaultValue: 0, description: "Minutes to keep looking, once a minute, while a backend lacks a whole set, so a set the GPU machine is still producing for this build is taken when it lands; 0 looks once.", maximum: 720, minimum: 0, name: "--wait");
-        var command = new Command(name: "fetch", description: "Find the cache set whose mesh bake identity matches the folder's build for each backend, verify its content pins, unpack it into cache/meshes and check it was produced for the world's bake groups; a backend with no whole set holds the publish (exit 1) and the verb names it.") { folder, notes, from, wait };
+        var command = new Command(name: "fetch", description: "Find the cache set whose mesh bake identity matches the folder's build for each backend, check it was produced for the world's bake groups, then take every mesh the folder lacks into cache/meshes, each verified against its pin; a backend with no whole set holds the publish (exit 1) and the verb names it.") { folder, notes, store, wait };
 
         command.SetAction(action: async (parse, cancellationToken) =>
-            await FetchAsync(cancellationToken: cancellationToken, clock: clock, folder: Path.GetFullPath(path: parse.GetRequiredValue(argument: folder)), from: ((parse.GetValue(option: from) is { } directory) ? Path.GetFullPath(path: directory) : null),
-                notes: parse.GetValue(option: notes), wait: TimeSpan.FromMinutes(minutes: parse.GetValue(option: wait))).ConfigureAwait(continueOnCapturedContext: false));
+            await FetchAsync(cancellationToken: cancellationToken, clock: clock, folder: Path.GetFullPath(path: parse.GetRequiredValue(argument: folder)), notes: parse.GetValue(option: notes),
+                store: parse.GetRequiredValue(option: store), wait: TimeSpan.FromMinutes(minutes: parse.GetValue(option: wait))).ConfigureAwait(continueOnCapturedContext: false));
         return command;
     }
 
+    private static string Hex(UInt128 identity) => Puck.SdfVm.SdfMeshStore.SetNameOf(identity: identity);
     private static IReadOnlyList<string> Backends(JsonNode record) =>
         [.. (record["backends"]?.AsArray() ?? []).Select(selector: static node => (string?)node).OfType<string>()];
     internal static bool TryIdentity(string folder, string backend, out UInt128 identity, out string? why) {
@@ -101,10 +119,10 @@ public static class WorldCachesCommand {
             return false;
         }
     }
-    internal static string SetDirectory(string folder, UInt128 identity) => Path.Combine(path1: folder, path2: PlayerBuildLayout.CacheDirectoryName, path3: PlayerBuildLayout.MeshesDirectoryName, path4: identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture));
-    private static string SetPrefix(UInt128 identity) => $"{PlayerBuildLayout.CacheDirectoryName}/{PlayerBuildLayout.MeshesDirectoryName}/{identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture)}/";
+    internal static string SetDirectory(string folder, UInt128 identity) => Path.Combine(path1: folder, path2: PlayerBuildLayout.CacheDirectoryName, path3: PlayerBuildLayout.MeshesDirectoryName, path4: Hex(identity: identity));
+    private static IReleaseSource OpenStore(string store) => ChannelSubscription.OpenSource(httpClient: HttpReleaseSource.SharedClient, source: store);
 
-    private static async Task<int> ProduceAsync(string folder, string output, bool push, CancellationToken cancellationToken) {
+    private static async Task<int> ProduceAsync(string folder, string output, ReleaseChannelHost? store, CancellationToken cancellationToken) {
         if (!PlayerBuildLayout.TryReadComplete(folder: folder, record: out var record, why: out var refusal)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: refusal!); }
 
         // The groups the folder's world plans, recorded so a release can tell whether it plans the same ones.
@@ -112,7 +130,9 @@ public static class WorldCachesCommand {
             return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: $"cannot name the groups its world plans, because {unplanned}.");
         }
 
-        var produced = new List<(string Tag, string Archive, int Files)>();
+        var objects = new ContentAddressedStore(root: output);
+        var written = new SortedSet<string>(comparer: StringComparer.Ordinal);
+        var manifests = new List<string>();
 
         foreach (var backend in Backends(record: record)) {
             if (!TryIdentity(backend: backend, folder: folder, identity: out var identity, why: out var why)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: why!); }
@@ -120,167 +140,123 @@ public static class WorldCachesCommand {
             var meshes = (Directory.Exists(path: set) ? Directory.GetFiles(path: set, searchPattern: $"*{Puck.SdfVm.SdfMeshStore.Extension}") : []);
 
             if (meshes.Length == 0) {
-                Console.Error.WriteLine(value: $"{Verb}: {backend}: the folder holds no meshes under its build's identity {identity:x32}; bake it with `puck world player` first.");
+                Console.Error.WriteLine(value: $"{Verb}: {backend}: the folder holds no meshes under its build's identity {Hex(identity: identity)}; bake it with `puck world player` first.");
                 continue;
             }
             Array.Sort(array: meshes, comparer: StringComparer.Ordinal);
-            var tag = Tag(backend: backend, identity: identity);
-            var directory = Path.Combine(path1: output, path2: $"{backend}-{identity:x32}");
-            var archive = Path.Combine(path1: directory, path2: AssetName);
             var files = new JsonArray();
+            long bytes = 0;
 
-            Directory.CreateDirectory(path: directory);
-            File.Delete(path: archive);
-            using (var zip = ZipFile.Open(archiveFileName: archive, mode: ZipArchiveMode.Create)) {
-                foreach (var mesh in meshes) {
-                    var bytes = await File.ReadAllBytesAsync(cancellationToken: cancellationToken, path: mesh).ConfigureAwait(continueOnCapturedContext: false);
-                    var path = (SetPrefix(identity: identity) + Path.GetFileName(path: mesh));
+            foreach (var mesh in meshes) {
+                var content = await File.ReadAllBytesAsync(cancellationToken: cancellationToken, path: mesh).ConfigureAwait(continueOnCapturedContext: false);
+                var pin = objects.Put(content: content);
 
-                    await using (var entry = zip.CreateEntry(compressionLevel: CompressionLevel.NoCompression, entryName: path).Open()) {
-                        await entry.WriteAsync(buffer: bytes, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-                    }
-                    files.Add(value: new JsonObject { ["path"] = path, ["hash"] = ContentPin.Compute(content: bytes).ToString(), ["size"] = bytes.LongLength });
-                }
-                var setRecord = new JsonObject {
-                    ["schema"] = Schema,
-                    ["backend"] = backend,
-                    ["identity"] = identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture),
-                    ["commit"] = record["commit"]?.DeepClone(),
-                    ["runtime"] = record["runtime"]?.DeepClone(),
-                    ["targets"] = record["targets"]?.DeepClone(),
-                    // What the producer's boots read of the finished store: each target's check settled having
-                    // dispatched, baked and missed nothing, or the folder would not be complete.
-                    ["checked"] = record["checked"]?.DeepClone(),
-                    ["plan"] = WorldCachePlan.ToJson(keys: plan),
-                    ["files"] = files,
-                };
-
-                await using (var recordEntry = zip.CreateEntry(compressionLevel: CompressionLevel.Optimal, entryName: RecordName).Open()) {
-                    await JsonSerializer.SerializeAsync(cancellationToken: cancellationToken, utf8Json: recordEntry, value: setRecord, options: RecordFormat).ConfigureAwait(continueOnCapturedContext: false);
-                }
-                // The same record beside the archive, uploaded as its own small asset, so a check reads which world a set
-                // was produced for without downloading the set (status).
-                CliFiles.WriteJson(path: Path.Combine(path1: directory, path2: RecordName), value: setRecord);
+                _ = written.Add(item: ContentAddressedStore.ObjectRelativePath(pin: pin));
+                files.Add(value: new JsonObject { ["name"] = Path.GetFileName(path: mesh), ["hash"] = pin.ToString(), ["size"] = content.LongLength });
+                bytes += content.LongLength;
             }
-            Console.Out.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Verb}: {backend}: {meshes.Length} meshes under identity {identity:x32}, {new FileInfo(fileName: archive).Length} bytes, in {CliPaths.ToDisplay(fullPath: archive)} for {tag}."));
-            produced.Add(item: (tag, archive, meshes.Length));
+
+            var name = SetName(backend: backend, identity: identity);
+
+            CliFiles.WriteJson(path: Path.Combine(path1: output, path2: name, path3: ChannelSubscription.ManifestFileName), value: new JsonObject {
+                ["schema"] = Schema,
+                ["backend"] = backend,
+                ["identity"] = Hex(identity: identity),
+                ["commit"] = record["commit"]?.DeepClone(),
+                ["runtime"] = record["runtime"]?.DeepClone(),
+                ["targets"] = record["targets"]?.DeepClone(),
+                // What the producer's boots read of the finished store: each target's check settled having dispatched,
+                // baked and missed nothing, or the folder would not be complete.
+                ["checked"] = record["checked"]?.DeepClone(),
+                ["plan"] = WorldCachePlan.ToJson(keys: plan),
+                ["files"] = files,
+            });
+            manifests.Add(item: $"{name}/{ChannelSubscription.ManifestFileName}");
+            Console.Out.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Verb}: {backend}: {meshes.Length} meshes ({bytes} bytes) under identity {Hex(identity: identity)}, staged as {name}."));
         }
-        if (produced.Count == 0) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: "holds no baked meshes for any backend it names."); }
-        if (!push) { return 0; }
+        if (manifests.Count == 0) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: "holds no baked meshes for any backend it names."); }
+        Console.Out.WriteLine(value: $"{Verb}: {written.Count} distinct objects for {manifests.Count} set(s) in {CliPaths.ToDisplay(fullPath: output)}.");
+        if (store is null) { return 0; }
 
-        foreach (var (tag, archive, count) in produced) {
-            var existing = await CliProcess.RunAsync(arguments: ["release", "view", tag, "--json", "tagName"], cancellationToken: cancellationToken, fileName: "gh").ConfigureAwait(continueOnCapturedContext: false);
-
-            if (existing.ExitCode != 0) {
-                if (!existing.Stderr.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "not found")) {
-                    Console.Error.WriteLine(value: $"{Verb}: gh release view {tag} failed: {existing.Stderr.Trim()}");
-                    return 1;
-                }
-                _ = await CliProcess.RunCheckedAsync(cancellationToken: cancellationToken, fileName: "gh",
-                    arguments: ["release", "create", tag, "--prerelease", "--title", $"Player mesh caches {tag[TagPrefix.Length..]}",
-                        "--notes", $"A player build's baked mesh store for one backend, named by its mesh bake identity. Produced by `puck world caches produce --push` from commit {record["commit"]}; the release pipeline's `puck world caches fetch` unpacks it into a release whose build has the same identity. A cache: never the truth, never committed."]).ConfigureAwait(continueOnCapturedContext: false);
-            }
-            // The archive first: a reader that finds the record finds the set it describes.
-            foreach (var part in SplitArchive(archive: archive)) {
-                _ = await CliProcess.RunCheckedAsync(arguments: ["release", "upload", tag, part, "--clobber"], cancellationToken: cancellationToken, fileName: "gh").ConfigureAwait(continueOnCapturedContext: false);
-            }
-            _ = await CliProcess.RunCheckedAsync(arguments: ["release", "upload", tag, Path.Combine(path1: Path.GetDirectoryName(path: archive)!, path2: RecordName), "--clobber"], cancellationToken: cancellationToken, fileName: "gh").ConfigureAwait(continueOnCapturedContext: false);
-            Console.Out.WriteLine(value: $"{Verb}: pushed {count} meshes as {tag}.");
+        try {
+            // The host writes every object before any manifest, so a reader that finds a set's manifest finds its meshes.
+            await store.UploadAsync(cancellationToken: cancellationToken, documents: manifests, objects: [.. written], tree: output).ConfigureAwait(continueOnCapturedContext: false);
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or InvalidDataException) {
+            Console.Error.WriteLine(value: $"{Verb}: writing to {store.Describe} failed: {exception.Message}");
+            return 1;
         }
+        Console.Out.WriteLine(value: $"{Verb}: wrote {string.Join(separator: ", ", values: manifests.Select(selector: static manifest => manifest[..manifest.LastIndexOf(value: '/')]))} to {store.Describe}.");
         return 0;
     }
 
-    // The files a set's archive uploads as: the archive itself when it fits one asset, otherwise its parts, each at most
-    // PartBytes, written beside it.
-    private static IReadOnlyList<string> SplitArchive(string archive) {
-        var length = new FileInfo(fileName: archive).Length;
+    private sealed record SetFile(string Name, ContentPin Pin, long Size);
+    private sealed record CacheSet(JsonNode? Plan, string Targets, IReadOnlyList<SetFile> Files);
+    // Reads a backend's set manifest from the store: the set, or why there is none (Missing, which waiting may change) or
+    // why the manifest cannot be one (Damaged, which waiting does not).
+    private static async Task<(CacheSet? Set, string? Missing, string? Damaged)> ReadSetAsync(IReleaseSource store, string backend, UInt128 identity, CancellationToken cancellationToken) {
+        var name = SetName(backend: backend, identity: identity);
+        var read = await store.TryGetLatestManifestAsync(cancellationToken: cancellationToken, channel: name).ConfigureAwait(continueOnCapturedContext: false);
 
-        if (length <= PartBytes) { return [archive]; }
-        var parts = new List<string>();
-        var buffer = new byte[1 << 20];
+        if (!read.Found) { return (null, $"{backend}: no mesh cache set matches this build's identity {Hex(identity: identity)} ({read.RefusalReason})", null); }
+        JsonNode? record;
 
-        using var input = File.OpenRead(path: archive);
-        for (var index = 0; (input.Position < length); index++) {
-            var part = string.Create(provider: CultureInfo.InvariantCulture, handler: $"{archive}.part{index:000}");
-            using var output = File.Create(path: part);
-            var left = Math.Min(val1: PartBytes, val2: (length - input.Position));
+        try {
+            record = JsonNode.Parse(utf8Json: read.ManifestBytes);
+        } catch (JsonException exception) {
+            return (null, null, $"its manifest does not parse: {exception.Message}");
+        }
+        if (((string?)record?["schema"] != Schema) || ((string?)record?["backend"] != backend) || ((string?)record?["identity"] != Hex(identity: identity))) {
+            return (null, null, $"its manifest is not a {Schema} for {backend} identity {Hex(identity: identity)}");
+        }
 
-            while (left > 0) {
-                var read = input.Read(buffer: buffer, offset: 0, count: (int)Math.Min(val1: buffer.Length, val2: left));
-                if (read == 0) { throw new EndOfStreamException(message: $"{archive} ended before its length."); }
-                output.Write(buffer: buffer, offset: 0, count: read);
-                left -= read;
+        var files = new List<SetFile>();
+        var names = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+        foreach (var file in record!["files"]?.AsArray() ?? []) {
+            var fileName = (string?)file?["name"];
+
+            // A name is one mesh file of the set's own directory, never a path out of it.
+            if (string.IsNullOrEmpty(value: fileName) || fileName.Contains(value: '/') || fileName.Contains(value: '\\') || (fileName == "..") || !fileName.EndsWith(value: Puck.SdfVm.SdfMeshStore.Extension, comparisonType: StringComparison.Ordinal) ||
+                !ContentPin.TryParse(pin: out var pin, text: (string?)file?["hash"]) || !((long?)file?["size"] is { } size and >= 0) || !names.Add(item: fileName)) {
+                return (null, null, $"its manifest lists the entry '{fileName}', which is not one mesh of the set");
             }
-            parts.Add(item: part);
+            files.Add(item: new SetFile(Name: fileName, Pin: pin, Size: size));
         }
-        return parts;
-    }
-    // Downloads a set's archive, whole or as the parts SplitArchive uploaded, which it joins in order; null when the
-    // release holds neither.
-    private static async Task<string?> DownloadArchiveAsync(string tag, string directory, CancellationToken cancellationToken) {
-        if (await DownloadAssetAsync(asset: AssetName, cancellationToken: cancellationToken, directory: directory, tag: tag).ConfigureAwait(continueOnCapturedContext: false) is { } whole) {
-            return whole;
-        }
-        _ = await DownloadAssetAsync(asset: $"{AssetName}.part*", cancellationToken: cancellationToken, directory: directory, tag: tag).ConfigureAwait(continueOnCapturedContext: false);
-        var parts = Directory.GetFiles(path: directory, searchPattern: $"{AssetName}.part*").Order(comparer: StringComparer.Ordinal).ToArray();
 
-        if (parts.Length == 0) { return null; }
-        var archive = Path.Combine(path1: directory, path2: AssetName);
+        var targets = string.Join(separator: ", ", values: (record["targets"]?.AsArray() ?? []).Select(selector: static node => (string?)node).OfType<string>());
 
-        await using (var output = File.Create(path: archive)) {
-            foreach (var part in parts) {
-                await using (var input = File.OpenRead(path: part)) {
-                    await input.CopyToAsync(destination: output, cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
-                }
-                File.Delete(path: part);
-            }
-        }
-        return archive;
-    }
-    // Downloads one asset of a cache set's release into a directory; returns the downloaded file, null when the release or
-    // the asset does not exist, and throws on any other gh failure.
-    private static async Task<string?> DownloadAssetAsync(string tag, string asset, string directory, CancellationToken cancellationToken) {
-        var fetched = await CliProcess.RunAsync(arguments: ["release", "download", tag, "--pattern", asset, "--dir", directory, "--clobber"], cancellationToken: cancellationToken, fileName: "gh").ConfigureAwait(continueOnCapturedContext: false);
-        var path = Path.Combine(path1: directory, path2: asset);
-
-        if ((fetched.ExitCode != 0) && !fetched.Stderr.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "not found") && !fetched.Stderr.Contains(comparisonType: StringComparison.OrdinalIgnoreCase, value: "no assets")) {
-            throw new IOException(message: $"gh release download {tag} failed: {fetched.Stderr.Trim()}");
-        }
-        return File.Exists(path: path) ? path : null;
+        return (new CacheSet(Files: files, Plan: record["plan"], Targets: targets), null, null);
     }
     // Judges a set whose identity matches against the world's plan: null when the set was produced for exactly the groups
     // the world plans, otherwise the line naming why it is not whole.
-    private static string? Lacks(string backend, string tag, JsonNode? recorded, IReadOnlyList<RestGroupKey> planned) =>
+    private static string? Lacks(string backend, string name, JsonNode? recorded, IReadOnlyList<RestGroupKey> planned) =>
         WorldCachePlan.Lacking(recorded: recorded, release: planned) switch {
-            null => $"{backend}: {tag} matches this build's identity but records no plan of the world's groups, so it cannot be known to cover this world; produce it again",
-            { Count: > 0 } lacking => $"{backend}: {tag} matches this build's identity but was produced for another world, so it lacks {WorldCachePlan.Describe(lacking: lacking, total: planned.Count)}",
+            null => $"{backend}: {name} matches this build's identity but records no plan of the world's groups, so it cannot be known to cover this world; produce it again",
+            { Count: > 0 } lacking => $"{backend}: {name} matches this build's identity but was produced for another world, so it lacks {WorldCachePlan.Describe(lacking: lacking, total: planned.Count)}",
             _ => null,
         };
-    private static string Missing(string backend, UInt128 identity, string tag) => $"{backend}: no mesh cache set matches this build's identity {identity:x32} (looked for {tag})";
 
-    private static async Task<int> StatusAsync(string world, string build, IReadOnlyList<string> backends, CancellationToken cancellationToken) {
+    private static async Task<int> StatusAsync(string world, string build, IReadOnlyList<string> backends, string store, CancellationToken cancellationToken) {
         if (!WorldCachePlan.TryRead(folder: Environment.CurrentDirectory, world: world, keys: out var planned, why: out var unplanned)) {
             return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: world), why: $"cannot name the groups it plans, because {unplanned}.");
         }
+        var source = OpenStore(store: store);
         var held = new List<string>();
 
         foreach (var backend in backends) {
             if (!TryIdentity(backend: backend, folder: build, identity: out var identity, why: out var why)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: build), why: why!); }
-            var tag = Tag(backend: backend, identity: identity);
-            using var download = RunDirectory.Create(keepOnFailure: false, prefix: "puck-cache-set-");
-            var path = await DownloadAssetAsync(asset: RecordName, cancellationToken: cancellationToken, directory: download.Path, tag: tag).ConfigureAwait(continueOnCapturedContext: false);
+            var name = SetName(backend: backend, identity: identity);
+            var (set, missing, damaged) = await ReadSetAsync(backend: backend, cancellationToken: cancellationToken, identity: identity, store: source).ConfigureAwait(continueOnCapturedContext: false);
 
-            if (path is null) {
-                held.Add(item: Missing(backend: backend, identity: identity, tag: tag));
+            if (set is null) {
+                held.Add(item: (missing ?? $"{backend}: {name} cannot be read, because {damaged}; produce it again"));
                 continue;
             }
-            var record = JsonNode.Parse(json: await File.ReadAllTextAsync(cancellationToken: cancellationToken, path: path).ConfigureAwait(continueOnCapturedContext: false));
-
-            if (Lacks(backend: backend, planned: planned, recorded: record?["plan"], tag: tag) is { } lacks) {
+            if (Lacks(backend: backend, name: name, planned: planned, recorded: set.Plan) is { } lacks) {
                 held.Add(item: lacks);
                 continue;
             }
-            Console.Out.WriteLine(value: $"{Verb}: {backend}: {tag} was produced for this world's {planned.Count} bake groups.");
+            Console.Out.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Verb}: {backend}: {name} holds {set.Files.Count} meshes ({set.Files.Sum(selector: static file => file.Size)} bytes), produced for this world's {planned.Count} bake groups."));
         }
         if (held.Count == 0) { return 0; }
 
@@ -297,13 +273,14 @@ public static class WorldCachesCommand {
         }
         return 1;
     }
-    private static async Task<int> FetchAsync(string folder, string? from, string? notes, TimeSpan wait, TimeProvider clock, CancellationToken cancellationToken) {
+    private static async Task<int> FetchAsync(string folder, string store, string? notes, TimeSpan wait, TimeProvider clock, CancellationToken cancellationToken) {
         if (!PlayerBuildLayout.TryReadComplete(folder: folder, record: out var record, why: out var refusal)) { return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: refusal!); }
 
+        var source = OpenStore(store: store);
         var deadline = (clock.GetUtcNow() + wait);
 
         while (true) {
-            var (exit, held, lines, outcomes) = await FetchOnceAsync(cancellationToken: cancellationToken, folder: folder, from: from, record: record).ConfigureAwait(continueOnCapturedContext: false);
+            var (exit, held, lines, outcomes) = await FetchOnceAsync(cancellationToken: cancellationToken, folder: folder, record: record, store: source).ConfigureAwait(continueOnCapturedContext: false);
 
             if (exit is { } failed) { return failed; }
             if ((held.Count > 0) && (clock.GetUtcNow() < deadline)) {
@@ -316,7 +293,7 @@ public static class WorldCachesCommand {
     }
     // One look for every backend's set: the exit code of a failure that holds no matter how long it waits, or the held lines,
     // the hit lines and each backend's outcome.
-    private static async Task<(int? Exit, List<string> Held, List<string> Lines, JsonObject Outcomes)> FetchOnceAsync(string folder, string? from, JsonNode record, CancellationToken cancellationToken) {
+    private static async Task<(int? Exit, List<string> Held, List<string> Lines, JsonObject Outcomes)> FetchOnceAsync(string folder, IReleaseSource store, JsonNode record, CancellationToken cancellationToken) {
         var lines = new List<string>();
         var held = new List<string>();
         var outcomes = new JsonObject();
@@ -324,52 +301,104 @@ public static class WorldCachesCommand {
 
         foreach (var backend in Backends(record: record)) {
             if (!TryIdentity(backend: backend, folder: folder, identity: out var identity, why: out var why)) { return (CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: folder), why: why!), held, lines, outcomes); }
-            var tag = Tag(backend: backend, identity: identity);
-            using var download = RunDirectory.Create(keepOnFailure: false, prefix: "puck-cache-set-");
-            string archive;
+            var name = SetName(backend: backend, identity: identity);
+            var identityText = Hex(identity: identity);
+            var (set, missing, damaged) = await ReadSetAsync(backend: backend, cancellationToken: cancellationToken, identity: identity, store: store).ConfigureAwait(continueOnCapturedContext: false);
 
-            if (from is null) {
-                try {
-                    archive = (await DownloadArchiveAsync(cancellationToken: cancellationToken, directory: download.Path, tag: tag).ConfigureAwait(continueOnCapturedContext: false)) ?? Path.Combine(path1: download.Path, path2: AssetName);
-                } catch (IOException failure) {
-                    Console.Error.WriteLine(value: $"{Verb}: {failure.Message}");
-                    return (1, held, lines, outcomes);
-                }
-            } else {
-                archive = Path.Combine(path1: from, path2: $"{backend}-{identity:x32}", path3: AssetName);
-            }
-            if (!File.Exists(path: archive)) {
-                held.Add(item: Missing(backend: backend, identity: identity, tag: tag));
-                outcomes[backend] = new JsonObject { ["identity"] = identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture), ["meshes"] = 0, ["held"] = "no set matches the identity" };
-                continue;
-            }
-
-            var (count, targets, error) = Unpack(archive: archive, backend: backend, folder: folder, identity: identity, plan: out var recorded);
-
-            if (error is not null) {
-                Console.Error.WriteLine(value: $"{Verb}: {tag}: {error}; nothing of it was kept.");
+            if (damaged is not null) {
+                Console.Error.WriteLine(value: $"{Verb}: {name}: {damaged}; nothing of it was taken.");
                 return (1, held, lines, outcomes);
+            }
+            if (set is null) {
+                held.Add(item: missing!);
+                outcomes[backend] = new JsonObject { ["identity"] = identityText, ["meshes"] = 0, ["held"] = "no set matches the identity" };
+                continue;
             }
             if ((planned is null) && !WorldCachePlan.TryRead(folder: folder, world: ((string?)record["world"] ?? string.Empty), keys: out planned, why: out var unplanned)) {
-                Console.Error.WriteLine(value: $"{Verb}: {tag}: cannot tell whether the set was produced for this build's world, because {unplanned}; a set that is not known to be whole does not ship.");
+                Console.Error.WriteLine(value: $"{Verb}: {name}: cannot tell whether the set was produced for this build's world, because {unplanned}; a set that is not known to be whole does not ship.");
                 return (1, held, lines, outcomes);
             }
-
-            var identityText = identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture);
-
-            if (Lacks(backend: backend, planned: planned, recorded: recorded, tag: tag) is { } lacks) {
+            // The plan is judged before any mesh moves, so a set produced for another world costs one manifest read.
+            if (Lacks(backend: backend, name: name, planned: planned, recorded: set.Plan) is { } lacks) {
                 held.Add(item: lacks);
-                outcomes[backend] = new JsonObject { ["identity"] = identityText, ["meshes"] = count, ["tag"] = tag, ["groups"] = planned.Count, ["held"] = "the set was not produced for this world's groups" };
+                outcomes[backend] = new JsonObject { ["identity"] = identityText, ["meshes"] = set.Files.Count, ["set"] = name, ["groups"] = planned.Count, ["held"] = "the set was not produced for this world's groups" };
                 continue;
             }
 
-            var hit = $"{backend}: {count} meshes from {tag}, produced for this world's {planned.Count} bake groups (baked for {(string.IsNullOrEmpty(value: targets) ? "the producer's targets" : targets)})";
+            var (fetched, kept, error) = await TakeAsync(cancellationToken: cancellationToken, files: set.Files, set: SetDirectory(folder: folder, identity: identity), store: store).ConfigureAwait(continueOnCapturedContext: false);
+
+            if (error is not null) {
+                Console.Error.WriteLine(value: $"{Verb}: {name}: {error}; the folder's set was left as it was.");
+                return (1, held, lines, outcomes);
+            }
+
+            var hit = string.Create(provider: CultureInfo.InvariantCulture, handler: $"{backend}: {set.Files.Count} meshes from {name} ({fetched} fetched, {kept} already held), produced for this world's {planned.Count} bake groups (baked for {(string.IsNullOrEmpty(value: set.Targets) ? "the producer's targets" : set.Targets)})");
 
             Console.Out.WriteLine(value: $"{Verb}: {hit}.");
             lines.Add(item: hit);
-            outcomes[backend] = new JsonObject { ["identity"] = identityText, ["meshes"] = count, ["tag"] = tag, ["targets"] = targets, ["groups"] = planned.Count, ["missing"] = 0 };
+            outcomes[backend] = new JsonObject { ["identity"] = identityText, ["meshes"] = set.Files.Count, ["fetched"] = fetched, ["set"] = name, ["targets"] = set.Targets, ["groups"] = planned.Count, ["missing"] = 0 };
         }
         return (null, held, lines, outcomes);
+    }
+    // Makes a folder's set directory hold exactly a set's meshes: a mesh already there with its pin's bytes is kept, every
+    // other one is fetched and verified into a staging directory beside it, and only once all have verified do they move in
+    // and the files the set does not list leave. A failure leaves the set directory as it was.
+    private static async Task<(int Fetched, int Kept, string? Error)> TakeAsync(IReleaseSource store, string set, IReadOnlyList<SetFile> files, CancellationToken cancellationToken) {
+        var staging = (set + ".fetching");
+        var fetched = 0;
+        var kept = 0;
+        string? error = null;
+
+        if (Directory.Exists(path: staging)) { Directory.Delete(path: staging, recursive: true); }
+        Directory.CreateDirectory(path: staging);
+        try {
+            using var stop = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
+
+            try {
+                await Parallel.ForEachAsync(
+                    body: async (file, token) => {
+                        var held = Path.Combine(path1: set, path2: file.Name);
+
+                        if (File.Exists(path: held) && (new FileInfo(fileName: held).Length == file.Size) && (ContentPin.OfFile(path: held) == file.Pin)) {
+                            _ = Interlocked.Increment(location: ref kept);
+                            return;
+                        }
+
+                        (byte[]? Content, string? Refusal) result = (null, null);
+
+                        for (var attempt = 0; ((attempt < FetchAttempts) && (result.Content is null)); attempt++) {
+                            result = await ReleaseObjectFetch.TryFetchAsync(cancellationToken: token, length: file.Size, pin: file.Pin, source: store).ConfigureAwait(continueOnCapturedContext: false);
+                        }
+                        if (result.Content is null) {
+                            _ = Interlocked.CompareExchange(comparand: null, location1: ref error, value: $"the mesh '{file.Name}' (hash {file.Pin}) {result.Refusal}");
+                            await stop.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
+                            return;
+                        }
+                        await File.WriteAllBytesAsync(bytes: result.Content, cancellationToken: token, path: Path.Combine(path1: staging, path2: file.Name)).ConfigureAwait(continueOnCapturedContext: false);
+                        _ = Interlocked.Increment(location: ref fetched);
+                    },
+                    parallelOptions: new ParallelOptions { CancellationToken = stop.Token, MaxDegreeOfParallelism = ReleaseObjectFetch.Parallelism },
+                    source: files
+                ).ConfigureAwait(continueOnCapturedContext: false);
+            } catch (OperationCanceledException) when ((error is not null) && !cancellationToken.IsCancellationRequested) {
+                // A mesh that could not be taken stopped the other fetches; the error names it.
+            }
+            if (error is not null) { return (fetched, kept, error); }
+
+            Directory.CreateDirectory(path: set);
+            foreach (var staged in Directory.EnumerateFiles(path: staging)) {
+                File.Move(destFileName: Path.Combine(path1: set, path2: Path.GetFileName(path: staged)), overwrite: true, sourceFileName: staged);
+            }
+
+            var listed = files.Select(selector: static file => file.Name).ToHashSet(comparer: StringComparer.Ordinal);
+
+            foreach (var stale in Directory.EnumerateFiles(path: set).Where(predicate: path => !listed.Contains(item: Path.GetFileName(path: path))).ToArray()) {
+                File.Delete(path: stale);
+            }
+            return (fetched, kept, null);
+        } finally {
+            if (Directory.Exists(path: staging)) { Directory.Delete(path: staging, recursive: true); }
+        }
     }
     private static async Task<int> FinishFetchAsync(string folder, JsonNode record, List<string> held, List<string> lines, JsonObject outcomes, string? notes, CancellationToken cancellationToken) {
         record["caches"] = outcomes;
@@ -404,73 +433,6 @@ public static class WorldCachesCommand {
         closing +
         "```text\n" +
         "puck world player worlds/debug --output <folder> --target rtx2060@1920x1080 --target rtx4070@2560x1440\n" +
-        "puck world caches produce <folder> --push\n" +
+        "puck world caches produce <folder> --host azure\n" +
         "```\n";
-    // Every entry the archive holds must be the record or a file the record lists under the identity's own set, and every
-    // listed file must match its content pin and size; the set lands only once the whole archive verified, so a damaged or
-    // foreign archive leaves the folder as it was.
-    // The plan is the record's list of the world's groups the set was produced for, null when the record holds none.
-    private static (int Count, string Targets, string? Error) Unpack(string archive, string backend, string folder, UInt128 identity, out JsonNode? plan) {
-        plan = null;
-        using var zip = ZipFile.OpenRead(archiveFileName: archive);
-        var recordEntry = zip.GetEntry(entryName: RecordName);
-
-        if (recordEntry is null) { return (0, string.Empty, $"the archive holds no {RecordName}"); }
-        JsonNode? record;
-
-        using (var stream = recordEntry.Open()) {
-            try {
-                record = JsonNode.Parse(utf8Json: stream);
-            } catch (JsonException exception) {
-                return (0, string.Empty, $"its {RecordName} does not parse: {exception.Message}");
-            }
-        }
-        if (((string?)record?["schema"] != Schema) || ((string?)record?["backend"] != backend) ||
-            ((string?)record?["identity"] != identity.ToString(format: "x32", provider: CultureInfo.InvariantCulture))) {
-            return (0, string.Empty, $"its {RecordName} is not a {Schema} for {backend} identity {identity:x32}");
-        }
-        plan = record!["plan"];
-        var prefix = SetPrefix(identity: identity);
-        var listed = new Dictionary<string, (ContentPin Pin, long Size)>(comparer: StringComparer.Ordinal);
-
-        foreach (var file in record["files"]?.AsArray() ?? []) {
-            var path = (string?)file?["path"];
-            var name = (path?.StartsWith(value: prefix, comparisonType: StringComparison.Ordinal) == true) ? path[prefix.Length..] : null;
-
-            if ((name is null) || (name.Length == 0) || name.Contains(value: '/') || name.Contains(value: '\\') || (name == "..") || !name.EndsWith(value: Puck.SdfVm.SdfMeshStore.Extension, comparisonType: StringComparison.Ordinal) ||
-                !ContentPin.TryParse(pin: out var pin, text: (string?)file?["hash"]) || ((long?)file?["size"] is not { } size) || !listed.TryAdd(key: path!, value: (pin, size))) {
-                return (0, string.Empty, $"its {RecordName} lists the entry '{path}', which is not one mesh of the set");
-            }
-        }
-        if (zip.Entries.Count != (listed.Count + 1)) { return (0, string.Empty, "the archive holds entries its record does not list"); }
-
-        var staging = (SetDirectory(folder: folder, identity: identity) + ".fetching");
-
-        if (Directory.Exists(path: staging)) { Directory.Delete(path: staging, recursive: true); }
-        Directory.CreateDirectory(path: staging);
-        try {
-            foreach (var (path, (pin, size)) in listed) {
-                var entry = zip.GetEntry(entryName: path);
-
-                if ((entry is null) || (entry.Length != size)) { return (0, string.Empty, $"the entry '{path}' is missing or not {size} bytes"); }
-                using var stream = entry.Open();
-                using var buffer = new MemoryStream(capacity: (int)size);
-
-                stream.CopyTo(destination: buffer);
-                var bytes = buffer.ToArray();
-
-                if (ContentPin.Compute(content: bytes) != pin) { return (0, string.Empty, $"the entry '{path}' does not match its content pin {pin}"); }
-                File.WriteAllBytes(bytes: bytes, path: Path.Combine(path1: staging, path2: path[prefix.Length..]));
-            }
-            var set = SetDirectory(folder: folder, identity: identity);
-
-            if (Directory.Exists(path: set)) { Directory.Delete(path: set, recursive: true); }
-            Directory.Move(destDirName: set, sourceDirName: staging);
-        } finally {
-            if (Directory.Exists(path: staging)) { Directory.Delete(path: staging, recursive: true); }
-        }
-        var targets = string.Join(separator: ", ", values: (record["targets"]?.AsArray() ?? []).Select(selector: static node => (string?)node).OfType<string>());
-
-        return (listed.Count, targets, null);
-    }
 }

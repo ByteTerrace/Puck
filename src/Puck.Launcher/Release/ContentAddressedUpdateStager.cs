@@ -37,6 +37,8 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
 
         var downloaded = 0;
         var reused = 0;
+        // Each pin is fetched once, however many files name it, so no two fetches write the same object.
+        var missing = new Dictionary<ContentPin, ReleasePayloadFile>();
 
         foreach (var file in payload.Files) {
             if (!ContentPin.TryParse(
@@ -45,33 +47,35 @@ public sealed class ContentAddressedUpdateStager(IReleaseSource source, ContentA
             )) {
                 return UpdateStageResult.Refuse(reason: $"file '{file.Path}' names '{file.Hash}', which is not a well-formed content pin");
             }
-            if (m_cache.Contains(pin: pin)) {
+            if (m_cache.Contains(pin: pin) || !missing.TryAdd(key: pin, value: file)) {
                 reused++;
-
-                continue;
             }
+        }
 
-            using var buffer = new MemoryStream();
-            var found = await m_source.TryGetFileAsync(
-                cancellationToken: cancellationToken,
-                destination: buffer,
-                length: file.Size,
-                pin: pin
+        string? refusal = null;
+        using var stop = CancellationTokenSource.CreateLinkedTokenSource(token: cancellationToken);
+
+        try {
+            await Parallel.ForEachAsync(
+                body: async (entry, token) => {
+                    var (content, why) = await ReleaseObjectFetch.TryFetchAsync(cancellationToken: token, length: entry.Value.Size, pin: entry.Key, source: m_source).ConfigureAwait(continueOnCapturedContext: false);
+
+                    if (content is null) {
+                        _ = Interlocked.CompareExchange(comparand: null, location1: ref refusal, value: $"file '{entry.Value.Path}' (hash {entry.Value.Hash}) {why} — refused rather than staged");
+                        await stop.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
+                        return;
+                    }
+                    _ = m_cache.Put(content: content);
+                    _ = Interlocked.Increment(location: ref downloaded);
+                },
+                parallelOptions: new ParallelOptions { CancellationToken = stop.Token, MaxDegreeOfParallelism = ReleaseObjectFetch.Parallelism },
+                source: missing
             ).ConfigureAwait(continueOnCapturedContext: false);
-
-            if (!found) {
-                return UpdateStageResult.Refuse(reason: $"file '{file.Path}' (hash {file.Hash}) could not be fetched");
-            }
-
-            var bytes = buffer.ToArray();
-            var actualHash = ContentPin.Compute(content: bytes);
-
-            if ((bytes.LongLength != file.Size) || (actualHash != pin)) {
-                return UpdateStageResult.Refuse(reason: $"file '{file.Path}' fetched with hash {actualHash}, expected {file.Hash} — refused rather than staged");
-            }
-
-            _ = m_cache.Put(content: bytes);
-            downloaded++;
+        } catch (OperationCanceledException) when ((refusal is not null) && !cancellationToken.IsCancellationRequested) {
+            // A refused object stopped the other fetches; the refusal below names it.
+        }
+        if (refusal is not null) {
+            return UpdateStageResult.Refuse(reason: refusal);
         }
 
         var versionDirectory = Path.Combine(

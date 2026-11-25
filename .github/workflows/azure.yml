@@ -31,6 +31,8 @@ concurrency:
 env:
   CI: true
   DOTNET_NOLOGO: true
+  # The deployment's release channel tree: the player channel's releases and the mesh cache sets they ship.
+  PLAYER_CHANNEL_URL: https://puck.byteterrace.com/official/releases
 
 jobs:
   artifacts:
@@ -309,7 +311,6 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
       - env:
-          AZCOPY_AUTO_LOGIN_TYPE: AZCLI
           AZCOPY_CONCURRENCY_VALUE: AUTO
           AZCOPY_JOB_PLAN_LOCATION: ${{ github.workspace }}/artifacts/azcopy
           AZCOPY_LOG_LOCATION: ${{ github.workspace }}/artifacts/azcopy
@@ -338,9 +339,10 @@ jobs:
     timeout-minutes: 120
   # The player channel: the consumer build (what the RTX 2060 test machine installs) as a signed release in the
   # deployment's own hosting. A hosted runner has no GPU, so the build is assembled without baking boots and takes its
-  # baked mesh store from the cache set a GPU machine pushed for the same mesh bake identity (`puck world caches produce
-  # --push`). A player never bakes, so a backend with no set for this identity, or a set missing groups the world
-  # needs, fails the fetch step before anything is signed or uploaded: the job summary names the miss and what the
+  # baked mesh store from the cache set a GPU machine wrote into the channel's own store for the same mesh bake identity
+  # (`puck world caches produce --host azure`); the set's meshes are objects the release then shares, so the push copies
+  # none of them again. A player never bakes, so a backend with no set for this identity, or a set missing groups the
+  # world needs, fails the fetch step before anything is signed or uploaded: the job summary names the miss and what the
   # lead runs, and the channel keeps its last complete release. It runs after deploy and nothing waits on it.
   player:
     concurrency:
@@ -377,12 +379,11 @@ jobs:
           name: azure-production-release
           path: artifacts
       - name: Assemble the player build without baking boots
-        run: puck world player worlds/debug --output artifacts/player --no-bake --channel-url https://puck.byteterrace.com/official/releases --channel-name player
+        run: puck world player worlds/debug --output artifacts/player --no-bake --channel-url "$PLAYER_CHANNEL_URL" --channel-name player
         shell: bash
-      - env:
-          GH_TOKEN: ${{ github.token }}
-        name: Take the mesh cache sets whose bake identity matches this build, waiting for the GPU machine's, or hold the channel
-        run: puck world caches fetch artifacts/player --notes artifacts/player-notes.txt --wait 45
+      # Anonymous reads through the deployment's public edge, as an install reads the channel: no identity needed.
+      - name: Take the mesh cache sets whose bake identity matches this build, waiting for the GPU machine's, or hold the channel
+        run: puck world caches fetch artifacts/player --store "$PLAYER_CHANNEL_URL" --notes artifacts/player-notes.txt --wait 45
         shell: bash
       - name: Write the player release tree
         run: >-
@@ -401,7 +402,6 @@ jobs:
         run: puck azure vault-access
         shell: bash
       - env:
-          AZCOPY_AUTO_LOGIN_TYPE: AZCLI
           AZCOPY_CONCURRENCY_VALUE: AUTO
           AZCOPY_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
         name: Sign the release and push the player channel
@@ -436,10 +436,8 @@ jobs:
         with:
           name: world-windows-framework-dependent
           path: artifacts/world
-      - env:
-          GH_TOKEN: ${{ github.token }}
-        name: Look for a whole cache set for this build's bake identity and world
-        run: puck world caches status worlds/debug --build artifacts/world
+      - name: Look for a whole cache set for this build's bake identity and world
+        run: puck world caches status worlds/debug --build artifacts/world --store "$PLAYER_CHANNEL_URL"
         shell: bash
     timeout-minutes: 15
   applications:
