@@ -869,7 +869,11 @@ Work a loop running beside it does is counted too.
 
 The boot is a loop timed from process start, so a restart and a cold boot
 read the same way. `world.reload` (by hand, or from `world.watch` once its
-quiet period ends) and `world.shaders.reload` each begin a loop.
+quiet period ends) and `world.shaders.reload` each begin a loop, and so does a
+hot-reload edit: the first frame after the runtime applies a C# update
+(`CodeRevision`) begins a `hot-reload` loop timed from the update's
+application, whose `frame` stage holds once the composition has emitted under
+the new code (`SdfCompositionFrameSource.BuiltCodeRevision`).
 `world.iteration begin <name>` begins one for the edit on the next line, such
 as a `world.row.set`, and a reload that follows it joins it. A newer loop
 supersedes one still open. A settled loop prints `[world.iteration] <line>` on

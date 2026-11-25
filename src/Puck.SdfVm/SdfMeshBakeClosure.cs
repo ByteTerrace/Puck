@@ -101,14 +101,14 @@ public sealed class SdfMeshBakeClosure {
     ], comparer: StringComparer.Ordinal);
     private static readonly Lazy<SdfMeshBakeClosure> Running = new(valueFactory: static () => Of(directory: AppContext.BaseDirectory));
 
-    private readonly Puck.Assets.CodeClosure m_code;
-    private readonly Puck.Assets.CodeClosure? m_sampling;
-    private readonly Puck.Assets.CodeClosure? m_contouring;
-    private readonly Puck.Assets.CodeClosure? m_simplification;
-    private readonly Puck.Assets.CodeClosure? m_checkpoints;
-    private SdfMeshBakeClosure(Puck.Assets.CodeClosure code, string entryVersion,
-        Puck.Assets.CodeClosure? sampling = null, Puck.Assets.CodeClosure? contouring = null,
-        Puck.Assets.CodeClosure? simplification = null, Puck.Assets.CodeClosure? checkpoints = null) {
+    private readonly Puck.Assets.CodeIdentity m_code;
+    private readonly Puck.Assets.CodeIdentity? m_sampling;
+    private readonly Puck.Assets.CodeIdentity? m_contouring;
+    private readonly Puck.Assets.CodeIdentity? m_simplification;
+    private readonly Puck.Assets.CodeIdentity? m_checkpoints;
+    private SdfMeshBakeClosure(Puck.Assets.CodeIdentity code, string entryVersion,
+        Puck.Assets.CodeIdentity? sampling = null, Puck.Assets.CodeIdentity? contouring = null,
+        Puck.Assets.CodeIdentity? simplification = null, Puck.Assets.CodeIdentity? checkpoints = null) {
         m_code = code;
         EntryVersion = entryVersion;
         m_sampling = sampling;
@@ -122,27 +122,28 @@ public sealed class SdfMeshBakeClosure {
     internal UInt128 Simplification => RunningHash(m_simplification);
     internal UInt128 Checkpoints => RunningHash(m_checkpoints);
 
-    private static UInt128 RunningHash(Puck.Assets.CodeClosure? closure) => closure is null ? 0
-        : SdfMeshBakeIdentity.Fold(closure.Hash, Puck.Abstractions.CodeRevision.AppliedTo(closure.Reads));
-    /// <summary>Gets the running build's bake closure.</summary>
+    private static UInt128 RunningHash(Puck.Assets.CodeIdentity? code) => code is null ? 0
+        : SdfMeshBakeIdentity.Fold(code.Hash, Puck.Abstractions.CodeRevision.AppliedTo(code.Reads));
+    /// <summary>Gets the running build's bake closure. Each of its closures is remembered for the build
+    /// (<see cref="Puck.Assets.CodeIdentity"/>), so a process of a build an earlier one walked walks none of them.</summary>
     public static SdfMeshBakeClosure Current => Running.Value;
     /// <summary>Gets the store entry format tag in the walked build.</summary>
     public string EntryVersion { get; }
     /// <summary>Gets the reachable code identity.</summary>
     public UInt128 Hash => m_code.Hash;
-    /// <summary>Gets normalized members and their hashes.</summary>
-    public IReadOnlyDictionary<string, UInt128> Members => m_code.Members;
-    /// <summary>Gets the first member reaching each member.</summary>
-    public IReadOnlyDictionary<string, string> Reasons => m_code.Reasons;
+    /// <summary>Gets normalized members and their hashes; walks the closure on first use.</summary>
+    public IReadOnlyDictionary<string, UInt128> Members => m_code.Closure.Members;
+    /// <summary>Gets the first member reaching each member; walks the closure on first use.</summary>
+    public IReadOnlyDictionary<string, string> Reasons => m_code.Closure.Reasons;
     /// <summary>Whether the closure reads an updated type.</summary>
     /// <param name="type">The updated type.</param>
     /// <returns>Whether it is read.</returns>
     public bool Reads(Type type) => m_code.Reads(type: type);
-    /// <summary>Walks the bake's production roots.</summary>
+    /// <summary>Names the bake's production roots and its stages' roots; nothing is walked until an identity is asked
+    /// for, and an identity an earlier process of the same build walked is read back.</summary>
     /// <param name="directory">The deployed build directory.</param>
     /// <returns>The bake closure.</returns>
     public static SdfMeshBakeClosure Of(string directory) {
-        using var modules = new Puck.Assets.CodeClosure.ModuleSet(directory);
         var codec = typeof(SdfMeshStoreCodec).FullName!;
         var simplification = typeof(SdfMeshPathBake.SimplificationStage).FullName!.Replace('+', '/');
         var contourStops = new HashSet<string>(StopTypes, StringComparer.Ordinal) { simplification };
@@ -156,28 +157,30 @@ public sealed class SdfMeshBakeClosure {
             ("Puck.SdfVm", typeof(SdfMeshStore).FullName!, nameof(SdfMeshStore.TryReadSamples)),
             ("Puck.SdfVm", typeof(SdfMeshStore).FullName!, nameof(SdfMeshStore.WriteSamples)),
         ];
-        var sampling = modules.Of(stopTypes: StopTypes, roots: sampleRoots);
-        var contouring = modules.Of(roots: contourRoots, stopTypes: contourStops);
-        var meshCheckpoints = modules.Of(stopTypes: StopTypes, roots: [
+        var sampling = Puck.Assets.CodeIdentity.Of(directory: directory, stopTypes: StopTypes, roots: sampleRoots);
+        var contouring = Puck.Assets.CodeIdentity.Of(directory: directory, roots: contourRoots, stopTypes: contourStops);
+        var meshCheckpoints = Puck.Assets.CodeIdentity.Of(directory: directory, stopTypes: StopTypes, roots: [
             ("Puck.SdfVm", codec, nameof(SdfMeshStoreCodec.EncodeExact)),
             ("Puck.SdfVm", typeof(SdfMeshStoreDecoder).FullName!, nameof(SdfMeshStoreDecoder.TryDecode)),
         ]);
-        var simplified = modules.Of(stopTypes: StopTypes, roots: [
+        var simplified = Puck.Assets.CodeIdentity.Of(directory: directory, stopTypes: StopTypes, roots: [
             ("Puck.SdfVm", simplification, nameof(SdfMeshPathBake.SimplificationStage.Run)),
         ]);
         return new SdfMeshBakeClosure(
-            modules.Of(roots: BakeRoots, stopTypes: StopTypes), ReadEntryVersion(modules),
+            Puck.Assets.CodeIdentity.Of(directory: directory, roots: BakeRoots, stopTypes: StopTypes), ReadEntryVersion(directory: directory),
             sampling: sampling, contouring: contouring, simplification: simplified, checkpoints: meshCheckpoints);
     }
-    /// <summary>Walks explicit roots with the bake's transport boundaries.</summary>
+    /// <summary>Names explicit roots with the bake's transport boundaries.</summary>
     /// <param name="directory">The deployed build directory.</param>
     /// <param name="roots">Assembly, type and method roots.</param>
     /// <returns>The closure.</returns>
-    public static SdfMeshBakeClosure Of(string directory, IReadOnlyList<(string Assembly, string Type, string? Method)> roots) {
+    public static SdfMeshBakeClosure Of(string directory, IReadOnlyList<(string Assembly, string Type, string? Method)> roots) =>
+        new(Puck.Assets.CodeIdentity.Of(directory: directory, roots: roots, stopTypes: StopTypes), ReadEntryVersion(directory: directory));
+    private static string ReadEntryVersion(string directory) {
         using var modules = new Puck.Assets.CodeClosure.ModuleSet(directory);
-        return new(modules.Of(roots, StopTypes), ReadEntryVersion(modules));
+
+        return SdfMeshStore.VersionText(magic: modules.ReadUInt64Constant(assembly: "Puck.SdfVm", type: "Puck.SdfVm.SdfMeshStore", field: "Magic"));
     }
-    private static string ReadEntryVersion(Puck.Assets.CodeClosure.ModuleSet modules) => SdfMeshStore.VersionText(magic: modules.ReadUInt64Constant(assembly: "Puck.SdfVm", type: "Puck.SdfVm.SdfMeshStore", field: "Magic"));
     /// <summary>Lists added, changed and removed members in ordinal order.</summary>
     /// <param name="members">The current members.</param>
     /// <param name="earlier">The earlier members.</param>

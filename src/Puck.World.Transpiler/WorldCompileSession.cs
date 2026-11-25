@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text;
 using Puck.Assets;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Modules;
@@ -64,7 +63,6 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
     private sealed class State(string? directory, PuckSourceTable sources) {
         public string? Directory = directory;
         public bool DeferCompositionWrites;
-        public string? LayerCodeHash;
 
         public ConcurrentDictionary<string, Lock> Compiling { get; } = new(comparer: StringComparer.Ordinal);
         public ConcurrentDictionary<string, WorldCompiledSource> Held { get; } = new(comparer: StringComparer.Ordinal);
@@ -111,91 +109,21 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
     public PuckSourceTable Sources => m_state.Sources;
 
     // The identity a product of the parser or compiler is keyed by, in memory and on disk: the normalized IL and layouts
-    // reachable from the compile's own code (CompilerCode), with an update applied to any of it folded in
-    // (CodeRevision.AppliedTo). A product is valid only under the identity it was written by, and an engine edit no
-    // compile runs (a renderer, a physics solver, the World's client) leaves it standing, so the restart after such an edit
-    // compiles nothing.
-    internal static string CompilerIdentity {
-        get {
-            if (Puck.Abstractions.CodeRevision.Current == 0) { return CompilerCodeHash(); }
-
-            var code = CompilerCode.Value;
-            var hash = code.Hash.ToString(format: "x32");
-            var applied = Puck.Abstractions.CodeRevision.AppliedTo(reads: code.Reads);
-
-            return ((applied.Length == 0) ? hash : ContentPin.OfText(text: $"{hash}\n{applied}").Hex);
-        }
-    }
+    // reachable from the compile's own code (CompilerCode, remembered for the build), with an update applied to any of it
+    // folded in. A product is valid only under the identity it was written by, and an engine edit no compile runs (a
+    // renderer, a physics solver, the World's client) leaves it standing, so the restart after such an edit compiles
+    // nothing.
+    internal static string CompilerIdentity => CompilerCode.Value.Applied();
     // The compile's code: every method and layout the compiler, the import index and this session's own persistence reach.
-    private static readonly Lazy<CodeClosure> CompilerCode = new(valueFactory: static () => CodeClosure.Of(
+    private static readonly Lazy<CodeIdentity> CompilerCode = new(valueFactory: static () => CodeIdentity.Of(
         directory: AppContext.BaseDirectory,
         roots: [
             ("Puck.World.Transpiler", "Puck.World.Transpiler.WorldCompiler", null),
             ("Puck.World.Transpiler", "Puck.World.Transpiler.WorldCompileSession", null),
             ("Puck.World.Transpiler", "Puck.World.Transpiler.Composition.WorldSourceIndex", null),
         ],
-        stopTypes: new HashSet<string>(collection: [typeof(CodeClosure).FullName!], comparer: StringComparer.Ordinal)
+        stopTypes: new HashSet<string>(collection: [typeof(CodeClosure).FullName!, typeof(CodeIdentity).FullName!], comparer: StringComparer.Ordinal)
     ));
-    private static string? HeldCompilerCodeHash;
-    // The compile's code hash in a build that applied no update. The walk reads every reached assembly's metadata, so a
-    // build walks it once: the shared session persists the hash under the build's own identity (BuildIdentity) and every
-    // later boot of the same build reads it back.
-    private static string CompilerCodeHash() {
-        if (Volatile.Read(location: ref HeldCompilerCodeHash) is { } held) { return held; }
-
-        const string Key = "compiler-code";
-        var session = Shared;
-        var hash = session.ReadPersisted(identity: BuildIdentity, key: Key, read: static reader => {
-            var value = reader.ReadString();
-
-            return Puck.Abstractions.ContentDigest.IsLowerHexDigits(length: 32, text: value)
-                ? value : throw new InvalidDataException(message: "Invalid compiler code hash.");
-        });
-
-        if (hash is null) {
-            var derived = CompilerCode.Value.Hash.ToString(format: "x32");
-
-            session.WritePersisted(identity: BuildIdentity, key: Key, write: writer => writer.Write(value: derived));
-            hash = derived;
-        }
-        _ = Interlocked.CompareExchange(location1: ref HeldCompilerCodeHash, value: hash, comparand: null);
-        return Volatile.Read(location: ref HeldCompilerCodeHash)!;
-    }
-    // The pin over every Puck module the compiler's assembly references: the guard the build's own walk of the compiler's
-    // code is persisted under, never the key of a compile.
-    private static string BuildIdentity => BuildPin.Value;
-
-    // The identity walks the compiler's reference graph from its own assembly. In a trimmed application a reference
-    // the trimmer removed is code the compile cannot run, so its load failing and entering the identity as absent is
-    // exactly the right answer.
-    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage(
-        category: "Trimming",
-        checkId: "IL2026",
-        Justification = "A reference the trimmer removed cannot run, and its failed load enters the identity as absent."
-    )]
-    private static string ComputeBuildPin() {
-        var modules = new SortedDictionary<string, Guid>(comparer: StringComparer.Ordinal);
-        foreach (var (name, assembly) in AssemblyReach.Of(
-            root: typeof(WorldCompiler).Assembly,
-            include: static reference => !IsFramework(name: reference.Name),
-            unavailable: reference => modules.TryAdd(key: (reference.Name ?? string.Empty), value: Guid.Empty))) {
-            modules[name] = assembly.ManifestModule.ModuleVersionId;
-        }
-
-        var text = new StringBuilder();
-
-        foreach (var (name, version) in modules) {
-            _ = text.Append(value: name).Append(value: '=').Append(value: version.ToString(format: "N")).Append(value: ';');
-        }
-
-        return ContentPin.OfText(text: text).Hex;
-    }
-    private static bool IsFramework(string? name) => (
-        (name is null) ||
-        name.StartsWith(comparisonType: StringComparison.Ordinal, value: "System") ||
-        name.StartsWith(comparisonType: StringComparison.Ordinal, value: "Microsoft") ||
-        (name is "netstandard" or "mscorlib" or "WindowsBase")
-    );
     private static bool Stands(IReadOnlyList<CompileInput> inputs, int from = 0) {
         for (var index = from; (index < inputs.Count); index++) {
             if (!inputs[index].StillHolds()) {
@@ -621,5 +549,4 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
             writer.Write(buffer: world.Json);
         }
     }
-    private static readonly Lazy<string> BuildPin = new(valueFactory: ComputeBuildPin);
 }

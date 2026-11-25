@@ -41,7 +41,7 @@ public sealed class DerivedBytes {
 
         return false;
     }
-    private readonly CodeClosure m_code;
+    private readonly CodeIdentity m_code;
     private readonly string m_name;
     private long m_hits;
     private long m_misses;
@@ -51,7 +51,7 @@ public sealed class DerivedBytes {
     /// <param name="roots">Assembly, full type and method roots.</param>
     public DerivedBytes(string name, IReadOnlyList<(string Assembly, string Type, string? Method)> roots) {
         m_name = name;
-        m_code = CodeClosure.Of(directory: AppContext.BaseDirectory, roots: roots,
+        m_code = CodeIdentity.Of(directory: AppContext.BaseDirectory, roots: roots,
             stopTypes: new HashSet<string>(collection: [typeof(DerivedBytes).FullName!, typeof(CodeClosure).FullName!], comparer: StringComparer.Ordinal));
     }
 

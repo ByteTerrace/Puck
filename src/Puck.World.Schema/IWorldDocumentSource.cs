@@ -59,8 +59,6 @@ public interface IWorldCompositionStore {
     WorldComposedDocument? ReadComposition(string key);
     /// <summary>Stores an image under this source, path and catalog identity.</summary>
     void WriteComposition(string key, WorldComposedDocument image);
-    /// <summary>Gets the verified result of the layer code walk for this build, deriving it on a miss.</summary>
-    string GetLayerCodeHash(Func<string> derive);
     /// <summary>Reads the verified layer under its content and code key, or returns null on a miss.</summary>
     T? ReadLayer<T>(string key, Func<BinaryReader, T> read) where T : class;
     /// <summary>Stores a newly shaped layer under its content and code key.</summary>

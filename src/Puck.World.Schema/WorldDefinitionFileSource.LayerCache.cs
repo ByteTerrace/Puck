@@ -5,7 +5,7 @@ using Puck.Assets;
 namespace Puck.World;
 
 public static partial class WorldDefinitionFileSource {
-    private static readonly Lazy<CodeClosure> LayerCode = new(static () => CodeClosure.Of(
+    private static readonly Lazy<CodeIdentity> LayerCode = new(static () => CodeIdentity.Of(
         directory: AppContext.BaseDirectory,
         roots: [
             ("Puck.World.Schema", "Puck.World.WorldDefinitionFileSource", nameof(ShapeBasis)),
@@ -17,14 +17,14 @@ public static partial class WorldDefinitionFileSource {
             ("Puck.World.Schema", "Puck.World.WorldDefinitionFileSource", nameof(WriteLayer)),
             ("Puck.World.Schema", "Puck.World.WorldModuleExports", nameof(WorldModuleExports.Walk)),
         ],
-        stopTypes: new HashSet<string>(collection: [typeof(CodeClosure).FullName!], comparer: StringComparer.Ordinal)
+        stopTypes: new HashSet<string>(collection: [typeof(CodeClosure).FullName!, typeof(CodeIdentity).FullName!], comparer: StringComparer.Ordinal)
     ));
 
-    private static string LayerCodeIdentity(IWorldCompositionStore store) {
-        if (CodeRevision.Current == 0) {
-            return store.GetLayerCodeHash(derive: static () => LayerCode.Value.Hash.ToString(format: "x32"));
-        }
+    // The shaping code's identity, remembered for the build (CodeIdentity), so another build with the same shaping code
+    // shares every layer entry.
+    private static string LayerCodeIdentity() {
         var code = LayerCode.Value;
+
         return $"{code.Hash:x32}{CodeRevision.AppliedTo(reads: code.Reads)}";
     }
 
