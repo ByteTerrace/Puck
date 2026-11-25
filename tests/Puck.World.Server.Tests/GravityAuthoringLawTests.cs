@@ -61,11 +61,26 @@ public sealed class GravityAuthoringLawTests {
             userMessage: reason
         );
 
-        return new WorldGravityField(
+        var field = new WorldGravityField(
             capacity: capacity,
             compiled: FixedWorldGravity.Compile(definition: definition)
         );
+        Definitions.Add(key: field, value: definition);
+        return field;
     }
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<WorldGravityField, WorldDefinition> Definitions = new();
+    // A solve at tick zero over the field's own definition, with no contact surface and no orbits.
+    private static void Solve(WorldGravityField field, IReadOnlyList<WorldGravityTarget> targets) => field.Solve(
+        inputs: new WorldGravityInputs(
+            Definition: Definitions.TryGetValue(key: field, value: out var definition) ? definition : throw new InvalidOperationException(message: "the field was not built by CompileField"),
+            EngineTick: 0UL,
+            Orbits: null,
+            Surface: null,
+            SurfaceVersion: 0UL,
+            Tick: 0UL
+        ),
+        targets: targets
+    );
     private static WorldGravity PointGravity(
         float gravitationalConstant = 45f,
         IReadOnlyList<WorldGravityAttractor>? attractors = null,
@@ -261,7 +276,7 @@ public sealed class GravityAuthoringLawTests {
             definition: definition
         );
 
-        field.Solve(targets: [
+        Solve(field: field, targets: [
             new WorldGravityTarget(
                 EntityIndex: 0,
                 Position: new FixedVector3(
@@ -329,7 +344,7 @@ public sealed class GravityAuthoringLawTests {
             definition: definition
         );
 
-        field.Solve(targets: [
+        Solve(field: field, targets: [
             Target(
                 entityIndex: 0,
                 x: 2,
@@ -430,7 +445,7 @@ public sealed class GravityAuthoringLawTests {
         );
 
         foreach (var field in new[] { uniformCombine, replaceThenCombine }) {
-            field.Solve(targets: [Target(
+            Solve(field: field, targets: [Target(
                     entityIndex: 0,
                     x: 0,
                     y: 0,
@@ -512,7 +527,7 @@ public sealed class GravityAuthoringLawTests {
         );
         var justOutside = FixedQ4816.FromRawBits(value: (FixedQ4816.FromInteger(value: 5).Value + 1L));
 
-        field.Solve(targets: [
+        Solve(field: field, targets: [
             Target(
                 entityIndex: 0,
                 x: 5,
@@ -664,7 +679,7 @@ public sealed class GravityAuthoringLawTests {
             definition: definition
         );
 
-        field.Solve(targets: [Target(
+        Solve(field: field, targets: [Target(
                 entityIndex: 0,
                 x: 0,
                 y: 0,
@@ -780,8 +795,9 @@ public sealed class GravityAuthoringLawTests {
             capacity: 1,
             compiled: compiled
         );
+        Definitions.Add(key: field, value: definition);
 
-        field.Solve(targets: [new WorldGravityTarget(
+        Solve(field: field, targets: [new WorldGravityTarget(
                 EntityIndex: 0,
                 Mass: FixedQ4816.Zero,
                 Position: new FixedVector3(
@@ -907,7 +923,7 @@ public sealed class GravityAuthoringLawTests {
             definition: definition
         );
 
-        oneBody.Solve(targets: [new WorldGravityTarget(
+        Solve(field: oneBody, targets: [new WorldGravityTarget(
                 EntityIndex: 0,
                 Position: FixedVector3.Zero,
                 Mass: FixedQ4816.FromInteger(value: 10)
@@ -927,7 +943,7 @@ public sealed class GravityAuthoringLawTests {
             definition: definition
         );
 
-        twoBodies.Solve(targets: [
+        Solve(field: twoBodies, targets: [
             new WorldGravityTarget(
                 EntityIndex: 0,
                 Position: new FixedVector3(
@@ -1121,7 +1137,7 @@ public sealed class GravityAuthoringLawTests {
 
         foreach (var field in new[] { zeroReplace, cancellation, radialCentre }) {
             Assert.True(condition: field.IsActive);
-            field.Solve(targets: [Target(
+            Solve(field: field, targets: [Target(
                     entityIndex: 0,
                     x: 0,
                     y: 0,
