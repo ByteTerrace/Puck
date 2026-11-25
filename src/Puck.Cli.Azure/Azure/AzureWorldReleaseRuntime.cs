@@ -34,7 +34,7 @@ public static partial class AzureCommand {
         // retained release and group, and private health answers. Each Run Command costs tens of seconds, which a release's
         // repeated checks across its phases once multiplied into most of its post-boot time.
         private async Task CheckWorkerAsync(string worker, AzureWorldReleaseDeployment deployment, JsonNode? probe = null) {
-            probe ??= await ProbeWorkerAsync(deployment: deployment, worker: worker).ConfigureAwait(continueOnCapturedContext: false);
+            probe ??= await ProbeWorkerAsync(worker: worker).ConfigureAwait(continueOnCapturedContext: false);
             var process = probe["process"]!;
 
             if (
@@ -55,7 +55,7 @@ public static partial class AzureCommand {
             }
         }
         // One Run Command reading the engine the silo runs and its state, the release status and private health.
-        private Task<JsonNode> ProbeWorkerAsync(string worker, AzureWorldReleaseDeployment deployment) => WorldGuestJsonAsync(
+        private Task<JsonNode> ProbeWorkerAsync(string worker) => WorldGuestJsonAsync(
             group: resourceGroup,
             script: WorldProbeScript,
             worker: worker
@@ -78,7 +78,7 @@ public static partial class AzureCommand {
             if (workers.Length > 1) { throw new InvalidOperationException(message: "release requires one authoritative worker"); }
             if (workers.Length == 1) {
                 var worker = Text(value: workers[0]!["name"]);
-                var probe = await ProbeWorkerAsync(deployment: deployment, worker: worker).ConfigureAwait(continueOnCapturedContext: false);
+                var probe = await ProbeWorkerAsync(worker: worker).ConfigureAwait(continueOnCapturedContext: false);
                 var process = probe["process"]!;
 
                 if (
@@ -176,11 +176,12 @@ public static partial class AzureCommand {
 
             return ((WorldReleaseGuestLock + WorldReleaseGuestGuard(request: request)) + "\n");
         }
-        private Task<JsonNode> InspectAsync(string worker) => WorldGuestJsonAsync(
+        // The engine the worker's silo unit runs and whether it is active: the probe's process member.
+        private async Task<JsonNode> InspectAsync(string worker) => (await WorldGuestJsonAsync(
             group: resourceGroup,
             script: WorldProbeScript,
             worker: worker
-        );
+        ).ConfigureAwait(continueOnCapturedContext: false))["process"]!;
         private async Task<WorldReleaseRuntimePublicationResult> PublishAsync(WorldReleaseGroupRecord operation, AzureWorldReleaseDeployment deployment, WorldReleaseOperationPhase phase, CancellationToken cancellationToken) {
             await RequireAsync(
                 cancellationToken: cancellationToken,
