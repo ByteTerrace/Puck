@@ -287,7 +287,7 @@ public static class MeshCommand {
             var held = ((baked is null) && store.TryPeek(geometry: group.Sealed, identity: identity, materials: out _, mesh: out stored, refusal: out _));
             // A group no evaluator reads (text) is still described by its stored mesh's size and cell.
             var size = (stored is { } peeked)
-                ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"; stored mesh {peeked.TriangleCount} triangles, {peeked.Positions.Length} vertices, cell {(1000f * MathF.Max(x: peeked.BakeCell.X, y: MathF.Max(x: peeked.BakeCell.Y, y: peeked.BakeCell.Z))):0.0} mm")
+                ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"; stored mesh {peeked.TriangleCount} triangles, {peeked.VertexCount} vertices, cell {(1000f * MathF.Max(x: peeked.BakeCell.X, y: MathF.Max(x: peeked.BakeCell.Y, y: peeked.BakeCell.Z))):0.0} mm")
                 : string.Empty;
 
             return new Outcome(Field: null, Label: label, Mesh: null, Owner: owner, Refusal: ((held || (baked is not null)) ? $"field {why}{size}" : "no stored mesh"), Report: null, Stored: held, ToWorld: toWorld);
@@ -331,7 +331,8 @@ public static class MeshCommand {
     }
     // Whether a mesh's vertices lie on a field: a sample of them spread over its vertex list, nearly all within reach.
     private static bool LiesOn(SdfMesh mesh, SdfFieldEvaluator field) {
-        var positions = mesh.Positions.Span;
+        using var held = mesh.Hold();
+        var positions = held.Positions.Span;
 
         if (positions.IsEmpty) { return false; }
 

@@ -129,7 +129,7 @@ public static class MeshPreviewCommand {
 
         var text = new StringBuilder();
 
-        text.Append(provider: CultureInfo.InvariantCulture, handler: $"mesh preview: {CliPaths.ToDisplay(fullPath: fullPath)} prototype {prototype}: {selected.Length} group(s), {subject.Mesh.TriangleCount} triangles, {subject.Mesh.Positions.Length} vertices, {subject.OpenTriangles.Count(predicate: static held => held)} triangles on open edges\n");
+        text.Append(provider: CultureInfo.InvariantCulture, handler: $"mesh preview: {CliPaths.ToDisplay(fullPath: fullPath)} prototype {prototype}: {selected.Length} group(s), {subject.Mesh.TriangleCount} triangles, {subject.Mesh.VertexCount} vertices, {subject.OpenTriangles.Count(predicate: static held => held)} triangles on open edges\n");
         text.Append(provider: CultureInfo.InvariantCulture, handler: $"  {(animated ? "animated: the pooled rest pose" : "static")}, baked on the CPU through the field evaluator in {bakeSeconds:0.0} s, {chosen.Count} view(s) drawn in {drawn.Elapsed.TotalSeconds:0.0} s\n");
         text.Append(provider: CultureInfo.InvariantCulture, handler: $"  author frame (+Z front, +X the subject's left, metres): x {low.X:0.000}..{high.X:0.000}, y {low.Y:0.000}..{high.Y:0.000}, z {low.Z:0.000}..{high.Z:0.000}\n");
         text.Append(value: report);
@@ -169,16 +169,17 @@ public static class MeshPreviewCommand {
             var origin = map(Vector3.Zero);
             var edges = SdfMeshAudit.EdgeCounts(mesh: mesh);
             var offset = (uint)positions.Count;
+            using var held = mesh.Hold();
 
-            foreach (var position in mesh.Positions.Span) { positions.Add(item: map(position)); }
-            foreach (var normal in mesh.Normals.Span) {
+            foreach (var position in held.Positions.Span) { positions.Add(item: map(position)); }
+            foreach (var normal in held.Normals.Span) {
                 var turned = (map(normal) - origin);
 
                 normals.Add(item: ((turned.LengthSquared() > 0f) ? Vector3.Normalize(value: turned) : Vector3.Zero));
             }
-            foreach (var index in mesh.Indices.Span) { indices.Add(item: (offset + index)); }
+            foreach (var index in held.Indices.Span) { indices.Add(item: (offset + index)); }
             for (var triangle = 0; (triangle < mesh.TriangleCount); triangle++) {
-                var id = (mesh.TriangleMaterials.IsEmpty ? 0u : mesh.TriangleMaterials.Span[triangle]);
+                var id = (held.TriangleMaterials.IsEmpty ? 0u : held.TriangleMaterials.Span[triangle]);
 
                 materials.Add(item: id);
                 use[id] = (use.GetValueOrDefault(key: id) + 1);

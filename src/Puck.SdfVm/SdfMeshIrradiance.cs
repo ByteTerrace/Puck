@@ -2716,13 +2716,33 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         for (var index = 0; (index < count); index++) { traces |= candidates[(first + index)].Trace; }
 
         // A whole batch's hit block even for a short batch, so every block is large enough for the large object heap. On
-        // the GPU the hit words only pass through the batch (ReleaseHits), so the block borrows the worker's scratch
-        // array rather than holding one of its own.
+        // the GPU the hit words only pass through the batch (ReleaseHits), so the block borrows an array rented for the
+        // batch alone, which goes back to the pool when the batch ends, as the GPU answers' array does (BatchEnded): a
+        // volume whose lighting has settled holds neither.
         var blockProbes = Math.Max(val1: BatchProbes, val2: count);
         var borrowed = (traces && (GpuTrace is not null));
+        var rentedHits = (borrowed ? RentedArrays.Rent<uint>(minimumLength: (blockProbes * SdfMeshProbeDepth.HitWords)) : null);
 
-        if (borrowed) { ArrayCapacity.EnsureScratch(ref m_gpuHits, (blockProbes * SdfMeshProbeDepth.HitWords)); }
-        var hits = blocks.Hits = (traces ? new ProbeBlock(count: blockProbes, hits: (borrowed ? m_gpuHits : null)) : null);
+        try {
+            BatchTraced(blocks: blocks, candidates: candidates, count: count, first: first, lighting: lighting, parallel: parallel, pass: pass, snapshot: in snapshot, hold: hold,
+                results: results, traces: traces, blockProbes: blockProbes, rentedHits: rentedHits);
+        } finally {
+            if (rentedHits is not null) {
+                blocks.Hits?.ReleaseHits();
+                RentedArrays.Return(array: rentedHits);
+            }
+            BatchEnded();
+        }
+    }
+    // Gives back the GPU answers' array the batch's selections, traces and relights reused.
+    private void BatchEnded() {
+        if (m_gpuAnswer.Length > 0) { RentedArrays.Return(array: m_gpuAnswer); }
+        m_gpuAnswer = [];
+    }
+    private void BatchTraced(BatchBlocks blocks, List<Candidate> candidates, int first, int count, Lighting lighting, ParallelOptions parallel, int pass, in Snapshot snapshot,
+        ReaderEpochs<Reclaimable>.Hold hold, ProbeData[] results, bool traces, int blockProbes, uint[]? rentedHits) {
+        var borrowed = (rentedHits is not null);
+        var hits = blocks.Hits = (traces ? new ProbeBlock(count: blockProbes, hits: rentedHits) : null);
         var lights = blocks.Lights = new LightBlock(count: count, inputs: lighting.Inputs);
 
         hits?.Charge(volume: this);

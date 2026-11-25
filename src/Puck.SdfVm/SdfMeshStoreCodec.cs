@@ -40,7 +40,7 @@ internal static class SdfMeshStoreCodec {
                     var index = 0;
                     for (; index < pieces.Count; index++) {
                         var mesh = pieces[index];
-                        var words = planes[index] ??= new uint[3 * mesh.Positions.Length];
+                        var words = planes[index] ??= new uint[3 * mesh.VertexCount];
                         if (!Fits(mesh, grid, words)) { break; }
                     }
                     if (index == pieces.Count) { return new(grid, planes); }
@@ -51,7 +51,8 @@ internal static class SdfMeshStoreCodec {
 
         private static bool Fits(SdfMesh mesh, PositionGrid grid, uint[] words) {
             var budget = mesh.BakeCell.Length() / 1024f;
-            var positions = mesh.Positions.Span;
+            using var held = mesh.Hold();
+            var positions = held.Positions.Span;
             var steps = Steps(grid.Width);
             for (var vertex = 0; vertex < positions.Length; vertex++) {
                 var point = positions[vertex];
@@ -138,10 +139,10 @@ internal static class SdfMeshStoreCodec {
         var bytes = (1L << 12);
 
         foreach (var piece in pieces) {
-            var width = ((piece.Positions.Length <= 65536) ? 2 : 4);
+            var width = ((piece.VertexCount <= 65536) ? 2 : 4);
 
-            bytes += ((16L * piece.Positions.Length) + (((long)width) * piece.Indices.Length) + (4L * piece.TriangleCount));
-            foreach (var level in piece.Levels) { bytes += ((((long)width) * level.Indices.Length) + (4L * level.TriangleMaterials.Length)); }
+            bytes += ((16L * piece.VertexCount) + (((long)width) * piece.IndexCount) + (4L * piece.TriangleCount));
+            foreach (var level in piece.Levels) { bytes += ((((long)width) * level.IndexCount) + (4L * level.MaterialCount)); }
         }
 
         return ((int)Math.Min(val1: bytes, val2: Array.MaxLength));
@@ -178,7 +179,11 @@ internal static class SdfMeshStoreCodec {
     }
     private static void WriteMesh(BinaryWriter writer, SdfMesh mesh, Vector3 low, Vector3 high, int width, SdfMeshMaterials.Remap? map, bool exact, ReadOnlySpan<uint> quantized) {
         WriteVector(writer, mesh.BakeCell);
-        var positions = mesh.Positions.Span;
+        using var held = mesh.Hold();
+
+        if (!held.Readable) { throw new InvalidOperationException(message: "A mesh whose store could not restore its planes cannot be encoded."); }
+
+        var positions = held.Positions.Span;
 
         writer.Write(value: ((byte)width));
         WriteVector(value: low, writer: writer);
@@ -197,7 +202,7 @@ internal static class SdfMeshStoreCodec {
             WritePlane(width: width, words: words, writer: writer);
         }
 
-        var normals = mesh.Normals.Span;
+        var normals = held.Normals.Span;
         var oct = !exact && IsOctahedral(normals: normals);
 
         writer.Write(value: oct);
@@ -219,8 +224,8 @@ internal static class SdfMeshStoreCodec {
                 }
             }
         }
-        WritePlane(writer, mesh.Indices.Span, ((positions.Length <= 65536) ? 2 : 4));
-        WriteMaterials(writer, mesh.TriangleMaterials.Span, map);
+        WritePlane(writer, held.Indices.Span, ((positions.Length <= 65536) ? 2 : 4));
+        WriteMaterials(writer, held.TriangleMaterials.Span, map);
         writer.Write(value: mesh.Members.Length);
         foreach (var member in mesh.Members.Span) {
             writer.Write(value: member.SlotOffset);
@@ -243,10 +248,10 @@ internal static class SdfMeshStoreCodec {
             }
         }
         writer.Write(value: mesh.Levels.Count);
-        foreach (var level in mesh.Levels) {
-            writer.Write(value: level.Error);
-            WritePlane(writer, level.Indices.Span, ((positions.Length <= 65536) ? 2 : 4));
-            WriteMaterials(writer, level.TriangleMaterials.Span, map);
+        for (var level = 1; (level <= mesh.Levels.Count); level++) {
+            writer.Write(value: mesh.Levels[(level - 1)].Error);
+            WritePlane(writer, held.LevelIndices(level: level).Span, ((positions.Length <= 65536) ? 2 : 4));
+            WriteMaterials(writer, held.LevelMaterials(level: level).Span, map);
         }
     }
     // The largest quantized value of a position width, which spans its axis's low to high.

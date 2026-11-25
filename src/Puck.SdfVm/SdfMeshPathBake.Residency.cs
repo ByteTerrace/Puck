@@ -572,6 +572,9 @@ public sealed partial class SdfMeshPathBake {
                     if ((WorkQueue.Count + AnswerQueue.Count) > 0) { continue; }
                     IdleWorkers++;
                 }
+                // The jobs this worker ran freed their native workspace into its own heap, which only this thread can
+                // give back to the allocator's arenas.
+                Puck.Hosting.Jobs.MemoryAccount.Shared.ReturnThreadMemory();
                 _ = WorkWake.WaitOne();
                 lock (WorkGate) {
                     IdleWorkers--;
@@ -962,9 +965,9 @@ public sealed partial class SdfMeshPathBake {
                 }
                 if (group.Mesh is not { } mesh) { continue; }
                 foreach (var piece in ((mesh.Chunks.Count == 0) ? (IReadOnlyList<SdfMesh>)[mesh] : mesh.Chunks)) {
-                    var perTriangle = ((3 + (piece.TriangleMaterials.IsEmpty ? 0 : 1)) * sizeof(uint));
+                    var perTriangle = ((3 + (piece.HasTriangleMaterials ? 1 : 0)) * sizeof(uint));
 
-                    vertexBytes += ((((long)piece.Positions.Length) * SdfMeshRecord.VertexWords) * sizeof(uint));
+                    vertexBytes += ((((long)piece.VertexCount) * SdfMeshRecord.VertexWords) * sizeof(uint));
                     levelTriangles[0] += piece.TriangleCount;
                     levelBytes[0] += (((long)piece.TriangleCount) * perTriangle);
                     for (var level = 0; ((level < piece.Levels.Count) && (level < SdfMeshCollapse.CellShares.Length)); level++) {

@@ -48,8 +48,9 @@ internal static class SdfMeshMaterials {
         }
 
         foreach (var piece in pieces) {
-            Reserve(values: piece.TriangleMaterials.Span);
-            foreach (var level in piece.Levels) { Reserve(values: level.TriangleMaterials.Span); }
+            using var held = piece.Hold();
+
+            for (var level = 0; (level <= piece.Levels.Count); level++) { Reserve(values: held.LevelMaterials(level: level).Span); }
         }
 
         var canonical = new int[materials.Length];

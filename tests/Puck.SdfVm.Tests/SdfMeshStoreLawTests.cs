@@ -28,7 +28,7 @@ public sealed class SdfMeshStoreLawTests {
                 // Zero is deliberately outside the palette. It must not collide with canonical place zero.
                 var original = Mesh();
                 var piece = new SdfMesh(positions: original.Positions, indices: original.Indices, normals: original.Normals, triangleMaterials: new uint[] { ((uint)palette[0]), 0 }) {
-                    Levels = [Level() with { TriangleMaterials = new uint[] { ((uint)palette[1]) } }],
+                    Levels = [new SdfMeshLevel(Error: Level().Error, Indices: LevelIndices, TriangleMaterials: new uint[] { ((uint)palette[1]) })],
                 };
                 var source = (chunked ? SdfMeshChunks.Join(chunks: [piece, piece]) : piece);
 
@@ -43,7 +43,7 @@ public sealed class SdfMeshStoreLawTests {
                 Assert.Equal(source.TriangleMaterials.ToArray(), loaded.TriangleMaterials.ToArray());
                 var read = (chunked ? loaded.Chunks[0] : loaded);
 
-                Assert.Equal(piece.Levels[0].TriangleMaterials.ToArray(), read.Levels[0].TriangleMaterials.ToArray());
+                Assert.Equal(piece.LevelMaterials(level: 1).ToArray(), read.LevelMaterials(level: 1).ToArray());
                 loaded.Release();
             }
         }
@@ -108,8 +108,8 @@ public sealed class SdfMeshStoreLawTests {
 
         var level = Assert.Single(collection: read.Levels);
 
-        Assert.Equal(expected: Level().Indices.ToArray(), actual: level.Indices.ToArray());
-        Assert.Equal(expected: new uint[] { 1 }, actual: level.TriangleMaterials.ToArray());
+        Assert.Equal(expected: LevelIndices, actual: read.LevelIndices(level: 1).ToArray());
+        Assert.Equal(expected: new uint[] { 1 }, actual: read.LevelMaterials(level: 1).ToArray());
         Assert.Equal(expected: Level().Error, actual: level.Error);
 
         // Another bake, another surface, or the same surface in a slot's frame reads nothing.
@@ -210,7 +210,7 @@ public sealed class SdfMeshStoreLawTests {
             Assert.Equal(palette, decoded.TriangleMaterials.ToArray());
             Assert.Equal(mesh.Members.ToArray(), decoded.Members.ToArray());
             Assert.Equal(mesh.VertexMembers.ToArray(), decoded.VertexMembers.ToArray());
-            Assert.Equal(mesh.Levels[0].Indices.ToArray(), decoded.Levels[0].Indices.ToArray());
+            Assert.Equal(mesh.LevelIndices(level: 1).ToArray(), decoded.LevelIndices(level: 1).ToArray());
         }
         var authored = new SdfMesh(positions.AsMemory(length: 3, start: 0), new uint[] { 0, 2, 1 },
             new Vector3[] { Vector3.Zero, new(x: 2, y: 3, z: 4), Vector3.UnitX }, new uint[] { uint.MaxValue });
@@ -528,7 +528,8 @@ public sealed class SdfMeshStoreLawTests {
         triangleMaterials: new uint[] { 4u, 9u }
     );
 
-    private static SdfMeshLevel Level() => new(Error: 0.25f, Indices: new uint[] { 0, 1, 2 }, TriangleMaterials: new uint[] { 9u });
+    private static SdfMeshLevel Level() => new(Error: 0.25f, Indices: LevelIndices, TriangleMaterials: new uint[] { 9u });
+    private static readonly uint[] LevelIndices = [0, 1, 2];
     // The file an entry is kept in: the name a write of it to a store of its own takes.
     private static string Entry(SdfMeshStore store, SdfMeshGeometry geometry) {
         var probe = new SdfMeshStore(directory: Path.Combine(path1: store.Directory, path2: "probe"));

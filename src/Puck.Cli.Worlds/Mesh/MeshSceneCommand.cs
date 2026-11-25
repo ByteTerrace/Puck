@@ -99,7 +99,11 @@ public static class MeshSceneCommand {
         }
 
         var target = draws[changed];
-        var copy = new SdfMesh(indices: target.Mesh.Indices.ToArray(), normals: target.Mesh.Normals.ToArray(), positions: target.Mesh.Positions.ToArray(), triangleMaterials: target.Mesh.TriangleMaterials.ToArray());
+        SdfMesh copy;
+
+        using (var held = target.Mesh.Hold()) {
+            copy = new SdfMesh(indices: held.Indices.ToArray(), normals: held.Normals.ToArray(), positions: held.Positions.ToArray(), triangleMaterials: held.TriangleMaterials.ToArray());
+        }
         var replaced = new List<SdfMeshDraw>(collection: draws) { [changed] = target with { Mesh = copy } };
         var moved = new List<SdfMeshDraw>(collection: draws) { [changed] = target.PlacedAt(objectToWorld: (target.FixedPlacement * Matrix4x4.CreateTranslation(position: new Vector3(x: 0f, y: 0.001f, z: 0f)))) };
         var center = ((target.Mesh.PositionLow + target.Mesh.PositionHigh) * 0.5f);

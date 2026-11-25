@@ -34,7 +34,10 @@ internal sealed class SdfPortalSight {
     private readonly Verdict?[] m_verdicts = new Verdict?[Capacity];
     private readonly List<SdfMeshOcclusion> m_readers = [];
     private SdfWorldView? m_view;
-    private object? m_program;
+    // The program the verdicts were made under, held weakly: it is compared by reference alone, so the sight keeps no
+    // replaced program (tens of megabytes) alive. A program the collector took is never the view's current one, so a lost
+    // target reads as a change.
+    private WeakReference<object>? m_program;
     private long m_epoch;
     private Vector3? m_capturedEye;
 
@@ -47,12 +50,14 @@ internal sealed class SdfPortalSight {
     }
     internal void Follow(SdfWorldView? view) {
         var program = view?.Residency.Frame?.Program;
-        if (view != m_view || !ReferenceEquals(program, m_program)) {
+        var same = ((m_program is null) ? (program is null) : (m_program.TryGetTarget(target: out var held) && ReferenceEquals(objA: held, objB: program)));
+
+        if ((view != m_view) || !same) {
             Array.Clear(m_queries);
             Array.Clear(m_verdicts);
             m_epoch++;
             m_view = view;
-            m_program = program;
+            m_program = ((program is null) ? null : new WeakReference<object>(target: program));
             m_capturedEye = null;
         }
     }
