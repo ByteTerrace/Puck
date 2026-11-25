@@ -1092,6 +1092,10 @@ inhabitants and many worlds on more than one authority. Each item is a place
 or a tool in the debug world, built on the engine's systems so it loads them
 as real use does (AGENTS.md).
 
+- [medium] **Producer-driven bodies never sleep** (`WorldBody.UpdateSleepEligibility`), so a citizen
+  standing at its anchor still steps at its cadence. It is likely a large share of the occupied
+  city's per-tick cost. The city's producer runs also sit about 11 a tick above what its authored
+  cadences give (`docs/plans/simulation-attention.md`, step 3).
 - [high] **Crowds of players.** Nothing connects many peers to one authority.
   Build a `puck` verb that connects N headless bot peers to an authority, the
   hosted one included, each with scripted movement, reusing the federation
@@ -2064,6 +2068,32 @@ build its [design for review](streaming-and-memory.md#sparse-backing-design-for-
 was frozen at. The plan owns the decisions, the build order and each step's
 check; this packet holds the defects beside it.
 
+- [high] **The GI owners break the RTX 2060's device bar.** On the player build (Vulkan, 1920×1080; its commit is in this item's
+  commit message), device memory peaked at 5.41 GB against the 4.6 GB cap, with 79 over-limit
+  grants (3.47 GB) and 24,150 refusals. The owners over the limit: the probe-trace hit cache
+  (812 MB), mesh irradiance (783 MB), probe feedback (498 MB) and `historyWindow` (207 MB). The
+  second loop of the debug route fell from 56–59 to 33–39 iterations a second once device memory
+  passed its budget, and never recovered. Size these owners from the device's quality table and
+  stream what is far or unseen, rather than holding them whole. Check: the same route on the 2060
+  holds device memory under its cap, and the second loop matches the first.
+- [high] **Host memory: rebuilt programs and presentation fields churn the large object heap.**
+  On the 2060's player build the managed heap held 4.26 GB, 3.12 GB of it on the LOH. Each
+  presentation-field and program rebuild churns about 150–280 MB through it, and `SdfProgram`
+  allocates fresh managed arrays on every build (appearance sections, Lipschitz factors, side
+  tables, part-program offsets). Rebuild only what changed, into owned and reused storage. The
+  other managed holders: program words (about 22 MB, no owner), the probe-cache tables (93 MB,
+  held by reference; they need block indices), the trace hierarchy's pack and top-level content,
+  the bake's scratch arrays, an unidentified renter of 92–98 MB `ArrayPool.Shared` arrays, and
+  about 140 MB of trace-scene storage still rented managed. Check: the 2060's route ends under
+  its host bar with the LOH flat across loops.
+- [medium] **mimalloc returns freed native pages only under pressure.** `MimallocAllocator` sets no
+  purge or decommit options, and `mi_collect(force: true)` runs only when the memory account asks
+  for a reclaim, when a thread returns its memory, or from a console command. Moving the GI
+  stores to native memory therefore swapped LOH fragmentation for allocator slack: on the 2060,
+  1.83 GB committed against 810 MB named, with 8.6 GB reserved. Set the purge options at process
+  start, give the large long-lived GPU-side stores their own heap or arena, and collect on a
+  cadence near the bar. Check: committed native memory tracks the named owners within a stated
+  slack on the same route.
 - [high] Measure the session-residency fix on the RTX 4070. A cold debug-world
   boot built 55 residencies, one for each `self`, `wonderland` and nested
   session screen of the boot world, and the device pool held 15.5 GB, mostly
@@ -4038,6 +4068,15 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
+- [high] **A player without the Azure CLI cannot sign in.** The `azure.api-users` provider takes
+  its token through `DefaultAzureCredential`'s default chain, which excludes the interactive
+  browser, with a 15 s acquisition deadline (`EntraSignIn`). Add an interactive browser
+  credential for clients in the provider project, with its own longer deadline; the deployment
+  already preauthorizes the Azure CLI client ID, which is the browser credential's default.
+  Check: a clean player install on a machine with no Azure CLI signs in and is admitted.
+- [medium] `Puck.Launcher.Setup.exe` carries no Authenticode signature (seen on the 2060's clean
+  install). The channel's own signature covers the release; an OS-level signature is the
+  distributor's choice and needs a certificate the owner provides.
 - [high] **The D3D12 mesh bake identity differs between machines.** For the same
   commit, CI computed one directx identity and the lead machine another, while
   the Vulkan identities agreed (the commit and both values are in this item's
