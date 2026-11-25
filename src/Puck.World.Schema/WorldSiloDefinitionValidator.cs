@@ -11,29 +11,60 @@ namespace Puck.World;
 /// row's loaded world definition carries <c>host.authority</c> — that fact depends on the referenced document, not
 /// this one, and is refused by name at activation instead. Extension settings are opaque here; the selected installed provider validates them before startup.</remarks>
 public static class WorldSiloDefinitionValidator {
-    private static bool TryValidateFederationKey(SafeName world, WorldSiloFederation federation, out string reason) {
-        if (string.IsNullOrWhiteSpace(value: federation.KeyFile)) {
-            reason = $"world '{world}' names no federation.keyFile";
+    // The same import a host performs when it loads the key, so a file that validates here is exactly one the host
+    // accepts: P-256, no trailing bytes.
+    private static bool TryValidateKeyFile(string? path, string label, out string reason) {
+        if (string.IsNullOrWhiteSpace(value: path)) {
+            reason = $"{label} names no keyFile";
 
             return false;
         }
 
-        if (!File.Exists(path: federation.KeyFile)) {
-            reason = $"world '{world}' names federation.keyFile '{federation.KeyFile}', which does not exist";
+        if (!File.Exists(path: path)) {
+            reason = $"{label} names keyFile '{path}', which does not exist";
 
             return false;
         }
 
         try {
-            var pkcs8 = File.ReadAllBytes(path: federation.KeyFile);
-            // The same import the silo host performs when it loads the row, so a key file that validates here is
-            // exactly one the host will accept: P-256, no trailing bytes.
             using var key = AttestationKeys.ImportPkcs8PrivateKey(
                 algorithm: AttestationAlgorithms.EcdsaP256Sha256,
-                pkcs8: pkcs8
+                pkcs8: File.ReadAllBytes(path: path)
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or CryptographicException or ArgumentException)) {
-            reason = $"world '{world}' federation.keyFile '{federation.KeyFile}' could not be read as a PKCS#8 P-256 private key — {exception.Message}";
+            reason = $"{label} keyFile '{path}' could not be read as a PKCS#8 P-256 private key — {exception.Message}";
+
+            return false;
+        }
+
+        reason = string.Empty;
+
+        return true;
+    }
+    /// <summary>Validates an issuer configuration: its root key file parses, its sign-in selection names an
+    /// extension type and object settings, and its issued-binding lifetime is positive and within the verifier's
+    /// ceiling.</summary>
+    /// <param name="issuer">The configuration to validate.</param>
+    /// <param name="reason">Why validation failed, or empty on success.</param>
+    /// <returns><see langword="true"/> when every check holds.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="issuer"/> is <see langword="null"/>.</exception>
+    public static bool TryValidateIssuer(WorldIssuerConfiguration issuer, out string reason) {
+        ArgumentNullException.ThrowIfNull(argument: issuer);
+
+        if (!TryValidateKeyFile(path: issuer.KeyFile, label: "issuer", reason: out reason)) {
+            return false;
+        }
+        if (
+            (issuer.SignIn is null) ||
+            string.IsNullOrWhiteSpace(value: issuer.SignIn.Type) ||
+            (issuer.SignIn.Settings.ValueKind != JsonValueKind.Object)
+        ) {
+            reason = "issuer.signIn requires an extension type and object settings";
+
+            return false;
+        }
+        if (issuer.SubjectValiditySeconds is < 1 or > WorldIssuerConfiguration.MaximumSubjectValiditySeconds) {
+            reason = $"issuer.subjectValiditySeconds {issuer.SubjectValiditySeconds} is outside 1..{WorldIssuerConfiguration.MaximumSubjectValiditySeconds}";
 
             return false;
         }
@@ -164,6 +195,12 @@ public static class WorldSiloDefinitionValidator {
                 return false;
             }
         }
+        if (
+            (definition.Issuer is { } issuer) &&
+            !TryValidateIssuer(issuer: issuer, reason: out reason)
+        ) {
+            return false;
+        }
         var worldIds = new HashSet<string>(comparer: StringComparer.Ordinal);
         var keyFiles = new Dictionary<string, SafeName>(comparer: StringComparer.OrdinalIgnoreCase);
         var extensionFiles = new Dictionary<string, SafeName>(comparer: StringComparer.OrdinalIgnoreCase);
@@ -181,17 +218,9 @@ public static class WorldSiloDefinitionValidator {
 
                 return false;
             }
-            if (
-                (world.Federation.Authentication is { } authentication) &&
-                (string.IsNullOrWhiteSpace(value: authentication.Type) || (authentication.Settings.ValueKind != JsonValueKind.Object))
-            ) {
-                reason = $"world '{world.World}' authentication requires an extension type and object settings";
-                return false;
-            }
-
-            if (!TryValidateFederationKey(
-                world: world.World,
-                federation: world.Federation,
+            if (!TryValidateKeyFile(
+                label: $"world '{world.World}' federation",
+                path: world.Federation.KeyFile,
                 reason: out reason
             )) {
                 return false;
@@ -204,6 +233,15 @@ public static class WorldSiloDefinitionValidator {
                 value: out var sharedWith
             )) {
                 reason = $"worlds '{sharedWith}' and '{world.World}' share the key file '{world.Federation.KeyFile}' — every world signs under its own key";
+
+                return false;
+            }
+
+            if (
+                (definition.Issuer is { } rowIssuer) &&
+                string.Equals(a: Path.GetFullPath(path: rowIssuer.KeyFile), b: keyFileFull, comparisonType: StringComparison.OrdinalIgnoreCase)
+            ) {
+                reason = $"world '{world.World}' signs with the issuer's root key '{world.Federation.KeyFile}' — the root vouches for players and signs as no world";
 
                 return false;
             }

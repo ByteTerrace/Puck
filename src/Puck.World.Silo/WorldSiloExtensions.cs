@@ -37,15 +37,6 @@ internal static class WorldSiloExtensions {
             ));
         }
     }
-    internal static Puck.Networking.IAuthenticator Authenticate(PuckExtensionSet extensions, WorldSiloExtension selection, Puck.Networking.IAuthenticator federation, TimeProvider clock) =>
-        extensions.Select<WorldAuthenticationProvider>(
-            key: selection.Type,
-            purpose: "Authentication"
-        ).Server(
-            selection.Settings,
-            federation,
-            clock
-        );
     internal static void ConfigureClustering(ISiloBuilder builder, WorldSiloDefinition definition) {
         if (!Clustering.TryGetValue(
             key: definition.Clustering.Kind,

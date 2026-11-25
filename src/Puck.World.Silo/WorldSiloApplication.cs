@@ -191,12 +191,6 @@ public static class WorldSiloApplication {
             routing: sp.GetRequiredService<SiloConsoleRouting>(),
             storageTarget: sp.GetRequiredService<Puck.Storage.ObjectStorageTarget>(),
             machineCatalog: sp.GetRequiredService<WorldMachineCatalog>(),
-            authentication: (selection, federation, clock) => WorldSiloExtensions.Authenticate(
-                clock: clock,
-                extensions: sp.GetRequiredService<PuckExtensionSet>(),
-                federation: federation,
-                selection: selection
-            ),
             contentAdmissionPolicy: sp.GetService<IMachineContentAdmissionPolicy>(),
             extensions: sp.GetRequiredService<PuckExtensionSet>()
         ));

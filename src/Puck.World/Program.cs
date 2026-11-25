@@ -198,7 +198,10 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         Description = "A deployment-secret file holding this authority's own PKCS8 ECDSA P-256 private key (raw DER bytes) — the SignsDirectly signing identity peers pin against this world's host.authority (or its \"boot\" instance identity when host.authority is absent). Absent disables federation while leaving ordinary admitted-peer listening available.",
     };
     var authenticationConfigFileOption = new Option<string?>(name: "--authentication-config-file") {
-        Description = "Deployment-owned connection authentication extension (type and settings). Requires --connect; credentials are acquired by the installed provider and never read from the world document.",
+        Description = "The deployment's published sign-in configuration (type, settings and the authority's remoteKeyHash). Requires --connect: the run signs in through the installed provider, the authority's issuer vouches for a key this run generates and never stores, and the run joins under that vouched identity. Credentials never enter the world document.",
+    };
+    var issuerConfigFileOption = new Option<string?>(name: "--issuer-config-file") {
+        Description = "Run an attestation issuer beside this listening authority (keyFile, signIn, subjectValiditySeconds): a client that signs in through the named provider gets its own key vouched for under the root key, and every world here trusts that root. Requires --federation-key-file.",
     };
     // AddSelfUpdate is always registered (channel/cacheRoot/checkInterval/keepVersions come from the world document's
     // update section — see WorldUpdateDefaults — and the trust anchor is the build-pinned constant below). This
@@ -239,6 +242,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         devicesOption,
         federationKeyFileOption,
         authenticationConfigFileOption,
+        issuerConfigFileOption,
         captureDirOption,
         captureToolOption,
         debugLayersOption,
@@ -408,15 +412,35 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
             ) {
                 throw new ArgumentException(message: "Connection authentication requires --connect and cannot be combined with --federation-key-file.");
             }
-            // The desktop host runs on system time; the provider's token and metadata deadlines read it.
+            if (!Puck.Networking.PeerEndpoint.TryParse(value: connectTarget, endpoint: out var issuerEndpoint)) {
+                throw new ArgumentException(message: $"--connect '{connectTarget}' names no ip:port or host:port the issuer is reached at.");
+            }
+            // The desktop host runs on system time; the provider's token deadlines and the exchange's read it.
             var connection = WorldConnectionAuthentication.Load(
                 clock: TimeProvider.System,
                 extensions: extensions,
                 path: authenticationPath
             );
+            var oracle = new Puck.World.Protocol.IssuedKeySigningOracle(
+                issue: (key, ct) => Puck.World.Server.WorldIssuanceClient.Issue(
+                    cancellationToken: ct,
+                    clock: TimeProvider.System,
+                    credential: connection.Credential,
+                    endpoint: issuerEndpoint,
+                    key: key,
+                    remoteKeyHash: connection.RemoteKeyHash
+                ),
+                session: Guid.NewGuid(),
+                validity: Puck.World.Protocol.WorldAttestedAuthenticator.MaximumClaimAge
+            );
+            var issued = oracle.Issue(cancellationToken: CancellationToken.None);
 
-            authenticator = connection.Authenticator;
-            connectionSubject = connection.Subject;
+            authenticator = new Puck.World.Protocol.WorldAttestedAuthenticator(
+                oracle: oracle,
+                remoteKeyHash: connection.RemoteKeyHash
+            );
+            connectionSubject = oracle.AuthorityIdentity;
+            Console.Error.WriteLine(value: $"[world.authentication: signed in as {connectionSubject}, vouched by the issuer at {connectTarget} until {DateTimeOffset.FromUnixTimeSeconds(seconds: issued.NotAfter):u}]");
             // A user's local authority is an instance namespace, not a published listening endpoint.
             bootOverrides = static definition => (definition with { HostRaw = definition.Host with { Authority = null, Listen = null } });
         } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.Text.Json.JsonException)) {
@@ -471,6 +495,32 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
             return 1;
         }
     }
+    Puck.World.Server.WorldAttestationIssuer? issuer = null;
+
+    if (parseResult.GetValue(option: issuerConfigFileOption) is { } issuerPath) {
+        try {
+            if (parseResult.GetValue(option: federationKeyFileOption) is null) {
+                throw new ArgumentException(message: "--issuer-config-file requires --federation-key-file: an issuing authority signs as itself.");
+            }
+            if (!WorldJsonPayload.TryParse(
+                error: out var issuerError,
+                info: WorldJsonContext.Default.WorldIssuerConfiguration,
+                json: File.ReadAllText(path: issuerPath),
+                value: out var issuerConfiguration
+            ) || !WorldSiloDefinitionValidator.TryValidateIssuer(issuer: issuerConfiguration!, reason: out issuerError)) {
+                throw new ArgumentException(message: issuerError);
+            }
+            issuer = Puck.World.Server.WorldAttestationIssuer.Load(
+                clock: TimeProvider.System,
+                configuration: issuerConfiguration!,
+                extensions: extensions
+            );
+            Console.Error.WriteLine(value: $"[world.issuer: vouching for '{issuerConfiguration!.SignIn.Type}' sign-ins under root {issuer.Domain}]");
+        } catch (Exception error) when ((error is IOException or UnauthorizedAccessException or ArgumentException or PuckExtensionException or System.Security.Cryptography.CryptographicException)) {
+            Console.Error.WriteLine(value: $"[world.issuer: configuration refused: {error.Message}]");
+            return 1;
+        }
+    }
     if (parseResult.GetValue(option: federationKeyFileOption) is { } federationKeyFile) {
         // The exact fallback WorldServer.AuthorityIdentity itself applies for the boot instance (host.authorityNamespace absent
         // means "colocated with the resolver", per its own doc comment) — reusing it here means authoring a signing key
@@ -505,8 +555,13 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
             Console.Error.WriteLine(value: $"[world.federation: authority={oracle.AuthorityIdentity} domain={oracle.Domain} publicKey={Convert.ToBase64String(inArray: oracle.PublicKeySubjectPublicKeyInfo)}]");
             authenticator = new Puck.World.Protocol.WorldAttestedAuthenticator(
                 oracle: oracle,
-                // Read on network threads while a tick runs, so it reads the policy the last install published.
-                trustEntries: () => ((admissionServer is { } trusted) ? trusted.AdmissionPolicy : worldSource.Definition.Admission)
+                // Read on network threads while a tick runs, so it reads the policy the last install published. An
+                // issuer's root is trusted beside the document's own key-bearing rows.
+                trustEntries: () => {
+                    var policy = ((admissionServer is { } trusted) ? trusted.AdmissionPolicy : worldSource.Definition.Admission);
+
+                    return ((issuer is { } vouching) ? vouching.Trust(policy: policy) : policy);
+                }
             );
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException or ArgumentException)) {
             Console.Error.WriteLine(value: $"--federation-key-file could not be read: {exception.Message}");
@@ -699,6 +754,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
             func: static (withheld, name) => (GpuOptionalCapabilitiesSpelling.TryParse(name: name, capability: out var capability) ? (withheld | capability) : withheld)),
         ExtensionsConfiguration = extensionsConfiguration,
         FederationKeyFile = parseResult.GetValue(option: federationKeyFileOption),
+        Issuer = issuer,
         ScheduleDirectory = parseResult.GetValue(option: scheduleDirOption),
         Scenario = batchHost is not null,
         StorageTarget = storageTarget,

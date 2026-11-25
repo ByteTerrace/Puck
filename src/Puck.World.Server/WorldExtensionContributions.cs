@@ -9,11 +9,11 @@ namespace Puck.World.Server;
 public sealed record WorldHealthCheck(string Path, Func<bool, (string ContentType, string Body)> Respond);
 /// <summary>Registers the world-hosting contribution kinds, each keyed by the selection key a deployment names.</summary>
 public static class WorldExtensionContributions {
-    /// <summary>Adds a connection authentication provider under its <see cref="WorldAuthenticationProvider.Type"/>.</summary>
+    /// <summary>Adds a sign-in provider under its <see cref="WorldSignInProvider.Type"/>.</summary>
     /// <param name="registry">The registering extension's registry.</param>
     /// <param name="provider">The provider.</param>
     /// <exception cref="PuckExtensionException">Another registration holds the key.</exception>
-    public static void AddAuthentication(this IPuckExtensionRegistry registry, WorldAuthenticationProvider provider) => registry.Add(
+    public static void AddSignIn(this IPuckExtensionRegistry registry, WorldSignInProvider provider) => registry.Add(
         contribution: provider,
         key: provider.Type
     );
@@ -79,6 +79,7 @@ public sealed class WorldServerExtension : IPuckExtension {
         ArgumentNullException.ThrowIfNull(argument: registry);
         registry.AddOperation(provider: WorldFixtureObservationProvider.Registration);
         registry.AddTelemetry(provider: WorldFileTelemetrySink.Provider);
+        registry.AddSignIn(provider: WorldAccountSignIn.Provider);
         registry.AddStorage(provider: new(
             "directory",
             static settings => {

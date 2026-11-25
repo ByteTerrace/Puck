@@ -21,7 +21,7 @@ namespace Puck.World.Protocol;
 /// being accepted at all, which is the one thing a directed-but-unsequenced claim otherwise leaves entirely to the
 /// issuer's own signed window.
 /// </remarks>
-public sealed class WorldAttestedAuthenticator : IAuthenticator {
+public sealed class WorldAttestedAuthenticator : IAuthenticator, IRemoteIdentityVerifier {
     private const int NewChallengeBytes = 32;
 
     /// <summary>The fixed audience every federation-identity claim is directed at.</summary>
@@ -31,11 +31,19 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator {
 
     private readonly Func<DateTimeOffset> m_now;
     private readonly ISigningOracle? m_oracle;
+    private readonly string? m_remoteKeyHash;
     private readonly Func<IReadOnlyList<WorldAdmissionEntry>?>? m_trustEntries;
 
     /// <summary>The verifier-side ceiling on a federation-identity claim's own age, independent of the fresh
     /// per-connection challenge nonce that already bounds replay.</summary>
     public static readonly TimeSpan MaximumClaimAge = TimeSpan.FromMinutes(value: 5);
+    /// <summary>The verifier-side ceiling on a vouching root's binding of an issuing key: how long a stolen issuing
+    /// key stays vouched for at most, whatever window its binding signed. An issuer re-binds a fresh issuing key well
+    /// inside it.</summary>
+    public static readonly TimeSpan MaximumRootBindingAge = TimeSpan.FromDays(value: 30);
+    /// <summary>The verifier-side ceiling on an issuing key's binding of a player's key: how long a sign-in the
+    /// provider stopped vouching for can still admit, whatever window its binding signed.</summary>
+    public static readonly TimeSpan MaximumSubjectBindingAge = TimeSpan.FromSeconds(value: WorldIssuerConfiguration.MaximumSubjectValiditySeconds);
 
     internal static readonly IAttestationCodec Codec = new CborAttestationCodec();
 
@@ -47,10 +55,14 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator {
     /// <param name="oracle">Signs this authority's own identity claims; <see langword="null"/> when this instance
     /// never proves.</param>
     /// <param name="now">The verification-boundary wall-clock read, overridable for tests.</param>
-    public WorldAttestedAuthenticator(Func<IReadOnlyList<WorldAdmissionEntry>?>? trustEntries = null, ISigningOracle? oracle = null, Func<DateTimeOffset>? now = null) {
+    /// <param name="remoteKeyHash">The lowercase SHA-256 fingerprint of the one transport key this client proves its
+    /// identity to, or <see langword="null"/> when the destination proves its own authority against
+    /// <paramref name="trustEntries"/>. A pinned client authenticates the destination by that transport key alone.</param>
+    public WorldAttestedAuthenticator(Func<IReadOnlyList<WorldAdmissionEntry>?>? trustEntries = null, ISigningOracle? oracle = null, Func<DateTimeOffset>? now = null, string? remoteKeyHash = null) {
         m_trustEntries = trustEntries;
         m_oracle = oracle;
         m_now = (now ?? (static () => DateTimeOffset.UtcNow));
+        m_remoteKeyHash = remoteKeyHash;
     }
 
     int IAuthenticator.ChallengeBytes => NewChallengeBytes;
@@ -60,6 +72,15 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator {
     /// from a verify-only instance learns so from <see cref="Prove"/>'s own refusal (<c>Puck.World.Server.WorldRemoteAuthority</c>
     /// records that and closes its signing gate on it).</remarks>
     public bool IsConfigured => ((m_oracle is not null) || (m_trustEntries is not null));
+    /// <inheritdoc/>
+    public bool HasRemoteIdentityPin => (m_remoteKeyHash is not null);
+
+    /// <inheritdoc/>
+    public bool AcceptsRemoteIdentity(string keyHash) => string.Equals(
+        a: m_remoteKeyHash,
+        b: keyHash,
+        comparisonType: StringComparison.Ordinal
+    );
 
     /// <inheritdoc/>
     public byte[] NewChallenge() => RandomNumberGenerator.GetBytes(count: NewChallengeBytes);
@@ -82,6 +103,8 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator {
             defaultMaximumAge: MaximumClaimAge,
             entries: entries,
             reason: out _,
+            rootBindingMaximumAge: MaximumRootBindingAge,
+            subjectBindingMaximumAge: MaximumSubjectBindingAge,
             trustList: out var trustList
         )) {
             return new((VerifiedPeerIdentity?)null);

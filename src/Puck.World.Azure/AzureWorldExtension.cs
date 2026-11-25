@@ -7,7 +7,7 @@ namespace Puck.World.Azure;
 
 /// <summary>
 /// Contributes the Azure world-hosting providers: <c>azure.blob</c> storage, the <c>azure.scheduled-events</c>
-/// retirement observer, the <c>azure.monitor</c> telemetry sink, <c>azure.api-users</c> connection authentication, the <c>azure.resource</c> operation provider,
+/// retirement observer, the <c>azure.monitor</c> telemetry sink, <c>azure.api-users</c> sign-in, the <c>azure.resource</c> operation provider,
 /// the <c>embedding.azure-openai</c> embedding provider, and the <c>/livez/azure</c> health endpoint. Registration
 /// performs no cloud access.
 /// </summary>
@@ -22,7 +22,7 @@ public sealed class AzureWorldExtension : IPuckExtension {
         registry.AddStorage(provider: AzureSiloExtensions.Storage);
         registry.AddRetirement(provider: AzureSiloExtensions.Retirement);
         registry.AddTelemetry(provider: AzureMonitorTelemetrySink.Provider);
-        registry.AddAuthentication(provider: AzureSiloExtensions.Authentication);
+        registry.AddSignIn(provider: AzureSiloExtensions.SignIn);
         registry.AddOperation(provider: AzureConfiguredProvider.Registration);
         registry.AddEmbedding(provider: new WorldExtensionEmbeddingProviderType(
             Create: AzureOpenAiConfiguredEmbeddingProvider.Create,

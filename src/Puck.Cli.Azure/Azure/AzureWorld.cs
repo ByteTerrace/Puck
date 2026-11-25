@@ -89,6 +89,12 @@ public static partial class AzureCommand {
         ? "federation.pk8"
         : (("federation-" + ContentDigest.HexOfText(text: identity)) + ".pk8")
     );
+    /// <summary>The mounted file name of the deployment issuer's root key, which vouches for every signed-in player's
+    /// own key; it reaches the worker beside the worlds' signing keys and signs as no world.</summary>
+    private const string WorldIssuerKeyFile = "issuer.pk8";
+    /// <summary>The deployment vault secret holding the issuer's root key, generated on the first release that finds it
+    /// absent. Rotating it re-vouches every player at their next sign-in and changes no world document.</summary>
+    private const string WorldIssuerKeySecret = "puck-world-issuer-root";
     private static async Task<WorldReleaseRetainedDeployment> PrepareWorldReleaseDeploymentAsync(WorldReleaseManifest manifest, string? group, TimeProvider clock) {
         var outputs = Outputs();
         var configuration = Value(
@@ -146,6 +152,12 @@ public static partial class AzureCommand {
                     temporary
                 ).ConfigureAwait(continueOnCapturedContext: false);
             }
+            keys[WorldIssuerKeyFile] = await LoadSigningKeyAsync(
+                vault,
+                WorldIssuerKeySecret,
+                secrets!.AsArray(),
+                temporary
+            ).ConfigureAwait(continueOnCapturedContext: false);
             if (!keys.TryGetValue(
                 key: "federation.pk8",
                 value: out var encodedKey
@@ -160,9 +172,11 @@ public static partial class AzureCommand {
                 bytes: key.ExportSubjectPublicKeyInfo(),
                 path: "artifacts/world-silo.public-key"
             );
-            var authentication = configuration["authentication"]!.DeepClone();
+            // A player's sign-in configuration: the provider the deployment's issuer checks, and the primary world's
+            // transport key, the one the client presents its credential to and joins.
+            var authentication = configuration["authentication"]!.DeepClone().AsObject();
 
-            authentication["settings"]!["remoteKeyHash"] = ContentDigest.HexOf(content: key.ExportSubjectPublicKeyInfo());
+            authentication["remoteKeyHash"] = ContentDigest.HexOf(content: key.ExportSubjectPublicKeyInfo());
             CliFiles.WriteJson(
                 path: "artifacts/world-authentication.json",
                 value: authentication
@@ -310,7 +324,11 @@ public static partial class AzureCommand {
 
         if (!manifest.Definitions.ContainsKey(key: primaryIdentity)) { throw new InvalidDataException(message: "release inventory is missing the configured primary world"); }
         worlds.Clear();
-        var authentication = configuration["authentication"]!;
+        // One issuer for the silo: every row trusts its root, and players sign in through the deployment's provider.
+        silo["issuer"] = new JsonObject {
+            ["keyFile"] = ("/configuration/" + WorldIssuerKeyFile),
+            ["signIn"] = configuration["authentication"]!.DeepClone(),
+        };
 
         foreach (var identity in manifest.Definitions.Keys.Order(comparer: StringComparer.Ordinal)) {
             var parts = identity.Split('/');
@@ -326,7 +344,6 @@ public static partial class AzureCommand {
                 identity: identity,
                 primaryIdentity: primaryIdentity
             ));
-            row["federation"]!["authentication"] = authentication.DeepClone();
             worlds.Add(item: row);
         }
         silo["release"] = new JsonObject {

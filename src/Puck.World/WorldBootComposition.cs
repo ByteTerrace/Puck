@@ -1215,6 +1215,10 @@ public static class WorldBootComposition {
         }
 
         services.AddSingleton(implementationInstance: inputs.Authenticator);
+        if (inputs.Issuer is { } issuer) {
+            // Registered by factory so the container owns and disposes it with the peer door that answers with it.
+            services.AddSingleton(implementationFactory: _ => issuer);
+        }
         services.AddSingleton(implementationFactory: _ => new WorldPeerNetwork(identityFile: (inputs.FederationKeyFile ?? Path.Combine(
             path1: inputs.StateRoot.FullPath,
             path2: "Network",

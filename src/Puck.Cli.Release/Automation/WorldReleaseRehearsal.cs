@@ -277,10 +277,24 @@ public static class WorldReleaseRehearsal {
         return manifest;
     }
     // A silo document over a local directory store: every world pinned under its owner with the rehearsal's signing key
-    // for that world (created under keys on first use, so every silo of one rehearsal signs as the same world), and its
-    // state under <directory>/<name>-state.
+    // for that world (created under keys on first use, so every silo of one rehearsal signs as the same world), its
+    // state under <directory>/<name>-state, and the deployment's issuer with the engine's own account sign-in standing in
+    // for the deployment's provider, so every rehearsed silo starts the issuer its rows trust.
     private static JsonObject SiloDocument(string directory, string name, string store, string documentDirectory, string keys, IReadOnlyList<WorldAuthorityIdentity> identities) {
         var rows = new JsonArray();
+        var issuerKey = PuckPaths.Slashed(path: Path.Combine(path1: keys, path2: "issuer.pk8"));
+        var accountKey = PuckPaths.Slashed(path: Path.Combine(path1: keys, path2: "rehearsal-account.pk8"));
+
+        foreach (var path in new[] { issuerKey, accountKey }) {
+            if (!File.Exists(path: path)) {
+                using var key = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
+
+                File.WriteAllBytes(path: path, bytes: key.ExportPkcs8PrivateKey());
+            }
+        }
+        using var account = ECDsa.Create();
+
+        account.ImportPkcs8PrivateKey(source: File.ReadAllBytes(path: accountKey), bytesRead: out _);
 
         foreach (var identity in identities) {
             var keyPath = PuckPaths.Slashed(path: Path.Combine(path1: keys, path2: $"{identity.World}.pk8"));
@@ -305,6 +319,15 @@ public static class WorldReleaseRehearsal {
             ["stateDir"] = PuckPaths.Slashed(path: Path.Combine(path1: directory, path2: $"{name}-state")),
             ["documentDirectory"] = PuckPaths.Slashed(path: documentDirectory),
             ["clustering"] = new JsonObject { ["kind"] = "Localhost" },
+            ["issuer"] = new JsonObject {
+                ["keyFile"] = issuerKey,
+                ["signIn"] = new JsonObject {
+                    ["type"] = Puck.World.Server.WorldAccountSignIn.Provider.Type,
+                    ["settings"] = new JsonObject {
+                        ["accounts"] = new JsonObject { ["rehearsal"] = Convert.ToBase64String(inArray: account.ExportSubjectPublicKeyInfo()) },
+                    },
+                },
+            },
         };
     }
     // Packages composed documents (a 'puck world prepare' output, or a release package's own) as the release a deployment

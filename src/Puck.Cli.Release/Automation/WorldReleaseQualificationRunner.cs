@@ -418,7 +418,8 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
             (definition!.Release is not null) ||
             (definition.Store.Type != "directory") ||
             (definition.Worlds.Select(selector: row => row.Owner).Distinct().Count() != 1) ||
-            definition.Worlds.Any(predicate: row => (!row.Pinned || (row.Federation.Authentication is not null))) ||
+            (definition.Issuer is not null) ||
+            definition.Worlds.Any(predicate: static row => !row.Pinned) ||
             !definition.Worlds.Select(selector: row => row.RootKey).ToHashSet(comparer: StringComparer.Ordinal).SetEquals(other: target.Definitions.Keys)
         ) {
             throw new InvalidDataException(message: "qualification fixture must exactly match the release's local pinned inventory without production credentials");

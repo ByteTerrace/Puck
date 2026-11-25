@@ -509,49 +509,13 @@ public static class AttestationVerifier {
     /// for one model: the forged bytes would be normalised away before the signature ever saw them, and
     /// every such laxity would silently become an accepted alternate encoding of a real claim.
     /// </remarks>
-    private static bool VerifySignature(SignedAttestation attestation, ReadOnlySpan<byte> publicKeySubjectPublicKeyInfo, string pinnedAlgorithm) {
-        var descriptor = AttestationAlgorithms.Resolve(algorithm: pinnedAlgorithm);
-
-        if (
-            (descriptor.Role != AttestationKeyRole.Signing) ||
-            (descriptor.SignatureHash is null)
-        ) {
-            return false;
-        }
-
-        using var ecdsa = ECDsa.Create();
-
-        try {
-            ecdsa.ImportSubjectPublicKeyInfo(
-                bytesRead: out var bytesRead,
-                source: publicKeySubjectPublicKeyInfo
-            );
-
-            if (bytesRead != publicKeySubjectPublicKeyInfo.Length) {
-                return false;
-            }
-        } catch (CryptographicException) {
-            return false;
-        }
-
-        if (!AttestationCurves.Matches(
-            key: ecdsa.ExportParameters(includePrivateParameters: false).Curve,
-            expected: descriptor.Curve
-        )) {
-            return false;
-        }
-
-        // IEEE P1363 fixed-field r‖s only: .NET refuses any length other than twice the field width, so no
-        // alternate DER encoding of the same (r, s) is even a candidate. What this does NOT buy is signature
-        // uniqueness — (r, s) and (r, n-s) are both valid for the same message, so signature bytes are never
-        // an identity. Replay is defended by the sequence mark and the audience, never by signature equality.
-        return ecdsa.VerifyData(
+    private static bool VerifySignature(SignedAttestation attestation, ReadOnlySpan<byte> publicKeySubjectPublicKeyInfo, string pinnedAlgorithm) =>
+        AttestationKeys.VerifySignature(
+            algorithm: pinnedAlgorithm,
             data: attestation.SignedPortionSpan,
-            signature: attestation.SignatureSpan,
-            hashAlgorithm: descriptor.SignatureHash.Value,
-            signatureFormat: DSASignatureFormat.IeeeP1363FixedFieldConcatenation
+            publicKeySubjectPublicKeyInfo: publicKeySubjectPublicKeyInfo,
+            signature: attestation.SignatureSpan
         );
-    }
     /// <summary>The two-hop case: root vouches for an issuing key, the issuing key vouches for the subject, the subject signed the claim.</summary>
     private static AttestationVerifyResult VerifyUnderVouchingRoot(
         IAttestationCodec codec,

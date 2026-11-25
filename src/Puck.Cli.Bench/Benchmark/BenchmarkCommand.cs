@@ -52,7 +52,7 @@ public static partial class BenchmarkCommand {
     private sealed record Play(string Name, string Route, string? WaitsOn = null);
 
     // One World a run boots, and the routes it plays one after another: the backend (null headless), the remote
-    // authority its seat joins (null in process, "local" for a listening World this verb starts beside it, or an
+    // authority its seat joins (null in process, "local" or "issued" for a listening World this verb starts beside it, or an
     // ip:port), and the seats it plays on.
     private sealed record Leg(string Name, WorldBackendPreference? Backend, string? Remote, int Seats, IReadOnlyList<Play> Plays);
 
@@ -62,7 +62,8 @@ public static partial class BenchmarkCommand {
         public readonly Option<string?> Chapter = new("--chapter") { Description = "Play only the chapters whose names start with this prefix; omitted plays every chapter in declaration order." };
         public readonly Option<string[]> Backends = new("--backend") { AllowMultipleArgumentsPerToken = true, Description = "Windowed graphics backends to play on, each in its own fresh World: directx and vulkan. Omitted plays both on Windows and vulkan elsewhere. Ignored with --headless." };
         public readonly Option<bool> Headless = new("--headless") { Description = "Play without a window or renderer: the arrival, state hash and host iterations are reported and every reading that needs a renderer is absent." };
-        public readonly Option<string?> Remote = new("--remote") { Description = "Play against a remote authority: local starts a listening World on this machine from a staged copy of the world (its own federation key, admitting one remote player) and boots the measured World with --connect to it; an ip:port connects to an authority already listening there. Omitted plays with the authority in process." };
+        public readonly Option<string?> Remote = new("--remote") { Description = "Play against a remote authority: local starts a listening World on this machine from a staged copy of the world (its own federation key, admitting one remote player) and boots the measured World with --connect to it, sharing that key; issued starts the same authority with an issuer and the measured World signs in through it, as a hosted world's player does; an ip:port connects to an authority already listening there, signing in with --authentication-config-file. Omitted plays with the authority in process." };
+        public readonly Option<string?> Authentication = new("--authentication-config-file") { Description = "The sign-in configuration (the deployment's published world-authentication.json) the measured World joins --remote <ip:port> with." };
         public readonly Option<int> Seats = CliOptions.Count("--seats", $"Play the route on this many seats of one client at once (1..{MaxSeats}, default 1): the world is staged with that many local seats seated at boot, and every seat walks the route in one world, its own or the remote authority's. A world that cannot seat them reports the leg unrun with its reason.", 1, 1, MaxSeats);
         public readonly Option<int?> At = CliOptions.OptionalCount<int>("--at", "The tick the run is armed at: its first chapter's first line lands at this tick, or four ticks after the boot when that is later. Omitted starts four ticks after the boot.", 1);
         public readonly Option<int> Loops = CliOptions.Count("--loops", $"Play the route this many times from one boot, each loop from the state the one before left (1..{MaxLoops}, default 1). Reported as cold (the first), warm (the second) and steady (the rest).", 1, 1, MaxLoops);
@@ -81,7 +82,7 @@ public static partial class BenchmarkCommand {
         public Command Command { get; }
 
         public RunOptions() => Command = new Command(Verb, "Play routes through a world in real time on fresh Worlds, on each backend and topology, and report every chapter's frame statistics, frame-thread parts, GPU passes, counted work, memory census and the machine's conditions; compare with an earlier report.") {
-            World, Route, Chapter, Backends, Headless, Remote, Seats, At, Loops, Profile, Uncapped, Budget, Timeout, Width, Height, Cache, Artifact, Output, Against, All, Json,
+            World, Route, Chapter, Backends, Headless, Remote, Authentication, Seats, At, Loops, Profile, Uncapped, Budget, Timeout, Width, Height, Cache, Artifact, Output, Against, All, Json,
         };
     }
 
@@ -263,8 +264,11 @@ public static partial class BenchmarkCommand {
 
         var remote = parse.GetValue(options.Remote);
 
-        if ((remote is not null) && (remote != "local") && !System.Net.IPEndPoint.TryParse(s: remote, result: out _)) {
-            return CliExit.Refuse(Verb, "--remote", $"'{remote}' is neither local nor an ip:port.");
+        if ((remote is not null) && (remote is not ("local" or "issued")) && !System.Net.IPEndPoint.TryParse(s: remote, result: out _)) {
+            return CliExit.Refuse(Verb, "--remote", $"'{remote}' is neither local, issued nor an ip:port.");
+        }
+        if ((parse.GetValue(options.Authentication) is not null) && ((remote is null) || (remote is "local" or "issued"))) {
+            return CliExit.Refuse(Verb, "--authentication-config-file", "signs in to a --remote <ip:port> authority; a local pair stages its own.");
         }
 
         var directory = Path.GetFullPath(path: Path.Combine(path1: (parse.GetValue(options.Output) ?? "artifacts/benchmark"), path2: Guid.NewGuid().ToString(format: "N")));
@@ -419,10 +423,11 @@ public static partial class BenchmarkCommand {
         SweepWorld? authority = null;
 
         try {
-            var local = (leg.Remote == "local");
+            var issued = (leg.Remote == "issued");
+            var local = (issued || (leg.Remote == "local"));
 
             if (local || (leg.Seats > 1)) {
-                pair = RemotePair.Stage(directory: Path.Combine(directory, "remote"), pair: local, seats: leg.Seats, world: world);
+                pair = RemotePair.Stage(directory: Path.Combine(directory, "remote"), issued: issued, pair: local, seats: leg.Seats, world: world);
             }
             if (local) {
                 authority = BootAuthority(build: build, budget: budget, directory: Path.Combine(directory, "authority"), pair: pair!, timeout: timeout);
@@ -435,7 +440,11 @@ public static partial class BenchmarkCommand {
                     .. ((connect is null) ? new[] { "--paused" } : ["--connect", connect]),
                     .. SizeArguments(options: options, parse: parse, shape: shape),
                     .. (parse.GetValue(options.Cache) is { } cache ? new[] { "--cache-dir", Path.GetFullPath(cache) } : []),
-                    .. (local ? new[] { "--federation-key-file", pair!.KeyFile } : []),
+                    .. (issued
+                        ? new[] { "--authentication-config-file", pair!.AuthenticationFile }
+                        : (local
+                            ? new[] { "--federation-key-file", pair!.KeyFile }
+                            : ((parse.GetValue(options.Authentication) is { } signIn) ? new[] { "--authentication-config-file", Path.GetFullPath(path: signIn) } : []))),
                     .. ((parse.GetValue(options.Uncapped) && (shape == WorldShape.Windowed)) ? new[] { "--present-mode", "immediate" } : [])],
                 Backend = leg.Backend,
                 ExitAfterSeconds = WorldLaunch.Backstop(TimeSpan.FromSeconds(Allowance(timeout) * leg.Plays.Count)),

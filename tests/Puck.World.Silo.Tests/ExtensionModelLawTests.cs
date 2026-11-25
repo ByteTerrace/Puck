@@ -724,7 +724,7 @@ public sealed class ExtensionModelLawTests {
         );
         Assert.Contains(
             collection: siloSet.Describe(),
-            expected: "Puck.World.Azure: WorldAuthenticationProvider azure.api-users, WorldExtensionEmbeddingProviderType embedding.azure-openai, WorldExtensionProviderType azure.resource, WorldHealthCheck /livez/azure, WorldSiloRetirementProvider azure.scheduled-events, WorldStorageProvider azure.blob"
+            expected: "Puck.World.Azure: WorldExtensionEmbeddingProviderType embedding.azure-openai, WorldExtensionProviderType azure.resource, WorldHealthCheck /livez/azure, WorldSignInProvider azure.api-users, WorldSiloRetirementProvider azure.scheduled-events, WorldStorageProvider azure.blob"
         );
         // The agent participant and its identity-authenticated model provider compose the same way in both hosts.
         Assert.Contains(

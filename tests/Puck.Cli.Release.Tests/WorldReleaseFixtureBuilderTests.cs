@@ -296,9 +296,9 @@ public sealed class WorldReleaseFixtureBuilderTests {
             documentDirectory: null
         );
 
+        Assert.Null(@object: silo.Issuer);
         foreach (var row in silo.Worlds) {
             Assert.True(condition: row.Pinned);
-            Assert.Null(@object: row.Federation.Authentication);
             Assert.StartsWith(
                 output.Replace(
                     newChar: '/',
