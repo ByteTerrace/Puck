@@ -106,7 +106,7 @@ public sealed partial class WorldAuthorityBlobStore {
                 const int SequenceDigits = 20;
                 return name.Length == SequenceDigits + 1 + AssetContentHash.HexLength + fileExtension.Length &&
                     name[SequenceDigits] == '-' &&
-                    !name.Slice(SequenceDigits + 1, AssetContentHash.HexLength).ContainsAnyExcept("0123456789abcdef") &&
+                    Puck.Abstractions.ContentDigest.IsLowerHexDigits(name.Slice(SequenceDigits + 1, AssetContentHash.HexLength), AssetContentHash.HexLength) &&
                     long.TryParse(name[..SequenceDigits], NumberStyles.None, CultureInfo.InvariantCulture, out var sequence) &&
                     sequence > 0 && sequence <= previous.Sequence;
             });

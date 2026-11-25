@@ -18,6 +18,7 @@ public static class ContentDigest {
 
     private const int StackBytes = 512;
     private static readonly SearchValues<char> HexDigits = SearchValues.Create(values: "0123456789abcdefABCDEF");
+    private static readonly SearchValues<char> LowerHexDigits = SearchValues.Create(values: "0123456789abcdef");
 
     /// <summary>Returns whether text is a SHA-256 digest written as <see cref="HexLength"/> hexadecimal digits of either case.</summary>
     /// <param name="text">The text to test; <see langword="null"/> is not a digest.</param>
@@ -29,6 +30,14 @@ public static class ContentDigest {
     /// <returns><see langword="true"/> when <paramref name="text"/> is <paramref name="length"/> hexadecimal digits and nothing else.</returns>
     public static bool IsHexDigits([NotNullWhen(returnValue: true)] string? text, int length) =>
         ((text is not null) && (text.Length == length) && !text.AsSpan().ContainsAnyExcept(values: HexDigits));
+    /// <summary>Returns whether characters are exactly a given number of lowercase hexadecimal digits, the one spelling a
+    /// content address, a pin's file name or a recorded code hash carries.</summary>
+    /// <param name="text">The characters to test.</param>
+    /// <param name="length">The required number of digits.</param>
+    /// <returns><see langword="true"/> when <paramref name="text"/> is <paramref name="length"/> digits from <c>0-9</c> and
+    /// <c>a-f</c> and nothing else.</returns>
+    public static bool IsLowerHexDigits(ReadOnlySpan<char> text, int length) =>
+        ((text.Length == length) && !text.ContainsAnyExcept(values: LowerHexDigits));
 
     /// <summary>Hashes bytes.</summary>
     /// <param name="content">The bytes to hash.</param>

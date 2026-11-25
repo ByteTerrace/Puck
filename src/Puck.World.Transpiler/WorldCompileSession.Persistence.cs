@@ -86,7 +86,7 @@ public sealed partial class WorldCompileSession {
             var hash = ReadPersisted(key: Key, read: static reader => {
                 var value = reader.ReadString();
 
-                return ((value.Length == 32) && (value.AsSpan().IndexOfAnyExcept(values: "0123456789abcdef") < 0))
+                return Puck.Abstractions.ContentDigest.IsLowerHexDigits(length: 32, text: value)
                     ? value : throw new InvalidDataException(message: "Invalid composition layer code hash.");
             });
             if (hash is null) {

@@ -82,12 +82,11 @@ public readonly record struct AssetContentHash(ulong Value) {
     public static bool TryParse([NotNullWhen(returnValue: true)] string? text, out AssetContentHash hash) {
         if (
             (text is null) ||
-            (text.Length != (Prefix.Length + HexLength)) ||
             !text.StartsWith(
             comparisonType: StringComparison.Ordinal,
             value: Prefix
         ) ||
-            (text.AsSpan(start: Prefix.Length).IndexOfAnyExcept(values: "0123456789abcdef") >= 0)
+            !Puck.Abstractions.ContentDigest.IsLowerHexDigits(length: HexLength, text: text.AsSpan(start: Prefix.Length))
         ) {
             hash = default;
             return false;

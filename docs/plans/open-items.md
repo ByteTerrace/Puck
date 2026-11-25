@@ -5082,18 +5082,6 @@ their lane order; this packet keeps the single duplicates and leads.
     three share one token-rule helper built on them and delete the comment's
     reason. Command lines are short, so this unifies a rule and claims no
     speed.
-  - **Shared: one hex-hash validator.** [medium] About ten sites validate a
-    fixed-length hex string, each in its own way: LINQ `Any` or `All` with a
-    per-character predicate (`WorldMutation`, `CorpusManifest`,
-    `WorldSpatialReadDependency`, `WorldDefinitionReadDependency`,
-    `MachineContentAdmissionPolicy`, `AzureWorldReleaseSecrets`,
-    `EntraWorldAuthenticator`), and a span search that passes the digit set as
-    a literal on each call (`AssetContentHash`, `ContentPin.TryParseHex`,
-    `LocalEndpointCapability`). Write one public validator beside the
-    content-hash types, backed by two cached `SearchValues<char>` sets
-    (lowercase, and either case), as a length test and one
-    `ContainsAnyExcept`. Keep each site's case rule: lowercase only at
-    `EntraWorldAuthenticator`, `AssetContentHash` and `ContentPin`.
   - **MCP: two uncancelled timeouts.** [low] `OperatorMcpFront.RunAsync`
     waits twice with `Task.WhenAny` over a `Task.Delay` that nothing cancels
     when the other task wins, the shape analyzer CA2027 names. Replace each

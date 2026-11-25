@@ -19,8 +19,8 @@ internal static class WorldConnectionAuthentication {
                 if (
                     (name != "remoteKeyHash") ||
                     (value.ValueKind != JsonValueKind.String) ||
-                    (value.GetString() is not { Length: 64 } hash) ||
-                    !hash.All(predicate: static c => char.IsAsciiHexDigitLower(c: c))
+                    (value.GetString() is not { } hash) ||
+                    !Puck.Abstractions.ContentDigest.IsLowerHexDigits(length: Puck.Abstractions.ContentDigest.HexLength, text: hash)
                 ) {
                     return false;
                 }
