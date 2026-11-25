@@ -241,17 +241,14 @@ No workflow runs the real-World canaries: their offscreen proofs need a GPU
 device on both backends, which the hosted runners do not have, and they are
 quarantined. See [the `puck canary` reference](../reference/cli.md#puck-canaryreal-world-behavioral-proofs).
 
-The Azure graph builds its two Linux container images independently of the Windows
-producer. The silo's Caddy stage uses Google's Docker Hub mirror with an exact index digest;
-both Docker Hub and ECR Public have rate-limited anonymous pulls on shared runners. When updating the pin,
-resolve the exact digest with `docker buildx imagetools inspect <image>:<version>@sha256:<digest>` and pull it
-with Docker before building the silo. A tag rebuild does not update the pinned image.
-The silo image's build restores the Linux shader cache and hands it to
-`docker build` as the `shader-cache` build context, which the Dockerfile mounts
-at its build's default cache directory; its DXC is the archive and checksum
-`setup-dxc` pins on Linux, and like the comparison it builds SPIR-V alone, so a
-restored entry is a hit inside the container and a cache under the commit's key
-compiles no shader. The image ships no DXIL, which only Direct3D 12 reads. The two pins change together.
+The Azure graph builds the actors container image and the host release on Linux. The host release's
+TLS front is Caddy's official Linux release archive, pinned by its SHA-256 in `WorldHostCommand` (whose SHA-512
+matches the checksum file Caddy publishes beside the release); when updating the pin, take both from the release and
+check them against that file.
+The host release's build (the `host-release` job) restores the Linux shader cache
+into the build's default cache directory; its DXC is the archive and checksum
+`setup-dxc` pins on Linux, so a restored entry is a hit and a cache under the
+commit's key compiles no shader.
 A cache from the previous shader inputs still answers every unchanged output.
 Container verification loads the saved image archives; deployment loads
 those same archives after every required check passes. Application assembly copies
@@ -562,8 +559,9 @@ compiles the CLI once, in that build, and packs it once, into `nuget-packages`;
 every other job that runs `puck` installs that package through `setup-puck`.
 Three builds stay outside that rule. The formatting workflow packs the pull
 request's own CLI, and formatting submission packs the default branch's, each
-in a workflow that has no producer. The silo image publishes its CLI inside its
-container build, which would otherwise wait on the Windows producer.
+in a workflow that has no producer. The host release publishes the CLI
+self-contained from source (`puck world host build`), since what a hosting machine
+runs is a build for its own runtime, not the tool package.
 
 **Verify package installation** (`pack.yml`) installs the exact candidate package on clean Windows and Linux
 runners and exercises command dispatch, native-backed search, declarations,
@@ -1016,76 +1014,72 @@ world. Connection information still carries the federation address and expected
 server identity: DNS alone does not select a world on a shared host.
 
 World workers use the Azure Linux Marketplace image `main.bicepparam` pins
-(`imageReference`). The silo container retains its Ubuntu-based .NET runtime;
-the host OS and container libraries are upgraded independently. The bootstrap
-installs Microsoft's Moby packages on Azure Linux and retains Ubuntu support
-for rollback. Those packages come from the live repository, not the pinned
-image, and their daemons are built with Microsoft's Go, which loads the host's
-`libcrypto` at start; neither `moby-engine` nor `containerd2` requires a
-minimum `openssl-libs`. So the bootstrap takes the repository's `openssl-libs`
-in its own transaction on every pass, before installing or restarting any
-daemon. Without that step, an image older than `openssl-libs` 3.3.7-5.azl3
-rejects the ML-KEM key share that Go 1.27 offers by default
-(microsoft/go#2472, fixed by microsoft/azurelinux#18630), and `docker login`
-fails its TLS handshake. It preserves the host firewall policy and installs only the
-configured QUIC UDP port and the health port from Azure's load-balancer probe
-address. The service restores those rules after reboot. The deployment is the
-one place that names every interface: the world document it publishes sets
-`host.listen` to `0.0.0.0:<port>` and the silo document it composes sets
-`lifecycle.healthAddress` to `0.0.0.0`, both from
-`AzureCommand.DeploymentListenAddress`, so the probe and forwarded QUIC reach
-the worker. The container smoke test, `puck azure test-world-container`, writes
-the same address inside its container and publishes the ports on the runner's
-loopback only. Both silo documents, and each release qualification leg's, name
-the image's `/app/worlds` as their `documentDirectory`
-(`WorldSiloImageLayout.WorldsDirectory`), so a hosted world's relative machine
-content and assets (patches, scores, voice sample sets) resolve inside the
-image, and the smoke test publishes only the composed `*.world.json` documents
-it copies out of it. The release package carries those documents and no asset:
-the image digest retains the layout. Steps that validate the documents on the
-runner (`puck azure prepare-world-release` and a first release's bootstrap) read
-the checkout's copy of that layout, `worlds/debug`
-(`AzureCommand.LocalWorldsDirectory`), which is what the image copies there. A local World or silo listens on loopback, and the `NET001` analyzer
-refuses an any-address bind anywhere else. Host-image qualification
-must exercise public QUIC with the expected world key, checkpoint recovery,
-drain/readiness withdrawal, and reboot recovery before changing the pinned image.
-The production release check compares the running VM's image reference as well
-as its container digest. A distribution change requires draining and replacing
-the worker; changing only the scale-set model does not establish that its
-existing VM runs the new OS.
+(`imageReference`), and install their World as a player's machine does
+([the decision](../decisions/runtime-and-delivery.md#hosting-machines)). The
+`host-release` job builds the host release on the runtime workers run
+(`puck world host build worlds/debug --tls-front` with the deployment's world
+extensions), writes the `server` channel's release tree (`puck publish --app
+puck.world.host --channel server --rid linux-x64`) and uploads it unsigned as
+`azure-server-channel`. It then signs a copy with a throwaway root (`puck channel
+push --to <mirror> --signing-key <file>`), installs it exactly as a worker does
+(`puck world host fetch`), boots the installed release twice against a fixture
+store (`puck azure test-world-host --install`: activation, checkpoint recovery,
+health, QUIC, and the second boot through the MCP entry point) and rehearses a
+first deployment through the same install (`puck world release rehearse
+--install`): the bootstrap transaction's roots and group record in a local store,
+and the release's silo started on a managed silo document as a worker starts it,
+through private health, release control, admission, a progress window and drain.
+A defect in the worker's managed start fails there, before any deploy touches
+Azure; locally, the same verb runs a package or a `puck world prepare` output
+against a built `Puck.World.Silo` (`--silo`, with `--extensions-dir` holding the
+machine providers).
+
+The deploy job signs and pushes that tree (`puck channel push --channel server
+--host azure`) before the world deploys, so the channel holds the release, its
+objects and its signed manifest as an object of its own. `puck azure
+prepare-world-release` reads the signed tree (`WorldHostRelease`) and writes the
+engine identity to `artifacts/world-host.engine`, which the production check
+compares against the engine the worker's silo unit runs. The worker's VM
+extension fetches the installer by its pin, installs the release's signed
+manifest by its pin into `/opt/puck/world`, and runs the installed CLI's `puck
+world host install`, which writes the configuration and credentials, the
+sandboxed units and the firewall rules (the configured QUIC UDP port and the
+health port from Azure's load-balancer probe address, applied by the unit on
+every start, so they survive a reboot), and waits for private health. The
+deployment is the one place that names every interface: the world document it
+publishes sets `host.listen` to `0.0.0.0:<port>` and the silo document it composes
+sets `lifecycle.healthAddress` to `0.0.0.0`, both from
+`AzureCommand.DeploymentListenAddress`, so the probe and forwarded QUIC reach the
+worker. Every silo document a host runs, and each release qualification leg's,
+names the installed version's `worlds` directory as its `documentDirectory`
+(`WorldHostLayout.WorldsDirectory`), so a hosted world's relative machine content
+and assets resolve inside the install. The release package carries the composed
+documents and no asset: the engine's release retains the layout. Steps that
+validate the documents on the runner (`puck azure prepare-world-release` and a
+first release's bootstrap) read the checkout's copy of that layout,
+`worlds/debug` (`AzureCommand.LocalWorldsDirectory`). A local World or silo
+listens on loopback, and the `NET001` analyzer refuses an any-address bind
+anywhere else. A distribution change requires draining and replacing the worker;
+changing only the scale-set model does not establish that its existing VM runs
+the new OS.
 
 Release Azure owns the silo release alongside website and Entra reconciliation.
 Runtime verification runs the compiled Entra admission, silo schema, and lifecycle
-recovery laws on Linux. Container verification boots the saved candidate image
-twice to verify checkpoint recovery and QUIC, then rehearses a first deployment of
-the image's own worlds inside the image (`puck world release rehearse --image`):
-the bootstrap transaction's roots and group record in a local store, and the
-image's silo started on a managed silo document as a worker starts it, through
-private health, release control, admission, a progress window and drain. A defect in
-the worker's managed start fails there, before any deploy touches Azure; locally,
-the same verb runs a package or a `puck world prepare` output against a built
-`Puck.World.Silo` (`--silo`, with `--extensions-dir` holding the machine providers). Deployment uses the existing `zzz`
-identity and production concurrency group. The runner's QUIC installer is the
-`setup-quic` action, pinned to Microsoft's checksum-verified package source for
-the one Ubuntu release the action accepts; the VM's pre-container host bootstrap (`build/Start-WorldSilo.sh`, which
-`puck world release deploy` templates) remains separate because it must run before
-Docker and the runtime are ready.
+recovery laws on Linux. Deployment uses the existing `zzz` identity and production
+concurrency group. The runner's QUIC installer is the `setup-quic` action, pinned
+to Microsoft's checksum-verified package source for the one Ubuntu release the
+action accepts; a worker takes `libmsquic` from Azure Linux's Microsoft repository.
 `puck azure deploy-world-platform` creates the
 runtime identity and its scoped grants. `puck azure prepare-world-release` binds
 the official endpoint and admission policy before hashing every composed world.
 `puck world release deploy artifacts/world-release` verifies this package and retains its exact files and its
-deployment inputs (the compute parameters, the compiled compute template and the rendered bootstrap) as immutable
-objects in the owner's private release content store (`WorldReleaseDeploymentStore`). A versioned Key Vault secret
-holds only the hosted worlds' signing keys and the inputs' content pin, so its size grows with the world count, not
-with the bootstrap or template. It protects the
-source and target ACR manifests from writes and deletion, checks their readability,
-and pulls both digests for qualification using temporary Docker credentials.
-On a pipeline retry, container publication verifies and reuses the existing
-commit's immutable image identity; it refuses different image bytes under the
-same commit instead of pushing through a retained release's write protection.
-Registry administrators can still change those protection settings; retention
-must remain part of the operator's storage policy.
-
+deployment inputs (the compute parameters, the compiled compute template, the worker's typed host inputs and the
+signed host release it installs) as immutable objects in the owner's private release content store
+(`WorldReleaseDeploymentStore`). A versioned Key Vault secret holds only the hosted worlds' signing keys and the
+inputs' content pin, so its size grows with the world count, not with the inputs or template. Qualification installs
+each engine on the runner through its retained installer and manifest (`AzureCommand.InstallWorldReleaseEngineAsync`)
+and runs its legs as processes of that install; the channel never prunes, so a retained predecessor stays installable
+without a retention step.
 How a deploy treats the hosted world follows the policy the deployment declares,
 `worldSiloHostedData` in `main.bicepparam`, which the deploy reads from the live
 deployment under the controller lease
@@ -1314,12 +1308,11 @@ boundary is eligible; resume never selects an older point on its own.
 
 ### Hosted worker runtime
 
-The image includes the [silo's runtime extensions](../../src/Puck.World.Silo/README.md#hosted-test-world)
-with their dependencies. The ordinary silo and optional MCP entry points discover
-the same installed Azure and Gaming Brick providers. Run `WorldReleasePackagedHostTests`
-with the candidate image tagged `puck/world-silo:candidate` to check its entry points;
-successful execution through the CLI alone cannot prove that the ordinary worker
-has its providers installed.
+The host release includes the [silo's runtime extensions](../../src/Puck.World.Silo/README.md#hosted-test-world)
+with their dependencies in its `extensions` directory, which the CLI and the silo
+it hosts discover beside their own assemblies, so the ordinary and MCP shapes load
+the same installed Azure and Gaming Brick providers. `puck azure test-world-host`
+boots both shapes from an install.
 
 `puck world prepare` packages the hosted primary world, the debug world
 (`worlds/debug/debug.puck`, hosted as `debug`, the deployment's
@@ -1341,7 +1334,7 @@ through the existing world hot-reload submission. The release marker advances
 only after the rebuilt world is checkpointed. An unchanged marker preserves the
 recovered state; a failed checkpoint can be retried without applying the rebuild
 twice. Changing the world's listening identity requires a fresh worker activation;
-the deployment's container restart establishes the published binding before
+the deployment's host restart establishes the published binding before
 reconciling an older checkpoint. A live reload cannot change that binding.
 If a restart finds the rebuilt definition already in its checkpoint, it commits
 the missing marker while retaining the recovered simulation state.
@@ -1353,7 +1346,7 @@ independently, so a storage outage does not cause the scale set to replace a
 worker holding unsaved state. Azure's v2 Application Health extension probes
 `/livez/azure`, which serves the same liveness as an `ApplicationHealthState`
 JSON body with HTTP 200. Status-only responses become `Unknown` under this
-contract and can trigger repeated automatic replacement. The container gate
+contract and can trigger repeated automatic replacement. The host gate
 checks this response, and release verification requires Azure's instance view
 to report `HealthState/healthy` before accepting the rollout.
 The world platform defines its own action group
@@ -1361,17 +1354,17 @@ through the current AVM module and always includes it in the readiness alert.
 Its name, email receivers, and pet-name tags are authored in
 `resources.worldSiloActionGroup` in `main.bicepparam`; additional existing action
 groups can be supplied through `monitoring.actionGroupResourceIds`.
-The nonroot container has a read-only root filesystem, writable state mount,
-bounded temporary filesystem, no Linux capabilities, and rotating local logs.
-Bootstrap does not prune local world images. Registry retention owns the exact
-active and previous release images; startup never guesses which unused image
-represents a rollback target.
+The silo unit runs as the unprivileged `puck` account with a read-only system,
+its own state directory, private temporary files and devices, no Linux
+capabilities, a service system-call filter, and its keys only as systemd
+credentials; the journal keeps its logs. The channel keeps every release, so a
+rollback target stays installable without retention on the worker.
 
 Testers use the existing ByteTerrace API identity and `user_impersonation` scope.
 Membership in ByteTerrace API Users admits a Puck user; the deployed world allows
 up to sixteen network players. A player signs in at the silo's issuer, whose root
 key is the vault secret `puck-world-issuer-root` (generated by the first release
-that finds it absent and mounted as `issuer.pk8`), and joins under the key the
+that finds it absent and loaded by the silo unit as the credential `issuer.pk8`), and joins under the key the
 issuer vouched for ([the deployment's issuer](../decisions/runtime-and-delivery.md#the-deployments-issuer)).
 The public `world-authentication.json` release artifact names the sign-in
 provider and pins the server's transport key.
@@ -1388,16 +1381,17 @@ reports healthy. Measure checkpoint latency and journal durability under
 representative player traffic. Before adding workers, implement and exercise
 exclusive world ownership, eligible placement, and replacement capacity.
 
-The silo identity `bytrcidp008` can read only `world-silo` in ACR and has a custom
+The silo identity `bytrcidp008` holds no registry grant and has a custom
 `Puck World Store` role on its own blob container: container read/create plus
 blob read/write, with no delete or role-management grant. CI retains its signing
-keys in Key Vault and passes them, with the pin of the retained deployment inputs, in the protected VM extension command.
-That command runs `build/Boot-WorldSilo.py`, which reads the inputs from the release content store with the silo
-identity, refuses bytes that do not match the pin, and runs the bootstrap with the keys in its environment; the bootstrap
-writes them to private mounted files. The runtime needs no vault permissions. CI temporarily admits its single runner IPv4 address to the vault
+keys in Key Vault and passes them, with the pin of the retained deployment inputs, in the protected VM extension
+settings. Their command installs the host release and hands that protected bootstrap to the installed CLI's `puck
+world host install` on standard input, which reads the inputs from the release content store with the silo identity
+(through the installed Azure world extension), refuses bytes that do not match the pin, and writes the keys as root-only
+files the silo unit loads as systemd credentials. The runtime needs no vault permissions. CI temporarily admits its single runner IPv4 address to the vault
 firewall; an `always()` step removes only the rule that run added. Secret
 parameter files are removed and excluded from artifacts.
-The image installs `libmsquic`, which .NET requires for Linux QUIC support.
+The worker's bootstrap installs `libmsquic` from Azure Linux's Microsoft repository, which .NET requires for Linux QUIC support.
 
 Resource names and deployment settings come from `main.bicepparam`; the silo
 publisher and readiness checks consume the resulting configuration outputs.
@@ -1460,8 +1454,7 @@ is chosen:
   until the daily reset once it is reached.
 
 ACR uses `AbacRepositoryPermissions`. CI publishes through Repository Contributor;
-Actors reads only `web-actors`, the marketplace only its image, and the silo only
-`world-silo`. Runtime identities receive no Catalog Lister. Existing broad grants
+Actors reads only `web-actors` and the marketplace only its image. Runtime identities receive no Catalog Lister. Existing broad grants
 need explicit reconciliation because incremental Bicep deployments do not remove
 them. CI uses an ACR-audience token. ARM-audience authentication is enabled because
 Container Apps managed-identity pulls require it; repository authorization remains

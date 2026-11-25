@@ -20,7 +20,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
         hosts: [host],
         operation: operation
     );
-    // The qualify verb's two failure codes over a real captured fixture, with scripted containers in place of Docker:
+    // The qualify verb's two failure codes over a real captured fixture, with scripted engines in place of installed ones:
     // a pair that ran and failed a leg's claim exits 1, anything that stops the pair from running exits 2, and
     // neither leaves a receipt. The runner reports the same failures as a result rather than an exception.
     private static async Task QualifyVerdictsAsync(string fixture, WorldReleaseManifest release, WorldReleaseManifest unsupported, string temporary, CancellationToken token) {
@@ -55,20 +55,20 @@ public sealed class WorldReleaseFixtureBuilderTests {
             WorldReleaseManifest.Canonicalize(manifest: unsupported)
         );
 
-        async Task<(int ExitCode, string Error, string Evidence)> QualifyAsync(string name, string targetManifest, IWorldReleaseQualificationContainers containers) {
+        async Task<(int ExitCode, string Error, string Evidence)> QualifyAsync(string name, string targetManifest, IWorldReleaseQualificationEngines engines) {
             var evidence = Path.Combine(
                 path1: temporary,
                 path2: ("qualify-" + name)
             );
             var command = WorldReleaseCommand.Create(
                 clock: TimeProvider.System,
-                containers: containers
+                engines: engines
             );
 
             CliExit.Guard(command: command);
 
-            var (exitCode, _, error) = await ConsoleCapture.RunSplitAsync(run: () => command.Parse(["qualify", sourcePath, targetManifest, fixture, "--source-image", "source",
-                "--target-image", "target", "--steps", "4", "--output", evidence]).InvokeAsync(cancellationToken: token));
+            var (exitCode, _, error) = await ConsoleCapture.RunSplitAsync(run: () => command.Parse(["qualify", sourcePath, targetManifest, fixture, "--source-engine", "source",
+                "--target-engine", "target", "--steps", "4", "--output", evidence]).InvokeAsync(cancellationToken: token));
 
             return (exitCode, error, evidence);
         }
@@ -83,9 +83,9 @@ public sealed class WorldReleaseFixtureBuilderTests {
         }
 
         var failedLeg = await QualifyAsync(
-            containers: new ScriptedContainers(
+            engines: new ScriptedEngines(
                 exercise: static _ => 1,
-                imageId: release.EngineImageDigest,
+                engine: release.Engine,
                 stderr: "\nwarming up\npuck world release exercise: the leg's store refused a write\n"
             ),
             name: "failed-leg",
@@ -102,13 +102,13 @@ public sealed class WorldReleaseFixtureBuilderTests {
         );
         AssertNoReceipt(evidence: failedLeg.Evidence);
 
-        foreach (var (name, targetManifest, containers, expected) in new (string, string, IWorldReleaseQualificationContainers, string)[] {
-            ("unsupported", unsupportedPath, new ScriptedContainers(exercise: static _ => 0, imageId: release.EngineImageDigest), "release definition"),
-            ("foreign-image", targetPath, new ScriptedContainers(exercise: static _ => 0, imageId: ("sha256:" + new string(c: 'f', count: 64))), "immutable digest"),
-            ("no-engine", targetPath, new ScriptedContainers(exercise: static _ => 0, imageId: null), "cannot inspect"),
+        foreach (var (name, targetManifest, engines, expected) in new (string, string, IWorldReleaseQualificationEngines, string)[] {
+            ("unsupported", unsupportedPath, new ScriptedEngines(exercise: static _ => 0, engine: release.Engine), "release definition"),
+            ("foreign-engine", targetPath, new ScriptedEngines(exercise: static _ => 0, engine: ("sha256/" + new string(c: 'f', count: 64))), "runs the engine"),
+            ("no-engine", targetPath, new ScriptedEngines(exercise: static _ => 0, engine: null), "holds no installed host release"),
         }) {
             var refused = await QualifyAsync(
-                containers: containers,
+                engines: engines,
                 name: name,
                 targetManifest: targetManifest
             );
@@ -130,7 +130,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
             ((("{\"Schema\":\"" + WorldReleaseExerciseResult.CurrentSchema) + "\"}"), "does not prove receipt preservation"),
         }) {
             var result = await new WorldReleaseQualificationRunner(
-                containers: new ScriptedContainers(
+                engines: new ScriptedEngines(
                     exercise: directory => {
                         if (report is not null) {
                             File.WriteAllText(
@@ -144,16 +144,16 @@ public sealed class WorldReleaseFixtureBuilderTests {
 
                         return 0;
                     },
-                    imageId: release.EngineImageDigest
+                    engine: release.Engine
                 ),
                 fixture: fixture,
                 outputDirectory: Path.Combine(
                     path1: temporary,
                     path2: "qualify-reports"
                 ),
-                sourceImage: "source",
+                sourceEngine: "source",
                 steps: 4,
-                targetImage: "target"
+                targetEngine: "target"
             ).RunAsync(
                 cancellationToken: token,
                 source: release,
@@ -211,20 +211,17 @@ public sealed class WorldReleaseFixtureBuilderTests {
             bytes
         );
         var token = TestContext.Current.CancellationToken;
-        var imageId = await CandidateWorldImage.TryResolveIdAsync(cancellationToken: token);
-        var image = ((imageId is null)
-            ? null
-            : CandidateWorldImage.Tag
-        );
-        var digest = (imageId ?? ("sha256:" + new string(
+        // An installed host release for the packaged legs (puck world host fetch), when the environment names one.
+        string? image = null;
+        var digest = ("sha256/" + new string(
             c: 'a',
             count: 64
-        )));
+        ));
         var release = new WorldReleaseManifest {
             CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
             Label = "fixture",
             SourceRevision = "test",
-            EngineImageDigest = digest,
+            Engine = digest,
             PersistenceContract = "test",
             PeerProtocolContract = "test",
             Definitions = new[] { "alpha", "beta" }.ToDictionary(
@@ -849,7 +846,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
             unsupported: unsupported
         );
         if (image is not null) {
-            // Retained beside the test assembly for inspection, replaced by the next run's Docker legs.
+            // Retained beside the test assembly for inspection, replaced by the next run's packaged legs.
             var evidence = Path.Combine(
                 path1: AppContext.BaseDirectory,
                 path2: "world-release-evidence"
@@ -895,7 +892,7 @@ public sealed class WorldReleaseFixtureBuilderTests {
             Assert.Equal(
                 0,
                 await command.Parse(["qualify", sourceManifestPath, targetManifestPath, complete,
-                "--source-image", image, "--target-image", image, "--steps", "4", "--output", Path.GetFullPath(path: evidence)])
+                "--source-engine", image, "--target-engine", image, "--steps", "4", "--output", Path.GetFullPath(path: evidence)])
                 .InvokeAsync(cancellationToken: token)
             );
             var proofPath = Directory.EnumerateFiles(
@@ -1074,23 +1071,20 @@ public sealed class WorldReleaseFixtureBuilderTests {
         )));
     }
 
-    // A container engine that never starts Docker: every image resolves to imageId, or the engine cannot inspect it at
-    // all when imageId is null, and each exercise answers with the exit code exercise returns for its fixture and
-    // stderr as its packaged engine's diagnostics.
-    private sealed class ScriptedContainers(Func<string, int> exercise, string? imageId, string stderr = "") : IWorldReleaseQualificationContainers {
-        public Task<Puck.Abstractions.ChildProcessResult> ExerciseAsync(string container, string image, string fixture, int steps, CancellationToken cancellationToken) =>
+    // An engine runner that starts no process: every install root resolves to itself when engine is the release's, refuses
+    // as another engine otherwise or as an empty install when engine is null, and each exercise answers with the exit code
+    // exercise returns for its fixture and stderr as its packaged engine's diagnostics.
+    private sealed class ScriptedEngines(Func<string, int> exercise, string? engine, string stderr = "") : IWorldReleaseQualificationEngines {
+        public Task<Puck.Abstractions.ChildProcessResult> ExerciseAsync(string engine, string fixture, int steps, CancellationToken cancellationToken) =>
             Task.FromResult(result: new Puck.Abstractions.ChildProcessResult(
                 ExitCode: exercise(arg: fixture),
                 Stderr: stderr,
                 Stdout: string.Empty
             ));
-        public Task<WorldReleaseQualificationImage> InspectAsync(string reference, CancellationToken cancellationToken) =>
-            ((imageId is null)
-                ? throw new InvalidOperationException(message: "the container engine cannot inspect images")
-                : Task.FromResult(result: new WorldReleaseQualificationImage(
-                    Id: imageId,
-                    RepoDigests: []
-                )));
-        public Task RemoveAsync(string container) => Task.CompletedTask;
+        public string Resolve(string installRoot, string expected) => engine switch {
+            null => throw new InvalidDataException(message: $"{installRoot} holds no installed host release"),
+            { } installed when (installed == expected) => installRoot,
+            { } installed => throw new InvalidDataException(message: $"{installRoot} runs the engine {installed}, not the release's {expected}"),
+        };
     }
 }

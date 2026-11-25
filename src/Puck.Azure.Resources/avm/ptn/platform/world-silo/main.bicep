@@ -1,9 +1,4 @@
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-// Imports
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-import { containerRepositoryCondition } from '../../../../abacConditions.bicep'
-
-// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Types
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 type tagsType = { *: string }
@@ -17,10 +12,10 @@ type worldSiloActionGroupConfigType = {
 @export()
 type worldSiloConfigType = {
   authentication: { type: string, settings: { *: string } }
-  container: {
+  @description('The processors and memory the world host\'s systemd unit may use on its worker.')
+  service: {
     cpu: int
     memoryInGB: int
-    name: string
   }
   compute: {
     adminUsername: string
@@ -73,7 +68,6 @@ type worldSiloConfigType = {
   releaseStateSecretName: string
   name: string
   port: int
-  repositoryName: string
   roleDefinitionName: string
   tags: tagsType?
   userAssignedIdentity: {
@@ -91,7 +85,6 @@ param actionGroup worldSiloActionGroupConfigType
 param tags tagsType = {}
 param owner string
 param publishingPrincipalId string
-param registryName string
 param storageAccountName string
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -99,7 +92,6 @@ param storageAccountName string
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 var worldStoreRoleDefinitionId = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', worldStoreRole.name)
 var publishingRoleDefinitionId = az.roleDefinitions('Storage Blob Data Contributor').id
-var pullRoleDefinitionId = az.roleDefinitions('Container Registry Repository Reader').id
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Resources
@@ -167,22 +159,6 @@ resource publishingBlobAccess 'Microsoft.Authorization/roleAssignments@2022-04-0
     // roleDefinitions() resolves the built-in role by name; the rule predates it.
     #disable-next-line use-resource-id-functions
     roleDefinitionId: publishingRoleDefinitionId
-  }
-}
-resource registry 'Microsoft.ContainerRegistry/registries@2025-04-01' existing = {
-  name: registryName
-}
-resource pull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: registry
-  name: guid(registry.id, owner, pullRoleDefinitionId)
-  properties: {
-    principalId: owner
-    principalType: 'ServicePrincipal'
-    // roleDefinitions() resolves the built-in role by name; the rule predates it.
-    #disable-next-line use-resource-id-functions
-    roleDefinitionId: pullRoleDefinitionId
-    conditionVersion: '2.0'
-    condition: containerRepositoryCondition([configuration.repositoryName], false)
   }
 }
 

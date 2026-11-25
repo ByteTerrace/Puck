@@ -17,23 +17,23 @@ namespace Puck.Cli.Automation;
 /// A run that exercised the pair returns its verdict: a receipt, or the claim a leg failed (a packaged engine that
 /// exited nonzero, overran <see cref="LegTimeout"/>, reported an incomplete or non-advancing inventory, or lost
 /// receipts, or two imports that disagree). A run that cannot exercise the pair throws: bad input, an unmarked or
-/// mismatched fixture, an unsupported pair, an image that is not the release's, or a container engine that cannot
-/// inspect or start an image.
+/// mismatched fixture, an unsupported pair, an install that does not hold the release's engine, or an engine that cannot
+/// start.
 /// </para>
 /// </summary>
 /// <param name="fixture">The marked offline fixture directory each leg imports.</param>
 /// <param name="outputDirectory">The directory that retains the isolated legs and their evidence.</param>
-/// <param name="sourceImage">The engine image of the release being left.</param>
-/// <param name="targetImage">The engine image of the release being entered.</param>
+/// <param name="sourceEngine">The install root holding the engine of the release being left.</param>
+/// <param name="targetEngine">The install root holding the engine of the release being entered.</param>
 /// <param name="steps">The exact continuation steps per packaged leg.</param>
 /// <param name="archive">The archive that retains both releases' files; required when their definitions differ.</param>
 /// <param name="clock">The clock every deadline runs on; <see langword="null"/> is <see cref="TimeProvider.System"/>.</param>
-/// <param name="containers">The container engine that runs the legs; <see langword="null"/> is Docker.</param>
+/// <param name="engines">What runs the legs' installed engines; <see langword="null"/> runs them as processes.</param>
 /// <param name="documentDirectory">The directory the fixture's captured definitions resolve their relative paths beside
 /// when the release's metadata transition decodes them on this machine (<see cref="WorldSiloDefinition.DocumentDirectory"/>
 /// as the hosting silo lays it out); <see langword="null"/> for documents that author none.</param>
-public sealed class WorldReleaseQualificationRunner(string fixture, string outputDirectory, string sourceImage, string targetImage, int steps = 60,
-    WorldReleaseArchive? archive = null, TimeProvider? clock = null, IWorldReleaseQualificationContainers? containers = null, string? documentDirectory = null)
+public sealed class WorldReleaseQualificationRunner(string fixture, string outputDirectory, string sourceEngine, string targetEngine, int steps = 60,
+    WorldReleaseArchive? archive = null, TimeProvider? clock = null, IWorldReleaseQualificationEngines? engines = null, string? documentDirectory = null)
     : IWorldReleaseQualificationRunner, IWorldReleaseBootstrapQualificationRunner {
     /// <summary>Gets how long one packaged leg may run, on the runner's clock, before it is abandoned.</summary>
     public static TimeSpan LegTimeout { get; } = TimeSpan.FromMinutes(minutes: 5);
@@ -44,11 +44,14 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
     public const string MarkerFileContent = Marker;
 
     private readonly TimeProvider m_clock = (clock ?? TimeProvider.System);
-    private readonly IWorldReleaseQualificationContainers m_containers = (containers ?? new WorldReleaseQualificationDocker(clock: (clock ?? TimeProvider.System)));
+    private readonly IWorldReleaseQualificationEngines m_engines = (engines ?? new WorldReleaseQualificationProcesses());
 
     private const int MaximumFileBytes = WorldAuthorityBlobStore.MaximumBlobBytes;
 
-    private static void CopyFixture(string source, string destination, WorldSiloDefinition definition) {
+    // A leg's copy names only paths inside itself; engine is the installed version the leg runs, whose asset layout the
+    // release's definitions resolve their relative paths beside, as the deployed silo does (null for a seed, which no
+    // engine runs).
+    private static void CopyFixture(string source, string destination, WorldSiloDefinition definition, string? engine = null) {
         Directory.CreateDirectory(path: destination);
         foreach (var owner in definition.Worlds.Select(selector: row => row.Owner).Distinct()) {
             var relative = Path.Combine(
@@ -153,12 +156,10 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
         );
         var config = JsonNode.Parse(WorldSiloDefinitionSerialization.Serialize(definition: definition))!.AsObject();
 
-        config["stateDir"] = "/fixture/state";
-        config["store"]!["settings"]!["path"] = "/fixture/store";
-        // The leg's silo runs inside the image, whose asset layout the release's definitions resolve their relative
-        // paths beside, as the deployed silo does.
-        config["documentDirectory"] = WorldSiloImageLayout.WorldsDirectory;
-        foreach (var row in config["worlds"]!.AsArray()) { row!["federation"]!["keyFile"] = $"/fixture/keys/{row["owner"]}-{row["world"]}.pk8"; }
+        config["stateDir"] = Path.Combine(path1: destination, path2: "state");
+        config["store"]!["settings"]!["path"] = Path.Combine(path1: destination, path2: "store");
+        if (engine is not null) { config["documentDirectory"] = Path.Combine(path1: engine, path2: WorldHostLayout.WorldsDirectory); }
+        foreach (var row in config["worlds"]!.AsArray()) { row!["federation"]!["keyFile"] = Path.Combine(path1: destination, path2: "keys", path3: $"{row["owner"]}-{row["world"]}.pk8"); }
         File.WriteAllText(
             Path.Combine(
                 path1: destination,
@@ -235,7 +236,7 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
     }
     // One packaged leg: its verdict is a report, or the claim the packaged engine failed. Only a leg that cannot start
     // throws.
-    private async Task<LegOutcome> LegAsync(string seed, string name, string image, WorldSiloDefinition definition, string run,
+    private async Task<LegOutcome> LegAsync(string seed, string name, string engine, WorldSiloDefinition definition, string run,
         CancellationToken cancellationToken, bool bootstrap = false) {
         var leg = Path.Combine(
             path1: run,
@@ -245,6 +246,7 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
         CopyFixture(
             definition: definition,
             destination: leg,
+            engine: engine,
             source: seed
         );
         var services = new ServiceCollection();
@@ -266,10 +268,9 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
             store: authority,
             token: cancellationToken
         ).ConfigureAwait(continueOnCapturedContext: false));
-        var container = ("puck-qualification-" + Guid.NewGuid().ToString(format: "N"));
         ChildProcessResult exercise;
 
-        Console.WriteLine(value: $"Qualification {name}: {image}");
+        Console.WriteLine(value: $"Qualification {name}: {engine}");
         using var deadline = new OperationDeadline(
             caller: cancellationToken,
             timeout: LegTimeout,
@@ -277,18 +278,14 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
         );
 
         try {
-            exercise = await m_containers.ExerciseAsync(
+            exercise = await m_engines.ExerciseAsync(
                 cancellationToken: deadline.Token,
-                container: container,
+                engine: engine,
                 fixture: leg,
-                image: image,
                 steps: steps
             ).ConfigureAwait(continueOnCapturedContext: false);
         } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
             return LegOutcome.Failed(failure: $"qualification leg '{name}' exceeded its five-minute limit; no receipt was produced");
-        } finally {
-            // Removal runs before another leg can use this leg's completed state, cancellation included.
-            await m_containers.RemoveAsync(container: container).ConfigureAwait(continueOnCapturedContext: false);
         }
         if (exercise.ExitCode != 0) {
             return LegOutcome.Failed(failure: $"qualification leg '{name}': the packaged engine exited with code {exercise.ExitCode}{Output(exercise: exercise)}");
@@ -347,27 +344,6 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
             Failure: null,
             Result: result
         );
-    }
-    private async Task<string> ResolveImageAsync(string reference, string expected, CancellationToken cancellationToken) {
-        if (
-            string.IsNullOrWhiteSpace(value: reference) ||
-            reference.StartsWith(value: '-')
-        ) { throw new InvalidDataException(message: "qualification requires an image reference"); }
-        var image = await m_containers.InspectAsync(
-            cancellationToken: cancellationToken,
-            reference: reference
-        ).ConfigureAwait(continueOnCapturedContext: false);
-
-        if (
-            (image.Id != expected) &&
-            !image.RepoDigests.Any(predicate: value => value.EndsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: ("@" + expected)
-        ))
-        ) {
-            throw new InvalidDataException(message: "qualification image does not match the release's immutable digest");
-        }
-        return image.Id;
     }
     private async Task<WorldReleaseQualificationResult> RunPairAsync(WorldReleaseManifest? source, WorldReleaseManifest target, CancellationToken cancellationToken) {
         if (steps is < 1 or > 1024) { throw new ArgumentOutOfRangeException(paramName: nameof(steps)); }
@@ -462,11 +438,6 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
             path2: Guid.NewGuid().ToString(format: "N")
         );
 
-        if (
-            run.Contains(value: ',') ||
-            run.Contains(value: '\n') ||
-            run.Contains(value: '\r')
-        ) { throw new InvalidDataException(message: "qualification output path cannot contain Docker mount separators"); }
         Directory.CreateDirectory(path: run);
         var seed = Path.Combine(
             path1: run,
@@ -508,25 +479,21 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
             ).ConfigureAwait(continueOnCapturedContext: false);
         }
         var forwardSeedHash = HashTree(directory: forwardSeed);
-        var aImage = await ResolveImageAsync(
-            ((source is null)
-            ? targetImage
-            : sourceImage),
-            (source ?? target).EngineImageDigest,
-            cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false);
-        var bImage = await ResolveImageAsync(
-            targetImage,
-            target.EngineImageDigest,
-            cancellationToken
-        ).ConfigureAwait(continueOnCapturedContext: false);
+        var aEngine = m_engines.Resolve(
+            expected: (source ?? target).Engine,
+            installRoot: ((source is null) ? targetEngine : sourceEngine)
+        );
+        var bEngine = m_engines.Resolve(
+            expected: target.Engine,
+            installRoot: targetEngine
+        );
 
         // Compare two imports of the same state, not a capture with a fresh import: restoration deliberately
         // parks sessions and resolves host bookkeeping. Then make both packages import state actually written by B.
         // The two legs of each pair import the same seed into their own copies and containers, so they run side by side.
         var forward = await Task.WhenAll(
-            LegAsync(forwardSeed, "source-import", aImage, definition, run, cancellationToken, bootstrap: (source is null)),
-            LegAsync(forwardSeed, "target-import", bImage, definition, run, cancellationToken, bootstrap: (source is null))
+            LegAsync(forwardSeed, "source-import", aEngine, definition, run, cancellationToken, bootstrap: (source is null)),
+            LegAsync(forwardSeed, "target-import", bEngine, definition, run, cancellationToken, bootstrap: (source is null))
         ).ConfigureAwait(continueOnCapturedContext: false);
         var (a, b) = (forward[0], forward[1]);
 
@@ -561,8 +528,8 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
         }
         var reverseSeedHash = HashTree(directory: reverseSeed);
         var backward = await Task.WhenAll(
-            LegAsync(reverseSeed, "source-reverse-import", aImage, definition, run, cancellationToken),
-            LegAsync(reverseSeed, "target-reverse-reference", bImage, definition, run, cancellationToken)
+            LegAsync(reverseSeed, "source-reverse-import", aEngine, definition, run, cancellationToken),
+            LegAsync(reverseSeed, "target-reverse-reference", bEngine, definition, run, cancellationToken)
         ).ConfigureAwait(continueOnCapturedContext: false);
         var (reverse, reference) = (backward[0], backward[1]);
 
@@ -579,8 +546,8 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
             Schema = Marker,
             SourceRelease = source?.Identity,
             TargetRelease = target.Identity,
-            SourceImage = aImage,
-            TargetImage = bImage,
+            SourceEngine = (source ?? target).Engine,
+            TargetEngine = target.Engine,
             SeedHash = seedHash,
             ForwardSeedHash = forwardSeedHash,
             ReverseSeedHash = reverseSeedHash,

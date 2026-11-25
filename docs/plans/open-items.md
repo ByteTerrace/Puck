@@ -4042,12 +4042,12 @@ retirement.
   (`WorldSiloHost.PublishManagedReleaseAdmissionAsync`), so a failed deploy
   names the step and not the cause. Carry the refusal's reason to the
   release's report.
-- [medium] The silo image installs `Puck.Mcp` twice, as a host assembly and as
-  an extension, which can split one type across two load contexts as
-  `System.Memory.Data` did. Install it once. The MCP front's `--entrypoint`
-  string is written apart from the shared `McpArguments` (`AzureWorld`), and
-  CI's container smoke does not boot the Azure blob store on the host
-  network, which is what production runs.
+- [medium] The host release installs `Puck.Mcp` twice, as an assembly the CLI
+  carries and as an extension (`--extension src/Puck.Mcp` in the Azure
+  workflow's `host-release` job), which can split one type across two load
+  contexts as `System.Memory.Data` did. Install it once. CI's host smoke
+  (`puck azure test-world-host`) does not boot the Azure blob store, which is
+  what production runs.
 - [low] A row that goes idle keeps its retention failure count, since only a
   later retention pass resets it (`WorldSiloHost`'s `RetentionFailures`), so
   private health can report a failure that has ended.
@@ -4057,7 +4057,7 @@ retirement.
 - [low] Whether Caddy's MCP TLS front logs the load balancer's TCP probe of
   8443 as handshake noise is unverified.
 - [low] Workers sharing one MCP hostname keep their own copy of Caddy's TLS
-  state, which `build/Keep-WorldTls.py` reconciles through the owner's store
+  state, which the TLS state keeper (`WorldHostTlsKeeper`) reconciles through the owner's store
   every ten minutes, so workers whose Caddy reaches the same ARI renewal time
   before either has stored its renewal each renew (ARI renewals are exempt from
   Let's Encrypt's rate limits; startup issuance is already one per hostname).
@@ -4086,10 +4086,10 @@ retirement.
   checkpoint decode, in storage and definition admission (`WorldSiloHost`'s
   per-step timers; `WorldAuthorityBlobStore`). Profile that phase and compare
   cold and warm activations in one process on a quiet machine before choosing
-  a publish or cache change. The silo image is plain IL (its `Dockerfile`
-  publishes `Puck.World.Silo` without ReadyToRun, and only `Puck.World`'s
-  project turns it on), so its first activation JIT-compiles every method it
-  runs.
+  a publish or cache change. The host release is plain IL (`puck world host
+  build` publishes the CLI, which hosts the silo, without ReadyToRun, and only
+  `Puck.World`'s project turns it on), so its first activation JIT-compiles
+  every method it runs.
 - [low] A silo started on Windows registers no precision waiter
   (`WorldSiloApplication` adds only the Linux one), so its tick pacer falls
   back to `HostWaits.Until`'s one-millisecond sleep loop, which lasts about a
@@ -4114,7 +4114,7 @@ retirement.
   could restore only its own assemblies' outputs
   ([CI and releases](../development/ci.md#build-and-validate)).
 - Finish the shared shader cache ([freshness](../reference/shaders.md#freshness)):
-  no GitHub run has yet shown the restored Windows build, the silo image build
+  no GitHub run has yet shown the restored Windows build, the host release build
   and a repeated `shader-bytecode` job compiling nothing; a local cache evicts
   only on `puck shaders cache prune`; toolchain identity covers standard
   release locations, not every native-loader override.
@@ -4926,12 +4926,6 @@ their lane order; this packet keeps the single duplicates and leads.
   record goes (an `IClientSink` or a wire frame). One stream type writing
   to a record target would hold each rule once; the withdrawal chokepoint's
   step 4 (the mirror per span) is the natural place to make it.
-- Four copies of the world worker's managed-identity token fetch and storage
-  read in Python: `build/Boot-WorldSilo.py` (`fetch`), `build/Guard-WorldRelease.py`
-  (`guard`), `build/Keep-WorldTls.py` (`token`, `call`) and the registry login
-  `build/Start-WorldSilo.sh` writes inline. Each is a standalone input the
-  release pins, so sharing one needs the launcher to install a guest module the
-  others import (the launcher already runs first and verifies its inputs).
 - Managed arrays grow by hand at about fifty files' worth of `Array.Resize`
   sites, though one helper now holds the rule (`ArrayCapacity`). Convert the
   sites in a second pass, keeping the caps that are deliberate and the

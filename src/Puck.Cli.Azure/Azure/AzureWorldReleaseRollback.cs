@@ -43,10 +43,8 @@ public static partial class AzureCommand {
                     out _,
                     out var reason
                 )) { throw new InvalidDataException(message: reason); }
-                await RetainWorldReleaseImagesAsync(
-                    [active.Image, previous.Image],
-                    token
-                ).ConfigureAwait(continueOnCapturedContext: false);
+                var activeEngine = await InstallWorldReleaseEngineAsync(deployment: active, token: token).ConfigureAwait(continueOnCapturedContext: false);
+                var previousEngine = await InstallWorldReleaseEngineAsync(deployment: previous, token: token).ConfigureAwait(continueOnCapturedContext: false);
                 var operation = (operationId ?? Guid.NewGuid());
 
                 Console.WriteLine(value: $"Rollback operation: {operation:D}");
@@ -60,8 +58,8 @@ public static partial class AzureCommand {
                 var runner = new WorldReleaseQualificationRunner(
                     fixture,
                     Path.GetFullPath(path: "artifacts/world-release-qualification"),
-                    active.Image,
-                    previous.Image,
+                    activeEngine,
+                    previousEngine,
                     archive: context.Archive,
                     clock: context.Clock,
                     documentDirectory: LocalWorldsDirectory
