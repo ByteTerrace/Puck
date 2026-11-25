@@ -38,7 +38,12 @@ public sealed partial class WorldInputOwner {
     private readonly bool m_usesFacing;
 
     private readonly WorldInputHold[] m_holds = new WorldInputHold[ChannelLimits.MaxChannels];
-    private readonly WorldInputHold[] m_holdScratch = new WorldInputHold[ChannelLimits.MaxChannels];
+    // The holds a call stages before it commits them to m_holds: per-call scratch, so one per thread serves every owner.
+    // A switch or restore clears it before writing; an admission reads back only the addresses it wrote this call
+    // (its holdsWritten mask), so nothing a call leaves behind is read by the next.
+    [ThreadStatic]
+    private static WorldInputHold[]? HoldScratchStorage;
+    private static WorldInputHold[] HoldScratch => (HoldScratchStorage ??= new WorldInputHold[ChannelLimits.MaxChannels]);
     private readonly Int128[] m_sum = new Int128[ChannelLimits.MaxChannels];
     private readonly long[] m_maximum = new long[ChannelLimits.MaxChannels];
 
@@ -396,7 +401,7 @@ public sealed partial class WorldInputOwner {
                     var press = (input.Kind == WorldInputEventKind.Press);
                     if ((shape != ChannelShape.Binary) || (input.RawValue != (press ? FixedQ4816.One.Value : 0)) ||
                         ((eventImage[address] != FixedQ4816.Zero) == press)) { reason = "input.transition: impossible press/release sequence"; return false; }
-                    holdPress = (press ? id : (((holdsWritten & (UInt128.One << address)) != 0) ? m_holdScratch[address] : m_holds[address]).Press);
+                    holdPress = (press ? id : (((holdsWritten & (UInt128.One << address)) != 0) ? HoldScratch[address] : m_holds[address]).Press);
                     eventImage = eventImage.WithChannel(ordinal: address, value: (press ? FixedQ4816.One : FixedQ4816.Zero));
                     break;
                 case WorldInputEventKind.AxisSample:
@@ -436,10 +441,10 @@ public sealed partial class WorldInputOwner {
                 }
             }
             if (input.Kind == WorldInputEventKind.Press) {
-                m_holdScratch[address] = new(input.Channel, id, record, false);
+                HoldScratch[address] = new(input.Channel, id, record, false);
                 holdsWritten |= (UInt128.One << address);
             } else if (input.Kind == WorldInputEventKind.Release) {
-                m_holdScratch[address] = default;
+                HoldScratch[address] = default;
                 holdsWritten |= (UInt128.One << address);
             }
             sequence = input.Sequence;
@@ -470,7 +475,7 @@ public sealed partial class WorldInputOwner {
             for (var written = holdsWritten; (written != 0); written &= (written - 1)) {
                 var address = (int)UInt128.TrailingZeroCount(value: written);
 
-                m_holds[address] = m_holdScratch[address];
+                m_holds[address] = HoldScratch[address];
             }
             m_crossingScratch.CopyTo(array: m_crossingHeld, index: 0);
             ReserveHistory(count: (m_count + eventCount));
@@ -597,7 +602,7 @@ public sealed partial class WorldInputOwner {
         }
         var image = default(PlayerIntent);
 
-        Array.Clear(array: m_holdScratch);
+        Array.Clear(array: HoldScratch);
         Array.Clear(array: m_sum);
         Array.Clear(array: m_maximum);
         m_reboundActivations.Clear();
@@ -631,7 +636,7 @@ public sealed partial class WorldInputOwner {
             var hold = m_holds[previous.Address(logicalId: channel)];
 
             if ((source.RawValue != 0) && (hold.Press != 0)) {
-                m_holdScratch[address] = hold with { Consumed = (hold.Consumed || consumedActivations.Contains(value: hold.Origin.Event.Activation)) };
+                HoldScratch[address] = hold with { Consumed = (hold.Consumed || consumedActivations.Contains(value: hold.Origin.Event.Activation)) };
             }
         }
         foreach (var channel in next.Live) {
@@ -643,12 +648,12 @@ public sealed partial class WorldInputOwner {
                 (long)Int128.Clamp(m_sum[address], ((shape == ChannelShape.Bipolar) ? -FixedQ4816.One.Value : 0), FixedQ4816.One.Value));
 
             image = image.WithChannel(ordinal: address, value: next.Channels.Quantize(ordinal: address, value: FixedQ4816.FromRawBits(value: raw)));
-            if (image[address] == FixedQ4816.Zero) { m_holdScratch[address] = default; }
+            if (image[address] == FixedQ4816.Zero) { HoldScratch[address] = default; }
         }
         var cancellations = 0;
 
         foreach (var hold in m_holds) {
-            if ((hold.Press != 0) && ((next.Address(logicalId: hold.Channel) < 0) || (m_holdScratch[next.Address(logicalId: hold.Channel)].Press != hold.Press))) { cancellations++; }
+            if ((hold.Press != 0) && ((next.Address(logicalId: hold.Channel) < 0) || (HoldScratch[next.Address(logicalId: hold.Channel)].Press != hold.Press))) { cancellations++; }
         }
         if ((m_count + cancellations) > m_historyCapacity) {
             // A terminal boundary cannot be refused. Overflow resets all continuation and uses the reserved cancellation slots.
@@ -656,7 +661,7 @@ public sealed partial class WorldInputOwner {
             Array.Clear(array: m_history);
             m_head = 0;
             m_count = 0;
-            Array.Clear(array: m_holdScratch);
+            Array.Clear(array: HoldScratch);
             image = default;
             reset = true;
             for (var index = 0; (index < m_sources.Length); index++) {
@@ -669,7 +674,7 @@ public sealed partial class WorldInputOwner {
 
         ReserveHistory(count: (m_count + cancellations));
         foreach (var hold in m_holds) {
-            if ((hold.Press == 0) || ((next.Address(logicalId: hold.Channel) >= 0) && (m_holdScratch[next.Address(logicalId: hold.Channel)].Press == hold.Press))) { continue; }
+            if ((hold.Press == 0) || ((next.Address(logicalId: hold.Channel) >= 0) && (HoldScratch[next.Address(logicalId: hold.Channel)].Press == hold.Press))) { continue; }
             var cause = (consumedActivations.Contains(value: hold.Origin.Event.Activation) ? hold.Origin.Event.Activation : 0);
             var input = new WorldInputEvent(hold.Channel, WorldInputEventKind.Cancel, 0, interval.Tick, default, 0, cause);
 
@@ -690,7 +695,7 @@ public sealed partial class WorldInputOwner {
 
             decisions.Add(item: new(channel, Image[address].Value, raw, reason, hold.Press, ((hold.Press == 0) ? default : hold.Origin.Time(policy: WorldInputJudgement.Capture))));
         }
-        m_holdScratch.CopyTo(array: m_holds, index: 0);
+        HoldScratch.CopyTo(array: m_holds, index: 0);
         Mapping = next;
         Image = image;
         m_steadyImageVerified = false;

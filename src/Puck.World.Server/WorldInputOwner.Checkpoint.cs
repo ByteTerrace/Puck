@@ -49,14 +49,14 @@ public sealed partial class WorldInputOwner {
             if (checkpoint.Sources[index].Source != m_sources[index].Source) { throw new ArgumentException(message: "input checkpoint source registry differs", paramName: nameof(checkpoint)); }
         }
         Restores++;
-        Array.Clear(array: m_holdScratch);
+        Array.Clear(array: HoldScratch);
         foreach (var hold in checkpoint.Holds) {
             if ((hold.Channel >= m_catalog.Channels.Length) || (mapping.Address(logicalId: hold.Channel) < 0) || (hold.Press == 0) ||
                 (hold.Origin.Id != hold.Press) || (hold.Origin.Event.Kind != WorldInputEventKind.Press) ||
-                (hold.Origin.Event.Channel != hold.Channel) || (m_holdScratch[mapping.Address(logicalId: hold.Channel)].Press != 0)) {
+                (hold.Origin.Event.Channel != hold.Channel) || (HoldScratch[mapping.Address(logicalId: hold.Channel)].Press != 0)) {
                 throw new ArgumentException(message: "input checkpoint has an invalid or duplicate hold origin", paramName: nameof(checkpoint));
             }
-            m_holdScratch[mapping.Address(logicalId: hold.Channel)] = hold;
+            HoldScratch[mapping.Address(logicalId: hold.Channel)] = hold;
         }
         var previousId = 0UL;
 
@@ -99,7 +99,7 @@ public sealed partial class WorldInputOwner {
         m_stepEvents = checkpoint.StepEvents;
         checkpoint.Sources.CopyTo(array: m_sources, index: 0);
         checkpoint.Crossings.CopyTo(array: m_crossingHeld, index: 0);
-        m_holdScratch.CopyTo(array: m_holds, index: 0);
+        HoldScratch.CopyTo(array: m_holds, index: 0);
         Array.Clear(array: m_history);
         m_head = 0;
         m_count = 0;
