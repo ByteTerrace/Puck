@@ -199,6 +199,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         m_decals = new WorldScreenDecals(
             catalog: TextCatalog,
             colors: new WorldBakedColors(mirror: mirror.FollowState()),
+            screens: ((mirror.Definition is { } definition) ? WorldPlacementPolicy.ScreenSpan(definition: definition) : 0),
             textAt: TextAt
         );
     }

@@ -1092,7 +1092,8 @@ public static partial class RuleCompiler {
             rowOrdinal: observe.RowOrdinal
         )) + stamp))));
     }
-    // The flood reads the board once. It visits each cell at most once, then sorts and writes only the cleared cells.
+    // The flood reads the board once and visits each cell at most once over two cell bitsets, then writes the cleared
+    // cells in the order their set's bits iterate, so no sort is paid.
     private static long ClearEnclosedWork(RuleCompileContext context, ArenaTransform.ClearEnclosed enclosed) {
         var topology = ((context.FindRowAt(rowOrdinal: enclosed.RowOrdinal)?.EffectiveDomain is StateDomain.CellsOf board)
             ? context.FindTopology(name: board.Topology)
@@ -1100,8 +1101,8 @@ public static partial class RuleCompiler {
         );
         var cells = ((long)(topology?.CellCount ?? 0));
         var directions = ((long)(topology?.DirectionCount ?? 0));
-        var sort = 2L * System.Numerics.BitOperations.Log2((uint)cells + 1U);
-        return directions + (cells * (7L + (3L * directions) + sort + TransformWork.BoardWrite));
+        var words = (3L * Puck.Maths.BitWords.WordsFor(members: (int)cells));
+        return directions + words + (cells * (7L + (3L * directions) + TransformWork.BoardWrite));
     }
     private static long ArrangeWork(RuleCompileContext context, ArenaTransform.Arrange arrange) {
         var tokens = Math.Min(

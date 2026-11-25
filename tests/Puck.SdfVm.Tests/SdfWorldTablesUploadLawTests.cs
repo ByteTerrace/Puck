@@ -394,6 +394,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
     [Fact]
     public void TheScreenMappingTableHoldsEachScreensDrawFormAndAnUnchangedMappingOwesNothing() {
         const int Screen = 3;
+        // The first screen settled claims the lowest slot.
+        const uint Slot = 0;
         // A screen's nine mapping rows, then its ripple's rows, all zero for a screen that does not ripple.
         const int Rows = (9 + SdfScreenRipple.Rows);
         const float Border = 0.03f;
@@ -407,7 +409,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             Warp: new SourceWarp(Inverse: SourceWarpInverse.Affine.Inset(border: Border), Pass: "glass")
         );
         var inset = ((SourceWarpInverse.Affine)mapping.Warp!.Inverse!);
-        var table = new float[((SdfWorldTables.MaxScreenSurfaces * Rows) * 4)];
+        // Every slot's rows, then the identity-to-slot map, one word an identity for the map's first 256 identities: the
+        // screen's word holds its slot plus one.
+        var table = new float[(((SdfWorldTables.MaxScreenSurfaces * Rows) * 4) + 256)];
+
+        table[(((SdfWorldTables.MaxScreenSurfaces * Rows) * 4) + Screen)] = BitConverter.UInt32BitsToSingle(value: (Slot + 1));
         // The warp's rows carry the face distance one warped unit spans, the inner width; the image rows the identity,
         // mapped and not letterboxing; then the whole crop, the crop inset by half a pixel, and the state row: unbound,
         // through the nearest sampler, a display's face.
@@ -427,9 +433,11 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         byte[] Table() => rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(float))));
 
         rig.Warm();
+        rig.Engine.SettleScreenSlots(wanted: [Screen]);
+        Assert.Equal(expected: (int)Slot, actual: rig.Engine.SlotOfScreen(screen: Screen));
         rig.Engine.SetScreenMapping(face: SdfScreenFace.Display, mapping: mapping, screenIndex: Screen);
         rig.Render(time: 0f);
-        rows.CopyTo(array: table, index: ((Screen * Rows) * 4));
+        rows.CopyTo(array: table, index: (((int)Slot * Rows) * 4));
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: table.AsSpan()).ToArray(),
             actual: Table()
@@ -443,7 +451,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         rig.Engine.SetScreenMapping(face: SdfScreenFace.Display, mapping: linear, screenIndex: Screen);
         rig.Render(time: 0f);
-        table[((((Screen * Rows) + 6) * 4) + 1)] = ((float)GpuSamplerFilter.Linear);
+        table[(((((int)Slot * Rows) + 6) * 4) + 1)] = ((float)GpuSamplerFilter.Linear);
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: table.AsSpan()).ToArray(),
             actual: Table()
@@ -451,7 +459,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         rig.Engine.SetScreenMapping(face: SdfScreenFace.Display, mapping: linear, screenIndex: Screen);
         rig.Render(time: 0f);
-        table[((((Screen * Rows) + 6) * 4) + 3)] = ((float)SdfScreenFace.Display);
+        table[(((((int)Slot * Rows) + 6) * 4) + 3)] = ((float)SdfScreenFace.Display);
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: table.AsSpan()).ToArray(),
             actual: Table()
@@ -463,7 +471,8 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         var unmapped = new float[table.Length];
 
-        unmapped[((((Screen * Rows) + 6) * 4) + 3)] = ((float)SdfScreenFace.Display);
+        unmapped[(((((int)Slot * Rows) + 6) * 4) + 3)] = ((float)SdfScreenFace.Display);
+        unmapped[(((SdfWorldTables.MaxScreenSurfaces * Rows) * 4) + Screen)] = table[(((SdfWorldTables.MaxScreenSurfaces * Rows) * 4) + Screen)];
         Assert.Equal(
             expected: MemoryMarshal.AsBytes(span: unmapped.AsSpan()).ToArray(),
             actual: Table()
@@ -478,9 +487,12 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         using var rig = new Rig(slots: 4);
 
         float W(int slot) => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(part: "dynamic-transforms", sizeBytes: (4 * DynamicTransformBytes)))[((slot * 12) + 3)];
-        float Rate() => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)((SdfWorldTables.MaxScreenSurfaces * Rows) * 16))))[((((Screen * Rows) + 9) * 4) + 2)];
+        // The mapping region holds every slot's rows and the map's first 256 identities; the first screen settled holds
+        // slot zero.
+        float Rate() => MemoryMarshal.Cast<byte, float>(span: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(((SdfWorldTables.MaxScreenSurfaces * Rows) * 16) + (256 * sizeof(uint))))))[(((0 * Rows) + 9) * 4) + 2];
 
         rig.Warm();
+        rig.Engine.SettleScreenSlots(wanted: [Screen]);
         rig.Engine.DebugMode = DebugViewModes.Rates;
         rig.Engine.SetScreenRate(code: SdfUpdateRateCode.Half, screenIndex: Screen);
         rig.Engine.SetScreenRipple(ripple: new SdfScreenRipple(Clock: 1f, Contact0: default, Contact1: default, Contact2: default, Contact3: default), screenIndex: Screen);
@@ -495,6 +507,32 @@ public sealed partial class SdfWorldTablesUploadLawTests {
         Assert.Equal(expected: 0f, actual: Rate());
         rig.Render(time: 0f);
         Assert.Equal(expected: 0L, actual: rig.Gpu.HostBytes());
+    }
+    // Screens past the slots hold none and are never refused: of 200 wanted, the first 128 hold distinct slots and the
+    // rest none. A later settle keeps each screen still wanted in the slot it held, gives the others' slots back and hands
+    // a freed slot to a newly wanted screen, so a slot never names two screens.
+    [Fact]
+    public void ScreensPastTheSlotsHoldNoneAndAKeptScreenKeepsItsSlot() {
+        using var rig = new Rig(slots: 1);
+        var wanted = Enumerable.Range(start: 1000, count: 200).ToArray();
+
+        rig.Warm();
+        rig.Engine.SettleScreenSlots(wanted: wanted);
+        Assert.Equal(expected: (wanted.Length - SdfWorldTables.MaxScreenSurfaces), actual: rig.Engine.DegradedScreens);
+        Assert.Equal(expected: SdfWorldTables.MaxScreenSurfaces, actual: Puck.Maths.BitWords.Count(mask: rig.Engine.ResidentScreens));
+        Assert.Equal(expected: SdfWorldTables.MaxScreenSurfaces, actual: wanted.Select(selector: screen => rig.Engine.SlotOfScreen(screen: screen)).Where(predicate: static slot => (slot >= 0)).Distinct().Count());
+        Assert.All(collection: wanted[SdfWorldTables.MaxScreenSurfaces..], action: screen => Assert.Equal(expected: -1, actual: rig.Engine.SlotOfScreen(screen: screen)));
+
+        var kept = wanted[10..20];
+        var held = kept.Select(selector: screen => rig.Engine.SlotOfScreen(screen: screen)).ToArray();
+
+        rig.Engine.SettleScreenSlots(wanted: [.. kept, 5, 6]);
+        Assert.Equal(expected: held, actual: kept.Select(selector: screen => rig.Engine.SlotOfScreen(screen: screen)).ToArray());
+        Assert.Equal(expected: -1, actual: rig.Engine.SlotOfScreen(screen: wanted[0]));
+        Assert.Equal(expected: 0, actual: rig.Engine.SlotOfScreen(screen: 5));
+        Assert.Equal(expected: 1, actual: rig.Engine.SlotOfScreen(screen: 6));
+        Assert.Equal(expected: 5, actual: rig.Engine.ScreenOfSlot(slot: 0));
+        Assert.Equal(expected: 0, actual: rig.Engine.DegradedScreens);
     }
     // A screen's glyph decal reaches the device's decal table: its descriptor (columns, rows, the first cell, the distance
     // range's bits) in the screen's descriptor row and its cells in the screen's run of the cell region. The same decal
@@ -513,12 +551,16 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             cells[index] = (0x01000000u + ((uint)index));
         }
 
-        var table = new uint[((SdfWorldTables.MaxScreenSurfaces + (SdfWorldTables.MaxScreenSurfaces * SdfWorldTables.MaxScreenDecalCells)) * 4)];
-        var cellBase = (SdfWorldTables.MaxScreenSurfaces + (Screen * SdfWorldTables.MaxScreenDecalCells));
+        // The descriptor band (a row a screen, then a row a surface text), then the screens' cell pool, whose first run the
+        // only grid claims.
+        var cellBase = (SdfWorldTables.MaxScreenSurfaces + SdfSurfaceTextLayout.MaxTexts);
+        var table = new uint[(((cellBase + (SdfWorldTables.MaxScreenDecalScreens * SdfWorldTables.MaxScreenDecalCells)) +
+            ((SdfSurfaceTextLayout.MaxTexts * SdfSurfaceTextLayout.MaxGlyphs) * SdfSurfaceTextLayout.EntriesPerGlyph)) * 4)];
 
         uint[] Table() => MemoryMarshal.Cast<byte, uint>(span: rig.Gpu.DeviceLocal(sizeBytes: ((ulong)(table.Length * sizeof(uint))))).ToArray();
 
         rig.Warm();
+        rig.Engine.SettleScreenSlots(wanted: [Screen]);
         rig.Engine.SetScreenDecal(
             cellWords: cells,
             columns: Columns,
@@ -527,7 +569,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
             screenIndex: Screen
         );
         rig.Render(time: 0f);
-        ((uint[])[Columns, Rows, ((uint)cellBase), BitConverter.SingleToUInt32Bits(value: DistanceRange)]).CopyTo(array: table, index: (Screen * 4));
+        ((uint[])[Columns, Rows, ((uint)cellBase), BitConverter.SingleToUInt32Bits(value: DistanceRange)]).CopyTo(array: table, index: (rig.Engine.SlotOfScreen(screen: Screen) * 4));
         cells.CopyTo(array: table, index: (cellBase * 4));
         Assert.Equal(expected: table, actual: Table());
 
@@ -543,7 +585,7 @@ public sealed partial class SdfWorldTablesUploadLawTests {
 
         rig.Engine.ClearScreenDecal(screenIndex: Screen);
         rig.Render(time: 0f);
-        Array.Clear(array: table, index: (Screen * 4), length: 4);
+        Array.Clear(array: table, index: (rig.Engine.SlotOfScreen(screen: Screen) * 4), length: 4);
         Assert.Equal(expected: table, actual: Table());
 
         rig.Engine.ClearScreenDecal(screenIndex: Screen);

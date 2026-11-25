@@ -5,6 +5,7 @@ using Puck.Abstractions.Presentation;
 using Puck.Abstractions.Waiting;
 using Puck.Hosting;
 using Puck.Hosting.Jobs;
+using Puck.Maths;
 using Puck.Shaders;
 using Puck.SignedDistance;
 
@@ -28,9 +29,10 @@ public readonly record struct SdfScreenSurfaceTransform(Vector3 Origin, Vector3 
 /// device from <see cref="FrameContext.Host"/> and builds its tables once its pipeline set, leased from the composition's
 /// cache and built off the frame thread, is ready.
 /// <para>
-/// Diegetic screens ride a separate, shading-only seam: a program may declare up to
-/// <see cref="SdfWorldTables.MaxScreenSurfaces"/> static screen surfaces (see <see cref="SdfProgramBuilder"/>'s
-/// screen-surface <c>ScreenSlab</c> overload), and each frame the residency binds (or unbinds) each one as its
+/// Diegetic screens ride a separate, shading-only seam: a program declares any number of screen surfaces (see
+/// <see cref="SdfProgramBuilder"/>'s screen-surface <c>ScreenSlab</c> overload), each frame the residency holds a slot
+/// (<see cref="SdfWorldTables.SettleScreenSlots"/>, <see cref="SdfWorldTables.MaxScreenSurfaces"/> at once, the nearest
+/// first) for each that shows a source or a glyph grid, and it binds (or unbinds) each one as its
 /// <see cref="ISdfScreenSources"/> says: the image the render graph hands a view's passes for the instance the screen
 /// reads, the mapping its face is drawn from and the light it casts. A screen riding a dynamic transform supplies a
 /// <c>ScreenSurfaceTransforms</c> provider on its frame source, polled every frame, so its sampling frame tracks the
@@ -52,13 +54,21 @@ public sealed partial class SdfWorldResidency : IDisposable {
     private readonly Func<FrameContext, bool>? m_film;
     private readonly ISdfScreenSources? m_screenSources;
     private readonly Dictionary<int, Func<SdfScreenSurfaceTransform?>> m_screenSurfaceTransforms;
+    // The screens wanted resident this frame (BindScreens), the set that keeps each once, the nearness order past the
+    // slots, and each glyph-grid provider's answer this frame; all reused, so a steady frame allocates nothing.
+    private readonly List<int> m_wantedScreens = [];
+    private readonly HashSet<int> m_wantedSeen = [];
+    private (float Distance, int Screen)[] m_wantedOrder = [];
+    private readonly List<(int Screen, SdfScreenDecalFrame? Decal)> m_screenDecalFrames = [];
 
     // Completed while the residency is ready, which a view's passes await before they install (SdfWorldPasses.BuildAsync). A
     // reset replaces only a completed source, so every wait begun before the next build sees it complete; its
     // continuations run on the thread pool, never on the frame thread that completes it.
     private TaskCompletionSource m_ready = new(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
     // The image-view handle each screen index was bound to by the latest recorded frame.
-    private readonly nint[] m_boundScreenSources = new nint[SdfWorldTables.MaxScreenSurfaces];
+    // The image each screen identity was last bound to, grown on the pack thread (BindScreens) to every identity it
+    // wanted, before any recording of the frame writes it.
+    private nint[] m_boundScreenSources = new nint[SdfWorldTables.MaxScreenSurfaces];
     // Owned here rather than by the tables, so submission identities keep increasing across a device-loss rebuild.
     private readonly GpuWorkLedger m_work = new(
         framesInFlight: SdfWorldTables.FrameRingSize,
@@ -275,13 +285,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Gets the screens the residency binds, or <see langword="null"/> for none.</summary>
     public ISdfScreenSources? ScreenSources => m_screenSources;
 
-    // Marks the screen indices this residency declares, which alone may bind a source, clearing every other.
-    internal void DeclareScreens(Span<bool> declared) {
-        declared.Clear();
-        if (m_screenSources is { } sources) {
-            foreach (var screen in sources.Screens) { declared[screen] = true; }
-        }
-    }
+
 
     /// <summary>Gets the last uploaded program's packed word count, or 0 before the first upload — the live half of the
     /// <c>world.budget</c> cost sheet against <see cref="ProgramWordCapacity"/>.</summary>
@@ -395,11 +399,14 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// readback. The packed format follows <see cref="SdfProgram"/> and is not a durable asset format.</remarks>
     public uint[] CopyLiveProgramWords() => (m_tables?.CopyLiveProgramWords() ?? []);
     /// <summary>Returns the image-view handle a screen was bound to by the latest recorded frame.</summary>
-    /// <param name="screen">The program-declared screen index, below <see cref="SdfWorldTables.MaxScreenSurfaces"/>.</param>
-    /// <returns>The handle, or zero for a screen bound to nothing, before the first frame and after a device loss.</returns>
-    /// <exception cref="IndexOutOfRangeException"><paramref name="screen"/> is negative or not below
-    /// <see cref="SdfWorldTables.MaxScreenSurfaces"/>.</exception>
-    public nint BoundScreenSource(int screen) => m_boundScreenSources[screen];
+    /// <param name="screen">The program-declared screen index.</param>
+    /// <returns>The handle, or zero for a screen bound to nothing (one holding no slot included), before the first frame
+    /// and after a device loss.</returns>
+    public nint BoundScreenSource(int screen) {
+        var bound = m_boundScreenSources;
+
+        return ((((uint)screen) < ((uint)bound.Length)) ? bound[screen] : 0);
+    }
     /// <summary>Takes another hold on the residency, which <see cref="Release"/> gives back.</summary>
     /// <exception cref="ObjectDisposedException">Every hold has been released.</exception>
     public void Retain() {
@@ -727,8 +734,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     }
 
     // Binds one screen slot's glyph-cell grid, or clears the slot when its provider shows no dense text this frame.
-    private static void BindScreenDecal(SdfWorldTables tables, int screenIndex, Func<SdfScreenDecalFrame?> provider) {
-        if (provider() is { } decal) {
+    private static void BindScreenDecal(SdfWorldTables tables, int screenIndex, SdfScreenDecalFrame? frame) {
+        if (frame is { } decal) {
             tables.SetScreenDecal(
                 screenIndex: screenIndex,
                 columns: decal.Columns,
@@ -783,17 +790,11 @@ public sealed partial class SdfWorldResidency : IDisposable {
             }
         }
 
-        // Screen DECALS (the material-level text tier): a screen slot showing dense reading text this frame binds its
-        // glyph-cell grid; a null result clears the slot back to the image or unbound-glass path.
-        // A dictionary is walked through its own enumerator, which the interface's would box every frame.
-        if (m_frameSource.ScreenDecals is Dictionary<int, Func<SdfScreenDecalFrame?>> decals) {
-            foreach (var (screenIndex, provider) in decals) {
-                BindScreenDecal(provider: provider, screenIndex: screenIndex, tables: tables);
-            }
-        } else if (m_frameSource.ScreenDecals is { } screenDecals) {
-            foreach (var (screenIndex, provider) in screenDecals) {
-                BindScreenDecal(provider: provider, screenIndex: screenIndex, tables: tables);
-            }
+        // Screen DECALS (the material-level text tier): a resident screen showing dense reading text this frame binds its
+        // glyph-cell grid, asked of its provider once in BindScreens; a null result clears the slot back to the image or
+        // unbound-glass path.
+        foreach (var (screenIndex, decal) in m_screenDecalFrames) {
+            BindScreenDecal(frame: decal, screenIndex: screenIndex, tables: tables);
         }
 
         // Surface texts (text paints): every slot is asked each frame, so a slot whose text went away clears.
@@ -1086,7 +1087,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             ? sampled
             : 0);
 
-        m_boundScreenSources[screen] = handle;
+        if (((uint)screen) < ((uint)m_boundScreenSources.Length)) { m_boundScreenSources[screen] = handle; }
 
         return handle;
     }
@@ -1094,8 +1095,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// and the filler at every other screen: a host's image on every call, since its handle is unique only among live
     /// objects, and the filler only where the set does not already hold it.</summary>
     /// <param name="view">The view's index in the residency's frame.</param>
-    /// <param name="shown">The screens whose images the pass samples, one flag per screen index; a screen past its end
-    /// samples the filler.</param>
+    /// <param name="shown">The slots whose screens' images the pass samples, a bit a slot (<see cref="SdfWorldTables.ResidentScreens"/>).</param>
+    /// <param name="tables">The tables whose slots <paramref name="shown"/> names.</param>
     /// <param name="recording">The recording whose reads and lease list the images come from.</param>
     /// <param name="bindings">The writer of the set's descriptors.</param>
     /// <param name="binding">The screen array's binding in <paramref name="set"/>.</param>
@@ -1104,27 +1105,34 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <param name="bound">The image view the set holds at each screen, which this updates, or empty for a set whose
     /// holdings are not tracked, which is written at every screen.</param>
     /// <returns>The screens bound an image, one bit per screen index.</returns>
-    internal uint BindScreenImages(int view, ReadOnlySpan<bool> shown, in RenderGraphPackageRecording recording, IGpuBindings bindings,
+    internal UInt128 BindScreenImages(int view, UInt128 shown, SdfWorldTables tables, in RenderGraphPackageRecording recording, IGpuBindings bindings,
         uint binding, nint set, nint filler, Span<nint> bound) {
         Span<nint> images = stackalloc nint[SdfWorldTables.MaxScreenSurfaces];
 
-        TakeScreenImages(images: images, recording: in recording, shown: shown, view: view);
-        return WriteScreenImages(images: images, binding: binding, bindings: bindings, bound: bound, filler: filler, set: set);
+        var imaged = TakeScreenImages(images: images, recording: in recording, shown: shown, tables: tables, view: view);
+
+        WriteScreenImages(images: images, binding: binding, bindings: bindings, bound: bound, filler: filler, set: set);
+        return imaged;
     }
     /// <summary>Takes the image (<see cref="ScreenImage"/>) of each screen a filter marks, holding its lease in the
     /// recording's lease list, and zero at every other screen: the half of <see cref="BindScreenImages"/> that changes the
     /// recording's leases and the residency, which a pass's decision takes in pass order.</summary>
     /// <param name="view">The view's index in the residency's frame.</param>
-    /// <param name="shown">The screens whose images the pass samples, one flag per screen index.</param>
+    /// <param name="shown">The slots whose screens' images the pass samples, a bit a slot.</param>
+    /// <param name="tables">The tables whose slots <paramref name="shown"/> names (<see cref="SdfWorldTables.ScreenOfSlot"/>).</param>
     /// <param name="recording">The recording whose reads and lease list the images come from.</param>
-    /// <param name="images">The image view each screen index samples, or zero; <see cref="SdfWorldTables.MaxScreenSurfaces"/>
+    /// <param name="images">The image view each slot samples, or zero; <see cref="SdfWorldTables.MaxScreenSurfaces"/>
     /// long.</param>
-    internal void TakeScreenImages(int view, ReadOnlySpan<bool> shown, in RenderGraphPackageRecording recording, Span<nint> images) {
-        for (var screen = 0; (screen < SdfWorldTables.MaxScreenSurfaces); screen++) {
-            images[screen] = (((screen < shown.Length) && shown[screen])
-                ? ScreenImage(latch: recording.Latch, leases: recording.Leases, reads: recording.Reads, screen: screen, view: view)
-                : 0);
+    /// <returns>The slots bound an image, a bit a slot.</returns>
+    internal UInt128 TakeScreenImages(int view, UInt128 shown, SdfWorldTables tables, in RenderGraphPackageRecording recording, Span<nint> images) {
+        var imaged = UInt128.Zero;
+
+        images.Clear();
+        foreach (var slot in BitWords.Members(mask: shown)) {
+            images[slot] = ScreenImage(latch: recording.Latch, leases: recording.Leases, reads: recording.Reads, screen: tables.ScreenOfSlot(slot: slot), view: view);
+            if (images[slot] != 0) { imaged |= BitWords.Bit(index: slot); }
         }
+        return imaged;
     }
     /// <summary>Writes into a pass set's screen array the images <see cref="TakeScreenImages"/> took, and the filler at
     /// every screen it took none for: a host's image on every call, since its handle is unique only among live objects, and
@@ -1137,24 +1145,17 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <param name="filler">The image view a screen that shows nothing samples.</param>
     /// <param name="bound">The image view the set holds at each screen, which this updates, or empty for a set whose
     /// holdings are not tracked, which is written at every screen.</param>
-    /// <returns>The screens bound an image, one bit per screen index.</returns>
-    internal static uint WriteScreenImages(ReadOnlySpan<nint> images, IGpuBindings bindings, uint binding, nint set, nint filler, Span<nint> bound) {
-        var imaged = 0u;
-
+    internal static void WriteScreenImages(ReadOnlySpan<nint> images, IGpuBindings bindings, uint binding, nint set, nint filler, Span<nint> bound) {
         for (var screen = 0; (screen < SdfWorldTables.MaxScreenSurfaces); screen++) {
             var image = images[screen];
 
-            if (image != 0) {
-                imaged |= (1u << screen);
-            } else if (!bound.IsEmpty && (bound[screen] == filler)) {
-                continue;
-            } else {
+            if (image == 0) {
+                if (!bound.IsEmpty && (bound[screen] == filler)) { continue; }
                 image = filler;
             }
             bindings.WriteSampledImage(arrayElement: ((uint)screen), binding: binding, descriptorSetHandle: set, imageViewHandle: image);
             if (!bound.IsEmpty) { bound[screen] = image; }
         }
-        return imaged;
     }
     /// <summary>Returns the instance a screen shows in one view (<see cref="ISdfScreenSources.ReadOf"/>), whose image
     /// the screen samples.</summary>
@@ -1522,38 +1523,52 @@ public sealed partial class SdfWorldResidency : IDisposable {
             SkyDetails: m_skyDetails,
             WorkLedger: m_work
         );
-    // Binds every screen's mapping, emission policy and bound flag: a screen shows a source while it names an instance some view of
-    // the frame reads, whose image each view's pass binds from the images its render graph hands it (ScreenImage).
+    // Settles which screens hold a slot this frame, then binds each resident screen's mapping, emission policy and bound
+    // flag. A screen is resident while it shows a source (it names an instance some view of the frame reads, whose image
+    // each view's pass binds from the images its render graph hands it, ScreenImage) or a glyph grid this frame; past the
+    // slots, the nearest to the frame's first camera hold them (SdfWorldTables.SettleScreenSlots), and the rest shade as
+    // screens with no source until a nearer one leaves. A screen that is neither shows nothing and holds no slot.
     private void BindScreens(SdfWorldTables tables, SdfFrame frame) {
-        if (m_screenSources is not { } sources) {
+        m_wantedScreens.Clear();
+        m_wantedSeen.Clear();
+        m_screenDecalFrames.Clear();
+        if (m_screenSources is { } sources) {
+            foreach (var screen in sources.Screens) {
+                if (ShowsSource(sources: sources, screen: screen, frame: frame) && m_wantedSeen.Add(item: screen)) { m_wantedScreens.Add(item: screen); }
+            }
+        }
+        // A provider is asked once a frame; a dictionary is walked through its own enumerator, which the interface's would
+        // box every frame.
+        if (m_frameSource.ScreenDecals is Dictionary<int, Func<SdfScreenDecalFrame?>> decals) {
+            foreach (var (screen, provider) in decals) { NoteDecal(screen: screen, decal: provider()); }
+        } else if (m_frameSource.ScreenDecals is { } screenDecals) {
+            foreach (var (screen, provider) in screenDecals) { NoteDecal(screen: screen, decal: provider()); }
+        }
+        if (m_wantedScreens.Count > SdfWorldTables.MaxScreenSurfaces) { OrderByNearness(frame: frame); }
+        foreach (var screen in m_wantedScreens) {
+            if (screen >= m_boundScreenSources.Length) {
+                Array.Resize(array: ref m_boundScreenSources, newSize: (int)Math.Min(val1: SdfProgramBuilder.MaxScreenIdentities, val2: (2L * (screen + 1))));
+            }
+        }
+        tables.SettleScreenSlots(wanted: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_wantedScreens));
+        if (m_screenSources is not { } bound) {
             return;
         }
-
-        var screens = sources.Screens;
-
-        for (var position = 0; (position < screens.Count); position++) {
-            var screen = screens[position];
-            var bound = false;
-
-            for (var view = 0; (!bound && (view < frame.Views.Count)); view++) {
-                bound = (sources.ReadOf(
-                    screen: screen,
-                    view: view
-                ) is not null);
-            }
+        foreach (var slot in BitWords.Members(mask: tables.ResidentScreens)) {
+            var screen = tables.ScreenOfSlot(slot: slot);
 
             tables.SetScreenBound(
-                bound: bound,
+                bound: ShowsSource(sources: bound, screen: screen, frame: frame),
                 screenIndex: screen
             );
             tables.SetScreenMapping(
-                face: sources.FaceOf(screen: screen),
-                mapping: sources.MappingOf(screen: screen),
+                face: bound.FaceOf(screen: screen),
+                mapping: bound.MappingOf(screen: screen),
                 screenIndex: screen,
-                treatment: sources.TreatmentOf(screen: screen)
+                treatment: bound.TreatmentOf(screen: screen)
             );
             tables.SetScreenLuminance(
-                luminance: sources.LuminanceOf(screen: screen),
+                luminance: bound.LuminanceOf(screen: screen),
                 screenIndex: screen
             );
             tables.SetScreenRate(
@@ -1561,7 +1576,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 screenIndex: screen
             );
             tables.SetScreenRipple(
-                ripple: (sources.TryRippleOf(
+                ripple: (bound.TryRippleOf(
                     ripple: out var ripple,
                     screen: screen
                 )
@@ -1570,6 +1585,39 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 ),
                 screenIndex: screen
             );
+        }
+    }
+    // Whether a screen shows a source this frame: some view of the frame reads the instance it names.
+    private static bool ShowsSource(ISdfScreenSources sources, int screen, SdfFrame frame) {
+        for (var view = 0; (view < frame.Views.Count); view++) {
+            if (sources.ReadOf(screen: screen, view: view) is not null) { return true; }
+        }
+        return false;
+    }
+    // Holds a screen's glyph grid for this frame, which makes the screen resident while it has one.
+    private void NoteDecal(int screen, SdfScreenDecalFrame? decal) {
+        m_screenDecalFrames.Add(item: (screen, decal));
+        if ((decal is not null) && m_wantedSeen.Add(item: screen)) { m_wantedScreens.Add(item: screen); }
+    }
+    // Orders the wanted screens nearest first from the frame's first camera, the identity breaking ties, so the slots go
+    // to the screens a viewer is most likely to see. A screen whose frame neither a surface transform nor the program
+    // declares orders last.
+    private void OrderByNearness(SdfFrame frame) {
+        var eye = ((frame.Views.Count > 0) ? frame.Views[0].Camera.Position : Vector3.Zero);
+        var count = m_wantedScreens.Count;
+
+        if (m_wantedOrder.Length < count) { Array.Resize(array: ref m_wantedOrder, newSize: count); }
+        for (var index = 0; (index < count); index++) {
+            var screen = m_wantedScreens[index];
+            var origin = ((m_screenSurfaceTransforms.TryGetValue(key: screen, value: out var provider) && (provider() is { } transform))
+                ? transform.Origin
+                : (frame.Program.Appearance.TryGetScreenSurface(screenIndex: screen, surface: out var surface) ? surface.Origin : new Vector3(value: float.PositiveInfinity)));
+
+            m_wantedOrder[index] = (Vector3.DistanceSquared(value1: eye, value2: origin), screen);
+        }
+        m_wantedOrder.AsSpan(start: 0, length: count).Sort();
+        for (var index = 0; (index < count); index++) {
+            m_wantedScreens[index] = m_wantedOrder[index].Screen;
         }
     }
     // A world load may replace (or remove) its immutable atlas without rebuilding the residency. Polling the reference is

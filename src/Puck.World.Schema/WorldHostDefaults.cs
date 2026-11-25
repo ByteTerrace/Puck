@@ -44,8 +44,8 @@ public sealed record WorldStorageDefaults([property: DocumentText("a principal i
 /// </description></item>
 /// </list>
 /// </summary>
-/// <param name="AuthoringHeadroomScreens">Boot-consumed. The extra screen slots the probe reserves, bounded by the
-/// engine's <see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/> ceiling.</param>
+/// <param name="AuthoringHeadroomScreens">Boot-consumed. The extra screen indices the probe reserves, bounded only by the
+/// screen index's format (<see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenIdentities"/>).</param>
 /// <param name="AuthoringHeadroomInstances">Boot-consumed. The instances the probe reserves beyond the boot scene, so
 /// live editing grows into buffers already sized for it; clamped to what the engine's instance ceiling leaves above the
 /// boot scene. It is no quota: buffers grow past it, and only the engine ceiling refuses a candidate.</param>

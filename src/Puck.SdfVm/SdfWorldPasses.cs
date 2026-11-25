@@ -2,6 +2,7 @@ using System.Numerics;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
 using Puck.Hosting.Jobs;
+using Puck.Maths;
 using Puck.Shaders;
 
 namespace Puck.SdfVm;
@@ -797,14 +798,15 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
 
         lock (m_imageWindowsGate) { m_imageWindows[instance] = window; }
     }
-    // Writes, for each screen a view of a residency samples, the window its source's latest scheduled render spans
-    // (NoteImageWindow), the unit rectangle for a screen that shows no view's image.
-    internal void ScreenWindowsOf(SdfWorldResidency residency, int view, Span<Vector4> windows) {
+    // Writes, for each slot a view of a residency samples, the window its screen's source's latest scheduled render spans
+    // (NoteImageWindow), the unit rectangle for a slot whose screen shows no view's image or a free slot.
+    internal void ScreenWindowsOf(SdfWorldResidency residency, SdfWorldTables tables, int view, Span<Vector4> windows) {
+        windows.Fill(value: new Vector4(x: 0f, y: 0f, z: 1f, w: 1f));
         lock (m_imageWindowsGate) {
-            for (var screen = 0; (screen < windows.Length); screen++) {
-                var window = (((residency.ScreenProducerOf(screen: screen, view: view) is { } producer) && m_imageWindows.TryGetValue(key: producer, value: out var noted)) ? noted : default);
+            foreach (var slot in BitWords.Members(mask: tables.ResidentScreens)) {
+                var window = (((residency.ScreenProducerOf(screen: tables.ScreenOfSlot(slot: slot), view: view) is { } producer) && m_imageWindows.TryGetValue(key: producer, value: out var noted)) ? noted : default);
 
-                windows[screen] = ((window.Z > window.X) && (window.W > window.Y)) ? window : new Vector4(x: 0f, y: 0f, z: 1f, w: 1f);
+                if ((window.Z > window.X) && (window.W > window.Y)) { windows[slot] = window; }
             }
         }
     }

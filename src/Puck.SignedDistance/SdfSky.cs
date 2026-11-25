@@ -288,14 +288,6 @@ public sealed class SdfSky {
             _ => -1,
         };
     }
-    /// <summary>Marks every screen a layer of the stack samples (<see cref="ScreenAt"/>), clearing the rest.</summary>
-    /// <param name="screens">The flags, one per screen index; a layer's screen outside them is not marked.</param>
-    public void MarkScreens(Span<bool> screens) {
-        screens.Clear();
-        for (var index = 0; (index < m_layerCount); index++) {
-            if ((ScreenAt(index: index) is var screen) && (((uint)screen) < ((uint)screens.Length))) { screens[screen] = true; }
-        }
-    }
     /// <summary>Returns a layer's kind parameters, by reference.</summary>
     /// <typeparam name="T">The layer's kind parameters.</typeparam>
     /// <param name="index">The layer's index.</param>

@@ -296,7 +296,7 @@ static const float3 SdfSunDirection = float3(0.51343602, 0.79349202, 0.32673201)
 // Material sentinel range: a SCREEN_SLAB shades as a "screen" rather than a table albedo. The plain sentinel
 // (SdfProgramBuilder.ScreenSlab with no screen index) shades as unbound glass. SDF_SCREEN_MATERIAL + 1 +
 // screenIndex (SdfProgramBuilder's screen-surface overload) additionally identifies WHICH declared screen surface —
-// and so which screen source slot (0..31) — the hit belongs to, decoded as (material - SDF_SCREEN_MATERIAL - 1).
+// and so which screen source slot (below SDF_MAX_SCREEN_SURFACES) — the hit belongs to, decoded as (material - SDF_SCREEN_MATERIAL - 1).
 // Every material id in this range is screen shading; test with >= SDF_SCREEN_MATERIAL, never ==.
 #define SDF_ISA_ERROR_MATERIAL (-1) // sdfMaterialLoad decodes this as emissive diagnostic magenta.
 

@@ -2,7 +2,6 @@ using Puck.Abstractions.Cameras;
 using Puck.Commands;
 using Puck.Hosting;
 using Puck.SdfVm;
-using Puck.SignedDistance;
 using Puck.World.Client;
 
 namespace Puck.World;
@@ -151,11 +150,21 @@ public sealed partial class WorldScreenBinder {
     // The world a feed's destination's glass stands in, read as its view dresses.
     private static Func<WorldDefinition?> DestinationOf(SessionFeed feed) => () => feed.Mirror.Definition;
 
-    // Every screen index a program may declare, which a residency of another world binds.
-    private static readonly int[] AllScreens = [.. Enumerable.Range(
-        count: SdfProgramBuilder.MaxScreenSurfaces,
-        start: 0
-    )];
+    // The screen indices another world's definition declares, authored and derived alike, which a residency of it binds:
+    // every index below the derived-face band's end. One list a span, shared by every definition of that span.
+    private static int[][] ScreenSpans = [];
+    private static readonly Lock ScreenSpansGate = new();
+
+    private static IReadOnlyList<int> ScreensOf(WorldDefinition? definition) {
+        if (definition is null) { return []; }
+
+        var span = WorldPlacementPolicy.ScreenSpan(definition: definition);
+
+        lock (ScreenSpansGate) {
+            if (ScreenSpans.Length <= span) { Array.Resize(array: ref ScreenSpans, newSize: (span + 1)); }
+            return (ScreenSpans[span] ??= [.. Enumerable.Range(count: span, start: 0)]);
+        }
+    }
 
     // The camera a feed renders its destination with this frame: a window's fit, or its ordinary projection while the fit
     // has no answer and for a camera projection.
@@ -256,7 +265,7 @@ public sealed partial class WorldScreenBinder {
     // cameras' alike: its destination's screens as the feed shows them.
     private sealed class FeedScreenSources(SessionFeed feed) : ISdfScreenSources {
         /// <inheritdoc/>
-        public IReadOnlyList<int> Screens => AllScreens;
+        public IReadOnlyList<int> Screens => ScreensOf(definition: feed.Mirror.Definition);
 
         /// <inheritdoc/>
         public bool Emits(int screen) => WorldScreenBinder.Emits(
@@ -285,7 +294,7 @@ public sealed partial class WorldScreenBinder {
     // own level, every level's being the same world.
     private sealed class RoutedScreenSources(WorldScreenBinder binder, WorldRoutedScene scene) : ISdfScreenSources {
         /// <inheritdoc/>
-        public IReadOnlyList<int> Screens => AllScreens;
+        public IReadOnlyList<int> Screens => ScreensOf(definition: scene.Definition);
 
         /// <inheritdoc/>
         public bool Emits(int screen) => WorldScreenBinder.Emits(

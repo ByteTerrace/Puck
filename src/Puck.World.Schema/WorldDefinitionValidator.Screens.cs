@@ -37,9 +37,9 @@ public static partial class WorldDefinitionValidator {
 
             if (
                 (screen.Index < 0) ||
-                (screen.Index >= SdfProgramBuilder.MaxScreenSurfaces)
+                (screen.Index >= SdfProgramBuilder.MaxScreenIdentities)
             ) {
-                errors.Add(item: $"{path}.index {screen.Index} is outside 0..{(SdfProgramBuilder.MaxScreenSurfaces - 1)}.");
+                errors.Add(item: $"{path}.index {screen.Index} is outside 0..{(SdfProgramBuilder.MaxScreenIdentities - 1)}.");
             }
 
             if (

@@ -91,5 +91,15 @@ internal static partial class LawRegistry {
             claim: Subjects.BitKernelRefusals,
             id: "integer.bit-kernel-refusals"
         ),
+        SweptCase(
+            claim: Subjects.BitWordsMembersBitOracle,
+            domain: BitMorton,
+            id: "bit-words.members-bit-oracle",
+            width: 2
+        ),
+        ClaimCase(
+            claim: Subjects.BitWordsSetAndRefusals,
+            id: "bit-words.set-and-refusals"
+        ),
     ];
 }

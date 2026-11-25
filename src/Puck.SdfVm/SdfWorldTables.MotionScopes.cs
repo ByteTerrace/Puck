@@ -591,10 +591,9 @@ public sealed partial class SdfWorldTables {
     // Judges a publication of the screens' emission: each scope that shades is lit by each screen the publication changed
     // (one bit a screen) whose light reaches what the scope's cull keeps. A publication lands after the frame's staging, and
     // every scope it lights moves, however often the staging met it.
-    internal void NoteEmission(uint screens) {
-        if ((screens == 0u) || (m_motionScopes.Count == 0)) { return; }
-        for (var bits = screens; (bits != 0u); bits &= (bits - 1u)) {
-            var screen = BitOperations.TrailingZeroCount(value: bits);
+    internal void NoteEmission(UInt128 screens) {
+        if ((screens == UInt128.Zero) || (m_motionScopes.Count == 0)) { return; }
+        foreach (var screen in BitWords.Members(mask: (screens & m_screenResident))) {
             var box = EmissionBoxOf(screen: screen);
 
             foreach (var scope in m_motionScopes) {

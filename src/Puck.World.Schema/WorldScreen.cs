@@ -470,8 +470,9 @@ public sealed record WorldScreenCarry(
 /// samples a bound source (or shades as dark glass when unbound). The frame (<see cref="Origin"/>/<see cref="Right"/>/
 /// <see cref="Up"/> + <see cref="HalfWidth"/>/<see cref="HalfHeight"/>) is the sampled surface frame and must match the
 /// slab's placement; the frame source bakes the geometry translate from it.</summary>
-/// <param name="Index">The engine screen-surface index (0..<see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenSurfaces"/>−1)
-/// this slab declares — the key the source/light providers bind under.</param>
+/// <param name="Index">The screen's identity (0..<see cref="Puck.SignedDistance.SdfProgramBuilder.MaxScreenIdentities"/>−1),
+/// unique in the world, which this slab declares — the key the source/light providers bind under. A world declares any
+/// number of screens; a presentation holds a slot only for those resident at once.</param>
 /// <param name="Origin">The front face's world-space center (the sampled surface origin); the geometry center sits one
 /// <see cref="HalfDepth"/> behind it along the face normal.</param>
 /// <param name="Right">The unit world axis the sampled U increases along (the slab's local +X in world space). Must be

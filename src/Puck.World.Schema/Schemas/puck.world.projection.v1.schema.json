@@ -977,7 +977,7 @@
         ],
         "properties": {
           "index": {
-            "description": "The engine screen-surface index (0..MaxScreenSurfaces\u22121) this slab declares \u2014 the key the source/light providers bind under.",
+            "description": "The screen\u0027s identity (0..MaxScreenIdentities\u22121), unique in the world, which this slab declares \u2014 the key the source/light providers bind under. A world declares any number of screens; a presentation holds a slot only for those resident at once.",
             "type": "integer"
           },
           "origin": {

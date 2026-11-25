@@ -25,7 +25,6 @@ public sealed partial class WorldScreenBinder {
     public nint CurrentHandle(int index) => ((
         m_slots.ContainsKey(key: index) &&
         (index >= 0) &&
-        (index < SdfWorldTables.MaxScreenSurfaces) &&
         (ViewHost is { } residency)
     )
         ? residency.BoundScreenSource(screen: index)

@@ -1977,7 +1977,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
     // before the runtime schedules or uploads the frame.
     private byte[]? m_frameScreenRateCodes;
     private byte[] ScreenRateCodes() {
-        var codes = new byte[SdfProgramBuilder.MaxScreenSurfaces];
+        var codes = new byte[WorldPlacementPolicy.ScreenSpan(definition: m_client.Definition)];
         m_frameScreenRateCodes = codes;
 
         return codes;
@@ -2708,6 +2708,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         m_decals = new WorldScreenDecals(
             catalog: () => m_text.Catalog,
             colors: new WorldBakedColors(mirror: client.StateMirror),
+            screens: WorldPlacementPolicy.ScreenSpan(definition: client.Definition),
             textAt: binder.TextSourceAt
         );
         m_surfaceTexts = new WorldSurfaceTexts(catalog: () => m_text.Catalog, mirror: client.StateMirror);
