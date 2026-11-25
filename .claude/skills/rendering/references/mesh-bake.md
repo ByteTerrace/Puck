@@ -1626,19 +1626,34 @@ laws exercise that boundary.
   holds the wait while it owes a group or is between rungs (`Filling`) and a
   view draws it (`SdfMeshPathBake.Driven`: its GPU work asked it for a lattice
   within a second); one no view draws lands nothing, so it holds no wait.
-  `Stored` draws stored rungs alone, the policy of a build that ships its cache
-  (a complete player build's default): a group arriving takes the nearest
-  stored rung of its ladder, coarser first (`StoredRung`, in `Place`), a group
-  asked another tier keeps what it draws until its demand names another
-  (`StartReplacement`, `Group.RetierRefused`), and a stored entry the account
-  had no room to read is never baked instead: a tier's replacement gives its
-  place back (`Decline`), and a group with nothing to draw reads again after a
-  doubling wait (`Reload`). Only a shape the store
-  holds no rung of bakes, and live geometry (`Group.Live`): a group that reads
+  `Stored` starts from stored rungs, the policy of a player's build: a shipped
+  cache is a warm start, never a precondition (the owner's ruling). A group
+  arriving draws the nearest stored rung of its ladder, coarser first
+  (`StoredRung`, in `Place`), before anything bakes; the tier decisions then ask
+  its demanded tier as `Demand` does, a rung the store lacks is counted
+  (`CountRungMissed`, in `StartReplacement`) and bakes under the budget, on the
+  play bar a player's process holds (`MemoryAccount.SetAuthoringOnPlayBar`), so
+  a short account defers the bake and the coarser rung keeps drawing. A stored
+  entry the account had no room to read is never baked instead: a tier's
+  replacement gives its place back (`Decline`), and a group with nothing to
+  draw reads again after a doubling wait (`Reload`). Under `Demand` and
+  `Stored`, a tier decision takes a stored rung that answers the tier asked
+  before it bakes (`DemandRung`), and a first detail whose tier no rung at or
+  finer than it answers takes the stored rung nearest that tier above its
+  floor: the first detail is the arrival's own step, outside the budget, so
+  what it would bake past the store is left to an owed finer tier the budget
+  governs, and a warm boot's arrivals do not overrun the region before its
+  bias has measured anything. A first detail of a floor the store brought
+  (`Group.Stored`) that no stored rung answers starts nothing
+  (`StartReplacement`): the run that stored the floor held that tier back or
+  never asked it, so it waits as an owed finer tier, under the hold and the
+  budget. Live geometry (`Group.Live`): a group that reads
   an operand's pose, or one planned again because a sampled field it reads
   published another snapshot. The world makes that geometry as it runs, so no
   cache holds it; it bakes under every policy, has no ladder filled and is
-  counted apart. Liveness and a reader's waiting successor belong to its place
+  counted apart, and once it draws a mesh of its own shape its next plans hold
+  no `world.wait bakes` (`SdfMeshPathBake.StillPending`), or a world whose body
+  keeps cutting would never settle. Liveness and a reader's waiting successor belong to its place
   in the list, not to the group holding it: every group that takes a place
   (`SdfMeshPathBake.Replace`, and a later program's plan in `Place`) takes both
   from the group it displaces (`Group.InheritLive`), so a tier of a live group is

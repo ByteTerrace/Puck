@@ -15,6 +15,14 @@
         <RootNamespace>Puck.Cli</RootNamespace>
         <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
         <ServerGarbageCollection>true</ServerGarbageCollection>
+        <!-- A hosting machine has no .NET: a host build (`puck world host build`) publishes the CLI, which carries the
+             silo, with its own runtime. The switch is this project's alone, as Puck.World's is, so referenced libraries
+             keep their portable locked restores. -->
+        <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
+        <SelfContained Condition="'$(PuckSelfContained)' == 'true'">true</SelfContained>
+        <!-- The silo and the worlds CLI are referenced for their assemblies, which this process hosts in-process (`puck
+             world host serve`); their own apphosts are never started from a host release. -->
+        <ValidateExecutableReferencesMatchSelfContained Condition="'$(PuckSelfContained)' == 'true'">false</ValidateExecutableReferencesMatchSelfContained>
     </PropertyGroup>
     <!-- The puck root composes one command tree from the verb assemblies (PuckRootCommand); each assembly references only
          what its own verbs need, so a change reaches the suites of the verbs it can change and no others. -->

@@ -584,7 +584,7 @@ public sealed class WorldReleaseMetadataPublicationLawTests {
                 c: 'a',
                 count: 40
             ),
-                EngineImageDigest = ("sha256:" + new string(
+                Engine = ("sha256/" + new string(
                 c: 'b',
                 count: 64
             )),

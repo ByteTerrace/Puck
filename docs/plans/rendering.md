@@ -80,7 +80,7 @@ answered it has landed and is unread on this machine, and no reading exists
 against a hosted authority. [Open items](open-items.md#hand-off) holds where
 that stands and the release that takes the next reading; the CPU half is
 [the CPU frame](open-items.md#the-cpu-frame)'s, and a player build that bakes
-is [its own packet](open-items.md#the-player-build-never-bakes).
+is [its own packet](open-items.md#the-player-builds-cache-sets).
 
 The steps, each after the one it names:
 

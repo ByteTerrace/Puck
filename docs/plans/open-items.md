@@ -350,7 +350,7 @@ packet; these are the ones owed now, most valuable first.
    checkpoint keys and trace-judge fixes it carries have not run windowed.
 7. **`cache-complete`.** The Vulkan fill and checks, which
    [the release](#the-release)'s step 1 runs anyway
-   ([the command](#the-player-build-never-bakes)).
+   ([the command](#the-player-builds-cache-sets)).
 8. **Carried from earlier windows,** each still owed unless a later change
    removed its subject:
    - `far-shadows`: at the valley rim (`body.pose 0 386 470 0 0 0`) with the
@@ -482,7 +482,7 @@ measured.**
    session screens, and a remote seat's input does not move its body. Until
    both are closed the 2060 would join a debug world whose paintings, press,
    cabinets and chess screens are blank.
-9. [high, M1] [The player build never bakes](#the-player-build-never-bakes):
+9. [high, M1] [The player build's cache sets](#the-player-builds-cache-sets):
    the whole cache and the stored-only draw are built, and a complete set of
    both backends and both targets is produced; its push and the RTX 2060's own
    boots are owed.
@@ -869,7 +869,7 @@ wait behind them.
    `uploaded-on-worker`, beside `host.frames`' capture and pack parts. At
    scale: a hub of a dozen worlds costs the frame the worlds on screen.
 
-### The player build never bakes
+### The player build's cache sets
 
 Owner: delivery with rendering · high, M1 · Next: the cache sets for the next
 release ([the release](#the-release), step 1), then the RTX 2060's boots of
@@ -877,12 +877,14 @@ that release, which are the first reading of this on the consumer.
 [The plan](runtime-and-delivery.md#the-player-build-and-its-channel) owns the
 steps; this packet holds what is unread and what the plan does not own.
 
-A consumer build never bakes (AGENTS.md, the bars). The RTX 2060's local run
+A player can bake what its cache lacks (AGENTS.md, the bars; the owner's ruling corrected an earlier overstatement); a cache set is its warm start. The RTX 2060's local run
 of a prerelease player build baked throughout, because the producer had
 stored one tier of each mesh. The replacement is built: the producer fills
-every tier (`SdfMeshCachePolicy.Ladder`), a player's build draws stored tiers
-alone (`SdfMeshCachePolicy.Stored`), and `puck world player` refuses a folder
-whose check boots did not settle with no tier missed.
+every tier (`SdfMeshCachePolicy.Ladder`), a player's build starts from its
+stored tiers and bakes only what they lack, on its play bar
+(`SdfMeshCachePolicy.Stored`, a warm start by the owner's ruling), and `puck
+world player` refuses a folder whose check boots did not settle with no tier
+missed.
 
 - [high] Both backends' fills and all four target checks
   (`rtx2060@1920x1080`, `rtx4070@2560x1440`) have run complete on the RTX
@@ -2085,7 +2087,7 @@ check; this packet holds the defects beside it.
   "still moving to the detail their demand asks" for the whole wait, where
   the `rtx4070` profile settles at once. A player's build now settles there,
   since it draws stored tiers alone
-  ([the player build never bakes](#the-player-build-never-bakes)). Whether a
+  ([the player build's cache sets](#the-player-builds-cache-sets)). Whether a
   build that may bake still chases a moving tier bias under that profile
   (`SdfMeshTier.Biased`) is unread; an author on a small card would meet it.
   Two holds of that shape are fixed at their cause: a tier asked of a group
@@ -3976,6 +3978,14 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
+- [high] **The D3D12 mesh bake identity differs between machines.** For the same
+  commit, CI computed one directx identity and the lead machine another, while
+  the Vulkan identities agreed (the commit and both values are in this item's
+  commit message). The identity hashes the
+  bake's code and its kernel bytecode, so DXIL from CI's DXC and the local DXC
+  differ (a compiler version, the container hash or signing). An identity must be
+  machine-independent: pin and verify the DXC both use, or hash the shader source
+  and the compiler's identity instead of the emitted container.
 - [high, M1] **A player has no way to get the deployment's sign-in file.** The
   deploy writes `artifacts/world-authentication.json` (the sign-in provider and
   the primary world's transport-key pin, `AzureWorld`), but published it nowhere,
@@ -4032,12 +4042,12 @@ retirement.
   (`WorldSiloHost.PublishManagedReleaseAdmissionAsync`), so a failed deploy
   names the step and not the cause. Carry the refusal's reason to the
   release's report.
-- [medium] The silo image installs `Puck.Mcp` twice, as a host assembly and as
-  an extension, which can split one type across two load contexts as
-  `System.Memory.Data` did. Install it once. The MCP front's `--entrypoint`
-  string is written apart from the shared `McpArguments` (`AzureWorld`), and
-  CI's container smoke does not boot the Azure blob store on the host
-  network, which is what production runs.
+- [medium] The host release installs `Puck.Mcp` twice, as an assembly the CLI
+  carries and as an extension (`--extension src/Puck.Mcp` in the Azure
+  workflow's `host-release` job), which can split one type across two load
+  contexts as `System.Memory.Data` did. Install it once. CI's host smoke
+  (`puck azure test-world-host`) does not boot the Azure blob store, which is
+  what production runs.
 - [low] A row that goes idle keeps its retention failure count, since only a
   later retention pass resets it (`WorldSiloHost`'s `RetentionFailures`), so
   private health can report a failure that has ended.
@@ -4047,7 +4057,7 @@ retirement.
 - [low] Whether Caddy's MCP TLS front logs the load balancer's TCP probe of
   8443 as handshake noise is unverified.
 - [low] Workers sharing one MCP hostname keep their own copy of Caddy's TLS
-  state, which `build/Keep-WorldTls.py` reconciles through the owner's store
+  state, which the TLS state keeper (`WorldHostTlsKeeper`) reconciles through the owner's store
   every ten minutes, so workers whose Caddy reaches the same ARI renewal time
   before either has stored its renewal each renew (ARI renewals are exempt from
   Let's Encrypt's rate limits; startup issuance is already one per hostname).
@@ -4076,10 +4086,10 @@ retirement.
   checkpoint decode, in storage and definition admission (`WorldSiloHost`'s
   per-step timers; `WorldAuthorityBlobStore`). Profile that phase and compare
   cold and warm activations in one process on a quiet machine before choosing
-  a publish or cache change. The silo image is plain IL (its `Dockerfile`
-  publishes `Puck.World.Silo` without ReadyToRun, and only `Puck.World`'s
-  project turns it on), so its first activation JIT-compiles every method it
-  runs.
+  a publish or cache change. The host release is plain IL (`puck world host
+  build` publishes the CLI, which hosts the silo, without ReadyToRun, and only
+  `Puck.World`'s project turns it on), so its first activation JIT-compiles
+  every method it runs.
 - [low] A silo started on Windows registers no precision waiter
   (`WorldSiloApplication` adds only the Linux one), so its tick pacer falls
   back to `HostWaits.Until`'s one-millisecond sleep loop, which lasts about a
@@ -4104,7 +4114,7 @@ retirement.
   could restore only its own assemblies' outputs
   ([CI and releases](../development/ci.md#build-and-validate)).
 - Finish the shared shader cache ([freshness](../reference/shaders.md#freshness)):
-  no GitHub run has yet shown the restored Windows build, the silo image build
+  no GitHub run has yet shown the restored Windows build, the host release build
   and a repeated `shader-bytecode` job compiling nothing; a local cache evicts
   only on `puck shaders cache prune`; toolchain identity covers standard
   release locations, not every native-loader override.
@@ -4916,12 +4926,6 @@ their lane order; this packet keeps the single duplicates and leads.
   record goes (an `IClientSink` or a wire frame). One stream type writing
   to a record target would hold each rule once; the withdrawal chokepoint's
   step 4 (the mirror per span) is the natural place to make it.
-- Four copies of the world worker's managed-identity token fetch and storage
-  read in Python: `build/Boot-WorldSilo.py` (`fetch`), `build/Guard-WorldRelease.py`
-  (`guard`), `build/Keep-WorldTls.py` (`token`, `call`) and the registry login
-  `build/Start-WorldSilo.sh` writes inline. Each is a standalone input the
-  release pins, so sharing one needs the launcher to install a guest module the
-  others import (the launcher already runs first and verifies its inputs).
 - Managed arrays grow by hand at about fifty files' worth of `Array.Resize`
   sites, though one helper now holds the rule (`ArrayCapacity`). Convert the
   sites in a second pass, keeping the caps that are deliberate and the

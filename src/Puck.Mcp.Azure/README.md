@@ -11,8 +11,8 @@ project only connects them to MCP.
 
 ## Installation
 
-Publish the project into a host's extensions directory beside `Puck.Mcp`, as the
-silo image does:
+Publish the project into a host's extensions directory beside `Puck.Mcp`, as
+`puck world host build --extension` does:
 
 ```text
 dotnet publish src/Puck.Mcp.Azure -c Release -o extensions/Puck.Mcp.Azure

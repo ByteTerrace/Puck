@@ -8,47 +8,52 @@ using Puck.World.Server;
 namespace Puck.Cli.Azure;
 
 public static partial class AzureCommand {
-    // The hosted inventory of a directory 'puck world prepare' wrote: its composed documents, in ordinal order. The silo
-    // image keeps the authored worlds directory beside them (.puck sources, schemas, notes), which is never an inventory
+    // The hosted inventory of a directory 'puck world prepare' wrote: its composed documents, in ordinal order. A host
+    // release keeps the authored worlds directory beside them (.puck sources, schemas, notes), which is never an inventory
     // member.
     private static string[] HostedWorldFiles(string directory) => [.. Directory.EnumerateFiles(
         path: directory,
         searchPattern: ("*" + WorldDocumentName.DocumentSuffix)
     ).Order(comparer: StringComparer.Ordinal)];
-    private static void PrepareOfficialWorldRelease(string outputDirectory) =>
+    /// <summary>The file the release preparation records the engine of the release it prepared in, which the production
+    /// verification checks the running worker against.</summary>
+    private const string WorldHostEnginePath = "artifacts/world-host.engine";
+    private static void PrepareOfficialWorldRelease(string outputDirectory) {
+        var outputs = Outputs();
+        var engine = HostRelease(outputs: outputs).Engine;
+
         PrepareOfficialWorldReleasePackage(
-            Outputs(),
+            outputs,
             CliFiles.ReadJson(path: "artifacts/release-source.json")["commit"]!.GetValue<string>(),
-            File.ReadAllText(path: "artifacts/world-silo.digest").Trim(),
+            engine,
             "artifacts/azure/silo-worlds",
             LocalWorldsDirectory,
             outputDirectory
         );
+        File.WriteAllText(contents: (engine + "\n"), path: WorldHostEnginePath);
+    }
 
     /// <summary>Applies deployment-owned endpoint/admission bindings before hashing the official release inventory.
     /// All composed co-hosted worlds become explicit pinned members of the maintenance group.</summary>
     /// <param name="outputs">The deployment's outputs.</param>
     /// <param name="revision">The full source commit the release was built from.</param>
-    /// <param name="image">The immutable registry reference of the world-silo image that runs the release.</param>
+    /// <param name="engine">The payload identity of the host release that runs the release.</param>
     /// <param name="sourceDirectory">The directory <c>puck world prepare</c> wrote the composed documents into.</param>
-    /// <param name="assetDirectory">The local copy of the asset layout the image ships the documents into
+    /// <param name="assetDirectory">The local copy of the asset layout the host release ships the documents into
     /// (<see cref="LocalWorldsDirectory"/>): every document validates beside it, as the deployed silo resolves its
-    /// relative paths beside <see cref="WorldSiloImageLayout.WorldsDirectory"/>. Never packaged; the image digest retains it.</param>
+    /// relative paths beside <see cref="WorldHostLayout.WorldsDirectory"/>. Never packaged; the engine's release retains it.</param>
     /// <param name="outputDirectory">The release package directory written.</param>
-    /// <exception cref="InvalidDataException">The revision or image is not immutable, the inventory lacks the configured
+    /// <exception cref="InvalidDataException">The revision or engine is not a full pin, the inventory lacks the configured
     /// primary world, or a document does not validate beside <paramref name="assetDirectory"/>.</exception>
-    public static void PrepareOfficialWorldReleasePackage(JsonNode outputs, string revision, string image, string sourceDirectory, string assetDirectory, string outputDirectory) {
+    public static void PrepareOfficialWorldReleasePackage(JsonNode outputs, string revision, string engine, string sourceDirectory, string assetDirectory, string outputDirectory) {
         if (
             !Regex.IsMatch(
             input: revision,
             pattern: CommitPattern
         ) ||
-            !Regex.IsMatch(
-            input: image,
-            pattern: "\\A[a-z0-9.-]+/[a-z0-9/_-]+@sha256:[a-f0-9]{64}\\z"
-        )
+            !Puck.Assets.ContentPin.TryParse(pin: out _, text: engine)
         ) {
-            throw new InvalidDataException(message: "official release preparation requires a full source revision and immutable registry image");
+            throw new InvalidDataException(message: "official release preparation requires a full source revision and engine pin");
         }
         _ = CliWorldVocabulary.EnsureInstalled();
         var configuration = Value(
@@ -176,7 +181,7 @@ public static partial class AzureCommand {
                 null,
                 revision[..12],
                 revision,
-                image[(image.LastIndexOf(value: '@') + 1)..],
+                engine,
                 WorldReleaseManifest.CurrentPersistenceContract,
                 WorldReleaseManifest.CurrentPeerProtocolContract
             );

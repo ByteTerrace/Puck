@@ -137,17 +137,26 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         set => Volatile.Write(location: ref m_time, value: (value ?? throw new ArgumentNullException(paramName: nameof(value))));
     }
 
-    // Name the trace scene's CPU hierarchy and the probe caches in the managed heap's row of the process account, read
-    // when the account is measured. Disposed outside m_gate, which their reads take while the account holds its sample
-    // gate.
+    // Name the probe caches' tables (managed) and the blocks their entries name (native when the volume has an
+    // allocator) in their rows of the process account, read when the account is measured. Disposed outside m_gate, which
+    // their reads take while the account holds its sample gate.
     private readonly IDisposable m_cacheOwner;
+    private readonly IDisposable m_blockOwner;
     private readonly Puck.Hosting.Jobs.MemoryAccount.Owner m_volumeOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateOwner(
         name: "sdf.mesh-gi.volume", memoryClass: MemoryClass.Elastic);
+    // The allocator the volume's slot words, the batches' hit and light blocks and the hit words a batch passes through
+    // take their storage from, so none of them lives on the large object heap; null (offline callers) rents them from
+    // RentedArrays.
+    private readonly IAllocator? m_allocator;
 
     /// <summary>Registers the probe cache's sampled storage in the process account.</summary>
-    public SdfMeshIrradiance() {
+    /// <param name="allocator">The native allocator the volume's large storage comes from (the residency's mesh library's),
+    /// or null to rent it from the managed pool.</param>
+    public SdfMeshIrradiance(IAllocator? allocator = null) {
+        m_allocator = allocator;
         m_levels = CreateLevels(blocks: m_blocks);
-        m_cacheOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: Puck.Abstractions.Memory.MemoryBacking.Managed, memoryClass: Puck.Abstractions.Memory.MemoryClass.Cached, name: "sdf.mesh-gi.probe-cache", read: CacheBytes);
+        m_cacheOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: MemoryBacking.Managed, memoryClass: MemoryClass.Cached, name: "sdf.mesh-gi.probe-cache", read: CacheTableBytes);
+        m_blockOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: ((allocator is null) ? MemoryBacking.Managed : MemoryBacking.NativeAllocator), memoryClass: MemoryClass.Cached, name: "sdf.mesh-gi.probe-blocks", read: () => Interlocked.Read(location: ref m_blockBytes));
     }
 
     // Drops the geometry the scene retained for a later build. The GPU client still holds the untrimmed scene it uploaded,
@@ -209,11 +218,27 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             RentedArrays.Return(array: m_snapshotDraws);
             (m_diagnosticDraws, m_diagnosticCount, m_snapshotDraws) = ([], 0, []);
             m_snapshotClaims.Dispose();
-            m_volumeOwner.Change(-(m_volume.LongLength * sizeof(uint)), MemoryBacking.Managed);
-            m_volume = [];
+            // Native storage has no collector to fall back on: every block an entry names and the volume's words go to
+            // the reader epochs, which free them once no reader's hold can reach them.
+            foreach (var level in m_levels) { level.Cache.Clear(); }
+            RetireVolume(next: VolumeWords.None);
             m_volumeOwner.Dispose();
         }
+        ReclaimReleased(attempt: 0);
     }
+    // Frees what the reader epochs still hold after the release. A hold a reader opened before it may still be open; what
+    // that hold could read is freed by a later attempt, on a timer rather than a wait, once it has closed.
+    private void ReclaimReleased(int attempt) {
+        _ = m_blocks.Reclaim(release: static item => item.Reclaim());
+        if (m_blocks.Pending == 0) {
+            m_blockOwner.Dispose();
+            return;
+        }
+        if (attempt < ReleaseAttempts) {
+            _ = Task.Delay(millisecondsDelay: 50).ContinueWith(continuationAction: _ => ReclaimReleased(attempt: (attempt + 1)), scheduler: TaskScheduler.Default);
+        }
+    }
+    private const int ReleaseAttempts = 200;
 
     // Each tier's levels, finest first. The finest is the tier's own; the storey level's 2 m vertical spacing puts a probe
     // plane in every storey 2.4 m or taller, which no isotropic coarse level does, over a 128 m by 48 m by 128 m window;
@@ -420,12 +445,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"probe-cache-probes={count} probe-cache-capacity={capacity} probe-cache-table={table}B probe-cache-blocks={blocks}B probe-cache-bytes={(table + blocks)}B trace-scene-cpu-array-bytes={(m_scene?.HierarchyBytes ?? 0)} {GpuTrace?.DescribeMemory()}");
     }
 
-    // The probe caches' table and block bytes over every level, as DescribeCache prints them.
-    private long CacheBytes() {
-        var (table, blocks, _, _) = CacheFigures();
-
-        return (table + blocks);
-    }
+    // The probe caches' table bytes over every level; the blocks their entries name are read apart (m_blockOwner), since
+    // they lie in another row.
+    private long CacheTableBytes() => CacheFigures().Table;
     // Every level's probe cache: its table bytes, capacity and probes, summed, and the bytes of the hit and light blocks
     // the volume holds (ProbeStorage.Charge): every block not yet returned, named by an entry, a batch in flight or a
     // retired table a reader may still hold.
@@ -481,7 +503,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // and the slot words composed for those.
     private readonly List<(int Level, (int X, int Y, int Z) Cell)> m_landed = [];
     private readonly List<(int Level, (int X, int Y, int Z) Cell)> m_restoreCells = [];
-    private uint[] m_volume = [];
+    // The volume's slot words. A reader outside the gate takes the reference under the gate inside an open hold of
+    // m_blocks, which a replacement retires the old words to (RetireVolume), so they are freed only once it ends.
+    private VolumeWords m_volume = VolumeWords.None;
     private readonly List<int> m_changedSlots = [];
     private readonly Stopwatch m_clock = new();
     // When the latest scene build began, a timestamp of Time; zero before the first.
@@ -998,12 +1022,22 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         Owe();
         m_traceOwed = true;
     }
+    // Under the gate. A refusal keeps the volume standing.
     private bool TryReplaceVolume(int words) {
-        var old = m_volume;
-        try { m_volume = m_volumeOwner.AllocateArray<uint>(words); }
+        VolumeWords next;
+
+        try { next = new VolumeWords(allocator: m_allocator, owner: m_volumeOwner, words: words); }
         catch (HostMemoryRefusedException) { return false; }
-        m_volumeOwner.Change(-(old.LongLength * sizeof(uint)), MemoryBacking.Managed);
+        RetireVolume(next: next);
         return true;
+    }
+    // Under the gate: publishes the next words and retires the replaced ones to the reader epochs, so a reader that took
+    // them under a hold keeps reading them until it ends.
+    private void RetireVolume(VolumeWords next) {
+        var old = m_volume;
+
+        m_volume = next;
+        if (!ReferenceEquals(objA: old, objB: VolumeWords.None)) { m_blocks.Retire(item: old); }
     }
     // Starts the trace worker: the drain of a lighting-converged frame, or the budgeted background work. Apart from
     // Stage, whose every call would otherwise allocate the closure over `drain`.
@@ -1233,7 +1267,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         if (copied) {
             m_tracedLanded = false;
-            write(obj: m_volume.AsMemory(length: (layout.TotalCount * SdfMeshIrradianceProbe.ProbeWords), start: 0));
+            write(obj: m_volume.Memory[..(layout.TotalCount * SdfMeshIrradianceProbe.ProbeWords)]);
             m_changedSlots.Clear();
         }
 
@@ -1590,7 +1624,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             foreach (var level in m_levels) { cached += level.Cache.Count; }
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} measured-from={m_layout.Finest} first-light-owed={(OwesFirstLight ? "yes" : "no")} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={(m_volume.LongLength * sizeof(uint))} table-device-bytes={buffers.DeviceLocal}");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} measured-from={m_layout.Finest} first-light-owed={(OwesFirstLight ? "yes" : "no")} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={m_volume.Bytes} table-device-bytes={buffers.DeviceLocal}");
         }
     }
 
@@ -1870,8 +1904,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private bool WaitingForMemory(long? refusedAt) => refusedAt is { } at && Time.GetElapsedTime(at) < PendingSceneInterval;
 
     // Parallel hierarchy workers can report several refusals together. Other build faults still reach the caller.
-    private static SdfMeshIrradianceScene? TryBuildScene(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous, WorkCounterSet? counters = null) {
-        try { return SdfMeshIrradianceScene.Build(draws, previous, counters, traceError: TraceError); }
+    private SdfMeshIrradianceScene? TryBuildScene(IReadOnlyList<SdfMeshDraw> draws, SdfMeshIrradianceScene? previous, WorkCounterSet? counters = null) {
+        try { return SdfMeshIrradianceScene.Build(draws, previous, counters, traceError: TraceError, allocator: m_allocator); }
         catch (Exception exception) when (HostMemoryRefusedException.Of(exception: exception) is not null) { return null; }
     }
     // A built scene waiting to replace the installed one: its input, its key and the change it makes; Done completes
@@ -2203,7 +2237,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         (m_layout.OffsetOf(level: level) + SlotOf(dims: m_layout.DimsOf(level: level), x: cell.X, y: cell.Y, z: cell.Z));
     // Whether a level's cell's slot holds that cell's probe.
     private bool Holds(int level, (int X, int Y, int Z) cell) =>
-        Holds(m_volume.AsSpan(VolumeSlot(cell: cell, level: level) * SdfMeshIrradianceProbe.ProbeWords), cell);
+        Holds(m_volume.Words[(VolumeSlot(cell: cell, level: level) * SdfMeshIrradianceProbe.ProbeWords)..], cell);
 
     private static bool Holds(ReadOnlySpan<uint> words, (int X, int Y, int Z) cell) =>
         (words[0] & SdfMeshIrradianceProbe.WrittenFlag) != 0 &&
@@ -2217,7 +2251,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         if ((GpuTrace is not null) && !gpuWritten) { _ = m_gpuDirty.Add(index: slot); }
 
         _ = m_levels[level].Changed.Add(index: slot);
-        return m_volume.AsSpan(length: SdfMeshIrradianceProbe.ProbeWords, start: (slot * SdfMeshIrradianceProbe.ProbeWords));
+        return m_volume.Words.Slice(length: SdfMeshIrradianceProbe.ProbeWords, start: (slot * SdfMeshIrradianceProbe.ProbeWords));
     }
     // Composes a level's cached cell's slot words from its own sky shares, relit cubes, surface map and light visibility;
     // false, writing nothing, when the cache holds no probe of it. It reads the cache alone, so it runs outside the gate.
@@ -2550,13 +2584,14 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var stale = false;
         var layout = snapshot.Layout;
         var lighting = snapshot.Lighting;
-        uint[] records;
+        // The hold opens before the words are taken, so a replacement cannot free them while this list reads them.
+        using var hold = m_blocks.Enter();
+        VolumeWords records;
         lock (m_gate) {
             if (!Stands(snapshot)) { throw new OperationCanceledException(); }
             records = m_volume;
         }
         var now = Time.GetTimestamp();
-        using var hold = m_blocks.Enter();
 
         candidates.Clear();
         for (var level = layout.Finest; (level < m_levels.Length); level++) {
@@ -2582,7 +2617,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                             RecordAge(age: age, ages: ages, level: level, changed: !current);
                         }
                         var slot = layout.OffsetOf(level) + SlotOf(x, y, z, dims);
-                        var required = trace || rebase || !Holds(records.AsSpan(slot * SdfMeshIrradianceProbe.ProbeWords), (x, y, z));
+                        var required = trace || rebase || !Holds(records.Words[(slot * SdfMeshIrradianceProbe.ProbeWords)..], (x, y, z));
                         if (!required && !OwesRelight(in probe, change, in snapshot, all, interleave, level, age, bound, ProbePhase(x, y, z), now, ref stale)) { continue; }
                         var visible = InAnyView(center, in snapshot);
                         candidates.Add(item: new Candidate(Cell: (x, y, z), Band: priority.Band, Morton: priority.Morton, Level: level, LitAt: (present ? probe.LitAt : 0L), Trace: trace,
@@ -2718,13 +2753,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         for (var index = 0; (index < count); index++) { traces |= candidates[(first + index)].Trace; }
 
-        // A whole batch's hit block even for a short batch, so every block is large enough for the large object heap. On
-        // the GPU the hit words only pass through the batch (ReleaseHits), so the block borrows an array rented for the
-        // batch alone, which goes back to the pool when the batch ends, as the GPU answers' array does (BatchEnded): a
-        // volume whose lighting has settled holds neither.
+        // A whole batch's hit block even for a short batch. On the GPU the hit words only pass through the batch
+        // (ReleaseHits), so the block borrows a buffer allocated for the batch alone and freed when it ends, as the GPU
+        // answers' array is returned (BatchEnded): a volume whose lighting has settled holds neither.
         var blockProbes = Math.Max(val1: BatchProbes, val2: count);
         var borrowed = (traces && (GpuTrace is not null));
-        var rentedHits = (borrowed ? RentedArrays.Rent<uint>(minimumLength: (blockProbes * SdfMeshProbeDepth.HitWords)) : null);
+        var rentedHits = (borrowed ? ProbeBlock.HitBuffer(allocator: m_allocator, count: blockProbes) : null);
 
         try {
             BatchTraced(blocks: blocks, candidates: candidates, count: count, first: first, lighting: lighting, parallel: parallel, pass: pass, snapshot: in snapshot, hold: hold,
@@ -2732,7 +2766,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         } finally {
             if (rentedHits is not null) {
                 blocks.Hits?.ReleaseHits();
-                RentedArrays.Return(array: rentedHits);
+                rentedHits.Dispose();
             }
             BatchEnded();
         }
@@ -2743,10 +2777,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         m_gpuAnswer = [];
     }
     private void BatchTraced(BatchBlocks blocks, List<Candidate> candidates, int first, int count, Lighting lighting, ParallelOptions parallel, int pass, in Snapshot snapshot,
-        ReaderEpochs<Reclaimable>.Hold hold, ProbeData[] results, bool traces, int blockProbes, uint[]? rentedHits) {
+        ReaderEpochs<Reclaimable>.Hold hold, ProbeData[] results, bool traces, int blockProbes, OwnedBuffer<uint>? rentedHits) {
         var borrowed = (rentedHits is not null);
-        var hits = blocks.Hits = (traces ? new ProbeBlock(count: blockProbes, hits: rentedHits) : null);
-        var lights = blocks.Lights = new LightBlock(count: count, inputs: lighting.Inputs);
+        var hits = blocks.Hits = (traces ? new ProbeBlock(allocator: m_allocator, count: blockProbes, hits: rentedHits) : null);
+        var lights = blocks.Lights = new LightBlock(allocator: m_allocator, count: count, inputs: lighting.Inputs);
 
         hits?.Charge(volume: this);
         lights.Charge(volume: this);
@@ -3538,15 +3572,29 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private abstract class Reclaimable {
         public abstract void Reclaim();
     }
+    // The volume's slot words, zeroed, charged to the volume's owner in the row their storage lies in (OwnedBuffer names
+    // it). Its words are read only while the volume publishes it or under a hold entered before it was retired.
+    private sealed class VolumeWords : Reclaimable {
+        public static readonly VolumeWords None = new(allocator: null, owner: null, words: 0);
+
+        private readonly OwnedBuffer<uint> m_words;
+
+        public VolumeWords(IAllocator? allocator, IAllocationObserver? owner, int words) =>
+            m_words = OwnedBuffer<uint>.OfLength(allocator: allocator, clear: true, length: words, observer: owner);
+
+        public int Length => m_words.Length;
+        public long Bytes => (((long)m_words.Capacity) * sizeof(uint));
+        public Span<uint> Words => m_words.GetSpan();
+        public ReadOnlyMemory<uint> Memory => m_words.Memory;
+
+        public override void Reclaim() => m_words.Dispose();
+    }
     private abstract class ProbeStorage : Reclaimable {
         private int m_references = 1;
 
-        protected ProbeStorage(int length) {
-            m_floats = RentedArrays.Rent<float>(minimumLength: length);
-            m_floats.AsSpan(start: 0, length: length).Clear();
-        }
+        protected ProbeStorage(int length, IAllocator? allocator) => m_floats = OwnedBuffer<float>.OfLength(allocator: allocator, clear: true, length: length);
 
-        protected float[] m_floats;
+        protected readonly OwnedBuffer<float> m_floats;
         // The volume whose block bytes this block is counted in (Charge), until it returns its words.
         private SdfMeshIrradiance? m_volume;
 
@@ -3579,9 +3627,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         public override void Reclaim() {
             Recharge(change: -Bytes);
             m_volume = null;
-            RentedArrays.Return(array: m_floats);
-            m_floats = [];
+            m_floats.Dispose();
         }
+        // A borrow of the block's floats, which ends when the block is reclaimed.
+        protected Span<float> Floats(int start, int length) => m_floats.GetSpan().Slice(start: start, length: length);
+        // The bytes of the block's floats' storage.
+        protected long FloatBytes => (((long)m_floats.Capacity) * sizeof(float));
         public static void Release(in ProbeData probe, ReaderEpochs<Reclaimable> epochs) {
             probe.Hits?.Release(epochs: epochs);
             probe.Shading?.Release(epochs: epochs);
@@ -3599,20 +3650,22 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
     // The geometry words of one trace batch's probes, each probe's at its index: six sky shares, the packed octahedral
     // surface map and curvature, then the hit buffer, held as the floats' bits so a batch is one allocation.
-    // `hits`, when given, is an array of at least count * HitWords words the block borrows until ReleaseHits; its words
-    // are read only after the batch wrote them.
-    private sealed class ProbeBlock(int count, uint[]? hits = null) : ProbeStorage(length: (count * FloatsPerProbe)) {
+    // `hits`, when given, is a buffer of at least count * HitWords words the block borrows until ReleaseHits; its words
+    // are read only after the batch wrote them. Otherwise the block owns its hit words, from the volume's allocator.
+    private sealed class ProbeBlock(int count, IAllocator? allocator, OwnedBuffer<uint>? hits = null) : ProbeStorage(length: (count * FloatsPerProbe), allocator: allocator) {
         public const int FloatsPerProbe = (6 + SdfMeshIrradianceProbe.DepthWords);
 
         private readonly bool m_borrowed = (hits is not null);
-        private uint[]? m_hits = (hits ?? RentedArrays.Rent<uint>(minimumLength: (count * SdfMeshProbeDepth.HitWords)));
+        private OwnedBuffer<uint>? m_hits = (hits ?? HitBuffer(allocator: allocator, count: count));
 
-        public override long Bytes => (((32L + 24L) + (((long)m_floats.Length) * sizeof(float))) + ((m_hits is { } hits) ? (24L + (hits.LongLength * sizeof(uint))) : 0L));
+        public override long Bytes => (FloatBytes + ((m_hits is { } hits) ? (((long)hits.Capacity) * sizeof(uint)) : 0L));
 
+        // Hit words for `count` probes, unwritten.
+        public static OwnedBuffer<uint> HitBuffer(IAllocator? allocator, int count) => OwnedBuffer<uint>.OfLength(allocator: allocator, clear: false, length: (count * SdfMeshProbeDepth.HitWords));
         public void ReleaseHits() {
             var before = Bytes;
 
-            if (!m_borrowed && (m_hits is { } own)) { RentedArrays.Return(array: own); }
+            if (!m_borrowed) { m_hits?.Dispose(); }
             m_hits = null;
             Recharge(change: (Bytes - before));
         }
@@ -3620,23 +3673,23 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             ReleaseHits();
             base.Reclaim();
         }
-        public Span<float> Sky(int index) => m_floats.AsSpan(length: 6, start: (index * FloatsPerProbe));
-        public Span<uint> Depth(int index) => MemoryMarshal.Cast<float, uint>(span: m_floats.AsSpan(length: SdfMeshIrradianceProbe.DepthWords, start: ((index * FloatsPerProbe) + 6)));
-        public Span<uint> Hits(int index) => (m_hits ?? throw new InvalidOperationException(message: "Runtime hit words are resident on the GPU.")).AsSpan(length: SdfMeshProbeDepth.HitWords, start: (index * SdfMeshProbeDepth.HitWords));
+        public Span<float> Sky(int index) => Floats(length: 6, start: (index * FloatsPerProbe));
+        public Span<uint> Depth(int index) => MemoryMarshal.Cast<float, uint>(span: Floats(length: SdfMeshIrradianceProbe.DepthWords, start: ((index * FloatsPerProbe) + 6)));
+        public Span<uint> Hits(int index) => (m_hits ?? throw new InvalidOperationException(message: "Runtime hit words are resident on the GPU.")).GetSpan().Slice(length: SdfMeshProbeDepth.HitWords, start: (index * SdfMeshProbeDepth.HitWords));
     }
     // The light words of one relight batch's probes, each probe's at its index: the radiance cube (18 floats), the part of
     // it the point and spot lights and emission send (18 floats), its traced-light visibility words, then its sky-light
     // cube (18 floats).
-    private sealed class LightBlock(int count, LightInputs inputs) : ProbeStorage(length: (count * FloatsPerProbe)) {
+    private sealed class LightBlock(int count, LightInputs inputs, IAllocator? allocator) : ProbeStorage(length: (count * FloatsPerProbe), allocator: allocator) {
         public LightInputs Inputs { get; } = inputs;
         public const int FloatsPerProbe = (54 + SdfMeshIrradianceProbe.LightWords);
 
-        public override long Bytes => ((24L + 24L) + (((long)m_floats.Length) * sizeof(float)));
+        public override long Bytes => FloatBytes;
 
-        public Span<Vector3> Radiance(int index) => MemoryMarshal.Cast<float, Vector3>(span: m_floats.AsSpan(length: 18, start: (index * FloatsPerProbe)));
-        public Span<Vector3> Local(int index) => MemoryMarshal.Cast<float, Vector3>(span: m_floats.AsSpan(length: 18, start: ((index * FloatsPerProbe) + 18)));
-        public Span<uint> Lights(int index) => MemoryMarshal.Cast<float, uint>(span: m_floats.AsSpan(length: SdfMeshIrradianceProbe.LightWords, start: ((index * FloatsPerProbe) + 36)));
-        public Span<Vector3> SkyLight(int index) => MemoryMarshal.Cast<float, Vector3>(span: m_floats.AsSpan(length: 18, start: (((index * FloatsPerProbe) + 36) + SdfMeshIrradianceProbe.LightWords)));
+        public Span<Vector3> Radiance(int index) => MemoryMarshal.Cast<float, Vector3>(span: Floats(length: 18, start: (index * FloatsPerProbe)));
+        public Span<Vector3> Local(int index) => MemoryMarshal.Cast<float, Vector3>(span: Floats(length: 18, start: ((index * FloatsPerProbe) + 18)));
+        public Span<uint> Lights(int index) => MemoryMarshal.Cast<float, uint>(span: Floats(length: SdfMeshIrradianceProbe.LightWords, start: ((index * FloatsPerProbe) + 36)));
+        public Span<Vector3> SkyLight(int index) => MemoryMarshal.Cast<float, Vector3>(span: Floats(length: 18, start: (((index * FloatsPerProbe) + 36) + SdfMeshIrradianceProbe.LightWords)));
     }
     // Table-owned publication arenas: no objects per key. The volume gate serializes writes. Grow/Retain copy
     // stable snapshots into independent arenas; a reader of an old table retains its complete earlier membership.

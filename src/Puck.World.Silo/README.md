@@ -52,11 +52,12 @@ The document loader validates against that same registry before host constructio
 Other providers are refused until eligible world placement and exclusive ownership are implemented.
 See [deployment](../../docs/development/ci.md) for the production endpoint and release process.
 
-The official Docker image publishes `Puck.World.Azure`, both Gaming Brick forges,
-`Puck.Mcp`, and `Puck.Mcp.Azure` into separate named directories under
-`/app/worlds/extensions`, including each extension's dependencies and dependency
-manifest. Both the default silo entry point and the optional CLI MCP entry point
-discover that directory from their working directory. Merely placing assemblies
+The official host release (`puck world host build`) publishes `Puck.World.Azure`,
+both Gaming Brick forges, `Puck.Mcp`, and `Puck.Mcp.Azure` into separate named
+directories under the installed version's `extensions`, including each extension's
+dependencies and dependency manifest. The CLI that hosts the silo (`puck world host
+serve`, with or without its MCP front) discovers that directory beside its own
+assemblies. Merely placing assemblies
 beside the CLI does not install them into the silo. Registering a provider does
 not enable it: the silo and MCP documents still select their configured behavior.
 Extensions using .NET hosted services retain their lifecycle callbacks and
@@ -67,7 +68,7 @@ endpoint — exits 2 with one `[silo.host: unsupported: <transport> listener
 <endpoint> unavailable: <reason>]` line, the shape World reports for an
 environment that cannot run its boot.
 Discovered providers remain loaded for the process lifetime; changing their code
-requires restarting the worker with the selected release image.
+requires restarting the worker with the selected host release.
 
 The schema selects installed extensions' contributions by `type` and opaque object
 `settings`; `world.extensions.catalog` lists what the silo composed, and world
@@ -96,10 +97,10 @@ A hosted world document arrives from the store as bytes, so it has no file to
 sit beside. The silo document's optional `documentDirectory` names the
 directory its relative paths resolve against instead: a machine's cartridge,
 an asset row's source, a pipeline. It is the directory `puck world prepare`
-wrote the composed documents into, inside the authored layout the image ships
-beside them, so the official image's silo documents name `/app/worlds`, and a
-prepared document's `../cartridges/...` reads the image's
-`/app/cartridges`. The first activation, a recovery from a checkpoint and a
+wrote the composed documents into, inside the authored layout the host release
+ships beside them, so a hosting machine's silo documents name `worlds`, resolved
+against the installed version directory its unit runs in, and a prepared
+document's `../cartridges/...` reads the version's `cartridges`. The first activation, a recovery from a checkpoint and a
 reload of published content all read the same directory. Without
 `documentDirectory`, a relative path in a hosted document is refused by name.
 Checkpoint decoding receives that directory too, before it validates embedded
@@ -203,10 +204,9 @@ restoring those roots again. Capture and restore check the current operation,
 source identity, and declared world inventory. The shared runtime adapter leaves
 pumping to its host composition; it never advances worlds from storage callbacks.
 
-The official Docker image retains the authored asset layout under `/app` and
-runs from `/app/worlds`, so relative cartridge and other content paths resolve
-beside the composed worlds. Its build context excludes local temporary outputs
-and ROM collections. The packaged qualification runner and its fixture format
+The official host release retains the authored asset layout in its `worlds`
+directory, so relative cartridge and other content paths resolve beside the
+composed worlds. It carries only the package's files and the composed documents. The packaged qualification runner and its fixture format
 are described in the [CLI guide](../Puck.Cli/README.md).
 `GET /livez/azure` reports the same liveness as Azure's v2 Application Health
 JSON contract, returning HTTP 200 with `Healthy` or `Unhealthy`. The generic
@@ -411,8 +411,9 @@ The [Azure workflow](../../docs/development/ci.md#azure-production-deployment) d
 world, the debug world (`debug`), as a pinned row on a single regular VMSS worker. QUIC requires
 UDP ingress and Linux `libmsquic`; Container Apps does not expose UDP. The silo
 uses its own managed identity, private blob container, and persistent federation
-key. The container test boots the primary world, verifies its QUIC key and checkpoint, replaces
-the container, and verifies recovery against the same store. The deployment
+key. The host test (`puck azure test-world-host`) boots the primary world from an installed host
+release, verifies its QUIC key and checkpoint, boots it again through the MCP shape, and verifies
+recovery against the same store. The deployment
 contract above owns resource names, grants, and operator setup.
 
 Hosted neighbour definitions must already be composed and use canonical world

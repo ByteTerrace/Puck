@@ -45,7 +45,7 @@ only CLI tooling reads them. Worlds, cartridges, music, addons and art belong
 to a package. Test fixtures live with the tests that read them.
 
 **Existing pipelines take a package; none is added.** `puck compile --tree`,
-`puck world prepare`, `puck official build --worlds` and the silo image each
+`puck world prepare`, `puck official build --worlds` and the host release each
 take the package folder, and the release publish compiles the package beside
 the published engine. `puck world player` composes those same steps into the
 folder a consumer machine runs (the owner's ruling: the RTX 2060 machine runs a
@@ -296,9 +296,9 @@ the resources since; an explicit full reconcile (the workflow's `full-reconcile`
 input) is the repair when something did, rather than a periodic apply that would
 cost every push. Each check of the worker is one Run Command, since a Run Command
 round trip costs about half a minute whatever it runs and the first replace deploy
-spent ten minutes in about thirty of them; one probe now reads the container, the
+spent ten minutes in about thirty of them; one probe now reads the engine the silo runs, the
 release status and private health together. The two legs of a qualification pair
-import the same seed into separate copies and containers, so they run side by side.
+import the same seed into separate copies and processes, so they run side by side.
 
 **A worker's evidence outlives the worker.** A deploy deletes a failed worker, its
 journal and its console with it, so the silo writes its logs and narration to a
@@ -500,7 +500,7 @@ all three as a player's does, so the fill stays a boot. Its cost is the bake's,
 not the visits': in a Vulkan fill of the debug world the spawn's whole-world
 ladder took nearly all of the boot and the places after it a few minutes,
 so a smaller fill comes from fewer tiers or fewer sets, not fewer places
-([open items](../plans/open-items.md#the-player-build-never-bakes)).
+([open items](../plans/open-items.md#the-player-builds-cache-sets)).
 
 **Complete means checked as a player runs it.** `puck world player` boots each
 backend and target under the stored policy on the target's device profile,
@@ -520,6 +520,105 @@ writer's set whole and evicts others past its bound; a set a later fill evicted
 fails the folder. An incomplete folder says why in `player.json` and produces
 no cache set, so the release job holds the channel as it does for a missing
 set.
+
+## Hosting machines
+
+**A hosting machine installs and updates its World exactly as a player's machine
+does (the owner's ruling: "there is basically no difference between a client and
+a server in Puck ... our own updater/launcher tech is probably the best
+choice").** No container, registry, Python or shell bootstrap stands between a
+release and the machine that serves it. A server is a World configured to host
+plus the silo's pieces, so its release is an install payload like a player
+build: `puck world host build` assembles the CLI (which carries the silo)
+published with its own runtime, its launcher, the composed hosted worlds and
+the deployment's world extensions, and the TLS front when the deployment
+exposes the MCP front. `puck publish --channel server` and `puck channel push`
+turn it into a signed `puck.release.manifest.v1` release on the deployment's
+`server` channel, beside the `player` channel and under the same root key
+(`WorldHostLayout` holds every name).
+
+**The engine is the host release's payload identity.** A world release's
+manifest names its engine as `engine`, the `ReleasePayloadIdentity` of the
+host release it runs: the pin over the payload's files that the install record
+already carries and nothing else computes, so re-signing or relabelling a
+release keeps it and any changed file changes it. Qualification, the worker
+probe and the production check all compare that identity, read from the
+install, never a path's spelling.
+
+**A machine installs the exact release its deployment names.** Every signed
+manifest a push publishes is also an object in the channel's object space, so a
+release stays installable by its pin after the channel moves on
+(`PinnedReleaseSource`, the installer's `--release`). That is what lets Azure
+replace a machine long after its deployment and still boot the admitted release,
+and what lets a controller install a retained predecessor for rollback
+qualification: the channel never prunes, so there is no image retention step.
+The release's signature still verifies against the install's pinned root, and
+each file against its pin. The guarantee stops at the signature's validity
+window (`puck channel push --validity`): a replacement after it has lapsed
+refuses until a later release is deployed.
+
+**The bootstrap is the installed CLI, reached through the platform's own
+primitives.** The VM extension's protected settings carry the installer's
+object URL as a file to fetch (the platform downloads it, so the machine needs
+no download tool) and one command: check the installer against its pin, install
+the release's signed manifest by pin into `/opt/puck/world`, and hand the
+protected bootstrap (the retained inputs' pin and the signing keys) to the
+installed CLI's `puck world host install` on standard input, so keys never
+appear in a process's arguments or environment. The install, as root, reads the
+retained inputs through the owner's store, re-checks the boot guard under the
+machine's release lock, writes configuration and keys as root-only files,
+writes the units and starts them, then waits for private health and the TLS
+front and, on failure, ends with a verdict that names its cause. QUIC's
+`libmsquic` comes from the host's own package manager (Azure Linux's Microsoft
+repository), as any other OS library would.
+
+**systemd runs the server directly, sandboxed.** The units run the installed
+version's `puck` (`world host serve`, `world host tls`) and the pinned Caddy as
+the system account `puck`, with no capabilities, `ProtectSystem=strict`, a
+service system-call filter (failing with `EPERM`), private devices and
+temporary files, and the memory and CPU the deployment's `service` sizes.
+Secrets reach a unit only as systemd credentials (`LoadCredential`), which only
+that unit's processes can read, so the silo never sees the TLS state and the
+TLS front never sees a signing key; each unit's state directory is
+inaccessible to the others. Write-execute memory stays allowed because the
+runtime's JIT needs it. The units do not go through the stub: systemd is the
+supervisor, and two supervisors (the stub's launch-attempt ceiling and
+`Restart=`) would fight. The account owns the install root, because a process
+running from an install registers as a holder of its version, which takes the
+root's update lease; that is the pruning decision's threat model, a process
+with the install's own write access.
+
+Options weighed:
+- Keep the container, minus Python. The registry, the image build and push, the
+  Docker daemon's OpenSSL hazard on Azure Linux and a second packaging of the
+  same engine would all stay, and none of them is Puck's.
+- `DynamicUser`. A dynamic UID cannot own the install's mutable state across
+  restarts, and the keeper and the front must share theirs; a static system
+  account with credentials and inaccessible paths gives the same separation.
+- Run the units through the stub. The stub's selection and launch counting
+  serve a player who starts the World by hand; on a server systemd already
+  restarts, backs off and stops, so the stub would only add a second policy.
+
+**One implementation of the provider's identity and storage.** The machine's
+verbs (`world host install`, `guard`, `probe`, `request`, `tls`) open the
+owner's store from the same `type` and `settings` a silo document names,
+through the installed world extensions (`WorldHostStore`), so the managed
+identity, token and blob access live once in the provider's extension and no
+host code names a provider. The guest guard reads the group record through
+`WorldReleaseGroupStore.LoadAsync`, the record's one reader, and checks it in
+`WorldReleaseGuestGuard`, so no second copy of the record's wire format exists.
+The TLS keeper's issuance lease is a store document replaced only by
+compare-and-swap on its version token, holding its holder and expiry, so it
+works over any store; its expiry is judged on each machine's clock, which
+bounds the guarantee by the hosts' clock skew, far below the lease's minute.
+
+**What the pipeline proves without a deployment.** CI builds the host release
+on the runtime machines run, signs a copy with a throwaway root, installs it
+through `puck world host fetch` exactly as a machine does, and runs that install:
+`puck azure test-world-host` (two boots against a fixture store, the second
+through the MCP entry point) and `puck world release rehearse --install`. It
+does not prove the systemd units, the firewall rules or the host package
+install; the first deploy after a change to `WorldHostInstall` does.
 
 ## Vendor binaries
 
@@ -565,7 +664,8 @@ certificate, key and ACME account live under `private/puck/hosted/tls/<hostname>
 beside the worlds' authority prefixes and outside them, so a hosted state reset,
 which replaces only each world's authority root
 (`WorldAuthorityBlobStore.PrepareReleaseResetAsync`), never touches it. A fresh
-worker restores it; one hostname issues once (`build/Keep-WorldTls.py`).
+worker restores it; one hostname issues once (the TLS state keeper, `puck world host tls`,
+`WorldHostTlsKeeper`).
 
 **First issuance uses ACME TLS-ALPN-01 through the load balancer's own rule.** A
 release boots its one worker on fresh compute, whose NIC joins the load
@@ -583,7 +683,7 @@ between cannot be validated.
 
 Options weighed:
 - DNS-01. Caddy would need a DNS-provider module, which means a custom build
-  in place of the pinned official image. The worker would also need a write
+  in place of the pinned official release. The worker would also need a write
   grant on the zone, and the provider's name would sit in Caddy's
   configuration, behind no Puck abstraction.
 - Issuing from the deploying runner and seeding the store. That needs an ACME
@@ -604,8 +704,8 @@ this entry is how a release carries it. The issuer's root key is a deployment
 vault secret, `puck-world-issuer-root`. A release generates it the first time it
 finds the secret absent, exactly as it generates each world's federation key
 (`AzureCommand.LoadSigningKeyAsync`). It reaches the worker the same way the
-worlds' keys do, through the protected bootstrap command, and is mounted as
-`/configuration/issuer.pk8`. The release writes one `issuer` member into the
+worlds' keys do, through the protected bootstrap, and the silo unit loads it as
+the systemd credential `issuer.pk8`. The release writes one `issuer` member into the
 silo document: that key file, plus the deployment's configured sign-in
 (`worldSiloConfiguration.authentication`, today `azure.api-users` over the
 existing API application, its user group and `user_impersonation`). The world

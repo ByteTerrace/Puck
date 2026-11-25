@@ -93,20 +93,10 @@ public static partial class AzureCommand {
             ).ConfigureAwait(continueOnCapturedContext: false)
             : null
         );
-        var endpoint = Text(value: Value(
-            context.Outputs,
-            "worldSiloStorageEndpoint"
-        ));
-
         return (candidate.Manifest, new AzureWorldReleaseRuntime(
             context.ResourceGroup,
             context.Group,
             temporary,
-            endpoint,
-            Text(value: Value(
-                context.Outputs,
-                "worldSiloClientId"
-            )),
             context.Groups,
             context.Authority,
             context.Archive,

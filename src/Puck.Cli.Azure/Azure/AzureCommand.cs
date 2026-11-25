@@ -62,10 +62,10 @@ public static partial class AzureCommand {
             new Option<bool>(name: "--full") { Description = "Plan and apply even when the latest successful deployment carries these inputs' identity, so a change made to Azure by hand is reconciled." },
         };
         var deployApplications = new Command(
-            description: "Verify the bundle, publish both container images, apply application configuration, and roll the actors revision.",
+            description: "Verify the bundle, publish the actors container image, apply application configuration, and roll the actors revision.",
             name: "deploy-applications"
         ) {
-            new Option<string>(name: "--artifacts-directory") { Description = "The downloaded artifacts holding azure-applications and the container images.", Required = true }, commitOption, resourceGroupOption,
+            new Option<string>(name: "--artifacts-directory") { Description = "The downloaded artifacts holding azure-applications and the actors container image.", Required = true }, commitOption, resourceGroupOption,
         };
         var deployWorldPlatform = new Command(
             description: "Deploy the world platform composition alone and record its outputs.",
@@ -111,10 +111,10 @@ public static partial class AzureCommand {
             commitOption, new Option<bool>(name: "--before-static-publication") { Description = "Verify services only; the website is not published yet." },
         };
         var testWorldContainer = new Command(
-            description: "Boot the world image twice against a fixture store, the second time through its hosted MCP entry point, and prove activation, checkpointing, health, and QUIC.",
-            name: "test-world-container"
+            description: "Boot an installed host release's world twice against a fixture store, the second time through its hosted MCP entry point, and prove activation, checkpointing, health, and QUIC.",
+            name: "test-world-host"
         ) {
-            new Option<string>(name: "--image") { Description = "The built world-silo image.", Required = true },
+            new Option<string>(name: "--install") { Description = "The install root holding the host release, installed from its channel as a hosting machine installs it.", Required = true },
         };
         var testWorldMcp = new Command(
             description: "Exercise the live MCP endpoint with delegated authorization.",
@@ -181,9 +181,9 @@ public static partial class AzureCommand {
             clock: clock,
             commit: parseResult.GetRequiredValue(option: commitOption)
         ));
-        Bind(command: testWorldContainer, work: (parseResult, _) => TestWorldContainerAsync(
+        Bind(command: testWorldContainer, work: (parseResult, _) => TestWorldHostAsync(
             clock: clock,
-            image: parseResult.GetRequiredValue<string>(name: "--image")
+            installRoot: Path.GetFullPath(path: parseResult.GetRequiredValue<string>(name: "--install"))
         ));
         Bind(command: testWorldMcp, work: (_, _) => TestWorldMcpAsync());
         Bind(command: buildActors, work: (parseResult, _) => BuildActorsAsync(

@@ -97,7 +97,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
             c: 'a',
             count: 40
         ),
-            EngineImageDigest = ("sha256:" + new string(
+            Engine = ("sha256/" + new string(
             c: 'a',
             count: 64
         )),
@@ -137,7 +137,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
         }
         var nextRelease = release with {
             Label = "release-b",
-            EngineImageDigest = ("sha256:" + new string(
+            Engine = ("sha256/" + new string(
             c: 'b',
             count: 64
         )),

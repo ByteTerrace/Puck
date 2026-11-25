@@ -132,9 +132,9 @@ and observation providers through request-confined OBO with federated managed id
 never substitute host credentials. Deployment uses automatic Caddy TLS behind the existing load balancer
 (whose MCP rule probes Caddy's port, never the admission-gated `/healthz`, so a worker with no stored certificate certifies before its commit;
 the platform's `main.bicepparam` is the only writer of the world subnet's security group and its `WorldMcp` rule, and the compute template only references them),
-certificate state outside World mounts that `build/Keep-WorldTls.py` keeps in the owner's private store under a blob
-lease (a fresh worker restores it; one hostname issues once; Caddy's unit is `Requisite=` on the keeper, which `Upholds=` it,
-and the host carries an account for UID 1655 because systemd refuses an unknown numeric `User=`), and Azure expiry/readiness alerts. Durable delegated
+certificate state the silo's unit cannot reach, which the TLS state keeper (`puck world host tls`, `WorldHostTlsKeeper`) keeps in
+the owner's private store under a compare-and-swap lease document (a fresh worker restores it; one hostname issues once; Caddy's
+unit is `Requisite=` on the keeper, which `Upholds=` it), and Azure expiry/readiness alerts. Durable delegated
 cloud writes and richer participant tools remain uninstalled.
 Run `tests/Puck.Hosting.Tests`, `tests/Puck.Networking.Tests`, `tests/Puck.Mcp.Tests`, `tests/Puck.Cli.Tests` (the `puck mcp` process interop) and the real-host smoke described in
 [`Puck.Mcp`](../../../../src/Puck.Mcp/README.md) when changing this attachment seam.
@@ -246,20 +246,20 @@ loaded world. Failed drain saves can be retried; closed ingress stays frozen.
 An activation's federation subject and `WorldInstance.ListenEndpoint` come from
 the published definition, independently of checkpoint network fields. Reload
 checks that activation binding; moving an endpoint requires a fresh activation.
-`puck azure test-world-container --image <image>` boots the primary (`debug`) row, verifies a durable
-checkpoint and the expected QUIC key, then replaces the container against the
-same store and repeats the checks. The first boot runs the image's own entry point;
-the second runs the deployment's MCP shape (`WorldSiloImageLayout.McpArguments`: the
-image's CLI composing the installed Azure extensions over the silo, with an
-Azure-shaped `mcp.json` whose inventory observation builds an ARM pipeline), so an
-extension that cannot load fails CI rather than the VM. Linux requires `libmsquic` and UDP ingress.
+`puck azure test-world-host --install <root>` boots the primary (`debug`) row from an installed host release
+(`puck world host build`, published on the `server` channel, installed with `puck world host fetch` as a hosting machine
+installs it), verifies a durable checkpoint and the expected QUIC key, then boots again against the same store through the
+deployment's MCP shape (`puck world host serve --mcp`, with an Azure-shaped `mcp.json` whose inventory observation builds an
+ARM pipeline), so an extension that cannot load fails CI rather than the VM. Linux requires `libmsquic` and UDP ingress; a
+hosting machine takes it from the host's package manager. How a machine installs and runs its release (the installer by pin,
+`world host install`, the sandboxed units, the guest verbs) is [the decision](../../../../docs/decisions/runtime-and-delivery.md#hosting-machines).
 `puck world release rehearse` (`WorldReleaseRehearsal`) runs the worker's managed start locally: a release
 package (or a `world prepare` output, packaged first) through `WorldReleaseCoordinator.ResumeAsync` from Drain over a
 directory store, with the release's own silo started as a child process on a managed silo document and reached through
 the release-control routes. Use it before any change to the silo's startup, the release transaction or the worker's
 silo document reaches a deploy: `--silo <Puck.World.Silo.dll> --extensions-dir <dir> --document-directory worlds/debug`
 locally (publish the GB, AGB and HGD forge projects, and `Puck.World.Azure` to load the provider's extension, into that
-directory, as the Dockerfile does), `--image` inside a built image, as CI's container verification does. `--mode
+directory, as `puck world host build` does), `--install` through an installed host release, as CI's `host-release` job does. `--mode
 durable` adds a reset deployment through the source's `/release/drain` and a failed deployment the source is recovered
 from; the storage steps over drained roots are `WorldReleaseRoots`, shared with `AzureCommand`'s runtime. Each silo's
 lines are `<name>.log` in the output directory (`source`, `candidate`, `refused-candidate`, `recovered-source`) and the
@@ -307,7 +307,7 @@ restores the protected operation roots before recording `RecoverActivate`; a
 restart in that phase activates without restoring again. Run
 `WorldReleaseCutoverLawTests` for the real-host coordinator, latest-state rollback,
 and interrupted recovery, plus `WorldReleaseArchiveLawTests` for retained package
-integrity. These same-binary laws do not qualify a pair of packaged engine images.
+integrity. These same-binary laws do not qualify a pair of packaged engines.
 `world release deploy` retains exact inputs and enters this
 coordinator after qualification; `resume` reads the pending operation and retained
 configuration. `azure prepare-world-release` binds and pins all composed worlds.
@@ -316,8 +316,7 @@ Deploy and rollback automatically export current source state through loopback
 without draining. `WorldReleaseFixtureArchive` publishes its inventory after the
 immutable checkpoints. The CLI materializes exact captured state with test keys
 and preserves machine identity. Run `WorldReleaseFixtureArchiveLawTests`, the
-cutover laws, and `WorldReleaseFixtureBuilderTests`; build the candidate image as
-`puck/world-silo:candidate` for the latter's unchanged-definition and metadata Docker controls. Empty no-kit population checkpoints
+cutover laws, and `WorldReleaseFixtureBuilderTests`. Empty no-kit population checkpoints
 preserve only the zero selection sentinel; `WorldEmptyPopulationCheckpointLawTests`
 also rejects nonempty population and invalid kit selections. The operator
 `rollback` command selects the retained predecessor directly from an admitted
@@ -329,7 +328,7 @@ checkpoint and definition in one CAS against the protected drain root, retaining
 receipts and recognizing retries without rewinding candidate progress. Run
 `WorldReleaseMetadataPublicationLawTests` for that boundary. Changed definition
 pins require the runner's package-bound preservation exercise. `WorldReleaseQualificationTransition` uses the real atomic
-publisher on disposable copies; both images import the forward result, then both
+publisher on disposable copies; both engines import the forward result, then both
 import the reversed candidate continuation. Never reverse the original seed or
 normalize away a checkpoint difference. Standalone `qualify` requires manifests
 at their package roots for changed definitions; managed paths use the archive.
@@ -357,22 +356,20 @@ an unowned root with no gameplay state. Run cutover, archive and CLI
 fixture tests for this path. Exercise reports use
 `WorldReleaseExerciseResult.CurrentSchema` (`puck.world.qualification-exercise.v1`),
 with all three receipt hashes required:
-each image checks every original receipt after import and continuation, then
+each engine checks every original receipt after import and continuation, then
 duplicate and conflicting retries on the drained fixture without changing its root.
 The runner independently computes the expected receipt hash before each leg.
 `WorldReleaseReceiptProofTests` covers this helper.
 Do not equate the checkpoint hash with receipt proof.
-The official image publishes `Puck.World.Azure`, both Gaming Brick forges, `Puck.Mcp` and `Puck.Mcp.Azure` with their
-dependency manifests under `/app/worlds/extensions`. Both shipped entry points
-discover that directory. A load context resolves another installed extension's own assembly from that
+The official host release publishes `Puck.World.Azure`, both Gaming Brick forges, `Puck.Mcp` and `Puck.Mcp.Azure` with
+their dependency manifests under its `extensions` directory, which the CLI that hosts the silo discovers beside itself. A load context resolves another installed extension's own assembly from that
 extension, then anything the host carries at a compatible version, then an upstream extension's dependency, then
 its own graph.
 Discovered providers use process-lifetime load contexts; the discovery API has no
 unload owner, so collectible contexts would allow premature dependency unloading.
 Keep .NET hosted-service supervision and lifecycle callbacks when composing an
-extension, and return failure if its background task faults. Run
-`WorldReleasePackagedHostTests` against `puck/world-silo:candidate` to verify actual image
-startup, both machine types, Azure health, MCP discovery and failed-listener shutdown.
+extension, and return failure if its background task faults. `puck azure test-world-host`
+over an installed host release verifies actual startup, Azure health and the MCP shape.
 Read retained package definitions with the composed-document parser, allowing
 unfilled boot draws; checkpoint live and undo documents keep strict rehydration.
 Bootstrap retries compare `LoadPublishedDefinitionBytesAsync` with the archived
@@ -386,7 +383,7 @@ committed and its history records a bootstrap that captured roots and recovered;
 recovery deletes its compute (`StopCandidateAsync` with no source), since nothing restarts on it and Azure's
 automatic repairs would keep rerunning the refused extension. Every start of a retained deployment
 (`AzureWorldReleaseRuntime.EnsureWorkerAsync`: the candidate at Activate, Verify or Commit, the restored source at
-RecoverActivate) only checks a worker already running its exact image and replaces any other with fresh compute. Azure
+RecoverActivate) only checks a worker already running its exact engine and replaces any other with fresh compute. Azure
 re-runs a VM extension only when its configuration changes, so re-applying the model a worker already carries (a
 source its drain stopped, a VM an automatic repair booted while the guest guard refused it) runs nothing and reports
 that worker's last result, a stopped host or a stale refusal; a fresh worker's bootstrap meets the guard under the
@@ -416,8 +413,8 @@ per world instead of the metadata transition. Never add migration code or read t
 Every pre-commit recovery outcome names its cause: `RecoverPreCommitAsync` is
 the one door, and it appends the failure that began recovery to every result. `world prepare` relocates
 provider-declared machine asset paths from nested origins to the common worlds
-directory, preserving the image's asset layout; the silo resolves those paths beside its document's
-`documentDirectory` (the image's `/app/worlds`), which becomes every hosted definition's `DocumentDirectory`,
+directory, preserving the host release's asset layout; the silo resolves those paths beside its document's
+`documentDirectory` (the installed version's `worlds`), which becomes every hosted definition's `DocumentDirectory`,
 and the machine host reads content beside the directory of the definition it prepares. Colocated silo rows with neither
 authority nor listen endpoint sign with the stable instance name, matching the
 server's authority identity; listening rows still require an advertised endpoint.
@@ -439,7 +436,7 @@ probe drives actual hosts, metadata publication, an internal transfer, interrupt
 rewind, and restart. It compares the entire checkpoint with the explicit reconnect
 parking adjustment, and verifies reconnect, retained current receipts, and recovery
 of the fresh drain after a rejected private rewind and interrupted recovery. It is
-not a packaged-image or Azure acceptance substitute.
+not a packaged-engine or Azure acceptance substitute.
 Local forwarding disposal must tolerate retired destinations without changing their
 frozen checkpoint. An already completed admission under the same fence claim
 still needs the group CAS and root census, but reuses fully published host effects;
@@ -450,28 +447,24 @@ finalization use a renewable controller lease. Run the CLI
 configuration, bootstrap, or controller ownership. The Azure lease law requires
 Docker and the Azurite image documented in the CLI test README. Cancellation of
 the local Azure CLI does not retract an already accepted remote operation.
-`build/Guard-WorldRelease.py` reads the durable C# group wire format; keep its
-numeric phase mapping synchronized with `WorldReleaseOperationPhase`. Bootstrap
-and guest mutations share a VM flock and reject stale effects after acquiring it.
-With no pending operation, bootstrap permits only the admitted active release,
-so ordinary VM replacement can recover without reopening a release transaction.
-The CLI `WorldReleaseGuestGuardTests` requires Python 3 on `PATH`.
-`world release qualify` executes exact Docker images over a copied offline fixture
-with networking disabled; see [the CLI reference](../../../../docs/reference/cli.md#automation-commands)
+The guest guard (`WorldReleaseGuestGuard`, run on a machine as `puck world host guard`) reads
+the group record through `WorldReleaseGroupStore.LoadAsync`, so no second copy of its wire format
+exists. Bootstrap and guest mutations share the machine's release lock
+(`WorldHostLayout.ReleaseLock`) and reject stale effects after acquiring it. With no pending
+operation, bootstrap permits only the admitted active release, so ordinary VM replacement can
+recover without reopening a release transaction.
+`world release qualify` runs each engine's own CLI from its install over a copied offline fixture; see [the CLI reference](../../../../docs/reference/cli.md#automation-commands)
 for the fixture and evidence contract.
 A pair that ran and failed a leg's claim is a `WorldReleaseQualificationResult.Failed`
 verdict (the coordinator refuses the group claim with it; `qualify` exits 1); only a
-run that cannot exercise the pair throws (exit 2). `IWorldReleaseQualificationContainers`
-is the container seam: Docker in production, scripted in `WorldReleaseFixtureBuilderTests`.
-It returns the packaged engine's captured output, and a leg that exits nonzero carries the
-tail of its standard error and output in its failure, so the deploy's refusal names the cause.
-On a Linux host, `WorldReleaseQualificationDocker` runs each leg as the runner's own user and
-group (`ProcessIdentity.LinuxUserAndGroup`): the directory store takes a lock file in every
-directory it reads, which the image's default root cannot create under `--cap-drop ALL` in a
-runner-owned tree, and its 0700/0600 entries must stay readable for the next leg's copy.
-Each package must preserve the same source import and candidate-written reverse
-import, advance simulation, and checkpoint successfully. A same-image control proves
-the runner only. Named handheld machines support complete durable checkpoints;
+run that cannot exercise the pair throws (exit 2). `IWorldReleaseQualificationEngines`
+is the engine seam: installed processes in production (`WorldHostEngine` resolves an install
+root to the version whose payload identity the manifest names), scripted in
+`WorldReleaseFixtureBuilderTests`. It returns the packaged engine's captured output, and a leg
+that exits nonzero carries the tail of its standard error and output in its failure, so the
+deploy's refusal names the cause. Each package must preserve the same source import and
+candidate-written reverse import, advance simulation, and checkpoint successfully. A same-engine
+control proves the runner only. Named handheld machines support complete durable checkpoints;
 run the real-core `queued-host-time-travel` probes and the world machine continuation
 laws when changing this seam. Pumped addons and applied screen operations use the
 ordinary authority checkpoint. Unsupported guest resources refuse mounting; live

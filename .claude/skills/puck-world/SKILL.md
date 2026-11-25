@@ -704,8 +704,9 @@ device lands there with a test.
    `world.status`, `world.hud` are the pattern).
 6. Fold any derived cost into `world.budget`.
 
-Then regenerate with `puck schema` (JSON Schemas, the dashboard types and
-`WorldModelShape.generated.cs`); never hand-edit those outputs.
+Then regenerate with `puck schema --bootstrap` (JSON Schemas, the dashboard types,
+`WorldModelShape.generated.cs` and `docs/world-name-registry.md`, in one run from the source
+model, then rebuild); never hand-edit those outputs.
 
 ## Running it
 
