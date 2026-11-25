@@ -75,6 +75,7 @@ Nothing has shipped, and nothing outside this repository depends on Puck. Every 
 ### Builds and deploys
 
 - Every project stays in the build.
+- Hosted worlds need no containers (the owner's ruling: "there is basically no difference between a client and a server in Puck ... our own updater/launcher tech is probably the best choice"). A hosted machine installs and updates its World through Puck's own launcher and updater on a signed channel, as a player's machine does, and runs it as a host service; the provider's token and storage access live in its provider project behind Puck's abstractions, never in scripts on the machine.
 - Every push to `main` keeps deploying, through a pipeline made as fast as possible. Official published builds in Azure are the target, but nothing is shipped until the owner says so: every deploy until then is development and testing.
 - While the debug world is the one live world, production deploys it: `world prepare` and the Azure release build from its package, `worlds/debug`.
 

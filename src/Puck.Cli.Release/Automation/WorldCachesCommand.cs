@@ -18,7 +18,8 @@ namespace Puck.Cli.Automation;
 /// the release job, reads the manifest whose identity matches the release's own build, checks with no device that the set
 /// was produced for the groups the release's world plans (<see cref="WorldCachePlan"/>), and only then takes every mesh its
 /// folder lacks, each verified against its pin. A backend with no matching set, or whose set was produced for another
-/// world, holds the channel's publish: the verb names it and exits non-zero, since a player never bakes.</summary>
+/// world, is named and the verb exits non-zero; the release job warns and ships without it, since a player bakes what its
+/// cache lacks and a set is a warm start, never a precondition.</summary>
 /// <remarks>A cache set is a cache: its entries are keyed by the bake identity and each group's geometry, so a set baked
 /// from an older world document only misses the groups that changed. The identity, never a commit, decides whether a set
 /// fits: it is the hash of the bake's code and kernel bytecode the store keys sets by (<see cref="MeshBuildIdentity"/>),
@@ -425,10 +426,10 @@ public static class WorldCachesCommand {
         return 1;
     }
     // The text a held build (its README, notes file, job summary and error) or a status check carries: what is missing and
-    // what the lead runs, since a player never cold-bakes and a consumer release therefore waits for a complete set.
+    // what the lead runs: a player bakes what its cache lacks, so a missing set costs a player's first boot, not the release.
     private static string MissingText(string headline, IReadOnlyList<string> held, string closing) =>
         headline +
-        "A player never bakes meshes, so a release ships only with a mesh cache set produced for this build's bake identity and for the groups its world plans, for each backend it ships. This build has none for:\n\n" +
+        "A mesh cache set is a player's warm start: without one produced for this build's bake identity and for the groups its world plans, a player bakes what it needs on its first boot. This build has none for:\n\n" +
         string.Concat(values: held.Select(selector: static line => $"- {line}\n")) +
         closing +
         "```text\n" +
