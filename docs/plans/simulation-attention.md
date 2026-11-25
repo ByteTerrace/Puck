@@ -66,12 +66,20 @@ world with an adjacency, and a world holding a transfer always step.
 
 Each step names the check that shows it worked.
 
-1. **A tape records a lapse.** A recorded row never lapses, because
-   `WorldReplayTape` has no entry for one. Add the entry beside the rate
-   lever's and re-apply it on a drive, then drop the tape test from `Lapses`.
-   Check: a recording taken across a lapse verifies as a match on replay. No
-   lapsable row is recorded today (only a desktop's boot row is, and the pump
-   steps it), so nothing is wrong until a wave row gains a tape.
+1. **A tape records a lapse.** This step comes first, because the invariant
+   is unchecked without it. A recorded row never lapses, since
+   `WorldReplayTape` has no entry for a lapse, and recorded rows are common: a
+   recording tapes the other rows of its process as companions
+   (`WorldReplayTape.TryRecordCompanion`), and a hosted silo tapes its rows.
+   Three things follow today. A recorded run of a world that authors a bar
+   steps it on every tick, so it reaches a different state from an unrecorded
+   run. `puck test --reproduce` and a replay drive compare runs in which
+   nothing lapsed, so neither can show that two runs lapse the same ticks. A
+   silo's rows save nothing. Add the entry beside the rate lever's, re-apply
+   it on a drive, then drop the tape test from `Lapses`. Check:
+   `puck test worlds/debug/attention-tests.puck --reproduce` passes its first
+   scenario, whose step counter reads the ticks the world was watched for and
+   not every tick, and a recording taken across a lapse verifies as a match.
 2. **Worlds joined by an adjacency lapse together.** The moon and the debug
    world share the `sky` seam, so neither lapses as an instance. A neighbour
    reads this world's ticks one by one; lapse the pair as one unit when both

@@ -19,6 +19,12 @@ namespace Puck.World;
 // Where it stops: a row that is recorded (a tape), that neighbours another world, or that holds a transfer in flight
 // always steps, because a tape does not yet carry a lapse entry and a neighbour or a lease reads this world's ticks
 // one by one. A desktop's boot row is stepped by the pump, never by a wave, so it never lapses.
+//
+// The recorded case is not an edge: a recording tapes the other rows of its process as companions
+// (WorldReplayTape.TryRecordCompanion) and a hosted silo tapes its rows, so while one records, no row lapses and a
+// world that authors a bar steps every tick. A recorded run and an unrecorded run of such a world therefore reach
+// different states, and a replay or a reproduction compares runs in which nothing lapsed. Until the tape carries a
+// lapse entry, the invariant above holds for unrecorded hosts only.
 public sealed partial class WorldInstanceHost {
     // Each running world's attention as of the host step being composed; a world absent from it is unobserved.
     private readonly Dictionary<string, WorldAttention> m_attention = new(comparer: StringComparer.Ordinal);

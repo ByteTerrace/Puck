@@ -1,9 +1,13 @@
 // Simulation follows attention (docs/decisions/worlds-and-federation.md): this world hangs a window onto
 // attention-world.puck a kilometre from its spawn, whose attention reaches a hundred metres, and follows that world's
 // day, its step counter and its bell. While the seat stands at the spawn the watched world lapses; while it stands by
-// the window the watched world steps. `puck test worlds/debug/attention-tests.puck --reproduce` shows two runs lapse
-// the same ticks, and the two scenarios show what a lapse keeps: the day reads the same whether the world was
-// watched throughout or only for two seconds, and the counter reads the ticks it was watched for.
+// the window the watched world steps. The two scenarios show what a lapse keeps: the day reads the same whether the
+// world was watched throughout or only for two seconds, and the counter reads the ticks it was watched for.
+//
+// Run it with `puck test worlds/debug/attention-tests.puck`. Under `--reproduce` the first scenario fails its
+// `steps < 75` gate: a reproduction records, a recording tapes the watched world as a companion, and a recorded row
+// never lapses, so the watched world steps on every tick. That gate is the check for carrying a lapse on the tape
+// (docs/plans/simulation-attention.md, step 1), and passes under `--reproduce` once it is built.
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "attention-tests"

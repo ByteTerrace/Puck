@@ -465,7 +465,9 @@ Four things make that precise.
 - **A lapse is input.** The same document and the same input, the lapses
   included, give the same state on every run. Two runs of one host with the
   same input lapse the same ticks, because the reading above is a function of
-  authority state; `puck test --reproduce` therefore agrees across them.
+  authority state. This holds by construction and is not yet checked by a
+  replay or by `puck test --reproduce`: a recorded row never lapses, so those
+  compare runs in which nothing lapsed (see "Where it stops" below).
 - **Time is a law, and a lapse keeps it.** A lapse moves the tick ordinal and
   the engine tick together, in the ratio a step moves them. Every value that
   is a function of those clocks reads after a lapse what it would have read had
@@ -517,12 +519,19 @@ An observer in another process counts as watching (`IWorldWatchingSink`), so a
 remote viewer's world is not frozen under it by a host that cannot measure it.
 
 **Where it stops.** A recorded row never lapses, because its tape has no entry
-for a lapse yet; the only recorded row today is a desktop's boot row, which the
-pump steps and which is always shown. A world that neighbours another through
-an adjacency, or holds a transfer in flight, always steps, since a neighbour
-and a lease read its ticks one by one. A lapsed body does not coast: a citizen
-is where it stood, not where its errand would have taken it. The
-[plan](../plans/simulation-attention.md) owns each of these as a step.
+for a lapse yet. That exclusion is wide: a recording tapes the other rows of
+its process as companions (`WorldReplayTape.TryRecordCompanion`), and a hosted
+silo tapes its rows. While a recording runs, no world lapses, so a world that
+authors a bar steps on every tick, and a recorded run of it reaches a different
+state from an unrecorded one. The second point above, that two runs lapse the
+same ticks, is therefore shown only for hosts that record nothing: a replay or
+a reproduction compares runs in which nothing lapsed, and cannot yet check a
+lapse. Carrying the lapse on the tape closes this and is the first step of the
+[plan](../plans/simulation-attention.md). A world that neighbours another
+through an adjacency, or holds a transfer in flight, always steps, since a
+neighbour and a lease read its ticks one by one. A lapsed body does not coast:
+a citizen is where it stood, not where its errand would have taken it. The
+plan owns each of these as a step.
 
 **Rulings it rests on.** Determinism pins the mapping (rule 4); authors rule (a
 world's document, never the engine, decides whether attention may matter);
