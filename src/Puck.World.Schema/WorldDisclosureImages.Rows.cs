@@ -1,3 +1,4 @@
+using Puck.Maths;
 using System.Buffers;
 using Puck.Abstractions;
 using Puck.Abstractions.Documents;
@@ -74,7 +75,7 @@ public sealed partial class WorldDisclosureImages {
                 if (readsRow && observer.CanRead(key: key, row: declaration, rowOrdinal: row)) { scratch[at] |= ((byte)(1 << (index & 7))); }
                 index++;
             }
-            return new RowMask(reading: RowReading.Restricted, bits: scratch, length: (1 + ((index + 7) >> 3)));
+            return new RowMask(reading: RowReading.Restricted, bits: scratch, length: (1 + index.CeilingDivide(divisor: 8)));
         }
     }
 

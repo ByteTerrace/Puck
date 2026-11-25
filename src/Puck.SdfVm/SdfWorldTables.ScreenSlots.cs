@@ -161,7 +161,7 @@ public sealed partial class SdfWorldTables {
 
         var grown = (int)GpuCapacity.Grown(current: m_slotOfScreen.Length, required: identities, ceiling: SdfProgramBuilder.MaxScreenIdentities, divisor: 2);
 
-        grown = (((grown + 3) / 4) * 4);
+        grown = grown.AlignUp(alignment: 4);
         Array.Resize(array: ref m_slotOfScreen, newSize: grown);
         Array.Resize(array: ref m_screenWanted, newSize: grown);
         m_retired.Reserve();
