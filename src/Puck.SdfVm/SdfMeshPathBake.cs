@@ -2700,24 +2700,24 @@ public sealed partial class SdfMeshPathBake {
         }
         group.Contour = contour;
         group.Cut = cut;
-        // A contour whose cut samples no point (one material, no boundary to place) meshes now, as Advance does once its
-        // rounds are spent: a round of no points would be a lattice of no samples, whose dispatch copies nothing back.
+        StartRound(gate: BakeGate.Split, group: group, points: points);
+    }
+    // Starts a group's next round of material points, or meshes the group once its cut samples none (one material, no
+    // boundary left to place): a round of no points would be a lattice of no samples, whose dispatch copies nothing back.
+    // The round's storage is filled on the worker running the group's stage, since no request names the group's points
+    // until the gate publishes the round's first chunk.
+    private void StartRound(Group group, int points, BakeGate gate) {
         if (points == 0) {
             Build(group: group);
             return;
         }
-        StagePoints(group: group, count: points);
-        using (EnterGate(site: BakeGate.Split)) {
+        group.PointMaterials.Resize(points, clear: false, preserve: false);
+        group.PointsAnswered = 0;
+        using (EnterGate(site: gate)) {
             group.Contouring = false;
             if (!GroupList.Holds(group: group)) { return; }
             group.Next = PointsChunk(gradients: false, group: group);
         }
-    }
-    // Fills a group's point round and the storage its answers land in, on the worker running the group's stage: no
-    // request names the group's points until the gate publishes the round's first chunk.
-    private static void StagePoints(Group group, int count) {
-        group.PointMaterials.Resize(count, clear: false, preserve: false);
-        group.PointsAnswered = 0;
     }
     // Answers a chunk of a group's material points; once a round's every point is answered, its material cut takes them
     // on the thread pool (Advance).
@@ -2827,18 +2827,7 @@ public sealed partial class SdfMeshPathBake {
         var points = cut.Points(into: group.Points);
 
         Account(group: group, since: started, stage: BakeStage.Cut);
-
-        if (points == 0) {
-            Build(group: group);
-            return;
-        }
-
-        StagePoints(group: group, count: points);
-        using (EnterGate(site: BakeGate.Advance)) {
-            group.Contouring = false;
-            if (!GroupList.Holds(group: group)) { return; }
-            group.Next = PointsChunk(gradients: false, group: group);
-        }
+        StartRound(gate: BakeGate.Advance, group: group, points: points);
     }
     // Builds a group's mesh from its contour, cut along its material boundaries.
     private void Build(Group group) {
