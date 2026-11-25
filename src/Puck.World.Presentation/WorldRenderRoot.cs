@@ -398,13 +398,13 @@ public static class WorldRenderRoot {
             root: () => runtime.NodeOf(instance: WorldViewGraphs.MainInstance)
         );
 
-        return new WorldPresentationRoot(root, client, () => frameSource.PinsPresentation, iterations, device, pipelines.RetiredBuilds);
+        return new WorldPresentationRoot(root, client, () => frameSource.PinsPresentation, iterations, device, pipelines.RetiredBuilds, allowance);
     }
 
     // All graph consumers see the clock of the snapshot the client actually received, including after replay
     // restoration or a paused boot. Host pump elapsed time is only a scheduling coordinate. Each produced frame advances
     // the edit loops the World times, just before the host presents it.
-    private sealed class WorldPresentationRoot(RenderGraphRuntimeNode root, WorldClient client, Func<bool> pinned, WorldIterationClock iterations, IGpuDeviceContext device, RetiredBuilds retired) : IRenderRoot, ICaptureRequestTarget {
+    private sealed class WorldPresentationRoot(RenderGraphRuntimeNode root, WorldClient client, Func<bool> pinned, WorldIterationClock iterations, IGpuDeviceContext device, RetiredBuilds retired, WorldBackgroundAllowance allowance) : IRenderRoot, ICaptureRequestTarget {
         public string? PendingCapturePath => root.PendingCapturePath;
 
         public void RequestCapture(FrameCaptureRequest request) => root.RequestCapture(request: request);
@@ -429,6 +429,7 @@ public static class WorldRenderRoot {
 
             var produced = root.ProduceFrame(context: in delivered);
 
+            allowance.Passed();
             iterations.ObserveFrame();
             return produced;
         }

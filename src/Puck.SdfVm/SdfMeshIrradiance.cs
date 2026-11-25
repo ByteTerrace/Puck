@@ -880,7 +880,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                 return Converging(stage: converging ? SdfMeshConvergenceStage.Refill : SdfMeshConvergenceStage.None);
             }
             if (relaid) { ForgetPublication(); }
-            if (ScenePendingDue(frame: frame)) { _ = RefreshScene(bakePending: bakePending, frame: frame); }
+            if (ScenePendingDue(bakePending: bakePending, frame: frame)) { _ = RefreshScene(bakePending: bakePending, frame: frame); }
             RefreshLighting(frame: frame, layout: layout);
             Grant(budget: frame.IndirectBudget);
             if (!m_owed && m_nextLightCheck != 0 && Time.GetTimestamp() >= m_nextLightCheck) { Owe(); }
@@ -1678,12 +1678,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // installed scene's traces are paid (none owed, or as many traced since it was installed as the windows hold, so a
     // camera that keeps the windows moving never holds a real change back) or cannot be paid at all (m_sceneUnplaced: the
     // residency no longer places a mesh the scene names, so the trace would wait on the rebuild that waits on it), and
-    // PendingSceneInterval has passed since the last build began. The trace's progress paces every rebuild, so the probes
-    // finish measuring one scene before the next replaces it; a lighting-converged frame builds its own scene
-    // (AwaitScene), and a build that faulted is always due, so RefreshScene reports it.
-    private bool ScenePendingDue(SdfFrame frame) =>
+    // PendingSceneInterval has passed since the last build began. The trace's progress paces a rebuild only while the bake
+    // still owes opaque static meshes (bakePending), so the probes finish measuring one scene before the next replaces it
+    // while the draws keep arriving; once the bake owes none, the draws standing are the scene the probes are meant to
+    // measure, and every probe still owed on the installed scene would measure geometry the next build replaces. A
+    // lighting-converged frame builds its own scene (AwaitScene), and a build that faulted is always due, so RefreshScene
+    // reports it.
+    private bool ScenePendingDue(SdfFrame frame, bool bakePending) =>
         ((m_build is { IsFaulted: true }) ||
-        (!frame.ConvergesLighting && (m_build is null or { IsCompleted: true }) && ((m_scene is null) || !m_traceOwed || m_sceneUnplaced || (m_tracedSinceScene >= m_layout.TotalCount)) &&
+        (!frame.ConvergesLighting && (m_build is null or { IsCompleted: true }) && ((m_scene is null) || !m_traceOwed || m_sceneUnplaced || !bakePending || (m_tracedSinceScene >= m_layout.TotalCount)) &&
         ((m_sceneStartedAt == 0L) || (Time.GetElapsedTime(startingTimestamp: m_sceneStartedAt) >= PendingSceneInterval))));
     // The probes traced since the installed scene was (Install, Batch).
     private long m_tracedSinceScene;
