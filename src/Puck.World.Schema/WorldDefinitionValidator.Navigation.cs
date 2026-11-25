@@ -7,7 +7,7 @@ public static partial class WorldDefinitionValidator {
     // select.
     private static (HashSet<string> Domains, HashSet<string> Profiles) ValidateNavigation(WorldDefinition definition, List<string> errors) {
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
-        var domains = definition.Navigation.Rows;
+        var domains = WorldNavigationDomains.Of(definition: definition);
         var totalCells = 0L;
 
         if (domains.Count > WorldNavigationCapacity.MaxDomains) {
@@ -17,6 +17,18 @@ public static partial class WorldDefinitionValidator {
         for (var index = 0; (index < domains.Count); index++) {
             var domain = domains[index];
             var path = $"navigation.domains[{index}]";
+
+            if (!WorldNavigationDomains.TryResolve(definition: definition, domain: definition.Navigation.Domains![index], refusal: out var regionRefusal, resolved: out _)) {
+                errors.Add(item: $"{path} {regionRefusal}");
+
+                continue;
+            }
+
+            if ((domain.Origin is not { } origin) || (domain.Width is not { } width) || (domain.Depth is not { } depth)) {
+                errors.Add(item: $"{path} must author its origin, width and depth, or name a placement's region that gives them.");
+
+                continue;
+            }
 
             if (domain.Parent is { } parentId) {
                 var placementsById = WorldPlacementIndex.ById(placements: definition.Placements);
@@ -61,7 +73,7 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"{path}.name '{domain.Name}' is duplicated.");
             }
 
-            if (!VectorFunctions.IsFinite(vector: domain.Origin)) {
+            if (!VectorFunctions.IsFinite(vector: origin)) {
                 errors.Add(item: $"{path}.origin must be finite.");
             }
             RequirePositive(
@@ -226,16 +238,16 @@ public static partial class WorldDefinitionValidator {
                 }
             }
             if (
-                (domain.Width <= 0) ||
-                (domain.Depth <= 0) ||
+                (width <= 0) ||
+                (depth <= 0) ||
                 (domain.Layers <= 0)
             ) {
                 errors.Add(item: $"{path}.width, depth, and layers must all be positive.");
                 continue;
             }
             if (
-                (domain.Width > WorldNavigationCapacity.MaxCellsPerDomain) ||
-                (domain.Depth > WorldNavigationCapacity.MaxCellsPerDomain) ||
+                (width > WorldNavigationCapacity.MaxCellsPerDomain) ||
+                (depth > WorldNavigationCapacity.MaxCellsPerDomain) ||
                 (domain.Layers > WorldNavigationCapacity.MaxCellsPerDomain)
             ) {
                 errors.Add(item: $"{path} dimensions necessarily exceed the per-domain maximum of {WorldNavigationCapacity.MaxCellsPerDomain} cells.");
@@ -243,7 +255,7 @@ public static partial class WorldDefinitionValidator {
                 continue;
             }
 
-            var cells = ((((long)domain.Width) * domain.Depth) * domain.Layers);
+            var cells = ((((long)width) * depth) * domain.Layers);
 
             totalCells += cells;
             if (cells > WorldNavigationCapacity.MaxCellsPerDomain) {
@@ -270,14 +282,14 @@ public static partial class WorldDefinitionValidator {
 
             if (float.IsFinite(f: domain.CellSize)) {
                 var maxCoordinate = ((double)CurvatureSpline.MaxCoordinate);
-                var maxX = (((double)domain.Origin.X) + (((double)domain.CellSize) * (domain.Width - 1L)));
-                var maxY = (((double)domain.Origin.Y) + (((double)domain.CellSize) * (domain.Layers - 1L)));
-                var maxZ = (((double)domain.Origin.Z) + (((double)domain.CellSize) * (domain.Depth - 1L)));
+                var maxX = (((double)origin.X) + (((double)domain.CellSize) * (width - 1L)));
+                var maxY = (((double)origin.Y) + (((double)domain.CellSize) * (domain.Layers - 1L)));
+                var maxZ = (((double)origin.Z) + (((double)domain.CellSize) * (depth - 1L)));
 
                 if (
-                    (Math.Abs(value: domain.Origin.X) > maxCoordinate) ||
-                    (Math.Abs(value: domain.Origin.Y) > maxCoordinate) ||
-                    (Math.Abs(value: domain.Origin.Z) > maxCoordinate) ||
+                    (Math.Abs(value: origin.X) > maxCoordinate) ||
+                    (Math.Abs(value: origin.Y) > maxCoordinate) ||
+                    (Math.Abs(value: origin.Z) > maxCoordinate) ||
                     (Math.Abs(value: maxX) > maxCoordinate) ||
                     (Math.Abs(value: maxY) > maxCoordinate) ||
                     (Math.Abs(value: maxZ) > maxCoordinate)
@@ -310,8 +322,8 @@ public static partial class WorldDefinitionValidator {
                 errors.Add(item: $"navigation.areaTypes[{index}] '{type}' is duplicated.");
             }
         }
-        for (var index = 0; (index < section.Rows.Count); index++) {
-            if ((section.Rows[index].Area is { } area) && !types.Contains(item: area)) {
+        for (var index = 0; (index < (section.Domains?.Count ?? 0)); index++) {
+            if ((section.Domains![index].Area is { } area) && !types.Contains(item: area)) {
                 errors.Add(item: $"navigation.domains[{index}].area '{area}' names no navigation.areaTypes entry.");
             }
         }

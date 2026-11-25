@@ -562,9 +562,18 @@ public static partial class PuckPrinter {
                         break;
                     }
                 case LetNode declaration: {
-                        m_builder.Append(value: "let ").Append(value: declaration.Name).Append(value: " = ");
+                        m_builder.Append(value: "let ").Append(value: declaration.Name);
+
+                        var value = declaration.Value;
+
+                        if (value is UnitAnnotationNode annotated) {
+                            m_builder.Append(value: ": ").Append(value: annotated.Unit);
+                            value = annotated.Value;
+                        }
+
+                        m_builder.Append(value: " = ");
                         Expression(
-                            expression: declaration.Value,
+                            expression: value,
                             level: level
                         );
 

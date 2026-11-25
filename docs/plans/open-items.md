@@ -3906,6 +3906,28 @@ Owner: language lane (transpiler) · medium · Next: the cost corpus, then the
   where an author expected (`motion-nod`'s first neck); check what a Capsule's
   half-length means under scale and say so in the shapes reference.
 
+#### Authoring units
+
+The dimension check, nested keys and region-bound domains have
+[decisions](../decisions/state-and-language.md#physical-units-are-checked-dimensions);
+what they leave open:
+
+- [medium] Template and function parameters take no unit annotation
+  (`template lift(height: m = 2)`), so a dimension crosses a call only when the
+  argument carries it; a call to an author's `function` infers as unknown. The
+  annotation would check the argument at the binding (`DocumentScope.BindArgument`)
+  as a `let`'s is checked (`DocumentDimensions.ReadsInUnit`).
+- [medium] The world's field table (`WorldDocumentEmitterUnits.Classify`)
+  classifies fields by name and holds no compound dimension, so a speed or an
+  angular rate field (`moveSpeed`, a sky layer's `spin`) admits no unit. Deriving
+  each field's dimension from the model (`WorldModelShape`) rather than its name
+  would let a field declare `m/s` and close the name heuristics.
+- [medium] An ambient audio bed (`WorldSpeaker.Bed`) is a sphere with its own
+  centre and radius, so it cannot name a place's box as a navigation domain does
+  (`region`). A bed that names a placement's region needs a box envelope (the
+  listener's distance to the box) in the mixer; no residency region exists yet,
+  and one takes the same reference when it is built.
+
 ### Maths
 
 Owner: maths lane · ordinary · Next: segment durations as ticks or decimals on

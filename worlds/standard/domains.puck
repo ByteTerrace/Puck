@@ -46,3 +46,23 @@ function surfaceDomain(name, origin, cellSize, width, depth, probeUp, probeDown,
   maxExpandedNodes: (width * depth)
   maxPathNodes: maxPathNodes
 }
+
+// A surface domain over a place: the static placement `region` names, whose box region is the domain's extent, so the
+// place and the ground its walkers route over are one authored box and moving the place moves both. Its floor plan
+// grown by `margin` metres on every side is the grid (a district reaching a few metres into its neighbours shares
+// cells with them), and its ground is searched over the region's whole height. Every cell is searchable in one route
+// (`maxExpandedNodes` zero is the cell count).
+function placeDomain(name, region, margin, cellSize, maxPathNodes, walker = standardWalker) = {
+  name: name
+  kind: Surface
+  region: region
+  margin: margin
+  cellSize: cellSize
+  agentHeight: walker.height
+  agentRadius: walker.radius
+  maxStepHeight: walker.step
+  maxSlopeDegrees: walker.slope
+  arrivalDistance: cellSize
+  maxExpandedNodes: 0
+  maxPathNodes: maxPathNodes
+}

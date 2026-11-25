@@ -182,12 +182,14 @@ let roadStrips = [
   { id: "east-lane", x0: 140, x1: 150, z0: -135, z1: -45 }
 ]
 
-// The districts' navigation domains, 1 m cells on whole-metre origins so neighbouring grids share cells where they
-// overlap, each reaching a few metres into its neighbours so a route crosses between them. The four are one `pavement`
-// network of shared domains: a citizen heading to an anchor reads its step from that anchor's goal field, which
-// crosses the districts at their shared cells, rather than searching a route of its own. The districts' ground is
-// `pavement` where no road or crossing marks it (the navigation areas below).
+// The districts' navigation domains: each is its district's place (`placements` below, ../standard/domains.puck's
+// `placeDomain`), so moving a district's box moves its ground too. 1 m cells on whole-metre corners let neighbouring
+// grids share cells where they overlap, and each reaches `districtReach` metres into its neighbours so a route crosses
+// between them. The four are one `pavement` network of shared domains: a citizen heading to an anchor reads its step
+// from that anchor's goal field, which crosses the districts at their shared cells, rather than searching a route of
+// its own. The districts' ground is `pavement` where no road or crossing marks it (the navigation areas below).
 let pavement = { shared: true, network: "pavement", area: "pavement" }
+let districtReach: m = 4
 
 
 
@@ -240,10 +242,10 @@ navigation {
   profiles [citizenProfile]
   domains: concat(
     [
-      walkable("city-square", [-46, 0.05, -100], 1, 92, 100, 2.2, 3, 1024) with pavement
-      walkable("city-terraces", [-150, 0.05, -205], 1, 114, 245, 2.2, 3, 1024) with pavement
-      walkable("city-works", [36, 0.05, -100], 1, 114, 140, 2.2, 3, 1024) with pavement
-      walkable("city-quay", [-46, 0.05, -205], 1, 196, 119, 2.2, 3, 1024) with pavement
+      walkableOver("city-square", "place-city-square", districtReach, 1, 1024) with pavement
+      walkableOver("city-terraces", "place-city-terraces", districtReach, 1, 1024) with pavement
+      walkableOver("city-works", "place-city-works", districtReach, 1, 1024) with pavement
+      walkableOver("city-quay", "place-city-quay", districtReach, 1, 1024) with pavement
     ]
   )
 }
@@ -375,7 +377,9 @@ placements {
   }
 
   // The city's places (place-kit.puck): the whole town, each district, the market inside the square, the ground before
-  // the arrival frame a crossing walks out onto, and the bridge.
+  // the arrival frame a crossing walks out onto, and the bridge. A district's box is also its navigation domain
+  // (`navigation` above), whose ground is searched over the box's height: 1.5 m below the street to 4.5 m above it,
+  // under every roof.
   placement "place-city" {
     prototype: "place"
     position [0, 1.5, -80]
@@ -401,21 +405,21 @@ placements {
     prototype: "place"
     position [-98, 1.5, -82.5]
     region {
-      halfExtents [52, 8, 122.5]
+      halfExtents [52, 3, 122.5]
     }
   }
   placement "place-city-works" {
     prototype: "place"
     position [98, 1.5, -30]
     region {
-      halfExtents [52, 8, 70]
+      halfExtents [52, 3, 70]
     }
   }
   placement "place-city-quay" {
     prototype: "place"
     position [52, 1.5, -152.5]
     region {
-      halfExtents [98, 8, 52.5]
+      halfExtents [98, 3, 52.5]
     }
   }
   placement "place-city-arrival" {

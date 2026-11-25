@@ -18,11 +18,11 @@ own emitter and supplies `IDocumentVocabulary` for the two questions generic val
 | `Parsing/` | `PuckParser` (partial, over Parlot): the document reader, its operand scanner, its expression gates and rule-body readers. |
 | `Diagnostics/` | `Diagnostic`/`DiagnosticBag`/`SourceSpan`/`SourceMap` and the `PUCK…` code constants. |
 | `Formatting/` | `PuckPrinter`: the one formatter, printing a parsed tree back as source. |
-| `Lowering/` | `DocumentLowering` (values, arithmetic, indexing, `for`/template expansion), `DocumentScope`, `DocumentValueComparer`, and `DocumentScalars`/`DocumentBuiltins`—the scalar and collection function vocabulary. |
+| `Lowering/` | `DocumentLowering` (values, arithmetic, indexing, `for`/template expansion), `DocumentScope`, `DocumentValueComparer`, `DocumentDimensions` (the compile-time dimension check), and `DocumentScalars`/`DocumentBuiltins`—the scalar and collection function vocabulary. |
 | `Modules/` | `ModuleResolver`: `import` resolution and alias composition; `CompileInputs`: the files and probes a compile read. |
 | `Editing/` | `LspJson`: the Language Server Protocol items, positions and ranges the editor services answer with. |
 | `Rewriting/` | `PuckSyntaxRewriter` and `PuckMigration`: a named rewrite over the tree, and what it declares it reshapes. |
-| `Units/` | `UnitDimension`/`UnitConversion`: what `deg`, `rad`, `s`, `ms`, `min`, `h`, `m`, `cm`, `mm`, `hz`, `%` represent. |
+| `Units/` | `UnitDimension`, `PhysicalDimension` and `UnitConversion`: what each unit suffix and compound measures and is worth. |
 | (root) | `CompilationResult<T>`. |
 
 ## Names
@@ -507,12 +507,64 @@ never disagree about what `a + b * c` means; a scalar function call in ordinary 
 the same choice: `ExpressionComparisons` reads both from the expression operator table's comparison rows, so a
 comparison operator can never mean one thing in a gate and another in an expression.
 
-## Unit conversion boundaries
+## Values keyed on clocks
 
-A millisecond is a thousandth of a second wherever it is written, so the arithmetic lives here. WHICH of a
-document's fields is a time is that document's own vocabulary—`WorldDocumentEmitterUnits.Classify` says
-`delaySeconds` is a `Seconds`, and hands the number to `UnitConversion` to divide. A second vocabulary adds its own
-classification and reuses the same arithmetic; it never restates that `ms` divides by 1000.
+A presentation value (a light's illuminance, an exposure bound, a sky layer's opacity) may be keys on a clock,
+blended between them. A scalar's key may hold keys of its own on another clock, so a value that follows two inputs is
+a table written where it is used, one clock per level, and a `let` names each level:
+
+```text
+let dayFloor = { clock: day, keys [{ at: 0, value: 2 }, { at: 23400, value: 7 }, { at: 67500, value: 2 }] }
+
+exposure {
+  minimum {
+    clock: altitude                       // a view clock over the viewer's height
+    keys [
+      { at: 0, value: dayFloor }          // on the ground the floor follows the day
+      { at: 300, value: dayFloor }
+      { at: 2250, value: 11, ease: Step } // at the seam it is the moon's
+    ]
+  }
+}
+```
+
+Each input is a `timeline.clocks` row (a tick clock, a state row, or the viewer's distance from a point or along an
+axis), so a new axis is an authored row. A rate and an ordered value (a gradient's stop elevations) take one clock,
+and a member that keys a field itself keeps its keys over a section's keys on that field
+([decision](../decisions/state-and-language.md#a-value-follows-its-clocks-by-nesting-keys)).
+
+## Units and dimensions
+
+A unit written against a number gives it a physical dimension: `3m`, `250ms`, `30deg`, `50%`, `800lm`, and
+compounds joined by `/` and raised by `^` with no space between, `8m/s`, `9.8m/s^2`, `60deg/s`, `1000lm/m^2`. The
+suffixes are `m cm mm`, `s ms min h`, `hz`, `deg rad`, `% pct`, `lx lm cd nit K`. A `let` may annotate its unit:
+
+```text
+let speed: m/s = 4         // a bare number is read in the annotated unit
+let lift: cm = 50          // half a metre
+let reach: m = 2m + 50cm   // a value that carries a dimension must carry the annotation's
+```
+
+Every expression a field receives has its dimension checked at compile time, with no cost to the compiled
+document (`DocumentDimensions`):
+
+| What is written | Its dimension |
+|---|---|
+| A bare number | Free: it takes the dimension of what it is added to, and is read in its field's own unit |
+| `a * b`, `a / b` | The product or quotient of the two (`speed * 2s` is a length) |
+| `a + b`, `a - b`, `a % b`, a comparison, `c ? a : b`, `minimum`, `maximum`, `clamp` | The two must agree, or PUCK137 |
+| `absolute`, `floor`, `ceiling`, `round` | Their argument's |
+| `sine(x)`, `cosine(x)` | A pure number; `x` is an angle or a pure number, read in radians, or PUCK137 |
+| `squareRoot(x)` | Half of `x`'s powers, when they are even |
+| A name | What its `let` or argument infers as |
+| Anything else (a member read, a record, an author's `function`, a collection builtin) | Unknown, never refused |
+
+A value whose dimension is proven to differ from its field's is PUCK025 (`radius: 2m * 3m`, `angle: 4m/s`), and one
+that carries a dimension into a field that admits none is PUCK024. Which of a document's fields is a length, a time
+or an angle is that document's own vocabulary (`WorldDocumentEmitterUnits.Classify` says `delaySeconds` is a time);
+what a unit measures and is worth is `UnitConversion`'s, the one table, which a second vocabulary reuses. A unit
+converts to its canonical unit where it is written: metres, seconds, lumens, candela, kelvin, and an angle in degrees
+where its field holds degrees (`yawDegrees: 0.5rad`) and in radians everywhere else.
 
 `schedule <row> in 250ms` reads its delay as the value `scheduleState(delaySeconds: 250ms)` takes, so it converts
 against the same field and accepts the same expressions (a number, a template parameter, arithmetic); the two

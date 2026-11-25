@@ -371,6 +371,15 @@ public static partial class PuckPrinter {
 
                         break;
                     }
+                // A unit annotation is spelled by the `let` that carries it (Statement), which prints it before the '='.
+                case UnitAnnotationNode annotated: {
+                        Expression(
+                            expression: annotated.Value,
+                            level: level
+                        );
+
+                        break;
+                    }
                 case UnaryExpressionNode unary: {
                         m_builder.Append(value: unary.Operator);
                         if (unary.Operator == "not") { m_builder.Append(value: ' '); }

@@ -20,3 +20,6 @@ function walkable(name, origin, cellSize, width, depth, probeUp, probeDown, maxP
   maxPathNodes,
   mothWalker
 )
+
+// A surface domain over a place (../standard/domains.puck's `placeDomain`) for the Moth's envelope.
+function walkableOver(name, region, margin, cellSize, maxPathNodes) = placeDomain(name, region, margin, cellSize, maxPathNodes, mothWalker)

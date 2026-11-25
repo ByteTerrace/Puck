@@ -119,7 +119,7 @@ public static partial class WorldDefinitionValidator {
                 errors
             );
             if (flock.MovementDomain is { } domainName) {
-                var domain = definition.Navigation.Rows.FirstOrDefault(predicate: row => string.Equals(
+                var domain = WorldNavigationDomains.Of(definition: definition).FirstOrDefault(predicate: row => string.Equals(
                     a: row.Name,
                     b: domainName,
                     comparisonType: StringComparison.Ordinal
