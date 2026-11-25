@@ -570,6 +570,19 @@ seed derived from the run's, so a failure under a schedule reproduces.
 | A remote spawn names the authority's own row | `PoseSpawn` is resolved in `WorldDocument.ApplyCommand` against the authority's definition | A spawn neither world declares is refused by name |
 | A jittered run reproduces | Each stream's schedule is a `Pcg32XshRr` stream from the run seed, the side and the stream's ordinal | Ordinals follow connection order, which the host's scheduling decides |
 
+**Where it stops: a seat that steers from delivered state is as slow as its
+lag.** With the five failures fixed, the remote debug route arrives on every
+chapter with no jitter, in both `--remote local` and `--remote issued`, and
+under 250 ms jitter on one schedule. On others the city painting, the
+route's longest walk, runs just past its 120 s: about 3,700 authority ticks
+under jitter against about 1,900 quiet, since every corner and every tight
+goal is approached a control lag late. At 500 ms jitter the lift also runs
+past its limit, and four seats under jitter meet each other in the city's
+terrace lane and at the lift's door. The structural answer is a seat that
+steers from its own predicted body, the client running its sent input ahead
+of the last delivery and correcting to it, so its control loop no longer
+holds the round trip; lengthening the chapter's limit would only hide it.
+
 ## The steps
 
 Each closes on a count or a state read from a headless pair on one machine:
@@ -674,3 +687,11 @@ manifest step for the debug world itself. Steps 4 and 5 depend on 2 and 3.
   [panes](open-items.md#panes-split-screens-the-player-drives); the seat mask
   of [decision 3](#decision-3-one-replica-of-a-world-for-the-seats-in-it) is
   the input that work needs.
+- *A remote seat that predicts its own body*
+  ([decision 8](#decision-8-a-remote-seat-is-judged-by-its-authoritys-state))
+  is the next lane on this plan. Its check: `puck benchmark --route debug
+  --remote local --headless --jitter-ms 250` arrives on every chapter for
+  several seeds, the city painting in about its quiet tick count, and with
+  `--seats 4`. The lane first searches the client for an existing correction
+  easer or replay of sent input to build on (`WorldClient`'s per-entity
+  correction easers are the lead).
