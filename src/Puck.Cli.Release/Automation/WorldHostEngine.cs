@@ -44,6 +44,12 @@ public static class WorldHostEngine {
 /// a refusal; the exit code and captured output of the packaged command are returned, because a nonzero code is a leg that
 /// failed and its output names why.</summary>
 public interface IWorldReleaseQualificationEngines {
+    /// <summary>Resolves an install root to the version directory of the engine a release names.</summary>
+    /// <param name="installRoot">The install root.</param>
+    /// <param name="expected">The engine identity the release names.</param>
+    /// <returns>The engine's version directory.</returns>
+    /// <exception cref="InvalidDataException">The root holds no installed engine, or another one.</exception>
+    string Resolve(string installRoot, string expected);
     /// <summary>Runs <c>world release exercise</c> from an installed engine over a leg's fixture.</summary>
     /// <param name="engine">The installed engine's version directory.</param>
     /// <param name="fixture">The leg's fixture directory, the only state the engine reads or writes.</param>
@@ -56,6 +62,7 @@ public interface IWorldReleaseQualificationEngines {
 /// directory, over the leg's fixture copy. The fixture's silo document names only paths inside the fixture and a directory
 /// store, and the exercise is handed no identity, so a leg reaches no deployment's state.</summary>
 internal sealed class WorldReleaseQualificationProcesses : IWorldReleaseQualificationEngines {
+    public string Resolve(string installRoot, string expected) => WorldHostEngine.Resolve(expected: expected, installRoot: installRoot);
     public async Task<ChildProcessResult> ExerciseAsync(string engine, string fixture, int steps, CancellationToken cancellationToken) {
         var executable = Path.Combine(path1: engine, path2: InstallLayout.ExecutableFileName(name: WorldHostLayout.Executable));
 

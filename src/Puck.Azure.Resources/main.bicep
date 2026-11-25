@@ -15,7 +15,7 @@ import {
 import {
   subnetType
 } from 'ts/bvm:ptn_network_basic-topology:0.0.4'
-import { worldSiloConfigType, worldSiloActionGroupConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.7'
+import { worldSiloConfigType, worldSiloActionGroupConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.8'
 
 import {
   groupType
@@ -3348,7 +3348,7 @@ module worldSiloIdentity 'br/public:avm/res/managed-identity/user-assigned-ident
     tags: union(tags, resources.worldSilo.userAssignedIdentity.?tags ?? {})
   }
 }
-module worldSilo 'ts/bvm:ptn_platform_world-silo:0.0.7' = {
+module worldSilo 'ts/bvm:ptn_platform_world-silo:0.0.8' = {
   dependsOn: [publicFlexApi, containerRegistry]
   params: {
     configuration: resources.worldSilo
@@ -3356,7 +3356,6 @@ module worldSilo 'ts/bvm:ptn_platform_world-silo:0.0.7' = {
     tags: tags
     owner: worldSiloIdentity.outputs.principalId
     storageAccountName: publicStorageAccounts[0].name
-    registryName: resources.containerRegistry!.name
     publishingPrincipalId: userAssignedIdentityPublishing.properties.principalId
   }
 }

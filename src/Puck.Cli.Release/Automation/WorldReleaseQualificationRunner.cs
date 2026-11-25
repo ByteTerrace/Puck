@@ -479,11 +479,11 @@ public sealed class WorldReleaseQualificationRunner(string fixture, string outpu
             ).ConfigureAwait(continueOnCapturedContext: false);
         }
         var forwardSeedHash = HashTree(directory: forwardSeed);
-        var aEngine = WorldHostEngine.Resolve(
+        var aEngine = m_engines.Resolve(
             expected: (source ?? target).Engine,
             installRoot: ((source is null) ? targetEngine : sourceEngine)
         );
-        var bEngine = WorldHostEngine.Resolve(
+        var bEngine = m_engines.Resolve(
             expected: target.Engine,
             installRoot: targetEngine
         );
