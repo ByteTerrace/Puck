@@ -104,14 +104,21 @@ public sealed partial class WorldScreenBinder {
         GroupSharedScenes();
         m_overlays.Clear();
         m_overlaidMirrors.Clear();
-        foreach (var feed in m_feeds) {
+        // Shallowest first, so a feed reads the audience its viewer's feed settled this frame.
+        m_settleOrder.Clear();
+        m_settleOrder.AddRange(collection: m_feeds);
+        m_settleOrder.Sort(comparison: static (left, right) => left.Depth.CompareTo(value: right.Depth));
+        foreach (var feed in m_settleOrder) {
             // Only the endpoint of the instance the session observes, and only on the authority's proof: a session
             // handed the whole scene, or all of it but the placements its disclosure varies, which only the boot world's
             // own residency can draw for its audience alone.
             var endpoint = feed.Observation?.Window;
             var boot = ((endpoint is not null) && WorldDefinitionLoader.IsBootInstance(name: feed.InstanceName));
             var whole = (feed.Observation?.Proof is { SharesAuthority: true });
-            var audience = ((boot && !whole) ? OverlayAudienceOf(feed: feed, presenter: presenter) : (byte)0);
+            // A window, mirror or portal of the world a home view shows is seen through that view, so it draws for the
+            // view's audience, whatever its own session is handed: no draw its viewer is withheld reaches it.
+            var viewer = ((feed.ParentFeed is { Home: true, Audience: > 0 } parent) ? parent.Audience : (byte)0);
+            var audience = (!boot ? (byte)0 : (viewer != 0) ? viewer : (!whole ? OverlayAudienceOf(feed: feed, presenter: presenter) : (byte)0));
             var home = (boot && (whole || (audience != 0)));
             var joins = ((whole && !home) ? endpoint : null);
 
@@ -131,6 +138,8 @@ public sealed partial class WorldScreenBinder {
     // hands the World's scene, and the mirrors they came from.
     private readonly Dictionary<WorldSessionMirror, byte> m_audiences = new(comparer: ReferenceEqualityComparer.Instance);
     private readonly List<WorldAudienceOverlay> m_overlays = [];
+    // The feeds in the order SettleSessionRoutes settles them: by depth, each after the view it is seen through.
+    private readonly List<SessionFeed> m_settleOrder = [];
     private readonly HashSet<WorldSessionMirror> m_overlaidMirrors = new(comparer: ReferenceEqualityComparer.Instance);
     private byte m_nextAudience = 1;
     // What the operator was last told of each overlay: the document counted, its varying placements, and whether any copy

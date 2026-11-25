@@ -575,12 +575,13 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
         var colors = BakedColors();
 
         colors.Begin();
-        // The destination's creations' text runs are not emitted: only its text screens draw text, as decals
-        // (ScreenDecals).
+        // The destination's creations' lettering is emitted from its own font catalog, as the World's scene emits its own;
+        // its text screens draw as decals (ScreenDecals).
         var meshDraws = new List<SdfMeshDraw>();
 
         WorldPlacementStamper.EmitStatic(
             builder: builder,
+            textCatalog: TextCatalog(),
             colors: colors,
             definition: definition,
             creations: definition.Creations,

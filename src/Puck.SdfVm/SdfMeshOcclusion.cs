@@ -224,7 +224,7 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // shares of one draw list draw each of its draws exactly once. The kernel reads the count and the share from eight bits
     // each of the controls' fourth word (MaxSlices). The audience is the view audience whose draws the pass may select
     // besides the neutral ones (SdfMeshAudience): the one door a view's disclosure reaches its selection through, so it
-    // has no default; a cascade, the residency's own, passes zero.
+    // has no default; a cascade passes its residency's caster audience (SdfWorldShadows.Decide).
     public void Stage(SdfWorldTables tables, int slot, uint count, uint width, uint height, in SdfMeshCull cull, in SdfMeshDetail detail, bool held, bool glass, bool occlude, byte audience, bool splitExit = false, bool skipsDepth = false, bool skipsExit = false, Puck.Abstractions.Cameras.CameraSnapshot camera = default, SdfMeshMotion motion = SdfMeshMotion.Any, int slice = 0, int slices = 1, long tag = 0L) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: slices, other: 1);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: slices, other: MaxSlices);
