@@ -1482,14 +1482,6 @@ The frame thread's CPU work, largest first:
   gate's holds attributed by site on a cold bake (`gate=[...]` in the done line)
   and the workers' longest sections shortened, or the frame's entries made to
   publish rather than wait as `Pending` does.
-- [medium] `SdfWorldTables.NoteMovedSlots` judges each row riding a moved slot
-  (`sdf.residency.motion.rows`, about 3,500 a staging across the route's
-  residencies), decoding its record's box. Rows riding one slot move rigidly,
-  as its readers do (`ReachBySlot`), but each row's held box (`m_slotBoxes`) is
-  what a later restage judges from; judging a slot once needs that held box
-  derived from the slot's last judged pose instead, and a per-slot reach must
-  group a slot's rows by their record's carry and scale (`SdfMeshBox.Ridden`
-  reads both per record), since rows on one slot need not share them.
 
 - [high] The tick runs on the frame thread (`HostLoop.Run` through
   `FixedStepPump.Step`), so a frame that steps carries a whole tick. The move

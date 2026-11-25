@@ -1105,6 +1105,24 @@ input to display is measured on the benchmark route and kept within a budget
 the design states. Counted work explains a change;
 the bar itself is read by timing the worst frame on a quiet machine.
 
+**A frame is pipelined across frames only once its camera is latched.**
+Capturing frame N+1 while frame N's recordings run moves N's presentation into
+the next host iteration, so world state reaches the display two frames after
+it is captured, which the paragraph above allows, and so would look, which it
+does not. The latency once the pipeline is built is one frame from look input
+to display and two from world state. Look is not read at present time today:
+the seat steps its live look once a fixed tick and presents it at the frame's
+interpolation fraction, where the body it frames is drawn
+(`WorldSeatViewState.PresentedLook`). Keeping a pipelined frame one frame from
+look therefore takes a latch: just before frame N's recordings open, the
+seat's camera is evaluated again from the newer look sample against the inputs
+frame N's capture gave the evaluator, which is a pure function of them
+(`SdfCameraProgramEvaluator`), while the stateful parts (the chase boom's ease
+in `WorldSeatViewState`, the clearance) carry frame N's results rather than
+stepping again. Until that latch exists the pipeline is not built, since
+without it look would gain a frame; the frame's own chain is shortened inside
+its interval instead ([frame production](../plans/frame-production.md#the-steps)).
+
 **Worlds are mostly static, and sculpting happens in the editor.** Most of a
 world's geometry never changes while it is played, and editor mode is where a
 creation's field is sculpted. The cost of evaluating an authored field therefore

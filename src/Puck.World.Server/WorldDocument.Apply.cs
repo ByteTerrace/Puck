@@ -832,7 +832,7 @@ public sealed partial class WorldDocument {
         var capacity = Host.Population.Capacity;
         if (operation.Partitions == 0) {
             m_tickCarrier.Reserve(capacity: capacity, stateSlots: Host.Population.ActionStateLane.Definitions.Count);
-            var partitions = capacity.CeilingDivide(divisor: SnapshotPartitionRows);
+            var partitions = Puck.Hosting.Jobs.PartitionRuns.Count(count: capacity, run: SnapshotPartitionRows);
             if ((partitions > 1) && (Host.Jobs is { Serial: false }) &&
                 ((operation.Count = CountSnapshotPartitions(capacity, partitions)) >= SnapshotForkRows)) {
                 m_snapshotRows ??= new SnapshotRows(document: this);
@@ -935,9 +935,9 @@ public sealed partial class WorldDocument {
 
         for (var partition = 0; (partition < partitions); partition++) {
             m_snapshotOffsets[partition] = count;
-            var end = Math.Min(val1: capacity, val2: ((partition + 1) * SnapshotPartitionRows));
+            var (start, end) = Puck.Hosting.Jobs.PartitionRuns.Of(count: capacity, partition: partition, run: SnapshotPartitionRows);
 
-            for (var index = (partition * SnapshotPartitionRows); (index < end); index++) {
+            for (var index = start; (index < end); index++) {
                 if (SnapshotBody(population, index) is not null) {
                     count++;
                 }
@@ -1018,13 +1018,12 @@ public sealed partial class WorldDocument {
     private sealed class SnapshotRows(WorldDocument document) : Puck.Hosting.Jobs.IJobPartitions {
         public WorldPopulation Population { get; set; } = null!;
 
-        public void Run(int partition) => _ = document.WriteSnapshotRows(
-            population: Population,
-            carrier: document.m_tickCarrier,
-            end: Math.Min(val1: Population.Capacity, val2: ((partition + 1) * SnapshotPartitionRows)),
-            first: (partition * SnapshotPartitionRows),
-            offset: document.m_snapshotOffsets[partition]
-        );
+        public void Run(int partition) {
+            var (first, end) = Puck.Hosting.Jobs.PartitionRuns.Of(count: Population.Capacity, partition: partition, run: SnapshotPartitionRows);
+
+            _ = document.WriteSnapshotRows(population: Population, carrier: document.m_tickCarrier, end: end, first: first,
+                offset: document.m_snapshotOffsets[partition]);
+        }
     }
 
     // The storage a built snapshot lends its subscribers until the next snapshot built into the same carrier: its

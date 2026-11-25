@@ -37,13 +37,16 @@ public sealed partial class ShaderPipelineRenderNode {
         public long RecordEndedAt;
         public long CommittedAt;
 
-        public void OpenExtra(nint list) {
+        // Takes a further list, not yet begun, so not yet open: only the walk takes one.
+        public void TakeExtra(nint list) {
             ArrayCapacity.EnsureLength(array: ref m_extraLists, required: (ExtraCount + 1));
             ArrayCapacity.EnsureLength(array: ref m_extraOpen, required: (ExtraCount + 1));
             m_extraLists[ExtraCount] = list;
-            m_extraOpen[ExtraCount] = true;
+            m_extraOpen[ExtraCount] = false;
             ExtraCount++;
         }
+        // Marks a further list open once its begin returned; the thread that began it writes only its own element.
+        public void MarkOpen(int extra) => m_extraOpen[extra] = true;
         // Forgets a list as open once its end is attempted: a further list by its place (`extra`), else the slot's frame
         // or copy list.
         public void CloseList(nint list, int extra) {

@@ -629,10 +629,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// signaled, builds the tables once their pipelines are ready, applies a pending reload and the glyph atlas, binds
     /// the screens, and uploads a changed program.</summary>
     /// <param name="context">The host's frame context, which resolves the device.</param>
+    /// <param name="jobs">The pool the pack forks its moved slots' judgements across, or <see langword="null"/> to
+    /// judge them on the packing thread.</param>
     /// <returns><see langword="true"/> when the frame is left to <see cref="RunPack"/>; <see langword="false"/> when the
     /// preparation has already begun this frame or settled its answer here (no frame, no tables, or a frame held while
     /// a pipeline builds).</returns>
-    internal bool BeginPack(in FrameContext context) {
+    internal bool BeginPack(in FrameContext context, Puck.Hosting.Jobs.JobPool? jobs = null) {
         if (m_pack != PackStage.None) { return false; }
         // The ledger publishes an upload once a frame finds its fence signaled, standing frames included, so the one
         // upload a still view renders from is read back even though no later upload follows it.
@@ -645,6 +647,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_packDevice = device;
         m_packFrame = frame;
         m_packContext = context;
+        m_tables!.Jobs = jobs;
         m_pack = PackStage.Begun;
         return true;
     }

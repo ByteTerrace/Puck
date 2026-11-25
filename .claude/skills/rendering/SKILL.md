@@ -543,7 +543,7 @@ records the options weighed.
   `SdfWorldShadows.Moved` before the scopes' early return; keep that call first, or a staging whose scopes are all met
   drops the change. `Moved` skips a change whose box lies within the finest judged texel of the box the entries last
   judged the row by (`m_judged`), for a standalone row or a rigid slot (one box its pose carries, decided in
-  `SdfWorldTables.JudgeMotionSlot`); any other slot is a union that can hide motion, and owes both ends whenever it
+  `SdfWorldTables.DecideMotionSlot`); any other slot is a union that can hide motion, and owes both ends whenever it
   moves. A slot judged rigid that is not would let its casters drift a texel unseen, so a new member kind of a slot
   (a second carry, a fixed member) must leave `rigid` false. With every motion scope met, a rigid slot is not placed
   at all while its pose change bounds its box's displacement from the shadows' judged box (`TryJudged`) under
@@ -811,7 +811,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   (`sdfMeshPoseOf`) and derive its world box the same way (`sdfSelectionBox`), so
   a body that moves rewrites its slot's row and no record. The host judges it by
   `SdfMeshBox.Ridden`, the box's twin, held per row as last judged
-  (`SdfWorldTables.RowSelection`) and moved as its slot moves (`NoteMovedSlots`).
+  (`SdfWorldTables.RowSelection`) and moved as its slot moves (`CollectMovedSlots`, `DecideMotionSlot`).
   A moving draw riding its slot (`SdfMeshDraw.PlacedBySlot`) keeps its scale and
   no pose: every CPU reader places it through one door, `SdfMeshDraw.PlacementIn`
   (the frame's transform rows), and `SdfMeshDraw.FixedPlacement`, which a static
@@ -1934,9 +1934,9 @@ counts in `sdf.transforms`, never in `records.posed`.
   the visits. The composition reads only the rigid copies a pack names (`ISdfSceneEmitter.MeshInstanceChanges`) while
   every emitter's `MeshInstancesRevision` stands.
 - **The pose pack forks by registration.** `WorldCreationInstances.PackTransforms` decides every visited registration in a
-  serial pass (`BeginStep`), poses the woken ones across the `JobPool` as one `JobClass.Frame` fork, one partition a
-  registration (`Pose`, `PackRegistration`), and settles them in pool order (`EndStep`). A partition writes only its own
-  registration and slot range and keeps its scratch on its own stack; anything shared it would write (a list, a pool
+  serial pass (`BeginStep`), poses the woken ones across the `JobPool` as one `JobClass.Frame` fork, a run of
+  registrations a partition (`PosePartitions`, through `Pose` and `PackRegistration`), and settles them in pool order (`EndStep`). A partition writes only its own
+  registrations and slot ranges and keeps its scratch on its own stack; anything shared it would write (a list, a pool
   field, a counter that is not interlocked) belongs in `BeginStep` or `EndStep`. A rig that reads another body
   (`Registration.ReadsBodies`) poses after the fork, so a new read of another registration's pose goes through a body
   read or it races. The state mirror's slot table takes a lease's first acquisition from many partitions under one
