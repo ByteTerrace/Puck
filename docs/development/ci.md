@@ -746,6 +746,16 @@ authored spawn points draw, then boots each target as a player's build does;
 it exits 1 and marks the folder incomplete when a boot does not settle or a
 check boot bakes or misses, and `produce` refuses an incomplete folder
 ([the decision](../decisions/runtime-and-delivery.md#the-player-channel)).
+The run takes hours on the GPU and about 20 GB of host memory, so run it under
+`puck lease gpu --holder <lane> --cold --wait 7200 -- …` once the code it
+carries is final: the cache set fits only builds with the same mesh bake
+identity, so the head it was produced from (`player.json`'s `commit`) is the
+head to push. When a fill does not settle, its `unsettled` reason names what
+holds the bakes, a ladder's hold included (rungs in flight, ladders owed and
+the first group that holds). When a check misses, `incomplete` and the check's
+`missed` list name each tier the fill did not produce: the place the check
+stood at, the residency, the geometry and the tiers asked and drawn. Find the
+geometry's group in the fill's `player-logs/` by that hash.
 
 `--push` uses `gh` with the developer's own login to create the prerelease when
 it is missing and replace its `cache-set.zip` and its `cache-set.json`, the

@@ -91,9 +91,12 @@ public static class WorldPlayerCommand {
             With --no-bake, one headless boot fills everything but the meshes. A consumer starts the folder with --world
             worlds/<package> --cache-dir cache; `puck publish` turns it into a release and the installer installs that.
             Writes player.json first as incomplete and last with the commit, runtime, backends, targets and each boot's
-            reading (places, settled, dispatches, groupsBaked, tiersMissed, loadsDeclined, tiersFilled, loaded), and prints
-            each part's size. The record says complete only when every boot settled at every place and every check
-            dispatched no lattice, baked no group and missed no tier; otherwise it lists why under incomplete, and
+            reading (places, settled, dispatches, groupsBaked, tiersMissed, tiersMissedLive, loadsDeclined, tiersFilled,
+            loaded, and missed: each tier a check asked that the fill did not produce, with the place, residency,
+            geometry and tiers asked and drawn), and prints each part's size. Before the fill it removes every mesh set
+            but this build's own from cache/meshes. The record says complete only when every boot settled at every place,
+            each backend's set still stands after the fills, and every check dispatched no lattice, baked no group and
+            missed no tier but a moved field's (live geometry); otherwise it lists why under incomplete, and
             `puck world caches produce` refuses the folder. Each boot's logs are in player-logs/. Exit 0 wrote a whole
             player build, 1 a step failed or the build is not complete, 2 invalid arguments.
             """);
