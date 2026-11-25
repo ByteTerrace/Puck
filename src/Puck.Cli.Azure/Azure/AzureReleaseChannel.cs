@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json.Nodes;
 
 namespace Puck.Cli.Azure;
 
@@ -29,7 +30,7 @@ public static partial class AzureCommand {
     /// <param name="documents">The documents' slashed paths under the tree, manifests last.</param>
     /// <returns>A task that completes when every blob is written.</returns>
     internal static async Task UploadReleaseChannelAsync(string tree, IReadOnlyList<string> documents) {
-        var outputs = Outputs();
+        var outputs = await DeployedOutputsAsync().ConfigureAwait(continueOnCapturedContext: false);
         var container = Text(value: Value(key: "officialContentContainerName", outputs: outputs));
         var endpoint = new Uri(uriString: Text(value: Value(key: "staticSiteEndpoint", outputs: outputs))).GetLeftPart(part: UriPartial.Authority);
         var destination = $"{endpoint}/{container}/{ReleaseChannelPrefix}";
@@ -49,4 +50,10 @@ public static partial class AzureCommand {
         }
         Console.Out.WriteLine(value: $"azure: release channel written under {Text(value: Value(key: "officialContentBaseUrl", outputs: outputs))}/releases.");
     }
+    // The deployment's outputs: those a deploy job left in artifacts/production-outputs.json, or, on a machine that did not
+    // deploy (the GPU machine writing cache sets), the platform deployment's own, read through the Azure CLI's sign-in and
+    // its current subscription.
+    private static async Task<JsonNode> DeployedOutputsAsync() => (File.Exists(path: OutputsPath)
+        ? Outputs()
+        : await AzJsonAsync("deployment", "group", "show", "-g", DefaultResourceGroup, "-n", "puck-production-platform", "--query", "properties.outputs", "-o", "json").ConfigureAwait(continueOnCapturedContext: false));
 }

@@ -254,7 +254,8 @@ public static partial class AzureCommand {
         if (await CliRoot.InvokeAsync(args: arguments, root: Verbs()) != 0) { throw new InvalidOperationException(message: $"puck {arguments[0]} failed."); }
     }
     private static string Text(JsonNode? value) => (value?.ToString() ?? throw new InvalidDataException(message: "Missing required JSON value."));
-    private static JsonNode Outputs() => CliFiles.ReadJson(path: "artifacts/production-outputs.json");
+    private const string OutputsPath = "artifacts/production-outputs.json";
+    private static JsonNode Outputs() => CliFiles.ReadJson(path: OutputsPath);
     private static JsonNode Value(JsonNode outputs, string key) => (outputs[key]?["value"] ?? throw new InvalidDataException(message: $"Missing deployment output: {key}"));
     // Resource names come from the compiled bicep parameters that deploy-infrastructure leaves beside its outputs.
     private static string ResourceName(params string[] path) => Text(value: path.Aggregate(

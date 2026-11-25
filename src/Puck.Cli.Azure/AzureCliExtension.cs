@@ -16,8 +16,8 @@ public sealed class AzureCliExtension : IPuckExtension {
         registry.Add<Puck.Cli.Channel.ReleaseChannelHost>(key: "azure", contribution: new AzureChannelHost());
     }
 
-    // The deployment's official-content container and key vault, named by the deployment outputs a deploy job leaves in
-    // artifacts/production-outputs.json.
+    // The deployment's official-content container and key vault, named by the deployment's outputs: the file a deploy job
+    // leaves in artifacts/production-outputs.json, or the platform deployment's own where no deploy ran.
     private sealed class AzureChannelHost : Puck.Cli.Channel.ReleaseChannelHost {
         public override string Describe => "the Azure deployment's official content (releases/)";
         public override Task<System.Security.Cryptography.ECDsa> LoadSigningKeyAsync(CancellationToken cancellationToken) => AzureCommand.LoadReleaseChannelKeyAsync();
