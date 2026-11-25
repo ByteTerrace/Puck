@@ -4,7 +4,8 @@ using Puck.Confinement;
 namespace Puck.Launcher.Release;
 
 /// <summary>
-/// The one cross-platform <see cref="IUpdateApplier"/>: it verifies every staged file against the manifest (the stager
+/// The one cross-platform <see cref="IUpdateApplier"/>: it verifies every staged file's bytes and, on Unix, its mode
+/// (<see cref="ReleaseFileMode.Matches"/>) against the manifest (the stager
 /// flushed each as it wrote it), flushes the version's directory entries (on Linux), computes the payload's identity
 /// (<see cref="ReleasePayloadIdentity"/>), and hands the install to <see cref="InstallTransaction.CommitApply"/>, which writes
 /// the version's install record durably and then commits the release record naming it current. A power loss therefore
@@ -46,6 +47,9 @@ public sealed class FileUpdateApplier : IUpdateApplier {
 
             if (!string.Equals(a: actualHash, b: file.Hash, comparisonType: StringComparison.Ordinal)) {
                 return UpdateApplyResult.Refuse(reason: $"staged file '{file.Path}' hash {actualHash} does not match the manifest's {file.Hash} — refused rather than applied");
+            }
+            if (!ReleaseFileMode.Matches(file: file, path: filePath)) {
+                return UpdateApplyResult.Refuse(reason: $"staged file '{file.Path}' is {(file.Executable ? "not " : "")}executable, but the manifest declares it {(file.Executable ? "" : "not ")}executable — refused rather than applied");
             }
         }
         if (!alreadyCurrent) {

@@ -15,7 +15,7 @@ public sealed class DirectoryReleaseSource(string root) : IReleaseSource {
 
     /// <summary>Publishes a built directory into this source's ordinary content-addressed layout: every file, or every
     /// file <paramref name="include"/> admits, becomes a payload file named by its slashed path relative to
-    /// <paramref name="input"/>. Optional signing runs after the complete payload inventory is known.</summary>
+    /// <paramref name="input"/>, executable as <see cref="ReleaseFileMode.IsExecutable"/> reads it. Optional signing runs after the complete payload inventory is known.</summary>
     /// <param name="input">The built directory.</param>
     /// <param name="rid">The runtime identifier the payload targets.</param>
     /// <param name="manifest">The manifest whose payloads this replaces.</param>
@@ -32,7 +32,7 @@ public sealed class DirectoryReleaseSource(string root) : IReleaseSource {
             .Select(selector: file => {
                 var bytes = File.ReadAllBytes(path: file.Path);
 
-                return new ReleasePayloadFile(file.Relative, store.Put(content: bytes).ToString(), bytes.LongLength);
+                return new ReleasePayloadFile(file.Relative, store.Put(content: bytes).ToString(), bytes.LongLength, ReleaseFileMode.IsExecutable(content: bytes, path: file.Path));
             }).ToArray();
 
         if (files.Length == 0) { throw new IOException(message: $"No release files under {directory}"); }

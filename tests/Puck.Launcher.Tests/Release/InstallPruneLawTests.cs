@@ -32,7 +32,7 @@ public sealed class InstallPruneLawTests : IDisposable {
         var content = Content(version: version);
 
         return new ReleaseManifest(App: "puck.world", Channel: "stable", MinimumSupported: null, Notes: null,
-            Payloads: [new ReleasePayload(Rid: "win-x64", Files: [new ReleasePayloadFile(Path: "app.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length)])],
+            Payloads: [new ReleasePayload(Rid: "win-x64", Files: [new ReleasePayloadFile(Path: "app.dll", Hash: ContentPin.Compute(content: content).ToString(), Size: content.Length, Executable: false)])],
             Revoked: null, Rollout: new ReleaseRollout(Percent: 100), Schema: ReleaseManifest.CurrentSchema,
             Signature: null, StateGeneration: 0, Version: version);
     }
