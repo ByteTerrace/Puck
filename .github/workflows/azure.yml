@@ -332,6 +332,8 @@ jobs:
           path: |
             artifacts/production-*.json
             artifacts/release-source.json
+            artifacts/world-authentication.json
+            artifacts/world-silo.public-key
             artifacts/*.digest
             artifacts/previous-actor-release.json
             artifacts/functions-scm-*.json
