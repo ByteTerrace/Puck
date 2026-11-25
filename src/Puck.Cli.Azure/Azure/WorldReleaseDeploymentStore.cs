@@ -67,7 +67,9 @@ public sealed partial class WorldReleaseDeploymentStore(IObjectBlobStore blobs, 
     private sealed record Secret(string Schema, string Inputs, Dictionary<string, string> Keys);
 
     /// <summary>The file names a worker's bootstrap accepts for a mounted signing key.</summary>
-    [GeneratedRegex(pattern: "\\Afederation(-[0-9a-f]{64})?\\.pk8\\z", options: RegexOptions.CultureInvariant)]
+    // A world's federation key (federation.pk8, or federation-<world digest>.pk8) or the deployment issuer's root key
+    // (issuer.pk8, AzureWorld.WorldIssuerKeyFile), the same names build/Start-WorldSilo.sh accepts.
+    [GeneratedRegex(pattern: "\\A(?:federation(-[0-9a-f]{64})?|issuer)\\.pk8\\z", options: RegexOptions.CultureInvariant)]
     private static partial Regex KeyFile();
 
     private ObjectBlobAddress Address(string group, string release) {
@@ -210,7 +212,7 @@ public sealed partial class WorldReleaseDeploymentStore(IObjectBlobStore blobs, 
                 s: key.Value
             )
             ) {
-                throw new InvalidDataException(message: "a deployment signing key needs a federation*.pk8 file name and base64 content");
+                throw new InvalidDataException(message: "a deployment signing key needs a federation*.pk8 or issuer.pk8 file name and base64 content");
             }
             if (text.Contains(
                 comparisonType: StringComparison.Ordinal,
