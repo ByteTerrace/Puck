@@ -320,15 +320,16 @@ public sealed class SdfGpuWorkDeferredException : Exception {
 /// share (<see cref="Weigh"/>), and a step the turn holds counts as <c>turn-holds</c>.</para>
 /// <para>Invariant: the budgeted jobs queued ahead of one frame together fit one frame's allowance. The service's one
 /// take hands every client what its job may take (<see cref="ISdfGpuWorkClient.TryTake"/>'s <c>allowance</c>): the
-/// budget's live <see cref="SdfGpuWorkBudget.Allowance"/>, the frame allowance less the priced length of every charged
+/// budget's live <see cref="SdfGpuWorkBudget.AllowanceOf"/>, the frame allowance less the priced length of every charged
 /// job still in flight on the presentation's queue, whichever service submitted it, since the queue runs each of them
 /// whole before the frame submitted after it and the jobs ahead of a frame delay it by their sum whatever the average
 /// share; and no bound for a held frame's own work. With the allowance spent, or a client's next job priced past what is
 /// left, the service takes no job until one completes (<see cref="Describe"/>'s <c>deadline-holds</c>), and the waiting
 /// client keeps its turn so no other client of the service takes the room it waits for. A client that cuts jobs ahead of
 /// its take (the probe coordinator) reads the whole frame allowance (<see cref="FrameAllowanceSeconds"/>), so its jobs
-/// wait for a queue with room for them. The turn is the service's own: another residency's service on the same budget
-/// is not held for it. It stops at a client's sizing: a job whose cost its rate has not measured yet, or one unit costlier than
+/// wait for a queue with room for them. The turn is the service's own; across services the waiting job holds the
+/// presentation's budget (<see cref="SdfGpuWorkBudget.Hold"/>), so another residency's service takes nothing new until
+/// the queue has drained for it. It stops at a client's sizing: a job whose cost its rate has not measured yet, or one unit costlier than
 /// the allowance (a bake lattice is never split) taken with nothing queued, runs long, and the service counts it
 /// (<c>over-allowance</c>), as it counts a job a client handed over past what was left while work was queued
 /// (<c>over-deadline</c>, a client defect). Whether the frames behind the work kept their period is counted on the
@@ -1041,14 +1042,16 @@ public sealed class SdfGpuWork : IDisposable {
             var allowance = (budgeted ? m_budget.UploadAllowance : MostUploadJobBytes);
             // A held frame queues no frame behind its own work, so its jobs are cut to nothing but their clients' most.
             // Background work fits what the jobs already queued ahead of the next frame leave of its allowance.
-            var fit = (budgeted ? m_budget.Allowance : SdfGpuWorkAllowance.Unbounded);
+            var fit = (budgeted ? m_budget.AllowanceOf(turn: m_turn) : SdfGpuWorkAllowance.Unbounded);
 
             if (fit.Queued && !(fit.Seconds > 0.0)) {
                 m_deadlineHolds++;
                 return Stop.Deadline;
             }
             // With work queued, a client whose next job does not fit what is left takes none and holds the room for it;
-            // a completion of this service's own job wakes it, and another service's frees room by the next pump.
+            // a completion of this service's own job wakes it, and another service's frees room by the next pump. The job
+            // holds the presentation's budget (SdfGpuWorkBudget.Hold), so no other service queues work ahead of it, and
+            // with the frame over its period it waits until the share has paid for it.
             if (!TryTake(allowance: fit, client: out var client, estimate: out var estimate, held: out var held, job: out var job, tables: tables, uploadBytes: allowance)) {
                 if (!held) {
                     // A service with nothing to take holds no other service to its pace.
@@ -1056,6 +1059,7 @@ public sealed class SdfGpuWork : IDisposable {
                     m_refillRested = true;
                     return Stop.None;
                 }
+                if (budgeted) { m_budget.Hold(seconds: estimate, turn: m_turn); }
                 m_deadlineHolds++;
                 return Stop.Deadline;
             }
@@ -1072,7 +1076,8 @@ public sealed class SdfGpuWork : IDisposable {
         return Stop.None;
     }
     // Offers the clients a take in turn from the one after the last that took. False with held when a client's next job
-    // waits for room while work is queued: that client keeps the turn. An owed take (ISdfGpuWorkClient.TryTakeOwed)
+    // waits for room while work is queued: that client keeps the turn, and the estimate is that job's price, which a hold
+    // banks (SdfGpuWorkBudget.Hold). An owed take (ISdfGpuWorkClient.TryTakeOwed)
     // offers the clients in the service's order and moves no turn, since it comes before every ordinary one.
     private bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out ISdfGpuWorkClient? client, out double estimate, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out bool held, bool owed = false) {
         var first = (owed ? 0 : m_nextClient);
@@ -1105,7 +1110,7 @@ public sealed class SdfGpuWork : IDisposable {
         }
         held = (allowance.Queued && (estimate > 0.0));
         client = null;
-        estimate = 0.0;
+        if (!held) { estimate = 0.0; }
         job = null;
         return false;
     }
@@ -1187,19 +1192,23 @@ public sealed class SdfGpuWork : IDisposable {
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: bytes, other: source.SizeBytes);
         if (bytes > int.MaxValue) { throw new ArgumentOutOfRangeException(paramName: nameof(bytes), message: "A background GPU job copies back at most 2 GiB."); }
 
-        var readback = ReserveReadback(bytes: bytes, slot: slot);
+        var readback = ReserveReadback(bytes: Math.Max(val1: bytes, val2: sizeof(uint)), slot: slot);
 
         target.Consumed = true;
 
-        GpuReadbackCopy.Record(
-            commandBuffer: commandBuffer,
-            destination: readback,
-            recorder: m_gpu.Recorder,
-            sizeBytes: bytes,
-            source: source,
-            sourceAccess: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.CopyWrite),
-            sourceStage: (GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader | GpuStage.Transfer)
-        );
+        // A job with nothing to copy back (a batch whose lattices owe no output words) still completes through its
+        // readback, empty: the device refuses a zero-length copy, so none is recorded.
+        if (bytes != 0) {
+            GpuReadbackCopy.Record(
+                commandBuffer: commandBuffer,
+                destination: readback,
+                recorder: m_gpu.Recorder,
+                sizeBytes: bytes,
+                source: source,
+                sourceAccess: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite | GpuAccess.CopyWrite),
+                sourceStage: (GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader | GpuStage.Transfer)
+            );
+        }
         target.Readback = readback;
         target.ReadbackBytes = bytes;
         target.Copied = true;

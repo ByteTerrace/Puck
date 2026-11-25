@@ -339,9 +339,13 @@ public sealed class SdfResidencySelectorLawTests {
         Assert.True(condition: (budget.GpuCredit <= (SdfGpuWorkBudget.MostBankSeconds * SdfGpuWork.GpuShare)), userMessage: $"the credit rose to {budget.GpuCredit}");
     }
     [Fact]
-    public void AFrameOverItsPeriodHoldsEvenAJobWithNothingQueuedToTheFrameAllowance() {
+    public void AFrameOverItsPeriodAdmitsAJobPastItsAllowanceOnlyOnceTheShareHasPaidForIt() {
         const double Period = (1.0 / 60.0);
-        var budget = new SdfGpuWorkBudget(time: VirtualClock.ForDevice());
+        var clock = VirtualClock.ForDevice();
+        var budget = new SdfGpuWorkBudget(time: clock);
+        var holder = budget.Join(name: "holder");
+        var other = budget.Join(name: "other");
+        var price = (10.0 * Period);
 
         void Frames(double frameSeconds) {
             for (var frame = 0; (frame < SdfGpuWorkBudget.FollowFrames); frame++) { budget.Observe(frameSeconds: frameSeconds, periodSeconds: Period); }
@@ -349,29 +353,67 @@ public sealed class SdfResidencySelectorLawTests {
 
         // Unread, and under a light frame, a job with nothing queued is admitted whatever its price.
         Assert.False(condition: budget.FrameOver);
-        Assert.True(condition: budget.Allowance.Admits(seconds: (10.0 * Period)));
+        Assert.True(condition: budget.AllowanceOf(turn: holder).Admits(seconds: price));
         Frames(frameSeconds: 0.002);
         Assert.False(condition: budget.FrameOver);
-        Assert.True(condition: budget.Allowance.Admits(seconds: (10.0 * Period)));
+        Assert.True(condition: budget.AllowanceOf(turn: holder).Admits(seconds: price));
         // A frame whose own work fills the period leaves the frame no room: the job must fit the allowance, nothing queued.
         Frames(frameSeconds: (25.0 / 1000.0));
         Assert.True(condition: budget.FrameOver);
-        Assert.Equal(expected: new SdfGpuWorkAllowance(Queued: true, Seconds: SdfGpuWorkBudget.LeastFrameSeconds), actual: budget.Allowance);
-        Assert.False(condition: budget.Allowance.Admits(seconds: (10.0 * Period)));
-        Assert.True(condition: budget.Allowance.Admits(seconds: (0.5 * SdfGpuWorkBudget.LeastFrameSeconds)));
+        Assert.Equal(expected: new SdfGpuWorkAllowance(Queued: true, Seconds: SdfGpuWorkBudget.LeastFrameSeconds), actual: budget.AllowanceOf(turn: holder));
+        Assert.False(condition: budget.AllowanceOf(turn: holder).Admits(seconds: price));
+        Assert.True(condition: budget.AllowanceOf(turn: holder).Admits(seconds: (0.5 * SdfGpuWorkBudget.LeastFrameSeconds)));
         // A held job comes back after a period, since nothing queued will wake it.
         Assert.Equal(expected: Period, actual: budget.DeadlineRetrySeconds, precision: 12);
         // The work the frame owes is the frame's own and is not held.
         Assert.False(condition: budget.OwedAllowance.Queued);
-        // The frame comes back under its period and the exception returns.
+
+        // The job past the allowance holds the budget: every other service's job waits, and the credit banks its price
+        // at the share's rate, one retry a period, until the holder's take is admitted whatever its price.
+        budget.Accrue();
+        budget.Hold(seconds: price, turn: holder);
+        budget.Hold(seconds: price, turn: other);
+        Assert.Contains(expectedSubstring: "holding:holder/", actualString: budget.Describe());
+        Assert.Equal(expected: 0.0, actual: budget.AllowanceOf(turn: other).Seconds);
+
+        var periods = 0;
+        var banked = budget.GpuCredit;
+
+        while (!budget.AllowanceOf(turn: holder).Admits(seconds: price)) {
+            Assert.True(condition: (++periods < 10_000), userMessage: $"the hold banked only {budget.GpuCredit}s of a {price}s job");
+            Assert.False(condition: budget.AllowanceOf(turn: other).Admits(seconds: (0.5 * SdfGpuWorkBudget.LeastFrameSeconds)));
+            clock.Advance(by: TimeSpan.FromSeconds(value: Period));
+            budget.Accrue();
+            budget.Hold(seconds: price, turn: holder);
+        }
+        // It waited the price over the share: one job past the allowance at the share's pace, never sooner.
+        var perPeriod = (Period * budget.Share);
+
+        Assert.True(condition: ((banked + ((periods - 1) * perPeriod)) < price), userMessage: $"admitted after {periods} periods, before the share paid");
+        Assert.True(condition: ((banked + ((periods + 1) * perPeriod)) >= price), userMessage: $"admitted after {periods} periods, long after the share paid");
+        Assert.False(condition: budget.AllowanceOf(turn: holder).Queued);
+
+        // Its charge ends the hold, and the next job past the allowance waits again behind the job now queued.
+        var charge = budget.ChargeGpu(seconds: price, turn: holder);
+
+        Assert.Contains(expectedSubstring: "holding:none/", actualString: budget.Describe());
+        Assert.False(condition: budget.AllowanceOf(turn: other).Admits(seconds: price));
+        budget.Leave(charge: charge);
+        Assert.False(condition: budget.AllowanceOf(turn: other).Admits(seconds: price));
+
+        // A hold lapses when its holder stops asking, and the frame coming back under its period returns the exception.
+        budget.Hold(seconds: price, turn: other);
+        clock.Advance(by: TimeSpan.FromSeconds(value: (2.0 * SdfGpuWorkBudget.ActiveSeconds)));
+        Assert.True(condition: budget.AllowanceOf(turn: holder).Admits(seconds: (0.5 * SdfGpuWorkBudget.LeastFrameSeconds)));
         Frames(frameSeconds: 0.002);
         Assert.False(condition: budget.FrameOver);
-        Assert.True(condition: budget.Allowance.Admits(seconds: (10.0 * Period)));
+        Assert.True(condition: budget.AllowanceOf(turn: holder).Admits(seconds: price));
     }
     [Fact]
     public void TheJobsQueuedAheadOfAFrameFitOneFrameAllowanceWhateverTheBankHolds() {
         var clock = VirtualClock.ForDevice();
         var budget = new SdfGpuWorkBudget(time: clock);
+        var reader = budget.Join(name: "reader");
         var allowance = budget.FrameAllowanceSeconds;
 
         // A long wait a service waited through banks the share of MostBankSeconds: several allowances of credit.
@@ -382,13 +424,13 @@ public sealed class SdfResidencySelectorLawTests {
         Assert.True(condition: (budget.GpuCredit > (2.0 * allowance)), userMessage: $"the bank holds {budget.GpuCredit}");
 
         // With nothing queued a job is admitted whatever its price, and the whole allowance is left to it.
-        Assert.Equal(expected: new SdfGpuWorkAllowance(Queued: false, Seconds: allowance), actual: budget.Allowance);
-        Assert.True(condition: budget.Allowance.Admits(seconds: (3.0 * allowance)));
+        Assert.Equal(expected: new SdfGpuWorkAllowance(Queued: false, Seconds: allowance), actual: budget.AllowanceOf(turn: reader));
+        Assert.True(condition: budget.AllowanceOf(turn: reader).Admits(seconds: (3.0 * allowance)));
 
         // Each charged job takes its price from what the next may take, so the credit the bank holds never queues more
         // than one allowance ahead of a frame.
         var first = budget.ChargeGpu(seconds: (0.6 * allowance));
-        var left = budget.Allowance;
+        var left = budget.AllowanceOf(turn: reader);
 
         Assert.True(condition: left.Queued);
         Assert.Equal(expected: (0.4 * allowance), actual: left.Seconds, precision: 12);
@@ -397,20 +439,20 @@ public sealed class SdfResidencySelectorLawTests {
 
         var second = budget.ChargeGpu(seconds: left.Seconds);
 
-        Assert.Equal(expected: 0.0, actual: budget.Allowance.Seconds, precision: 12);
+        Assert.Equal(expected: 0.0, actual: budget.AllowanceOf(turn: reader).Seconds, precision: 12);
         Assert.True(condition: budget.Holds);
         Assert.Contains(expectedSubstring: "queued:2/", actualString: budget.Describe());
 
         // A unit costlier than what is left takes no job of its kind while work is queued; alone, it runs.
         var rate = new SdfGpuWorkRate(priorSecondsPerUnit: (0.5 * allowance));
 
-        Assert.Equal(expected: 0L, actual: budget.Allowance.UnitsWithin(most: 100L, rate: rate));
+        Assert.Equal(expected: 0L, actual: budget.AllowanceOf(turn: reader).UnitsWithin(most: 100L, rate: rate));
         // Leaving gives the room back, and the last job's leaving clears the queue exactly, whatever rounding left.
         budget.Leave(charge: first);
-        Assert.Equal(expected: (0.6 * allowance), actual: budget.Allowance.Seconds, precision: 12);
-        Assert.Equal(expected: 1L, actual: budget.Allowance.UnitsWithin(most: 100L, rate: rate));
+        Assert.Equal(expected: (0.6 * allowance), actual: budget.AllowanceOf(turn: reader).Seconds, precision: 12);
+        Assert.Equal(expected: 1L, actual: budget.AllowanceOf(turn: reader).UnitsWithin(most: 100L, rate: rate));
         budget.Leave(charge: second);
-        Assert.Equal(expected: new SdfGpuWorkAllowance(Queued: false, Seconds: allowance), actual: budget.Allowance);
+        Assert.Equal(expected: new SdfGpuWorkAllowance(Queued: false, Seconds: allowance), actual: budget.AllowanceOf(turn: reader));
         Assert.Equal(expected: 0.0, actual: budget.QueuedSeconds);
         // A charge no job made leaves nothing.
         budget.Leave(charge: default);
