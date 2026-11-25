@@ -315,7 +315,7 @@ public static partial class HostMemory {
                     if ((region.Type == MemPrivate) && (region.State != MemFree)) {
                         if (current.Base != region.AllocationBase) {
                             if (current.Committed > 0) { allocations.Add(item: current); }
-                            current = new PrivateAllocation(Base: region.AllocationBase, Committed: 0, Reserved: 0, Resident: 0) { Allocator = (allocatorOwns?.Invoke(arg: region.AllocationBase) ?? false) };
+                            current = new PrivateAllocation(Base: region.AllocationBase, Committed: 0, Reserved: 0, Resident: 0);
                         }
                         current = (current with { Reserved = (current.Reserved + ((long)region.RegionSize)) });
                     }
@@ -331,7 +331,13 @@ public static partial class HostMemory {
                             case MemPrivate:
                                 privateBytes += bytes;
                                 privateResident += resident;
-                                current = (current with { Committed = (current.Committed + bytes), Resident = (current.Resident + (resident ?? 0L)) });
+                                // mimalloc answers for addresses inside its pages, not for an arena's own header at its
+                                // base, so any committed region of the allocation names it.
+                                current = (current with {
+                                    Allocator = (current.Allocator || (allocatorOwns?.Invoke(arg: region.BaseAddress) ?? false)),
+                                    Committed = (current.Committed + bytes),
+                                    Resident = (current.Resident + (resident ?? 0L)),
+                                });
                                 break;
                             case MemMapped: mappedBytes += bytes; mappedResident += resident; break;
                             case MemImage: imageBytes += bytes; imageResident += resident; break;

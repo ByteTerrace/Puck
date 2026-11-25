@@ -62,6 +62,8 @@ public sealed partial class MimallocAllocator : IAllocator, IAllocatorStatistics
     /// <inheritdoc/>
     public void Collect() => mi_collect(force: true);
     /// <inheritdoc/>
+    /// <remarks>mimalloc answers for an address inside one of its pages; an arena's own header at its base reads
+    /// false.</remarks>
     public unsafe bool Owns(nint address) => mi_is_in_heap_region(p: ((void*)address));
 
     [LibraryImport(LibraryName, EntryPoint = "mi_is_in_heap_region")]
