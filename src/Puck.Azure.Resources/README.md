@@ -136,8 +136,8 @@ The root exposes delegated `user_impersonation` on the existing Entra applicatio
 supplies the World managed identity's federated credential. The existing Function
 onboarding endpoint and ARM delegation still require user consent.
 
-The existing load balancer maps public TCP 443 to Caddy on 8443 (the image
-`src/Puck.World.Silo/Dockerfile` pins by digest). Caddy uses
+The existing load balancer maps public TCP 443 to Caddy on 8443 (the official Linux
+release `puck world host build --tls-front` pins by its archive's digest). Caddy uses
 ACME TLS-ALPN-01 to issue, renew and hot-swap the certificate, forwarding only to
 the loopback MCP listener. That rule has its own TCP probe of 8443, not the world's
 `/healthz` probe: a worker that finds no stored certificate obtains one through the rule
@@ -150,22 +150,20 @@ Turning MCP on with `deploy-world-mcp` alone therefore opens 8443 only at the ne
 platform reconcile, which every release runs first. No DNS plugin, stored Azure
 credential, PFX secret, port 80 listener or renewal restart is needed.
 
-Caddy keeps its certificate, key and ACME account in `/var/lib/puck-tls`, under a
-separate container UID, outside the World container's mounts. The TLS state keeper
-([Keep-WorldTls.py](../../build/Keep-WorldTls.py), a systemd service running as
-Caddy's user) carries that state between workers through the world owner's private
+Caddy keeps its certificate, key and ACME account in `/var/lib/puck-tls`, a state
+directory the silo's unit cannot reach. The TLS state keeper (`puck world host tls`,
+`WorldHostTlsKeeper`, a systemd service beside Caddy) carries that state between workers through the world owner's private
 container, at `private/puck/hosted/tls/<hostname>/state.json`, with the worker's own
 managed identity, which already owns that container. Let's Encrypt allows five new
 certificates per exact set of names in seven days, so a worker that issued on every
 bootstrap, Spot replacement or priority change would lock the hostname out of TLS.
 Caddy starts only after the keeper reports ready: the restored or local certificate
 is outside Caddy's renewal window (the last third of its lifetime), or this worker
-holds the lease on the `lock` blob beside the state. The keeper's systemd unit is the
+holds the issuance lease, a `lock` document beside the state that the keeper replaces
+only by compare-and-swap. The keeper's systemd unit is the
 one door. Caddy's unit is `Requisite=` on it and is never enabled itself, and the
 keeper `Upholds=` Caddy, so systemd starts Caddy each time the keeper becomes ready,
-including after a failed keeper start that systemd retried. The bootstrap gives the
-host an account for Caddy's UID 1655 (`puck-tls`), because systemd refuses to start a
-unit whose numeric `User=` the host's account database lacks. A second worker that finds no
+including after a failed keeper start that systemd retried. A second worker that finds no
 fresh certificate waits for the holder to store one, so a hostname issues once
 however many workers start. The keeper then stores whichever certificate is newer,
 so a renewal reaches the store, and a worker that sees another's renewal loads it

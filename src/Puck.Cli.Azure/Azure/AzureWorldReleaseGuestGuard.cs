@@ -1,18 +1,13 @@
-using System.Text;
-using System.Text.Json.Nodes;
+using Puck.Cli.Automation;
+using Puck.World.Server;
 
 namespace Puck.Cli.Azure;
 
 public static partial class AzureCommand {
-    private const string WorldReleaseGuestLock = "exec 9>/run/puck-world-release.lock || exit $?\nflock -w 600 9 || exit $?\n";
+    // Every delayed guest effect holds the machine's release lock across its guard and the effect.
+    private static readonly string WorldReleaseGuestLock = $"exec 9>{WorldHostLayout.ReleaseLock} || exit $?\nflock -w 600 9 || exit $?\n";
 
-    private static string WorldReleaseGuestGuard(JsonObject request) => WorldReleaseGuestGuard(
-        request: request,
-        script: File.ReadAllBytes(path: "build/Guard-WorldRelease.py")
-    );
-    private static string WorldReleaseGuestGuard(JsonObject request, byte[] script) {
-        var argument = Convert.ToBase64String(inArray: Encoding.UTF8.GetBytes(s: request.ToJsonString()));
-
-        return $"printf '%s' '{Convert.ToBase64String(inArray: script)}' | base64 -d | python3 - '{argument}' || exit $?";
-    }
+    // The guard runs as the installed CLI's guest verb, which reads the group record through the machine's own store.
+    private static string WorldReleaseGuestGuard(WorldReleaseGuestGuardRequest request) =>
+        $"{WorldHostLayout.HostExecutable} world host guard '{WorldHostGuest.Encode(request: request)}' || exit $?";
 }

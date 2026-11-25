@@ -73,6 +73,9 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
         // For a live state edit, the simulation tick the loop began at: a frame carries the edit once the feed has
         // collected a tick after it. Null for a document or kernel edit.
         public ulong? LiveTick { get; init; }
+        // For a hot-reload edit, the code revision it applied: a frame carries the edit once the composition emitted under
+        // it. Null for any other edit.
+        public int? Code { get; init; }
         public long ShaderRequest { get; set; }
         // The first produced frame observed since the loop began.
         public long? First { get; set; }
@@ -120,12 +123,7 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
         m_probe = probe;
         m_bakes = bakes;
         m_presented = presented;
-        if (m_boot is null) {
-            using var process = Process.GetCurrentProcess();
-            var age = (DateTime.Now - process.StartTime);
-
-            m_boot = new Loop(after: default, name: "boot", named: false, number: ++m_count, shaderInstalls: 0L, started: (Stopwatch.GetTimestamp() - ((long)(age.TotalSeconds * Stopwatch.Frequency))));
-        }
+        m_boot ??= new Loop(after: default, name: "boot", named: false, number: ++m_count, shaderInstalls: 0L, started: Puck.Abstractions.ProcessClock.StartTimestamp);
     }
 
     /// <summary>Begins a loop for an edit about to be made, timed from now. Call on the host pump before the edit is
@@ -138,7 +136,11 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
     /// document: its frame stage holds once a frame presents a tick after the one the loop began at.</param>
     /// <returns>The loop's number.</returns>
     /// <exception cref="ArgumentException"><paramref name="name"/> is empty or white space.</exception>
-    public long Begin(string name, bool named, long shaderRequest = 0L, bool live = false) {
+    public long Begin(string name, bool named, long shaderRequest = 0L, bool live = false) => BeginAt(code: null, live: live, name: name, named: named, shaderRequest: shaderRequest, started: Stopwatch.GetTimestamp());
+
+    // Begins a loop timed from a timestamp; a hot-reload edit (code) reaches its frame once the composition emitted under
+    // its revision.
+    private long BeginAt(string name, bool named, long shaderRequest, bool live, long started, int? code) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: name);
         if (!named && (Latest is { Named: true, Frame: null, Ended: null } joined)) {
             if (shaderRequest > 0L) { joined.ShaderRequest = shaderRequest; }
@@ -157,8 +159,8 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
             named: named,
             number: ++m_count,
             shaderInstalls: (presented?.ShaderBatchesInstalled ?? 0L),
-            started: Stopwatch.GetTimestamp()
-        ) { LiveTick = (live ? feed.Tick.Tick : null), ShaderRequest = shaderRequest, PresentedAtStart = (m_probe?.Root?.FramesProduced ?? -1L), BuildsAtStart = (m_probe?.Composition?.ProgramBuilds ?? -1L), AppearancesAtStart = (m_probe?.Composition?.AppearanceBuilds ?? -1L), WorkAtStart = ReadWork() };
+            started: started
+        ) { Code = code, LiveTick = (live ? feed.Tick.Tick : null), ShaderRequest = shaderRequest, PresentedAtStart = (m_probe?.Root?.FramesProduced ?? -1L), BuildsAtStart = (m_probe?.Composition?.ProgramBuilds ?? -1L), AppearancesAtStart = (m_probe?.Composition?.AppearanceBuilds ?? -1L), WorkAtStart = ReadWork() };
 
         m_loops.Add(item: loop);
         if (m_loops.Count > Kept) { m_loops.RemoveAt(index: 0); }
@@ -196,12 +198,19 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
         var previous = m_lastFrame;
 
         m_lastFrame = now;
+        // A hot-reload edit begins its loop at the first frame after the runtime applied it, timed from the application.
+        if (Puck.Abstractions.CodeRevision.Current is var code && (code != m_code)) {
+            m_code = code;
+            _ = BeginAt(code: code, live: false, name: "hot-reload", named: false, shaderRequest: 0L, started: Puck.Abstractions.CodeRevision.AppliedAt);
+        }
         if (m_boot is { Open: true } boot) { Advance(bakes: bakes, loop: boot, now: now, previous: previous, probe: probe); }
         if (Latest is { Open: true } latest) { Advance(bakes: bakes, loop: latest, now: now, previous: previous, probe: probe); }
     }
 
     // When the latest produced frame was observed, zero before the first.
     private long m_lastFrame;
+    // The code revision the latest hot-reload loop began at, or the process's own before any.
+    private int m_code = Puck.Abstractions.CodeRevision.Current;
 
     private void Advance(Loop loop, long now, long previous, WorldRenderProbe probe, IWorldBakeReadiness bakes) {
         loop.First ??= now;
@@ -218,7 +227,7 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
 
         if (loop.Frame is null) {
             if (EndedUnchanged(loop: loop, residency: residency)) { return; }
-            if (!probe.IsReady || (residency.Frame is not { } frame) || !Reaches(frame: frame, loop: loop, residency: residency)) { return; }
+            if (!probe.IsReady || (residency.Frame is not { } frame) || !Reaches(composition: composition, frame: frame, loop: loop, residency: residency)) { return; }
             if (composition.Building || !ReferenceEquals(objA: frame.Program, objB: composition.Program)) { return; }
             loop.Frame = now;
             loop.ContentMark = bakes.Frames;
@@ -256,10 +265,12 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
         (volume.LightingMatches > loop.LightingMark) && (!volume.Settling || (volume.Converged && ((volume.LightingCaptures - loop.CaptureMark) >= MovingCaptures)));
 
     // Whether the frame carries the loop's edit: a document past the one installed when it began (any delivered document
-    // for the boot), a kernel batch installed since, or for a live state edit a tick collected after the one it began at.
-    private bool Reaches(SdfFrame frame, Loop loop, SdfWorldResidency residency) =>
+    // for the boot), a kernel batch installed since, for a live state edit a tick collected after the one it began at, or for
+    // a hot-reload edit a program every emitter emitted under its code revision.
+    private bool Reaches(SdfFrame frame, Loop loop, SdfWorldResidency residency, SdfCompositionFrameSource composition) =>
         ((frame.DiagnosticSource is WorldDocumentVersion version) && version.IsDelivered && !loop.After.Covers(other: version)) ||
-        (residency.ShaderBatchesInstalled > loop.ShaderInstalls) || ((loop.LiveTick is { } live) && (feed.Tick.Tick > (live + 1UL)));
+        (residency.ShaderBatchesInstalled > loop.ShaderInstalls) || ((loop.LiveTick is { } live) && (feed.Tick.Tick > (live + 1UL))) ||
+        ((loop.Code is { } code) && (composition.BuiltCodeRevision >= code));
 
     // Ends a loop whose only edit is a kernel reload that changed no pipeline or failed: no frame will ever show it.
     private static bool EndedUnchanged(Loop loop, SdfWorldResidency residency) {

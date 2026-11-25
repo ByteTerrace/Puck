@@ -109,10 +109,6 @@ public static partial class AzureCommand {
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
                 RequireClosedRewindDeployment(deployment: deployment);
-                await RetainWorldReleaseImagesAsync(
-                    [deployment.Image],
-                    cancellationToken
-                ).ConfigureAwait(continueOnCapturedContext: false);
                 var operation = (operationId ?? Guid.NewGuid());
 
                 Console.WriteLine(value: $"Restore operation: {operation:D}");

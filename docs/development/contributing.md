@@ -451,9 +451,10 @@ two things, and the watch output says which:
   next frame, so an edit to that code shows without a reload. A persisted
   product folds `CodeRevision.AppliedTo` into its identity: empty until an
   update touches a type the product reads, then a token unique to the process
-  and that update. The compile cache and its source declarations (the
-  compiler's modules), the compiled world (the engine build's modules) and the
-  mesh store (the types the bake's closure declares members of) key what a
+  and that update. The compile cache and its source declarations (the code the
+  compiler reaches, `CodeClosure`), the compiled world (the engine build's
+  modules) and the mesh store (the types the bake's closure declares members
+  of) key what a
   hot-reloaded process reads and writes apart from the build's own entries,
   which an update elsewhere leaves standing; the entries it writes are orphans
   the stores' retention trims. Simulation state and installed shader pipelines
@@ -998,10 +999,13 @@ unverified when no device run exists.
 - Docker Desktop's service can be set to start manually, so a stopped engine
   is not a missing one. When `docker version` reports no server, start Docker
   Desktop and wait until `docker version --format '{{.Server.Version}}'`
-  answers. Then the container legs run locally: build an image as CI does
-  (`docker build --file src/<Project>/Dockerfile --tag puck/<image>:local .`
-  from the root) and run `puck azure test-world-container --image
-  puck/world-silo:local`.
+  answers. Then the actors container leg runs locally: build its image as CI
+  does (`docker build --file src/Puck.Actors/Dockerfile --tag puck/web-actors:local .`
+  from the root). The world host needs no container: `puck world host build`,
+  `puck publish`, `puck channel push --to <mirror> --signing-key <file>` and
+  `puck world host fetch` install a host release locally, and `puck azure
+  test-world-host --install <root>` and `puck world release rehearse --install
+  <root>` run it.
 - `dotnet build <file>.cs` builds a file-based app (`src/Puck.Azure.Resources/bootstrap.cs`)
   only while the command carries no MSBuild switch: with `-nodeReuse:false` or
   any other the SDK loads the `.cs` file as a project and fails with `MSB4025`.
@@ -1415,8 +1419,14 @@ meant to establish.
 - A document field that carries a state, zone, rule, table, pattern, topology,
   generator, field, or dynamics name is registered in `WorldNameRegistry`
   (`src/Puck.World.Schema`); `puck registry --check` fails on an unregistered
-  unclassified text position or a stale `docs/world-name-registry.md`, and
-  `puck registry` rewrites the table.
+  unclassified text position or a stale `docs/world-name-registry.md`.
+  After adding or changing a document-model member, run `puck schema --bootstrap`: one
+  command regenerates the JSON schemas, the portal's TypeScript, the model table
+  `WorldModelShape.generated.cs` and that registry from the source model, and a text member
+  without `[DocumentName]` or `[DocumentText]` refuses the run, naming the member and the
+  annotation. Rebuild afterwards. Until you do, a build of `Puck.World.Schema` fails with
+  `PUCKSCHEMA001` naming the same command; stage the regenerated files, since the check
+  compares them with the git index.
 - Derive descriptor counts, pool sizes, strides, and capacities from the data
   that defines them.
 - .NET 11 is the only target. Verify runtime behavior and measure before preserving a hand optimization or making a performance claim.

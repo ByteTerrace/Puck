@@ -564,77 +564,61 @@ public static class WorldRenderKeys {
             )
         );
     }
-    private static BindableScalar? Scalar<TPart>(BindableScalar? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableScalar?> field) => ((Track(
+    // A field the section's keys state takes the section's track in place of its authored value, unless the member keys
+    // the field itself: its own keys then stand, so a world overrides one field of a template's section keys by keying
+    // it (a star layer's opacity keyed by the viewer's height, whose ground keys follow the hour).
+    private static BindableScalar? Scalar<TPart>(BindableScalar? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableScalar?> field) => (((authored?.Keys is null) && (Track(
+        clock: clock,
+        field: field,
+        literal: static value => ((value.Literal is not null) ? value : ((BindableScalar?)null)),
+        parts: parts
+    ) is { } track))
+        ? new BindableScalar(keys: track)
+        : authored
+    );
+    private static BindableAngle? Angle<TPart>(BindableAngle? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableAngle?> field) => (((authored?.Value.Keys is null) && (Track(
+        clock: clock,
+        field: field,
+        literal: static value => ((value.Value.Literal is not null) ? value.Value : ((BindableScalar?)null)),
+        parts: parts
+    ) is { } track))
+        ? new BindableAngle(value: new BindableScalar(keys: track))
+        : authored
+    );
+    private static BindableDirection? Direction<TPart>(BindableDirection? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableDirection?> field) => (((authored?.Keys is null) && (Track(
         clock: clock,
         field: field,
         literal: static value => value.Literal,
         parts: parts
-    ) is { } track)
-        ? new BindableScalar(keys: Joined(authored: authored?.Keys, section: track))
-        : authored
-    );
-    private static BindableAngle? Angle<TPart>(BindableAngle? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableAngle?> field) => ((Track(
-        clock: clock,
-        field: field,
-        literal: static value => value.Value.Literal,
-        parts: parts
-    ) is { } track)
-        ? new BindableAngle(value: new BindableScalar(keys: Joined(authored: authored?.Value.Keys, section: track)))
-        : authored
-    );
-    // A field the section's keys state replaces its authored value with the section's track, unless the authored value
-    // is keys that say how they join (a combine): those keys then join over the section's track, so one value follows
-    // the section's clock and its own (a star layer's opacity keyed by the hour and raised by the viewer's height).
-    private static WorldKeyTrack<float> Joined(WorldKeyTrack<float>? authored, WorldKeyTrack<float> section) => ((authored is { Combine: not null })
-        ? authored.Over(beneath: section)
-        : section
-    );
-    private static BindableDirection? Direction<TPart>(BindableDirection? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableDirection?> field) => ((Track(
-        clock: clock,
-        field: field,
-        literal: static value => value.Literal,
-        parts: parts
-    ) is { } track)
+    ) is { } track))
         ? new BindableDirection(keys: track)
         : authored
     );
-    private static BindableVector2? Vector<TPart>(BindableVector2? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableVector2?> field) => ((Track(
+    private static BindableVector2? Vector<TPart>(BindableVector2? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableVector2?> field) => (((authored?.Keys is null) && (Track(
         clock: clock,
         field: field,
         literal: static value => value.Literal,
         parts: parts
-    ) is { } track)
+    ) is { } track))
         ? new BindableVector2(keys: track)
         : authored
     );
-    private static BindableVector3? Vector<TPart>(BindableVector3? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableVector3?> field) => ((Track(
+    private static BindableVector3? Vector<TPart>(BindableVector3? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableVector3?> field) => (((authored?.Keys is null) && (Track(
         clock: clock,
         field: field,
         literal: static value => value.Literal,
         parts: parts
-    ) is { } track)
+    ) is { } track))
         ? new BindableVector3(keys: track)
         : authored
     );
-    private static BindableColor? Color<TPart>(BindableColor? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableColor?> field) {
-        var keys = ImmutableArray.CreateBuilder<WorldKey<BindableColor>>();
-
-        foreach (var (at, ease, part) in parts) {
-            if ((field(arg: part) is { Literal: not null } value)) {
-                keys.Add(item: new WorldKey<BindableColor>(
-                    At: at,
-                    Ease: ease,
-                    Value: value
-                ));
-            }
-        }
-
-        return ((keys.Count == 0)
-            ? authored
-            : new BindableColor(keys: new WorldKeyTrack<BindableColor>(
-                clock: clock,
-                keys: keys.ToImmutable()
-            ))
-        );
-    }
+    private static BindableColor? Color<TPart>(BindableColor? authored, string clock, IReadOnlyList<(double At, WorldEase Ease, TPart Part)> parts, Func<TPart, BindableColor?> field) => (((authored?.Keys is null) && (Track(
+        clock: clock,
+        field: field,
+        literal: static value => ((value.Literal is not null) ? value : ((BindableColor?)null)),
+        parts: parts
+    ) is { } track))
+        ? new BindableColor(keys: track)
+        : authored
+    );
 }

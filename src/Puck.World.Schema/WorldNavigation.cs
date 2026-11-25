@@ -7,7 +7,8 @@ namespace Puck.World;
 
 /// <summary>The authored bounded surface, free-volume, and live-medium navigation domains available to body producers,
 /// the area types their cells carry, and the cost profiles that price those areas per kind of agent.</summary>
-/// <param name="Domains">Finite rectangular domains, each compiled from the world's deterministic solid field.</param>
+/// <param name="Domains">Finite rectangular domains, each compiled from the world's deterministic solid field, as
+/// authored; a region-bound domain's extent is read through <see cref="WorldNavigationDomains.Of"/>.</param>
 /// <param name="AreaTypes">The area type names the world's areas, domains and profiles use, in a stable order. The
 /// engine gives no type a meaning: a type costs what each profile says.</param>
 /// <param name="Areas">Marked volumes in precedence order: a cell takes the type of the last area holding the point a
@@ -25,9 +26,6 @@ public sealed record WorldNavigationSection(
 ) {
     /// <summary>Gets a section containing no navigation domains.</summary>
     public static WorldNavigationSection Absent { get; } = new();
-    /// <summary>Gets the declared domain rows.</summary>
-    [JsonIgnore]
-    public IReadOnlyList<WorldNavigationDomain> Rows => (Domains ?? []);
     /// <summary>Gets the declared area type names.</summary>
     [JsonIgnore]
     public IReadOnlyList<string> AreaTypeRows => (AreaTypes ?? []);
@@ -86,18 +84,29 @@ public enum WorldNavigationConnectivity : byte {
     /// <summary>All 26 neighbours, including three-axis diagonals.</summary>
     Full,
 }
-/// <summary>One finite navigation grid compiled from the world's collision and optional medium truth.</summary>
+/// <summary>One finite navigation grid compiled from the world's collision and optional medium truth. Its extent is
+/// either authored (<paramref name="Origin"/>, <paramref name="Width"/>, <paramref name="Depth"/>, and a surface's probe
+/// band or a volume's layers) or taken from a placement's region (<paramref name="Region"/>), so a place and the ground
+/// its walkers route over are one authored box; <see cref="WorldNavigationDomains.Of"/> resolves the second form into
+/// the first, and every reader of a domain's extent reads it there.</summary>
 /// <param name="Name">The stable domain name referenced by navigated producer targets.</param>
 /// <param name="Kind">Whether cells follow ground, free 3D space, or a live medium.</param>
-/// <param name="Origin">The center of cell (0,0,0), relative to Parent when present and world-space otherwise;
-/// for a surface domain, resolved world Y is the ground-probe baseline.</param>
 /// <param name="CellSize">The square cell width in world units.</param>
-/// <param name="Width">The number of cells along the frame's X axis.</param>
-/// <param name="Depth">The number of cells along the frame's Z axis.</param>
 /// <param name="AgentRadius">The solid-clearance sphere radius. A medium domain also keeps this whole volume submerged.</param>
 /// <param name="ArrivalDistance">How close a body must come before advancing to the next waypoint.</param>
-/// <param name="MaxExpandedNodes">The hard A* expansion budget for one route search.</param>
+/// <param name="MaxExpandedNodes">The hard A* expansion budget for one route search; zero for the domain's cell
+/// count, every cell in one route.</param>
 /// <param name="MaxPathNodes">The hard stored-waypoint budget for one route.</param>
+/// <param name="Origin">The center of cell (0,0,0), relative to Parent when present and world-space otherwise;
+/// for a surface domain, resolved world Y is the ground-probe baseline. Absent beside a region.</param>
+/// <param name="Width">The number of cells along the frame's X axis. Absent beside a region.</param>
+/// <param name="Depth">The number of cells along the frame's Z axis. Absent beside a region.</param>
+/// <param name="Region">A static placement whose box region is the domain's extent: its floor plan grown by
+/// <paramref name="Margin"/> on every side gives the origin, width and depth, a surface probes its ground over the
+/// region's whole height (the baseline at its centre, the probe band its half height above and below), and a volume
+/// fills its height with layers. Its centre and half extents, less the margin, must fall on the cell grid.</param>
+/// <param name="Margin">How far a region-bound domain reaches past its region's floor plan on every side, in world units,
+/// so neighbouring districts share cells and a route crosses between them. Zero without a region.</param>
 /// <param name="Layers">The number of cells along world Y; surface domains require one.</param>
 /// <param name="Connectivity">The volume neighbour set; ignored by surface domains.</param>
 /// <param name="ProbeUp">For a surface domain, the ground-search distance above origin Y.</param>
@@ -120,14 +129,17 @@ public enum WorldNavigationConnectivity : byte {
 public sealed record WorldNavigationDomain(
     [property: DocumentText("a navigation domain name")] string Name,
     WorldNavigationKind Kind,
-    Vector3 Origin,
     float CellSize,
-    int Width,
-    int Depth,
     float AgentRadius,
     float ArrivalDistance,
     int MaxExpandedNodes,
     int MaxPathNodes,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Vector3? Origin = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Width = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Depth = null,
+    [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Region = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float Margin = 0f,
     int Layers = 1,
     WorldNavigationConnectivity Connectivity = WorldNavigationConnectivity.Full,
     float ProbeUp = 0f,
@@ -189,10 +201,10 @@ public sealed class WorldNavigationDomainTable {
     /// <param name="section">The navigation section.</param>
     public static WorldNavigationDomainTable Compile(WorldNavigationSection section) => new(
         table: OrdinalTable.Build(
-            names: section.Rows.Select(selector: static domain => domain.Name).ToArray(),
+            names: (section.Domains ?? []).Select(selector: static domain => domain.Name).ToArray(),
             comparer: StringComparer.Ordinal
         ),
-        kinds: section.Rows.Select(selector: static domain => domain.Kind).ToArray(),
+        kinds: (section.Domains ?? []).Select(selector: static domain => domain.Kind).ToArray(),
         profiles: OrdinalTable.Build(
             names: section.ProfileRows.Select(selector: static profile => profile.Name).Distinct(comparer: StringComparer.Ordinal).ToArray(),
             comparer: StringComparer.Ordinal
@@ -235,10 +247,10 @@ public readonly record struct FixedWorldNavigationDomain(
     /// <summary>Compiles authoring values once at the document boundary.</summary>
     public static FixedWorldNavigationDomain Compile(WorldNavigationDomain domain) => new(
         Kind: domain.Kind,
-        Origin: FixedVector3.FromVector3(value: domain.Origin),
+        Origin: FixedVector3.FromVector3(value: domain.Origin.GetValueOrDefault()),
         CellSize: FixedQ4816.FromDouble(value: domain.CellSize),
-        Width: domain.Width,
-        Depth: domain.Depth,
+        Width: domain.Width.GetValueOrDefault(),
+        Depth: domain.Depth.GetValueOrDefault(),
         Layers: domain.Layers,
         Connectivity: domain.Connectivity,
         ProbeUp: FixedQ4816.FromDouble(value: domain.ProbeUp),

@@ -41,9 +41,9 @@ public sealed partial class ProjectionAnchorLawTests {
         Visibility: visibility
     );
 
-    private static BindableScalar Density { get; } = new(keys: new WorldKeyTrack<float>(clock: Clock, keys: [
-        new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
-        new WorldKey<float>(At: 0.5d, Ease: WorldEase.Smooth, Value: 0.1f),
+    private static BindableScalar Density { get; } = new(keys: new WorldKeyTrack<BindableScalar>(clock: Clock, keys: [
+        new WorldKey<BindableScalar>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
+        new WorldKey<BindableScalar>(At: 0.5d, Ease: WorldEase.Smooth, Value: 0.1f),
     ]));
 
     // The fixture world with a presentation-tier admission row, a state clock over one Fixed row, and a fog density

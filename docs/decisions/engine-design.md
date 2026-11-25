@@ -657,6 +657,19 @@ again:
   slower. Counters show hits, misses and derivation time, as evidence for a
   performance decision, never as a gate.
 
+The walk that names the deriving code is a derivation of its own, so it follows
+the same rule. `CodeIdentity` (`src/Puck.Assets`) is the one door every product's
+code identity passes through: the mesh bake and its stages, the compiled world's
+chunks, the compile cache, the composition layers and `DerivedBytes`. It
+remembers each walk's hash beside the module version of every assembly the walk
+read, and the entry stands only while each of those assemblies still carries
+that version. A process of a build an earlier process walked therefore reads
+the hash back and walks nothing, while an edit to an assembly a walk read walks
+it again. The walk reads every reached method's IL, and before it was
+remembered, it was the largest single cost of a warm boot before the first
+frame. A hot-reloaded process still walks, since it asks what the closure reads
+to fold the applied update in.
+
 Why: the owner's ruling. Shipped bake products are acceptable so long as Puck
 never again becomes a slave to a recorded artifact, as it did with the deleted
 ledgers and the bake derivation fingerprint.

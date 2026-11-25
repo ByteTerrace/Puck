@@ -21,17 +21,17 @@ public static partial class AzureCommand {
 
             if (workers.Length != 1) { throw new InvalidOperationException(message: "qualification export requires exactly one active source worker"); }
             var worker = Text(value: workers[0]!["name"]);
-            var status = await WorldGuestJsonAsync(
+            var status = (await WorldGuestJsonAsync(
                 group: context.ResourceGroup,
-                script: "docker inspect --format '{\"image\":{{json .Config.Image}},\"running\":{{.State.Running}}}' puck-world",
+                script: WorldProbeScript,
                 worker: worker
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            ).ConfigureAwait(continueOnCapturedContext: false))["process"]!;
 
             if (
-                (status["image"]?.GetValue<string>() != source.Image) ||
+                (status["engine"]?.GetValue<string>() != source.Engine) ||
                 (status["running"]?.GetValue<bool>() != true)
             ) {
-                throw new InvalidOperationException(message: "qualification export found another image or a stopped source");
+                throw new InvalidOperationException(message: "qualification export found another engine or a stopped source");
             }
             var exported = await WorldGuestJsonAsync(
                 group: context.ResourceGroup,

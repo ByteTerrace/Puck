@@ -91,9 +91,9 @@ public sealed class WorldTimelineLawTests {
         ) with {
             RenderRaw = new WorldRenderDefaults(Sky: new WorldRenderSky(Layers: [new WorldRenderSkyLayer.Clouds(
                 Coverage: 0.4f,
-                Spin: new BindableScalar(keys: new WorldKeyTrack<float>(
+                Spin: new BindableScalar(keys: new WorldKeyTrack<BindableScalar>(
                     clock: clock,
-                    keys: [new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f), new WorldKey<float>(At: 0.5d, Ease: WorldEase.Linear, Value: 0.2f)]
+                    keys: [new WorldKey<BindableScalar>(At: 0d, Ease: WorldEase.Linear, Value: 0f), new WorldKey<BindableScalar>(At: 0.5d, Ease: WorldEase.Linear, Value: 0.2f)]
                 ))
             )])),
         };

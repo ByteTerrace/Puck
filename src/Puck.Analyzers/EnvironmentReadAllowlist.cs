@@ -87,6 +87,10 @@ public static class EnvironmentReadAllowlist {
             Assemblies: ["Puck.Cli.Release"],
             Reason: "The short-lived key the NuGet trusted-publishing login issues; the SDK reads it itself, and the publish verb only refuses to push without it."
         ),
+        ["NOTIFY_SOCKET"] = new(
+            Assemblies: ["Puck.Cli.Release"],
+            Reason: "Set by systemd for a Type=notify unit; the hosting machine's TLS state keeper reports its readiness on the socket it names, the one channel systemd offers."
+        ),
         ["NUGET_PACKAGES"] = new(
             Assemblies: ["Puck.Cli.Bench"],
             Reason: "The .NET SDK's package-cache override; the bench reference capture finds the cache where the SDK does."

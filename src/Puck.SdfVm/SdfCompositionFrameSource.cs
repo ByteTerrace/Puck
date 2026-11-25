@@ -160,6 +160,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// <summary>Gets the number of completed rebuilds that took the held program's field with another appearance: a look
     /// value (a colour, a material value, a shade parameter) packed without a field build.</summary>
     public long AppearanceBuilds { get; private set; }
+    /// <summary>Gets the code revision (<see cref="Puck.Abstractions.CodeRevision.Current"/>) every emitter emitted
+    /// <see cref="Program"/> under: once it reaches a hot-reload edit's revision, the program carries what the edited code
+    /// emits. Read on the frame thread.</summary>
+    public int BuiltCodeRevision => m_builtRevisions[CodeComponent];
+    // The revision component the code revision occupies, after every emitter's own.
+    private int CodeComponent => m_revisionOffsets[m_emitters.Count];
 
     // Counts an adopted build against the program it replaced.
     private void CountBuild(SdfProgram built, SdfProgram? held) {
@@ -400,7 +406,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         }
 
         // A hot-reload edit to any emission code re-emits every emitter, as a moved component of each would.
-        var code = m_revisionOffsets[m_emitters.Count];
+        var code = CodeComponent;
 
         m_pendingRevisions[code] = Puck.Abstractions.CodeRevision.Current;
         moved |= (m_pendingRevisions[code] != m_builtRevisions[code]);

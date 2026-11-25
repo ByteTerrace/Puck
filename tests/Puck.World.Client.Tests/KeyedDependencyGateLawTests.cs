@@ -14,9 +14,9 @@ public sealed class KeyedDependencyGateLawTests {
         var definition = (baseline with {
             TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: "day", State: "phase")]),
             RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(
-                Density: new BindableScalar(keys: new WorldKeyTrack<float>(clock: "day", keys: [
-                    new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
-                    new WorldKey<float>(At: 0.5d, Ease: WorldEase.Linear, Value: 0.1f),
+                Density: new BindableScalar(keys: new WorldKeyTrack<BindableScalar>(clock: "day", keys: [
+                    new WorldKey<BindableScalar>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
+                    new WorldKey<BindableScalar>(At: 0.5d, Ease: WorldEase.Linear, Value: 0.1f),
                 ]))
             ))),
             ThemeRaw = baseline.Theme with {

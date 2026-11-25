@@ -33,6 +33,10 @@ public sealed partial class CodeClosure {
     public IReadOnlyDictionary<string, UInt128> Members { get; }
     /// <summary>Gets the first member reaching each member, or root.</summary>
     public IReadOnlyDictionary<string, string> Reasons { get; }
+    /// <summary>Gets each <c>Puck</c> assembly the walk read and its module version identity, the empty identity for one
+    /// the build does not hold, in ordinal order; with a shared <see cref="ModuleSet"/>, also the assemblies its earlier
+    /// walks read. The hash depends on nothing else in the build (<see cref="CodeIdentity"/>).</summary>
+    public IReadOnlyDictionary<string, Guid> Assemblies { get; private init; } = new SortedDictionary<string, Guid>(comparer: StringComparer.Ordinal);
     /// <summary>Whether an applied metadata update to this type invalidates this closure.</summary>
     /// <param name="type">The updated type.</param>
     /// <returns>Whether the closure reads it.</returns>
@@ -62,7 +66,15 @@ public sealed partial class CodeClosure {
         public CodeClosure Of(IReadOnlyList<(string Assembly, string Type, string? Method)> roots, IReadOnlySet<string>? stopTypes = null) {
             ArgumentNullException.ThrowIfNull(roots);
             var walk = new Walk(m_directory, stopTypes ?? new HashSet<string>(), Load, m_byReader);
-            return new CodeClosure(walk.Run(roots), walk.Reasons, walk.Types);
+            var members = walk.Run(roots);
+            var assemblies = new SortedDictionary<string, Guid>(comparer: StringComparer.Ordinal);
+
+            foreach (var (name, module) in m_modules) {
+                if (name.StartsWith("Puck.", StringComparison.Ordinal)) {
+                    assemblies[name] = ((module is null) ? Guid.Empty : module.Metadata.GetGuid(handle: module.Metadata.GetModuleDefinition().Mvid));
+                }
+            }
+            return new CodeClosure(members, walk.Reasons, walk.Types) { Assemblies = assemblies };
         }
 
         private Module? Load(string name) {

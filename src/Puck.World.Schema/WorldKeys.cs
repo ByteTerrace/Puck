@@ -19,23 +19,6 @@ public enum WorldEase {
     /// <summary>The value holds this key's until the next key, where it changes at once.</summary>
     Step = 2,
 }
-/// <summary>How a keyed scalar's track joins the value beneath it: the track it follows in a chain
-/// (<see cref="WorldKeyTrack{T}.With"/>), or a section's keys on the field it fills (<see cref="WorldRenderKeys"/>). Each
-/// combine has an identity, so a track with nothing beneath it is its own value.</summary>
-[JsonConverter(typeof(StrictEnumConverter<WorldKeyCombine>))]
-public enum WorldKeyCombine {
-    /// <summary>The two values add: a lift over a base.</summary>
-    Add = 0,
-
-    /// <summary>The two values multiply: a fade of a base.</summary>
-    Multiply = 1,
-
-    /// <summary>The greater of the two: a floor that either clock may raise.</summary>
-    Maximum = 2,
-
-    /// <summary>The lesser of the two: a ceiling that either clock may lower.</summary>
-    Minimum = 3,
-}
 /// <summary>One key of a keyed value: where on its clock it sits, the value it holds there, and how time eases from it
 /// to the next key.</summary>
 /// <typeparam name="T">The value's type.</typeparam>
@@ -48,24 +31,20 @@ public readonly record struct WorldKey<T>(double At, T Value, WorldEase Ease);
 /// A value keyed on a clock: the clock it reads, by name in the <c>timeline</c> section, and its keys, ascending in
 /// <see cref="WorldKey{T}.At"/>. The value between two keys is the two keys' values blended by the field's type at the
 /// eased fraction of the way between them, and the last key wraps into the first, since every clock is periodic. A
-/// track compares by value, so two documents that author the same keys are equal. A scalar's track may carry a second
-/// track on another clock (<see cref="With"/>) that joins it by that track's <see cref="Combine"/>, so one value follows
-/// two clocks at once (an exposure floor that follows both the day and the viewer's height).
+/// track compares by value, so two documents that author the same keys are equal. A scalar's key may hold keys of its
+/// own on another clock (<see cref="BindableScalar"/>), so one value follows as many clocks as its keys nest: an
+/// exposure floor keyed on the viewer's height whose ground keys follow the day is a table over both clocks.
 /// </summary>
 /// <typeparam name="T">The value's type.</typeparam>
 public sealed class WorldKeyTrack<T> : IEquatable<WorldKeyTrack<T>>, IWorldKeyTrack {
     /// <summary>Initializes a new instance of the <see cref="WorldKeyTrack{T}"/> class.</summary>
     /// <param name="clock">The clock's name.</param>
     /// <param name="keys">The keys, in authored order.</param>
-    /// <param name="combine">How this track joins the value beneath it, or <see langword="null"/> for none authored.</param>
-    /// <param name="with">The track that joins this one, on its own clock, or <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="clock"/> is <see langword="null"/>.</exception>
-    public WorldKeyTrack(string clock, ImmutableArray<WorldKey<T>> keys, WorldKeyCombine? combine = null, WorldKeyTrack<T>? with = null) {
+    public WorldKeyTrack(string clock, ImmutableArray<WorldKey<T>> keys) {
         ArgumentNullException.ThrowIfNull(argument: clock);
 
         Clock = clock;
-        Combine = combine;
-        With = with;
         Keys = (keys.IsDefault
             ? []
             : keys
@@ -76,34 +55,16 @@ public sealed class WorldKeyTrack<T> : IEquatable<WorldKeyTrack<T>>, IWorldKeyTr
     public string Clock { get; }
     /// <summary>Gets the keys, in authored order.</summary>
     public ImmutableArray<WorldKey<T>> Keys { get; }
-    /// <summary>Gets how this track joins the value beneath it, or <see langword="null"/> when none is authored, which
-    /// joins as <see cref="WorldKeyCombine.Add"/>.</summary>
-    public WorldKeyCombine? Combine { get; }
-    /// <summary>Gets the track that joins this one by its own <see cref="Combine"/>, on its own clock, or
-    /// <see langword="null"/>.</summary>
-    public WorldKeyTrack<T>? With { get; }
     /// <inheritdoc/>
     public int Count => Keys.Length;
-    /// <inheritdoc/>
-    IWorldKeyTrack? IWorldKeyTrack.With => With;
-
-    /// <summary>Returns this track joined over another: <paramref name="beneath"/> and its chain first, then this
-    /// track and its own chain, each link by its combine.</summary>
-    /// <param name="beneath">The track this one joins.</param>
-    /// <returns>The chained track.</returns>
-    public WorldKeyTrack<T> Over(WorldKeyTrack<T> beneath) {
-        ArgumentNullException.ThrowIfNull(argument: beneath);
-
-        return new WorldKeyTrack<T>(
-            clock: beneath.Clock,
-            combine: beneath.Combine,
-            keys: beneath.Keys,
-            with: ((beneath.With is { } next) ? Over(beneath: next) : this)
-        );
-    }
 
     /// <inheritdoc/>
     public double AtOf(int index) => Keys[index].At;
+    /// <inheritdoc/>
+    public IWorldKeyTrack? NestedAt(int index) => ((Keys[index].Value is BindableScalar scalar)
+        ? scalar.Keys
+        : null
+    );
     /// <inheritdoc/>
     public bool Equals(WorldKeyTrack<T>? other) {
         if (other is null) {
@@ -123,19 +84,15 @@ public sealed class WorldKeyTrack<T> : IEquatable<WorldKeyTrack<T>>, IWorldKeyTr
             b: other.Clock,
             comparisonType: StringComparison.Ordinal
         ) &&
-            Keys.AsSpan().SequenceEqual(other: other.Keys.AsSpan()) &&
-            (Combine == other.Combine) &&
-            Equals(objA: With, objB: other.With)
+            Keys.AsSpan().SequenceEqual(other: other.Keys.AsSpan())
         );
     }
     /// <inheritdoc/>
     public override bool Equals(object? obj) => Equals(other: (obj as WorldKeyTrack<T>));
     /// <inheritdoc/>
-    public override int GetHashCode() => HashCode.Combine(Clock, SequenceHash.Of(Keys.AsSpan()), Combine, With);
+    public override int GetHashCode() => HashCode.Combine(Clock, SequenceHash.Of(Keys.AsSpan()));
     /// <inheritdoc/>
-    public override string ToString() => ((With is { } with)
-        ? $"keys(clock: {Clock}, {Keys.Length} keys, with {with})"
-        : $"keys(clock: {Clock}, {Keys.Length} keys)");
+    public override string ToString() => $"keys(clock: {Clock}, {Keys.Length} keys)";
 }
 
 /// <summary>Reads one key's value of a keyed track.</summary>
@@ -146,9 +103,8 @@ public delegate T WorldKeyValueReader<T>(ref Utf8JsonReader reader);
 
 /// <summary>The one wire form of a keyed value, which every bindable's converter reads and writes beside its literal
 /// and binding arms: <c>{ "clock": "&lt;name&gt;", "keys": [ { "at": n, "value": v, "ease": "Smooth" } ] }</c>,
-/// <c>ease</c> optional and <see cref="WorldEase.Linear"/> when absent. A track that combines (a scalar's) also reads
-/// <c>combine</c> (<see cref="WorldKeyCombine"/>) and <c>with</c>, a second track of the same form on its own clock.
-/// Any other member is refused by name.</summary>
+/// <c>ease</c> optional and <see cref="WorldEase.Linear"/> when absent. A key's value is read by the bindable's own
+/// reader, so a scalar's key may hold keys of its own on another clock. Any other member is refused by name.</summary>
 public static class WorldKeyTrackJson {
     /// <summary>The refusal every keyed arm shares.</summary>
     public const string Grammar = "{ clock: <name>, keys [ { at: <time>, value: <value>, ease: Linear|Smooth|Step } ] }";
@@ -158,10 +114,9 @@ public static class WorldKeyTrackJson {
     /// <param name="reader">The reader, on a <see cref="JsonTokenType.StartObject"/>.</param>
     /// <param name="readValue">Reads one key's value.</param>
     /// <param name="kind">The bindable's name, for refusals.</param>
-    /// <param name="combines">Whether the track may carry <c>combine</c> and <c>with</c>.</param>
     /// <returns>The track.</returns>
     /// <exception cref="JsonException">The object is not a keyed track.</exception>
-    public static WorldKeyTrack<T> Read<T>(ref Utf8JsonReader reader, WorldKeyValueReader<T> readValue, string kind, bool combines = false) {
+    public static WorldKeyTrack<T> Read<T>(ref Utf8JsonReader reader, WorldKeyValueReader<T> readValue, string kind) {
         ArgumentNullException.ThrowIfNull(argument: readValue);
 
         if (reader.TokenType != JsonTokenType.StartObject) {
@@ -169,9 +124,7 @@ public static class WorldKeyTrackJson {
         }
 
         string? clock = null;
-        WorldKeyCombine? combine = null;
         ImmutableArray<WorldKey<T>>.Builder? keys = null;
-        WorldKeyTrack<T>? with = null;
 
         while (reader.Read() && (reader.TokenType != JsonTokenType.EndObject)) {
             var member = reader.GetString();
@@ -203,23 +156,6 @@ public static class WorldKeyTrackJson {
                     }
 
                     break;
-                case "combine" when combines:
-                    combine = ((Enum.TryParse(ignoreCase: true, result: out WorldKeyCombine parsedCombine, value: reader.GetString()) && Enum.IsDefined(value: parsedCombine) && !int.TryParse(s: reader.GetString(), result: out _))
-                        ? parsedCombine
-                        : throw new JsonException(message: $"A keyed {kind}'s combine '{reader.GetString()}' is not Add, Multiply, Maximum or Minimum."));
-
-                    break;
-                case "with" when combines:
-                    if (reader.TokenType != JsonTokenType.Null) {
-                        with = Read(
-                            combines: true,
-                            kind: kind,
-                            readValue: readValue,
-                            reader: ref reader
-                        );
-                    }
-
-                    break;
                 default:
                     throw new JsonException(message: $"A keyed {kind} has no member '{member}'; it is {Grammar}.");
             }
@@ -235,9 +171,7 @@ public static class WorldKeyTrackJson {
 
         return new WorldKeyTrack<T>(
             clock: clock,
-            combine: combine,
-            keys: keys.ToImmutable(),
-            with: with
+            keys: keys.ToImmutable()
         );
     }
     /// <summary>Writes a keyed track.</summary>
@@ -277,52 +211,12 @@ public static class WorldKeyTrackJson {
         }
 
         writer.WriteEndArray();
-
-        if (track.Combine is { } combine) {
-            writer.WriteString(
-                propertyName: "combine",
-                value: combine.ToString()
-            );
-        }
-
-        if (track.With is { } with) {
-            writer.WritePropertyName(propertyName: "with");
-            Write(
-                track: with,
-                writeValue: writeValue,
-                writer: writer
-            );
-        }
-
         writer.WriteEndObject();
     }
     /// <summary>Builds the schema node of a keyed track whose key values take a given schema.</summary>
     /// <param name="value">The schema of one key's value.</param>
-    /// <param name="combines">Whether the track may carry <c>combine</c> and <c>with</c>.</param>
     /// <returns>The keyed arm's schema.</returns>
-    public static JsonObject Schema(JsonNode value, bool combines = false) {
-        var schema = TrackSchema(value: value);
-
-        if (combines) {
-            var combine = new JsonObject {
-                ["type"] = "string",
-                ["enum"] = new JsonArray(
-                    nameof(WorldKeyCombine.Add),
-                    nameof(WorldKeyCombine.Multiply),
-                    nameof(WorldKeyCombine.Maximum),
-                    nameof(WorldKeyCombine.Minimum)
-                ),
-            };
-            var with = TrackSchema(value: value.DeepClone());
-
-            ((JsonObject)with["properties"]!)["combine"] = combine.DeepClone();
-            ((JsonObject)schema["properties"]!)["combine"] = combine;
-            ((JsonObject)schema["properties"]!)["with"] = with;
-        }
-
-        return schema;
-    }
-    private static JsonObject TrackSchema(JsonNode value) => new() {
+    public static JsonObject Schema(JsonNode value) => new() {
         ["type"] = "object",
         ["properties"] = new JsonObject {
             ["clock"] = new JsonObject { ["type"] = "string" },

@@ -843,9 +843,12 @@ regardless.
 `DocumentNameAttribute`. `DocumentTextAttribute` identifies literal text and names that
 belong to another vocabulary. Bindable values carry their state binding through their
 type. The schema generator embeds these classifications in `WorldModelShape`, including
-the converter-backed expression instruction arms. After changing the model, run `puck schema`,
-rebuild, and run `puck registry` to regenerate [the name positions](../../docs/world-name-registry.md).
-`puck registry --check` reports unclassified text and checks the generated reference.
+the converter-backed expression instruction arms. After changing the model, run `puck schema --bootstrap`,
+which regenerates the schemas, the model table and [the name positions](../../docs/world-name-registry.md)
+from the source model in one run, then rebuild. A text member with no classification refuses that run,
+naming the member and the annotation, and a build of this project whose model table lacks a public
+property fails with `PUCKSCHEMA001`. `puck registry --check` reports unclassified text and checks the
+generated reference against the compiled model.
 `WorldModuleNamespace.cs` reads the same registry at compose time: an import
 entry carrying `as` qualifies every name its fragment declares by the alias,
 `<alias>$<name>` (`GeneratedName.Qualify`, the generated spelling no author
@@ -1868,7 +1871,11 @@ names no declared text cell, or one whose text is not a hex color; the
 has no world to resolve against—the world validator resolves it at the
 placement). `render.lighting`/`render.sky`/`render.environment` colors speak
 `BindableColor` instead—the theme vocabulary's generalized form of the
-identical binding grammar, which may also be keyed on a clock (an accepted
+identical binding grammar, which may also be keyed on a clock (a scalar's key
+may hold keys of its own on another clock, so one value follows several clocks
+as a table: `{ clock: altitude, keys [{ at: 0, value: dayFloor }, { at: 2250,
+value: 11 }] }` with `dayFloor` keyed on the day, see
+[the decision](../../docs/decisions/state-and-language.md#a-value-follows-its-clocks-by-nesting-keys); an accepted
 `#RRGGBBAA` alpha is ignored; the render path is opaque), resolved at emit by
 `WorldEnvironmentResolve` against the routed definition with no re-bake, so a cell write recolors the
 sky on the next frame. Identity, profile, and `seatDefaults` neutral colors
@@ -3172,6 +3179,20 @@ edges are baked, while whole-agent node and edge containment are re-read from
 the live field so draining or moving fluid invalidates a cached route. A
 medium agent's diameter may not exceed its field lattice cell size, keeping
 that conservative neighboring-voxel clearance proof bounded.
+
+A domain's extent is authored (`origin`, `width`, `depth`, and a surface's
+`probeUp`/`probeDown` or a volume's `layers`) or named: `region` names a static
+placement whose box region is the domain, so a place and the ground its walkers
+route over are one box ([decision](../../docs/decisions/state-and-language.md#one-region-written-once)).
+The region's floor plan grown by `margin` on every side gives the corner and
+the cell counts, a surface searches its ground over the region's height (the
+baseline at its centre, the band its half height above and below), and a
+volume fills that height with layers. The region must be an unturned box on
+the domain's cell grid, and the domain authors none of the extent it derives.
+`WorldNavigationDomains.Of` resolves every domain, and every reader of an
+extent reads it there. A `maxExpandedNodes` of zero searches every cell in one
+route. The standard's `placeDomain` (`worlds/standard/domains.puck`) writes one;
+the city's districts are each a `placeDomain` over their place.
 
 All coordinates and tuning quantize once to `FixedQ4816`. A stable A* order
 breaks equal costs by estimated cost and then node ordinal. `connectivity`

@@ -412,7 +412,7 @@ public static partial class WorldDefinitionFileSource {
             ShapeOwn(root: ownBody);
         }
 
-        var layerCode = (store is null) ? null : LayerCodeIdentity(store: store);
+        var layerCode = (store is null) ? null : LayerCodeIdentity();
         string? KeyOf(string kind, string path, string? alias, string description, WorldComposedDocument? input) =>
             (layerCode is null) ? null : LayerKey(code: layerCode, kind: kind, input: (input?.ComposedDigest ?? ContentPin.Compute(content: bytes).Hex),
                 path: path, target: resolvedPath, catalog: catalogFingerprint, hasCatalog: (catalog is not null), alias: alias, description: description, walk: hasImports);

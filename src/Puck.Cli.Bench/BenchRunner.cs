@@ -124,7 +124,7 @@ public static class BenchRunner {
         var command = new Command(
             description: "Measure kernels, the server tick path, World startup, windowed frames, and the cost schedule's evidence.",
             name: "bench"
-        ) { kernelsCommand, StartupBenchmarks.Create(sampleHost: sampleHost), FrameBenchmarks.Create(sampleHost), StateEvidenceCommand.Create(clock: clock), worldCommand };
+        ) { kernelsCommand, StartupBenchmarks.Create(sampleHost: sampleHost), IterationBenchmarks.Create(sampleHost: sampleHost), FrameBenchmarks.Create(sampleHost), StateEvidenceCommand.Create(clock: clock), worldCommand };
 
         kernelsCommand.Detail(detail: """
             Every argument reaches BenchmarkDotNet's switcher unchanged. Job rigor is chosen there and layered over the

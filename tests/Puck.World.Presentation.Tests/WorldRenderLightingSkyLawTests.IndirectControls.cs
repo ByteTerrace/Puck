@@ -10,7 +10,7 @@ public sealed partial class WorldRenderLightingSkyLawTests {
     public void IndirectControlsResolveBindingsKeysAndExplicitZeroThroughTheExistingEnvironment() {
         var indirect = new WorldRenderIndirect(Sources: new WorldRenderIndirectSources(
             Lights: .125f, Emission: .25f, Screens: 0f, Sky: .5f,
-            Feedback: new BindableScalar(keys: new WorldKeyTrack<float>(clock: "day", keys: [new(At: 0, Ease: WorldEase.Linear, Value: .75f)]))),
+            Feedback: new BindableScalar(keys: new WorldKeyTrack<BindableScalar>(clock: "day", keys: [new(At: 0, Ease: WorldEase.Linear, Value: .75f)]))),
             Bounces: 1, Apply: new WorldRenderIndirectApply(Intensity: .5f, Tint: new BindableColor(Raw: "state.colors.sun"), Contact: .25f));
         var definition = Fixtures.BuildDocument().WithWorldState([ColorsRow(hex: "#FF0000")]) with {
             TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: "day", PeriodSeconds: 1)]),

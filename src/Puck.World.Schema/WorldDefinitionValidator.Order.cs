@@ -36,8 +36,8 @@ public static partial class WorldDefinitionValidator {
             } else if ((value.Literal is null) && (value.Keys is null)) {
                 // A malformed binding is refused by its own field.
                 judged = false;
-            } else if (value.Keys?.With is not null) {
-                errors.Add(item: $"{valuePath} may not join a second track: {path} must stay ascending, and two clocks' keys meet at phases no document states.");
+            } else if (value.IsNested) {
+                errors.Add(item: $"{valuePath} may not nest keys on another clock: {path} must stay ascending, and two clocks' keys meet at phases no document states.");
                 judged = false;
             }
         }
@@ -245,8 +245,8 @@ public static partial class WorldDefinitionValidator {
             span: span,
             track: track
         );
-        var a = keys[segment.From].Value;
-        var b = keys[segment.To].Value;
+        var a = (keys[segment.From].Value.Literal ?? 0f);
+        var b = (keys[segment.To].Value.Literal ?? 0f);
         var ease = keys[segment.From].Ease;
         var start = WorldKeyResolver.Scalar(
             phase: (from / span),

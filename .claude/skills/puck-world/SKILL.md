@@ -704,8 +704,9 @@ device lands there with a test.
    `world.status`, `world.hud` are the pattern).
 6. Fold any derived cost into `world.budget`.
 
-Then regenerate with `puck schema` (JSON Schemas, the dashboard types and
-`WorldModelShape.generated.cs`); never hand-edit those outputs.
+Then regenerate with `puck schema --bootstrap` (JSON Schemas, the dashboard types,
+`WorldModelShape.generated.cs` and `docs/world-name-registry.md`, in one run from the source
+model, then rebuild); never hand-edit those outputs.
 
 ## Running it
 
@@ -823,9 +824,10 @@ check the flag: the owner may be holding the pad.
   narration, boot lines, capture announcements and `[world.mutation: …]`
   echoes land on stderr. A World you did not launch keeps its newest 4096
   lines of both in a ring that `host.log` reads over an attachment, each as
-  `#<seq> t<tick> out|err <line>`; filter with `category <prefix>`, `text
-  <word>` (quote several words), `stream err`, `ticks <from>..<to>`, `since
-  <seq>` and `last <n>`.
+  `#<seq> t<tick> +<seconds>s out|err <line>`, the seconds counted from the
+  process's start (`ProcessClock`), so a boot's wait reads as the gap between
+  two lines; filter with `category <prefix>`, `text <word>` (quote several
+  words), `stream err`, `ticks <from>..<to>`, `since <seq>` and `last <n>`.
 - **Narrow a large read.** An MCP result carries 1 MiB, and `world.counters gpu`
   alone passes that in a world with many render-graph instances. Ask with
   `summary`, `node <name>`, `pass <label>` or `counter <prefix>` (they combine;
@@ -842,7 +844,8 @@ check the flag: the owner may be holding the pad.
   comments are skipped.
 - **Time the edit loop.** `world.iteration` reads every edit loop the World
   has timed (`WorldIterationClock`): the boot from process start, each
-  `world.reload` and `world.shaders.reload`, and a loop a script begins with
+  `world.reload` and `world.shaders.reload`, each hot-reload edit (from the
+  runtime's application, `CodeRevision.AppliedAt`), and a loop a script begins with
   `world.iteration begin <name>` before its own edit. Each line gives the
   seconds to the first produced frame (`first`, the boot's start), the first
   frame from the edited content (`frame`), every mesh

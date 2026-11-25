@@ -1,15 +1,17 @@
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Imports
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-import { worldSiloConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.7'
+import { worldSiloConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.8'
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Parameters
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 param configuration worldSiloConfigType
 param identityResourceId string
+@description('The protected bootstrap: the host release installer\'s fileUris and the command that installs the release and hands its bootstrap to the installed CLI.')
 @secure()
-param bootstrapCommand string
+param bootstrap object
+@description('The engine the release runs: its host release\'s payload identity.')
 param release string
 param sshPublicKey string
 @description('Expose the silo OAuth-protected MCP TLS listener. Its configuration arrives in the retained deployment inputs the protected bootstrap command pins.')
@@ -234,9 +236,9 @@ resource workers 'Microsoft.Compute/virtualMachineScaleSets@2025-04-01' = {
               typeHandlerVersion: '2.1'
               autoUpgradeMinorVersion: true
               enableAutomaticUpgrade: false
-              forceUpdateTag: take(last(split(release, ':')), 40)
+              forceUpdateTag: take(last(split(release, '/')), 40)
               suppressFailures: false
-              protectedSettings: { commandToExecute: bootstrapCommand }
+              protectedSettings: bootstrap
             }
           }
         ]

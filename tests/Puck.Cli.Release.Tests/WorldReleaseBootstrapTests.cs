@@ -70,7 +70,7 @@ public sealed class WorldReleaseBootstrapTests {
             CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
             Label = "bootstrap",
             SourceRevision = "test",
-            EngineImageDigest = ("sha256:" + new string(
+            Engine = ("sha256/" + new string(
             c: 'a',
             count: 64
         )),
@@ -246,7 +246,7 @@ public sealed class WorldReleaseBootstrapTests {
             CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
             Label = "silo-publish",
             SourceRevision = "test",
-            EngineImageDigest = ("sha256:" + new string(
+            Engine = ("sha256/" + new string(
             c: 'a',
             count: 64
         )),

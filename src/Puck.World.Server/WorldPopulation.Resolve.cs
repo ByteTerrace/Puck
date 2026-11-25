@@ -196,7 +196,7 @@ public sealed partial class WorldPopulation {
     // Whether a body may follow a route from its first tick: a kit's target or flock names a navigation domain. Its
     // domains' bakes then start on the thread pool at install, so the first tick that reads one rarely waits.
     private static bool NavigationBakesAhead(WorldDefinition definition) =>
-        ((definition.Navigation.Rows.Count != 0) &&
+        (((definition.Navigation.Domains?.Count ?? 0) != 0) &&
          (definition.BodyMotionPrograms.Any(predicate: static program => (program.Target is BodyTargetSource.Navigated)) ||
           definition.Kits.Any(predicate: static kit => kit.Producers.Values.Any(predicate: static parameters => (parameters?.Flock?.MovementDomain is not null)))));
 

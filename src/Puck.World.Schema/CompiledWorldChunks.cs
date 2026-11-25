@@ -111,13 +111,13 @@ public sealed class CompiledWorldContext {
 /// </summary>
 public sealed class CompiledWorldChunks : IReadOnlyList<ICompiledWorldChunk> {
     private readonly ICompiledWorldChunk[] m_chunks;
-    private readonly Lazy<CodeClosure> m_code;
+    private readonly Lazy<CodeIdentity> m_code;
 
     private CompiledWorldChunks(ICompiledWorldChunk[] chunks) {
         m_chunks = chunks;
-        m_code = new Lazy<CodeClosure>(valueFactory: () => CodeClosure.Of(directory: AppContext.BaseDirectory,
+        m_code = new Lazy<CodeIdentity>(valueFactory: () => CodeIdentity.Of(directory: AppContext.BaseDirectory,
             roots: [.. m_chunks.SelectMany(selector: ProducerRoots).Distinct()],
-            stopTypes: new HashSet<string>(collection: [typeof(CompiledWorld).FullName!, typeof(CompiledWorldChunks).FullName!, typeof(CodeClosure).FullName!], comparer: StringComparer.Ordinal)));
+            stopTypes: new HashSet<string>(collection: [typeof(CompiledWorld).FullName!, typeof(CompiledWorldChunks).FullName!, typeof(CodeClosure).FullName!, typeof(CodeIdentity).FullName!], comparer: StringComparer.Ordinal)));
     }
 
     private static IEnumerable<(string Assembly, string Type, string? Method)> ProducerRoots(ICompiledWorldChunk chunk) {
@@ -137,10 +137,11 @@ public sealed class CompiledWorldChunks : IReadOnlyList<ICompiledWorldChunk> {
 
     /// <summary>Gets the code and layouts deriving this registry's chunks. Each producer's contract methods,
     /// constructors and type initializer are roots; unrelated helpers join only when those entries reach them.</summary>
-    public CodeClosure Code => m_code.Value;
+    public CodeClosure Code => m_code.Value.Closure;
 
-    /// <summary>Gets the deriving code identity, including hot-reload updates to types its closure reads.</summary>
-    public string EngineBuild => AssetContentHash.OfText(text: $"{Code.Hash:x32}\n{Puck.Abstractions.CodeRevision.AppliedTo(reads: Code.Reads)}").ToString();
+    /// <summary>Gets the deriving code identity, including hot-reload updates to types its closure reads. A process of a
+    /// build an earlier process walked reads the closure's hash back (<see cref="CodeIdentity"/>) and walks nothing.</summary>
+    public string EngineBuild => AssetContentHash.OfText(text: $"{m_code.Value.Hash:x32}\n{Puck.Abstractions.CodeRevision.AppliedTo(reads: m_code.Value.Reads)}").ToString();
 
     /// <summary>Gets the standard derivations: <see cref="DefinitionChunk"/>, <see cref="AssetChunk"/> and <see cref="CurvatureChunk"/>.</summary>
     public static CompiledWorldChunks Standard { get; } = new(chunks: [DefinitionChunk.Instance, AssetChunk.Instance, CurvatureChunk.Instance]);

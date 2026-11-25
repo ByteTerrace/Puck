@@ -51,7 +51,7 @@ public sealed class WorldReleaseManagementLawTests {
         c: 'c',
         count: 40
     ),
-        EngineImageDigest = ("sha256:" + new string(
+        Engine = ("sha256/" + new string(
         c: 'd',
         count: 64
     )),
@@ -77,13 +77,13 @@ public sealed class WorldReleaseManagementLawTests {
             },
             new Dictionary<string, string>()
         ) with {
-            EngineImageDigest = ("sha256:" + new string(
+            Engine = ("sha256/" + new string(
             c: 'a',
             count: 64
         )),
         };
         var target = source with {
-            EngineImageDigest = ("sha256:" + new string(
+            Engine = ("sha256/" + new string(
             c: 'b',
             count: 64
         )),
@@ -572,7 +572,7 @@ public sealed class WorldReleaseManagementLawTests {
         );
         var target = source with {
             Label = "candidate",
-            EngineImageDigest = ("sha256:" + new string(
+            Engine = ("sha256/" + new string(
             c: 'e',
             count: 64
         )),
@@ -633,7 +633,7 @@ public sealed class WorldReleaseManagementLawTests {
             }
         );
         var same = source with {
-            EngineImageDigest = ("sha256:" + new string(
+            Engine = ("sha256/" + new string(
             c: 'b',
             count: 64
         )),

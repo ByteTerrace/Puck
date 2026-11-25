@@ -42,4 +42,8 @@ internal sealed class WorldBackgroundAllowance(WorldGpuTiming timing, IWorldFram
             target.Unread(periodSeconds: period, reason: "untimed");
         }
     }
+    /// <summary>Tells the budget the frame's own submissions have reached the queue (<see cref="SdfGpuWorkBudget.FramePassed"/>),
+    /// so the background jobs entered before them stop counting against the next frame's allowance. Call on the frame
+    /// thread once the root has produced the frame.</summary>
+    public void Passed() => m_budget?.FramePassed();
 }

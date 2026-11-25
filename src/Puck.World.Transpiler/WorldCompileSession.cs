@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text;
 using Puck.Assets;
 using Puck.Transpiler.Diagnostics;
 using Puck.Transpiler.Modules;
@@ -29,11 +28,12 @@ namespace Puck.World.Transpiler;
 /// </para>
 /// <para>
 /// Held compiles live in memory for the session and, once <see cref="Persist"/> names a directory, in that directory
-/// too, so a later process compiles nothing an earlier one already compiled. An entry belongs to one compiler build:
-/// the identity of every non-framework assembly the compiler loads, with any hot-reload update applied to one of them
-/// (<see cref="Puck.Abstractions.CodeRevision.AppliedTo"/>), is part of the entry's name and is recorded inside it, so a
-/// rebuilt or hot-reloaded compiler never reads an older one's output, and builds that share a directory (an editor's
-/// <c>puck lsp</c>, a candidate CLI, the game) keep their own entries rather than overwriting each other's. A read
+/// too, so a later process compiles nothing an earlier one already compiled. An entry belongs to the code that wrote it:
+/// the identity of the code the compiler reaches (<see cref="Puck.Assets.CodeClosure"/>), with any hot-reload update
+/// applied to it (<see cref="Puck.Abstractions.CodeRevision.AppliedTo"/>), is part of the entry's name and is recorded
+/// inside it, so a compiler whose code changed never reads an older one's output, a build that changed only code no
+/// compile runs reads every entry, and builds that share a directory (an editor's <c>puck lsp</c>, a candidate CLI, the
+/// game) keep their own entries rather than overwriting each other's. A read
 /// that serves an entry stamps it as used, and a write keeps the directory within <see cref="MaxPersistedEntries"/>
 /// entries and <see cref="MaxPersistedBytes"/> bytes, least recently used out
 /// (<see cref="Puck.Abstractions.CacheRetention"/>), and also removes the temporary files an interrupted write left
@@ -46,9 +46,12 @@ namespace Puck.World.Transpiler;
 /// </summary>
 public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorldDocumentSource {
     /// <summary>The most entries the persistent directory keeps; writing one more removes the least recently used.</summary>
-    public const int MaxPersistedEntries = 1024;
-    /// <summary>The most bytes the persistent directory's entries hold between them.</summary>
-    public const long MaxPersistedBytes = (256L << 20);
+    public const int MaxPersistedEntries = 16384;
+    /// <summary>The most bytes the persistent directory's entries hold between them. One boot of a world the size of the
+    /// debug world writes about a quarter of a gibibyte of compiles, compositions and layers, so the bound holds several
+    /// code identities' sets at once (the builds and checkouts a development machine runs side by side); a bound under one
+    /// boot's set evicts that boot's own entries and the next boot compiles every source again.</summary>
+    public const long MaxPersistedBytes = (4L << 30);
     /// <summary>The most editor buffers whose latest compile a session holds; holding one more forgets the least recently used.</summary>
     public const int MaxHeldBuffers = 64;
 
@@ -60,7 +63,6 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
     private sealed class State(string? directory, PuckSourceTable sources) {
         public string? Directory = directory;
         public bool DeferCompositionWrites;
-        public string? LayerCodeHash;
 
         public ConcurrentDictionary<string, Lock> Compiling { get; } = new(comparer: StringComparer.Ordinal);
         public ConcurrentDictionary<string, WorldCompiledSource> Held { get; } = new(comparer: StringComparer.Ordinal);
@@ -106,48 +108,22 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
     /// <summary>Gets the parses this session's import walks read every library through.</summary>
     public PuckSourceTable Sources => m_state.Sources;
 
-    // The pin over every Puck module the compiler reaches, with the update applied to any of them folded in
-    // (CodeRevision.AppliedTo): a product of the parser or compiler is valid only under the identity it was written by.
-    internal static string CompilerIdentity {
-        get {
-            var (built, modules) = Identity.Value;
-            var applied = Puck.Abstractions.CodeRevision.AppliedToAssemblies(assemblies: modules);
-
-            return ((applied.Length == 0) ? built : ContentPin.OfText(text: $"{built}\n{applied}").Hex);
-        }
-    }
-
-    // The identity walks the compiler's reference graph from its own assembly. In a trimmed application a reference
-    // the trimmer removed is code the compile cannot run, so its load failing and entering the identity as absent is
-    // exactly the right answer.
-    [System.Diagnostics.CodeAnalysis.UnconditionalSuppressMessage(
-        category: "Trimming",
-        checkId: "IL2026",
-        Justification = "A reference the trimmer removed cannot run, and its failed load enters the identity as absent."
-    )]
-    private static (string Built, IReadOnlySet<string> Modules) ComputeCompilerIdentity() {
-        var modules = new SortedDictionary<string, Guid>(comparer: StringComparer.Ordinal);
-        foreach (var (name, assembly) in AssemblyReach.Of(
-            root: typeof(WorldCompiler).Assembly,
-            include: static reference => !IsFramework(name: reference.Name),
-            unavailable: reference => modules.TryAdd(key: (reference.Name ?? string.Empty), value: Guid.Empty))) {
-            modules[name] = assembly.ManifestModule.ModuleVersionId;
-        }
-
-        var text = new StringBuilder();
-
-        foreach (var (name, version) in modules) {
-            _ = text.Append(value: name).Append(value: '=').Append(value: version.ToString(format: "N")).Append(value: ';');
-        }
-
-        return (ContentPin.OfText(text: text).Hex, modules.Keys.ToHashSet(comparer: StringComparer.Ordinal));
-    }
-    private static bool IsFramework(string? name) => (
-        (name is null) ||
-        name.StartsWith(comparisonType: StringComparison.Ordinal, value: "System") ||
-        name.StartsWith(comparisonType: StringComparison.Ordinal, value: "Microsoft") ||
-        (name is "netstandard" or "mscorlib" or "WindowsBase")
-    );
+    // The identity a product of the parser or compiler is keyed by, in memory and on disk: the normalized IL and layouts
+    // reachable from the compile's own code (CompilerCode, remembered for the build), with an update applied to any of it
+    // folded in. A product is valid only under the identity it was written by, and an engine edit no compile runs (a
+    // renderer, a physics solver, the World's client) leaves it standing, so the restart after such an edit compiles
+    // nothing.
+    internal static string CompilerIdentity => CompilerCode.Value.Applied();
+    // The compile's code: every method and layout the compiler, the import index and this session's own persistence reach.
+    private static readonly Lazy<CodeIdentity> CompilerCode = new(valueFactory: static () => CodeIdentity.Of(
+        directory: AppContext.BaseDirectory,
+        roots: [
+            ("Puck.World.Transpiler", "Puck.World.Transpiler.WorldCompiler", null),
+            ("Puck.World.Transpiler", "Puck.World.Transpiler.WorldCompileSession", null),
+            ("Puck.World.Transpiler", "Puck.World.Transpiler.Composition.WorldSourceIndex", null),
+        ],
+        stopTypes: new HashSet<string>(collection: [typeof(CodeClosure).FullName!, typeof(CodeIdentity).FullName!], comparer: StringComparer.Ordinal)
+    ));
     private static bool Stands(IReadOnlyList<CompileInput> inputs, int from = 0) {
         for (var index = from; (index < inputs.Count); index++) {
             if (!inputs[index].StillHolds()) {
@@ -573,5 +549,4 @@ public sealed partial class WorldCompileSession : IWorldCompositionStore, IWorld
             writer.Write(buffer: world.Json);
         }
     }
-    private static readonly Lazy<(string Built, IReadOnlySet<string> Modules)> Identity = new(valueFactory: ComputeCompilerIdentity);
 }

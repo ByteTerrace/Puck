@@ -50,12 +50,18 @@ six stages true:
   the settled frame.
 
 The boot is a loop timed from process start; `world.reload` (by hand or from
-`world.watch`) and `world.shaders.reload` begin loops themselves, and a script
+`world.watch`), `world.shaders.reload` and a hot-reload edit (from the
+runtime's application of the update) begin loops themselves, and a script
 names any other edit with `world.iteration begin <name>` on the line before
 it. A settled loop prints `[world.iteration] …` on stderr, so a lane reads the
 loop it changed and the batch reads every loop from the World's log.
 `world.wait iteration <seconds>` holds a script until the latest loop
-settles.
+settles. `puck bench loops` is the maintained reading: it boots a windowed
+World on a private copy of the worlds tree and reports the boot, a `.puck`
+edit, its revert and a restart, each by stage and as its own figure
+([the reference](../reference/cli.md#puck-bench-loops)). Between the stages,
+`host.log` lines carry seconds from the process's start, so a wait shows as
+the gap between two lines.
 
 A watched save starts its loop when the watch submits the reload, after its
 quiet period (`WorldViewGraphHost.WatchDebounceMilliseconds`), so the time from
@@ -116,11 +122,11 @@ What has changed since, row by row:
 
 What the readings show:
 
-- **`lit` is never reached on the debug world.** Its day clock moves the sun
-  every frame, and the irradiance volume's relight fell behind it: it relit
-  about 1,500 to 1,900 probes a second where its age bound needs about 2,500
-  (`[sdf.mesh-gi] behind level=0 … needed-per-second=2496`), over ten minutes
-  of watching.
+- **`lit` is reached, slowly.** Under the day clock the relight has to keep
+  every probe within its age bound, about 5,500 probes a second over the
+  debug world's 73,728; the clean window read `lit` 117 to 181 seconds after
+  a boot, with the relight at 1,300 to 1,800 probes a second
+  (`[sdf.mesh-gi] behind`). The causes and fixes are below.
 - **A saved edit spent most of its time before the first frame.** Each
   `world.reload` took 9 to 15 seconds to reach a frame, though the rebake after
   it took 0 to 3. Compiling, composing, diffing and installing the document was
@@ -128,11 +134,43 @@ What the readings show:
 - **A kernel reload shows in 3 seconds and finishes in 49.** The first changed
   pipeline installs quickly; the request stays pending until every carried
   source in the tree has compiled.
-- **A restart spends 47 seconds before its first frame** even with every mesh
-  in the store (`loaded=2`, no dispatches), and the World's own build after
-  the engine edit ran for more than two minutes before that (the store build
-  was still running at 124 seconds). Nothing yet says where the boot's wait
-  goes.
+- **A restart spent most of its wait before the first frame naming its own
+  code and compiling its sources again.** `host.log` lines carry seconds from
+  the process's start, so the boot's wait reads as the gaps between them. On a
+  warm store the definition line came 19 to 28 seconds in, with every one of
+  the debug world's 89 sources compiled again, and a sampled trace of a boot
+  that compiled nothing put half of what remained in one walk of the engine's
+  IL (`CompiledWorldChunks.EngineBuild`). Three defects made it: the compile
+  cache was keyed by the module version of every assembly the compiler's
+  references reach, so any rebuild of Abstractions, Hosting, Maths, Physics or
+  State emptied it; its 256 MiB bound held less than one boot's entries, so a
+  boot evicted its own; and every product's code identity walked its closure
+  in every process. Each is fixed: compiles are keyed by the code the compiler
+  reaches, the bound holds several builds' sets, and every code identity is
+  remembered for its build ([the decision](../decisions/engine-design.md#a-derived-product-is-a-cache-never-the-truth)).
+  Counted on headless boots over a private cache: a warm boot compiles none,
+  and a rebuild after an edit to `Puck.SdfVm` or `Puck.Hosting` compiles none.
+  What remains before the first frame is the authority's build, the screen
+  sessions' destination instances, opened one at a time, and the renderer's
+  composition; their quiet split is owed.
+- **The session windows a colour edit seemed to rebuild were the nesting
+  depth.** `world.row.set views nestingDepth 0` releases every session window
+  (`WorldScreenBinder.ReconcileNesting`, under the reason `source changed`), and
+  the edit was read in the same session as that toggle. A colour edit after the
+  same toggle, and a saved edit and its revert without it, released no window
+  and settled (`meshes` 0.8 to 11 seconds) in a windowed World.
+- **Lighting waited on a stale scene and on the queue's round trip.** The
+  irradiance volume paced every scene rebuild by the installed scene's trace,
+  so a boot's first scene, built from the draws landed at that moment, held the
+  settled one back while the whole window traced it (57.9 seconds in one boot).
+  The background GPU budget counted every job still in flight against the next
+  frame, so the work ran one allowance per round trip through the queue: on a
+  0.25 share it measured an occupancy of 0.09, with nearly every job held by
+  the deadline. And the probe jobs were priced for the costliest job seen, so
+  each filled its allowance and measured a third of it. The scene now rebuilds
+  once the bake owes no static mesh, a job counts against the frame it queues
+  ahead of (`SdfGpuWorkBudget.FramePassed`), and probe rates follow their mean.
+  One loaded windowed boot reached `lit` at 94.6 seconds against 172.1 before.
 
 ## What makes the loops slow today
 
@@ -144,15 +182,19 @@ latest readings against them:
 | Loop | Latest reading | Against the figure |
 |---|---|---|
 | HLSL kernel edit, `world.shaders.reload` | 3.2 s to the first frame that draws the reloaded kernel (the baseline) | Within it |
-| C# edit that hot reload applies | Well under a second after the watch's first edit ([edit to running](../development/contributing.md#edit-to-running)); the loop clock does not time it | Within it |
-| C# edit that needs a restart | The World's build, still running at 124 s, then 47 s to the first frame (the baseline) | Several times over |
+| C# edit that hot reload applies | 0.88 s from the save to the applied revision; the World now times it as its own `hot-reload` loop, whose frame reading is owed | Within it |
+| C# edit that needs a restart | 6.9 s of build, then 21.9 s to the first frame on a warm store, of which the compile and the code walks above were most; their removal's reading is owed | Over it |
 | Cold bake, empty store | 114 s on Direct3D 12 and 123 s on Vulkan, free-running, on a shared machine | About twice over |
 
 - **A restart is the C# loop's cost.** An edit hot reload cannot apply (a rude
   edit, or one in a project the watch does not list) rebuilds the World and
-  boots it. The bake no longer adds to that for most edits, but the build and
-  the boot to the first frame together take minutes, and nothing attributes
-  the boot's wait. The [edit-to-running packet](open-items.md#edit-to-running-hot-reload-and-boot)
+  boots it. The bake no longer adds to that for most edits, and the boot no
+  longer compiles the world's sources or walks its code again (above). What
+  remains is the authority's build, the destination instances the screen
+  sessions open one at a time before the first frame, and the renderer's
+  composition. `puck bench loops` reads the boot, a `.puck` edit, its revert
+  and the restart, each as its own figure ([the reference](../reference/cli.md#puck-bench-loops)).
+  The [edit-to-running packet](open-items.md#edit-to-running-hot-reload-and-boot)
   owns the restart, the build and their quiet timing.
 - **A cold bake is latency-bound.** The bake kernel is about 2.4% of a cold
   bake's wall time, and the GPU is idle most of the time a job is in flight
@@ -198,16 +240,23 @@ not reach.
    floor, so view retiers and the budget's bias leave it standing; a rebuild
    keeps the batch in flight; a probe keeps its local cube across a change that
    misses it; a change is a box hierarchy rather than one union box; rebuilds
-   are paced by trace progress; one GPU budget is shared across residencies by
-   their share of the display; and a seen volume's first light takes the
-   allowance an arriving bake takes
+   are paced by trace progress while the bake still owes static meshes, and a
+   settled scene replaces a stale one at once; one GPU budget is shared across
+   residencies by their share of the display, and fills one allowance a frame
+   rather than one a round trip through the queue; probe jobs are priced at
+   their mean; and a seen volume's first light takes the allowance an arriving
+   bake takes
    ([the settle research's fixes](illumination/research-settle-time.md#the-ranked-fixes)).
-   Left: the reading that says whether `lit` is reached under the day clock; a
-   session that renders the boot world sharing the world's meshes instead of
-   holding its own copy (that research's fix 3, a streaming change); uploading
-   only the top level of a scene change (its fix 9); and a relight driven by
-   which probes' inputs moved, which a material edit needs. *Check:* the boot
-   loop's `world.iteration` line reports `lit` on the debug world.
+   Left: light reused across boots, so a boot over an unchanged scene starts
+   from the last settled light instead of no bounce (the volume's traced hits
+   live on the device, so this needs a read-back of the hits and the relit
+   cubes keyed by the scene's static draws and the layout); a session that
+   renders the boot world sharing the world's meshes instead of holding its own
+   copy (that research's fix 3, a streaming change); uploading only the top
+   level of a scene change (its fix 9); and a relight driven by which probes'
+   inputs moved, which a material edit needs. *Check:* the boot loop's
+   `world.iteration` line reports `lit` within seconds of `meshes` on the debug
+   world in the quiet window.
 5. **The cold bake fed.** Built: an arriving group's bake work takes its own
    allowance of the GPU the frame leaves idle, the bake starts once its own two
    kernels compile, only groups arriving in view plan a coarse first tier, the
