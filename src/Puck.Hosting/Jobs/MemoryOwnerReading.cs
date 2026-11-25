@@ -214,8 +214,12 @@ public sealed record HostMemorySample(long? AllocatorCommitted, long ManagedComm
     /// <returns>The sample.</returns>
     public static HostMemorySample Take(IAllocator? allocator, bool walk) {
         var info = GC.GetGCMemoryInfo(kind: GCKind.Any);
-        long? committed = (((allocator as IAllocatorStatistics)?.ReadStatistics() is { } statistics) ? statistics.Committed : null);
+        var statistics = (allocator as IAllocatorStatistics);
+        var walked = (walk ? HostMemory.WalkProcess(allocatorOwns: ((statistics is null) ? null : statistics.Owns)) : null);
+        // The allocator's arenas as the walk read their pages, where it read them: mimalloc keeps statistics per thread
+        // and merges them late, so its own committed figure trails what its arenas hold by gigabytes on a busy process.
+        var committed = (walked?.AllocatorCommitted ?? statistics?.ReadStatistics().Committed);
 
-        return new(AllocatorCommitted: committed, ManagedCollection: info.Index, ManagedCommitted: info.TotalCommittedBytes, Walk: (walk ? HostMemory.WalkProcess() : null));
+        return new(AllocatorCommitted: committed, ManagedCollection: info.Index, ManagedCommitted: info.TotalCommittedBytes, Walk: walked);
     }
 }

@@ -48,22 +48,26 @@ public sealed partial class MimallocAllocator : IAllocator, IAllocatorStatistics
     private static partial void mi_collect([MarshalAs(UnmanagedType.U1)] bool force);
 
     /// <inheritdoc/>
-    public unsafe (long Committed, long Reserved, long InUse) ReadStatistics() {
-        // v3's process-wide JSON avoids pinning the versioned mi_stats_t ABI. The returned block belongs to mimalloc. Live
-        // allocations are its small and large blocks (malloc_normal) and its huge ones (malloc_huge).
+    public unsafe (long Committed, long Reserved) ReadStatistics() {
+        // v3's process-wide JSON avoids pinning the versioned mi_stats_t ABI. The returned block belongs to mimalloc.
         var json = mi_stats_get_json(buffer: null, size: 0);
 
         if (json is null) { return default; }
         try {
             using var document = JsonDocument.Parse(Marshal.PtrToStringUTF8(ptr: ((nint)json))!);
-            var root = document.RootElement;
-            long Current(string name) => root.GetProperty(propertyName: name).GetProperty(propertyName: "current").GetInt64();
 
-            return (Current(name: "committed"), Current(name: "reserved"), (Current(name: "malloc_normal") + Current(name: "malloc_huge")));
+            return (document.RootElement.GetProperty(propertyName: "committed").GetProperty(propertyName: "current").GetInt64(), document.RootElement.GetProperty(propertyName: "reserved").GetProperty(propertyName: "current").GetInt64());
         } finally { mi_free(p: json); }
     }
     /// <inheritdoc/>
     public void Collect() => mi_collect(force: true);
+    /// <inheritdoc/>
+    public unsafe bool Owns(nint address) => mi_is_in_heap_region(p: ((void*)address));
+
+    [LibraryImport(LibraryName, EntryPoint = "mi_is_in_heap_region")]
+    [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]
+    [return: MarshalAs(UnmanagedType.U1)]
+    private static unsafe partial bool mi_is_in_heap_region(void* p);
 
     [LibraryImport(LibraryName, EntryPoint = "mi_free")]
     [UnmanagedCallConv(CallConvs = new[] { typeof(CallConvCdecl) })]

@@ -292,8 +292,10 @@ public static partial class HostMemory {
     /// memory as it is touched. The walk reads the address space as each region is reached while the process runs on, so
     /// regions that change during it are read at different instants. It costs a system call per region (thousands) and one
     /// per quarter gibibyte committed, so it is taken on request, never per frame.</summary>
+    /// <param name="allocatorOwns">Whether the engine's native allocator manages an address (its arenas), which names
+    /// the private allocations it holds by their pages; <see langword="null"/> names none.</param>
     /// <returns>The walk, or <see langword="null"/> when this platform cannot be walked.</returns>
-    public static unsafe ProcessMemoryWalk? WalkProcess() {
+    public static unsafe ProcessMemoryWalk? WalkProcess(Func<nint, bool>? allocatorOwns = null) {
         if (OperatingSystem.IsWindows()) {
             long privateBytes = 0, driverBytes = 0, mappedBytes = 0, imageBytes = 0;
             long? privateResident = 0, driverResident = 0, mappedResident = 0, imageResident = 0;
@@ -313,7 +315,7 @@ public static partial class HostMemory {
                     if ((region.Type == MemPrivate) && (region.State != MemFree)) {
                         if (current.Base != region.AllocationBase) {
                             if (current.Committed > 0) { allocations.Add(item: current); }
-                            current = new PrivateAllocation(Base: region.AllocationBase, Committed: 0, Reserved: 0, Resident: 0);
+                            current = new PrivateAllocation(Base: region.AllocationBase, Committed: 0, Reserved: 0, Resident: 0) { Allocator = (allocatorOwns?.Invoke(arg: region.AllocationBase) ?? false) };
                         }
                         current = (current with { Reserved = (current.Reserved + ((long)region.RegionSize)) });
                     }
@@ -355,6 +357,8 @@ public static partial class HostMemory {
                 PrivateBySize = PrivateSizeClass.Of(allocations: allocations),
                 LargestPrivate = [.. allocations.OrderByDescending(keySelector: static allocation => allocation.Resident).Take(count: LargestPrivateCount)],
                 NativeHeaps = ReadNativeHeaps(),
+                AllocatorCommitted = ((allocatorOwns is null) ? null : allocations.Where(predicate: static allocation => allocation.Allocator).Sum(selector: static allocation => allocation.Committed)),
+                AllocatorResident = ((allocatorOwns is null) ? null : allocations.Where(predicate: static allocation => allocation.Allocator).Sum(selector: static allocation => allocation.Resident)),
             };
         }
         if (OperatingSystem.IsLinux()) {
@@ -423,13 +427,21 @@ public sealed record ProcessMemoryWalk(long PrivateBytes, long MappedBytes, long
     public IReadOnlyList<PrivateAllocation> LargestPrivate { get; init; } = [];
     /// <summary>Gets the process's NT heaps summed, or <see langword="null"/> where the platform has none.</summary>
     public NativeHeapReading? NativeHeaps { get; init; }
+    /// <summary>Gets the committed private bytes of the allocations the engine's native allocator manages, read from its
+    /// arenas' pages, or <see langword="null"/> when the walk was given no allocator or the platform cannot tell.</summary>
+    public long? AllocatorCommitted { get; init; }
+    /// <summary>Gets how much of <see cref="AllocatorCommitted"/> is in the working set, or <see langword="null"/>.</summary>
+    public long? AllocatorResident { get; init; }
 }
 /// <summary>One private allocation of a process walk, in bytes: the regions sharing one allocation base.</summary>
 /// <param name="Base">The allocation's base address.</param>
 /// <param name="Reserved">The address range it reserves, committed or not.</param>
 /// <param name="Committed">Its committed ordinary private bytes.</param>
 /// <param name="Resident">How much of <paramref name="Committed"/> is in the working set.</param>
-public readonly record struct PrivateAllocation(nint Base, long Reserved, long Committed, long Resident);
+public readonly record struct PrivateAllocation(nint Base, long Reserved, long Committed, long Resident) {
+    /// <summary>Gets whether the engine's native allocator manages the allocation (one of its arenas).</summary>
+    public bool Allocator { get; init; }
+}
 /// <summary>The private allocations of one reservation-size class, in bytes.</summary>
 /// <param name="ReservedAtMost">The largest reservation the class holds: a power of four, or <see cref="long.MaxValue"/>
 /// for the last.</param>
