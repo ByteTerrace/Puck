@@ -1900,14 +1900,33 @@ Built with it:
   is handed to another session only once no copy still carries it
   (`WorldRigidAssets.CarriesAudience`).
 
-  **Where the guarantee stops.** The residency's shadow cascades draw for its
-  own viewers, so a session's view shows the shadows of the presentation's
-  own varying placements (a card's silhouette, never its face). An overlay's
-  copy brings no light or medium; the presentation's own copy lights every
-  view. A mirror or portal view the residency derives inside a home view
-  renders for the residency's own viewers. Overlays are kept per session mirror,
-  so sessions of one disclosure each place their own copies of the same
-  rows.
+  **Derived views and shadows.** A window, mirror or portal of the world a
+  home view shows is a feed whose viewer is that home view
+  (`SessionFeed.ParentFeed`); it is drawn from the same residency for its
+  viewer's audience, through the same `Stage` door, whatever its own session
+  is handed (`WorldScreenBinder.SettleSessionRoutes`, which settles feeds
+  shallowest first so each reads its viewer's audience of the same frame).
+  The cameras a home view's level shows take its audience too. The
+  residency's shadow cascades are one set every view reads, so they select
+  their casters for the residency's own viewers only while every view of the
+  frame is theirs, and the neutral draws alone (`SdfMeshAudience.NeutralOnly`)
+  while any view draws for another audience (`SdfWorldShadows.Decide`, which
+  owes every entry whole when the choice changes; `world.residency`'s shadows
+  line prints `casters=own|neutral`). Per-audience cascades were the other
+  option: they keep every varying placement's shadow but cost a residency's
+  cascades once per audience, against the ruling that a world's shadows are
+  drawn once.
+
+  **Where the guarantee stops.** While a window of another disclosure shows
+  the world, no varying placement casts a shadow in any view, the
+  presentation's own included. An overlay's copy brings no light or medium;
+  the presentation's own copy lights every view. A feed nested in a home view
+  draws for its viewer's single audience, so where its own session is handed
+  less than its viewer, the difference is not drawn apart (one audience tag
+  cannot hold an intersection). A feed nested in a session that renders its
+  own scene renders its own scene too, under its own delivery. Overlays are
+  kept per session mirror, so sessions of one disclosure each place their
+  own copies of the same rows.
 
   **Evidence.** **[capture]** On the RTX 2060, Direct3D 12, a self painting
   of the gallery pointed live at a frame facing the shedding table: the
