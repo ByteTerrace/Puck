@@ -71,6 +71,9 @@ internal enum WorldFederationLane : byte {
 
     /// <summary>Route lookups and forwarded submissions for an already-committed traveler.</summary>
     Routed,
+
+    /// <summary>Content-addressed prototype and asset fetches hydrated off the simulation pump.</summary>
+    Content,
 }
 
 /// <summary>What a transfer step's answer is evidence of.</summary>
@@ -149,14 +152,14 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     /// behind whatever else is queued on the same ordered lane, so it is deliberately longer than one attempt. A caller
     /// that runs out of it answers <see cref="WireRefusal.LaneUnavailable"/> and the request stays queued for the lane
     /// to finish. This bounds transport lifecycle, never simulation state.</summary>
-    public static TimeSpan RoutedRequestDeadline { get; } = TimeSpan.FromSeconds(value: 10);
+    public static TimeSpan RoutedRequestDeadline { get; } = TimeSpan.FromSeconds(value: 30);
     /// <summary>Gets the lane's per-attempt deadline — the inner of the two, run on the host clock. One attempt is
     /// connect, hello, and authenticate (when the lane has no connection) plus the request write and the response read;
     /// a peer that goes silent inside it is answered <see cref="WireRefusal.RequestTimedOut"/> once the request was
     /// written (no re-send, no backoff) or counted as a connect failure before it. Shorter than
     /// <see cref="RoutedRequestDeadline"/> so a caller's wait can cover its own attempt plus one queued ahead of
     /// it.</summary>
-    public static TimeSpan LaneRequestTimeout { get; } = TimeSpan.FromSeconds(value: 5);
+    public static TimeSpan LaneRequestTimeout { get; } = TimeSpan.FromSeconds(value: 15);
     /// <summary>Gets how long a lane waits, on the host clock, before retrying a connect that failed, before it calls
     /// the peer down.</summary>
     public static TimeSpan ConnectRetryDelay { get; } = TimeSpan.FromMilliseconds(value: 50);
@@ -627,11 +630,11 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 unavailableBackoff: LaneBackoff
             )
         );
-    private static WorldFederationLane LaneOf(WorldFederationRequest kind) =>
-        ((kind is WorldFederationRequest.Route or WorldFederationRequest.Submission or WorldFederationRequest.Prototype)
-            ? WorldFederationLane.Routed
-            : WorldFederationLane.Transaction
-        );
+    private static WorldFederationLane LaneOf(WorldFederationRequest kind) => kind switch {
+        WorldFederationRequest.Prototype => WorldFederationLane.Content,
+        WorldFederationRequest.Route or WorldFederationRequest.Submission => WorldFederationLane.Routed,
+        _ => WorldFederationLane.Transaction,
+    };
     // The current observation session's ingress, so the span it holds closes when the session ends.
     private sealed class ObservedStream {
         public WorldStreamIngress? Session;

@@ -1857,8 +1857,12 @@ public sealed partial class WorldInstanceHost {
     private static void SeedArrivalOccupancy(WorldInstance instance, int seat) {
         if (
             (seat < 0) ||
-            (seat >= instance.Server.Population.LocalSeatCount) ||
-            (instance.Server.Population.EntryBody(index: seat) is not { } body)
+            (seat >= instance.Server.Population.Capacity) ||
+            !WorldAdjacencyOwnership.TryTraveller(
+                body: out var body,
+                index: seat,
+                population: instance.Server.Population
+            )
         ) {
             return;
         }

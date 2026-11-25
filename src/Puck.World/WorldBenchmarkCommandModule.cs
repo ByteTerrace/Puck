@@ -501,8 +501,27 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         );
 
         var firstTick = Math.Max(val1: (script.CompletedTick + LeadTicks), val2: (at ?? 0UL));
+        string? priorCameraLine = null;
+
+        foreach (var candidate in route.Chapters) {
+            if (ReferenceEquals(objA: candidate, objB: chapters[0])) {
+                break;
+            }
+            foreach (var step in candidate.Steps) {
+                if ((step is WorldRouteStep.Line line) && line.Text.StartsWith(value: "player.camera.", comparisonType: StringComparison.Ordinal)) {
+                    priorCameraLine = line.Text;
+                }
+            }
+        }
 
         try {
+            if (priorCameraLine is not null) {
+                for (var extra = 0; (extra < m_seatCount); extra++) {
+                    if (script.ArmSeat(line: out _, router: router, slot: (slot + extra), text: priorCameraLine, tick: (firstTick - 1UL)) is { } cameraRefusal) {
+                        throw new InvalidOperationException(message: $"could not arm '{priorCameraLine}' at tick {(firstTick - 1UL)}: {cameraRefusal}");
+                    }
+                }
+            }
             ArmGoalChapter(loop: 0, position: 0, start: firstTick);
         } catch (InvalidOperationException refusal) {
             _ = script.Clear();
@@ -515,8 +534,8 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         script.Ticked += OnTicked;
 
         // A route's length is known only as it plays; its chapters' authority-tick time limits bound it, with headroom
-        // for a remote authority that steps slower than the client host under load.
-        var bound = ((ulong)(chapters.Sum(selector: chapter => Math.Ceiling(a: (chapter.TimeoutSeconds * m_rateHz)) + GapTicks) * loops) * 4UL);
+        // for a remote authority that steps slower than the client host under load and for multi-seat staggered starts.
+        var bound = ((ulong)(chapters.Sum(selector: chapter => Math.Ceiling(a: (chapter.TimeoutSeconds * m_rateHz)) + GapTicks) * loops) * 6UL);
 
         return Enter(budget: budget, firstTick: firstTick, label: (string.IsNullOrEmpty(value: prefix) ? route.Name : $"{route.Name}#{prefix}"), lastTick: (firstTick + bound), loops: loops, output: output, session: session, timeout: timeout);
     }
@@ -546,8 +565,13 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             chapter.Endpoint = seatRouter?.TryRoute(slot: driver.Seat)?.Endpoint;
             chapter.DeliveryAtBegin = (chapter.Endpoint?.Mirror.DeliveryWork ?? default);
             driver.Begin(chapter: chapter.Program.Goals!, rateHz: m_rateHz, tick: tick);
-            foreach (var companion in m_companions) {
-                companion.Begin(chapter: chapter.Program.Goals!, rateHz: m_rateHz, tick: tick);
+            for (var extra = 0; (extra < m_companions.Count); extra++) {
+                m_companions[extra].Begin(
+                    chapter: chapter.Program.Goals!,
+                    leadInTicks: ((ulong)((extra + 1) * 4 * m_rateHz)),
+                    rateHz: m_rateHz,
+                    tick: tick
+                );
             }
             return;
         }

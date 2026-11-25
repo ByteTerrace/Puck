@@ -155,25 +155,52 @@ public sealed class WorldSessionMirror : IClientSink {
                 return default;
             }
 
-            ref readonly var entry = ref image.Entries[index];
-
-            return new WorldDeliveredBody(
-                Active: true,
-                Facts: entry.Facts,
-                Generation: entry.Generation,
-                Heading: entry.Heading,
-                Kit: entry.Kit,
-                Orientation: entry.CurrentOrientation,
-                PoseEpoch: entry.PoseEpoch,
-                Position: entry.CurrentPosition,
-                PreviousPosition: entry.PreviousPosition,
-                StepSeconds: image.StepSeconds,
-                Tick: image.Tick
-            );
+            return DeliveredOf(entry: in image.Entries[index], image: in image);
         });
 
         return body.Active;
     }
+    /// <summary>Copies every active solid body other than <paramref name="excludeIndex"/> from the latest complete
+    /// image, never waiting on a delivery in progress.</summary>
+    /// <param name="excludeIndex">The 0-based entity index to omit, or <c>-1</c> to include all active solid bodies.</param>
+    /// <param name="bodies">Receives each solid body's entity index and delivered pose.</param>
+    public void CopySolidBodies(int excludeIndex, List<(int Index, WorldDeliveredBody Body)> bodies) {
+        ArgumentNullException.ThrowIfNull(argument: bodies);
+        _ = m_images.Read(
+            state: (Bodies: bodies, Exclude: excludeIndex, Mirror: this),
+            read: static (in SnapshotImage image, long version, (List<(int Index, WorldDeliveredBody Body)> Bodies, int Exclude, WorldSessionMirror Mirror) state) => {
+                var contacts = Volatile.Read(location: ref state.Mirror.m_kitBodyContacts);
+
+                state.Bodies.Clear();
+                for (var index = 0; (index < image.Extent); index++) {
+                    if ((index == state.Exclude) || !image.Entries[index].Active) {
+                        continue;
+                    }
+
+                    ref readonly var entry = ref image.Entries[index];
+                    var contact = ((entry.Kit < contacts.Length) ? contacts[entry.Kit] : WorldBodyContactMode.Overlap);
+
+                    if (contact == WorldBodyContactMode.Solid) {
+                        state.Bodies.Add(item: (index, DeliveredOf(entry: in entry, image: in image)));
+                    }
+                }
+                return 0;
+            }
+        );
+    }
+    private static WorldDeliveredBody DeliveredOf(in SnapshotImage image, in ImageEntry entry) => new(
+        Active: true,
+        Facts: entry.Facts,
+        Generation: entry.Generation,
+        Heading: entry.Heading,
+        Kit: entry.Kit,
+        Orientation: entry.CurrentOrientation,
+        PoseEpoch: entry.PoseEpoch,
+        Position: entry.CurrentPosition,
+        PreviousPosition: entry.PreviousPosition,
+        StepSeconds: image.StepSeconds,
+        Tick: image.Tick
+    );
     /// <summary>Gets what this mirror's deliveries have cost since it was constructed: each kind's count and the time
     /// its delivering thread spent applying it. The count of a delivery moves after its time, so a reader sees a
     /// count only with the time it cost.</summary>

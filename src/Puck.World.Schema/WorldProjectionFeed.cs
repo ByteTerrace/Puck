@@ -66,11 +66,6 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     private int[] m_referencedRowOrdinals = [];
     private ulong[] m_referencedRowVersions = [];
 
-    /// <summary>Compares a traveller's current projection with its last delivery, retaining its clock anchors and
-    /// sequence for the comparison. A hidden install cannot change this identity.</summary>
-    public bool Holds(WorldRecipientView view) => m_held is null || WorldProjection.SerializeCompact(m_held).AsSpan()
-        .SequenceEqual(WorldProjection.SerializeCompact(view.Project(m_anchors, m_held.Provenance.Revision)!));
-
     /// <summary>Composes through the capability and advances only this delivery's cursor. Hidden-only changes
     /// reuse the shared row images; a read of the same view cannot seed this feed.</summary>
     public WorldProjectionDelivery Compose(WorldRecipientView view, WorldDeliveryCursor cursor) {

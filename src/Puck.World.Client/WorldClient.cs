@@ -910,9 +910,14 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
     /// <param name="yawPerTick">The yaw change, in radians, of one tick at full positive X deflection: negative, since
     /// a look to the right lowers the yaw, unless the preference inverts it.</param>
     /// <returns><see langword="true"/> when the seat is joined and its body's pose is known.</returns>
-    public bool TrySeatLook(int slot, out float yaw, out float yawPerTick) {
+    public bool TrySeatLook(int slot, out float yaw, out float yawPerTick) =>
+        TrySeatLook(slot: slot, yaw: out yaw, yawPerTick: out yawPerTick, latchedMoveYaw: out _);
+    /// <summary>Reads a seat's live facing, the yaw its stick movement is framed against when latched, and the turn one
+    /// tick of full right-stick look deflection gives it under the seat's look preference.</summary>
+    public bool TrySeatLook(int slot, out float yaw, out float yawPerTick, out float? latchedMoveYaw) {
         yaw = 0f;
         yawPerTick = 0f;
+        latchedMoveYaw = null;
         if ((m_roster.Seat(slot: slot) is not { } seat) || (m_seatRouter.TryRoute(slot: slot) is not { } route)) {
             return false;
         }
@@ -927,6 +932,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
         yaw = seat.View.LogicalYaw(bodyOrientation: bodyOrientation, views: definition.Views);
         yawPerTick = ((-preference.StickLookRate / definition.SimulationRateHz) * (preference.InvertYaw ? -1f : 1f));
+        latchedMoveYaw = ((seat.FreeLooking && route.Endpoint.TryEntityHeading(heading: out var freeHeading, index: route.EntityIndex))
+            ? freeHeading
+            : ((seat.Move.Behavior == SeatMoveBehavior.FaceTravel) ? seat.CameraFrameYaw : null));
         return true;
     }
     /// <summary>Consumes each seat's right-stick and toggled motion-control samples into its seat-owned view state
@@ -1004,6 +1012,9 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             yawReference: definition.Views.SeatControl.YawReference
         );
         if (inPlaceTurn != FixedQ4816.Zero) {
+            if ((definition.Views.SeatControl.YawReference == WorldSeatYawReference.World) && (seat.CameraFrameYaw is { } carriedFrame)) {
+                seat.CameraFrameYaw = VectorFunctions.WrapAngle(radians: (carriedFrame + ((float)inPlaceTurn)));
+            }
             remoteInPlaceTurn?.Invoke(arg1: slot, arg2: inPlaceTurn);
         }
 
@@ -1012,13 +1023,13 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             index: route.EntityIndex,
             heading: out var observedHeading,
             poseEpoch: out var observedEpoch
+        ) && seat.View.ObserveBody(
+            heading: observedHeading,
+            poseEpoch: observedEpoch,
+            routeEpoch: route.Epoch,
+            yawReference: definition.Views.SeatControl.YawReference
         )) {
-            seat.View.ObserveBody(
-                heading: observedHeading,
-                poseEpoch: observedEpoch,
-                routeEpoch: route.Epoch,
-                yawReference: definition.Views.SeatControl.YawReference
-            );
+            seat.CameraFrameYaw = null;
         }
 
         seat.View.Nudge(

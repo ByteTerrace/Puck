@@ -80,8 +80,6 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     /// <summary>The number of encoded records currently retained for this subscriber.</summary>
     public int PendingDeliveries => m_frames.Reader.Count;
 
-    internal bool HoldsProjection => ((m_view is null) || (m_feed?.Holds(view: m_view) ?? m_cursor.Holds(view: m_view)));
-
     /// <inheritdoc/>
     public string? DetachReason { get; private set; }
 

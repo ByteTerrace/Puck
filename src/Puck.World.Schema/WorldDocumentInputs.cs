@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -356,6 +357,78 @@ public readonly struct WorldDocumentInputs : IEquatable<WorldDocumentInputs> {
         }
         return changed;
     }
+
+    /// <summary>Returns whether <paramref name="before"/> and <paramref name="after"/> hold the same canonical content
+    /// for <paramref name="input"/>, even when hydrated as distinct object instances across streams.</summary>
+    /// <param name="before">The earlier or peer document.</param>
+    /// <param name="after">The candidate document.</param>
+    /// <param name="input">The document part to compare.</param>
+    /// <returns><see langword="true"/> when both documents hold equal content for <paramref name="input"/>.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static bool SameContent(WorldDefinition before, WorldDefinition after, WorldDocumentInput input) {
+        ArgumentNullException.ThrowIfNull(argument: before);
+        ArgumentNullException.ThrowIfNull(argument: after);
+
+        if (ReferenceEquals(objA: before, objB: after)) { return true; }
+
+        WorldDocumentInputTable.Verify();
+
+        using (WorldDocumentReads.Unrecorded()) {
+            var read = WorldDocumentInputTable.SelectorOf(input: input);
+            var left = read(arg: before);
+            var right = read(arg: after);
+
+            if (ReferenceEquals(objA: left, objB: right)) { return true; }
+            if ((left is null) || (right is null)) { return false; }
+            if (left is string or ValueType) { return left.Equals(obj: right); }
+            if ((input == WorldDocumentInput.Views) && (left is WorldViewDefaults oldViews) && (right is WorldViewDefaults newViews) && oldViews.SameConfiguration(other: newViews)) {
+                return true;
+            }
+            if (input == WorldDocumentInput.Shades) {
+                return SameShades(
+                    left: ((IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>)left),
+                    right: ((IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>)right)
+                );
+            }
+            if (input == WorldDocumentInput.Extensions) {
+                return SameExtensions(
+                    left: ((IDictionary<string, System.Text.Json.JsonElement>)left),
+                    right: ((IDictionary<string, System.Text.Json.JsonElement>)right)
+                );
+            }
+
+            return WorldDefinitionSerialization.SerializeCompact(definition: WorldDocumentInputTable.Isolate(d: before, input: input)).AsSpan().SequenceEqual(
+                other: WorldDefinitionSerialization.SerializeCompact(definition: WorldDocumentInputTable.Isolate(d: after, input: input))
+            );
+        }
+    }
+
+    private static bool SameShades(IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition> left, IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition> right) {
+        if (left.Count != right.Count) { return false; }
+        foreach (var (key, leftShade) in left) {
+            if (!right.TryGetValue(key: key, value: out var rightShade)) { return false; }
+            if (!ReferenceEquals(objA: leftShade, objB: rightShade) &&
+                !CanonicalJsonDocument.SerializeCompact(value: leftShade, jsonTypeInfo: WorldJsonContext.Default.SdfShadeDefinition).AsSpan().SequenceEqual(
+                    other: CanonicalJsonDocument.SerializeCompact(value: rightShade, jsonTypeInfo: WorldJsonContext.Default.SdfShadeDefinition))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static bool SameExtensions(IDictionary<string, System.Text.Json.JsonElement> left, IDictionary<string, System.Text.Json.JsonElement> right) {
+        if (left.Count != right.Count) { return false; }
+        var elementType = WorldJsonContext.Default.Options.GetTypeInfo(type: typeof(System.Text.Json.JsonElement));
+
+        foreach (var (key, leftValue) in left) {
+            if (!right.TryGetValue(key: key, value: out var rightValue)) { return false; }
+            if (!CanonicalJsonDocument.SerializeCompact(value: leftValue, jsonTypeInfo: elementType).AsSpan().SequenceEqual(
+                other: CanonicalJsonDocument.SerializeCompact(value: rightValue, jsonTypeInfo: elementType))) {
+                return false;
+            }
+        }
+        return true;
+    }
 }
 
 /// <summary>Records the parts of a <see cref="WorldDefinition"/> a product build reads: every member property notes
@@ -577,7 +650,113 @@ internal static class WorldDocumentInputTable {
     private static readonly Dictionary<string, WorldDocumentInputs> PropertyInputs = BuildPropertyInputs();
     private static readonly HashSet<string> Computed = new(collection: ["ShadesRaw"], comparer: StringComparer.Ordinal);
 
+    private static readonly Func<WorldDefinition, object?>[] OrderedSelectors = BuildOrderedSelectors();
+
     public static string NameOf(WorldDocumentInput input) => Names[(int)input];
+    public static Func<WorldDefinition, object?> SelectorOf(WorldDocumentInput input) => OrderedSelectors[(int)input];
+
+    public static WorldDefinition Isolate(WorldDefinition d, WorldDocumentInput input) => input switch {
+        WorldDocumentInput.Motion => new WorldDefinition { MotionRaw = d.MotionRaw },
+        WorldDocumentInput.SpawnPoints => new WorldDefinition { SpawnPointsRaw = d.SpawnPointsRaw },
+        WorldDocumentInput.Render => new WorldDefinition { RenderRaw = d.RenderRaw },
+        WorldDocumentInput.Screens => new WorldDefinition { ScreensRaw = d.ScreensRaw },
+        WorldDocumentInput.ScreenMaterials => new WorldDefinition { ScreenMaterialsRaw = d.ScreenMaterialsRaw },
+        WorldDocumentInput.Cameras => new WorldDefinition { CamerasRaw = d.CamerasRaw },
+        WorldDocumentInput.Bodies => new WorldDefinition { PopulationRaw = d.PopulationRaw },
+        WorldDocumentInput.SeatDefaults => new WorldDefinition { PlayerDefaultsRaw = d.PlayerDefaultsRaw },
+        WorldDocumentInput.Channels => new WorldDefinition { ChannelsRaw = d.ChannelsRaw },
+        WorldDocumentInput.InputModes => new WorldDefinition { InputModes = d.InputModes },
+        WorldDocumentInput.InputHistory => new WorldDefinition { InputHistory = d.InputHistory },
+        WorldDocumentInput.InputPatterns => new WorldDefinition { InputPatterns = d.InputPatterns },
+        WorldDocumentInput.TargetRegisters => new WorldDefinition { TargetRegistersRaw = d.TargetRegistersRaw },
+        WorldDocumentInput.BodyMotionPrograms => new WorldDefinition { BodyMotionProgramsRaw = d.BodyMotionProgramsRaw },
+        WorldDocumentInput.KitRows => new WorldDefinition { KitRowsRaw = d.KitRowsRaw },
+        WorldDocumentInput.KitAssignment => new WorldDefinition { AssignmentRaw = d.AssignmentRaw },
+        WorldDocumentInput.Addons => new WorldDefinition { AddonsRaw = d.AddonsRaw },
+        WorldDocumentInput.BindingOverlays => new WorldDefinition { BindingOverlaysRaw = d.BindingOverlaysRaw },
+        WorldDocumentInput.Storage => new WorldDefinition { StorageRaw = d.StorageRaw },
+        WorldDocumentInput.Prototypes => new WorldDefinition { CreationsRaw = d.CreationsRaw },
+        WorldDocumentInput.PlacementRows => new WorldDefinition { PlacementRowsRaw = d.PlacementRowsRaw },
+        WorldDocumentInput.PlacementPolicy => new WorldDefinition { AuthoringRaw = d.AuthoringRaw },
+        WorldDocumentInput.Speakers => new WorldDefinition { SpeakersRaw = d.SpeakersRaw },
+        WorldDocumentInput.Tunes => new WorldDefinition { TunesRaw = d.TunesRaw },
+        WorldDocumentInput.Patches => new WorldDefinition { PatchesRaw = d.PatchesRaw },
+        WorldDocumentInput.Audio => new WorldDefinition { AudioRaw = d.AudioRaw },
+        WorldDocumentInput.Collision => new WorldDefinition { CollisionRaw = d.CollisionRaw },
+        WorldDocumentInput.Gravity => new WorldDefinition { GravityRaw = d.GravityRaw },
+        WorldDocumentInput.Host => new WorldDefinition { HostRaw = d.HostRaw },
+        WorldDocumentInput.Views => new WorldDefinition { ViewsRaw = d.ViewsRaw },
+        WorldDocumentInput.LookRows => new WorldDefinition { LookRowsRaw = d.LookRowsRaw },
+        WorldDocumentInput.LookAssignment => new WorldDefinition { LookAssignmentRaw = d.LookAssignmentRaw },
+        WorldDocumentInput.Dynamics => new WorldDefinition { DynamicsRaw = d.DynamicsRaw },
+        WorldDocumentInput.Grants => new WorldDefinition { GrantsRaw = d.GrantsRaw },
+        WorldDocumentInput.Hud => new WorldDefinition { HudRaw = d.HudRaw },
+        WorldDocumentInput.Icons => new WorldDefinition { IconsRaw = d.IconsRaw },
+        WorldDocumentInput.StateWorld => new WorldDefinition { StateRaw = new WorldStateSection(World: d.StateRaw?.World) },
+        WorldDocumentInput.StateBody => new WorldDefinition { StateRaw = new WorldStateSection(Body: d.StateRaw?.Body) },
+        WorldDocumentInput.StateIdentity => new WorldDefinition { StateRaw = new WorldStateSection(Identity: d.StateRaw?.Identity) },
+        WorldDocumentInput.StateLattices => new WorldDefinition { StateRaw = new WorldStateSection(Lattices: d.StateRaw?.Lattices) },
+        WorldDocumentInput.StateSpaces => new WorldDefinition { StateRaw = new WorldStateSection(Spaces: d.StateRaw?.Spaces) },
+        WorldDocumentInput.StateEnums => new WorldDefinition { StateRaw = new WorldStateSection(Enums: d.StateRaw?.Enums) },
+        WorldDocumentInput.StateFamilies => new WorldDefinition { StateRaw = new WorldStateSection(Families: d.StateRaw?.Families) },
+        WorldDocumentInput.StateRecords => new WorldDefinition { StateRaw = new WorldStateSection(Records: d.StateRaw?.Records) },
+        WorldDocumentInput.StatePools => new WorldDefinition { StateRaw = new WorldStateSection(Pools: d.StateRaw?.Pools) },
+        WorldDocumentInput.StatePairPools => new WorldDefinition { StateRaw = new WorldStateSection(PairPools: d.StateRaw?.PairPools) },
+        WorldDocumentInput.InputHold => new WorldDefinition { InputHoldRaw = d.InputHoldRaw },
+        WorldDocumentInput.Theme => new WorldDefinition { ThemeRaw = d.ThemeRaw },
+        WorldDocumentInput.Markers => new WorldDefinition { MarkersRaw = d.MarkersRaw },
+        WorldDocumentInput.Haptics => new WorldDefinition { HapticsRaw = d.HapticsRaw },
+        WorldDocumentInput.KeyLights => new WorldDefinition { KeyLightsRaw = d.KeyLightsRaw },
+        WorldDocumentInput.Highlights => new WorldDefinition { HighlightsRaw = d.HighlightsRaw },
+        WorldDocumentInput.Rules => new WorldDefinition { Rules = d.Rules },
+        WorldDocumentInput.Identity => new WorldDefinition { Identity = d.Identity },
+        WorldDocumentInput.Groups => new WorldDefinition { Groups = d.Groups },
+        WorldDocumentInput.Properties => new WorldDefinition { Properties = d.Properties },
+        WorldDocumentInput.Interactions => new WorldDefinition { Interactions = d.Interactions },
+        WorldDocumentInput.Generation => new WorldDefinition { Generation = d.Generation },
+        WorldDocumentInput.Generators => new WorldDefinition { Generators = d.Generators },
+        WorldDocumentInput.References => new WorldDefinition { References = d.References },
+        WorldDocumentInput.Portals => new WorldDefinition { Portals = d.Portals },
+        WorldDocumentInput.Simulation => new WorldDefinition { Simulation = d.Simulation },
+        WorldDocumentInput.Destinations => new WorldDefinition { Destinations = d.Destinations },
+        WorldDocumentInput.Admission => new WorldDefinition { Admission = d.Admission },
+        WorldDocumentInput.Adjacencies => new WorldDefinition { Adjacencies = d.Adjacencies },
+        WorldDocumentInput.Text => new WorldDefinition { Text = d.Text },
+        WorldDocumentInput.Metadata => new WorldDefinition { Metadata = d.Metadata },
+        WorldDocumentInput.Update => new WorldDefinition { Update = d.Update },
+        WorldDocumentInput.Music => new WorldDefinition { Music = d.Music },
+        WorldDocumentInput.SeatModes => new WorldDefinition { SeatModesRaw = d.SeatModesRaw },
+        WorldDocumentInput.Probes => new WorldDefinition { ProbesRaw = d.ProbesRaw },
+        WorldDocumentInput.Captures => new WorldDefinition { Captures = d.Captures },
+        WorldDocumentInput.Schedule => new WorldDefinition { Schedule = d.Schedule },
+        WorldDocumentInput.Curves => new WorldDefinition { CurvesRaw = d.CurvesRaw },
+        WorldDocumentInput.Navigation => new WorldDefinition { NavigationRaw = d.NavigationRaw },
+        WorldDocumentInput.Patterns => new WorldDefinition { PatternsRaw = d.PatternsRaw },
+        WorldDocumentInput.Tables => new WorldDefinition { Tables = d.Tables },
+        WorldDocumentInput.Search => new WorldDefinition { SearchRaw = d.SearchRaw },
+        WorldDocumentInput.Machines => new WorldDefinition { MachinesRaw = d.MachinesRaw },
+        WorldDocumentInput.RuleGroups => new WorldDefinition { RuleGroupsRaw = d.RuleGroupsRaw },
+        WorldDocumentInput.Sets => new WorldDefinition { SetsRaw = d.SetsRaw },
+        WorldDocumentInput.Editor => new WorldDefinition { EditorRaw = d.EditorRaw },
+        WorldDocumentInput.Timeline => new WorldDefinition { TimelineRaw = d.TimelineRaw },
+        WorldDocumentInput.Commands => new WorldDefinition { CommandsRaw = d.CommandsRaw },
+        WorldDocumentInput.Replays => new WorldDefinition { ReplaysRaw = d.ReplaysRaw },
+        WorldDocumentInput.Roles => new WorldDefinition { RolesRaw = d.RolesRaw },
+        WorldDocumentInput.SeatPrograms => new WorldDefinition { SeatProgramsRaw = d.SeatProgramsRaw },
+        WorldDocumentInput.Routes => new WorldDefinition { RoutesRaw = d.RoutesRaw },
+        WorldDocumentInput.Exports => new WorldDefinition { Exports = d.Exports },
+        WorldDocumentInput.Imports => new WorldDefinition { Imports = d.Imports },
+        _ => throw new ArgumentOutOfRangeException(paramName: nameof(input), actualValue: input, message: "Part is compared directly without isolation."),
+    };
+
+    private static Func<WorldDefinition, object?>[] BuildOrderedSelectors() {
+        var ordered = new Func<WorldDefinition, object?>[WorldDocumentInputs.Count];
+
+        foreach (var (input, read) in Selectors) {
+            ordered[(int)input] = read;
+        }
+        return ordered;
+    }
 
     public static void Verify() {
         if (!Verified.Value) { throw new InvalidOperationException(message: "The world document's read table failed its check."); }

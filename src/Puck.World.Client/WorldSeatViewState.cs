@@ -585,9 +585,12 @@ public sealed class WorldSeatViewState {
     /// <param name="poseEpoch">The body's pose-discontinuity counter.</param>
     /// <param name="heading">The body's authoritative heading, in radians about world up.</param>
     /// <param name="yawReference">The yaw reference of the world the seat is framed in.</param>
-    public void ObserveBody(ulong routeEpoch, int poseEpoch, float heading, WorldSeatYawReference yawReference) {
+    public bool ObserveBody(ulong routeEpoch, int poseEpoch, float heading, WorldSeatYawReference yawReference) {
+        var jumped = false;
+
         lock (m_gate) {
             if ((m_observedRoute == routeEpoch) && (m_observedPose != poseEpoch)) {
+                jumped = true;
                 // A carried first-person offset would steer the posed body off its posed heading on the next tick, and
                 // a recenter after that tick centres on the turned body, so the offset would outlive every pose.
                 if (m_viewTransition.LookFirstPerson) {
@@ -604,6 +607,8 @@ public sealed class WorldSeatViewState {
             m_observedPose = poseEpoch;
             m_observedHeading = heading;
         }
+
+        return jumped;
     }
     /// <summary>Turns the camera round BEHIND the body: the live yaw is set so the resulting logical facing is
     /// <paramref name="targetYaw"/>. Presentation-only; the rig's own smoothing eases the turn.</summary>

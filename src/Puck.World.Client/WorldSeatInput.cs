@@ -27,6 +27,7 @@ public sealed class WorldSeatInput {
     private FixedVector2 m_driveStartDirection;
     private bool m_driveAwaitingPublish;
     private uint m_driveStartSequence;
+    private bool m_reconciledMoving;
     private bool m_wasMoving;
     private bool m_stopAwaitingPublish;
     private uint m_stopSequence;
@@ -155,17 +156,38 @@ public sealed class WorldSeatInput {
     public bool Reconcile(in WorldInputPublication publication, SeatController seat, InputRouter? router = null, int slot = 0) {
         var sources = publication.Sources.Span;
 
-        if ((sources.Length != m_contracts.Length) || (publication.Mapping >= m_catalog.Mappings.Length)) { return false; }
-        for (var index = 0; (index < sources.Length); index++) { if (sources[index].Source != m_contracts[index]) { return false; } }
+        if (
+            (sources.Length != m_contracts.Length) ||
+            (publication.Mapping >= m_catalog.Mappings.Length) ||
+            (publication.Revision < m_producer.Revision) ||
+            ((publication.Revision == m_producer.Revision) && (publication.Epoch < m_producer.Epoch))
+        ) {
+            m_admitted = false;
+            return false;
+        }
+        for (var index = 0; (index < sources.Length); index++) {
+            if (sources[index].Source != m_contracts[index]) {
+                m_admitted = false;
+                return false;
+            }
+        }
         if (m_admitted && (publication.Revision == m_producer.Revision) && (publication.Epoch == m_producer.Epoch)) { return true; }
         m_producer.Reconcile(publication.Revision, publication.Epoch, m_catalog.Mappings[publication.Mapping], publication.Baseline, sources);
         // A new epoch ends every guess: its edges belong to the epoch the authority closed.
         Array.Clear(array: m_edgeSequence);
         Array.Clear(array: m_answeredSequence);
-        m_driveStartDirection = default;
+        var installedForward = (((m_moveForward >= 0) && (m_moveForward < sources.Length))
+            ? FixedQ4816.FromRawBits(value: sources[m_moveForward].RawValue)
+            : FixedQ4816.Zero);
+        var installedStrafe = (((m_moveStrafe >= 0) && (m_moveStrafe < sources.Length))
+            ? FixedQ4816.FromRawBits(value: sources[m_moveStrafe].RawValue)
+            : FixedQ4816.Zero);
+        var authorityMoving = ((installedForward != FixedQ4816.Zero) || (installedStrafe != FixedQ4816.Zero));
+        m_reconciledMoving = authorityMoving;
+        m_wasMoving = authorityMoving;
+        m_driveStartDirection = (authorityMoving ? new FixedVector2(X: installedStrafe, Y: installedForward) : default);
         m_driveAwaitingPublish = false;
         m_driveStartSequence = 0U;
-        m_wasMoving = false;
         m_stopAwaitingPublish = false;
         m_stopSequence = 0U;
         m_pendingLagSequence = 0U;
@@ -251,6 +273,7 @@ public sealed class WorldSeatInput {
                 m_stopAwaitingPublish = true;
                 m_stopSequence = 0U;
             }
+            m_reconciledMoving = false;
             m_wasMoving = false;
             m_driveStartDirection = default;
             m_driveAwaitingPublish = false;
@@ -263,6 +286,7 @@ public sealed class WorldSeatInput {
                 ((m_driveStartDirection.X == FixedQ4816.Zero) && (m_driveStartDirection.Y == FixedQ4816.Zero)) ||
                 (((value.X * m_driveStartDirection.X) + (value.Y * m_driveStartDirection.Y)) <= FixedQ4816.Zero)
             ) {
+                m_reconciledMoving = false;
                 m_driveStartDirection = value;
                 m_driveAwaitingPublish = true;
                 m_driveStartSequence = 0U;
@@ -326,6 +350,16 @@ public sealed class WorldSeatInput {
                 }
             }
         }
+        if (m_driveAwaitingPublish && m_producer.IsQuiescent) {
+            var latestMoveEdge = Math.Max(
+                val1: ((forwardChannel < m_edgeSequence.Length) ? m_edgeSequence[forwardChannel] : 0U),
+                val2: ((strafeChannel < m_edgeSequence.Length) ? m_edgeSequence[strafeChannel] : 0U)
+            );
+            if ((latestMoveEdge != 0U) || m_reconciledMoving) {
+                m_driveStartSequence = latestMoveEdge;
+                m_driveAwaitingPublish = false;
+            }
+        }
         if (m_stopAwaitingPublish && m_producer.IsQuiescent) {
             m_stopAwaitingPublish = false;
         }
@@ -352,7 +386,7 @@ public sealed class WorldSeatInput {
     /// <summary>Reports whether the seat's current continuous move push has been answered by the authority at or before
     /// <paramref name="bodyTick"/>.</summary>
     public bool IsMoveAnswered(WorldInputAnswer? answer, ulong bodyTick) {
-        if (!m_admitted) {
+        if (!m_admitted || !m_wasMoving) {
             return false;
         }
         UpdateLag(answer: answer, bodyTick: bodyTick);
@@ -360,7 +394,7 @@ public sealed class WorldSeatInput {
             return false;
         }
         if (m_driveStartSequence == 0U) {
-            return true;
+            return m_reconciledMoving;
         }
 
         return (

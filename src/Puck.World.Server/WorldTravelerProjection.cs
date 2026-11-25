@@ -37,12 +37,6 @@ internal static class WorldTravelerProjection {
                 principal: principal,
                 server: server
             )) { return null; }
-            var checkedDefinition = server.Definition;
-            bool SameProjection() {
-                if (ReferenceEquals(checkedDefinition, server.Definition)) { return true; }
-                checkedDefinition = server.Definition;
-                return sink?.HoldsProjection != false;
-            }
             var subject = GrantSubject.Body(index: principal.Index);
 
             if (!server.Grants.Allows(
@@ -70,14 +64,13 @@ internal static class WorldTravelerProjection {
                 principal: principal,
                 subject: subject
             ).IsAllowed);
-            bool Current() => SameProjection() && Authorized();
             var view = server.DeliveryView(principal, request.Ceiling, Authorized);
 
             // The live body policy at every delivery, as every other projection reads it: a policy edit reaches the next
             // delivery, and one that turns redacting cuts this stream.
             sink = new(
                 disclosure: () => view.Bodies,
-                isCurrent: Current,
+                isCurrent: Authorized,
                 recipient: principal,
                 server: server,
                 tier: request.Ceiling,
