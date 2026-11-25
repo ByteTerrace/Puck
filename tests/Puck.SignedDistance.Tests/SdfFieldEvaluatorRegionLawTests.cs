@@ -313,6 +313,9 @@ public sealed class SdfFieldEvaluatorRegionLawTests {
         _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: -2f, z: 0f)).Rotate(rotation: Quaternion.CreateFromYawPitchRoll(yaw: 0.4f, pitch: 0.2f, roll: 0.1f)).Box(halfExtents: new Vector3(x: 6f, y: 1f, z: 5f), material: stone, round: 0.25f);
         _ = builder.ResetPoint().Translate(offset: new Vector3(x: 1f, y: 0.5f, z: 0f)).Sphere(blend: SdfBlendOp.SmoothUnion, material: stone, radius: 0.75f, smooth: 0.3f);
         _ = builder.ResetPoint().Translate(offset: new Vector3(x: -2f, y: 0f, z: 1f)).Capsule(endpoint: new Vector3(x: 0.5f, y: 1.5f, z: 0.25f), material: stone, radius: 0.3f);
+        _ = builder.PushField(compose: SdfBlendOp.Union);
+        _ = builder.ResetPoint().Translate(offset: new Vector3(x: 2f, y: 1f, z: -1f)).Superellipsoid(exponent: 3f, material: stone, radii: new Vector3(x: 0.8f, y: 0.6f, z: 0.7f)).NoiseDisplace(amplitude: 0.05f, frequency: 2f, octaves: 3);
+        _ = builder.PopField();
 
         var program = builder.Build();
         var plain = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact);
@@ -320,15 +323,29 @@ public sealed class SdfFieldEvaluatorRegionLawTests {
         var near = FixedQ4816.FromDouble(value: 0.9995);
         var step = FixedQ4816.FromDouble(value: 0.01);
 
-        // Central differences of the point walk, six taps a centimetre apart.
+        // Central differences of the point walk, six taps a centimetre apart, where the field is smooth over them: a stencil
+        // whose one-sided differences disagree along an axis by a twentieth of the step straddles a crease (a hard
+        // minimum's switch between two shapes, a blend's edge) and reads a blend of two slopes, so it is not compared.
         bool TryDifferenced(FixedPosition point, out FixedVector3 gradient) {
             FixedQ4816 Tap(FixedVector3 offset) => (plain.TryDistance(distance: out var value, material: out _, position: (point + offset)) ? value : FixedQ4816.MaxValue);
-            var x = (Tap(offset: new FixedVector3(X: step, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)) - Tap(offset: new FixedVector3(X: -step, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)));
-            var y = (Tap(offset: new FixedVector3(X: FixedQ4816.Zero, Y: step, Z: FixedQ4816.Zero)) - Tap(offset: new FixedVector3(X: FixedQ4816.Zero, Y: -step, Z: FixedQ4816.Zero)));
-            var z = (Tap(offset: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: step)) - Tap(offset: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: -step)));
+            var centre = Tap(offset: FixedVector3.Zero);
+            var kink = (step / FixedQ4816.FromInteger(value: 20L));
+            var smooth = true;
 
-            gradient = new FixedVector3(X: x, Y: y, Z: z).Normalize();
-            return (gradient != FixedVector3.Zero);
+            FixedQ4816 Axis(FixedVector3 along) {
+                var ahead = Tap(offset: along);
+                var behind = Tap(offset: -along);
+
+                smooth &= (FixedQ4816.Abs(value: ((ahead + behind) - (centre + centre))) <= kink);
+                return (ahead - behind);
+            }
+
+            gradient = new FixedVector3(
+                X: Axis(along: new FixedVector3(X: step, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero)),
+                Y: Axis(along: new FixedVector3(X: FixedQ4816.Zero, Y: step, Z: FixedQ4816.Zero)),
+                Z: Axis(along: new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: step))
+            ).Normalize();
+            return (smooth && (gradient != FixedVector3.Zero));
         }
         var compared = 0;
 
@@ -337,8 +354,6 @@ public sealed class SdfFieldEvaluatorRegionLawTests {
             if (!TryDifferenced(gradient: out var differenced, point: point) || !regional.TryFieldGradient(gradient: out var walked, position: point)) { continue; }
             Assert.True(condition: plain.TryFieldGradient(gradient: out var culled, position: point));
             Assert.True(condition: (FixedVector3.Dot(left: culled, right: walked) >= near), userMessage: $"{culled} against {walked} at {point}");
-            // A point whose stencil straddles a crease or a blend's edge reads a blend of two slopes; elsewhere the two agree.
-            if (FixedVector3.Dot(left: walked, right: differenced) < FixedQ4816.FromDouble(value: 0.9)) { continue; }
             compared++;
             Assert.True(condition: (FixedVector3.Dot(left: walked, right: differenced) >= near), userMessage: $"{walked} against {differenced} at {point}");
         }

@@ -12,8 +12,9 @@ namespace Puck.SignedDistance.Queries;
 // point walk does, so a crease answers the face the point reads rather than a blend of the two faces a stencil straddles.
 // Every operation is integer arithmetic on raws: deterministic on every machine, like the point walk.
 //
-// A walk that meets an op or a formula node the reader has no dual of (a warp, a relief's noise, a shape whose reader is
-// hand-written, the power and the ellipse's root) answers nothing, and TryFieldGradient takes its six taps.
+// A walk that meets an op or a formula node the reader has no dual of (a warp, a masked relief, a shape whose reader is
+// hand-written, a varying exponent, the ellipse's root, the cell noise) answers nothing, and TryFieldGradient takes its
+// six taps.
 public sealed partial class SdfFieldEvaluator {
     // Set by the dispatch's fallback when the walk reached a formula without a fixed-point dual.
     [ThreadStatic]
@@ -26,6 +27,21 @@ public sealed partial class SdfFieldEvaluator {
     private static FixedGradient3 DualUncoveredPoint() {
         DualMissed = true;
         return default;
+    }
+
+    // The superellipsoid's |p| · min(r) / r (SuperellipsoidScaledRatio), whose slope is the constant min(r) / r; the
+    // shader-only reciprocal radius is unused, as the plain reader leaves it.
+    private static FixedGradient SuperellipsoidScaledRatioGradient(FixedGradient magnitude, FixedQ4816 minRadius, FixedQ4816 radius) =>
+        new(Value: SuperellipsoidScaledRatio(magnitude: magnitude.Value, minRadius: minRadius, radius: radius),
+            Gradient: (magnitude.Gradient * FusedArithmetic.MultiplyDivide(divisor: radius, multiplicand: FixedQ4816.One, multiplier: minRadius)));
+    // x^y at a constant exponent through the exact power memo, its slope y · x^y / x where x is positive and zero elsewhere,
+    // as the kernels' sdfdPower takes it.
+    private static FixedGradient PowerGradient(ExactPowerMemo memo, FixedGradient x, FixedQ4816 exponent, ref PowerWork powerWork) {
+        var value = memo.Pow(x: x.Value, y: exponent, work: ref powerWork);
+
+        return (x.Value > FixedQ4816.Zero)
+            ? new FixedGradient(Value: value, Gradient: (x.Gradient * FusedArithmetic.MultiplyDivide(divisor: x.Value, multiplicand: exponent, multiplier: value)))
+            : value;
     }
 
     // A candidate scaled by a scope's 2⁻³² fraction (ScaleScope), its gradient with it.
@@ -88,6 +104,12 @@ public sealed partial class SdfFieldEvaluator {
                         }
                     case SdfPointAction.EditField: {
                             result = EditField(distance: result, instruction: in instruction, p: local);
+                            break;
+                        }
+                    case SdfPointAction.WeightedRelief: {
+                            // A masked relief's weight varies along the surface and has no dual yet.
+                            if (instruction.ReliefMasks is not null) { return false; }
+                            result = NoiseDisplaceField(distance: result, instruction: in instruction, p: local, weight: FixedQ4816.One);
                             break;
                         }
                     case SdfPointAction.Identity: {

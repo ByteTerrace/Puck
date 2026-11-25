@@ -260,8 +260,8 @@ internal class SdfFormula {
     // it reads an active input, except where its derivative is zero everywhere it is defined (a rounding, a comparison),
     // and an active node lowers to the dual library's function of its operation while an inactive one keeps the plain
     // reader's text. A helper is emitted once for each pattern of active arguments its callers pass, as an overload. A node
-    // the fixed-point target has no dual of (a loop the kernels carry as a primitive: the noises, the ellipse's root, the
-    // power) leaves the formula without a fixed-point dual, and its readers there take the stencil.
+    // the fixed-point target has no dual of (a loop the kernels carry as a primitive: the cell noise, the ellipse's root, a
+    // power whose exponent varies) leaves the formula without a fixed-point dual, and its readers there take the stencil.
     private static readonly string[] DualStates = ["p", "current", "candidate", "distance"];
 
     // A formula whose fixed-point dual would need a node that target has no dual of.
@@ -407,9 +407,14 @@ internal class SdfFormula {
             SdfFormulaOp.Lerp => Function("sdfdLerp", Lifted(0), Lifted(1), Lifted(2)),
             SdfFormulaOp.SegmentParameter => ActiveAt(1) ? Function("sdfdSegmentParameter", Lifted(0), Lifted(1)) : Function("sdfdSegmentParameter", Lifted(0), Value(1)),
             SdfFormulaOp.MinLength => Function("sdfdMinLength", Lifted(0), Lifted(1)),
-            // The shader's |p| · (min(r) · 1/r).
-            SdfFormulaOp.ScaledRatio => KernelOnly(Function("sdfdMultiply", Operand(0), (ActiveAt(1) || ActiveAt(3)) ? Function("sdfdMultiply", Operand(1), Operand(3)) : $"({Value(1)} * {Value(3)})")),
-            SdfFormulaOp.Power => KernelOnly(ActiveAt(1) ? Function("sdfdPower", Lifted(0), Lifted(1)) : Function("sdfdPower", Lifted(0), Value(1))),
+            // The shader's |p| · (min(r) · 1/r); the fixed carrier's widened product rounded once, with its constant slope.
+            SdfFormulaOp.ScaledRatio => shader
+                ? Function("sdfdMultiply", Operand(0), (ActiveAt(1) || ActiveAt(3)) ? Function("sdfdMultiply", Operand(1), Operand(3)) : $"({Value(1)} * {Value(3)})")
+                : (ActiveAt(1) || ActiveAt(2)) ? throw new DualUncovered(node.Op) : $"SuperellipsoidScaledRatioGradient({Lifted(0)}, {Value(1)}, {Value(2)})",
+            // The fixed carrier's power reads the evaluator's exact power memo, as the plain reader's does.
+            SdfFormulaOp.Power => shader
+                ? (ActiveAt(1) ? Function("sdfdPower", Lifted(0), Lifted(1)) : Function("sdfdPower", Lifted(0), Value(1)))
+                : ActiveAt(1) ? throw new DualUncovered(node.Op) : $"PowerGradient(memo, {Lifted(0)}, {Value(1)}, ref powerWork)",
             SdfFormulaOp.FiniteOr => Function("sdfdFiniteOr", Lifted(0), Lifted(1)),
             SdfFormulaOp.Select => Function("sdfdSelect", Value(0), Lifted(1), Lifted(2)),
             SdfFormulaOp.Smoothstep => ActiveAt(0) || ActiveAt(1)
@@ -417,7 +422,9 @@ internal class SdfFormula {
                 : Function("sdfdSmoothstep", Value(0), Value(1), Lifted(2)),
             SdfFormulaOp.RotateInverse => DualFunction("sdfdRotateInverse", shader) + "(" + Lifted(0) + Constants(1) + ")",
             SdfFormulaOp.Ellipse2D => KernelOnly("sdfEllipse2D(" + Lifted(0) + ", float2(" + Constants(1).Substring(2) + "))"),
-            SdfFormulaOp.Fbm3 => KernelOnly("sdfFbm3(" + Lifted(0) + Constants(1) + ")"),
+            SdfFormulaOp.Fbm3 => shader
+                ? "sdfFbm3(" + Lifted(0) + Constants(1) + ")"
+                : (ActiveAt(1) || ActiveAt(2) || ActiveAt(3) || ActiveAt(4)) ? throw new DualUncovered(node.Op) : $"Pcg3dLatticeNoise.Fbm3(q: {Lifted(0)}, seed: {Value(1)}, octaves: ((int){Value(2)}), gain: {Value(3)}, lacunarity: {Value(4)})",
             SdfFormulaOp.CellDistance => KernelOnly("sdfCellDistance(" + Lifted(0) + Constants(1) + ")"),
             SdfFormulaOp.Call => DualCall(node, names, written, output, shader),
             _ => throw new InvalidOperationException($"Field formula operation {node.Op} has no dual lowering."),

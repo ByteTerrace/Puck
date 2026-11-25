@@ -271,6 +271,13 @@ public sealed class SdfFieldCatalogueGenerator : IIncrementalGenerator {
                     static formula => formula.ResultType == SdfFormulaType.Vector3);
                 DualSwitch("FixedGradient EditField(in CompiledInstruction instruction, FixedGradient3 p, FixedGradient distance)", "instruction.Op", "Formula", "DualUncovered()",
                     static formula => formula.ResultType == SdfFormulaType.Scalar && !formula.FixedState("weight").Any());
+                // A field op that reads a weight (a relief) is called by name, as the point walk calls it.
+                foreach (var (entry, _, formula) in formulas.Where(item => item.Property == "Formula" && covered.Contains(item.Formula) && item.Formula.FixedState("weight").Any())) {
+                    var dispatch = formula.Dispatch(shader: false);
+                    var state = string.Concat(formula.FixedState("p", "distance", "weight").Select(static item => ", " + (item.Name switch { "p" => "FixedGradient3", "distance" => "FixedGradient", _ => item.Type }) + " " + item.Name));
+                    var work = dispatch.Contains("ref powerWork") ? ", ref PowerWork powerWork" : "";
+                    source.AppendLine($"    private static FixedGradient {entry.Name}Field(in CompiledInstruction instruction{state}{work}) => {dispatch};");
+                }
                 break;
         }
         source.Append(duals);

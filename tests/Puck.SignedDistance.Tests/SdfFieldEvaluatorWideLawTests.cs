@@ -25,6 +25,21 @@ public sealed class SdfFieldEvaluatorWideLawTests {
             }
         }
     }
+    // Whether the point walk's one-sided differences a centimetre either side disagree along an axis by a twentieth of the
+    // step: the stencil straddles a crease.
+    private static bool Kinked(SdfFieldEvaluator field, FixedPosition position) {
+        var step = FixedQ4816.FromDouble(value: 0.01);
+        var kink = (step / FixedQ4816.FromInteger(value: 20L));
+
+        FixedQ4816 Tap(FixedVector3 offset) => (field.TryDistance(distance: out var value, material: out _, position: (position + offset)) ? value : FixedQ4816.MaxValue);
+
+        var centre = Tap(offset: FixedVector3.Zero);
+
+        foreach (var along in new[] { new FixedVector3(X: step, Y: FixedQ4816.Zero, Z: FixedQ4816.Zero), new FixedVector3(X: FixedQ4816.Zero, Y: step, Z: FixedQ4816.Zero), new FixedVector3(X: FixedQ4816.Zero, Y: FixedQ4816.Zero, Z: step) }) {
+            if (FixedQ4816.Abs(value: ((Tap(offset: along) + Tap(offset: -along)) - (centre + centre))) > kink) { return true; }
+        }
+        return false;
+    }
     private static void AssertNormalsAgree(SdfProgram program, IEnumerable<Vector3> points) {
         var plain = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact);
         var regional = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact, regional: true);
@@ -38,7 +53,10 @@ public sealed class SdfFieldEvaluatorWideLawTests {
                 _ = regional.TryDistance(distance: out _, material: out _, position: position);
             }
 
-            if (!plain.TryFieldGradient(gradient: out var gradient, position: position)) {
+            // The fixed-point gradient is one forward-mode walk, the exact slope of the branch the point reads; the wide
+            // normal differences taps a centimetre apart, so where those taps straddle a crease (a hard minimum's switch, a
+            // blend's edge) it reads a blend of two slopes and is not compared.
+            if (Kinked(field: plain, position: position) || !plain.TryFieldGradient(gradient: out var gradient, position: position)) {
                 continue;
             }
 

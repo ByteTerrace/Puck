@@ -178,14 +178,18 @@ the JIT's specialisation is the only thing between it and the fixed reader's
 code. The rename keeps every carrier's code monomorphic and its constants
 plain, and costs one emitter branch per carrier class.
 
-**Built.** Contact gradients take one walk: a regional evaluator's
-`TryFieldGradient` walks the point's region tape once over `FixedGradient`
+**Built.** Contact gradients take one walk: `TryFieldGradient` walks the
+point's region tape (a regional evaluator) or the stream under the point walk's
+instance cull (any other) once over `FixedGradient`
 (`SdfFieldEvaluator.Gradient.cs`) and normalizes the exact gradient of the
-branch the point reads; `sdf.queries.gradient-walks` counts them. A tape
-holding a warp, a relief's noise, a hand-written shape or a formula node with
-no fixed-point dual (the power, the ellipse's root, the noises) answers by the
-six taps as before. A non-regional evaluator keeps the taps: its culled point
-walks cost less than a full-stream dual walk.
+branch the point reads; `sdf.queries.gradient-walks` counts them. The power at
+a constant exponent (the superellipsoid) and the lattice noise's octave sum
+(`Pcg3dLatticeNoise.Fbm3` over `FixedGradient3`, so an unmasked relief) have
+fixed-point duals. A walk that meets a warp, a masked relief, a hand-written
+shape or a node with no fixed-point dual (a varying exponent, the ellipse's
+root, the cell noise) answers by the six taps as before. A headless debug-world
+boot (`world.wait 30`, `world.counters sdf.queries`) reads 4,338 gradients as
+4,338 walks and no taps, where the base read them as 26,028 taps.
 
 **Next, by the same mechanism.**
 

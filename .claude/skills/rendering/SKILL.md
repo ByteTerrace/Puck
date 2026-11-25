@@ -1461,9 +1461,9 @@ without a formula and the fixed-point gradient answers instead. The dual reader
 lowers every formula a fourth way, for two targets from one emitter
 (`SdfFormula.EmitAllDual`, `EmitAllFixedDual`): the bake's `SdfDual` overloads and
 the query evaluator's `FixedGradient` ones (Puck.Maths' `FixedGradients` names
-each function as `field/sdf-dual.hlsli` does), which a regional evaluator's
-`TryFieldGradient` walks once over the point's tape (`SdfFieldEvaluator.Gradient.cs`).
-A node with no fixed-point dual (the power, the ellipse's root, the noises)
+each function as `field/sdf-dual.hlsli` does), which
+`TryFieldGradient` walks once over the point's tape or the culled stream (`SdfFieldEvaluator.Gradient.cs`).
+A node with no fixed-point dual (a varying exponent, the ellipse's root, the cell noise)
 leaves its formula without one, and a tape that reaches it takes the six taps.
 A new dual rule goes in both libraries ([the decision](../../../docs/decisions/engine-design.md#a-field-formula-lowers-once-per-carrier)).
 
