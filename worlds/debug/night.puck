@@ -9,6 +9,12 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "night"
 
+// The night field steps while a window onto it is at least glimpsed or someone stands in it (simulation.stepsAt).
+simulation {
+  rateHz: 30
+  stepsAt: Glimpsed
+}
+
 // The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's suit toggle and size.
 import "moth-controls"
 import "suit"
@@ -129,6 +135,7 @@ placements {
           destination: "debug"
           fallback: "#10141B"
           projection: window
+          attention: windowAttention
         }
       }
     ]

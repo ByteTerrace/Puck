@@ -82,6 +82,13 @@ public sealed partial class WorldPopulation {
     public int SleepingRigidBodies => m_sleepingBodies.Count;
     /// <summary>Number of simulated bodies visited by the integration pass this tick.</summary>
     public int SimulatedBodyVisits { get; private set; }
+    /// <summary>Gets the simulated body advances this population has run since it was built: the non-seat bodies its
+    /// ticks stepped, the count <see cref="WorldBodyWork.Advances"/> totals across every population of the process. A
+    /// counter, not simulation state: nothing hashes or checkpoints it.</summary>
+    public long BodyAdvances { get; private set; }
+    /// <summary>Gets the producer runs this population has run since it was built; a counter like
+    /// <see cref="BodyAdvances"/>.</summary>
+    public long BodySteers { get; private set; }
 
     // An entry's slot changed (it took or lost its body, or became active or inactive): the work sets follow. A slot
     // that lets its body go has already passed DisturbBody (Entry's setters), while it still held the body.

@@ -28,6 +28,10 @@ public sealed partial class WorldInstanceHost {
         public ulong StepWidth;
         // A paused or stopped row, which takes no tick and is settled once, in the first wave's name order.
         public bool Administrative;
+        // A row that stands below the attention its document steps at (Lapses): it takes no tick, banks the master
+        // delta like a stepping row, and is settled once, in the first wave's name order, where its clocks pass over
+        // the ticks it banked.
+        public bool Lapsing;
         // The row owes no further tick this host step.
         public bool Done;
         // How many ticks a fast-forwarding replay drive has taken in this host step beyond the scheduled one.
@@ -107,6 +111,7 @@ public sealed partial class WorldInstanceHost {
     // Opens a host step: banks the master delta into every steppable row and lists the rows in name order.
     private void BeginInstanceWaves(ulong masterDeltaTicks) {
         m_waveRowCount = 0;
+        ReadAttention();
         foreach (var name in Names) {
             if (
                 string.Equals(a: name, b: BootInstanceName, comparisonType: StringComparison.Ordinal) ||
@@ -131,7 +136,8 @@ public sealed partial class WorldInstanceHost {
             var idleClientRow = ((Boot is { } boot) && IsIdleClientBoot(boot: boot) && !IsOccupied(instance: instance) && !PresentsScreens(instance: instance));
             row.Administrative = ((rateHz <= 0) || instance.IsPaused || idleClientRow);
             row.StepWidth = (row.Administrative ? 0UL : FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz)));
-            row.Done = row.Administrative;
+            row.Lapsing = (!row.Administrative && Lapses(instance: instance));
+            row.Done = (row.Administrative || row.Lapsing);
             row.Burst = 0;
             row.FastForward = false;
             row.Slot = -1;
@@ -183,7 +189,9 @@ public sealed partial class WorldInstanceHost {
             for (var index = 0; (index < m_waveRowCount); index++) {
                 var row = m_waveRows[index];
 
-                if (!row.Administrative && !row.Done && StillSteps(row: row)) {
+                // A lapsing row adopts its followed rows here too, in the first wave: the adoption is input, which its
+                // settle applies and answers with a step.
+                if (!row.Administrative && (!row.Done || (row.Lapsing && m_firstWave)) && StillSteps(row: row)) {
                     row.Instance.Server.ResolveAdjacencyNeighbours();
                 }
             }
@@ -194,7 +202,7 @@ public sealed partial class WorldInstanceHost {
             row.Slot = -1;
             row.Executed = default;
             row.Fault = null;
-            if (row.Administrative) {
+            if (row.Administrative || row.Lapsing) {
                 if (m_firstWave) { m_wave.Add(item: row); }
 
                 continue;
@@ -258,6 +266,27 @@ public sealed partial class WorldInstanceHost {
         _ = row.Instance.Server.DrainAdministrative();
         SettleScreenSessions(instance: row.Instance, stepped: false);
     }
+    // A lapsing row's host step: its clocks pass over every whole tick it has banked (WorldTick.Lapse), leaving the
+    // remainder banked, so it keeps its phase against the master timeline and steps on its own schedule the moment
+    // attention returns; then it settles as a paused row does. Anything that settle applied, and any input queued for
+    // the row, owes it one step (WorldInstance.StepOwed), so its rules see what entered while nobody looked.
+    private void SettleLapsed(WaveRow row) {
+        var instance = row.Instance;
+        var ticks = (instance.ScheduleAccumulatorTicks / row.StepWidth);
+
+        if (ticks != 0UL) {
+            var engineTicks = instance.Server.Lapse(ticks: ticks);
+
+            if (engineTicks != 0UL) {
+                instance.ScheduleAccumulatorTicks -= engineTicks;
+                instance.ElapsedEngineTicks += engineTicks;
+                instance.LapsedTicks += ticks;
+                instance.PublishTick(obj: instance.CompletedTicks);
+            }
+        }
+        if (instance.Server.DrainAdministrative() || instance.Server.HasQueuedIntents) { instance.StepOwed = true; }
+        SettleScreenSessions(instance: instance, stepped: false);
+    }
     // Copies how each slice of the collected wave ended into its row, so a row settled after a held one keeps it.
     private void TakeWaveResults() {
         foreach (var row in m_wave) {
@@ -283,6 +312,11 @@ public sealed partial class WorldInstanceHost {
 
             if (row.Administrative) {
                 if (StillRuns(row: row)) { SettleIdle(row: row); }
+
+                continue;
+            }
+            if (row.Lapsing) {
+                if (StillSteps(row: row)) { SettleLapsed(row: row); }
 
                 continue;
             }
@@ -330,6 +364,7 @@ public sealed partial class WorldInstanceHost {
                     m_seats.PresentSeatLook(endpoint: endpoint);
                 }
                 instance.ElapsedEngineTicks = row.Context.ElapsedTicks;
+                instance.StepOwed = false;
                 row.FastForward = (
                     (instance.Tape is { WantsFastForwardStep: true } tape) &&
                     !m_pacing.StepsOneTickPerFrame &&

@@ -22,8 +22,10 @@ let citizenProfile = { name: "citizen", costs { road: 10, crossing: 1, pavement:
 // The producer, the kit and the target register. `domain` names the surface domain the citizens route over and
 // `profile` the navigation profile they price its areas by (a world lists `citizenProfile` to name "citizen"), or
 // none to pay one everywhere; `motionSeconds` and `steeringSeconds` set how often each citizen's motion and steering
-// update, batching a crowd.
-template citizenDesign(domain, motionSeconds = 0.1, steeringSeconds = 0.2, profile = null) {
+// update, batching a crowd. A citizen farther than `farBeyond` metres from every player, and every citizen of a town
+// nobody walks, updates at `farMotionSeconds` and `farSteeringSeconds` instead: it still walks its errand at its own
+// pace, in coarser steps nobody is near enough to see.
+template citizenDesign(domain, motionSeconds = 0.1, steeringSeconds = 0.2, profile = null, farBeyond = 70, farMotionSeconds = 0.5, farSteeringSeconds = 1) {
   targetRegisters [
     { name: "errand", maximumRange: 1000, maximumHalfAngleDegrees: 180, requiresLineOfSight: false }
   ]
@@ -48,6 +50,11 @@ template citizenDesign(domain, motionSeconds = 0.1, steeringSeconds = 0.2, profi
       autonomy {
         motionSeconds: motionSeconds
         steeringSeconds: steeringSeconds
+        far {
+          beyond: farBeyond
+          motionSeconds: farMotionSeconds
+          steeringSeconds: farSteeringSeconds
+        }
       }
       motion: citizenMotion
       producers {

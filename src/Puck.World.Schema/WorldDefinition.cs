@@ -727,6 +727,11 @@ public sealed partial record WorldDefinition(
     /// rate parameter by hand.</summary>
     [JsonIgnore]
     public int SimulationRateHz => (Simulation?.RateHz ?? UnauthoredSimulationRateHz);
+    /// <summary>Gets the least attention this world steps at: <see cref="Simulation"/>'s authored
+    /// <see cref="WorldSimulationDefaults.StepsAt"/>, or <see cref="WorldAttention.Unobserved"/> when the world
+    /// authors no <see cref="Simulation"/> section, so it steps whoever observes it.</summary>
+    [JsonIgnore]
+    public WorldAttention SimulationStepsAt => (Simulation?.StepsAt ?? WorldAttention.Unobserved);
     /// <summary>Gets the immutable fixed-point spatial query index compiled from the current placement rows. The
     /// index is rebuilt when the placement section instance changes, and reports unsupported dynamic/distributed rows
     /// explicitly instead of silently dropping their possible blockers.</summary>

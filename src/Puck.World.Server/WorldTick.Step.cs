@@ -938,6 +938,46 @@ public sealed partial class WorldTick {
             return applied;
         }
     }
+    /// <summary>THE LAPSE DOOR. Moves the authority's clocks over <paramref name="ticks"/> ticks nothing stepped: the
+    /// tick ordinal by that count and the engine tick by the same count of the world's step width, with the music clock
+    /// beside them. Nothing else runs: no rule, body, machine, field, deadline sweep or delivery. This is the one
+    /// place an authority's time moves without a step, and it moves both clocks in the ratio a step does, so every
+    /// value that is a law of time (a <see cref="Puck.State.StateAdvance"/> over engine ticks, a cycle or an eased
+    /// follower over ticks, the music clock, a tick-stamped deadline's comparison) reads after a lapse exactly what it
+    /// would have read had the world stepped that long. Everything else stands where the last step left it, which is
+    /// what a world's document accepts when it authors <see cref="WorldSimulationDefaults.StepsAt"/>.</summary>
+    /// <remarks>A lapse is authority input: the host that reads the world's attention decides it, from authority facts
+    /// alone, and the same facts lapse the same ticks on every run.</remarks>
+    /// <param name="ticks">The ticks to pass over; zero moves nothing.</param>
+    /// <returns>The engine ticks the clocks moved by.</returns>
+    /// <exception cref="InvalidOperationException">A tick is prepared, executing or held, or the world's authored rate
+    /// is zero: a world that never steps has no step width to lapse by.</exception>
+    internal ulong Lapse(ulong ticks) {
+        using (Host.EnterAtTickBoundary()) {
+            Host.ThrowIfTickPending();
+            if ((ticks == 0UL) || Host.AuthorityRetiring) {
+                return 0UL;
+            }
+
+            var rate = Host.Definition.SimulationRateHz;
+
+            if (rate <= 0) {
+                throw new InvalidOperationException(message: "A world that never steps has no step width to lapse by.");
+            }
+
+            var engineTicks = checked(ticks * FixedTickConversion.PerRate(ratePerSecond: ((uint)rate)));
+
+            m_lastCompletedTick = checked(m_lastCompletedTick + ticks);
+            m_lastCompletedEngineTicks = checked(m_lastCompletedEngineTicks + engineTicks);
+            m_deliveryTick = m_lastCompletedTick;
+            // The boundary a lapse crosses reaches no listener: nobody attends the world it lapses.
+            _ = m_musicClock?.Advance(stepTicks: engineTicks);
+            WorldTickWork.Process.Add(kind: WorldTickWork.Lapses, amount: 1L);
+            WorldTickWork.Process.Add(kind: WorldTickWork.LapsedTicks, amount: checked((long)ticks));
+
+            return engineTicks;
+        }
+    }
     /// <summary>Buffers one entity's submitted intent for the next <see cref="Step"/>.</summary>
     /// <param name="submission">The tick, entity index, and merged intent.</param>
     internal void EnqueueIntent(in IntentSubmission submission) {

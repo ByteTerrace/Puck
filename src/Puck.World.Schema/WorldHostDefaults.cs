@@ -152,8 +152,15 @@ public sealed record WorldPlacementPolicyDefaults(
 /// <c>RateHz * n / 8</c> at substep count <c>n</c>, supplied by <c>collision.bodyContacts.rigidSubstepCeiling</c>.
 /// It coincides with <c>RateHz / 4</c> only at <c>n</c> = 2. A derived
 /// floor belongs here, beside the rate it constrains, never as a second section.</para></param>
+/// <param name="StepsAt">The least attention the world steps at (<see cref="WorldAttention"/>). Below it the host
+/// that runs the world does not step it: the world lapses, and when attention returns its clocks jump the whole
+/// lapsed span in one closed-form move before it steps again, so nothing in it ran while nobody looked and no tick is
+/// replayed. Absent is <see cref="WorldAttention.Unobserved"/>: the world steps whoever observes it, and its state
+/// never depends on attention. A lapse is authority input, so a world that authors a higher value states that
+/// observation may decide what happens in it.</param>
 public sealed record WorldSimulationDefaults(
-    int RateHz
+    int RateHz,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] WorldAttention StepsAt = WorldAttention.Unobserved
 );
 /// <summary>
 /// How the world boots its presentation shell — the closed vocabulary <see cref="WorldHostDefaults.Presentation"/> and

@@ -110,6 +110,15 @@ public sealed partial class WorldServer {
         PrepareUnsteppedAdjacencyPresentation();
         return applied;
     }
+    /// <inheritdoc cref="WorldTick.Lapse"/>
+    public ulong Lapse(ulong ticks) => m_tick.Lapse(ticks: ticks);
+    /// <summary>Gets whether an intent is queued for the next step: input addressed to a body or a session of this
+    /// world that only a step applies.</summary>
+    public bool HasQueuedIntents {
+        get {
+            lock (AuthorityGate) { return (m_tick.Intents.Count != 0); }
+        }
+    }
     /// <inheritdoc cref="WorldTick.EnqueueIntent"/>
     public void EnqueueIntent(in IntentSubmission submission) => m_tick.EnqueueIntent(submission: in submission);
     /// <inheritdoc cref="WorldTick.PublishFederatedIntent"/>

@@ -152,6 +152,16 @@ public sealed class WorldInstance : IDisposable {
     public WorldServer Server { get; }
     /// <summary>The document path this instance currently answers for.</summary>
     public string SourcePath => m_origin();
+    /// <summary>Gets the attention the host last read for this instance (<see cref="WorldInstanceHost"/>'s attention
+    /// reading, once a host step): operational state the host derives again every step, never checkpointed.</summary>
+    public WorldAttention Attention { get; internal set; }
+    /// <summary>Gets the ticks this instance has lapsed since it was admitted: the ticks its host moved its clocks
+    /// over without stepping it, because it stood below the attention it steps at. A host counter, not simulation
+    /// state: <see cref="CompletedTicks"/> less this is the ticks the instance stepped in this process.</summary>
+    public ulong LapsedTicks { get; internal set; }
+    /// <summary>Gets or sets whether the instance owes one step whatever its attention: an administrative drain applied
+    /// something to it while it lapsed, or input is queued for it, and only a step lets its rules see either.</summary>
+    internal bool StepOwed { get; set; }
 
     /// <summary>Resolves <see cref="SourcePath"/> as <see cref="WorldFileOrigin.TryResolveCanonicalPath"/> does, probing
     /// the file system once for each path the instance answers for, so a crossing that compares running instances'

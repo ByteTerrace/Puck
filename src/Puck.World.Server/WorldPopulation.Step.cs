@@ -18,6 +18,8 @@ public sealed partial class WorldPopulation {
     private ulong[] m_fieldInputPasses = [];
     // The producer fault last narrated for each body slot, so each transition is narrated once. Diagnostic only.
     private readonly Puck.Abstractions.ReasonLatch<int> m_producerFaults = new();
+    // Where the bodies humans occupy stood as this tick's plan began, in slot order (ReadAttendedPoints).
+    private readonly List<FixedVector3> m_attendedPoints = [];
 
     private static void ApplyVariation(Entry entry, CompiledBodyProducer producer, FixedQ4816 phase, FixedQ4816 weaveUnit, FixedQ4816 activityUnit, bool resetPhase) {
         entry.ProducerState.WeaveFrequency = (producer.Scalar(parameter: BodyProducerParameter.WeaveFrequencyBase) + (producer.Scalar(parameter: BodyProducerParameter.WeaveFrequencyRange) * weaveUnit));
@@ -981,6 +983,45 @@ public sealed partial class WorldPopulation {
             )
         );
     }
+    // Whether a bound cadence refreshes on a tick of stepTicks: CadenceDue's own test, read without advancing it.
+    private static bool CadenceComesDue(ulong period, ulong remaining, ulong stepTicks) => ((period == 0UL) || (remaining <= stepTicks));
+    // Moves a bound cadence to the other tier's period at a refresh. The time it has batched is kept and comes due on
+    // this tick, so a body that changes tier loses none of the motion it was owed. A cadence that is or becomes every
+    // tick is left to BindCadence, which holds no batch across that change.
+    private static void Retier(ulong period, ref ulong boundPeriod, ref ulong remaining) {
+        if ((boundPeriod != 0UL) && (period != 0UL) && (boundPeriod != period)) {
+            boundPeriod = period;
+            remaining = 1UL;
+        }
+    }
+    // Whether every attended point stands farther from a position than a kit's far distance; with nobody in the world,
+    // every position is far.
+    private bool StandsFar(in FixedVector3 position, FixedQ4816 beyondSquared) {
+        foreach (var point in m_attendedPoints) {
+            if ((point - position).LengthSquared <= beyondSquared) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+    // Reads where humans stand, before any body plans its tick: the points a kit's far cadence measures against. A
+    // seat is read where it stood when the tick began, since the seats advance after the simulated bodies.
+    private void ReadAttendedPoints() {
+        m_attendedPoints.Clear();
+
+        var tiered = false;
+
+        foreach (var kit in m_kits) { tiered |= (kit.AutonomousFar is not null); }
+        if (!tiered) {
+            return;
+        }
+        for (var index = 0; (index < Capacity); index++) {
+            if (IsHumanOccupied(bodyIndex: index) && (m_entries[index].Body is { } body)) {
+                m_attendedPoints.Add(item: body.FixedPosition);
+            }
+        }
+    }
     private static bool CadenceDue(ulong period, ulong stepTicks, ref ulong elapsed, ref ulong remaining, out ulong elapsedTicks) {
         if (period == 0UL) {
             elapsedTicks = stepTicks;
@@ -1053,6 +1094,7 @@ public sealed partial class WorldPopulation {
         // change mid-loop (nothing here writes either) can never wake half a tick's peers and not the other half.
         var contactFieldVersion = ContactFieldVersion;
 
+        ReadAttendedPoints();
         // The kit advance split (WorldPopulation.Partitions.cs): the bodies whose step is local advance first, in fixed
         // partitions of slots over the frozen image, and every other body then advances here, serially, in index order.
         PlanKitStep(contactFieldVersion: contactFieldVersion, stepBodies: stepBodies, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks);
@@ -1086,6 +1128,7 @@ public sealed partial class WorldPopulation {
                 work: m_serialWork
             );
             SeedSteering(entry: entry, motionPeriod: step.MotionPeriod, player: player, steeringPeriod: step.SteeringPeriod, work: m_serialWork);
+            BodySteers++;
         }
         if (!step.Moves) {
             return;
@@ -1112,6 +1155,7 @@ public sealed partial class WorldPopulation {
             sleepAfterTicks: m_sleepAfterTicks,
             contactFieldVersion: contactFieldVersion
         );
+        BodyAdvances++;
         WorldBodyWork.Process.Add(amount: 1, kind: WorldBodyWork.Advances);
         RecordFlockMotion(body: player, work: m_serialWork);
     }
@@ -1146,12 +1190,42 @@ public sealed partial class WorldPopulation {
             ? kit.AutonomousMotionTicks
             : 0UL
         );
-        var steeringPeriod = ((!entry.IsRemoteHuman && Producing(entry: entry, player: player))
+        var producing = (!entry.IsRemoteHuman && Producing(entry: entry, player: player));
+        var steeringPeriod = (producing
             ? kit.AutonomousSteeringTicks
             : 0UL
         );
         ref var autonomy = ref entry.AutonomyState;
         var ordinal = (index - LocalSeatCount);
+
+        if (kit.AutonomousFar is { } far) {
+            var farMotion = (locallyAutonomous ? far.MotionTicks : 0UL);
+            var farSteering = (producing ? far.SteeringTicks : 0UL);
+
+            if ((farMotion != motionPeriod) || (farSteering != steeringPeriod)) {
+                // The tier a body is bound to stands until one of its cadences comes due, so a far body reads the
+                // distance to the attended points once a refresh, not once a tick.
+                var boundFar = ((autonomy.MotionPeriodTicks == farMotion) && (autonomy.SteeringPeriodTicks == farSteering));
+                var bound = (boundFar || ((autonomy.MotionPeriodTicks == motionPeriod) && (autonomy.SteeringPeriodTicks == steeringPeriod)));
+                var isFar = boundFar;
+
+                if (
+                    !bound ||
+                    CadenceComesDue(period: autonomy.MotionPeriodTicks, remaining: autonomy.MotionRemainingTicks, stepTicks: stepTicks) ||
+                    CadenceComesDue(period: autonomy.SteeringPeriodTicks, remaining: autonomy.SteeringRemainingTicks, stepTicks: stepTicks)
+                ) {
+                    isFar = StandsFar(position: player.FixedPosition, beyondSquared: far.BeyondSquared);
+                }
+                if (isFar) {
+                    motionPeriod = farMotion;
+                    steeringPeriod = farSteering;
+                }
+                if (bound && (isFar != boundFar)) {
+                    Retier(period: motionPeriod, boundPeriod: ref autonomy.MotionPeriodTicks, remaining: ref autonomy.MotionRemainingTicks);
+                    Retier(period: steeringPeriod, boundPeriod: ref autonomy.SteeringPeriodTicks, remaining: ref autonomy.SteeringRemainingTicks);
+                }
+            }
+        }
 
         BindCadence(
             motionPeriod,

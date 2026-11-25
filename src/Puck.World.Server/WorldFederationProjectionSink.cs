@@ -23,7 +23,7 @@ namespace Puck.World.Server;
 /// <param name="view">An ingress-minted view with live admission, or null to mint it from the server and tier.</param>
 public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null, WorldServer? server = null,
-    WorldRecipientView? view = null) : IWorldDetachableSink, IWorldInterestSink {
+    WorldRecipientView? view = null) : IWorldDetachableSink, IWorldInterestSink, IWorldWatchingSink {
     /// <summary>The maximum encoded records one projection subscriber retains while its wire consumer is behind.</summary>
     public const int PendingDeliveryLimit = 256;
     /// <summary>The named reason for detaching an observer whose wire queue fills.</summary>

@@ -19,6 +19,13 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "city"
 
+// The town steps while a window onto it is at least glimpsed or someone walks it; with nobody near any window its
+// clocks alone move (simulation.stepsAt), so its day keeps time and its people stand where they were last seen.
+simulation {
+  rateHz: 30
+  stepsAt: Glimpsed
+}
+
 // The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's suit toggle and size.
 import "moth-controls"
 import "suit"
@@ -475,6 +482,7 @@ placements {
           destination: "debug"
           fallback: "#10141B"
           projection: window
+          attention: windowAttention
         }
       }
     ]

@@ -9,6 +9,13 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "hearth"
 
+// The hearth stands behind two windows from the debug world, so it steps only while its own window is watched from
+// the garden or someone stands in it (simulation.stepsAt).
+simulation {
+  rateHz: 30
+  stepsAt: Watched
+}
+
 // The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's suit toggle and size.
 import "moth-controls"
 import "suit"
@@ -107,6 +114,7 @@ placements {
           destination: "garden"
           fallback: "#FF9A4D"
           projection: window
+          attention: windowAttention
         }
       }
     ]

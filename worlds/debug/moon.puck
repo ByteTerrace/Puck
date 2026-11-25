@@ -215,6 +215,7 @@ placements {
           destination: "debug"
           fallback: "#D8D2C6"
           projection: window
+          attention: windowAttention
         }
       }
     ]
@@ -266,6 +267,7 @@ placements {
           destination: "debug"
           fallback: "#D8D2C6"
           projection: window
+          attention: windowAttention
         }
       }
     ]

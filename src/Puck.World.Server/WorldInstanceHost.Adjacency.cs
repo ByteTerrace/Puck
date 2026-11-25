@@ -587,7 +587,12 @@ public sealed partial class WorldInstanceHost {
             StepWidthTicks: (stopped
             ? (ulong?)null
             : FixedTickConversion.PerRate(ratePerSecond: ((uint)rateHz))),
-            CompletedTicks: instance.CompletedTicks
+            CompletedTicks: instance.CompletedTicks,
+            Attention: instance.Attention,
+            StepsAt: instance.Server.Configuration.SimulationStepsAt,
+            LapsedTicks: instance.LapsedTicks,
+            BodyAdvances: instance.Server.Population.BodyAdvances,
+            BodySteers: instance.Server.Population.BodySteers
         );
         reason = string.Empty;
 

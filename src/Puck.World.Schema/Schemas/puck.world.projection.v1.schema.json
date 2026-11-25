@@ -6794,6 +6794,23 @@
         "rateHz": {
           "description": "The simulation rate in Hz. Zero is a legal, distinct rate: a resident, non-stepping world \u2014 a static diorama the authoritative server never advances a fixed step for, though it still applies ordered submissions (mutations, session requests, connects/disconnects) through the administrative drain, so a rate-0 world can accept the very write that revives it. At rate 0, a simulation-tick duration authored as a positive value means never \u2014 not zero and not \u0022already expired\u0022 \u2014 since there is no tick mapping for a world that never advances (see CompiledTickDuration, PopulationReconnectGraceTicks). A positive rate must be a divisor of TicksPerSecond (50400) exactly, so Puck.Maths.FixedTickConversion.PerRate always derives a whole engine-tick step width \u2014 never truncated, never remainder-carried (WorldDefinitionValidator refuses a non-divisor, naming the nearest valid rates; a negative rate is refused outright, at any magnitude). 45 and 90 Hz \u2014 Steam Deck OLED\u0027s two refresh rates \u2014 both divide 50400 exactly (1120 and 560 engine ticks per step). The engine holds no rate of its own: an authored section states its rate, and a world authoring no simulation section runs at UnauthoredSimulationRateHz \u2014 the distinct rate-0 resident world is reached only by authoring rateHz 0 by name. The derived-floor seam. This record is deliberately the one place a follow-on validation pass adds the physics floor (from body size/speed), the interactivity floor (from input latency), and the representable band; these floors are not built yet. The rigid solver already clamps authored contact frequency to RateHz * n / 8 at substep count n, supplied by collision.bodyContacts.rigidSubstepCeiling. It coincides with RateHz / 4 only at n = 2. A derived floor belongs here, beside the rate it constrains, never as a second section.",
           "type": "integer"
+        },
+        "stepsAt": {
+          "description": "The least attention the world steps at (WorldAttention). Below it the host that runs the world does not step it: the world lapses, and when attention returns its clocks jump the whole lapsed span in one closed-form move before it steps again, so nothing in it ran while nobody looked and no tick is replayed. Absent is Unobserved: the world steps whoever observes it, and its state never depends on attention. A lapse is authority input, so a world that authors a higher value states that observation may decide what happens in it.",
+          "enum": [
+            "Unobserved",
+            "Glimpsed",
+            "Watched",
+            "Occupied"
+          ],
+          "default": "Unobserved",
+          "title": "WorldAttention",
+          "x-enumDescriptions": {
+            "Unobserved": "Nobody stands in the world and no observation reaches it.",
+            "Glimpsed": "The world is seen from afar or at a remove: through a surface no one stands near, through an infinity layer, or through a world that is itself only observed.",
+            "Watched": "A world someone stands in observes it through a surface they stand near, or an observer the host knows nothing more about (another process) holds a session on it.",
+            "Occupied": "Someone stands in the world."
+          }
         }
       },
       "required": [
@@ -12470,6 +12487,33 @@
         "Window": "The destination renders through an off-axis frustum fitted to THIS face\u0027s aperture, apexed at the viewer\u0027s eye mapped through the border pair\u0027s isometry (see Puck.World.Client.WorldWindowProjectionMath, downstream of this project \u2014 see docs/project-map.md\u0027s layering) \u2014 requires this same face\u0027s Portal to author Mapped with a Counterpart (refused by name otherwise \u2014 see WorldDefinitionValidator), since the aperture and the mapping both come from the SAME border pair. CameraName is ignored under this mode \u2014 the camera is derived every produced frame, never an authored row."
       }
     },
+    "WorldSessionAttention": {
+      "description": "How far an observing surface\u0027s attention reaches: the distances, from the surface to the nearest body a human occupies in the world that declares it, within which the destination is watched and within which it is glimpsed.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "watchedWithin": {
+          "description": "The distance in metres within which the destination is Watched; absent watches at any distance.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "glimpsedWithin": {
+          "description": "The distance in metres within which the destination is at least Glimpsed; absent glimpses at any distance. It is never less than WatchedWithin.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldSessionAttention"
+    },
     "WorldScreenSourceSession": {
       "description": "A live rendered view of another world, resolved through a destinations row (docs/architecture/worlds.md, \u0022Observation and display\u0022). The face/screen resolves the same resolver-owned identity a portal crossing at the same door would land in (WorldSessionResolver), attaches an observation lease to the resolved instance\u0027s server, and mirrors just enough of its delivered definition/snapshots to render its static authored geometry through CameraName (or the destination\u0027s default projection). It never re-derives durability/scope/generation itself \u2014 those are the destination row\u0027s own facts.",
       "properties": {
@@ -12510,6 +12554,11 @@
           "description": "Whether the opening ripples: its image is refracted by slow interfering waves all the time, with a faint highlight riding them, and a body that touches or passes through sends rings across the whole glass that fade within about a second. Presentation only (the shading reads the contact and the clock; nothing in the simulation depends on it). Requires Window. Omitted from the wire when false.",
           "type": "boolean",
           "default": false
+        },
+        "attention": {
+          "$ref": "#/$defs/WorldSessionAttention",
+          "description": "How far this surface\u0027s attention reaches (WorldSessionAttention): what the destination\u0027s host reads when it decides whether the destination steps. Absent watches the destination at any distance. Omitted from the wire when null.",
+          "default": null
         }
       },
       "required": [

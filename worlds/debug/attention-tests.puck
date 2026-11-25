@@ -1,0 +1,90 @@
+// Simulation follows attention (docs/decisions/worlds-and-federation.md): this world hangs a window onto
+// attention-world.puck a kilometre from its spawn, whose attention reaches a hundred metres, and follows that world's
+// day, its step counter and its bell. While the seat stands at the spawn the watched world lapses; while it stands by
+// the window the watched world steps. `puck test worlds/debug/attention-tests.puck --reproduce` shows two runs lapse
+// the same ticks, and the two scenarios show what a lapse keeps: the day reads the same whether the world was
+// watched throughout or only for two seconds, and the counter reads the ticks it was watched for.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "attention-tests"
+
+import "painting-kit"
+
+references [
+  { document: "attention-world", name: "watched" }
+]
+
+destinations [
+  { durability: persisted, name: "watched", reference: "watched", scope: global }
+]
+
+state {
+  world [
+    { name: "day", kind: "Fixed", value: "0", advance { perSecondNumerator: 1, perSecondDenominator: 1440 }, follows { destination: "watched" } }
+    { name: "steps", kind: "Int", value: 0, follows { destination: "watched" } }
+    { name: "rang", kind: "Int", value: 0, follows { destination: "watched" } }
+  ]
+}
+
+prototypes {
+  prototype "frame" {
+    document {
+      arrivalFrame(color: "#C9A43A")
+    }
+  }
+}
+
+placements {
+  placement "window" {
+    prototype: "frame"
+    position [0, 0, -1000]
+    faceSources [
+      {
+        face: "glass"
+        source {
+          $type: "session"
+          destination: "watched"
+          attention { watchedWithin: 100, glimpsedWithin: 100 }
+        }
+      }
+    ]
+  }
+}
+
+// Five seconds unwatched, two by the window, three unwatched again: the watched world steps for about the two seconds
+// it was watched, its bell (due at its second second, which passed while it lapsed) rings on its first step, and its
+// day stands where ten seconds of its own clock put it.
+test "an unwatched world lapses and keeps its clock" {
+  when {
+    ticks 150
+    seat1: body.pose 0 0 -995 0 0 0 0
+    ticks 60
+    seat1: body.pose 0 0 0 0 0 0 0
+    ticks 90
+  }
+  expect {
+    steps > 40
+    steps < 75
+    rang == 1
+    day > 0.2568
+    day < 0.2571
+  }
+}
+
+// The same ten seconds watched throughout: every tick steps, and the day reads what it read above.
+test "a watched world steps every tick to the same clock" {
+  when {
+    seat1: body.pose 0 0 -995 0 0 0 0
+    ticks 100
+    seat1: body.pose 0 0 -995 0 0 0 0
+    ticks 100
+    seat1: body.pose 0 0 -995 0 0 0 0
+    ticks 100
+  }
+  expect {
+    steps > 280
+    rang == 1
+    day > 0.2568
+    day < 0.2571
+  }
+}
