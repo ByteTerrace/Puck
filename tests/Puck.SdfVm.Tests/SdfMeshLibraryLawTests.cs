@@ -399,7 +399,7 @@ public sealed class SdfMeshLibraryLawTests {
         Assert.True(condition: library.TryTake(geometry: geometry, identity: identity, materials: [20], mesh: out var second));
         Assert.Equal(expected: [7u, 7u, 7u], actual: first!.TriangleMaterials.ToArray());
         Assert.Equal(expected: [20u, 7u, 20u], actual: second.TriangleMaterials.ToArray());
-        first.Release();
+        first!.Release();
         second.Release();
     }
     // One decoder writes every plane into the storage a caller names: a host library's native blocks hold the planes an
@@ -478,8 +478,8 @@ public sealed class SdfMeshLibraryLawTests {
             Assert.Equal(expected: wanted.BakeCell, actual: got.BakeCell);
             Assert.Equal(expected: wanted.Levels.Count, actual: got.Levels.Count);
             for (var level = 0; (level < wanted.Levels.Count); level++) {
-                Assert.Equal(expected: wanted.Levels[level].Indices.ToArray(), actual: got.Levels[level].Indices.ToArray());
-                Assert.Equal(expected: wanted.Levels[level].TriangleMaterials.ToArray(), actual: got.Levels[level].TriangleMaterials.ToArray());
+                Assert.Equal(expected: wanted.LevelIndices(level: (level + 1)).ToArray(), actual: got.LevelIndices(level: (level + 1)).ToArray());
+                Assert.Equal(expected: wanted.LevelMaterials(level: (level + 1)).ToArray(), actual: got.LevelMaterials(level: (level + 1)).ToArray());
                 Assert.Equal(expected: wanted.Levels[level].Error, actual: got.Levels[level].Error);
             }
         }

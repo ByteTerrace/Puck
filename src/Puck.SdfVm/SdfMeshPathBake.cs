@@ -1471,9 +1471,9 @@ public sealed partial class SdfMeshPathBake {
                 if (group.Mesh is not { } mesh) { continue; }
                 meshes++;
                 triangles += mesh.TriangleCount;
-                vertices += mesh.Positions.Length;
-                bytes += ((((((long)mesh.Positions.Length) + mesh.Normals.Length) * 3) * sizeof(float))
-                    + (((3L * mesh.TriangleCount) + mesh.TriangleMaterials.Length) * sizeof(uint)));
+                vertices += mesh.VertexCount;
+                bytes += ((((((long)mesh.VertexCount) * (mesh.HasNormals ? 2 : 1)) * 3) * sizeof(float))
+                    + (((3L * mesh.TriangleCount) + (mesh.HasTriangleMaterials ? mesh.TriangleCount : 0)) * sizeof(uint)));
             }
 
             return $"[sdf.mesh-bake] residency={Residency} groups={m_groups.Count} meshes={meshes} pending={m_groups.Count(predicate: static group => !group.Done)} dispatches={m_accounts.Dispatches} samples={m_accounts.Samples} discarded={m_accounts.Discarded} returned={m_accounts.Returned} taps={m_accounts.Taps} refined={m_accounts.RefinedCells} edges={m_accounts.CutEdges} softened={m_accounts.Softened} merged={m_accounts.Merged} loaded={m_accounts.Loaded} skinned={m_groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }))} triangles={triangles} vertices={vertices} bytes={bytes} seconds={(m_reported ? m_seconds : m_clock.Elapsed.TotalSeconds):0.000} {m_accounts.DescribeCheckpoints()}";

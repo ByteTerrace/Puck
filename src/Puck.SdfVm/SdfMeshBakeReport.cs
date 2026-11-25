@@ -348,7 +348,7 @@ internal static class SdfMeshBakeReport {
     public static void Done(string residency, string residencyId, IReadOnlyList<Finished> groups, Accounts accounts, double seconds, Func<string>? dispatches) {
         var meshes = groups.Count(predicate: static group => (group.Mesh is not null));
         var triangles = groups.Sum(selector: static group => ((long)(group.Mesh?.TriangleCount ?? 0)));
-        var vertices = groups.Sum(selector: static group => ((long)(group.Mesh?.Positions.Length ?? 0)));
+        var vertices = groups.Sum(selector: static group => ((long)(group.Mesh?.VertexCount ?? 0)));
         // The meshes some of whose vertices ride a member's slot rather than the group's.
         var skinned = groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }));
         // The meshes with coarser levels, and the triangles every mesh draws at its first and second coarser level (its

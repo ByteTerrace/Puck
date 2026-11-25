@@ -31,7 +31,8 @@ public static class SdfMeshChunks {
         // surface first, so a flat face does not retain an artificial row of contour vertices at every spatial seam.
         mesh = SdfMeshPlanarMerge.Merge(allocator: allocator, mesh: mesh, owner: owner);
         if (mesh.TriangleCount == 0) { return mesh; }
-        var positions = mesh.Positions.Span;
+        using var held = mesh.Hold();
+        var positions = held.Positions.Span;
         var low = mesh.PositionLow;
         var size = (mesh.PositionHigh - low);
 
@@ -43,7 +44,9 @@ public static class SdfMeshChunks {
         var triangleCount = mesh.TriangleCount;
         var bins = new Dictionary<(int X, int Y, int Z), int>();
         var binOf = scope.Rent<int>(minimumLength: triangleCount);
-        var indices = mesh.Indices.Span;
+        var indices = held.Indices.Span;
+        var normals = held.Normals.Span;
+        var materials = held.TriangleMaterials.Span;
 
         // A mesh spread wider than MostChunks bins (the world group's far ground) takes bins of twice the side until it
         // fills no more: at 8 m it split into 160,000 draws, and every pass culls and levels each. A bin is numbered as
@@ -102,9 +105,9 @@ public static class SdfMeshChunks {
         }
 
         var joinedPositions = new Vector3[vertexCount];
-        var joinedNormals = new Vector3[mesh.Normals.IsEmpty ? 0 : vertexCount];
+        var joinedNormals = new Vector3[normals.IsEmpty ? 0 : vertexCount];
         var joinedIndices = new uint[indices.Length];
-        var joinedMaterials = new uint[mesh.TriangleMaterials.Length];
+        var joinedMaterials = new uint[materials.Length];
         var chunks = new SdfMesh[parts];
         var localOf = scope.Rent<int>(minimumLength: positions.Length);
         var sourceSites = mesh.Sites();
@@ -120,7 +123,7 @@ public static class SdfMeshChunks {
             var count = 0;
             for (var at = 0; at < binTriangles; at++) {
                 var triangle = order[(starts[part] + at)];
-                if (joinedMaterials.Length > 0) { joinedMaterials[triangleBase + at] = mesh.TriangleMaterials.Span[triangle]; }
+                if (joinedMaterials.Length > 0) { joinedMaterials[triangleBase + at] = materials[triangle]; }
                 for (var corner = 0; corner < 3; corner++) {
                     var source = indices[3 * triangle + corner];
                     if (seen[source] != part + 1) {
@@ -131,7 +134,7 @@ public static class SdfMeshChunks {
                         if (site < vertexBase) { site = vertex; }
                         localSites[count++] = site - vertexBase;
                         joinedPositions[vertex] = positions[(int)source];
-                        if (joinedNormals.Length > 0) { joinedNormals[vertex] = mesh.Normals.Span[(int)source]; }
+                        if (joinedNormals.Length > 0) { joinedNormals[vertex] = normals[(int)source]; }
                     }
                     localIndices[3 * at + corner] = (uint)localOf[source];
                     joinedIndices[3 * (triangleBase + at) + corner] = (uint)(vertexBase + localOf[source]);
@@ -156,27 +159,34 @@ public static class SdfMeshChunks {
     /// arrays are a CPU query view, never another resident GPU mesh. The joined mesh holds the vertex and triangle
     /// attributes once: its chunks are views of its positions, normals and triangle materials, in order, each keeping its
     /// own indices and levels, and a native copy keeps that sharing and drops the joined indices
-    /// (<see cref="SdfMesh.StorageBytes"/>, <see cref="SdfMesh.Indices"/>).</summary>
+    /// (<see cref="SdfMesh.StorageBytes"/>, <see cref="SdfMesh.Held.Indices"/>).</summary>
     /// <param name="chunks">The nonempty list of chunks, none of them skinned.</param>
     /// <returns>The whole-group mesh.</returns>
     public static SdfMesh Join(IReadOnlyList<SdfMesh> chunks) {
         ArgumentNullException.ThrowIfNull(chunks);
         if (chunks.Count == 0) { throw new ArgumentException(message: "A chunked mesh needs chunks.", paramName: nameof(chunks)); }
-        var vertices = chunks.Sum(selector: static chunk => chunk.Positions.Length);
+        var vertices = chunks.Sum(selector: static chunk => chunk.VertexCount);
         var triangles = chunks.Sum(selector: static chunk => chunk.TriangleCount);
         var positions = new Vector3[vertices];
-        var normals = new Vector3[(chunks[0].Normals.IsEmpty ? 0 : vertices)];
+        var normals = new Vector3[(chunks[0].HasNormals ? vertices : 0)];
         var indices = new uint[(3 * triangles)];
-        var materials = new uint[(chunks[0].TriangleMaterials.IsEmpty ? 0 : triangles)];
+        var materials = new uint[(chunks[0].HasTriangleMaterials ? triangles : 0)];
+        var chunkIndices = new ReadOnlyMemory<uint>[chunks.Count];
         var vertex = 0;
         var triangle = 0;
 
-        foreach (var chunk in chunks) {
-            chunk.Positions.Span.CopyTo(destination: positions.AsSpan(start: vertex));
-            if (normals.Length != 0) { chunk.Normals.Span.CopyTo(destination: normals.AsSpan(start: vertex)); }
-            if (materials.Length != 0) { chunk.TriangleMaterials.Span.CopyTo(destination: materials.AsSpan(start: triangle)); }
-            for (var index = 0; (index < chunk.Indices.Length); index++) { indices[((3 * triangle) + index)] = (chunk.Indices.Span[index] + ((uint)vertex)); }
-            vertex += chunk.Positions.Length;
+        for (var at = 0; (at < chunks.Count); at++) {
+            var chunk = chunks[at];
+            using var held = chunk.Hold();
+            var own = held.Indices.Span;
+
+            held.Positions.Span.CopyTo(destination: positions.AsSpan(start: vertex));
+            if (normals.Length != 0) { held.Normals.Span.CopyTo(destination: normals.AsSpan(start: vertex)); }
+            if (materials.Length != 0) { held.TriangleMaterials.Span.CopyTo(destination: materials.AsSpan(start: triangle)); }
+            for (var index = 0; (index < own.Length); index++) { indices[((3 * triangle) + index)] = (own[index] + ((uint)vertex)); }
+            // A joined chunk keeps its own index array; a managed chunk's planes are arrays its hold never lets go.
+            chunkIndices[at] = held.Indices;
+            vertex += chunk.VertexCount;
             triangle += chunk.TriangleCount;
         }
         var views = new SdfMesh[chunks.Count];
@@ -187,14 +197,14 @@ public static class SdfMeshChunks {
             var chunk = chunks[index];
 
             views[index] = new SdfMesh(
-                positions: positions.AsMemory(start: vertex, length: chunk.Positions.Length),
-                indices: chunk.Indices,
-                normals: ((normals.Length == 0) ? default : normals.AsMemory(start: vertex, length: chunk.Positions.Length)),
+                positions: positions.AsMemory(start: vertex, length: chunk.VertexCount),
+                indices: chunkIndices[index],
+                normals: ((normals.Length == 0) ? default : normals.AsMemory(start: vertex, length: chunk.VertexCount)),
                 triangleMaterials: ((materials.Length == 0) ? default : materials.AsMemory(start: triangle, length: chunk.TriangleCount))) {
                 BakeCell = chunk.BakeCell,
                 Levels = chunk.Levels,
             };
-            vertex += chunk.Positions.Length;
+            vertex += chunk.VertexCount;
             triangle += chunk.TriangleCount;
         }
 
