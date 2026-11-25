@@ -231,12 +231,18 @@ public sealed partial class WorldCreationInstances {
             }
         }
 
-        m_posePartitions.Begin(client: client, deltaSeconds: deltaSeconds, parkPosition: parkPosition, transforms: transforms);
+        // A partition poses a run of registrations, a few runs for each thread the pool has: one registration a partition
+        // put every thread's claim of its next registration on the fork's one counter, thousands of times a frame.
+        var chunk = ((Jobs is { Serial: false } pool) ? Math.Clamp(value: (poses / (PoseRunsPerThread * pool.Workers.Count)), min: 1, max: MaxPosesPerPartition) : poses);
+
+        m_posePartitions.Begin(client: client, deltaSeconds: deltaSeconds, parkPosition: parkPosition, transforms: transforms, poses: poses, chunk: Math.Max(val1: chunk, val2: 1));
         try {
+            var partitions = ((poses + m_posePartitions.Chunk - 1) / m_posePartitions.Chunk);
+
             if (Jobs is { } jobs) {
-                jobs.Fork(body: m_posePartitions, jobClass: JobClass.Frame, partitions: poses);
+                jobs.Fork(body: m_posePartitions, jobClass: JobClass.Frame, partitions: partitions);
             } else {
-                for (var partition = 0; (partition < poses); partition++) {
+                for (var partition = 0; (partition < partitions); partition++) {
                     m_posePartitions.Run(partition: partition);
                 }
             }
@@ -409,34 +415,45 @@ public sealed partial class WorldCreationInstances {
     // The pool entries the first pass found posing in full, in pool order: partition i poses m_poseOrder[i].
     private int[] m_poseOrder = [];
 
-    // The pose fork's partitions: one registration's full pose each. Every partition writes only its registration
-    // (its fields, its effectors' held answers, its pack step) and that registration's slot range of the table, and
-    // reads the client, the definition and the state mirror, which nothing writes during the fork but a lease's first
-    // acquisition of a slot, which the mirror serializes (WorldStateMirror.Acquire). A rig that reads another body is
-    // never in the fork, so no partition reads another registration's pose.
+    // How many runs of registrations the pose fork cuts for each pool thread, so a run holding an expensive rig leaves the
+    // other threads work to take, and the most registrations one run holds.
+    private const int PoseRunsPerThread = 4;
+    private const int MaxPosesPerPartition = 32;
+
+    // The pose fork's partitions: a run of registrations' full poses each, in pose order. Every partition writes only its
+    // registrations (their fields, their effectors' held answers, their pack steps) and those registrations' slot ranges of
+    // the table, and reads the client, the definition and the state mirror, which nothing writes during the fork but a
+    // lease's first acquisition of a slot, which the mirror serializes (WorldStateMirror.Acquire). A rig that reads
+    // another body is never in the fork, so no partition reads another registration's pose.
     private sealed class PosePartitions(WorldCreationInstances owner) : Puck.Hosting.Jobs.IJobPartitions {
         private IWorldStampSource? m_client;
         private DynamicTransform[] m_transforms = [];
         private float m_deltaSeconds;
         private Vector3 m_parkPosition;
+        private int m_poses;
 
-        public void Begin(IWorldStampSource client, float deltaSeconds, Vector3 parkPosition, DynamicTransform[] transforms) {
+        // The registrations a partition poses.
+        public int Chunk { get; private set; } = 1;
+
+        public void Begin(IWorldStampSource client, float deltaSeconds, Vector3 parkPosition, DynamicTransform[] transforms, int poses, int chunk) {
             m_client = client;
             m_deltaSeconds = deltaSeconds;
             m_parkPosition = parkPosition;
             m_transforms = transforms;
+            m_poses = poses;
+            Chunk = chunk;
         }
         public void End() {
             m_client = null;
             m_transforms = [];
         }
-        public void Run(int partition) => owner.Pose(
-            client: m_client!,
-            deltaSeconds: m_deltaSeconds,
-            index: owner.m_poseOrder[partition],
-            parkPosition: m_parkPosition,
-            transforms: m_transforms
-        );
+        public void Run(int partition) {
+            var end = Math.Min(val1: m_poses, val2: ((partition + 1) * Chunk));
+
+            for (var at = (partition * Chunk); (at < end); at++) {
+                owner.Pose(client: m_client!, deltaSeconds: m_deltaSeconds, index: owner.m_poseOrder[at], parkPosition: m_parkPosition, transforms: m_transforms);
+            }
+        }
     }
 
     private readonly PosePartitions m_posePartitions;
