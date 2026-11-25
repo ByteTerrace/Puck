@@ -126,7 +126,9 @@ jobs:
             # Formatting a source that imports types from a Template Spec restores it from Azure, which needs the sign-in
             # only main's infrastructure job has; that job checks those sources.
             if grep -qE "from 'ts[:/]" "$file"; then continue; fi
-            if ! az bicep format --file "$file" --stdout | diff -q "$file" - >/dev/null; then
+            # --stdout appends a newline of its own (Bicep 0.48), so format to a file and compare that.
+            az bicep format --file "$file" --outfile "${RUNNER_TEMP}/formatted.bicep"
+            if ! diff -q "$file" "${RUNNER_TEMP}/formatted.bicep" >/dev/null; then
               echo "::error file=$file::not formatted; run az bicep format --file $file"; status=1
             fi
           done
