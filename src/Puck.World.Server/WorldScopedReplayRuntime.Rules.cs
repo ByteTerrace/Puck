@@ -25,6 +25,9 @@ public sealed partial class WorldScopedReplayRuntime {
     private void RebindRules(WorldRuleHost host) {
         var writes = new List<CellAccess>();
         var bodies = new HashSet<int>();
+        // A player's body reaches the scope only through a scope body a player can hold, and a rule it reaches is
+        // never isolated below, since which bodies players hold moves with the population, not with the scope.
+        var holdsPlayer = ScopeHoldsPlayerBody();
 
         bool WritesScope(CompiledRule rule, bool grouped = false) {
             writes.Clear(); rule.CollectWrites(into: writes);
@@ -32,7 +35,7 @@ public sealed partial class WorldScopedReplayRuntime {
             // Standalone level rules carry no latch. A group's progress still owns their effects.
             return (writes.Any(predicate: cell => m_rows.Contains(item: cell.RowOrdinal)) ||
                 ((grouped || (rule.Mode == ActionTriggerMode.Edge) || (rule is CompiledWorldFactsRule { Decision: not null })) &&
-                    bodies.Any(predicate: body => (m_bodies.Contains(item: body) || ((body < 0) && (m_bodies.Count > 0))))));
+                    bodies.Any(predicate: body => (m_bodies.Contains(item: body) || ((body == PlayerBody) ? holdsPlayer : ((body < 0) && (m_bodies.Count > 0)))))));
         }
         m_groups = host.Groups.Where(predicate: group => group.Members.Any(predicate: member => WritesScope(rule: host.Rules[member], grouped: true))).ToArray();
         m_rules = host.Rules.Where(predicate: (rule, index) => (WritesScope(rule: rule) || m_groups.Any(predicate: group => group.Members.Contains(value: index)))).ToArray();

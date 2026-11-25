@@ -591,7 +591,9 @@ and sweeps over a set no version names are due every tick. A
 `forEach: region(placement)` sweep is due in full when the region's occupants
 change, and a `forEach: $players` sweep for the body that joined or left the
 players; otherwise either is due for the occupant or player whose own fact or
-cell moved, as a body sweep is (`RuleIteration.BindsBodies`).
+cell moved, as a body sweep is (`RuleIteration.BindsBodies`). A channel read
+for the body bound to `$each` has no version, so a rule that reads one is
+volatile and judged every tick over its set.
 
 A keyed sweep is due **per binding**. A schedule records how the judgement
 reaches each row it reads (`RowReach`): the cell under the key bound to

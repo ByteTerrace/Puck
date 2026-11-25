@@ -883,7 +883,11 @@ key names, reaches that body's binding alone, a move for a body outside the set
 the sweep last bound reaches nothing, and only a move of the set itself (its
 `TrySchedule` dependencies) reaches every binding. So a rule about a place
 costs, tick by tick, one visit when an occupant does something, never one per
-body that moved anywhere.
+body that moved anywhere. A channel read for the body bound to `$each` has no
+per-body version yet (`WorldRuleHost`'s value watch derives one value with no
+binding in place), so a rule that reads one, a press or a toggle, is judged
+every tick over its set's current members
+([the open item](../plans/open-items.md#language-and-authoring)).
 
 **Options weighed.**
 
@@ -922,7 +926,10 @@ debug world price and count each rule over a set as one line;
 list, both reading the same `RuleIteration.Collect`), and the scheduled and the
 in-place sweep name each binding's latch entry through `SweepLatchKey`, so the
 replay with every schedule off (`puck test --reproduce`) compares the same
-bindings. What nothing enforces: that a set's `TrySchedule` names every change
+bindings. A scoped replay reads a `$players` rule's `$each` write as a write to
+a player's body, which reaches its scope only through a scope body a player can
+hold (`WorldScopedReplayRuntime`), so a scope of pieces is not refused for the
+players' toggles. What nothing enforces: that a set's `TrySchedule` names every change
 to its members. `$players` rests on the population changing who players hold
 only when a slot's liveness changes (`WorldPlayerIteration.TrySchedule`); a
 writer that marked a slot human without activating it would be a wrong skip the
