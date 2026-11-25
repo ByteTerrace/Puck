@@ -122,11 +122,15 @@ jobs:
           set -euo pipefail
           status=0
           for file in $(git ls-files 'src/Puck.Azure.Resources/*.bicep' 'src/Puck.Azure.Resources/**/*.bicep'); do
+            # A source that references a Template Spec (ts:) restores it from Azure, which needs the sign-in only main's
+            # infrastructure job has; that job checks those sources.
+            if grep -q "'ts:" "$file"; then continue; fi
             if ! az bicep format --file "$file" --stdout | diff -q "$file" - >/dev/null; then
               echo "::error file=$file::not formatted; run az bicep format --file $file"; status=1
             fi
           done
           for file in src/Puck.Azure.Resources/main.bicep src/Puck.Azure.Resources/worldSiloPlatform.bicep; do
+            if grep -q "'ts:" "$file"; then continue; fi
             az bicep build --file "$file" --stdout >/dev/null || status=1
           done
           exit $status
