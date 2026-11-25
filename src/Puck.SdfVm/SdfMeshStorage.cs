@@ -24,18 +24,18 @@ internal sealed record SdfMeshShape(bool Chunked, bool Encloses, SdfMeshPieceSha
             var levels = new SdfMeshLevelShape[piece.Levels.Count];
 
             for (var level = 0; (level < levels.Length); level++) {
-                levels[level] = new SdfMeshLevelShape(Indices: piece.Levels[level].Indices.Length, Materials: piece.Levels[level].TriangleMaterials.Length, Error: piece.Levels[level].Error);
+                levels[level] = new SdfMeshLevelShape(Indices: piece.Levels[level].IndexCount, Materials: piece.Levels[level].MaterialCount, Error: piece.Levels[level].Error);
             }
             pieces[index] = new SdfMeshPieceShape(
                 BakeCell: piece.BakeCell,
-                Indices: piece.Indices.Length,
+                Indices: piece.IndexCount,
                 Influences: (chunked ? 0 : piece.Influences.Length),
                 Levels: levels,
-                Materials: piece.TriangleMaterials.Length,
+                Materials: (piece.HasTriangleMaterials ? piece.TriangleCount : 0),
                 Members: (chunked ? 0 : piece.Members.Length),
-                Normals: piece.Normals.Length,
+                Normals: (piece.HasNormals ? piece.VertexCount : 0),
                 VertexMembers: (chunked ? 0 : piece.VertexMembers.Length),
-                Vertices: piece.Positions.Length
+                Vertices: piece.VertexCount
             );
         }
 

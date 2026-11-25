@@ -110,6 +110,8 @@ public sealed class SdfMeshFieldLevels {
 
     private readonly ISdfMeshLevelField m_field;
     private readonly SdfMesh m_reference;
+    private readonly ReadOnlyMemory<Vector3> m_referencePositions;
+    private readonly ReadOnlyMemory<uint> m_referenceIndices;
     private readonly float m_cell;
     private readonly float m_tolerance;
     private readonly float m_normalCosine;
@@ -148,9 +150,15 @@ public sealed class SdfMeshFieldLevels {
         m_tolerance = (options.ToleranceShare * cell);
         m_normalCosine = MathF.Cos(x: float.DegreesToRadians(degrees: SdfMeshCollapse.ResolvedDegrees));
 
-        var positions = reference.Positions.Span;
-        var indices = reference.Indices.Span;
-        var normals = reference.Normals.Span;
+        using var held = reference.Hold();
+        // The reference's positions and indices, which later measures read, are the analysis's own copies.
+        m_referencePositions = held.Positions.ToArray();
+        m_referenceIndices = held.Indices.ToArray();
+
+        var positions = m_referencePositions.Span;
+        var indices = m_referenceIndices.Span;
+        var normals = held.Normals.Span;
+        var materials = held.TriangleMaterials.Span;
         var triangles = reference.TriangleCount;
         var points = new List<Vector3>();
         var owners = new List<int>();
@@ -195,7 +203,10 @@ public sealed class SdfMeshFieldLevels {
         Certified = ((field.StepScale > 0f) && (ratio <= 1f));
         m_surface = [.. kept.Select(selector: witness => bracket.Surface[witness])];
         m_owner = [.. kept.Select(selector: witness => owners[witness])];
-        m_material = [.. m_owner.Select(selector: triangle => (reference.TriangleMaterials.IsEmpty ? 0 : (int)reference.TriangleMaterials.Span[triangle]))];
+        m_material = new int[m_owner.Length];
+        if (!materials.IsEmpty) {
+            for (var at = 0; (at < m_owner.Length); at++) { m_material[at] = ((int)materials[m_owner[at]]); }
+        }
         m_normal = [.. kept.Select(selector: witness => Unit(vector: witnessNormals[witness]))];
 
         (m_neighbours, m_component, m_components, _) = Adjacency(positions: positions, indices: indices, triangles: triangles);
@@ -311,8 +322,11 @@ public sealed class SdfMeshFieldLevels {
     /// each kept vertex's member, each triangle of <paramref name="whole"/> marked where it vanished, and the components
     /// vanished.</returns>
     private (SdfMesh? Kept, byte[]? Members, bool[] Vanished, int Components) Vanish(SdfMesh whole, byte[]? members, IReadOnlyList<(ISdfMeshLevelField Field, byte Member)> pieces, (int Flips, int OpenEdges) allowance) {
-        var positions = whole.Positions.Span;
-        var indices = whole.Indices.Span;
+        using var held = whole.Hold();
+        var wholePositions = held.Positions;
+        var wholeIndices = held.Indices;
+        var positions = wholePositions.Span;
+        var indices = wholeIndices.Span;
         var triangles = whole.TriangleCount;
         var faces = new Vector3[triangles];
         var gradients = new Vector3[triangles];
@@ -334,9 +348,10 @@ public sealed class SdfMeshFieldLevels {
         foreach (var (piece, list) in byPiece) {
             var field = ((pieces.Count == 0) ? m_field : pieces[piece].Field);
             var centroids = list.Select(selector: triangle => {
-                var (a, b, c) = Corners(indices: whole.Indices.Span, triangle: triangle);
+                var (a, b, c) = Corners(indices: wholeIndices.Span, triangle: triangle);
+                var at = wholePositions.Span;
 
-                return (((whole.Positions.Span[a] + whole.Positions.Span[b]) + whole.Positions.Span[c]) / 3f);
+                return (((at[a] + at[b]) + at[c]) / 3f);
             }).ToArray();
             var values = new float[centroids.Length];
             var slopes = new Vector3[centroids.Length];
@@ -387,7 +402,7 @@ public sealed class SdfMeshFieldLevels {
         var vanished = new bool[triangles];
         var keptIndices = new List<uint>();
         var keptMaterials = new List<uint>();
-        var materials = whole.TriangleMaterials.Span;
+        var materials = held.TriangleMaterials.Span;
 
         for (var triangle = 0; (triangle < triangles); triangle++) {
             vanished[triangle] = gone[component[triangle]];
@@ -436,8 +451,9 @@ public sealed class SdfMeshFieldLevels {
         var nearest = new Vector3[count];
         var held = new int[count];
         var excused = new bool[count];
-        var positions = level.Positions.Span;
-        var indices = level.Indices.Span;
+        using var levelHeld = level.Hold();
+        var positions = levelHeld.Positions.Span;
+        var indices = levelHeld.Indices.Span;
 
         // A surface witness nearest a vanished triangle of the level as contoured lies on a part the level vanished: it
         // counts in that part's extent, not in a distance to whatever surface remains.
@@ -498,10 +514,10 @@ public sealed class SdfMeshFieldLevels {
         var materialMarked = new bool[m_reference.TriangleCount];
         var normalMarked = new bool[m_reference.TriangleCount];
         var nearestMarked = new bool[m_reference.TriangleCount];
-        var levelMaterials = level.TriangleMaterials;
-        var levelNormals = level.Normals;
-        var levelPositions = level.Positions;
-        var levelIndices = level.Indices;
+        var levelMaterials = levelHeld.TriangleMaterials;
+        var levelNormals = levelHeld.Normals;
+        var levelPositions = levelHeld.Positions;
+        var levelIndices = levelHeld.Indices;
 
         Vector3 Interpolated(int triangle, Vector3 point) {
             var corners = levelIndices.Span;
@@ -563,8 +579,9 @@ public sealed class SdfMeshFieldLevels {
     // each bracketed onto its piece's field: the upper bounds, the largest certified lower bound, the witnesses whose lower
     // bound passes their upper one, those refused, and those left out as interior.
     private (SdfMeshAuditStatistic Upper, float Lower, int LowerOver, int Refused, int Interior) MeshToSurface(SdfMesh level, byte[]? members, IReadOnlyList<(ISdfMeshLevelField Field, byte Member)> pieces, float cell, float budget) {
-        var positions = level.Positions.Span;
-        var indices = level.Indices.Span;
+        using var held = level.Hold();
+        var positions = held.Positions.Span;
+        var indices = held.Indices.Span;
         var byPiece = new Dictionary<int, List<(Vector3 Point, Vector3 Normal)>>();
         var pieceOf = new Dictionary<byte, int>();
 
@@ -580,7 +597,7 @@ public sealed class SdfMeshFieldLevels {
             list.Add(item: (point, Unit(vector: normal)));
         }
 
-        var vertexNormals = level.Normals;
+        var vertexNormals = held.Normals;
 
         Vector3 NormalOf(int vertex, Vector3 face) => (vertexNormals.IsEmpty ? face : vertexNormals.Span[vertex]);
 
@@ -780,8 +797,8 @@ public sealed class SdfMeshFieldLevels {
     }
     // The marked level-zero triangles joined over shared edges into runs, each run's half box diagonal its error.
     private SdfMeshLevelRuns Runs(bool[] marked) {
-        var positions = m_reference.Positions.Span;
-        var indices = m_reference.Indices.Span;
+        var positions = m_referencePositions.Span;
+        var indices = m_referenceIndices.Span;
         var visited = new bool[marked.Length];
         var runs = 0;
         var triangles = 0;
@@ -847,15 +864,17 @@ public sealed class SdfMeshFieldLevels {
     /// <returns>The joined mesh and, when asked, each vertex's member.</returns>
     private static (SdfMesh Mesh, byte[]? Members) Join(List<(SdfMesh Mesh, byte Member)> pieces, bool members) {
         if (pieces.Count == 1) {
-            return (pieces[0].Mesh, (members ? Enumerable.Repeat(element: pieces[0].Member, count: pieces[0].Mesh.Positions.Length).ToArray() : null));
+            return (pieces[0].Mesh, (members ? Enumerable.Repeat(element: pieces[0].Member, count: pieces[0].Mesh.VertexCount).ToArray() : null));
         }
 
         var joined = SdfMeshChunks.Join(chunks: [.. pieces.Select(selector: static piece => piece.Mesh)]);
         var vertexMembers = new List<byte>();
 
-        foreach (var (mesh, member) in pieces) { vertexMembers.AddRange(collection: Enumerable.Repeat(element: member, count: mesh.Positions.Length)); }
+        foreach (var (mesh, member) in pieces) { vertexMembers.AddRange(collection: Enumerable.Repeat(element: member, count: mesh.VertexCount)); }
+        // A managed join's planes are arrays the level shares.
+        using var held = joined.Hold();
 
-        return (new SdfMesh(indices: joined.Indices, normals: joined.Normals, positions: joined.Positions, triangleMaterials: joined.TriangleMaterials) { BakeCell = pieces[0].Mesh.BakeCell }, (members ? [.. vertexMembers] : null));
+        return (new SdfMesh(indices: held.Indices, normals: held.Normals, positions: held.Positions, triangleMaterials: held.TriangleMaterials) { BakeCell = pieces[0].Mesh.BakeCell }, (members ? [.. vertexMembers] : null));
     }
     // A mesh's triangle neighbours across welded edges, each triangle's connected component, how many there are, and each
     // triangle's open edges (welded edges it alone holds, as the audit counts them).

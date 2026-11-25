@@ -26,6 +26,7 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
+        <Compile Include="../Shared/SdfMeshPlanes.cs" Link="SdfMeshPlanes.cs" />
         <Compile Include="../Shared/FaultingDevice.cs" Link="FaultingDevice.cs" />
         <Compile Include="../Shared/ObservedPackageFactory.cs" Link="ObservedPackageFactory.cs" />
         <Compile Include="../Shared/RefusingGpuDevice.cs" Link="RefusingGpuDevice.cs" />

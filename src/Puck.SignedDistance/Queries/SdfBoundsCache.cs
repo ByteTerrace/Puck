@@ -7,7 +7,8 @@ namespace Puck.SignedDistance.Queries;
 /// field revision; mutable fields, including lattice columns, remain outside it.</summary>
 /// <param name="field">The immutable program whose bounds are reused.</param>
 /// <remarks>Only identical boxes share an answer. Sweep proposals, query budgets, refusals and reached fractions
-/// therefore stay unchanged. Storage is bounded and allocated once; replacement follows query order, never time.
+/// therefore stay unchanged. Storage is bounded and allocated once, at the first answer kept; replacement follows query
+/// order, never time.
 /// Concurrent callers are serialized, while deterministic work counts describe an ordered query stream.</remarks>
 public sealed class SdfBoundsCache(SdfFieldEvaluator field) : IFieldBounds {
     /// <summary>Gets the kind counting boxes requested from immutable fields.</summary>
@@ -31,8 +32,10 @@ public sealed class SdfBoundsCache(SdfFieldEvaluator field) : IFieldBounds {
     private const int Ways = 4;
 
     private readonly SdfFieldEvaluator m_field = (field ?? throw new ArgumentNullException(paramName: nameof(field)));
-    private readonly Entry[] m_entries = new Entry[(Sets * Ways)];
-    private readonly byte[] m_next = new byte[Sets];
+    // Allocated at the first answer kept: most of a world's static colliders are never asked a box, and each carries a
+    // cache of its own.
+    private Entry[]? m_entries;
+    private byte[]? m_next;
     private readonly Lock m_gate = new();
 
     /// <inheritdoc/>
@@ -71,8 +74,8 @@ public sealed class SdfBoundsCache(SdfFieldEvaluator field) : IFieldBounds {
             var set = ((int)(hash.Value & (Sets - 1)));
             var first = (set * Ways);
 
-            for (var way = 0; (way < Ways); way++) {
-                ref readonly var entry = ref m_entries[(first + way)];
+            for (var way = 0; ((m_entries is { } entries) && (way < Ways)); way++) {
+                ref readonly var entry = ref entries[(first + way)];
 
                 if (entry.Valid && (entry.Box == box)) {
                     distance = entry.Distance;
@@ -90,8 +93,11 @@ public sealed class SdfBoundsCache(SdfFieldEvaluator field) : IFieldBounds {
             ProcessWork.Add(amount: rotations, kind: Rotations);
 
             if (answered) {
-                m_entries[(first + m_next[set])] = new Entry(Box: box, Distance: distance, Valid: true);
-                m_next[set] = ((byte)((m_next[set] + 1) % Ways));
+                var kept = (m_entries ??= new Entry[(Sets * Ways)]);
+                var next = (m_next ??= new byte[Sets]);
+
+                kept[(first + next[set])] = new Entry(Box: box, Distance: distance, Valid: true);
+                next[set] = ((byte)((next[set] + 1) % Ways));
             }
 
             return answered;

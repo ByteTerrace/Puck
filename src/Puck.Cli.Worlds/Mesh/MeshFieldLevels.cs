@@ -230,8 +230,9 @@ internal static class MeshFieldLevels {
     // The level-zero triangles a level accounts for by their run's extent, as a mesh the audit excuses missing crossings
     // near; null when there are none.
     private static SdfMesh? Accounted(SdfMesh level0, IReadOnlyList<bool> vanished) {
-        var indices = level0.Indices.Span;
-        var materials = level0.TriangleMaterials.Span;
+        using var held = level0.Hold();
+        var indices = held.Indices.Span;
+        var materials = held.TriangleMaterials.Span;
         var kept = new List<uint>();
         var keptMaterials = new List<uint>();
 

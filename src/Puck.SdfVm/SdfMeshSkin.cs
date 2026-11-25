@@ -72,19 +72,21 @@ public static class SdfMeshSkin {
         ArgumentNullException.ThrowIfNull(argument: mesh);
         ArgumentNullException.ThrowIfNull(argument: poses);
         if (mesh.VertexMembers.IsEmpty) { return mesh; }
-        var positions = new Vector3[mesh.Positions.Length];
-        var normals = mesh.Normals.ToArray();
+        using var held = mesh.Hold();
+        var rest = held.Positions.Span;
+        var positions = new Vector3[rest.Length];
+        var normals = held.Normals.ToArray();
 
         (Quaternion Q, Vector3 T) Motion(byte member) {
             if (member == SdfMesh.NoMember) { return (Quaternion.Identity, Vector3.Zero); }
-            var rest = mesh.Members.Span[member];
+            var at = mesh.Members.Span[member];
 
-            return (poses.TryGetValue(key: rest.SlotOffset, value: out var current)
-                ? MotionOf(orientation: current.Orientation, position: current.Position, rest: in rest)
+            return (poses.TryGetValue(key: at.SlotOffset, value: out var current)
+                ? MotionOf(orientation: current.Orientation, position: current.Position, rest: in at)
                 : (Quaternion.Identity, Vector3.Zero));
         }
         for (var vertex = 0; (vertex < positions.Length); vertex++) {
-            var p = mesh.Positions.Span[vertex];
+            var p = rest[vertex];
             var n = ((normals.Length > 0) ? normals[vertex] : Vector3.UnitY);
 
             var (q0, t0) = Motion(member: mesh.VertexMembers.Span[vertex]);
@@ -110,7 +112,7 @@ public static class SdfMeshSkin {
             positions[vertex] = (Vector3.Transform(rotation: rotation, value: p) + blended.Translation.ToVector3());
             if (normals.Length > 0) { normals[vertex] = Vector3.Normalize(value: Vector3.Transform((n - (v * (Vector3.Dot(vector1: u, vector2: n) / (1f + Vector3.Dot(vector1: u, vector2: v))))), rotation)); }
         }
-        return new(positions, mesh.Indices, normals, mesh.TriangleMaterials, mesh.Members, mesh.VertexMembers, mesh.Influences) { BakeCell = mesh.BakeCell };
+        return new(positions, held.Indices.ToArray(), normals, held.TriangleMaterials.ToArray(), mesh.Members, mesh.VertexMembers, mesh.Influences) { BakeCell = mesh.BakeCell };
     }
     /// <summary>Counts a skin's vertices by vertex-stage path and the positions whose copies carry different
     /// tuples.</summary>
@@ -122,10 +124,12 @@ public static class SdfMeshSkin {
         if (mesh.VertexMembers.IsEmpty) { return (0, 0, 0, 0); }
         var places = new Dictionary<Vector3, SdfMeshSkinTuple>();
         var split = new HashSet<Vector3>();
+        using var held = mesh.Hold();
+        var positions = held.Positions.Span;
 
-        for (var at = 0; (at < mesh.Positions.Length); at++) {
+        for (var at = 0; (at < positions.Length); at++) {
             var tuple = new SdfMeshSkinTuple(First: mesh.VertexMembers.Span[at], Influence: (mesh.Influences.IsEmpty ? SdfMeshInfluence.Rigid : mesh.Influences.Span[at]));
-            var position = mesh.Positions.Span[at];
+            var position = positions[at];
 
             if (!places.TryAdd(key: position, value: tuple) && (places[position] != tuple)) { split.Add(item: position); }
         }
@@ -165,12 +169,14 @@ public static class SdfMeshSkin {
             pieces.Add(item: piece);
             var member = ((slot == group.Slot) ? SdfMesh.NoMember : (byte)Array.FindIndex(array: members, match: m => (m.SlotOffset == (slot - group.Slot))));
 
-            vertexMembers.AddRange(collection: Enumerable.Repeat(member, piece.Positions.Length));
+            vertexMembers.AddRange(collection: Enumerable.Repeat(member, piece.VertexCount));
         }
         if (pieces.Count == 0) { return null; }
         var joined = SdfMeshChunks.Join(chunks: pieces);
+        // A managed join's planes are arrays the new mesh shares.
+        using var held = joined.Hold();
 
-        return new(joined.Positions, joined.Indices, joined.Normals, joined.TriangleMaterials, members, vertexMembers.ToArray());
+        return new(held.Positions, held.Indices, held.Normals, held.TriangleMaterials, members, vertexMembers.ToArray());
     }
     /// <summary>Attaches propagated two-owner shares, one canonical tuple per exact position
     /// (<see cref="SdfMeshSkinTuple.Of"/>). A nonrepresentable group returns null and a reason for a rigid split.</summary>
@@ -194,14 +200,17 @@ public static class SdfMeshSkin {
 
         if (!SdfMeshAudit.TryEvaluator(rest, out var field, out refusal)) { return null; }
         var step = GradientStep(field: rest);
-        var first = new byte[mesh.Positions.Length];
+        // The contoured mesh is a managed mesh of the bake, whose planes the skin shares.
+        using var held = mesh.Hold();
+        var positions = held.Positions.Span;
+        var first = new byte[positions.Length];
         var influences = new SdfMeshInfluence[first.Length];
         var places = new Dictionary<Vector3, SdfMeshSkinTuple>();
         var weights = new FixedQ4816[slots.Length];
         byte Member(int index) => ((slots[index] == group.Slot) ? SdfMesh.NoMember : (byte)Array.IndexOf(array: others, value: slots[index]));
 
         for (var vertex = 0; (vertex < first.Length); vertex++) {
-            var point = mesh.Positions.Span[vertex];
+            var point = positions[vertex];
 
             if (!places.TryGetValue(key: point, value: out var tuple)) {
                 var fixedPoint = FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point));
@@ -228,7 +237,7 @@ public static class SdfMeshSkin {
             influences[vertex] = tuple.Influence;
         }
         refusal = null;
-        return new(mesh.Positions, mesh.Indices, mesh.Normals, mesh.TriangleMaterials, members, first, influences);
+        return new(held.Positions, held.Indices, held.Normals, held.TriangleMaterials, members, first, influences);
     }
 
     // The three largest owners by share, ties to the lower slot; -1 where fewer owners exist.

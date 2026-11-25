@@ -234,7 +234,7 @@ internal sealed partial class SdfMeshProbeGpuWork {
                         indexOffsetBytes: (ulong)(placement.IndexWord + (3 * bottom.Geometry.FirstTriangle)) * sizeof(uint),
                         source: meshes,
                         triangleCount: (uint)bottom.Geometry.Count,
-                        vertexCount: (uint)bottom.Geometry.Positions.Length,
+                        vertexCount: (uint)bottom.Geometry.Mesh.VertexCount,
                         vertexOffsetBytes: (ulong)placement.VertexWord * sizeof(uint),
                         vertexStrideBytes: (uint)SdfMeshRecord.VertexWords * sizeof(uint)
                     );

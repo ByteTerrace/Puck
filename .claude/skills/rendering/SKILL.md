@@ -1583,17 +1583,22 @@ paired arithmetic. Carry author-facing parameters through
   (`GpuRegion.TryOweMove`) passes through no host buffer, and the mesh region
   stages no word from the host at all (`SdfMeshRegionStore`). A region's moves record first, then its gathers, then its
   staged words, in one recording door (`GpuRegion.RecordCopy`), so a word written
-  after a move never races it. The irradiance scene likewise reads its triangles through
-  each mesh's positions and indices, never a copy. A new consumer of baked
-  triangles reads the `SdfMesh` buffers rather than copying them: the debug
-  world's published meshes are native payloads with explicit consumer claims, and every copy costs that
-  much again in working set. A mesh the library published from its store lets its normals and coarser
-  levels' indices go once no region needs its words, and brings them back from the store before they are
-  read again (`SdfMesh.Restore.cs`). `SdfMeshRegion.WriteMesh` takes an `SdfMesh.Held`, which only
-  `SdfMesh.Hold` makes (a need, waiting for or running the restore), so every region write, a coarsened
-  copy run's included, reads resident parts; the owed set (`OwedMeshes`) holds a need for the owed meshes
-  the latest list names so landing never waits on the frame thread. A new reader of those parts takes a
-  hold. A published chunked mesh keeps no joined indices: read its chunks.
+  after a move never races it. A mesh's planes (positions, indices, normals, triangle materials and every
+  level's) are a cache of its store entry: they are private to the mesh, and the one door to them is
+  `SdfMesh.Held`, which only `SdfMesh.Hold` makes (a need, waiting for or running the restore). A mesh the
+  library published from its store lets every plane go once it has stood unneeded for
+  `SdfMesh.IdleSeconds` (`SdfMesh.ReleaseIdle`, run by each residency's store service, every unneeded one
+  at a trim) and brings them back from the store when next held (`SdfMesh.Restore.cs`); the members,
+  vertex members and influences stay. So read the planes under a hold and keep no view past it: a long-lived
+  reader copies what it keeps, as the irradiance scene copies each traced level's triangles over the
+  vertices they reach and each draw mesh's traced materials (`SdfMeshIrradianceScene.Geometry`), and a
+  count comes from the mesh (`VertexCount`, `IndexCount`, `HasNormals`, `HasTriangleMaterials`), never a
+  plane's length. `SdfMeshRegion.WriteMesh` takes a hold, so every region write, a coarsened copy run's
+  included, reads resident planes; the owed set (`OwedMeshes`) holds a need for the owed meshes the latest
+  list names so landing never waits on the frame thread. A hold of a released mesh on the frame thread
+  reads and decodes its entry there (a renumbering does), so a frame-thread reader holds rarely. A
+  published chunked mesh keeps no joined indices: read its chunks. Laws read planes through
+  `tests/Shared/SdfMeshPlanes.cs`, which copies them through a hold.
 - A scoped creation emits one instance, a scope-free one an instance per shape
   (`CreationStampEmitter.PerCopyInstanceCount`). `world.budget` prints the live
   cost sheet.

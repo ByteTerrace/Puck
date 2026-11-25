@@ -199,19 +199,26 @@ public sealed class WorldPresentationProbe(TimeProvider? time = null) {
         if (mesh is null) { return; }
         // Mesh memories are borrowed, unlike SdfProgram's private immutable words. Read live contents rather than
         // caching a signature by object reference and missing an in-place authoring change.
-        hash.Add(value: ((uint)mesh.Positions.Length)); foreach (var value in mesh.Positions.Span) { hash.AddBits(value: value); }
-        hash.Add(value: ((uint)mesh.Indices.Length)); foreach (var value in mesh.Indices.Span) { hash.Add(value: value); }
-        hash.Add(value: ((uint)mesh.Normals.Length)); foreach (var value in mesh.Normals.Span) { hash.AddBits(value: value); }
-        hash.Add(value: ((uint)mesh.TriangleMaterials.Length)); foreach (var value in mesh.TriangleMaterials.Span) { hash.Add(value: value); }
+        using var held = mesh.Hold();
+        // A chunked mesh's triangles are its chunks', which the walk below hashes.
+        var indices = ((mesh.Chunks.Count == 0) ? held.Indices.Span : default);
+
+        hash.Add(value: ((uint)held.Positions.Length)); foreach (var value in held.Positions.Span) { hash.AddBits(value: value); }
+        hash.Add(value: ((uint)indices.Length)); foreach (var value in indices) { hash.Add(value: value); }
+        hash.Add(value: ((uint)held.Normals.Length)); foreach (var value in held.Normals.Span) { hash.AddBits(value: value); }
+        hash.Add(value: ((uint)held.TriangleMaterials.Length)); foreach (var value in held.TriangleMaterials.Span) { hash.Add(value: value); }
         hash.Add(value: ((uint)mesh.Members.Length)); foreach (var member in mesh.Members.Span) { hash.Add(value: ((long)member.SlotOffset)); hash.AddBits(value: member.Position); hash.AddBits(value: member.Orientation); }
         hash.Add(value: ((uint)mesh.VertexMembers.Length)); hash.Add(values: mesh.VertexMembers.Span);
         hash.Add(value: ((uint)mesh.Influences.Length));
         foreach (var influence in mesh.Influences.Span) { hash.Add(value: influence.Blend); hash.Add(value: influence.GradientXY); hash.Add(value: influence.GradientZ); }
         hash.AddBits(value: mesh.BakeCell); hash.Add(value: ((byte)(mesh.Encloses ? 1 : 0)));
         hash.Add(value: ((uint)mesh.Levels.Count));
-        foreach (var level in mesh.Levels) {
-            hash.AddBits(value: level.Error); hash.Add(value: ((uint)level.Indices.Length)); foreach (var value in level.Indices.Span) { hash.Add(value: value); }
-            hash.Add(value: ((uint)level.TriangleMaterials.Length)); foreach (var value in level.TriangleMaterials.Span) { hash.Add(value: value); }
+        for (var level = 1; (level <= mesh.Levels.Count); level++) {
+            var levelIndices = held.LevelIndices(level: level).Span;
+            var levelMaterials = held.LevelMaterials(level: level).Span;
+
+            hash.AddBits(value: mesh.Levels[(level - 1)].Error); hash.Add(value: ((uint)levelIndices.Length)); foreach (var value in levelIndices) { hash.Add(value: value); }
+            hash.Add(value: ((uint)levelMaterials.Length)); foreach (var value in levelMaterials) { hash.Add(value: value); }
         }
         hash.Add(value: ((uint)mesh.Chunks.Count)); foreach (var chunk in mesh.Chunks) { AddMesh(hash: ref hash, mesh: chunk); }
     }

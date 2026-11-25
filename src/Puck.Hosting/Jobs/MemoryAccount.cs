@@ -790,6 +790,8 @@ public sealed class MemoryAccount {
             }
             if ((m_hostBar is not null) && (Interlocked.Exchange(location1: ref m_beyondReading, value: 1) == 0)) { m_beyondReads.Enqueue(item: this); }
         }
+        // The large arrays no build has rented for a while go back to the collector at the account's own pace.
+        Puck.Abstractions.Memory.RentedArrays.TrimIdleLarge();
     }
     // Reads the process's private resident pages (HostMemory.PrivateResidentBytes) on the host's pool and records what
     // lies beyond the pool's holdings: commit no page backs yet, such as a driver's mirror of device memory or a

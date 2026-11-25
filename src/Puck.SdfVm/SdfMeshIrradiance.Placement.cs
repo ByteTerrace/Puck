@@ -31,9 +31,8 @@ public sealed partial class SdfMeshIrradiance {
         // The next offset each unresolved probe tries: -1 the pushed one, then each candidate's index.
         var next = new int[count];
         // A probe's saved words are written in Place before the result loop reads them, so the scratch keeps stale words
-        // only for probes that read none.
-        ArrayCapacity.EnsureScratch(ref m_gpuSavedHits, count * SdfMeshProbeDepth.HitWords);
-        var savedHits = m_gpuSavedHits;
+        // only for probes that read none. Rented for the batch alone and returned once its results are read.
+        using var savedLease = RentedArrays.Rent<uint>(minimumLength: (count * SdfMeshProbeDepth.HitWords), array: out var savedHits);
         var indices = new List<int>(count);
         var clearance = SdfMeshIrradianceProbe.Clearance;
         var trace = GpuTrace;
