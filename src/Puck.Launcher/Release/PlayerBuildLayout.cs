@@ -17,6 +17,10 @@ public static class PlayerBuildLayout {
     public const string LauncherDirectoryName = "launcher";
     /// <summary>The producing boots' logs, which a release never ships.</summary>
     public const string LogsDirectoryName = "player-logs";
+    /// <summary>The sign-in configuration of the deployment the build was made for, when it carries one: the file a
+    /// boot names to <c>--authentication-config-file</c> with <c>--connect</c>, and the extensions directory holds the
+    /// provider it names.</summary>
+    public const string SignInName = "world-authentication.json";
 
     /// <summary>Reads a folder's player-build record (<see cref="RecordName"/>) and whether it says the build is
     /// complete. The producer writes it incomplete first, so its own baking boots read as incomplete, and complete last;

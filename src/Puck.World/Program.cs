@@ -441,7 +441,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
                 throw new ArgumentException(message: $"--connect '{connectTarget}' names no ip:port or host:port the issuer is reached at.");
             }
             // The desktop host runs on system time; the provider's token deadlines and the exchange's read it.
-            var connection = WorldConnectionAuthentication.Load(
+            var connection = Puck.World.Server.WorldConnectionAuthentication.Load(
                 clock: TimeProvider.System,
                 extensions: extensions,
                 path: authenticationPath
@@ -477,7 +477,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
 
     if (parseResult.GetValue(option: storageConfigFileOption) is { } storagePath) {
         try {
-            storageTarget = WorldConnectionAuthentication.LoadStorage(
+            storageTarget = Puck.World.Server.WorldConnectionAuthentication.LoadStorage(
                 extensions: extensions,
                 path: storagePath
             );

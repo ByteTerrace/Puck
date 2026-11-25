@@ -476,6 +476,10 @@ authority's issuer (`WorldAttestationIssuer`, the silo document's `issuer`, a
 World's `--issuer-config-file`), and every world the host runs trusts the
 issuer's root without writing it into the document
 ([decision](../../../../docs/decisions/worlds-and-federation.md#players-are-admitted-through-their-hosts-issuer)).
+A player build carries its deployment's sign-in: `puck world player --sign-in <file>`
+ships the file as `world-authentication.json` beside the provider's `--extension`, and
+refuses a sign-in the folder's extensions cannot select
+([decision](../../../../docs/decisions/runtime-and-delivery.md#the-deployments-issuer)).
 No token belongs in world content or checkpoints, and no world verifies one:
 Azure's provider validates ByteTerrace API membership at the issuer only. Prove
 the flow locally with `puck benchmark --headless --route debug --remote issued`
