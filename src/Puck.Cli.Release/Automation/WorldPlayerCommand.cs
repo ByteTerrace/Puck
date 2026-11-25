@@ -26,6 +26,7 @@ public static class WorldPlayerCommand {
     private const string CacheName = Puck.Launcher.Release.PlayerBuildLayout.CacheDirectoryName;
     private const string LogsName = Puck.Launcher.Release.PlayerBuildLayout.LogsDirectoryName;
     private const string LauncherName = Puck.Launcher.Release.PlayerBuildLayout.LauncherDirectoryName;
+    private const string SignInName = Puck.Launcher.Release.PlayerBuildLayout.SignInName;
     internal static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(minutes: 45);
 
     /// <summary>One baking boot: the device profile it applies (or the adapter's own, <c>auto</c>) and its window size.</summary>
@@ -63,6 +64,7 @@ public static class WorldPlayerCommand {
         var package = new Argument<string>(name: "package") { Description = "The world's asset package folder (worlds/debug). Its parent directory holds the packages it imports, and the whole directory is compiled into the folder." };
         var output = CliOptions.Output(description: "The player folder, created if missing. A folder that already holds a player build (player.json) is rebuilt in place, keeping its cache/; any other non-empty folder is refused.", required: true);
         var extensions = new Option<string[]>(name: "--extension") { AllowMultipleArgumentsPerToken = true, Description = "An extension project to install beside the engine (extensions/<name>/), such as src/Puck.World.Azure for a hosted authority's sign-in. Repeatable." };
+        var signIn = new Option<string?>(name: "--sign-in") { Description = $"The sign-in configuration the deployment this build is for publishes (its world-authentication.json): shipped in the folder as {SignInName}, which a player names to --authentication-config-file with --connect. The folder is refused unless an installed extension (--extension) or the engine provides the sign-in it names." };
         var backends = new Option<string[]>(name: "--backend") { AllowMultipleArgumentsPerToken = true, Description = "The backends whose caches are prewarmed, each baked in its own windowed boot: directx and vulkan. Omitted bakes both on Windows and vulkan elsewhere." };
         var targets = new Option<string[]>(name: "--target") { AllowMultipleArgumentsPerToken = true, Description = "A device the build is checked for: its profile and window size, [profile@]WIDTHxHEIGHT (rtx2060@1920x1080); a profile is a name of the world's render.devices, or auto for this adapter's own. Each is booted once per backend as a player's build boots. Repeatable; omitted checks auto@2560x1440." };
         var noBake = new Option<bool>(name: "--no-bake") { Description = "Skip the baking boots, which need a GPU: one headless boot derives the device-free caches instead, and the mesh store stays empty until a cache set fills it (puck world caches fetch)." };
@@ -70,14 +72,16 @@ public static class WorldPlayerCommand {
         var channel = new Option<string?>(name: "--channel-url") { Description = "The release channel this build is published to (a release tree's root URL, with --channel-name): the README then names the one command that installs it. Absent, the README says how to install from a channel without naming one." };
         var channelName = new Option<string>(name: "--channel-name") { DefaultValueFactory = static _ => "player", Description = "The release channel's name under --channel-url." };
         var command = new Command(name: "player", description: "Assemble the folder a consumer machine runs: a self-contained Release engine, its launcher (stub and installer), the package compiled, and its caches prewarmed (the AGB BIOS and Rust guests, specialized shading kernels, compiled worlds and compiles, prepared cartridges and the baked mesh store per backend and target).") {
-            package, output, extensions, backends, targets, noBake, bakeSeconds, channel, channelName,
+            package, output, extensions, signIn, backends, targets, noBake, bakeSeconds, channel, channelName,
         };
 
         command.Detail(detail: """
-            Steps, in order: build Puck.World in Release (SPIR-V included) under the build lease and publish it
-            self-contained for this machine's runtime as one composite ReadyToRun image; publish the stub and the installer
-            (Puck.Launcher.Setup) self-contained into launcher/; publish each --extension into extensions/<name>/; compile
-            the package's parent directory into worlds/ (documents, compiled worlds and the shader package store); compose
+            Steps, in order: publish each --extension into extensions/<name>/; with --sign-in, copy the deployment's
+            sign-in configuration into the folder as world-authentication.json, refusing it unless the folder's extensions
+            (or the engine's own) provide the sign-in it names, and record its provider in player.json; build Puck.World
+            in Release (SPIR-V included) under the build lease and publish it self-contained for this machine's runtime as
+            one composite ReadyToRun image; publish the stub and the installer (Puck.Launcher.Setup) self-contained into
+            launcher/; compile the package's parent directory into worlds/ (documents, compiled worlds and the shader package store); compose
             the package's worlds, export their specialized shading kernels into derived/ and prewarm the AGB BIOS and the
             Rust guests they reference there (needs clang, ld.lld and Rust with wasm32-unknown-unknown when a world
             references them); then boot the published engine
@@ -106,6 +110,7 @@ public static class WorldPlayerCommand {
             bakeSeconds: parse.GetValue(option: bakeSeconds),
             channel: ((parse.GetValue(option: channel) is { } url) ? (url, parse.GetValue(option: channelName)!) : null),
             extensions: parse.GetValue(option: extensions) ?? [],
+            signIn: ((parse.GetValue(option: signIn) is { } signInPath) ? Path.GetFullPath(path: signInPath) : null),
             output: Path.GetFullPath(path: parse.GetRequiredValue(option: output)),
             package: Path.GetFullPath(path: parse.GetRequiredValue(argument: package)),
             targetNames: parse.GetValue(option: targets) ?? []
@@ -113,10 +118,20 @@ public static class WorldPlayerCommand {
         return command;
     }
 
-    private static int Run(string package, string output, IReadOnlyList<string> extensions, IReadOnlyList<string> backendNames, IReadOnlyList<string> targetNames, bool bake, int bakeSeconds, (string Url, string Name)? channel) {
+    private static int Run(string package, string output, IReadOnlyList<string> extensions, string? signIn, IReadOnlyList<string> backendNames, IReadOnlyList<string> targetNames, bool bake, int bakeSeconds, (string Url, string Name)? channel) {
         if (!CliPaths.TryGetRepositoryRoot(repositoryRoot: out var repository)) { return 2; }
         if (!Directory.Exists(path: package)) {
             return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: package), why: "is not an asset package folder.");
+        }
+
+        Puck.World.Server.WorldSignInConfiguration? signInConfiguration = null;
+
+        if (signIn is not null) {
+            try {
+                signInConfiguration = Puck.World.Server.WorldConnectionAuthentication.ReadSignIn(path: signIn);
+            } catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException or System.Text.Json.JsonException) {
+                return CliExit.Refuse(verb: Verb, what: $"--sign-in {CliPaths.ToDisplay(fullPath: signIn)}", why: $"is not a sign-in configuration: {exception.Message}");
+            }
         }
         if (!WorldPrepareCommand.TryResolvePrimary(primary: package, entry: out var entry, reason: out var refusal)) {
             return CliExit.Refuse(verb: Verb, what: CliPaths.ToDisplay(fullPath: package), why: refusal);
@@ -168,8 +183,11 @@ public static class WorldPlayerCommand {
         var logs = Path.Combine(path1: output, path2: LogsName);
 
         try {
-            Publish(repository: repository, output: output);
+            // The extensions and the sign-in first: a sign-in the folder cannot select refuses before the engine's publish.
             var installed = extensions.Select(selector: extension => PublishExtension(repository: repository, project: extension, output: output)).ToArray();
+            var shipped = ((signInConfiguration is null) ? null : ShipSignIn(configuration: signInConfiguration, output: output, source: signIn!));
+
+            Publish(repository: repository, output: output);
 
             Console.WriteLine(value: $"{Verb}: compiling {CliPaths.ToDisplay(fullPath: worldsRoot)} into worlds/.");
             if (CompileCommand.Create().Parse(args: ["--tree", worldsRoot, "--output", Path.Combine(path1: output, path2: "worlds")]).Invoke() != 0) {
@@ -233,7 +251,7 @@ public static class WorldPlayerCommand {
 
             var commit = CliProcess.RunCheckedAsync(arguments: ["rev-parse", "HEAD"], capture: true, fileName: "git", workingDirectory: repository).GetAwaiter().GetResult().Trim();
 
-            WriteReadme(channel: channel, commit: commit, extensions: installed, output: output, targets: (bake ? targets : []), world: Puck.Abstractions.PuckPaths.Relative(path: world, relativeTo: output));
+            WriteReadme(channel: channel, commit: commit, extensions: installed, output: output, signIn: shipped, targets: (bake ? targets : []), world: Puck.Abstractions.PuckPaths.Relative(path: world, relativeTo: output));
             CliFiles.WriteJson(path: Path.Combine(path1: output, path2: MarkerName), value: new JsonObject {
                 ["schema"] = "puck.player-build.v1",
                 ["complete"] = (incomplete.Count == 0),
@@ -245,6 +263,7 @@ public static class WorldPlayerCommand {
                 ["backends"] = new JsonArray([.. backends.Select(selector: static backend => JsonValue.Create(value: WorldBackendTokens.Token(backend: backend)))]),
                 ["targets"] = new JsonArray([.. (bake ? targets : []).Select(selector: static target => JsonValue.Create(value: target.ToString()))]),
                 ["extensions"] = new JsonArray([.. installed.Select(selector: static name => JsonValue.Create(value: name))]),
+                ["signIn"] = shipped?.ToJson(),
                 ["launcher"] = LauncherName,
                 ["checked"] = verified,
             });
@@ -428,6 +447,39 @@ public static class WorldPlayerCommand {
             workingDirectory: repository
         ).GetAwaiter().GetResult();
         return name;
+    }
+    /// <summary>The sign-in a player build carries: the provider's type and the extension that provides it in the
+    /// folder, shipped as <c>world-authentication.json</c>.</summary>
+    /// <param name="Type">The sign-in provider's contribution key.</param>
+    /// <param name="Extension">The name of the extension that contributes it, installed in the folder or built into the
+    /// engine.</param>
+    public sealed record ShippedSignIn(string Type, string Extension) {
+        /// <summary>Writes the sign-in as <c>player.json</c> records it.</summary>
+        /// <returns>The object.</returns>
+        public JsonObject ToJson() => new() { ["file"] = SignInName, ["type"] = Type, ["extension"] = Extension };
+    }
+
+    // Ships the deployment's sign-in in the folder, refusing it unless the folder provides its provider: the folder's
+    // extensions directory composed with the engine's own extension, as a host composes it, so the boot that later reads
+    // the file selects the provider this one found.
+    private static ShippedSignIn ShipSignIn(Puck.World.Server.WorldSignInConfiguration configuration, string output, string source) {
+        string extension;
+
+        try {
+            var set = Puck.World.Silo.WorldSiloApplication.ComposeExtensions(directories: [Path.Combine(path1: output, path2: "extensions")]);
+
+            try {
+                _ = configuration.Provider(extensions: set);
+                extension = set.Contributions<Puck.World.Server.WorldSignInProvider>().Single(predicate: entry => string.Equals(a: entry.Key, b: configuration.Type, comparisonType: StringComparison.Ordinal)).Extension;
+            } finally {
+                set.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+        } catch (Exception exception) when (exception is ArgumentException or Puck.Abstractions.PuckExtensionException) {
+            throw new InvalidOperationException(message: $"the sign-in {CliPaths.ToDisplay(fullPath: source)} names a provider this folder cannot select, so its players could not sign in: {exception.Message} Install its provider's project with --extension.", innerException: exception);
+        }
+        File.Copy(sourceFileName: source, destFileName: Path.Combine(path1: output, path2: SignInName), overwrite: true);
+        Console.WriteLine(value: $"{Verb}: shipping the sign-in '{configuration.Type}' (from {extension}) as {SignInName}.");
+        return new ShippedSignIn(Extension: extension, Type: configuration.Type);
     }
     /// <summary>What one boot of the published engine asked of the folder's mesh cache: the places it stood at, those
     /// its bakes did not settle at, and the engine's own <c>sdf.mesh-cache</c> counts as the boot ended.</summary>
@@ -692,7 +744,7 @@ public static class WorldPlayerCommand {
     }
     // The page a consumer reads first: how to install the build from its channel, and how to start it locally and against
     // a remote authority.
-    private static void WriteReadme(string output, string world, string commit, IReadOnlyList<string> extensions, IReadOnlyList<BakeTarget> targets, (string Url, string Name)? channel) {
+    private static void WriteReadme(string output, string world, string commit, IReadOnlyList<string> extensions, ShippedSignIn? signIn, IReadOnlyList<BakeTarget> targets, (string Url, string Name)? channel) {
         var executable = (OperatingSystem.IsWindows() ? "Puck.World.exe" : "./Puck.World");
         var setup = (OperatingSystem.IsWindows() ? "Puck.Launcher.Setup.exe" : "Puck.Launcher.Setup");
         var stub = (OperatingSystem.IsWindows() ? "Puck.Launcher.Stub.exe" : "./Puck.Launcher.Stub");
@@ -705,9 +757,13 @@ public static class WorldPlayerCommand {
                 ? $"$setup = \"$env:TEMP\\{setup}\"; Invoke-WebRequest {named.Url.TrimEnd('/')}/{named.Name}/{rid}/{setup} -OutFile $setup; & $setup {named.Url.TrimEnd('/')} --channel {named.Name}"
                 : $"curl -fsSLo /tmp/{setup} {named.Url.TrimEnd('/')}/{named.Name}/{rid}/{setup} && chmod +x /tmp/{setup} && /tmp/{setup} {named.Url.TrimEnd('/')} --channel {named.Name}")
             : $"{setup} <channel address> --channel <name>";
-        var signIn = ((extensions.Count == 0)
-            ? "No extension is installed, so an authority that requires sign-in refuses this folder; rebuild it with the deployment's provider extension (`--extension <project>`)."
-            : $"Installed in `extensions/`: {string.Join(separator: ", ", values: extensions.Select(selector: static name => $"`{name}`"))}. An authority that requires sign-in names its provider and settings in the authentication configuration its deployment publishes; the provider acquires the credential itself, from the sign-in it documents.");
+        var installedText = ((extensions.Count == 0)
+            ? "No extension is installed."
+            : $"Installed in `extensions/`: {string.Join(separator: ", ", values: extensions.Select(selector: static name => $"`{name}`"))}.");
+        var signInText = ((signIn is null)
+            ? $"{installedText} This build carries no deployment's sign-in: an authority that requires one names its provider and settings in the authentication configuration its deployment publishes, and this folder signs in only with a provider it installs or the engine's own `puck.accounts`."
+            : $"`{SignInName}` is the sign-in of the deployment this build was made for: provider `{signIn.Type}`, from `{signIn.Extension}`, pinned to that deployment's transport key. {installedText} The provider acquires the credential itself, from the sign-in it documents.");
+        var signInFile = ((signIn is null) ? "<world-authentication.json>" : SignInName);
         var text = $$"""
             # Puck player build
 
@@ -761,10 +817,10 @@ public static class WorldPlayerCommand {
             ## Attach to a remote authority
 
             ```text
-            {{executable}} --world {{world}} --cache-dir cache --connect <host:port> --authentication-config-file <world-authentication.json>
+            {{executable}} --world {{world}} --cache-dir cache --connect <host:port> --authentication-config-file {{signInFile}}
             ```
 
-            `--world` supplies the initial definition until the authority's own revision arrives. {{signIn}}
+            `--world` supplies the initial definition until the authority's own revision arrives. {{signInText}}
 
             ## What a boot reports
 
