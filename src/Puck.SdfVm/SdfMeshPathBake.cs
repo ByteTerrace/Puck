@@ -521,10 +521,12 @@ public sealed partial class SdfMeshPathBake {
     // Publishes what the bake owes, at a release of its lock. Under the gate.
     private void PublishOwing() => Volatile.Write(location: ref m_owing, value: (((m_ahead.Count > 0) ? OwingAhead : 0) | (OwesWork() ? OwingWork : 0) | (OwesStill() ? OwingStill : 0)));
     // Whether a landed product has not reached the dressed frame: the dresser acknowledges outside the lock.
-    private bool DressOwed() => ((Volatile.Read(location: ref m_program) is not null) && (Volatile.Read(location: ref m_dressedRevision) != Volatile.Read(location: ref m_productRevision)));
-    // Whether a landed product of anything but live geometry has not reached the dressed frame. The revisions only grow,
-    // and the dresser acknowledges the product revision it read, so it has taken every change up to the one it names.
-    private bool StillDressOwed() => ((Volatile.Read(location: ref m_program) is not null) && (Volatile.Read(location: ref m_dressedRevision) < Volatile.Read(location: ref m_stillRevision)));
+    private bool DressOwed() => DressedBefore(revision: Volatile.Read(location: ref m_productRevision));
+    // Whether a landed product of anything but live geometry has not reached the dressed frame.
+    private bool StillDressOwed() => DressedBefore(revision: Volatile.Read(location: ref m_stillRevision));
+    // Whether the dressed frame has yet to take a product revision. The revisions only grow, and the dresser acknowledges
+    // the product revision it read, so it has taken every change up to the one it names.
+    private bool DressedBefore(long revision) => ((Volatile.Read(location: ref m_program) is not null) && (Volatile.Read(location: ref m_dressedRevision) < revision));
 
     /// <summary>Gets whether every group of the bake's program draws a mesh of its own geometry at some tier, or has
     /// finished with none: no group draws nothing while it bakes, and none still draws the mesh it took from the group it
