@@ -508,10 +508,12 @@ across a benchmark chapter and divided by the frames.
     the screen list's identity, the portal version and the filmed count; the
     host replaces the screen list whenever it changes any of the three.
 
-13. **The pipeline with a camera late-latch.** Decided, not built. Capture
-    frame N+1 on the frame thread while frame N's recordings run on the pool,
-    and place the camera the recording renders at submission. The order of
-    work:
+13. **The pipeline with a camera late-latch.** Decided, not built: it waits
+    for its latch, without which look would gain a frame
+    ([the decision](../decisions/rendering.md#the-pipeline-foundation)).
+    Capture frame N+1 on the frame thread while frame N's recordings run on
+    the pool, and place the camera the recording renders at submission. The
+    order of work:
 
     - Double-buffer what a capture writes and a recording reads, indexed by
       the frame's parity through the residency's two capture writers
@@ -559,6 +561,49 @@ across a benchmark chapter and divided by the frames.
       on both backends: `host.frames` produce against capture plus pack and
       prepare plus record, `render.record`, and presented bursts in motion
       for tearing or a frame-old camera.
+
+    **What reading the code settled.** Four more things, for the lane that
+    builds it:
+
+    - Where the frames meet. Frame N's recordings open at the start of frame
+      N+1's produce, after that iteration's input, which is what lets the
+      latch read a newer look sample than N's capture did. They run beside
+      the host's composition capture of N+1 only (the composition's
+      `PrepareCapture`, `PackCapture` and `FinishCapture`, whose dress places
+      the cameras), and join before anything else of N+1: the runtime's pump,
+      the residencies' upkeep and `SdfWorldResidency.BeginFrame` (which starts
+      the shadows' next decision, `BeginShadowFrame`) all touch what a
+      recording reads. `WorldFramePresenter.PlaceComposedFrame` and the
+      residency's `PublishCaptured` also run after the join, since they write
+      the graph host's placements, the panes' frames and parameters
+      (`ShaderPipelineRenderNode.Frame`, read by `WriteFrameGroup` as a node
+      records) and the dresser's rows.
+    - What frame N's recordings must stop reading. The SDF recorders read
+      `SdfWorldResidency.Frame`, which a capture replaces; they read the frame
+      the tables packed instead. `SdfFrame.Writer.CopyFrom` copies the
+      content's references, and the presenter's dress refills its view list in
+      place, so a copy owns what the recorders read of the content (the views
+      first). `SdfWorldResidency.OpenCapture` makes the tables forget their
+      view inputs, which a recording reads, so that moves after the join.
+    - The runtime's frame state splits across two produces. Today one call
+      prepares, records, commits, flushes and settles a frame
+      (`RenderGraphRuntime.ProduceFrameBatched`, then `Complete`,
+      `ServePresented` and the retirements in `ProduceFrameCore`, and
+      `FinishHistory` after it). The commit loop, `ConvertForCapture`,
+      `FinishHistory` and the frame's completions move to the call after, ahead
+      of that call's schedule, which reads the history the commit settles; the
+      node returns frame N's surface and `Render` from call N+1. A frame that
+      cannot wait a call keeps today's shape: a second wave
+      (`RenderGraphRuntime.PlanWaves`), a capture armed or converging, a
+      locked tick.
+    - The latch's camera. The camera evaluator is a pure function of its frame
+      (`SdfCameraProgramEvaluator`), so frame N's seat camera is evaluated
+      again from `WorldSeatViewState.PresentedLook` at N+1's fraction against
+      the subjects, scalars and clocks N's capture handed it, with the boom's
+      ease and the clearance carried from N's evaluation; the views that read
+      the seat's camera after the dress (windows fitted to its glass, the
+      footprints' sight) keep N's fit for that frame, which is the padding the
+      second item above asks for.
 
 14. **Smaller cuts beside the chain.** Built.
 
