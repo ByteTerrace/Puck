@@ -370,21 +370,64 @@ mints a new root, and installs pinned to the old one need a fresh install.
 releases what it pushes (the owner's ruling).** A hosted runner has no GPU, and
 WARP or the CPU audit bake is not the GPU product a consumer would otherwise
 derive. Until CI has a GPU runner, the lead machine (RTX 4070) is the interim
-producer: it bakes a player folder and runs `puck world caches produce --push`,
-which packs each backend's mesh set into a cache set named by the build's mesh
-bake identity and uploads it as the asset of a GitHub prerelease tagged
-`caches/<backend>-<identity>`. The lead creates those tags and prereleases
-(the owner's ruling); a lane never does, since a lane never pushes. The
-producer needs no deployment access. The
+producer: it bakes a player folder and runs `puck world caches produce --host
+azure`, which writes each backend's meshes into the deployment's own release
+store as a cache set named by the build's mesh bake identity (below). The
 release job (`player` in the Azure workflow) assembles the folder without
-baking boots, and `puck world caches fetch` takes the cache set whose identity
-equals its own build's, verifies every file's content pin and unpacks it; the
-deployment's own identity then publishes the release. When no set matches, or a
-matching set was produced for other groups than the release's world plans, the
-verb holds the publish (below). A derived product is never committed
+baking boots, and `puck world caches fetch` reads the set whose identity equals
+its own build's, checks its plan, and takes every mesh, each verified against
+its content pin; the deployment's own identity then publishes the release. When
+no set matches, or a matching set was produced for other groups than the
+release's world plans, the verb holds the publish (below). A derived product is
+never committed
 ([decision](engine-design.md#a-derived-product-is-a-cache-never-the-truth)),
-so a release asset carries it, never a branch. A GPU runner later runs the same
-`produce --push`, and nothing else changes.
+so the deployment's storage carries it, never a branch. A GPU runner later runs
+the same `produce`, under the publishing identity that already writes the
+channel, and nothing else changes.
+
+**Cache sets live in the channel's own store, as content-addressed objects (the
+owner's ruling: they are hosted in the deployment's storage, not on GitHub).** The store is the
+release channel tree that `puck channel push` writes and an install reads: a
+channel host (`ReleaseChannelHost`) writes it and a release source
+(`IReleaseSource`) reads it, so the verbs name no provider. Each mesh is one
+object named by its content pin, in the same `objects/sha256/…` space the
+channel's releases use, and each set is one manifest,
+`caches/<backend>-<identity>/manifest.json`, listing every mesh's file name, pin
+and size with the world plan it was produced for. A mesh is therefore stored
+once by its bytes: a new release uploads only the meshes the store lacks, a new
+identity whose bake writes the same bytes reuses every object, identical meshes
+across backends are stored once, and the release that ships a set finds every
+mesh already in place, so its push copies none of them again. An archive per
+set would instead upload every mesh again for each release and keep each set
+apart from the release that ships it.
+
+The granularity is one object per mesh rather than packs of meshes. The
+deciding fact is the channel itself: an install already fetches a release one
+file per object, so a mesh stored as its own object is the object the release
+names, and a pack would be stored beside it a second time. The cost of many
+small objects is round trips, which the fetch bounds by taking many at once
+(`ReleaseObjectFetch`), and the edge serves the channel's objects outside its
+per-client rate limit. The first complete set measured 11,612 directx meshes
+(2.88 GB) and 11,533 vulkan meshes (2.87 GB), about 250 KB each, as 23,145
+distinct objects: no mesh's bytes were shared across the two backends, so the
+saving comes from releases and identities, not backends. A set's manifest was
+2.5 MB, inside the 8 MiB bound a source reads a channel document under
+(`ReleaseSourceReader`); a world past roughly three times the debug world's
+meshes needs that bound raised or the manifest split, which nothing does yet.
+
+Reads are anonymous. The channel tree is public content behind the
+deployment's edge, as it must be for an install, so `status` and `fetch` need no
+identity and no role. Writes need the channel host's: the workflow's publishing
+identity holds it, and the GPU machine's producer signs in as the developer's
+own Azure CLI account, which needs write access to the official-content
+container (scoped to `public/puck/official/releases`). The workflow's identity
+cannot grant that to a user account, so it is the owner's one setup step
+([CI](../development/ci.md#the-player-channel)). The invariant a reader rests on
+is that a set's manifest appears only after every object it names, and one door
+enforces it: a channel host writes every object before any document
+(`ReleaseChannelHost.UploadAsync`), so `status` reads a manifest alone and never
+checks the objects. Nothing prunes the store yet; objects only accumulate, as the
+channel's release objects already do.
 
 **A cache set fits by identity, never by commit.** The mesh bake identity
 hashes the bake's code and kernel bytecode, so every machine that built the
@@ -409,7 +452,7 @@ job, and the time it takes is the bake's. What made it manual was learning of th
 need from a held channel after the deploy: the first replace deploy shipped with
 its channel held. Every Azure run now checks, with no device, whether whole sets
 exist for its own World build and world (`puck world caches status`, which reads
-only a set's record, published beside its archive) and warns on the run's page
+only each set's manifest) and warns on the run's page
 without holding anything, so the lead produces the sets beside the validation run.
 The player job then waits for a set (`fetch --wait`) instead of failing at once, so
 a set that lands after the push ships with that release. A GPU runner that produces
