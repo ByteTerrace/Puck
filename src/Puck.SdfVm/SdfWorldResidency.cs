@@ -354,7 +354,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 ? ((pipeline.Refusal is { } refusal)
                     ? $"residency '{Name}' holds its frame: the '{pipeline.Name}' pipeline was refused and is built again on a kernel reload or a device loss: {refusal.Message}"
                     : $"residency '{Name}' holds its frame until the '{pipeline.Name}' pipeline is built: {m_pipelines.Describe()}")
-                : m_pipelines.Describe())));
+                : (((m_tables is null) && StandsParked)
+                    ? $"residency '{Name}' is parked: it gave its tables back and builds them again when a render or the sight wants it"
+                    : m_pipelines.Describe()))));
     /// <summary>Gets why the residency cannot become ready until something it is built from changes, or
     /// <see langword="null"/> while it is ready or what it waits on is still building: the refused build of its tables
     /// (the device, the kernels, its options or a reload retries it) or a refused pipeline its frame waits on (a kernel reload or a device loss builds it again), naming the failure. A refusal is never waited out:
@@ -633,7 +635,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// judge them on the packing thread.</param>
     /// <returns><see langword="true"/> when the frame is left to <see cref="RunPack"/>; <see langword="false"/> when the
     /// preparation has already begun this frame or settled its answer here (no frame, no tables, or a frame held while
-    /// a pipeline builds).</returns>
+    /// a pipeline builds), or the residency stands parked (<see cref="StandsParked"/>), which settles nothing for the
+    /// frame.</returns>
     internal bool BeginPack(in FrameContext context, Puck.Hosting.Jobs.JobPool? jobs = null) {
         if (m_pack != PackStage.None) { return false; }
         // The ledger publishes an upload once a frame finds its fence signaled, standing frames included, so the one
@@ -641,7 +644,9 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_work.Poll();
         if (!PrepareTables(context: in context, device: out var device, frame: out var frame)) {
             m_renders = false;
-            m_pack = PackStage.Ran;
+            // A preparation that finds the residency standing parked builds nothing and settles nothing, so a render the
+            // frame asks for later (Stage, BeginStage) wakes it and prepares it whole in this same frame.
+            if (!StandsParked) { m_pack = PackStage.Ran; }
             return false;
         }
         m_packDevice = device;
@@ -933,8 +938,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// they are built.</returns>
     /// <exception cref="ObjectDisposedException">The residency is released.</exception>
     public bool Stage(in FrameContext context) {
-        // A staging is for a render, which a parked residency wakes for.
-        if (m_parked) { m_wakeOwed = true; }
+        ClaimWake();
         _ = Prepare(context: in context);
 
         if (m_tables is not { } tables) { return false; }
@@ -983,6 +987,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// (a locked tick, a converging capture or a withheld frame), which <see cref="Stage"/> stages.</returns>
     /// <exception cref="ObjectDisposedException">The residency is released.</exception>
     internal bool BeginStage(in FrameContext context) {
+        ClaimWake();
         _ = Prepare(context: in context);
         if ((m_tables is not { } tables) || m_submitted || FrameWithheld || HoldsFrame || (m_frame is not { TickLocked: false, ConvergesLighting: false })) { return false; }
         return OpenSubmit(tables: tables);

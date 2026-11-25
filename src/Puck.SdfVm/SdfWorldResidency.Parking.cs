@@ -7,15 +7,18 @@ namespace Puck.SdfVm;
 // next preparation builds tables from its pipeline set, which it keeps leased), opened by the presentation
 // (SdfWorldPasses.BeginFrame) for a world no view has shown for a while.
 //
-// Invariant: no submission recorded after a park reads the parked tables, and the tables are disposed only after every
-// submission recorded before it completed. The first holds because m_tables is the one reference every recording, upload
-// and background pump reaches the tables through, and parking clears it on the frame thread between frames, before any
-// residency is staged; a render of a parked residency stages it first (Stage), which builds new tables, and a read that
-// renders nothing finds no tables and stands on its views' last images (StandsParked, which SdfWorldPasses.IsUnchanged
-// and the readers' preparation honour). The second holds because the parked tables go to the device's one retirement
+// Invariant: no submission recorded after a park reads the parked tables, no recording reads a residency that stands
+// parked, and the tables are disposed only after every submission recorded before it completed. The first holds because
+// m_tables is the one reference every recording, upload and background pump reaches the tables through, and parking
+// clears it on the frame thread between frames, before any residency is staged. The second holds because every render
+// reaches its residency through a staging (Stage, BeginStage, StageLate through Stage), which claims the wake
+// (ClaimWake) before it prepares, and a preparation that finds the residency standing parked settles nothing for the
+// frame (BeginPack), so whichever door prepared it first that frame, the staging builds new tables; a read that renders
+// nothing finds no tables and stands on its views' last images (StandsParked, which SdfWorldPasses.IsUnchanged and the
+// readers' preparation honour). The third holds because the parked tables go to the device's one retirement
 // (GpuDeviceRetirement), which disposes them once the checkpoint queued after the frame's batch completes; nothing waits
-// for the device. Where it stops: a recording of a view whose residency stands parked, which no schedule makes, would
-// find no tables (SdfWorldResidency.Staged refuses it by name).
+// for the device. Where it stops: a woken residency whose tables' build is refused or still waits on its pipeline set has
+// no tables, and SdfWorldResidency.Staged refuses its recording by name.
 public sealed partial class SdfWorldResidency {
     /// <summary>The seconds a residency must go unobserved before it parks while the device's pool stands past its
     /// limit (<see cref="SdfResidencySelector.Excess"/>).</summary>
@@ -100,7 +103,7 @@ public sealed partial class SdfWorldResidency {
         m_wantedWhy = why;
         m_wantedMetres = metres;
         if (m_clock is { } clock) { m_wantedAt = clock.GetTimestamp(); }
-        if (m_parked) { m_wakeOwed = true; }
+        ClaimWake();
     }
     /// <summary>Records that a reader of the frame asked for the residency: a view the frame renders, or for a residency
     /// the sight does not judge (<see cref="Sighted"/>), a view the frame reads. A parked residency wakes at its next
@@ -109,6 +112,11 @@ public sealed partial class SdfWorldResidency {
     internal void Observe(string reader) {
         m_observedBy = reader;
         if (m_clock is { } clock) { m_observedAt = clock.GetTimestamp(); }
+        ClaimWake();
+    }
+    // A render's, a reader's or the sight's claim on a parked residency: its next preparation builds tables. A preparation
+    // that found it standing parked earlier in the frame settled nothing (BeginPack), so the claim is served this frame.
+    private void ClaimWake() {
         if (m_parked) { m_wakeOwed = true; }
     }
     /// <summary>Returns the seconds since a reader last asked for the residency (<see cref="Observe"/>) or the sight last
