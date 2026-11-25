@@ -396,7 +396,7 @@ jobs:
           path: artifacts
       - name: Assemble the player build without baking boots
         run: >-
-          puck world player worlds/debug --output artifacts/player --no-bake --channel-url "$PLAYER_CHANNEL_URL" --channel-name player
+          puck world player worlds/debug --output artifacts/player --no-bake --extension src/Puck.World.Azure --channel-url "$PLAYER_CHANNEL_URL" --channel-name player
           --extension src/Puck.World.Azure --sign-in artifacts/world-authentication.json
         shell: bash
       # Anonymous reads through the deployment's public edge, as an install reads the channel: no identity needed.
