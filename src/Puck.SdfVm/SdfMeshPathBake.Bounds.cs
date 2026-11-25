@@ -1,6 +1,7 @@
 using System.Numerics;
 using Puck.Maths;
 using Puck.SignedDistance;
+using Puck.SignedDistance.Queries;
 using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
 
 namespace Puck.SdfVm;
@@ -30,6 +31,9 @@ public sealed partial class SdfMeshPathBake {
     private const float BoundBandDiagonals = 3f;
     // The resources a group's GPU field reads that its CPU field cannot see.
     private const SdfFieldResource BoundUnseen = (SdfFieldResource.GlyphAtlas | SdfFieldResource.SampledHandle | SdfFieldResource.SlotLanes);
+
+    // A group's CPU field, or none where it cannot be read, as CpuField built it.
+    internal sealed record CpuFieldHold(SdfFieldEvaluator? Evaluator);
 
     // The final lattice's blocks and what each takes: NaN for a sampled block, else the value every sample of it takes.
     private sealed class FinalBlocks {
@@ -65,11 +69,14 @@ public sealed partial class SdfMeshPathBake {
         }
     }
 
+    // Whether a group's GPU field is one its CPU field reads, so its bounds may stand in for samples.
+    private static bool Boundable(Group group) => ((group.GlyphCell <= 0f) && !group.Geometry.ContainsGlyph && (group.SampledSnapshots.Length == 0));
+
     // In the take, under the gate: hands a group's final lattice to the pool to be bounded before its first slab, once.
     // True when the group is held by that job (or retired), so the take passes it by.
     private bool QueueBounds(Group group, FinalLattice final) {
         final.Bounded = true;
-        if ((final.Lattice.Samples < BoundLeastSamples) || (group.GlyphCell > 0f) || group.Geometry.ContainsGlyph || (group.SampledSnapshots.Length > 0) || (m_program is not { } program)) { return false; }
+        if ((final.Lattice.Samples < BoundLeastSamples) || !Boundable(group: group) || (m_program is not { } program)) { return false; }
         if (!group.QueueWork()) { return true; }
 
         var field = Volatile.Read(location: ref m_field);
@@ -79,10 +86,59 @@ public sealed partial class SdfMeshPathBake {
         return true;
     }
 
+    // The group's CPU field for the bake's field version, built once and kept on the group for its later stages; null when
+    // the field reads what the CPU cannot see or the evaluator refuses it. On the pool, holding the group.
+    private static SdfFieldEvaluator? CpuField(Group group, SdfProgram program, long field) {
+        if ((group.BoundField is { } held) && (group.BoundFieldVersion == field)) { return held.Evaluator; }
+
+        var excerpt = SdfMeshAudit.Field(group: group, program: program);
+        SdfFieldEvaluator? evaluator = null;
+
+        if (!excerpt.Instructions.Any(predicate: static instruction => ((SdfFieldOps.ResourcesOf(value: instruction.Op) & BoundUnseen) != 0))) {
+            _ = SdfMeshAudit.TryEvaluator(field: out evaluator, program: excerpt, refusal: out _);
+        }
+        group.BoundField = new(Evaluator: evaluator);
+        group.BoundFieldVersion = field;
+        return evaluator;
+    }
+
+    // Splits a box of cells [low, high) by halving its longest run until `settles` settles each part; a part of one cell is
+    // asked with `last` set and must settle.
+    private static void Descend((int X, int Y, int Z) low, (int X, int Y, int Z) high, Func<(int X, int Y, int Z), (int X, int Y, int Z), bool, bool> settles) {
+        var (sx, sy, sz) = ((high.X - low.X), (high.Y - low.Y), (high.Z - low.Z));
+
+        if (settles(low, high, ((sx == 1) && (sy == 1) && (sz == 1)))) { return; }
+        if ((sx >= sy) && (sx >= sz)) {
+            var middle = (low.X + (sx / 2));
+            Descend(high: (middle, high.Y, high.Z), low: low, settles: settles);
+            Descend(high: high, low: (middle, low.Y, low.Z), settles: settles);
+        } else if (sy >= sz) {
+            var middle = (low.Y + (sy / 2));
+            Descend(high: (high.X, middle, high.Z), low: low, settles: settles);
+            Descend(high: high, low: (low.X, middle, low.Z), settles: settles);
+        } else {
+            var middle = (low.Z + (sz / 2));
+            Descend(high: (high.X, high.Y, middle), low: low, settles: settles);
+            Descend(high: high, low: (low.X, low.Y, middle), settles: settles);
+        }
+    }
+
+    // Encloses the field over a box, padded; false where the evaluator refuses the box or answers it unbounded.
+    private static bool TryBounds(SdfFieldEvaluator evaluator, Vector3 low, Vector3 high, Vector3 pad, out float lower, out float upper) {
+        if (evaluator.TryDistanceBounds(lower: Fixed(point: (low - pad)), upper: Fixed(point: (high + pad)), distance: out var bounds) && !bounds.IsUnbounded) {
+            (lower, upper) = (((float)((double)bounds.Lower)), ((float)((double)bounds.Upper)));
+            return true;
+        }
+        (lower, upper) = (float.NegativeInfinity, float.PositiveInfinity);
+        return false;
+    }
+
     // On the pool, holding the group: classifies the final lattice's blocks and gives the group its first slab, or finishes
     // it as empty when no block can hold the surface.
     private void Bound(Group group, FinalLattice final, SdfProgram program, long field) {
-        var blocks = Classify(final: final, group: group, program: program, walks: out var walks);
+        var evaluator = CpuField(field: field, group: group, program: program);
+        var walks = 0L;
+        var blocks = ((evaluator is null) ? null : Classify(evaluator: evaluator, final: final, walks: out walks));
         var empty = (blocks is { Sampled: 0 });
 
         if (empty) { StoreEmpty(group); }
@@ -111,17 +167,8 @@ public sealed partial class SdfMeshPathBake {
         emptied?.Dispose();
     }
 
-    // The final lattice's blocks, each sampled or skipped with its fill; null when the group's CPU field cannot bound it.
-    private static FinalBlocks? Classify(Group group, FinalLattice final, SdfProgram program, out long walks) {
-        walks = 0L;
-
-        var excerpt = SdfMeshAudit.Field(group: group, program: program);
-
-        foreach (var instruction in excerpt.Instructions) {
-            if ((SdfFieldOps.ResourcesOf(value: instruction.Op) & BoundUnseen) != 0) { return null; }
-        }
-        if (!SdfMeshAudit.TryEvaluator(field: out var evaluator, program: excerpt, refusal: out _)) { return null; }
-
+    // The final lattice's blocks, each sampled or skipped with its fill.
+    private static FinalBlocks Classify(SdfFieldEvaluator evaluator, FinalLattice final, out long walks) {
         var lattice = final.Lattice;
         var blocks = new FinalBlocks(dims: lattice.Dims);
         var band = (BoundBandDiagonals * lattice.Cell.Length());
@@ -129,61 +176,38 @@ public sealed partial class SdfMeshPathBake {
         var pad = new Vector3(value: ((1.0e-5f * (lattice.Origin.Length() + (lattice.Cell.Length() * lattice.Dims.X))) + (2f / 65536f)));
         var count = 0L;
 
-        void Box(int x0, int y0, int z0, int x1, int y1, int z1) {
-            var low = (lattice.Origin + (new Vector3(
-                x: FinalBlocks.Corner(block: x0, samples: blocks.Dims.X, size: blocks.Size.X),
-                y: FinalBlocks.Corner(block: y0, samples: blocks.Dims.Y, size: blocks.Size.Y),
-                z: FinalBlocks.Corner(block: z0, samples: blocks.Dims.Z, size: blocks.Size.Z)
-            ) * lattice.Cell)) - pad;
-            var high = (lattice.Origin + (new Vector3(
-                x: (FinalBlocks.Corner(block: (x1 - 1), samples: blocks.Dims.X, size: blocks.Size.X) + blocks.Size.X - 1),
-                y: (FinalBlocks.Corner(block: (y1 - 1), samples: blocks.Dims.Y, size: blocks.Size.Y) + blocks.Size.Y - 1),
-                z: (FinalBlocks.Corner(block: (z1 - 1), samples: blocks.Dims.Z, size: blocks.Size.Z) + blocks.Size.Z - 1)
-            ) * lattice.Cell)) + pad;
+        Vector3 SampleOf(int x, int y, int z) => new(
+            x: FinalBlocks.Corner(block: x, samples: blocks.Dims.X, size: blocks.Size.X),
+            y: FinalBlocks.Corner(block: y, samples: blocks.Dims.Y, size: blocks.Size.Y),
+            z: FinalBlocks.Corner(block: z, samples: blocks.Dims.Z, size: blocks.Size.Z)
+        );
+
+        Descend(high: blocks.Count, low: (0, 0, 0), settles: (from, to, last) => {
+            // One cell past its blocks' samples on every side, so each lattice cell with a corner in a skipped block lies
+            // in that block's box: a zero between two skipped blocks' facing samples is in both boxes.
+            var low = (lattice.Origin + ((SampleOf(x: from.X, y: from.Y, z: from.Z) - Vector3.One) * lattice.Cell));
+            var high = (lattice.Origin + ((SampleOf(x: (to.X - 1), y: (to.Y - 1), z: (to.Z - 1)) + new Vector3(x: blocks.Size.X, y: blocks.Size.Y, z: blocks.Size.Z)) * lattice.Cell));
             var fill = float.NaN;
 
             count++;
-            if (evaluator.TryDistanceBounds(lower: Fixed(point: low), upper: Fixed(point: high), distance: out var bounds) && !bounds.IsUnbounded) {
-                var lower = (float)((double)bounds.Lower);
-                var upper = (float)((double)bounds.Upper);
-
+            if (TryBounds(evaluator: evaluator, high: high, low: low, lower: out var lower, pad: pad, upper: out var upper)) {
                 if (lower > band) {
                     fill = lower;
                 } else if (upper < -band) {
                     fill = upper;
                 }
             }
-            if (!float.IsNaN(f: fill) || (((x1 - x0) == 1) && ((y1 - y0) == 1) && ((z1 - z0) == 1))) {
-                for (var z = z0; (z < z1); z++) {
-                    for (var y = y0; (y < y1); y++) {
-                        for (var x = x0; (x < x1); x++) {
-                            blocks.Fill[blocks.Index(x: x, y: y, z: z)] = fill;
-                        }
+            if (float.IsNaN(f: fill) && !last) { return false; }
+            for (var z = from.Z; (z < to.Z); z++) {
+                for (var y = from.Y; (y < to.Y); y++) {
+                    for (var x = from.X; (x < to.X); x++) {
+                        blocks.Fill[blocks.Index(x: x, y: y, z: z)] = fill;
                     }
                 }
-                if (float.IsNaN(f: fill)) { blocks.Sampled++; }
-                return;
             }
-
-            // Halve the box's longest run of blocks.
-            var (sx, sy, sz) = ((x1 - x0), (y1 - y0), (z1 - z0));
-
-            if ((sx >= sy) && (sx >= sz)) {
-                var middle = (x0 + (sx / 2));
-                Box(x0: x0, x1: middle, y0: y0, y1: y1, z0: z0, z1: z1);
-                Box(x0: middle, x1: x1, y0: y0, y1: y1, z0: z0, z1: z1);
-            } else if (sy >= sz) {
-                var middle = (y0 + (sy / 2));
-                Box(x0: x0, x1: x1, y0: y0, y1: middle, z0: z0, z1: z1);
-                Box(x0: x0, x1: x1, y0: middle, y1: y1, z0: z0, z1: z1);
-            } else {
-                var middle = (z0 + (sz / 2));
-                Box(x0: x0, x1: x1, y0: y0, y1: y1, z0: z0, z1: middle);
-                Box(x0: x0, x1: x1, y0: y0, y1: y1, z0: middle, z1: z1);
-            }
-        }
-
-        Box(x0: 0, x1: blocks.Count.X, y0: 0, y1: blocks.Count.Y, z0: 0, z1: blocks.Count.Z);
+            if (float.IsNaN(f: fill)) { blocks.Sampled++; }
+            return true;
+        });
         walks = count;
         return blocks;
     }

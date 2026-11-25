@@ -3229,6 +3229,9 @@ public sealed partial class SdfMeshPathBake {
 
         private SdfMeshBakeRequest? m_next;
         public int Refinements { get; set; }
+        // The CPU field the group's bounds read, for the bake's field version it was built under (CpuField).
+        public CpuFieldHold? BoundField { get; set; }
+        public long BoundFieldVersion { get; set; }
         // The final lattice's contour, its material cut, the points the cut's round samples, and their answers so far.
         public SdfContour? Contour { get; set; }
         public SdfMeshMaterialCut? Cut { get; set; }
