@@ -272,34 +272,12 @@ public sealed partial class SdfFieldEvaluator {
         }
         if (!IsInFrame(point: lowerPoint) || !IsInFrame(point: upperPoint)) { return false; }
 
-        var cullBounds = m_cullBounds;
-        var query = new BoxQuery(box: new IntervalVector3(
+        var record = RecordWalk(parent: null, query: new BoxQuery(box: new IntervalVector3(
             X: new FixedInterval(lower: lowerPoint.X, upper: upperPoint.X),
             Y: new FixedInterval(lower: lowerPoint.Y, upper: upperPoint.Y),
             Z: new FixedInterval(lower: lowerPoint.Z, upper: upperPoint.Z)
-        ));
-        var reaches = BoxReaches();
-        var primer = BoxPrimer.None;
-        var record = (RegionRecord ??= []);
-        var walked = 0;
-        var expanded = 0;
+        )), walked: out var walked);
 
-        record.Clear();
-        for (var bound = 0; (bound < cullBounds.Length); bound++) {
-            RankBoxReach(bound: bound, primer: ref primer, query: in query, reaches: reaches, regional: true);
-        }
-        _ = WalkBounds(
-            cull: true,
-            end: m_instructions.Length,
-            first: 0,
-            primer: ref primer,
-            query: in query,
-            reaches: reaches.AsSpan(start: 0, length: cullBounds.Length),
-            record: record,
-            rotationsExpanded: ref expanded,
-            walked: ref walked,
-            world: query.Box
-        );
         RegionWork.Add(amount: walked, kind: RegionBuildInstructions);
 
         var found = false;
@@ -324,20 +302,33 @@ public sealed partial class SdfFieldEvaluator {
     // for a child, with the primer chosen among the instances that walk can meet. Its box is its cube and the pad either
     // side, less what lies outside the frame, whose points no walk reads.
     private RegionNode RecordRegion(RegionNode? parent, int shift, long x, long y, long z) {
-        var cullBounds = m_cullBounds;
-        var query = new BoxQuery(box: new IntervalVector3(
+        var record = RecordWalk(parent: parent, query: new BoxQuery(box: new IntervalVector3(
             X: CellSide(cell: x, least: -m_frameRaw, most: m_frameRaw, pad: RegionPad, shift: shift),
             Y: CellSide(cell: y, least: -m_frameRaw, most: m_frameRaw, pad: RegionPad, shift: shift),
             Z: CellSide(cell: z, least: -m_frameRaw, most: m_frameRaw, pad: RegionPad, shift: shift)
-        ));
+        )), walked: out var walked);
+        var tape = TapeOf(instructions: out var instructions, length: m_instructions.Length, record: record, within: parent?.Tape);
+
+        RegionWork.Count(kind: RegionsBuilt);
+        RegionWork.Add(amount: walked, kind: RegionBuildInstructions);
+        RegionWork.Add(amount: instructions, kind: RegionTapeInstructions);
+
+        // Only a region whose tape is long hands its instances on: to a child's record when it divides, and to a box
+        // query's walk over it (BoundsOverRegions) at any edge.
+        return new RegionNode(bounds: ((instructions > RegionShortTape) ? BoundsIn(candidates: parent?.Bounds, tape: tape) : []), instructions: instructions, tape: tape);
+    }
+    // The regional box walk over a box (the walk a region's tape is recorded by), over the whole stream or a parent's tape,
+    // with the primer chosen among the instances that walk can meet; the ranges it kept, in this thread's record list, which
+    // the next recording walk on the thread reuses.
+    private List<(int First, int End)> RecordWalk(in BoxQuery query, RegionNode? parent, out int walked) {
+        var cullBounds = m_cullBounds;
         var reaches = BoxReaches();
         var primer = BoxPrimer.None;
         var record = (RegionRecord ??= []);
-        var walked = 0;
         var expanded = 0;
 
+        walked = 0;
         record.Clear();
-
         if (parent is null) {
             for (var bound = 0; (bound < cullBounds.Length); bound++) {
                 RankBoxReach(bound: bound, primer: ref primer, query: in query, reaches: reaches, regional: true);
@@ -347,7 +338,6 @@ public sealed partial class SdfFieldEvaluator {
                 RankBoxReach(bound: bound, primer: ref primer, query: in query, reaches: reaches, regional: true);
             }
         }
-
         _ = WalkBounds(
             cull: true,
             end: m_instructions.Length,
@@ -362,15 +352,7 @@ public sealed partial class SdfFieldEvaluator {
             world: query.Box
         );
 
-        var tape = TapeOf(instructions: out var instructions, length: m_instructions.Length, record: record, within: parent?.Tape);
-
-        RegionWork.Count(kind: RegionsBuilt);
-        RegionWork.Add(amount: walked, kind: RegionBuildInstructions);
-        RegionWork.Add(amount: instructions, kind: RegionTapeInstructions);
-
-        // Only a region whose tape is long hands its instances on: to a child's record when it divides, and to a box
-        // query's walk over it (BoundsOverRegions) at any edge.
-        return new RegionNode(bounds: ((instructions > RegionShortTape) ? BoundsIn(candidates: parent?.Bounds, tape: tape) : []), instructions: instructions, tape: tape);
+        return record;
     }
     // One side of a region cell on an axis: the cell's raws and a pad either side, held between two raws.
     private static FixedInterval CellSide(long cell, int shift, long pad, long least, long most) {

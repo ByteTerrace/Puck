@@ -607,6 +607,31 @@ would rest on the JIT specialising every instantiation. Rendering per carrier
 keeps every reader monomorphic with its constants plain, at one emitter branch
 per carrier class. Recorded in [the efficiency plan](../plans/efficiency.md#5-one-lowering-over-a-carrier).
 
+## A bake samples only what its field leaves undecided
+
+The mesh bake asks the GPU for a sample only where neither a measured value
+nor the field's own proof already answers it. An edge's crossing is a Newton
+landing over dual trials, each walk returning the value and its gradient, kept
+inside the bracket the edge's signs give and cut in thirds where Newton cannot
+be trusted, so one walk places a smooth crossing and carries its normal. A
+material point is not sampled where the group's geometry closes over one
+material or a box walk of its CPU field proves the box reads one. A grid block
+is not sampled where its enclosure clears the band.
+
+Options weighed. Bisection with two trials a round guarantees a bracket of the
+tolerance but spends six value walks a root and a seventh for the gradient;
+Newton alone converges quadratically but lands anywhere a kink sends it. The
+safeguarded hybrid keeps the bracket and accepts a landing only by an error
+two trials prove (their secant agrees with their slopes) or by a step under
+the tolerance, so a kink costs a round, never a crossing off the surface.
+Reading the material in the crossing walk was weighed and left: a crossing is
+not one of the points the material cut samples, so it would cost every dual
+walk material tracking and spare no sample. Bounding the refinement's fine
+samples at the grid's band was left too: only a sixth of them lie past it on
+the Moth, and a sparse final lattice that never lays out a block proved off the
+surface is the structural answer. Recorded in
+[the efficiency plan](../plans/efficiency.md#2-bounds-that-skip-a-grid-lattices-empty-blocks).
+
 ## A derived product is a cache, never the truth
 
 A baked mesh, an irradiance volume, a compiled shader or any other product

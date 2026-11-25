@@ -211,17 +211,29 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   stands up to a fine cell off that face and keeps a merged piece's planes from
   meeting at its crease. Only samples displaced by `CloseSheets` keep their lattice
   interpolation: their intentional surface differs from the original field.
-  The search (`CrossingRoot`) measures two trials a round, a tolerance apart
-  about an estimate (the linear one, then the secant through the last round's
-  pair), so a root the estimate all but hits closes the bracket that round, and
-  cuts the bracket in thirds once the thirdings it still needs fill its
-  remaining rounds; it ends once the bracket is an 8,192th of the edge wide (the
-  root, its middle, within a 16,384th), in at most eleven rounds. The
+  The search (`CrossingRoot`) is a safeguarded Newton iteration over dual
+  trials: a crossing round is a gradient points lattice, each trial one walk
+  of the field in forward mode, and a round measures one trial at Newton's
+  estimate (the linear one first). It ends at a landing whose estimated error
+  is under half an 8,192th of the edge: the step itself, or for a step under a
+  64th of the edge the second-order error that two trials agreeing on one
+  quadratic give it (their secant matches the mean of their slopes, which a
+  kink between them breaks; the mismatch itself enters the error, so a slope
+  read from taps rather than a dual walk lands no farther off than it shows).
+  A Newton estimate outside the bracket, or with the wrong slope, bisects
+  instead, and once the thirdings the bracket still needs fill its remaining
+  rounds it is cut in thirds, two trials a round, so no search passes eleven
+  rounds. The trial whose Newton step is least carries the crossing's gradient
+  where it lies within a 64th of the edge of the root, with its value carried to
+  the root by its slope, and `GradientPoints` measures only the crossings no
+  trial measured (closed edges, an end reading an exact zero). The
   `ACrossingLandsWithinASixteenThousandthOfItsEdgeInAFewRounds` law holds the
-  bound and the cost. Each round is a readback round trip of the group, and
-  only the groups the memory account admits hold a final lattice, so a group's rounds bound its
-  latency: a search must not trade fewer samples for more rounds than its worst
-  root needs (a one-trial secant search's worst roots took up to 37).
+  bound and the cost (a float field takes 1.5 to 2 trials a root; the CPU bake,
+  whose fixed-point taps fail the quadratic check, about 3.5). Each round is a
+  readback round trip of the group, and only the groups the memory account
+  admits hold a final lattice, so a group's rounds bound its latency: a search
+  must not trade fewer samples for more rounds than its worst root needs (a
+  one-trial secant search's worst roots took up to 37).
 - **Signs are read once.** `SdfSampledLattice.FineInside` keeps each fine
   sample's sign in a bit once read (`AnswerRefinement` clears them,
   `CloseSample` keeps a closed sample's), and the contour's corner masks,
@@ -1008,8 +1020,16 @@ laws exercise that boundary.
   times coarser relative to itself. A slice (`world.slice`) walks the field
   through the frame's rigid transforms, so it shows a scaled body at its own
   size about its slots.
-- **Materials are point-sampled, not taken from the lattice.** Each final
-  quad's quarters and vertices are sampled through `sdfMeshBakePoints` (a staged
+- **Materials are point-sampled, not taken from the lattice, unless the field
+  decides them.** A group whose geometry closes over one material
+  (`SdfMeshGeometryBuilder.MaterialsClosed`: no world-segment shape and no render
+  warp that adds a stride) samples none, its cut meshing every quad in it. A
+  multi-material group decides the first round's points whose box (eight contour
+  cells a side) its CPU field proves reads one material
+  (`SdfFieldEvaluator.TryUniformMaterial`, the region-tape walk over that box),
+  walking on only while each walk decides eight points (`DecideMaterials`; the
+  done line's `materials=[decided,walks]`). Every other quad's quarters and
+  vertices are sampled through `sdfMeshBakePoints` (a staged
   World table the residency writes before the upload); a quad whose quarters
   disagree splits into them, taking one vertex at the middle of each of its
   edges that the triangle across the edge splits at too (found by position, so a
