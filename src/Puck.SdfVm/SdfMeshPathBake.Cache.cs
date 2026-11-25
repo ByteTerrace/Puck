@@ -185,29 +185,40 @@ public sealed partial class SdfMeshPathBake {
     }
     // The stored rung a bake that bakes what its demand asks (SdfMeshCachePolicy.Demand) takes in place of a tier the
     // library and the store lack, so a boot over a store an earlier run warmed bakes only what no rung of the shape
-    // answers: for a finer tier (a retier, a first detail, an arrival, drawn being int.MaxValue for one drawing
-    // nothing), the nearest stored rung finer still, which shows every detail the demand asks; for a coarser tier (the
-    // budget's), the nearest stored rung between the tier drawn and the one asked, which still gives back bytes. Null for
-    // live geometry, a tier the store holds, any other policy, or a shape the store holds no such rung of, which bakes.
+    // answers. For a finer tier (a retier, a first detail, an arrival, drawn being int.MaxValue for one drawing nothing)
+    // it is the nearest stored rung finer still, which shows every detail the demand asks. For a coarser tier, which only
+    // the region's budget asks (its spare groups and its bias), it is the nearest stored rung between the tier drawn and
+    // the one asked, else the nearest coarser than the one asked: the budget gives detail up to free bytes, and any
+    // stored rung coarser than the tier drawn frees them without a bake. Null for live geometry, a tier the store holds,
+    // any other policy, or a shape the store holds no such rung of, which bakes.
     private Group? DemandRung(Group planned, UInt128 identity, int drawn) {
         if ((Library.Policy != SdfMeshCachePolicy.Demand) || planned.Live || (Library.Disk is not { } disk) || Stores(group: planned, identity: identity) ||
             (planned.Dynamic && disk.Holds(geometry: SdfMeshLibrary.FormGeometry(form: planned.Form), identity: identity))) { return null; }
 
-        var last = ((planned.Tier < drawn) ? planned.FinestTier : (drawn + 1));
+        var finer = (planned.Tier < drawn);
 
-        for (var tier = (planned.Tier - 1); (tier >= last); tier--) {
-            if (RungOf(group: planned, tier: tier) is not { } rung) { continue; }
-            if (!Stores(group: rung, identity: identity)) {
-                rung.Retired = true;
-                continue;
-            }
-            Library.Cache.Count(kind: SdfMeshCache.RungsTaken);
-            rung.FirstDetailOwed = planned.FirstDetailOwed;
-            rung.DemandPixel = planned.DemandPixel;
-            rung.DemandedTier = planned.DemandedTier;
-            return rung;
+        for (var tier = (planned.Tier - 1); (tier >= (finer ? planned.FinestTier : (drawn + 1))); tier--) {
+            if (StoredRungAt(identity: identity, planned: planned, tier: tier) is { } rung) { return rung; }
+        }
+        if (finer) { return null; }
+        for (var tier = (planned.Tier + 1); (tier <= planned.CoarsestTier); tier++) {
+            if (StoredRungAt(identity: identity, planned: planned, tier: tier) is { } rung) { return rung; }
         }
         return null;
+    }
+    // A planned group planned again at another tier when the library or the store holds that rung, carrying the plan's
+    // demand; null otherwise.
+    private Group? StoredRungAt(Group planned, int tier, UInt128 identity) {
+        if (RungOf(group: planned, tier: tier) is not { } rung) { return null; }
+        if (!Stores(group: rung, identity: identity)) {
+            rung.Retired = true;
+            return null;
+        }
+        Library.Cache.Count(kind: SdfMeshCache.RungsTaken);
+        rung.FirstDetailOwed = planned.FirstDetailOwed;
+        rung.DemandPixel = planned.DemandPixel;
+        rung.DemandedTier = planned.DemandedTier;
+        return rung;
     }
     // Starts, for each geometry a done group draws, the next rung of its ladder the store lacks, coarsest first, at most
     // SdfMeshTier.MaxInFlight at once; true while any ladder still has a rung to look at or in flight. A rung bakes in
