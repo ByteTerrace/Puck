@@ -125,6 +125,10 @@ internal static class SdfMeshBakeReport {
         public long BoundRefused;
         public long BoundWalks;
         public long BoundSkipped;
+        // The material cut's first-round points the groups' CPU fields decided without sampling (SdfMeshPathBake's
+        // DecideMaterials), and the walks of the boxes they lie in.
+        public long MaterialsDecided;
+        public long MaterialWalks;
         // The samples of lattices handed back after the GPU sampled them (a group retired while its lattice flew, a
         // failed decode or readback), and of those handed back before it did (a deferred or abandoned job).
         public long Discarded;
@@ -185,7 +189,7 @@ internal static class SdfMeshBakeReport {
             FrameGateWaitMax = FrameGateWaitTotal = FrameGateWaitsSlow = 0;
             Dispatches = Samples = Taps = Discarded = Returned = RefinedCells = CutEdges = Softened = Merged = Loaded = 0;
             Joined = JoinedLanded = JoinedAbandoned = JoinedStalled = SamplesSaved = 0;
-            BoundLattices = BoundRefused = BoundWalks = BoundSkipped = 0;
+            BoundLattices = BoundRefused = BoundWalks = BoundSkipped = MaterialsDecided = MaterialWalks = 0;
             Array.Clear(array: GateEntries);
             Array.Clear(array: GateWaitTicks);
             Array.Clear(array: GateHoldTicks);
@@ -248,7 +252,7 @@ internal static class SdfMeshBakeReport {
             var takes = Math.Max(val1: 1L, val2: Takes);
             var kinds = string.Join(separator: ",", values: Enumerable.Range(start: 0, count: KindNames.Length).Select(selector: kind => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{KindNames[kind]}:{KindSamples[kind]}")));
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" joined=[groups:{Joined},landed:{JoinedLanded},abandoned:{JoinedAbandoned},stalled:{JoinedStalled},samples-saved:{SamplesSaved}] {DescribeCheckpoints()} kinds=[{kinds}] bound=[lattices:{BoundLattices},refused:{BoundRefused},walks:{BoundWalks},skipped:{BoundSkipped}] cpu=[{stages}] batches={Batches} takes={Takes} idle={IdleTakes} stop=[taps:{StopTaps},samples:{StopSamples},batch:{StopBatch},readback:{StopReadback},drained:{StopDrained}] host-refusals=[readback-waits:{ReadbackWaits},refine-waits:{Interlocked.Read(location: ref RefinementWaits)},copy-waits:{CopyWaits},readmitted:{Readmissions}] per-take=[waiting:{(WaitingGroups / ((double)takes)):0.0},flying:{(FlyingGroups / ((double)takes)):0.0},working:{(WorkingGroups / ((double)takes)):0.0}]{dispatches?.Invoke()} frame-gate=[max:{((FrameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((FrameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{FrameGateWaitsSlow}] gate=[{DescribeGate()}] managed=[{DescribeManaged()}] tail={PoolTailSeconds():0.0}s");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $" joined=[groups:{Joined},landed:{JoinedLanded},abandoned:{JoinedAbandoned},stalled:{JoinedStalled},samples-saved:{SamplesSaved}] {DescribeCheckpoints()} kinds=[{kinds}] bound=[lattices:{BoundLattices},refused:{BoundRefused},walks:{BoundWalks},skipped:{BoundSkipped}] materials=[decided:{MaterialsDecided},walks:{MaterialWalks}] cpu=[{stages}] batches={Batches} takes={Takes} idle={IdleTakes} stop=[taps:{StopTaps},samples:{StopSamples},batch:{StopBatch},readback:{StopReadback},drained:{StopDrained}] host-refusals=[readback-waits:{ReadbackWaits},refine-waits:{Interlocked.Read(location: ref RefinementWaits)},copy-waits:{CopyWaits},readmitted:{Readmissions}] per-take=[waiting:{(WaitingGroups / ((double)takes)):0.0},flying:{(FlyingGroups / ((double)takes)):0.0},working:{(WorkingGroups / ((double)takes)):0.0}]{dispatches?.Invoke()} frame-gate=[max:{((FrameGateWaitMax * 1000d) / Stopwatch.Frequency):0.00}ms,total:{((FrameGateWaitTotal * 1000d) / Stopwatch.Frequency):0.0}ms,over-1ms:{FrameGateWaitsSlow}] gate=[{DescribeGate()}] managed=[{DescribeManaged()}] tail={PoolTailSeconds():0.0}s");
         }
         // Each gate site entered: its entries, the milliseconds it waited and held in all, and its longest hold.
         private string DescribeGate() {

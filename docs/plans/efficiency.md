@@ -38,14 +38,7 @@ gradient and crease samples; the audit's normal runs read the same or better
 refute it: a group whose audit's normal error rises where its start line names
 no stencil op.
 
-**Considered and left.** Newton crossings that take the gradient from the last
-trial: each crossing round already straddles its estimate a tolerance apart
-(`SdfSampledLattice.CrossingRoot`), so a root usually closes in two or three
-rounds of two value walks; a Newton round costs one dual walk (two units) and
-needs the same rounds to bound its root, and merging the gradient stage saves
-one gradient sample a crossing. The saving is a few percent of a bake for a
-search whose bracket guarantee would have to be rebuilt; it is not worth it
-while the slabs below dominate. A GPU count of the fallback walks
+**Considered and left.** A GPU count of the fallback walks
 (`sdfWorkGradients` is counted, but the bake disables its counter row) needs the
 bake's counter buffer zeroed and copied with each batch's readback; the start
 line's static list answers the same question per program.
@@ -88,18 +81,45 @@ interval walks. The base's kinds show where a bake's interpretations go:
 `crossing` 18,158,154, `fine` 14,485,788, `refine` 10,614,483, `material`
 7,966,505, `slab` 7,153,063, `gradient` 7,192,748. Two thirds of the work lies
 at the surface, where no bound can skip a sample, so the bounds cannot reach
-the success line alone. What can, in the order the counts give:
+the success line alone. What it did next, and what is left:
 
-- **Crossings.** Each crossed edge brackets its root to an 8,192th of the edge
-  (`SdfSampledLattice.CrossingRoot`) in rounds of two value walks. A round of
-  one dual walk (value and slope, the gradient kernel already holds it) puts a
-  Newton step inside the bracket, and the root's gradient the next stage
-  measures again is the last round's.
-- **Material rounds.** The material cut samples its points in rounds of their
-  own (`kinds=[…material:…]`); the crossing round that lands a root walks the
-  field there already and can keep its winner.
-- **Fine samples.** The refinement measures every fine sample of a refined cell;
-  bounding the fine cells as blocks is the same mechanism at the fine spacing.
+- **Crossings (built).** Each crossed edge's root is a safeguarded Newton
+  iteration over dual trials (`SdfSampledLattice.CrossingRoot`; the [mesh-bake
+  reference](../../.claude/skills/rendering/references/mesh-bake.md#contouring)
+  holds the rules). The trial nearest the root carries the crossing's gradient,
+  so the gradient stage no longer measures searched crossings. A CPU bake of the
+  Moth: `crossing` 18,158,154 value samples to 10,730,752 dual ones, `gradient`
+  7,192,748 to 4,020,633, the audit's defects the same or fewer. The CPU answers
+  gradients from fixed-point taps whose slopes rarely pass the quadratic check,
+  so it takes about 3.5 trials a root where a float field takes 1.5 to 2
+  (`ACrossingLandsWithinASixteenThousandthOfItsEdgeInAFewRounds`); the GPU's dual
+  walk is expected to read near the latter, about 6 M crossing samples on the
+  Moth.
+- **Material rounds (built, by another route).** A crossing's material does not
+  stand for any point the cut samples (a quad's quarters and its vertices lie
+  off the edges, lifted out of the surface), so reading the winner in the
+  crossing walk would cost every dual walk material tracking for no point it
+  covers. The field decides instead: a group whose geometry closes over one
+  material samples no point, and a multi-material group's first round skips
+  every point whose box its CPU field proves single-material
+  (`SdfFieldEvaluator.TryUniformMaterial`). The Moth's `material` falls from
+  7,966,505 to 4,689,996, most of it single-material groups; the boxes decide
+  little on the Moth (46,852 points for 51,660 walks), so a group stops walking
+  once its walks stop paying, which keeps the same 46,852 points for 1,941
+  walks.
+- **Fine samples (judged not to pay at the proved band).** Of the Moth's
+  14,230,347 fine samples, 2,385,755 read more than three fine-cell diagonals
+  from the surface and 8,121,298 more than one (a counted run on this branch).
+  The grid bounds' band, three diagonals, could skip at most the first figure,
+  less what an enclosure overstates, about 2 % of the bake for an interval walk
+  per fine block. A one-diagonal band could reach several times that, but a
+  measured cell of a coarser stride interpolates its stride cells' corners, so
+  a skipped corner's filled value would move an interpolated crossing unless
+  the widening is the stride's, which leaves little to skip. The structural
+  answer is a sparse final lattice: blocks proved off the surface at the fine
+  spacing are never laid out, so the coarse narrowing, the slabs and the
+  refinement become one adaptive descent. It is the next step, sized by these
+  counts.
 
 A cold debug-world CPU bake does not fit a shared machine's memory (the host
 account defers admission past five gigabytes of machine limit), so the
@@ -217,10 +237,37 @@ generated `Shared/low-discrepancy.hlsli`.
 Open: the wallpaper fold's, masked reliefs' and lane erosion's duals (their
 derivatives are rules the dual library does not yet hold); the superellipsoid
 law's infinities on both backends (`SdfFieldDeviceLawTests.ShapeFormulas`, a
-GPU leg); the wide fixed-point lowering with 128-bit products from 32-bit
-lanes; structure of arrays for the body step and fact derivation; the audio
-mixer's and the emulators' pixel loops. Each is judged by its count before it
-is built.
+GPU leg); the emulators' pixel composition.
+
+Judged, each by its count:
+
+- **The wide fixed-point lowering for batch queries.** A headless debug-world
+  boot reads 24,214 point samples and 4,338 gradients over its first 35 ticks
+  (`world.counters sdf.queries`), each a contact or probe query at its own
+  point on its own region tape. Wide lanes pay where many points share one
+  tape and one walk; no engine path batches queries that way, and the one that
+  does (the CPU bake behind `puck mesh audit --cpu`) is a tool. It is built when
+  a batch consumer exists, as one more carrier of section 5's emitter.
+- **Structure of arrays for the body step and fact derivation.** Fact
+  derivation already visits candidate slots, not the population
+  (`WorldRuleHost.DeriveFacts` through `CollectFactCandidateSlots`, counted by
+  `WorldTickWork.FactSlots`), and the body step is a branchy per-body program
+  run in parallel kit partitions (`WorldBody.StepIsLocal`,
+  `WorldPopulation.Partitions.cs`). Lanes pay for uniform arithmetic over many
+  bodies, which neither loop is; a population of thousands is where a count
+  would show otherwise, and the city stress world is where to take it.
+- **The audio mixer's integer lanes.** At most 64 emitters (`AudioSnapshot`'s
+  `DefaultMaxEmitters`) mix 48,000 frames a second into two channels, 6.1 M
+  multiply-adds a second at the worst, well under a percent of one core. Each
+  product is a 64-bit one (an `int` sample times a Q16 gain ramped in Q32,
+  `AudioMixer.AccumulateMono`), and AVX2 has no signed 64-bit lane multiply, so
+  `Vector<int>` lanes would widen and emulate it for no measurable gain.
+- **The emulators' pixel composition.** One machine composes 38,400 pixels a
+  frame (`AgbPpu.Composite`: window mask, the top two layers by priority, the
+  blend), about 2.3 M a second, a few percent of a core per running machine.
+  It matters at an MMO's thousands of machines, and a vector compositor must
+  reproduce every pixel the Post batteries hold, so it is the gaming-bricks
+  area's work with its batteries, not this sweep's.
 
 ## 7. The toolbox, structure by structure
 
@@ -231,12 +278,14 @@ or open (with what decides it).
 | Structure | Hot path weighed | Verdict |
 |---|---|---|
 | Intervals | The bake's grid lattices | Used (step 2): the moth's samples fall from 66,499,882 to 64,618,835 for 536,331 walks, meshes identical. |
+| Intervals | The bake's material points | Used (step 2): a box's region-tape walk proves one material (`SdfFieldEvaluator.TryUniformMaterial`); with the single-material groups the Moth's `material` falls from 7,966,505 to 4,689,996. |
+| Intervals | The refinement's fine samples | Judged not to pay at the proved band (step 2): 2,385,755 of the Moth's 14,230,347 fine samples lie past three diagonals; a sparse final lattice is the next step. |
 | Intervals | Physics broad phase and sweeps | Already in place: the contact solver reads the field's enclosure over a body's box (`FixedFieldContactSolver`'s `IFieldBounds`, joined with the moving solids' through `FieldBoundsUnion`), and a regional evaluator's box queries cost what stands near the box. |
 | Intervals | Render culling of empty or solid tiles | Judged not to pay: the frame draws baked meshes, whose host boxes already cull per draw (`SdfMeshCull`), and no frame pass walks the field. |
-| Intervals | Residency and far-product planning | Open: a far product holds a settled residency's static draws, already boxed; an interval pays only for a group whose box overstates its content, which no count shows yet. |
-| Intervals | Rules over ranges | Open: no rule the state system runs evaluates a field over a range today. |
+| Intervals | Residency and far-product planning | Judged not to pay: a far product holds a settled residency's static draws, whose boxes are their baked meshes' bounds, so no box there overstates its content for an interval to tighten. |
+| Intervals | Rules over ranges | Judged not to pay today: no rule the state system runs evaluates a field over a range; one that does takes the interval carrier of section 5. |
 | Duals | Contact gradients | Used (step 5): a debug-world boot reads 4,338 gradients as 4,338 walks and no taps, where it read 26,028 taps. |
-| Duals | The bake's crossings | Open, first in step 2's list: a dual round per crossing in place of two value rounds. |
+| Duals | The bake's crossings | Used (step 2): a safeguarded Newton search over dual trials whose nearest trial carries the crossing's gradient; a CPU bake of the Moth reads `crossing` 18,158,154 value samples as 10,730,752 dual ones and `gradient` 7,192,748 as 4,020,633. |
 | Duals and jets | Wide normals, physics solves, motion velocities, rig Jacobians, curvature | Open (step 5's list), each by the count of its differencing. |
 | Peano and successor arithmetic | Forward differencing along lattice rows | Judged not to pay: a lattice sample walks the whole program, whose terms are not polynomials of the sample's index; differencing would hold only for a single affine shape. |
 | Space-filling orders | Probe, bake-block and dispatch order | Already in place where locality pays: the irradiance worker orders probes by Morton cell within a band (`SdfMeshIrradiance.CompareSpatial`, over `BinaryIntegerFunctions`' interleave), and `HilbertCurve` serves the state system. The bounds' blocks are classified by halving boxes, which is already local; a block lattice's order inside one dispatch does not move a count. A Peano curve is not added: no consumer here. |
@@ -245,4 +294,4 @@ or open (with what decides it).
 | Rationals and continued fractions | Tick-to-frame ratios | Already in place: the fixed-step pump accumulates whole engine ticks (`FixedStepPump`), and the machines pace by `RationalRateAccumulator`. |
 | Finite fields and transforms | Many normalizations, transfer redundancy, convolutions | Judged not to pay today: no engine loop normalizes many vectors at once (`BatchInverseKernel` pays from tens of inverses in one batch); `ReedSolomon` already backs the asset store; the mixer's filters are short recursive ones, so an NTT or FFT convolution has no long kernel to replace. |
 | Exact geometry | Quadratic integers, hexagonal coordinates | Already in place in the state system (`HexagonalCoordinate` boards); no field or physics path carries a √2 or √3 relation it re-corrects. |
-| Wide lanes and structure of arrays | Items 6 to 8: a wide fixed-point lowering, the body step's and fact derivation's layouts, the mixer's and emulators' loops | Open. The mixer accumulates in integers (`AudioMixer`'s `Span<int>` planes), so its lanes are `Vector<int>`, not `TensorPrimitives` over floats. The wide fixed-point lowering is one more carrier of section 5's emitter. |
+| Wide lanes and structure of arrays | A wide fixed-point lowering, the body step's and fact derivation's layouts, the mixer's and emulators' loops | Judged in section 6, each by its count: no batch query consumer, candidate-driven facts and branchy body programs, a mixer under a percent of a core whose products are 64-bit; the emulators' composition is open for the gaming-bricks area. |

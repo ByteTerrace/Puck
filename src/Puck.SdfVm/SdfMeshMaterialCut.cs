@@ -63,12 +63,22 @@ internal sealed class SdfMeshMaterialCut {
 
     /// <summary>Initializes a new instance of the <see cref="SdfMeshMaterialCut"/> class.</summary>
     /// <param name="contour">The contour, split at its creases, in the frame its group bakes in.</param>
-    public SdfMeshMaterialCut(SdfContour contour) {
+    /// <param name="uniform">The one material every point of the group's field reads
+    /// (<see cref="SdfMeshGeometryBuilder.MaterialsClosed"/> over a single material), whose cut samples no point and meshes
+    /// every quad whole in it; <see langword="null"/> to sample the field's materials.</param>
+    public SdfMeshMaterialCut(SdfContour contour, int? uniform = null) {
         m_contour = contour;
         m_siteAt = new SdfMeshWeld(contour.VertexCount);
         m_site = new int[contour.VertexCount];
         for (var vertex = 0; (vertex < m_site.Length); vertex++) {
             m_site[vertex] = m_siteAt.Site(Position(vertex), vertex);
+        }
+        if (uniform is { } material) {
+            m_quarters = new int[(4 * contour.QuadCount)];
+            m_vertices = new int[contour.VertexCount];
+            Array.Fill(array: m_quarters, value: material);
+            Array.Fill(array: m_vertices, value: material);
+            m_round = Rounds;
         }
     }
 

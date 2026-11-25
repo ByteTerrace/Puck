@@ -49,6 +49,17 @@ public sealed class SdfSampledLatticeLawTests {
 
         return (gradient * (0.25f / Spacing));
     }
+    // Answers a crossing round with each point's value and gradient, as the bake's gradient kernel does.
+    private static void AnswerCrossings(SdfSampledLattice lattice, Func<Vector3, float> field, Vector3[] points) {
+        var gradients = new float[(3 * points.Length)];
+
+        for (var index = 0; (index < points.Length); index++) {
+            var gradient = Gradient(field: field, point: points[index]);
+
+            (gradients[(3 * index)], gradients[((3 * index) + 1)], gradients[((3 * index) + 2)]) = (gradient.X, gradient.Y, gradient.Z);
+        }
+        lattice.AnswerCrossings(first: 0, gradients: gradients, values: [.. points.Select(selector: field)]);
+    }
     private static SdfContour Bake(bool refine) => Bake(field: Field, refine: refine);
     private static SdfContour Bake(Func<Vector3, float> field, bool refine) => Bake(field: field, material: null, refine: refine, regions: []);
     // The lattice's samples of `field` and, when given, `material`; refined `Factor` to a cell when asked.
@@ -74,7 +85,7 @@ public sealed class SdfSampledLatticeLawTests {
         }
 
         for (var crossings = Xyz(lattice.CrossingPoints()); (crossings.Length > 0); crossings = Xyz(lattice.CrossingPoints())) {
-            lattice.AnswerCrossings(first: 0, values: [.. crossings.Select(selector: field)]);
+            AnswerCrossings(field: field, lattice: lattice, points: crossings);
         }
 
         var points = Xyz(lattice.GradientPoints());
@@ -483,24 +494,24 @@ public sealed class SdfSampledLatticeLawTests {
 
         for (var crossings = Xyz(lattice.CrossingPoints()); (crossings.Length > 0); crossings = Xyz(lattice.CrossingPoints())) {
             rounds++;
-            roots = Math.Max(val1: roots, val2: (crossings.Length / 2));
             samples += crossings.Length;
-            lattice.AnswerCrossings(first: 0, values: [.. crossings.Select(selector: field)]);
+            AnswerCrossings(field: field, lattice: lattice, points: crossings);
         }
 
-        var checkedCrossings = 0;
+        var found = lattice.Roots();
+        var measured = 0;
 
-        foreach (var point in Xyz(lattice.GradientPoints())) {
-            var at = ((point - Origin) / Cell);
+        roots = found.Length;
+        foreach (var root in found) {
+            var point = new Vector3(x: root.X, y: root.Y, z: root.Z);
 
-            // A lattice sample a gradient is read at, not a crossing.
-            if ((MathF.Abs(at.X - MathF.Round(at.X)) < 1e-3f) && (MathF.Abs(at.Y - MathF.Round(at.Y)) < 1e-3f) && (MathF.Abs(at.Z - MathF.Round(at.Z)) < 1e-3f)) { continue; }
-            checkedCrossings++;
+            measured += ((root.W > 0f) ? 1 : 0);
             Assert.True(condition: (MathF.Abs(field(arg: point)) <= ((Cell / 16384f) + 2e-7f)), userMessage: $"the crossing at {point} reads {field(arg: point)}, past a 16,384th of its {Cell} edge");
         }
 
-        Assert.True(condition: (checkedCrossings > 100), userMessage: $"only {checkedCrossings} crossings were checked");
-        Assert.True(condition: (samples <= (6 * roots)), userMessage: $"{roots} roots took {samples} samples");
+        Assert.True(condition: (roots > 100), userMessage: $"only {roots} crossings were checked");
+        Assert.True(condition: (measured >= (roots - (roots / 100))), userMessage: $"only {measured} of {roots} crossings kept a trial's gradient");
+        Assert.True(condition: (samples <= ((5 * roots) / 2)), userMessage: $"{roots} roots took {samples} dual samples");
         // Each round is a readback round trip: no search takes more than eleven, where bisection took thirteen.
         Assert.True(condition: (rounds <= 11), userMessage: $"the search took {rounds} rounds");
     }
