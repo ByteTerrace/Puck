@@ -237,7 +237,7 @@ public sealed partial class WorldCreationInstances {
 
         m_posePartitions.Begin(client: client, deltaSeconds: deltaSeconds, parkPosition: parkPosition, transforms: transforms, poses: poses, chunk: Math.Max(val1: chunk, val2: 1));
         try {
-            var partitions = ((poses + m_posePartitions.Chunk - 1) / m_posePartitions.Chunk);
+            var partitions = PartitionRuns.Count(count: poses, run: m_posePartitions.Chunk);
 
             if (Jobs is { } jobs) {
                 jobs.Fork(body: m_posePartitions, jobClass: JobClass.Frame, partitions: partitions);
@@ -448,9 +448,9 @@ public sealed partial class WorldCreationInstances {
             m_transforms = [];
         }
         public void Run(int partition) {
-            var end = Math.Min(val1: m_poses, val2: ((partition + 1) * Chunk));
+            var (start, end) = PartitionRuns.Of(count: m_poses, partition: partition, run: Chunk);
 
-            for (var at = (partition * Chunk); (at < end); at++) {
+            for (var at = start; (at < end); at++) {
                 owner.Pose(client: m_client!, deltaSeconds: m_deltaSeconds, index: owner.m_poseOrder[at], parkPosition: m_parkPosition, transforms: m_transforms);
             }
         }

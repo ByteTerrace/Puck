@@ -160,7 +160,7 @@ public sealed partial class SdfWorldTables {
         // Every entry past the count is written whole by the next collection before anything reads it, so the array is
         // never cleared; the slot motions it still names are the tables' own.
         m_judgementCount = 0;
-        var partitions = ((count + JudgementsPerPartition - 1) / JudgementsPerPartition);
+        var partitions = Puck.Hosting.Jobs.PartitionRuns.Count(count: count, run: JudgementsPerPartition);
 
         if ((partitions > 1) && (Jobs is { Serial: false } pool)) {
             var judges = (m_slotJudges ??= new SlotJudges(owner: this));
@@ -182,9 +182,9 @@ public sealed partial class SdfWorldTables {
         public int Count;
 
         public void Run(int partition) {
-            var end = Math.Min(val1: Count, val2: ((partition + 1) * JudgementsPerPartition));
+            var (start, end) = Puck.Hosting.Jobs.PartitionRuns.Of(count: Count, partition: partition, run: JudgementsPerPartition);
 
-            for (var index = (partition * JudgementsPerPartition); (index < end); index++) {
+            for (var index = start; (index < end); index++) {
                 owner.DecideMotionSlot(judgement: ref owner.m_judgements[index]);
             }
         }
