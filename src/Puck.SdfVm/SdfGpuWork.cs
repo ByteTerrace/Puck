@@ -327,8 +327,9 @@ public sealed class SdfGpuWorkDeferredException : Exception {
 /// left, the service takes no job until one completes (<see cref="Describe"/>'s <c>deadline-holds</c>), and the waiting
 /// client keeps its turn so no other client of the service takes the room it waits for. A client that cuts jobs ahead of
 /// its take (the probe coordinator) reads the whole frame allowance (<see cref="FrameAllowanceSeconds"/>), so its jobs
-/// wait for a queue with room for them. The turn is the service's own: another residency's service on the same budget
-/// is not held for it. It stops at a client's sizing: a job whose cost its rate has not measured yet, or one unit costlier than
+/// wait for a queue with room for them. The turn is the service's own; across services the waiting job holds the
+/// presentation's budget (<see cref="SdfGpuWorkBudget.Hold"/>), so another residency's service takes nothing new until
+/// the queue has drained for it. It stops at a client's sizing: a job whose cost its rate has not measured yet, or one unit costlier than
 /// the allowance (a bake lattice is never split) taken with nothing queued, runs long, and the service counts it
 /// (<c>over-allowance</c>), as it counts a job a client handed over past what was left while work was queued
 /// (<c>over-deadline</c>, a client defect). Whether the frames behind the work kept their period is counted on the
@@ -1048,9 +1049,9 @@ public sealed class SdfGpuWork : IDisposable {
                 return Stop.Deadline;
             }
             // With work queued, a client whose next job does not fit what is left takes none and holds the room for it;
-            // a completion of this service's own job wakes it, and another service's frees room by the next pump. With
-            // nothing queued and the frame over its period nothing will complete to make room, so the job holds the
-            // budget until the share has paid for it (SdfGpuWorkBudget.Hold).
+            // a completion of this service's own job wakes it, and another service's frees room by the next pump. The job
+            // holds the presentation's budget (SdfGpuWorkBudget.Hold), so no other service queues work ahead of it, and
+            // with the frame over its period it waits until the share has paid for it.
             if (!TryTake(allowance: fit, client: out var client, estimate: out var estimate, held: out var held, job: out var job, tables: tables, uploadBytes: allowance)) {
                 if (!held) {
                     // A service with nothing to take holds no other service to its pace.
