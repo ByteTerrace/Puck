@@ -104,8 +104,12 @@ row with a `view`, `WorldClockView`) reads how far the frame's first view
 stands from a point, along an axis or in any direction, clamped at the span's
 end, so a look keys on the viewer's height (`worlds/debug/launch.puck`'s
 `altitude`); the presenter writes `WorldStateMirror.ViewPoint` before it
-resolves the environment, a rate may not key on it, and a value still reads one
-clock. A projection carries the tick
+resolves the environment, and a rate may not key on it. A scalar's key may hold
+keys of its own on another clock (`BindableScalar`, `IWorldKeyTrack.NestedAt`),
+so one value follows several clocks as a table nested one clock per level; a
+member that keys a field itself keeps its keys over the section's keys on that
+field (`WorldRenderKeys`), and a rate or an ordered value refuses nested keys.
+A projection carries the tick
 and view clocks, and each state clock a value keys on as an anchored clock
 (`WorldClock.Anchor`, refused in an authored document) whose phase the
 recipient predicts with `WorldClockAnchor.Predict`, the authority's own

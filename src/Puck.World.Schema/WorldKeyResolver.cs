@@ -218,61 +218,25 @@ public static class WorldKeyResolver {
     // opposite sign and near-maximal magnitude cannot overflow it, so the result never leaves [from, to].
     private static float Lerp(float from, double t, float to) => ((float)(from + ((to - ((double)from)) * t)));
 
-    /// <summary>Joins a track's value to the value beneath it by the track's combine; an absent combine adds.</summary>
-    /// <param name="combine">The joining track's combine.</param>
-    /// <param name="below">The value beneath.</param>
-    /// <param name="value">The joining track's value.</param>
-    /// <returns>The joined value.</returns>
-    public static float Combine(WorldKeyCombine? combine, float below, float value) => (combine switch {
-        WorldKeyCombine.Multiply => (below * value),
-        WorldKeyCombine.Maximum => MathF.Max(x: below, y: value),
-        WorldKeyCombine.Minimum => MathF.Min(x: below, y: value),
-        _ => (below + value),
-    });
-    /// <summary>Returns the least and greatest value a chained scalar track reaches over every phase of its clocks:
-    /// each link's least and greatest key, joined link by link at the four corners, since every combine is monotone in
-    /// each argument (a product's extremes over a box lie at its corners).</summary>
-    /// <param name="track">The track; every link carries at least one key.</param>
-    /// <returns>The least and greatest value.</returns>
-    public static (float Low, float High) Extremes(WorldKeyTrack<float> track) {
-        ArgumentNullException.ThrowIfNull(argument: track);
-
-        var (low, high) = KeyExtremes(track: track);
-
-        for (var link = track.With; (link is not null); link = link.With) {
-            if (link.Keys.IsEmpty) {
-                continue;
-            }
-
-            var (linkLow, linkHigh) = KeyExtremes(track: link);
-            var a = Combine(combine: link.Combine, below: low, value: linkLow);
-            var b = Combine(combine: link.Combine, below: low, value: linkHigh);
-            var c = Combine(combine: link.Combine, below: high, value: linkLow);
-            var d = Combine(combine: link.Combine, below: high, value: linkHigh);
-
-            low = MathF.Min(x: MathF.Min(x: a, y: b), y: MathF.Min(x: c, y: d));
-            high = MathF.Max(x: MathF.Max(x: a, y: b), y: MathF.Max(x: c, y: d));
-        }
-
-        return (low, high);
-    }
-    private static (float Low, float High) KeyExtremes(WorldKeyTrack<float> track) {
-        var low = float.PositiveInfinity;
-        var high = float.NegativeInfinity;
-
-        foreach (var key in track.Keys) {
-            low = MathF.Min(x: low, y: key.Value);
-            high = MathF.Max(x: high, y: key.Value);
-        }
-
-        return (low, high);
-    }
-    /// <summary>Returns a keyed scalar at a phase, blended linearly.</summary>
+    /// <summary>Blends two resolved key values of a scalar at an eased fraction: linearly, or, for an angle, along the
+    /// shorter arc between them, so from 350° to 10° it passes 0°, never 180°.</summary>
+    /// <param name="from">The earlier key's value; radians for an angle.</param>
+    /// <param name="to">The later key's value; radians for an angle.</param>
+    /// <param name="t">The eased fraction, in <c>[0, 1]</c>.</param>
+    /// <param name="angle">Whether the values are angles.</param>
+    /// <returns>The blend; an angle unwrapped from <paramref name="from"/>.</returns>
+    public static float Blend(float from, float to, double t, bool angle) => (angle
+        ? ((float)ShortArc(from: from, t: t, to: to))
+        : Lerp(from: from, t: t, to: to)
+    );
+    /// <summary>Returns a keyed scalar whose keys are literals at a phase, blended linearly. A key that nests keys of
+    /// its own reads as zero here: a reader with live clocks resolves it (the state mirror), and the validator refuses
+    /// nested keys wherever it resolves a track without one (an ordered set, a rate).</summary>
     /// <param name="track">The track.</param>
     /// <param name="span">The clock's span.</param>
     /// <param name="phase">The clock's phase.</param>
     /// <returns>The value.</returns>
-    public static float Scalar(WorldKeyTrack<float> track, double span, double phase) {
+    public static float Scalar(WorldKeyTrack<BindableScalar> track, double span, double phase) {
         var (from, to, t) = Locate(
             phase: phase,
             span: span,
@@ -280,29 +244,10 @@ public static class WorldKeyResolver {
         );
 
         return Lerp(
-            from: track.Keys[from].Value,
+            from: (track.Keys[from].Value.Literal ?? 0f),
             t: t,
-            to: track.Keys[to].Value
+            to: (track.Keys[to].Value.Literal ?? 0f)
         );
-    }
-    /// <summary>Returns a keyed angle at a phase, blended along the shorter arc between the two keys' angles: from
-    /// 350° to 10° it passes 0°, never 180°.</summary>
-    /// <param name="track">The track, in radians.</param>
-    /// <param name="span">The clock's span.</param>
-    /// <param name="phase">The clock's phase.</param>
-    /// <returns>The angle, in radians: the earlier key's angle plus the eased share of the shorter arc, unwrapped.</returns>
-    public static float Angle(WorldKeyTrack<float> track, double span, double phase) {
-        var (from, to, t) = Locate(
-            phase: phase,
-            span: span,
-            track: track
-        );
-
-        return ((float)ShortArc(
-            from: track.Keys[from].Value,
-            t: t,
-            to: track.Keys[to].Value
-        ));
     }
     /// <summary>Returns a keyed colour at a phase, blended in linear light: each key's red, green and blue decoded
     /// from sRGB, blended, and encoded again; alpha blended as it is.</summary>
@@ -465,15 +410,15 @@ public static class WorldKeyResolver {
     /// <returns>The reduced integral.</returns>
     /// <exception cref="ArgumentException"><paramref name="clock"/> is no tick clock, or <paramref name="track"/>
     /// carries no keys.</exception>
-    public static double Integrate(WorldKeyTrack<float> track, WorldClock clock, PresentedTick tick, double modulus) => Integrate(
+    public static double Integrate(WorldKeyTrack<BindableScalar> track, WorldClock clock, PresentedTick tick, double modulus) => Integrate(
         clock: clock,
         modulus: modulus,
         tick: tick,
         track: track,
-        value: static value => value
+        value: static value => (value.Literal ?? 0f)
     );
     /// <summary>Returns one component of a keyed rate integrated from engine tick zero to a presented tick, as
-    /// <see cref="Integrate(WorldKeyTrack{float}, WorldClock, PresentedTick, double)"/> integrates a scalar rate: a
+    /// <see cref="Integrate(WorldKeyTrack{BindableScalar}, WorldClock, PresentedTick, double)"/> integrates a scalar rate: a
     /// drift's offset along one axis.</summary>
     /// <typeparam name="T">The rate's type.</typeparam>
     /// <param name="track">The rate's keys, in units per second.</param>

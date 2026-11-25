@@ -494,8 +494,16 @@ public static partial class PuckParser {
                 throw CreateException(context: context, message: $"Expected '=' or ':' after variable name '{varName}'");
             }
 
+            // `let reach: m = 3` annotates the value's unit; `let reach: 3` is the colon spelling of `=`.
+            var unit = TryReadUnitAnnotation(context: context);
+            var valueStart = context.Scanner.Cursor.Offset;
+            var (valueLine, valueColumn) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: valueStart);
             var val = ParseExpression(context: context);
             var len = (context.Scanner.Cursor.Offset - startOffset);
+
+            if (unit is not null) {
+                val = new UnitAnnotationNode(Column: valueColumn, Length: (context.Scanner.Cursor.Offset - valueStart), Line: valueLine, Offset: valueStart, Unit: unit, Value: val);
+            }
 
             return new LetNode(Column: col, Length: len, Line: line, Name: varName, Offset: startOffset, Value: val);
         }
@@ -1438,12 +1446,27 @@ public static partial class PuckParser {
             }
         }
 
-        // Check for unit suffix: s, ms, hz, rad, deg, m, mm, cm, %, pct
-        string? unit = null;
+        // A unit suffix written against the digits: s, ms, m, deg, %, lx, …, or a compound of them (m/s, m/s^2).
+        var unit = ScanUnit(context: context);
+        var totalLen = (cursor.Offset - startOffset);
+        var rawText = ((hasDecimalPoint || hasExponent) ? signedNumStr : null);
 
-        if (!cursor.Eof && (char.IsLetter(c: cursor.Current) || (cursor.Current == '%'))) {
-            var unitStart = cursor.Offset;
+        return new LiteralExpressionNode(Column: col, Length: totalLen, Line: line, Offset: startOffset, RawText: rawText, Unit: unit, Value: numVal);
+    }
+    // A unit as written, from the cursor: a suffix of letters or '%', optionally raised with '^' and a whole power,
+    // then any number of '/' and another such suffix, all with no white space between. A '/' not followed at once by
+    // a letter is a division and ends the unit. Returns null when no unit starts here.
+    private static string? ScanUnit(ParseContext context) {
+        var cursor = context.Scanner.Cursor;
+        var buffer = context.Scanner.Buffer;
 
+        if (cursor.Eof || !(char.IsLetter(c: cursor.Current) || (cursor.Current == '%'))) {
+            return null;
+        }
+
+        var unitStart = cursor.Offset;
+
+        while (true) {
             if (cursor.Current == '%') {
                 cursor.Advance();
             } else {
@@ -1451,13 +1474,57 @@ public static partial class PuckParser {
                     cursor.Advance();
                 }
             }
-            unit = context.Scanner.Buffer.Substring(unitStart, (cursor.Offset - unitStart));
+
+            var at = cursor.Offset;
+
+            if ((at < buffer.Length) && (buffer[at] == '^')) {
+                var digits = (at + 1);
+
+                if ((digits < buffer.Length) && (buffer[digits] == '-')) {
+                    digits++;
+                }
+
+                if ((digits < buffer.Length) && char.IsAsciiDigit(c: buffer[digits])) {
+                    cursor.Advance(count: (digits - at));
+                    while (!cursor.Eof && char.IsAsciiDigit(c: cursor.Current)) {
+                        cursor.Advance();
+                    }
+                }
+            }
+
+            at = cursor.Offset;
+
+            if (((at + 1) < buffer.Length) && (buffer[at] == '/') && (char.IsLetter(c: buffer[(at + 1)]) || (buffer[(at + 1)] == '%'))) {
+                cursor.Advance();
+
+                continue;
+            }
+
+            return buffer[unitStart..cursor.Offset];
+        }
+    }
+    // After `let name:`, reads a unit annotation and the '=' that ends it (`let reach: m = 3`), or reads nothing and
+    // leaves the cursor where it was (`let reach: 3`, the colon spelling of '=').
+    private static string? TryReadUnitAnnotation(ParseContext context) {
+        var cursor = context.Scanner.Cursor;
+        var saved = cursor.Position;
+
+        SkipWhiteSpace(context: context);
+
+        if (ScanUnit(context: context) is { } unit) {
+            SkipWhiteSpace(context: context);
+
+            if (!cursor.Eof && (cursor.Current == '=') && (cursor.PeekNext() != '=')) {
+                cursor.Advance();
+                SkipWhiteSpace(context: context);
+
+                return unit;
+            }
         }
 
-        var totalLen = (cursor.Offset - startOffset);
-        var rawText = ((hasDecimalPoint || hasExponent) ? signedNumStr : null);
+        cursor.ResetPosition(position: saved);
 
-        return new LiteralExpressionNode(Column: col, Length: totalLen, Line: line, Offset: startOffset, RawText: rawText, Unit: unit, Value: numVal);
+        return null;
     }
     private static ColorExpressionNode ParseHexColor(ParseContext context) {
         var cursor = context.Scanner.Cursor;

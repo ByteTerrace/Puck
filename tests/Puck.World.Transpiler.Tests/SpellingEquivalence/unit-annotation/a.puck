@@ -1,0 +1,17 @@
+// A let annotated in a unit reads its bare number in that unit, and a speed times a time is a length.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+let lift: cm = 30
+let speed: m/s = 2
+
+prototypes {
+  prototype "p" {
+    document {
+      shape Box "b" {
+        position [0, lift, speed * 250ms]
+        scale [0.5, 0.5, 0.5]
+      }
+    }
+  }
+}

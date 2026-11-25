@@ -5,7 +5,7 @@ using Xunit;
 namespace Puck.World.Schema.Tests;
 
 /// <summary>
-/// CONTRACT UNDER TEST: a keyed rate integrates in closed form (<see cref="WorldKeyResolver.Integrate(WorldKeyTrack{float}, WorldClock, PresentedTick, double)"/>):
+/// CONTRACT UNDER TEST: a keyed rate integrates in closed form (<see cref="WorldKeyResolver.Integrate(WorldKeyTrack{BindableScalar}, WorldClock, PresentedTick, double)"/>):
 /// whole periods of its tick clock through the integral over one period, the period in progress through each key
 /// segment's exact area. A cloud's offset therefore moves by one tick's worth of its rate between any two consecutive
 /// ticks, where a key changes the rate, where the clock's period ends, and where the tick crosses 2^32, and it equals
@@ -17,12 +17,12 @@ public sealed class WindIntegralLawTests {
     // A sixty-second clock whose wind holds 1 unit a second for half the period, steps to 3 and eases down to 2, then
     // falls back to 1 by the period's end.
     private static readonly WorldClock Clock = new(Name: "gust", PeriodSeconds: 60d);
-    private static readonly WorldKeyTrack<float> Wind = new(
+    private static readonly WorldKeyTrack<BindableScalar> Wind = new(
         clock: "gust",
         keys: [
-            new WorldKey<float>(At: 0d, Ease: WorldEase.Step, Value: 1f),
-            new WorldKey<float>(At: 30d, Ease: WorldEase.Smooth, Value: 3f),
-            new WorldKey<float>(At: 45d, Ease: WorldEase.Linear, Value: 2f),
+            new WorldKey<BindableScalar>(At: 0d, Ease: WorldEase.Step, Value: 1f),
+            new WorldKey<BindableScalar>(At: 30d, Ease: WorldEase.Smooth, Value: 3f),
+            new WorldKey<BindableScalar>(At: 45d, Ease: WorldEase.Linear, Value: 2f),
         ]
     );
 

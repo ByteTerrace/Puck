@@ -123,6 +123,24 @@ let sunRadiansPerHour = 3.141592653589793 / 12
 // The sun's hour angle at clock hour `h`: zero at noon, a quarter turn at six.
 function sunHourAngle(h) = (h - 12) * sunRadiansPerHour
 
+// The sun's illuminance at clock hour `h`: `peak` lux times the cosine of its hour angle, and none below the horizon.
+function sunHourIlluminance(h, peak) = peak * maximum(0, cosine(sunHourAngle(h)))
+
+// The sun's illuminance through the day, keyed every hour on `clock`: what `dayCycle` keys the light named `key` by. A
+// world that keys that light's illuminance itself nests this as a key's value, so its keys stand over the day's and the
+// day still turns the sun where they say (a sun that rises with the viewer's height above the valley, hall.puck).
+function sunIlluminance(clock, peak = 100000) = {
+  clock: clock
+  keys: map(range(0, 24), h => { at: h * 3600, value: sunHourIlluminance(h, peak) })
+}
+
+// The stars' opacity through the day, keyed on `clock` at the hours of `daySkyHours`: what `dayCycle` keys its star
+// layer by. A world that keys `starOpacity` nests this as a key's value to keep the night in it.
+function nightStars(clock) = {
+  clock: clock
+  keys: map(daySkyHours, k => { at: k["hour"] * 3600, value: k["stars"] })
+}
+
 // The direction the sun's light travels at clock hour `h`: due east of `heading` degrees at six, `noonElevation` degrees
 // up at noon.
 function sunDirection(h, heading, noonElevation) = [
@@ -147,8 +165,10 @@ function sunDirection(h, heading, noonElevation) = [
 // its shadows, in radians: a light with no size is a point source), or overrides the row by its name. It
 // stands opposite the sun, at `moonPeak` lux times the cosine of its hour angle, in `moonColor`. The night sky's gradient shows at `nightLuminance` nits and its stars
 // at `starLuminance`, `starDensity` cells to an axis, `starBrightness` at their peak, hashed from `starSeed`; their
-// opacity follows the hour, and a world that keys `starOpacity` with a combine (`{ clock, combine, keys }`) joins it
-// over the hour's, so one star field answers both the night and the viewer's height. Writing the row moves the time (`world.state.cell.set <clock> $value 0.5` is noon), and its
+// opacity follows the hour (`nightStars`), and a world that keys `starOpacity` itself replaces the hour's with its own
+// keys, nesting `nightStars(clock)` as a key's value where the night should still show, so one star field answers both
+// the night and the viewer's height. A world that keys the `key` light's illuminance itself does the same with
+// `sunIlluminance`. Writing the row moves the time (`world.state.cell.set <clock> $value 0.5` is noon), and its
 // advance holds the sun (`world.row.set state <clock> advance {"perSecondNumerator":0,"perSecondDenominator":1}`) and
 // runs it again (the numerator back to one over `daySeconds`). `bodies` are layers of the world's own that hang in the
 // sky behind the clouds and before the stars and the sun's disc: a moon, a planet, another world seen from here.
@@ -190,7 +210,7 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
           key: directional(
             direction: sunDirection(h, heading, noonElevation),
             color: ((h <= 7) or (h >= 17)) ? horizonColor : noonColor,
-            illuminance: peak * maximum(0, cosine(sunHourAngle(h)))
+            illuminance: sunHourIlluminance(h, peak)
           )
           moon: directional(
             direction: map(sunDirection(h, heading, noonElevation), component => component * (0 - 1)),

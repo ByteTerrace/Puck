@@ -24,7 +24,7 @@ public sealed class KeyedBlendOverflowLawTests {
     [InlineData(0.75d, 1.5e38f)]
     [Theory]
     public void A_scalar_blends_between_keys_of_opposite_extremes_without_overflowing(double along, float expected) {
-        var blended = WorldKeyResolver.Scalar(phase: (0.5d * along), span: Span, track: Track(first: -3e38f, second: 3e38f));
+        var blended = WorldKeyResolver.Scalar(phase: (0.5d * along), span: Span, track: Track<BindableScalar>(first: -3e38f, second: 3e38f));
 
         Assert.Equal(expected: expected, actual: blended, tolerance: (MathF.Abs(x: expected) * 1e-6f));
     }

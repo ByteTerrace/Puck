@@ -541,6 +541,29 @@ public static class WorldModuleNamespace {
         }
     }
 
+    // A converter-backed bindable has no serializer members, but its keyed arm names a clock, and a scalar's key may hold
+    // keys of its own naming another; each follows the module's declaration as a keyed section's clock does.
+    private static void VisitKeyClocks(JsonObject? node, WorldNameVisitor visitor) {
+        if (node is null) {
+            return;
+        }
+
+        if (node["clock"] is { } clock) {
+            visitor(
+                node,
+                "clock",
+                clock,
+                WorldNameRegistry.KeyClock.NameField!,
+                typeof(string)
+            );
+        }
+
+        if (node["keys"] is JsonArray keys) {
+            foreach (var key in keys) {
+                VisitKeyClocks(node: (key?["value"] as JsonObject), visitor: visitor);
+            }
+        }
+    }
     // The IR's wire shape flattens an instruction's payload onto the instruction object, so the walk reaches a
     // payload's registered names by the operation's payload shape rather than through a JSON type info.
     private static void VisitExpressionProgram(JsonNode node, WorldNameVisitor visitor) {
@@ -654,18 +677,7 @@ public static class WorldModuleNamespace {
         // Converter-backed bindables have no serializer members. Their keyed arm still names a clock, and
         // that reference must follow the module's declaration just as a keyed section's clock does.
         if (WorldKeyedValues.IsKeyable(type: type)) {
-            // A scalar's keys may join a second track (`with`), whose clock is a reference of its own.
-            for (var keyed = (node as JsonObject); (keyed is not null); keyed = (keyed["with"] as JsonObject)) {
-                if (keyed["clock"] is { } clock) {
-                    visitor(
-                        keyed,
-                        "clock",
-                        clock,
-                        WorldNameRegistry.KeyClock.NameField!,
-                        typeof(string)
-                    );
-                }
-            }
+            VisitKeyClocks(node: (node as JsonObject), visitor: visitor);
 
             return;
         }

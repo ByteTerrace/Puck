@@ -11,9 +11,9 @@ public sealed class KeyedClockBoundaryLawTests {
     [Theory]
     public void An_exact_key_tick_selects_that_key_without_a_phase_round_trip(ulong periods) {
         var clock = new WorldClock(Name: "day", PeriodSeconds: 100d);
-        var track = new WorldKeyTrack<float>(clock: "day", keys: [
-            new WorldKey<float>(At: 0d, Ease: WorldEase.Step, Value: 0f),
-            new WorldKey<float>(At: 29d, Ease: WorldEase.Step, Value: 1f),
+        var track = new WorldKeyTrack<BindableScalar>(clock: "day", keys: [
+            new WorldKey<BindableScalar>(At: 0d, Ease: WorldEase.Step, Value: 0f),
+            new WorldKey<BindableScalar>(At: 29d, Ease: WorldEase.Step, Value: 1f),
         ]);
         var at = ((periods * WorldClocks.PeriodTicks(clock: clock)) + (29UL * FixedTickConversion.TicksPerSecond));
 

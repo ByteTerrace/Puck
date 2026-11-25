@@ -256,7 +256,7 @@ public sealed partial class WorldPopulation {
     // kernel parses no document, so every authoring enum crosses the seam through an explicit mapping rather than
     // a numeric cast that would silently drift if either side's member order ever changed.
     internal static NavigationDomainInput[] CompileNavigationDomains(WorldDefinition definition, WorldNavigationAreas areas) {
-        var rows = definition.Navigation.Rows;
+        var rows = WorldNavigationDomains.Of(definition: definition);
         var domains = new NavigationDomainInput[rows.Count];
 
         for (var index = 0; (index < domains.Length); index++) {
@@ -267,9 +267,9 @@ public sealed partial class WorldPopulation {
                 : default
             );
             var origin = ((row.Parent is null)
-                ? row.Origin
+                ? row.Origin.GetValueOrDefault()
                 : (frame.Position + WorldPlacementFrameCompilation.RotateY(
-                    row.Origin,
+                    row.Origin.GetValueOrDefault(),
                     frame.YawDegrees
                 ))
             );

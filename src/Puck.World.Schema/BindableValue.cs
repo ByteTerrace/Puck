@@ -193,12 +193,13 @@ public readonly record struct BindableColor {
 /// Fixed or Int cell whose live value drives it, or keys on a clock (<see cref="Keys"/>) — the numeric twin of
 /// <see cref="BindableColor"/>, sharing its binding grammar (<see cref="StateBinding"/>) and its one read path, the
 /// client's state mirror. Parses as a JSON number (literal), string (binding) or object (keys), and keys blend
-/// linearly.
+/// linearly. A key's value is itself a literal or keys on another clock, so a value that follows several clocks is a
+/// table nested one clock per level, written where the value is used.
 /// </summary>
 [JsonConverter(typeof(BindableScalarJsonConverter))]
 public readonly record struct BindableScalar {
     /// <summary>The refusal every bindable scalar field shares.</summary>
-    public const string Grammar = "must be a finite number, state.<row>[.<key>] naming a Fixed or Int cell, or keys on a clock whose values are finite numbers";
+    public const string Grammar = "must be a finite number, state.<row>[.<key>] naming a Fixed or Int cell, or keys on a clock whose values are finite numbers or keys of their own";
 
     /// <summary>Initializes a new instance of the <see cref="BindableScalar"/> struct as a literal.</summary>
     /// <param name="literal">The authored value.</param>
@@ -220,9 +221,9 @@ public readonly record struct BindableScalar {
         State = StateBinding.Parse(token: binding);
     }
     /// <summary>Initializes a new instance of the <see cref="BindableScalar"/> struct as keys on a clock.</summary>
-    /// <param name="keys">The keys.</param>
+    /// <param name="keys">The keys, each value a literal or keys of its own.</param>
     /// <exception cref="ArgumentNullException"><paramref name="keys"/> is <see langword="null"/>.</exception>
-    public BindableScalar(WorldKeyTrack<float> keys) {
+    public BindableScalar(WorldKeyTrack<BindableScalar> keys) {
         ArgumentNullException.ThrowIfNull(argument: keys);
 
         Binding = null;
@@ -239,17 +240,15 @@ public readonly record struct BindableScalar {
     /// malformed.</summary>
     public StateBinding? State { get; }
     /// <summary>Gets the keys on a clock, or <see langword="null"/> when this is a literal or a binding.</summary>
-    public WorldKeyTrack<float>? Keys { get; }
+    public WorldKeyTrack<BindableScalar>? Keys { get; }
 
     /// <summary>Converts a literal into a bindable scalar.</summary>
     /// <param name="literal">The literal.</param>
     public static implicit operator BindableScalar(float literal) => new(literal: literal);
 
-    /// <summary>Returns the values the document authors for this scalar: its literal, or every key's value; none for a
-    /// binding, whose values the validator cannot know. Keys that combine a second track on another clock
-    /// (<see cref="WorldKeyTrack{T}.With"/>) yield the combination's extremes instead: every combine is monotone in each
-    /// argument, so the values it reaches lie between the combinations of each track's least and greatest key, and the
-    /// two clocks move independently, so each of those corners is reached.</summary>
+    /// <summary>Returns the values the document authors for this scalar: its literal, or every literal its keys hold at
+    /// any depth; none for a binding, whose values the validator cannot know. A blend of two keys lies between them, so
+    /// every value the scalar presents lies between the least and greatest of these.</summary>
     /// <returns>The authored values.</returns>
     public IEnumerable<float> AuthoredValues() {
         if (Literal is { } literal) {
@@ -260,40 +259,40 @@ public readonly record struct BindableScalar {
             yield break;
         }
 
-        if (keys.With is null) {
-            foreach (var key in keys.Keys) {
-                yield return key.Value;
+        foreach (var key in keys.Keys) {
+            foreach (var value in key.Value.AuthoredValues()) {
+                yield return value;
             }
+        }
+    }
+    /// <summary>Gets whether this scalar's keys hold keys of their own, so it follows more than one clock.</summary>
+    public bool IsNested => ((Keys is { } keys) && keys.Keys.Any(predicate: static key => (key.Value.Keys is not null)));
 
-            yield break;
+    /// <summary>Returns whether this scalar is a literal or keys whose every value, at any depth, is a literal: what a
+    /// keyed value's key may hold.</summary>
+    /// <returns><see langword="true"/> when the scalar reads no state.</returns>
+    public bool IsStateless() {
+        if (Keys is not { } keys) {
+            return ((Binding is null) && (Literal is { } literal) && float.IsFinite(f: literal));
         }
 
-        if (keys.Keys.IsEmpty) {
-            yield break;
+        foreach (var key in keys.Keys) {
+            if (!key.Value.IsStateless()) {
+                return false;
+            }
         }
 
-        var (low, high) = WorldKeyResolver.Extremes(track: keys);
-
-        yield return low;
-        yield return high;
+        return true;
     }
     /// <summary>Returns whether this scalar is admissible against a document: a finite literal, a state binding naming
-    /// a declared Fixed or Int cell, or keys whose every value is finite.</summary>
+    /// a declared Fixed or Int cell, or keys whose every value is a finite literal or keys of its own.</summary>
     /// <param name="definition">The document to check the binding half against.</param>
     /// <returns><see langword="true"/> when the scalar is admissible.</returns>
     public bool IsAuthorable(WorldDefinition definition) {
         ArgumentNullException.ThrowIfNull(argument: definition);
 
-        if (Keys is { } keys) {
-            for (var link = keys; (link is not null); link = link.With) {
-                foreach (var key in link.Keys) {
-                    if (!float.IsFinite(f: key.Value)) {
-                        return false;
-                    }
-                }
-            }
-
-            return true;
+        if (Keys is not null) {
+            return IsStateless();
         }
 
         if (Binding is null) {
@@ -324,7 +323,7 @@ public readonly record struct BindableScalar {
 /// <summary>
 /// An angle in radians authored as a finite number literal, a <c>state.&lt;row&gt;[.&lt;key&gt;][.$target]</c>
 /// binding naming a Fixed or Int cell that holds radians, or keys on a clock, whose values blend
-/// along the shorter arc across a whole turn (<see cref="WorldKeyResolver.Angle"/>). A <c>.puck</c> source writes it in
+/// along the shorter arc across a whole turn (<see cref="WorldKeyResolver.Blend"/>). A <c>.puck</c> source writes it in
 /// degrees (<c>0.53deg</c>), which the transpiler converts. Its wire form is <see cref="BindableScalar"/>'s.
 /// </summary>
 [JsonConverter(typeof(BindableAngleJsonConverter))]
@@ -557,16 +556,16 @@ public sealed class BindableColorJsonConverter : JsonConverter<BindableColor>, I
 /// whose values are numbers.</summary>
 public sealed class BindableScalarJsonConverter : JsonConverter<BindableScalar>, IJsonSchemaNodeConverter {
     /// <summary>Builds the schema every scalar-shaped bindable shares: a number, a binding string, or keys whose
-    /// values are numbers.</summary>
+    /// values are numbers or keys of their own. A nested key's object is left to the loader, which reads it as this
+    /// same form.</summary>
     /// <returns>The schema node.</returns>
     public static JsonObject Schema() => new() {
         ["anyOf"] = new JsonArray(
             new JsonObject { ["type"] = "number" },
             new JsonObject { ["type"] = "string" },
-            WorldKeyTrackJson.Schema(
-                combines: true,
-                value: new JsonObject { ["type"] = "number" }
-            )
+            WorldKeyTrackJson.Schema(value: new JsonObject {
+                ["type"] = new JsonArray("number", "object"),
+            })
         ),
     };
     /// <summary>Reads a scalar-shaped bindable.</summary>
@@ -585,12 +584,13 @@ public sealed class BindableScalarJsonConverter : JsonConverter<BindableScalar>,
 
         if (reader.TokenType == JsonTokenType.StartObject) {
             return new BindableScalar(keys: WorldKeyTrackJson.Read(
-                combines: true,
                 kind: kind,
                 reader: ref reader,
-                readValue: static (ref Utf8JsonReader value) => ((value.TokenType == JsonTokenType.Number)
-                    ? value.GetSingle()
-                    : throw new JsonException(message: "A keyed number's value must be a number."))
+                readValue: static (ref Utf8JsonReader value) => value.TokenType switch {
+                    JsonTokenType.Number => new BindableScalar(literal: value.GetSingle()),
+                    JsonTokenType.StartObject => ReadScalar(kind: "keyed number's value", reader: ref value),
+                    _ => throw new JsonException(message: "A keyed number's value must be a number or keys of its own."),
+                }
             ));
         }
 
@@ -606,7 +606,7 @@ public sealed class BindableScalarJsonConverter : JsonConverter<BindableScalar>,
             WorldKeyTrackJson.Write(
                 track: keys,
                 writer: writer,
-                writeValue: static (target, key) => target.WriteNumberValue(value: key)
+                writeValue: static (target, key) => WriteScalar(value: key, writer: target)
             );
         } else if (value.Binding is { } binding) {
             writer.WriteStringValue(value: binding);

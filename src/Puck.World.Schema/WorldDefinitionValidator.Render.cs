@@ -970,23 +970,19 @@ public static partial class WorldDefinitionValidator {
         }
 
         if (value.Keys is { } keys) {
-            var link = keys;
-            var linkPath = path;
+            JudgeKeys(errors: errors, field: field, keys: keys, path: path);
+        }
+    }
+    // Every literal a scalar's keys hold, at any depth, lies in the field's domain: a blend of two keys lies between
+    // them and a domain is an interval, so every value the keys present lies in it too.
+    private static void JudgeKeys(WorldValueField field, WorldKeyTrack<BindableScalar> keys, string path, List<string> errors) {
+        for (var index = 0; (index < keys.Keys.Length); index++) {
+            var keyPath = $"{path}.keys[{index}].value";
 
-            for (; (link is not null); link = link.With, linkPath = $"{linkPath}.with") {
-                for (var index = 0; (index < link.Keys.Length); index++) {
-                    if (!float.IsFinite(f: link.Keys[index].Value)) {
-                        errors.Add(item: $"{linkPath}.keys[{index}].value {link.Keys[index].Value} must be finite.");
-                    } else if ((link == keys) && !field.Domain.Contains(value: link.Keys[index].Value)) {
-                        errors.Add(item: $"{linkPath}.keys[{index}].value {link.Keys[index].Value} must be finite and within {field.Domain}{Because(field: field)}.");
-                    }
-                }
-            }
-
-            // Joined tracks are judged by what their combination reaches, not key by key: a lift's keys may sit
-            // outside the field's domain while every sum stays inside it.
-            if ((keys.With is not null) && value.AuthoredValues().ToArray() is [var low, var high] && (!field.Domain.Contains(value: low) || !field.Domain.Contains(value: high))) {
-                errors.Add(item: $"{path} combines tracks that reach {low} to {high}, which must stay within {field.Domain}{Because(field: field)}.");
+            if (keys.Keys[index].Value.Keys is { } nested) {
+                JudgeKeys(errors: errors, field: field, keys: nested, path: keyPath);
+            } else if (keys.Keys[index].Value.Literal is { } literal && !field.Domain.Contains(value: literal)) {
+                errors.Add(item: $"{keyPath} {literal} must be finite and within {field.Domain}{Because(field: field)}.");
             }
         }
     }
@@ -1078,8 +1074,8 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} is a rate the tick integrates and may not bind a state row: a row's value can move by any amount between two ticks, so the offset would jump; key it on a tick clock instead.");
         }
 
-        if (rate?.Keys?.With is not null) {
-            errors.Add(item: $"{path} is a rate the tick integrates in closed form over one track's keys and may not join a second track.");
+        if (rate?.IsNested == true) {
+            errors.Add(item: $"{path} is a rate the tick integrates in closed form over one track's keys and may not nest keys on another clock.");
         }
 
         JudgeRate(

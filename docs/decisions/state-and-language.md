@@ -574,6 +574,95 @@ work and its order are [S9](../plans/state-and-language.md#s9--the-authoring-con
 - **`sql { }` is deleted.** It is a second spelling of rows and rules that never
   printed back.
 
+### A value follows its clocks by nesting keys
+
+A keyed scalar's key may hold keys of its own on another clock, so one value
+follows as many clocks as its keys nest. Exposure by altitude is keys on the
+viewer's height whose ground keys hold the day's keys
+([hall.puck](../../worlds/debug/hall.puck)). Each axis is an authored
+`timeline.clocks` row (a tick, a state row, the viewer's distance from a point
+or along an axis), so a new axis is never engine work.
+
+- **Options weighed.** A second track joined to the first by add, multiply,
+  maximum or minimum is a vocabulary of its own, for scalars only and one level
+  deep. An expression clock over other
+  clocks would read clock names through the state IR, whose names the module
+  namespace renames as state rows, and would add a second presentation
+  evaluator. A signal graph of named curve rows would move every composed value
+  away from the field it fills. Nesting needs no new vocabulary and no new
+  evaluator: a key's value is read by the bindable's own converter, and the
+  mirror resolves a nested key through the same keyed read.
+- **What it gives up.** A nested table blends between its keys, so the exact
+  maximum of two curves is not a spelling. The debug world's uses are blends
+  that reach the same values on the ground and at the seam.
+- **Section keys.** A member that keys a field itself keeps its keys over a
+  section's keys on that field (`WorldRenderKeys`), so a world overrides one
+  field of a template's day cycle by keying it, and nests the template's own
+  curve (`skies.puck`'s `sunIlluminance`, `nightStars`) where it wants the day.
+- **Invariant and its door.** Every reader resolves a nested key through
+  `WorldStateMirror.Keyed`; every nested clock is found by `WorldKeyedValues`
+  (the validator's key times, the projection's clock list) and
+  `WorldClockReads.Note`. A rate and an ordered value refuse nesting, since
+  neither has a sound reading of two clocks.
+
+### Physical units are checked dimensions
+
+A unit an author writes gives a value a physical dimension: `3m`, `8m/s`,
+`9.8m/s^2`, `lm/m^2`, or an annotation, `let reach: m = 3`. The compiler
+infers the dimension of each expression a field receives from its syntax: a
+product multiplies dimensions, a sum, a comparison, a choice and
+`minimum`/`maximum`/`clamp` need agreeing dimensions, a rounding keeps its
+argument's, and `sine` and `cosine` take an angle or a pure number. A bare
+number is free: it takes the dimension of what it is added to and is read in
+its field's own unit, as it always was. A value whose proven dimension is not
+its field's is PUCK025, one carrying a dimension into a field that admits none
+is PUCK024, and two dimensions meeting where they must agree are PUCK137.
+
+- **Why a field table alone is not enough.** Converting each unit-bearing
+  literal against the field it sits in checks the literal, not the value: it
+  admits `2m * 3m` into a length, refuses `cosine(60deg)` inside a position, and
+  has no way to write a speed.
+- **Zero runtime cost.** The check reads syntax and changes no number; a unit
+  converts to its canonical unit where it is written (metres, seconds, lumens,
+  candela, kelvin; an angle in degrees where its field holds degrees and in
+  radians everywhere else, which is the only unit a field's context decides).
+- **Where it stops.** Anything the rules do not cover (a member read, a record,
+  a call to an author's `function`, a collection builtin) infers as unknown and
+  is never refused, so the check refuses only what it has proven wrong. Template
+  and function parameters take no annotation yet, and the field table
+  (`WorldDocumentEmitterUnits`) still classifies fields by name and holds no
+  compound dimension; both are [open items](../plans/open-items.md#authoring-units).
+- **Door.** `DocumentDimensions` is the one judge, called by
+  `DocumentLowering.Evaluate` once per expression a field receives;
+  `UnitConversion` is the one table of what a unit measures and is worth.
+
+### One region, written once
+
+A place is a placement's region, and every system that covers an area names that
+placement rather than copying its box: a navigation area marks the ground under
+it (`placement`), and a navigation domain takes its whole extent from it
+(`region`, grown by `margin` on every side), so moving a district is one edit
+([city.puck](../../worlds/debug/city.puck)).
+
+- **Options weighed.** A compile-time `let` holding the box and handed to a
+  place template and a domain template would also make it one edit, but the
+  compiled document would hold copies, so a live edit to the placement (World
+  Studio dragging a zone, `world.row.set`) would leave the ground behind, and a
+  tool reading the document could not see the relation. A reference keeps one
+  truth at run time, as the navigation areas already did.
+- **The derivation.** A region-bound domain's corner is the region's floor plan
+  less the margin, its width and depth the plan plus twice the margin in cells,
+  and a surface searches its ground over the region's whole height (the baseline
+  at its centre, the band its half height). The region must be a static, unturned
+  box on the domain's cell grid; anything else is refused by name.
+- **Door.** `WorldNavigationDomains.Of` resolves every domain, and every reader of
+  a domain's extent (the population's compiled domains, the validator, the flock
+  and motion checks) reads it there; the section no longer offers its rows
+  unresolved.
+- **Not yet covered.** An ambient audio bed is a sphere with its own centre and
+  radius, and no residency region exists; each takes the same `region` reference
+  when it is built ([open items](../plans/open-items.md#authoring-units)).
+
 ### Expression semantics
 
 A condition converts its result to truth: numeric zero and absence are false;

@@ -26,6 +26,7 @@
 
 import "../standard/bounds"
 import "../standard/kits"
+import "../standard/skies"
 import "shapes"
 // The companion hears the lift's authored door edge through its read-only sensory projection.
 exports {
@@ -1387,6 +1388,29 @@ placements {
   }
 }
 
+// The exposure's floor and key through the day (the `exposure` block below): EV 7 and a stop and a quarter from dawn to
+// dusk, EV 2 and the meter's own key at night.
+let hallDayFloor = {
+  clock: day
+  keys [
+    { at: 0, value: 2 }
+    { at: 18900, value: 2 }
+    { at: 23400, value: 7 }
+    { at: 63000, value: 7 }
+    { at: 67500, value: 2 }
+  ]
+}
+let hallDayKey = {
+  clock: day
+  keys [
+    { at: 0, value: 0 }
+    { at: 18900, value: 0 }
+    { at: 23400, value: 1.25 }
+    { at: 63000, value: 1.25 }
+    { at: 67500, value: 0 }
+  ]
+}
+
 // The hall's lights. The Moth basis's sun stays (a lights list replaces its basis's whole), and the ceilings' fixtures
 // light the inside: a downlight every 12 m along each strip, a pendant in the stairwell, a lamp riding the lift
 // car's body under its ceiling, and the painting wing's downlights and washes (Wonderland next door is lit by its own
@@ -1402,19 +1426,19 @@ render {
   lighting {
     lights: concat(
       [
-        // The day turns the sun and dims it below the horizon (day.puck); above the valley the horizon falls away,
-        // so the sun's light rises with the viewer's height (launch.puck's `altitude` clock) to the full strength the
-        // moon's sun has all the way round, and a night crossing of the sky seam keeps the light it had.
+        // The day turns the sun and dims it below the horizon (day.puck, skies.puck's `sunIlluminance`); above the
+        // valley the horizon falls away, so from 300 m the sun's light rises with the viewer's height (launch.puck's
+        // `altitude` clock) to the full strength the moon's sun has all the way round, and a night crossing of the sky
+        // seam keeps the light it had.
         directional(
           name: "key",
           direction: [3, 5, -4],
           color: "#FFF0DC",
           illuminance: {
             clock: altitude
-            combine: Maximum
             keys [
-              { at: 0, value: 0 }
-              { at: 300, value: 0 }
+              { at: 0, value: sunIlluminance("day") }
+              { at: 300, value: sunIlluminance("day") }
               { at: 2250, value: 100000, ease: Step }
             ]
           },
@@ -1528,48 +1552,27 @@ render {
   // percentiles and centre weight restated, since this section replaces the basis's whole).
   //
   // As the viewer climbs toward the sky seam (launch.puck's `altitude` clock), the camera meets what the moon's own
-  // camera meets past the seam (moon.puck): the floor rises to the moon's EV 11 whatever the hour, the key eases back to
-  // the meter's own, and the meter leaves the darkest seven tenths of the picture out, so a black sky never pulls the
-  // exposure down and the sunlit ship and the moon hold their tone up to the seam and across it.
+  // camera meets past the seam (moon.puck): from 300 m the floor and the key leave the day's keys for the moon's EV 11
+  // and the meter's own key, whatever the hour, and the meter leaves the darkest seven tenths of the picture out, so a
+  // black sky never pulls the exposure down and the sunlit ship and the moon hold their tone up to the seam and across
+  // it. Each value is keyed on the height, its ground keys holding the day's keys.
   exposure {
     mode: Auto
     minimum {
-      clock: day
+      clock: altitude
       keys [
-        { at: 0, value: 2 }
-        { at: 18900, value: 2 }
-        { at: 23400, value: 7 }
-        { at: 63000, value: 7 }
-        { at: 67500, value: 2 }
+        { at: 0, value: hallDayFloor }
+        { at: 300, value: hallDayFloor }
+        { at: 2250, value: 11, ease: Step }
       ]
-      with {
-        clock: altitude
-        combine: Maximum
-        keys [
-          { at: 0, value: 0 }
-          { at: 300, value: 0 }
-          { at: 2250, value: 11, ease: Step }
-        ]
-      }
     }
     compensation {
-      clock: day
+      clock: altitude
       keys [
-        { at: 0, value: 0 }
-        { at: 18900, value: 0 }
-        { at: 23400, value: 1.25 }
-        { at: 63000, value: 1.25 }
-        { at: 67500, value: 0 }
+        { at: 0, value: hallDayKey }
+        { at: 300, value: hallDayKey }
+        { at: 2250, value: 0, ease: Step }
       ]
-      with {
-        clock: altitude
-        combine: Multiply
-        keys [
-          { at: 0, value: 1 }
-          { at: 300, value: 1 }
-          { at: 2250, value: 0, ease: Step }
-        ]
-      }
     }
     maximum: 16
     adaptation: 0.75

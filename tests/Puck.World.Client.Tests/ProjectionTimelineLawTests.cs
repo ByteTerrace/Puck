@@ -13,9 +13,9 @@ public sealed class ProjectionTimelineLawTests {
     private static readonly WorldClock Mode = new(Name: "mode", State: "phase");
 
     private static WorldDefinition Keyed(string clock, bool section = false) {
-        var track = new WorldKeyTrack<float>(clock: clock, keys: [
-            new WorldKey<float>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
-            new WorldKey<float>(At: 0.5d, Ease: WorldEase.Smooth, Value: 0.1f),
+        var track = new WorldKeyTrack<BindableScalar>(clock: clock, keys: [
+            new WorldKey<BindableScalar>(At: 0d, Ease: WorldEase.Linear, Value: 0f),
+            new WorldKey<BindableScalar>(At: 0.5d, Ease: WorldEase.Smooth, Value: 0.1f),
         ]);
         var render = (section
             ? new WorldRenderDefaults(Sky: new WorldRenderSky(

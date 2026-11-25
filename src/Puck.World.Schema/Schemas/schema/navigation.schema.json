@@ -6,13 +6,13 @@
   ],
   "properties": {
     "domains": {
-      "description": "Finite rectangular domains, each compiled from the world\u0027s deterministic solid field.",
+      "description": "Finite rectangular domains, each compiled from the world\u0027s deterministic solid field, as authored; a region-bound domain\u0027s extent is read through Of.",
       "type": [
         "array",
         "null"
       ],
       "items": {
-        "description": "One finite navigation grid compiled from the world\u0027s collision and optional medium truth.",
+        "description": "One finite navigation grid compiled from the world\u0027s collision and optional medium truth. Its extent is either authored (Origin, Width, Depth, and a surface\u0027s probe band or a volume\u0027s layers) or taken from a placement\u0027s region (Region), so a place and the ground its walkers route over are one authored box; Of resolves the second form into the first, and every reader of a domain\u0027s extent reads it there.",
         "type": [
           "object",
           "null"
@@ -36,26 +36,9 @@
               "Medium": "A 3D grid constrained to one live fluid-medium field."
             }
           },
-          "origin": {
-            "description": "The center of cell (0,0,0), relative to Parent when present and world-space otherwise; for a surface domain, resolved world Y is the ground-probe baseline.",
-            "type": "array",
-            "items": {
-              "type": "number"
-            },
-            "minItems": 3,
-            "maxItems": 3
-          },
           "cellSize": {
             "description": "The square cell width in world units.",
             "type": "number"
-          },
-          "width": {
-            "description": "The number of cells along the frame\u0027s X axis.",
-            "type": "integer"
-          },
-          "depth": {
-            "description": "The number of cells along the frame\u0027s Z axis.",
-            "type": "integer"
           },
           "agentRadius": {
             "description": "The solid-clearance sphere radius. A medium domain also keeps this whole volume submerged.",
@@ -66,12 +49,51 @@
             "type": "number"
           },
           "maxExpandedNodes": {
-            "description": "The hard A* expansion budget for one route search.",
+            "description": "The hard A* expansion budget for one route search; zero for the domain\u0027s cell count, every cell in one route.",
             "type": "integer"
           },
           "maxPathNodes": {
             "description": "The hard stored-waypoint budget for one route.",
             "type": "integer"
+          },
+          "origin": {
+            "description": "The center of cell (0,0,0), relative to Parent when present and world-space otherwise; for a surface domain, resolved world Y is the ground-probe baseline. Absent beside a region.",
+            "default": null,
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 3,
+            "maxItems": 3
+          },
+          "width": {
+            "description": "The number of cells along the frame\u0027s X axis. Absent beside a region.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "depth": {
+            "description": "The number of cells along the frame\u0027s Z axis. Absent beside a region.",
+            "type": [
+              "integer",
+              "null"
+            ],
+            "default": null
+          },
+          "region": {
+            "description": "A static placement whose box region is the domain\u0027s extent: its floor plan grown by Margin on every side gives the origin, width and depth, a surface probes its ground over the region\u0027s whole height (the baseline at its centre, the probe band its half height above and below), and a volume fills its height with layers. Its centre and half extents, less the margin, must fall on the cell grid.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "margin": {
+            "description": "How far a region-bound domain reaches past its region\u0027s floor plan on every side, in world units, so neighbouring districts share cells and a route crosses between them. Zero without a region.",
+            "type": "number",
+            "default": 0
           },
           "layers": {
             "description": "The number of cells along world Y; surface domains require one.",
@@ -159,10 +181,7 @@
         "required": [
           "name",
           "kind",
-          "origin",
           "cellSize",
-          "width",
-          "depth",
           "agentRadius",
           "arrivalDistance",
           "maxExpandedNodes",
