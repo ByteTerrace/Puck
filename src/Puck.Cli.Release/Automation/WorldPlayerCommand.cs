@@ -250,7 +250,7 @@ public static class WorldPlayerCommand {
             });
             ReportSizes(output: output);
             if (incomplete.Count == 0) { return 0; }
-            Console.Error.WriteLine(value: $"{Verb}: the folder is not complete, and {MarkerName} says so: a player's build never bakes, so one whose boots do not settle on a whole cache does not ship.");
+            Console.Error.WriteLine(value: $"{Verb}: the folder is not complete, and {MarkerName} says so: its boots did not settle on a whole cache, so its cache set would leave players baking at their first boot.");
             foreach (var reason in incomplete) { Console.Error.WriteLine(value: $"{Verb}:   {reason}"); }
             return 1;
         } catch (Exception exception) when (exception is InvalidOperationException or InvalidDataException or IOException or TimeoutException or UnauthorizedAccessException) {
