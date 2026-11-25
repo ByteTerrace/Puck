@@ -324,9 +324,10 @@ public static class WorldAdmissionDoor {
         return WorldAdmissionRefusal.NoArrivalAuthority;
     }
 
-    // Parses a session-qualified client authority (`<64-hex-domain>/<subject>/<32-hex-session>` from
-    // WorldAttestedAuthenticator or `<uuid>/<32-hex-session>` from EntraWorldAuthenticator) so a FederatedAuthority row
-    // naming the underlying principal or subject still matches while preserving the per-run sourceAuthority on the verdict.
+    // Parses a session-qualified client authority (`<64-hex-domain>/<subject>/<32-hex-session>`, which
+    // WorldAttestedAuthenticator derives from a session-bound claim, the domain being a direct key's or an issuer root's
+    // fingerprint) so a FederatedAuthority row naming the domain or the subject still matches while preserving the
+    // per-run sourceAuthority on the verdict.
     private static bool TrySplitClientSession(string sourceAuthority, out string keyDomain, out string keySubject) {
         keyDomain = string.Empty;
         keySubject = string.Empty;
@@ -347,10 +348,6 @@ public static class WorldAdmissionDoor {
             }
             keyDomain = prefix[..64].ToString();
             keySubject = prefix[65..].ToString();
-            return true;
-        }
-        if ((firstSlash < 0) && Guid.TryParseExact(input: prefix, format: "D", result: out _)) {
-            keyDomain = prefix.ToString();
             return true;
         }
         return false;

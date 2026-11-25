@@ -552,6 +552,40 @@ Options weighed:
   once one template owns the rule. A CA outage during a first issuance still
   rolls the release back, and the extension's tail names it.
 
+## The deployment's issuer
+
+**The deployment's players sign in at its issuer, and its worlds trust the
+issuer's root.** The trust model is
+[the federation decision](worlds-and-federation.md#players-are-admitted-through-their-hosts-issuer);
+this entry is how a release carries it. The issuer's root key is a deployment
+vault secret, `puck-world-issuer-root`. A release generates it the first time it
+finds the secret absent, exactly as it generates each world's federation key
+(`AzureCommand.LoadSigningKeyAsync`). It reaches the worker the same way the
+worlds' keys do, through the protected bootstrap command, and is mounted as
+`/configuration/issuer.pk8`. The release writes one `issuer` member into the
+silo document: that key file, plus the deployment's configured sign-in
+(`worldSiloConfiguration.authentication`, today `azure.api-users` over the
+existing API application, its user group and `user_impersonation`). The world
+documents are not touched. The public `world-authentication.json` the release
+publishes names the same sign-in and the primary world's transport key
+(`remoteKeyHash`), which a player passes to
+`--authentication-config-file` with `--connect`.
+
+**Rotation and custody.** Deleting the secret rotates the root at the next
+release. Every player is vouched for again at their next sign-in, and no world
+definition changes, so no state resets. The root signs only one issuing-key
+binding per process start and per week. Its custody matches the worlds' own
+signing keys, a file on the worker. Moving it behind a signing service (a vault
+key that signs without leaving the vault) changes only how
+`WorldAttestationIssuer` signs the root binding, so it is a step for whoever
+next tightens key custody, and nothing else depends on where the root lives.
+
+**Rehearsal.** `puck world release rehearse` gives every silo it starts the
+same `issuer` member, with the engine's `puck.accounts` sign-in standing in for
+the deployment's provider, so a rehearsal proves that the silo starts its issuer
+and that its rows trust the root. `puck benchmark --remote issued` proves a
+client signing in and joining through an issuer, end to end, on one machine.
+
 ## The runtime
 
 **Bare-metal Puck runs on Puck's own host (the owner's ruling).** The

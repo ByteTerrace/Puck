@@ -3544,17 +3544,16 @@ enforces it today.
   account catalog, so an offline holder pulls its receipts from the door. It
   unblocks currency, items, stakes, the refund half of the hub plan's H17 and
   the tables.
-- [high] Identity, issuance, revocation and roles as abstractions. The signing
-  oracle's remote shape (`ISigningOracle` names a `Vouches` claim nothing
-  implements); binding ceilings and a replay horizon at the admission door,
-  where `WorldAdmissionDoor` builds its `TrustList` with all three unset; the
-  refusal snapshot with a not-after instant per entry (`Puck.Attestation` has
-  no revocation); the role list a domain vouches (issuer, dealer, referee,
-  witness, budget holder); and the provider behind each. Proof of possession
-  is the identity abstraction's: an arrival bound to the connection's
-  challenge by a signature, where the Entra authenticator echoes a bearer
-  token beside the challenge. It unblocks any federation beyond loopback, any
-  vouched role and any table with stakes.
+- [high] Revocation and roles as abstractions. Identity and issuance stand
+  ([players are admitted through their host's issuer](../decisions/worlds-and-federation.md#players-are-admitted-through-their-hosts-issuer)):
+  a signed-in player's own key, vouched for by the host's issuer and bound to
+  the connection by its signature, with binding ceilings at the federation door.
+  Still open: binding ceilings and a replay horizon at the peer admission door,
+  where `WorldAdmissionDoor.TryAdmit` builds its `TrustList` with all three
+  unset; the refusal snapshot with a not-after instant per entry
+  (`Puck.Attestation` has no revocation); the role list a domain vouches
+  (issuer, dealer, referee, witness, budget holder); and the provider behind
+  each. It unblocks any vouched role and any table with stakes.
 - [medium] The duel witness and prototype: a relay vouched as a witness role
   that signs receipt times and silence; lockstep commitments or
   witness-ordered inputs with a held-input horizon; a match-entry reservation
@@ -3727,15 +3726,11 @@ findings are answered in decision 3a. Then the researcher brief's priorities
   revocation schedules; authorization and disclosure composition; deployed
   Azure identity, storage and key policy; aggregate hostile-input budgets;
   cryptographic portability beyond the Windows and Linux fixtures.
-- The bearer-token admission trust model, asked of
-  `WorldAuthenticationProvider` and checked against the Entra authenticator:
-  the challenge and session are compared but not signed by the bearer, so
-  replay across challenges needs a still-valid token; on a pinned transport
-  the destination's server proof is not checked (`WorldRemoteAuthority`'s
-  `pinnedTransport` branch), so decide whether the transport pin alone is the
-  intended authority proof. No bypass was reproduced; the signature over the
-  challenge is [settlement](#settlement-trust-roles-and-revocation)'s identity
-  item.
+- On a pinned transport a signed-in player's client does not check the
+  destination's server proof (`WorldRemoteAuthority`'s `pinnedTransport`
+  branch): the transport pin is its only proof of the authority. Decide whether
+  the pin alone is the intended authority proof, or whether the issuer should
+  also vouch for the hosted worlds' own keys so the client verifies their proofs.
 - Initial binding issuance from caller-writable key blobs (`AttestKeys`,
   `DefaultBindingService`): an authenticated user can supply a public key
   under their own prefix and trigger issuance when `binding.cbor` is absent.
@@ -4100,9 +4095,9 @@ provider assumption outside its provider's project (AGENTS.md).
 - [medium] Player storage identity is an authored user id (`storage.userId`,
   `ExplicitOverridePlayerStorageIdentityResolver`), today an Entra `oid` used
   as the container name. Resolve it from the configured identity provider, as
-  the store is resolved from its provider (`WorldAuthenticationProvider.Client`
-  already returns the verified subject), and keep the container mapping a
-  store concern.
+  the store is resolved from its provider (the issuer's vouched subject, the
+  middle segment of a signed-in player's namespace), and keep the container
+  mapping a store concern.
 - [medium] `Puck.Actors` (declared `<PuckProvider>Azure</PuckProvider>`) is the
   Azure deployment's onboarding tier throughout, and nothing references it.
   Name it for its provider (a `Puck.Azure` prefix), retargeting the citations

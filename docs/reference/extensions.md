@@ -38,7 +38,7 @@ The kinds in use today, and who reads them:
 | `IMachineEngine`, `IMachineContentProvider` | engine id | `AddMachineEngine` | every host's `WorldMachineCatalog.From` |
 | `WorldStorageProvider` | store `type` | `AddStorage` | the silo document's `store`; World's `--storage-config-file` |
 | `WorldSiloRetirementProvider` | observer `type` | `AddRetirement` | the silo document's `lifecycle.observer` |
-| `WorldAuthenticationProvider` | `type` | `AddAuthentication` | silo row admission; World's `--authentication-config-file` |
+| `WorldSignInProvider` | `type` | `AddSignIn` | an issuer's `signIn` (the silo document's `issuer`, World's `--issuer-config-file`); World's `--authentication-config-file` |
 | `WorldExtensionProviderType`, `WorldExtensionEmbeddingProviderType` | provider `type` | `AddOperation`, `AddEmbedding` | the extension configuration's `providers` |
 | `WorldParticipantType` | participant `type` | `AddParticipant` | the extension configuration's `participants` |
 | `ChatClientProvider` | provider name | `AddChatClient` | an `agent.harness` participant's `provider` setting |

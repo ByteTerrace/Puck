@@ -601,6 +601,85 @@ provider is one implementation ("Puck is provider-independent" in `AGENTS.md`):
 **Evidence.** [Synthesis, abstractions](../plans/mmo-foundations/synthesis.md#3-abstractions-not-providers);
 [Puck as it is, attestation](../plans/mmo-foundations/puck-today.md#3-attestation).
 
+## Players are admitted through their host's issuer
+
+**Decided.** A host that admits players runs an attestation issuer
+(`WorldAttestationIssuer`), and every world it hosts trusts the issuer's root.
+A player's client generates a key for the run and never stores it, signs in
+through the host's sign-in provider, and proves it holds that key. The issuer
+then returns two bindings: its root vouches for an issuing key the issuer
+process generated, and that issuing key vouches for the player's key under the
+subject the sign-in established. From then on the client signs every
+federation challenge with its own key and presents the chain
+(`IssuedKeySigningOracle`), and the world verifies it offline as a `Vouches`
+claim (`WorldAttestedAuthenticator`). The world never calls the provider, and
+no world sees a sign-in credential. The world's `admission` rows still decide
+what an authenticated namespace is admitted as. The debug world's
+`FederatedAuthority` rows with domain `"*"` admit any authenticated session or
+visitor, and a world that wants only one host's players names the issuer's
+domain in its row instead.
+
+The issuer is a host's, never a world's. A silo document names it once
+(`issuer`: the root key file, the sign-in provider and how long a player's key
+binding lasts), and a local World names the same shape with
+`--issuer-config-file`. The root's trust row is added to each row's own
+key-bearing rows when the row's authenticator builds its trust list
+(`WorldAttestationIssuer.Trust`). It is never written into the world document.
+A closed rewind group trusts the issuer's root alone, so it keeps admitting
+players while it refuses every other authority. The issuance exchange rides the
+federation wire: a client sends `Issue` in place of `Authenticate`
+(`WorldFederationRequest.Issue`). The issuer checks the key's signature over the
+transport-bound challenge (`WorldFederationCodec.BindIssuanceChallenge`) before
+it asks the provider anything.
+
+**The invariant and its enforcement.** A namespace is admitted only on a claim
+signed by a key that is pinned or vouched for, bound to this connection's nonces
+and transport keys. One door enforces it: `WorldAttestedAuthenticator.VerifyAsync`
+over `WorldAdmissionDoor.TryBuildTrustList`, which every federation connection
+crosses. No authenticator verifies a bearer credential at a world any more; the
+only `IAuthenticator` on the federation wire is the attested one. The guarantee
+stops at the issuer. A player is who the issuer's sign-in provider says, for as
+long as the subject binding lasts (one hour by default, one day at most). A
+stolen issuing key is vouched for at most `MaximumRootBindingAge`, thirty days,
+and the issuer replaces its own issuing key every week. Revocation below expiry
+is [the refusal snapshot](#revocation-below-expiry), which this does not build.
+
+**Why.** [Identity](#abstractions-not-providers) asks for a namespace a chain
+under a trusted root vouched for, bound to the connection by a signature over
+the challenge. A bearer token echoed beside the challenge and checked with the
+identity provider at every world would be a credential for its whole lifetime
+at any world that trusted the provider. At MMO
+scale each zone, moon and player-hosted world is a world of its own. Each must
+verify a player without a call to the provider, the provider must be replaceable
+behind one seam ("Puck is provider-independent"), and the provider must be
+reached once per sign-in, not once per world or per connection. Keeping the
+trust row out of the document keeps the deployed document the author's. If a
+deployment's key were part of the composed definition, rotating the root would
+change the definition outside its metadata, and the release would reset the
+world's state.
+
+Options weighed:
+- A `Vouches` row injected into the deployed document at release. It is visible
+  in the document, but every hosted world would carry a deployment's key, and a
+  root rotation would reset state through the release's definition comparison.
+- A document row naming an issuer by name, which the host resolves to a key.
+  It needs a keyless `Vouches` row shape in the schema and a resolver at every
+  trust-list builder, and it decides nothing the `FederatedAuthority` rows do
+  not already decide.
+- The deployment's Functions app as the issuer, over HTTPS. Its prototype
+  issuance (`DefaultBindingService`) mints from caller-writable key blobs
+  without proof of possession. It needs its own deploy and key custody, and it
+  cannot be rehearsed with a local silo.
+- A bearer token checked at each world. It was refused for the reasons above.
+
+**Building it.** The sign-in provider is a `WorldSignInProvider` an extension
+contributes: `azure.api-users` (`EntraSignIn`, in the Azure provider project)
+in the deployment, and the engine's own `puck.accounts` (`WorldAccountSignIn`:
+a host lists accounts and their public keys, and a player signs the exchange
+with one) for player hosts and rehearsals. `puck benchmark --remote issued`
+plays the route against a local authority that runs an issuer, with a client
+that signs in through it and holds no key the document pins.
+
 ## The owner's deferred calls
 
 Three questions stay the owner's, deferred until the systems they depend on

@@ -81,25 +81,27 @@ health JSON. The silo serves it at `/livez/azure` with HTTP 200 for both
 to Azure. This uses simulation liveness, independently of storage readiness.
 See the [Azure health extension contract](https://learn.microsoft.com/en-us/azure/virtual-machines/extensions/health-extension).
 
-`azure.api-users` wraps the world's federation authenticator at the connection
-boundary. Its deployment-owned settings are `tenantId`, `audience` (the API
-application ID), `groupId`, and `scope`. A user needs a signed, unexpired delegated
-API token from that tenant, with the required scope and group claim. ByteTerrace
-API Users is the Puck user group. App-only tokens and group-overage tokens without
-the required group claim are refused. Explicitly trusted world peers retain the
-existing attestation path.
+`azure.api-users` (`EntraSignIn`) is the sign-in a host's issuer checks a
+player against before it vouches for the player's own key
+([the trust model](../../docs/decisions/worlds-and-federation.md#players-are-admitted-through-their-hosts-issuer)).
+Its deployment-owned settings are `tenantId`, `audience` (the API application
+ID), `groupId`, and `scope`. A user needs a signed, unexpired delegated API token
+from that tenant, with the required scope and group claim. ByteTerrace API Users
+is the Puck user group. App-only tokens and group-overage tokens without the
+required group claim are refused. The established subject is the token's object
+ID. A silo selects it as its document's `issuer.signIn`.
 
-The desktop opts into this provider with `--authentication-config-file <path>`
-alongside `--connect <host:port>`. The file contains `type` and `settings`; clients
-also require `remoteKeyHash`, the lowercase SHA-256 fingerprint of the host's
-public peer key. Deployment writes this public authentication configuration beside the world artifacts.
-The provider uses the existing ambient Azure sign-in with the API's `/.default`
-scope; the server independently checks `user_impersonation`. The client verifies
-the peer key before sending its token. Tokens stay outside world documents,
-checkpoints, logs, and simulation. The verified user ID supplies the client's
-local instance namespace together with a per-process session ID, while the public
-world's authority remains its endpoint. Reconnecting transport lanes retain that
-namespace. A fresh process gets a new one, preventing stale transfer epochs from
+The desktop signs in with `--authentication-config-file <path>` alongside
+`--connect <host:port>`. The file contains `type`, `settings` and
+`remoteKeyHash`, the lowercase SHA-256 fingerprint of the host's transport key.
+Deployment writes this public configuration beside the world artifacts. The
+provider uses the existing ambient Azure sign-in with the API's `/.default`
+scope; the issuer independently checks `user_impersonation`. The client checks
+the transport key before sending its token, and the token reaches only the
+issuer: no world validates it, and it stays outside world documents,
+checkpoints, logs and simulation. The client's namespace is the issuer root's
+domain, the object ID and a per-process session ID. Reconnecting transport lanes
+retain it. A fresh process gets a new one, preventing stale transfer epochs from
 the previous process from blocking entry; restoring a previous process's body is
 a separate durable travel-recovery operation.
 

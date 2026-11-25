@@ -99,6 +99,7 @@ public static class AttestationVerifier {
         }
 
         return AttestationVerifyResult.Accept(
+            bindingValidThrough: bindingValidThrough,
             validThrough: Math.Min(validThrough, bindingValidThrough),
             replayCommit: replayCommit,
             trustEntry: entry

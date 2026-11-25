@@ -187,6 +187,10 @@ public sealed class WorldAttestedAuthenticator : IAuthenticator, IRemoteIdentity
             return new((VerifiedPeerIdentity?)null);
         }
         var authority = ((sessionSuffix is null) ? subject : $"{claim.Header.Domain}/{subject}/{sessionSuffix}");
-        return new(new VerifiedPeerIdentity(authority, result.ValidThrough, TrustIsCurrent));
+        // The claim proves possession once, over this connection's fresh challenge, and its own window is checked
+        // above. What the connection rests on afterwards is the trust that vouched for the key: the chain's bindings
+        // for a vouched key, the unchanged trust row for a pinned one. A session therefore lasts until a binding ends
+        // or the trust rows change, never only until the claim would be too old to present again.
+        return new(new VerifiedPeerIdentity(authority, result.BindingValidThrough, TrustIsCurrent));
     }
 }

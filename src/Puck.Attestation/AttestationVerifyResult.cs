@@ -48,18 +48,23 @@ public sealed class AttestationVerifyResult {
 
     /// <summary>Last inclusive Unix second accepted by every verified claim and binding window.</summary>
     public long ValidThrough { get; private init; }
+    /// <summary>Last inclusive Unix second accepted by every verified binding window alone, with each binding's
+    /// verifier ceiling applied: how long the chain keeps vouching for the claim's key, apart from the claim's own
+    /// freshness. <see cref="long.MaxValue"/> for a claim from a directly pinned key, which no binding limits.</summary>
+    public long BindingValidThrough { get; private init; }
 
     /// <summary>Builds a verified result carrying the admitting entry's authored slot reach.</summary>
     /// <param name="trustEntry">The entry that verified the claim.</param>
     /// <param name="replayCommit">The replay-mark commit to transact with the claim's effect, or <see langword="null"/> for an unsequenced claim.</param>
-    /// <param name="validThrough">Last inclusive Unix second authorized by the chain.</param>
-    internal static AttestationVerifyResult Accept(TrustListEntry trustEntry, ReplayCommitRequirement? replayCommit, long validThrough) => new(
+    /// <param name="validThrough">Last inclusive Unix second authorized by the claim and the chain.</param>
+    /// <param name="bindingValidThrough">Last inclusive Unix second authorized by the chain's bindings alone.</param>
+    internal static AttestationVerifyResult Accept(TrustListEntry trustEntry, ReplayCommitRequirement? replayCommit, long validThrough, long bindingValidThrough) => new(
         reach: trustEntry.Reach,
         trustEntry: trustEntry,
         refusalReason: null,
         replayCommit: replayCommit,
         verified: true
-    ) { ValidThrough = validThrough };
+    ) { ValidThrough = validThrough, BindingValidThrough = bindingValidThrough };
 
     /// <summary>Builds a refused result carrying why. A refusal never carries reach — there is no verified claim to scope.</summary>
     /// <param name="reason">A human-readable refusal reason — never used for control flow, only for reporting.</param>
