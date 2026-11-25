@@ -1694,16 +1694,19 @@ laws exercise that boundary.
   its value is the key a cache of the store is saved under.
 - **The store keeps whole sets.** Each identity's entries are one set, in a
   directory named for the identity (`SdfMeshStore.SetDirectoryOf`). The debug
-  world's set is compressed with its mesh codec; the store keeps `SdfMeshStore.DefaultCapacityBytes`
-  (8 GiB), shared by every World and worktree on the machine, a set at a
-  time (`CacheRetention.EnforceSetsOnWrite`, which the store's writer runs after
-  each entry stands): a set's last use is its most
-  recently read or written entry's, and a write removes whole sets, least
-  recently used first, keeping its own. A peer's write may evict a set being
-  baked or loaded unless it is pinned (`SdfMeshStore.Hold`). An unpinned writer's
-  set larger than the cap alone keeps its most recently used entries, including
-  the entry being written. An entry left directly in the directory is a set of its own and ages
-  out first. A boot that bakes nothing shows `done … loaded=N` with
+  world's set is compressed with its mesh codec. One per-user store is shared by
+  every World and worktree on the machine and is sized by what it serves: it
+  keeps its `SdfMeshStore.RetainedSets` most recently used sets whole whatever
+  their bytes (the build a machine runs and the one before it, on two backends),
+  the writer's own and the pinned (`SdfMeshStore.Hold`) among them, and holds
+  the sets older than those to a share of its volume (`SdfMeshStore.CapacityOf`),
+  a set at a time (`CacheRetention.EnforceSetsOnWrite`, which the store's writer
+  runs after each entry stands): a set's last use is its most recently read or
+  written entry's, and a write removes whole sets, least recently used first. So
+  another build's bake never evicts the set the machine booted last. A volume
+  short of its reserve (`SdfMeshStore.ReserveOf`) takes no new entry until the
+  older sets have given the room back. An entry left directly in the directory
+  is a set of its own and ages out first. A boot that bakes nothing shows `done … loaded=N` with
   `dispatches=0`. A program that arrives while groups are pending and takes
   every group from the library reports the started bake `done` at once
   (`SdfMeshPathBake.Restart`), since no landing follows to report it.

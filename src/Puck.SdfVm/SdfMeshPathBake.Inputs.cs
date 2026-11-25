@@ -71,7 +71,7 @@ public sealed partial class SdfMeshPathBake {
         );
 
         var started = new PlaceCounts();
-        var leaders = Leaders();
+        var leaders = Leaders(indices: m_inputReaders);
         var counts = Library.Inputs;
 
         for (var at = 0; (at < plans.Count); at++) {

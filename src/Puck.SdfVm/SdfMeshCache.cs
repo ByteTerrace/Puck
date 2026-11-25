@@ -61,8 +61,12 @@ public static class SdfMeshCache {
     /// <summary>Counts each stored rung a <see cref="SdfMeshCachePolicy.Demand"/> bake took in place of a tier the store
     /// lacked: one finer than a finer tier asked, or one between the drawn tier and a coarser one asked.</summary>
     public static readonly WorkKind RungsTaken = new(name: "sdf.mesh-cache.rungs-taken", unit: "groups", workClass: WorkClass.Pacing);
+    /// <summary>Counts each group of <see cref="RungsTaken"/> that was still waiting to bake, with nothing to draw, when
+    /// another group of its shape landed a finer rung, and took that rung in its place: a far copy of a body drawn at the
+    /// detail a near copy already holds, instead of nothing, until the tier decisions bring it its own.</summary>
+    public static readonly WorkKind RungsShared = new(name: "sdf.mesh-cache.rungs-shared", unit: "groups", workClass: WorkClass.Pacing);
 
-    private static readonly WorkKind[] DeclaredKinds = [Dispatches, LiveDispatches, GroupsBaked, LiveBaked, RungsMissed, RungsMissedLive, LoadsDeclined, RungsFilled, RungsTaken];
+    private static readonly WorkKind[] DeclaredKinds = [Dispatches, LiveDispatches, GroupsBaked, LiveBaked, RungsMissed, RungsMissedLive, LoadsDeclined, RungsFilled, RungsTaken, RungsShared];
 
     /// <summary>Gets the kinds the counters count, in report order, for a reader that registers the source before a
     /// library exists.</summary>

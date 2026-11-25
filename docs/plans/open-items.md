@@ -2086,14 +2086,15 @@ check; this packet holds the defects beside it.
   the bake's scratch arrays, an unidentified renter of 92–98 MB `ArrayPool.Shared` arrays, and
   about 140 MB of trace-scene storage still rented managed. Check: the 2060's route ends under
   its host bar with the LOH flat across loops.
-- [medium] **mimalloc returns freed native pages only under pressure.** `MimallocAllocator` sets no
-  purge or decommit options, and `mi_collect(force: true)` runs only when the memory account asks
-  for a reclaim, when a thread returns its memory, or from a console command. Moving the GI
-  stores to native memory therefore swapped LOH fragmentation for allocator slack: on the 2060,
-  1.83 GB committed against 810 MB named, with 8.6 GB reserved. Set the purge options at process
-  start, give the large long-lived GPU-side stores their own heap or arena, and collect on a
-  cadence near the bar. Check: committed native memory tracks the named owners within a stated
-  slack on the same route.
+- [medium] **Read the native allocator's slack on the RTX 2060's route.** The 2060 read 1.83 GB
+  committed against 810 MB named, with 8.6 GB reserved, when freed ranges were decommitted only by
+  a later free and every size class committed its whole page. `MimallocAllocator`'s owner thread
+  now decommits expired ranges every `MimallocAllocator.PurgePeriod`, and pages past a slice
+  commit as their blocks are used. Check: committed native memory tracks the named owners within
+  a stated slack on the same route (`host.memory`'s native row and its residual). If the slack
+  that remains is live blocks pinning mostly empty pages, give the large long-lived stores (mesh
+  payloads, the irradiance volume) a heap of their own, apart from the bake's short-lived
+  workspace.
 - [high] Measure the session-residency fix on the RTX 4070. A cold debug-world
   boot built 55 residencies, one for each `self`, `wonderland` and nested
   session screen of the boot world, and the device pool held 15.5 GB, mostly
@@ -2204,13 +2205,14 @@ check; this packet holds the defects beside it.
   hold every column that can ever raise, with displacement closing the dry
   ones, is a design question for the field's owner.
 - One group in the debug world has a mesh no draw names, not yet identified.
-- [medium] The mesh store evicts whole sets when it nears its size limit
-  (`CacheRetention`), and a whole ladder per backend is now several times the
-  bytes of the sets that limit was sized for, so a lead machine that bakes
-  for two backends and several identities loses sets it still needs. A player
-  folder keeps only its build's sets and fails when one was evicted
-  (`puck world player`); the per-user store still needs its limit sized from
-  what a set is, or retirement by identity age, and an owner for the figure.
+- [low] The mesh store keeps its most recently used sets whole and holds the
+  older ones to a share of its volume (`SdfMeshStore.RetainedSets`,
+  `SdfMeshStore.CapacityOf`), so on a roomy volume the sets of builds no
+  checkout can produce again stand until the bytes ask for them. Retire a set
+  by the age of its last use if a lead machine's store is seen to fill with
+  them. A group that waits to bake takes a finer rung of its shape only when a
+  group of its own bake lands it (`SdfMeshPathBake.TakeLandedRungs`); a rung
+  another residency's bake landed is found at the group's plan alone.
 - [medium] Step 2's heap walk on a headless debug world names two large-object
   tenants the plan's [large host owners](streaming-and-memory.md#the-large-host-owners)
   table bounds by no step: `FieldCellDelta[]` arrays held by

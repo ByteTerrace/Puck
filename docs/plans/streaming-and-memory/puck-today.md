@@ -88,7 +88,7 @@ All paths are under `src/` unless stated.
 
 ### 1.6 `SdfMeshStore` (SdfMeshStore.cs) — disk
 
-- **Bound:** `DefaultCapacityBytes = (8L << 30)` per store (SdfMeshStore.cs:34), whole identity sets evicted LRU
+- **Bound:** at this round, eight gibibytes per store (since replaced by `SdfMeshStore.CapacityOf` and `SdfMeshStore.RetainedSets`), whole identity sets evicted LRU
   through `CacheRetention.EnforceSetsOnWrite` (doc, :19-29) **[opened]**. A disk bound, not memory.
 - Reads charge `MemoryAccount.Shared.CreateOwner(name: "mesh-entry")` transiently (:188, :250) **[opened]**.
 

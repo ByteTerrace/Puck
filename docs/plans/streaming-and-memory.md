@@ -295,7 +295,7 @@ several:
 | A share of device memory | One: a reservation in the account (`MemoryAccount.ReserveDevice`), which the mesh regions and the shader pipelines hold |
 | Demand points | `SdfMeshDemand.Observe` and the lighting's own `SdfMeshIrradiance.CaptureViewCameras`, with different filters |
 | A byte ledger | `MemoryAccount` owners fed by `GpuDeviceMemoryWork`; the mesh library's own weight (`SdfMeshLibrary.ByteBudget`) and the region's named bytes copied into the bake (`SdfMeshPathBake.ObserveResidency`) remain |
-| Retention | The library in bytes, the arena's slack in words (`SdfMeshRegionArena.RetainedSlackWords`), the trace scene in triangles (`SdfMeshIrradianceScene.RetainedTriangles`), the probe cache in window cells; the store's disk bound (`SdfMeshStore.DefaultCapacityBytes`) is a fifth, and stays, because disk is its own resource |
+| Retention | The library in bytes, the arena's slack in words (`SdfMeshRegionArena.RetainedSlackWords`), the trace scene in triangles (`SdfMeshIrradianceScene.RetainedTriangles`), the probe cache in window cells; the store's disk bound is a fifth, and stays, because disk is its own resource: its most recently used sets whole (`SdfMeshStore.RetainedSets`) and a share of its volume for the older ones (`SdfMeshStore.CapacityOf`) |
 | Scheduling residency work | The bake's own pool of dedicated threads (`SdfMeshPathBake.StartWorkers`), the lighting's and the restore's thread-pool work and `JobPool`; the GPU budget is one (`SdfGpuWorkBudget`) |
 
 ### What the RTX 2060 showed
@@ -593,7 +593,7 @@ held, promised and room.
 | The composed-document store | Play | Released after boot where nothing reads it | 6 |
 | Speculative work: bakes, loads and decodes for a predicted demand | As the work it speculates | A share of the workspace class, cancelled when the demand leaves or pressure asks | 3, 10 |
 | Rented arrays the shared pool keeps | Play | `RentedArrays` limits shared buckets by payload size. All element types share one retention limit for larger reference-free arrays. The cache admits each returned array against host room and releases its charge on reuse or trim. | 2, 11 |
-| Native allocator slack | Beyond the owners | Named; collected only by `host.memory collect` (`IAllocatorStatistics.Collect`), and [decision 6](#decision-6-what-a-landed-mesh-keeps-on-the-cpu) collects it when an arrival settles | 2 |
+| Native allocator slack | Beyond the owners | Named. The allocator's owner thread decommits freed ranges whose purge delay has passed every `MimallocAllocator.PurgePeriod`, and pages past a slice commit as their blocks are used; `host.memory collect` and a reclaim force the rest (`IAllocatorStatistics.Collect`) | 2 |
 | The managed heap's other tenants | Beyond the owners | Named by a heap walk; each one past a stated size becomes an owner with a capacity. No hard limit on the heap: it would turn pressure into an exception where everything else turns it into a coarser picture | 2, then per tenant |
 | Runtime code and loader heaps | Beyond the owners | Named; not controllable at run time | 2 |
 | Driver memory and swapchain images | Beyond the owners | Named, as the API's usage less the ledger | 1 |
