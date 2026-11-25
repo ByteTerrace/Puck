@@ -176,6 +176,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
         m_ownedLibrary = ((meshLibrary is null) ? new SdfMeshLibrary() : null);
         MeshPathBake = new SdfMeshPathBake { Demand = MeshDemand, Identity = SdfMeshStore.IdentityOf(kernels: kernels), Library = (meshLibrary ?? m_ownedLibrary!), Residency = name };
         m_meshDresser = new SdfMeshDresser(bake: MeshPathBake);
+        MeshIrradiance = new SdfMeshIrradiance(allocator: MeshPathBake.Library.Allocator);
         // A program built in the background plans its bake before the frame that adopts it, at the far distance of the
         // frames before it, which a restart at another plans again.
         frameSource.ObserveBuilds(built: (program, transforms) => {
@@ -1233,7 +1234,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
 
     /// <summary>Gets the residency's indirect lighting, the irradiance volume its views read while its frame asks for
     /// indirect light.</summary>
-    public SdfMeshIrradiance MeshIrradiance { get; private set; } = new();
+    public SdfMeshIrradiance MeshIrradiance { get; private set; }
     /// <summary>Gets the exposure each view of the residency's latest frame maps the luminance it shades by.</summary>
     public SdfViewExposures Exposures { get; } = new();
 

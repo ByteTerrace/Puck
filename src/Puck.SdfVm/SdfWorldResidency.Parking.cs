@@ -189,7 +189,7 @@ public sealed partial class SdfWorldResidency {
 
         var forgotten = MeshIrradiance;
 
-        MeshIrradiance = new SdfMeshIrradiance();
+        MeshIrradiance = new SdfMeshIrradiance(allocator: MeshPathBake.Library.Allocator);
         m_lightingForgotten = true;
         m_lightingDrops++;
         forgotten.Dispose();
