@@ -168,6 +168,22 @@ internal sealed class HostMemoryCommandModule(IAllocator allocator, IEnumerable<
         text.Append(CultureInfo.InvariantCulture, $" | sample age={(((long?)pools.SampleAge?.TotalMilliseconds)?.ToString(provider: CultureInfo.InvariantCulture) ?? "none")}ms managed-collection={sample.ManagedCollection.ToString(provider: CultureInfo.InvariantCulture)} negative-residuals={pools.NegativeResiduals}");
         if (sample.Walk is { } walk) {
             text.Append(CultureInfo.InvariantCulture, $" | walk private={walk.PrivateBytes} ({(walk.PrivateCommitted ? "committed" : "resident anonymous and swap")}) resident={Bytes(bytes: walk.PrivateResident)} driver-mapped={walk.DriverMappedBytes} resident={Bytes(bytes: walk.DriverMappedResident)} mapped={walk.MappedBytes} resident={Bytes(bytes: walk.MappedResident)} image={walk.ImageBytes} resident={Bytes(bytes: walk.ImageResident)} regions={walk.Regions}; host rows in private less driver-mapped: native-allocator, native-direct, managed and runtime-and-driver; driver-mapped is the host's write-combined and uncached views of graphics allocations, counted as device blocks");
+            if (walk.NativeHeaps is { } heaps) {
+                text.Append(CultureInfo.InvariantCulture, $" | nt-heaps count={heaps.Count} allocated={heaps.Allocated} committed={heaps.Committed} (HeapAlloc's heaps: the CRT's, the loader's and native libraries'; part of runtime-and-driver)");
+            }
+            if (walk.PrivateBySize.Count > 0) {
+                text.Append(value: " | private-by-reservation");
+                foreach (var each in walk.PrivateBySize) {
+                    text.Append(CultureInfo.InvariantCulture, $" {((each.ReservedAtMost == long.MaxValue) ? "larger" : $"<={each.ReservedAtMost}B")}:allocations={each.Allocations},committed={each.Committed},resident={each.Resident}");
+                }
+                text.Append(value: " (ordinary private memory by the range each allocation reserves: the collector's and the native allocator's arenas reserve gibibytes)");
+            }
+            if (walk.LargestPrivate.Count > 0) {
+                text.Append(value: " | private-largest");
+                foreach (var each in walk.LargestPrivate) {
+                    text.Append(CultureInfo.InvariantCulture, $" 0x{each.Base:X}:reserved={each.Reserved},committed={each.Committed},resident={each.Resident}");
+                }
+            }
         } else {
             text.Append(value: " | walk none (this platform cannot be walked)");
         }

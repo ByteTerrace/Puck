@@ -202,6 +202,43 @@ public static partial class HostMemory {
     }
 
     private const uint MemCommit = 0x1000;
+    private const uint MemFree = 0x10000;
+    // The most private allocations a walk names, by resident bytes.
+    private const int LargestPrivateCount = 8;
+
+    [StructLayout(layoutKind: LayoutKind.Sequential)]
+    private struct HeapSummaryInformation {
+        public uint Size;
+        public nuint Allocated;
+        public nuint Committed;
+        public nuint Reserved;
+        public nuint MaximumReserve;
+    }
+
+    [LibraryImport(libraryName: "kernel32.dll")]
+    private static unsafe partial uint GetProcessHeaps(uint count, nint* heaps);
+    [LibraryImport(libraryName: "kernel32.dll")]
+    [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
+    private static partial bool HeapSummary(nint heap, uint flags, ref HeapSummaryInformation summary);
+
+    // The process's NT heaps (the CRT's, the loader's, every native library's that allocates through HeapAlloc) summed:
+    // how many, and the bytes they hold allocated and committed.
+    private static unsafe NativeHeapReading ReadNativeHeaps() {
+        var count = GetProcessHeaps(count: 0, heaps: null);
+        var heaps = new nint[(count + 16)];
+        long allocated = 0, committed = 0;
+
+        fixed (nint* first = heaps) { count = Math.Min(val1: GetProcessHeaps(count: ((uint)heaps.Length), heaps: first), val2: ((uint)heaps.Length)); }
+        for (var index = 0; (index < count); index++) {
+            var summary = new HeapSummaryInformation { Size = ((uint)sizeof(HeapSummaryInformation)) };
+
+            if (!HeapSummary(flags: 0, heap: heaps[index], summary: ref summary)) { continue; }
+            allocated += ((long)summary.Allocated);
+            committed += ((long)summary.Committed);
+        }
+
+        return new NativeHeapReading(Allocated: allocated, Committed: committed, Count: ((int)count));
+    }
     private const uint MemImage = 0x1000000;
     private const uint MemMapped = 0x40000;
     private const uint MemPrivate = 0x20000;
@@ -265,10 +302,21 @@ public static partial class HostMemory {
             var size = ((nuint)Marshal.SizeOf<MemoryBasicInformation>());
             var pageSize = ((long)Environment.SystemPageSize);
             var batch = ((WorkingSetExInformation*)NativeMemory.Alloc(byteCount: ((nuint)(ResidencyBatch * sizeof(WorkingSetExInformation)))));
+            // The ordinary private memory (not a driver's view) of each allocation, which VirtualQuery reads as consecutive
+            // regions sharing an allocation base, and the address range each reserves.
+            var allocations = new List<PrivateAllocation>();
+            var current = default(PrivateAllocation);
 
             try {
                 while (VirtualQuery(address: address, buffer: out var region, length: size) != 0) {
                     regions++;
+                    if ((region.Type == MemPrivate) && (region.State != MemFree)) {
+                        if (current.Base != region.AllocationBase) {
+                            if (current.Committed > 0) { allocations.Add(item: current); }
+                            current = new PrivateAllocation(Base: region.AllocationBase, Committed: 0, Reserved: 0, Resident: 0);
+                        }
+                        current = (current with { Reserved = (current.Reserved + ((long)region.RegionSize)) });
+                    }
                     if (region.State == MemCommit) {
                         var bytes = ((long)region.RegionSize);
                         var resident = ResidentBytes(batch: batch, length: bytes, pageSize: pageSize, start: region.BaseAddress);
@@ -278,7 +326,11 @@ public static partial class HostMemory {
                                 driverBytes += bytes;
                                 driverResident += resident;
                                 break;
-                            case MemPrivate: privateBytes += bytes; privateResident += resident; break;
+                            case MemPrivate:
+                                privateBytes += bytes;
+                                privateResident += resident;
+                                current = (current with { Committed = (current.Committed + bytes), Resident = (current.Resident + (resident ?? 0L)) });
+                                break;
                             case MemMapped: mappedBytes += bytes; mappedResident += resident; break;
                             case MemImage: imageBytes += bytes; imageResident += resident; break;
                         }
@@ -289,6 +341,7 @@ public static partial class HostMemory {
                     if (next <= address) { break; }
                     address = next;
                 }
+                if (current.Committed > 0) { allocations.Add(item: current); }
             } finally {
                 NativeMemory.Free(ptr: batch);
             }
@@ -299,6 +352,9 @@ public static partial class HostMemory {
                 ImageResident = imageResident,
                 MappedResident = mappedResident,
                 PrivateResident = (privateResident + driverResident),
+                PrivateBySize = PrivateSizeClass.Of(allocations: allocations),
+                LargestPrivate = [.. allocations.OrderByDescending(keySelector: static allocation => allocation.Resident).Take(count: LargestPrivateCount)],
+                NativeHeaps = ReadNativeHeaps(),
             };
         }
         if (OperatingSystem.IsLinux()) {
@@ -357,4 +413,52 @@ public sealed record ProcessMemoryWalk(long PrivateBytes, long MappedBytes, long
     /// <summary>Gets how much of <see cref="ImageBytes"/> is in the working set, or <see langword="null"/> when the
     /// system refused the query.</summary>
     public long? ImageResident { get; init; }
+    /// <summary>Gets the ordinary private memory (not a driver's view) summed by the size of the address range each
+    /// allocation reserves, smallest class first: the shape of what holds it (the collector's and the allocator's arenas
+    /// reserve gibibytes, heap segments and thread stacks a few mebibytes, a driver's own blocks their own sizes). Empty
+    /// where the platform cannot tell (Linux).</summary>
+    public IReadOnlyList<PrivateSizeClass> PrivateBySize { get; init; } = [];
+    /// <summary>Gets the private allocations (not a driver's view) holding the most resident bytes, most first. Empty
+    /// where the platform cannot tell (Linux).</summary>
+    public IReadOnlyList<PrivateAllocation> LargestPrivate { get; init; } = [];
+    /// <summary>Gets the process's NT heaps summed, or <see langword="null"/> where the platform has none.</summary>
+    public NativeHeapReading? NativeHeaps { get; init; }
 }
+/// <summary>One private allocation of a process walk, in bytes: the regions sharing one allocation base.</summary>
+/// <param name="Base">The allocation's base address.</param>
+/// <param name="Reserved">The address range it reserves, committed or not.</param>
+/// <param name="Committed">Its committed ordinary private bytes.</param>
+/// <param name="Resident">How much of <paramref name="Committed"/> is in the working set.</param>
+public readonly record struct PrivateAllocation(nint Base, long Reserved, long Committed, long Resident);
+/// <summary>The private allocations of one reservation-size class, in bytes.</summary>
+/// <param name="ReservedAtMost">The largest reservation the class holds: a power of four, or <see cref="long.MaxValue"/>
+/// for the last.</param>
+/// <param name="Allocations">The allocations in the class.</param>
+/// <param name="Committed">Their committed bytes.</param>
+/// <param name="Resident">How much of <paramref name="Committed"/> is in the working set.</param>
+public readonly record struct PrivateSizeClass(long ReservedAtMost, int Allocations, long Committed, long Resident) {
+    // The classes' upper bounds: 64 KiB to 1 GiB by fours, then everything larger.
+    private static readonly long[] Bounds = [(64L << 10), (256L << 10), (1L << 20), (4L << 20), (16L << 20), (64L << 20), (256L << 20), (1L << 30), long.MaxValue];
+
+    /// <summary>Sums allocations into the classes, dropping the empty ones.</summary>
+    /// <param name="allocations">The allocations.</param>
+    /// <returns>The classes holding any allocation, smallest first.</returns>
+    public static IReadOnlyList<PrivateSizeClass> Of(IReadOnlyList<PrivateAllocation> allocations) {
+        var classes = new PrivateSizeClass[Bounds.Length];
+
+        for (var index = 0; (index < Bounds.Length); index++) { classes[index] = new PrivateSizeClass(Allocations: 0, Committed: 0, ReservedAtMost: Bounds[index], Resident: 0); }
+        foreach (var allocation in allocations) {
+            var index = Array.FindIndex(array: Bounds, match: bound => (allocation.Reserved <= bound));
+            var held = classes[index];
+
+            classes[index] = (held with { Allocations = (held.Allocations + 1), Committed = (held.Committed + allocation.Committed), Resident = (held.Resident + allocation.Resident) });
+        }
+
+        return [.. classes.Where(predicate: static each => (each.Allocations > 0))];
+    }
+}
+/// <summary>A process's NT heaps summed, in bytes.</summary>
+/// <param name="Count">The heaps.</param>
+/// <param name="Allocated">The bytes their live blocks hold.</param>
+/// <param name="Committed">The bytes they hold committed.</param>
+public readonly record struct NativeHeapReading(int Count, long Allocated, long Committed);
