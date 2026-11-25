@@ -152,6 +152,64 @@ beacon's power. An action that carries who acted (an attack, a gift) is not a
 followed row: it is an addressed effect the far world's grants admit, which
 waits for the interaction settlement the world model names as unbuilt.
 
+## Physics across worlds
+
+The owner's request: fill the engine gaps that make cross-world physics rich,
+and prove that authors rule with toy worlds, such as a world that portals to a
+galaxy-like planetoid platformer. The settled design is
+[influence between worlds](../decisions/worlds-and-federation.md#influence-between-worlds-is-a-delayed-value-and-a-tide);
+this section is its plan: the mechanisms, what each toy world proves, and the
+check for each.
+
+### The model
+
+- **A world's own field dominates inside it.** Gravity stays a per-world
+  section (`WorldGravity`). Nothing reaches into another world's bodies.
+- **Another body's pull is a tide.** A far mass pulls a world's frame and
+  everything in it alike, so the uniform part is dropped (the frame falls with
+  it) and what is left is the tidal term: one symmetric tensor per world per
+  tick, applied to each body as a product with its offset from the world's
+  tide origin. The cost is one tensor per source per tick, never a pair per
+  body.
+- **Influence is a value that arrives late.** A world publishes its mass, its
+  light and its orbit as state rows. Another world follows them
+  (`WorldStateFollow`) with a delay the author derives from distance over a
+  propagation speed, so a follower reads the leader's value from that long ago.
+  A sun that goes out is a row its world writes once; each follower meets the
+  change at its own delay. Authorities need causality, never lockstep.
+- **What nobody watches rides rails.** An orbit is a closed-form conic of the
+  engine tick: its phase is an exact rational of the tick, so any tick's
+  position is computed directly, and a world that stopped stepping resumes
+  exactly where the orbit stands.
+
+### Mechanisms
+
+| # | Mechanism | Authored surface | Check |
+|---|---|---|---|
+| 1 | Gravity from any shape | `gravity.areas[].acceleration`: `directional`, `radial`, `axial` (toward the placement's own Y axis), `planar` (toward its XZ plane), `point` (inverse square from a reference radius) and `surface` (toward the nearest solid surface, the contact field's gradient) | `world.gravity` lists each area's form; a body dropped beside a torus, a cube and a tube lands and stands with its up along the surface |
+| 2 | Areas blend and bind to state | `areas[].blend`, the depth inside the bound over which the area's weight rises to one; `weight` and `scale`, state rows that fade an area or scale and flip its pull; `vector`, a keyed state row that supplies a directional area's vector | A body walking from one planetoid's reach into another's turns over the blend depth, never in one tick; writing a scale row to -1 flips a corridor |
+| 3 | A body and its camera follow their up | The kit's `motion.upTurn` and the chase rig, which rides the seat's up (both existed) | A seat walks round a planetoid with the boom behind and above it everywhere |
+| 4 | A launch along a path | The `timedMove` effect's `toward` (a placement or a point), `arc` and `exclusive`; the standard's launch template | A body stepping onto a launch pad lands on the planetoid the pad names |
+| 5 | Rails | An `orbits` row: centre, semi-major axis, eccentricity, plane angles, period, phase, the body that rides it and the state row that says whether it rides | The rider's position at tick n equals the closed form at n whatever ticks were stepped between; `world.orbits` reads each orbit |
+| 6 | A delayed follow | `follows { destination, row, delaySeconds }` | A leader's write reaches the follower that much later, to the tick, and reproduces |
+| 7 | Tides | `gravity.tides[]`: a source's placement or orbit, its mass, and a `scale` state row (a followed mass) | `world.gravity` reads the tensor; a body off the origin drifts as the tensor says, and a zero mass row stops it |
+| 8 | Seams from masses | The author's own arithmetic: `squareRoot` in a `let` derives where two pulls balance | The seam altitude a document compiles to is the balance point of its two masses |
+
+Light needs no mechanism of its own: a light's power is already a state row
+(`power: "state.<row>"`), so a sun's light is a followed row with a delay, and
+an eclipse is a rule over the delayed rows.
+
+### The toy worlds
+
+Each is a document beside the debug world, reached from it, and played headless
+by a `puck test --reproduce` scenario.
+
+| World | Reached by | What it proves |
+|---|---|---|
+| The planetoid field (`galaxy.puck`) | A painting in the painting wing | Mechanisms 1 to 5: planetoids of several shapes each with its own pull, launch pads between them, a corridor whose gravity a switch flips, and a small moon on rails |
+| The sun (`sun.puck`), with the debug world and the moon | Rows the debug world and the moon follow | Mechanisms 6 to 8: the sun's mass and light reach each world after its own delay, and the sun going out reaches the valley and the moon at different ticks |
+| The bottle world (`globe.puck`) | A glass in the painting wing | What only Puck's world model allows: the globe's gravity is a value the debug world owns. A lever beside the glass tilts the globe, and the globe's own authority follows the lever with a delay, with one visitor inside and another watching through the glass |
+
 ## Readings owed
 
 - A windowed Direct3D 12 pass: the moon painting's curtain shut and drawn, the
