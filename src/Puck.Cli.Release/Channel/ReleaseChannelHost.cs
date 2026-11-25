@@ -28,18 +28,32 @@ public abstract class ReleaseChannelHost {
     /// <param name="name">The host's name, or <see langword="null"/>.</param>
     /// <returns>The host.</returns>
     public static ReleaseChannelHost Select(string? name = null) => CliExtensions.Installed.Select<ReleaseChannelHost>(key: name, purpose: "release channel host");
+    /// <summary>Opens the host a verb's options name: a local directory's channel tree when one is given, otherwise an
+    /// installed host by name, or the single installed host.</summary>
+    /// <param name="name">The installed host's name, or <see langword="null"/>.</param>
+    /// <param name="directory">The local tree's root, or <see langword="null"/> for an installed host.</param>
+    /// <param name="keyFile">With <paramref name="directory"/>: the root key file that signs it, or <see langword="null"/>
+    /// when nothing written is signed.</param>
+    /// <returns>The host.</returns>
+    /// <exception cref="InvalidOperationException">No directory is given and no installed host answers to
+    /// <paramref name="name"/>.</exception>
+    public static ReleaseChannelHost Open(string? name, string? directory, string? keyFile = null) =>
+        ((directory is not null) ? new DirectoryReleaseChannelHost(directory: directory, keyFile: keyFile) : Select(name: name));
 }
-/// <summary>A channel mirrored into a local directory, signed by a key file: a developer's own channel, served by
-/// <c>puck official serve</c> or read by a <see cref="Puck.Launcher.Release.DirectoryReleaseSource"/>.</summary>
-/// <param name="directory">The mirror's root.</param>
-/// <param name="keyFile">The PKCS#8 root key file, created on first use.</param>
-public sealed class DirectoryReleaseChannelHost(string directory, string keyFile) : ReleaseChannelHost {
+/// <summary>A channel tree in a local directory, signed by a key file when it carries a release: a developer's own channel,
+/// served by <c>puck official serve</c> or read by a <see cref="Puck.Launcher.Release.DirectoryReleaseSource"/>.</summary>
+/// <param name="directory">The tree's root.</param>
+/// <param name="keyFile">The PKCS#8 root key file, created on first use, or <see langword="null"/> for a tree that holds
+/// nothing signed (a store of cache sets).</param>
+public sealed class DirectoryReleaseChannelHost(string directory, string? keyFile) : ReleaseChannelHost {
     private readonly string m_directory = Path.GetFullPath(path: directory);
 
     /// <inheritdoc/>
     public override string Describe => m_directory;
     /// <inheritdoc/>
-    public override Task<ECDsa> LoadSigningKeyAsync(CancellationToken cancellationToken) => Task.FromResult(result: Puck.Launcher.Release.ReleaseSigner.LoadOrCreate(path: keyFile));
+    /// <exception cref="InvalidOperationException">The host was opened without a key file.</exception>
+    public override Task<ECDsa> LoadSigningKeyAsync(CancellationToken cancellationToken) => Task.FromResult(result: Puck.Launcher.Release.ReleaseSigner.LoadOrCreate(
+        path: (keyFile ?? throw new InvalidOperationException(message: $"{m_directory} was opened without a root key file, so it signs nothing."))));
     /// <inheritdoc/>
     public override Task UploadAsync(string tree, IReadOnlyList<string> objects, IReadOnlyList<string> documents, CancellationToken cancellationToken) {
         var source = Path.GetFullPath(path: tree);

@@ -242,7 +242,7 @@ public static partial class AzureCommand {
         ) {
             Console.WriteLine(value: $"Infrastructure inputs are unchanged (identity {identity}); the deployed platform's outputs are reused without a plan or apply.");
             CliFiles.WriteJson(
-                path: "artifacts/production-outputs.json",
+                path: OutputsPath,
                 value: deployed["outputs"]!.DeepClone()
             );
             return;
@@ -271,7 +271,7 @@ public static partial class AzureCommand {
             plan: plan
         );
         CliFiles.WriteJson(
-            path: "artifacts/production-outputs.json",
+            path: OutputsPath,
             value: await AzJsonAsync(
                 "deployment",
                 "group",
@@ -362,7 +362,7 @@ public static partial class AzureCommand {
 
         if (mcp["value"] is not null) { outputs["worldMcpConfiguration"] = mcp.DeepClone(); } else if (source["worldMcp"]?["value"] is not null) { throw new InvalidOperationException(message: "Deploy unified infrastructure or deploy-world-mcp before enabling MCP in an application release."); }
         CliFiles.WriteJson(
-            path: "artifacts/production-outputs.json",
+            path: OutputsPath,
             value: outputs
         );
     }
@@ -488,7 +488,7 @@ public static partial class AzureCommand {
 
         outputs["worldMcpConfiguration"] = deployed["worldMcpConfiguration"]!.DeepClone();
         CliFiles.WriteJson(
-            path: "artifacts/production-outputs.json",
+            path: OutputsPath,
             value: outputs
         );
     }

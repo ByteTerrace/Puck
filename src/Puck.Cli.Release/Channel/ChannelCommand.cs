@@ -37,17 +37,15 @@ public static class ChannelCommand {
         command.SetAction(action: async (parse, cancellationToken) => {
             var root = Path.GetFullPath(path: parse.GetRequiredValue(option: tree));
             var name = parse.GetRequiredValue(option: channel);
+            var directory = parse.GetValue(option: to);
+            var keyFile = parse.GetValue(option: key);
             ReleaseChannelHost selected;
 
-            if (parse.GetValue(option: to) is { } directory) {
-                if (parse.GetValue(option: key) is not { } keyFile) { return CliExit.Refuse(verb: Verb, what: "--to", why: "needs --signing-key, the root key that signs the mirror."); }
-                selected = new DirectoryReleaseChannelHost(directory: directory, keyFile: keyFile);
-            } else {
-                try {
-                    selected = ReleaseChannelHost.Select(name: parse.GetValue(option: host));
-                } catch (InvalidOperationException exception) {
-                    return CliExit.Refuse(verb: Verb, what: "--host", why: exception.Message);
-                }
+            if ((directory is not null) && (keyFile is null)) { return CliExit.Refuse(verb: Verb, what: "--to", why: "needs --signing-key, the root key that signs the mirror."); }
+            try {
+                selected = ReleaseChannelHost.Open(directory: directory, keyFile: keyFile, name: parse.GetValue(option: host));
+            } catch (InvalidOperationException exception) {
+                return CliExit.Refuse(verb: Verb, what: "--host", why: exception.Message);
             }
             return await PushAsync(cancellationToken: cancellationToken, channel: name, host: selected, sequence: parse.GetRequiredValue(option: sequence), tree: root,
                 validity: TimeSpan.FromDays(value: parse.GetValue(option: validity))).ConfigureAwait(continueOnCapturedContext: false);
@@ -64,7 +62,7 @@ public static class ChannelCommand {
     /// <returns>The verb's exit code.</returns>
     public static async Task<int> PushAsync(string tree, string channel, ReleaseChannelHost host, ulong sequence, TimeSpan validity, CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(argument: host);
-        var manifestPath = Path.Combine(path1: tree, path2: channel, path3: "manifest.json");
+        var manifestPath = Path.Combine(path1: tree, path2: channel, path3: ChannelSubscription.ManifestFileName);
         ReleaseManifest manifest;
 
         try {
@@ -94,9 +92,9 @@ public static class ChannelCommand {
             var channelDirectory = Path.Combine(path1: tree, path2: channel);
             var documents = Directory.EnumerateFiles(path: channelDirectory, searchOption: SearchOption.AllDirectories, searchPattern: "*")
                 .Select(selector: path => Puck.Abstractions.PuckPaths.Relative(path: path, relativeTo: tree))
-                .Where(predicate: path => !path.EndsWith(value: "/manifest.json", comparisonType: StringComparison.Ordinal))
+                .Where(predicate: path => !path.EndsWith(value: $"/{ChannelSubscription.ManifestFileName}", comparisonType: StringComparison.Ordinal))
                 .Order(comparer: StringComparer.Ordinal)
-                .Append(element: $"{channel}/manifest.json")
+                .Append(element: $"{channel}/{ChannelSubscription.ManifestFileName}")
                 .ToArray();
 
             Console.Out.WriteLine(value: $"{Verb}: signed {manifest.App} {channel} {manifest.Version} (sequence {sequence}, root key {signed.TrustAnchor.Domain}); writing {objects.Distinct(comparer: StringComparer.Ordinal).Count()} object(s) the host lacks and {documents.Length} document(s) to {host.Describe}.");
