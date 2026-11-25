@@ -847,17 +847,14 @@ public sealed partial class SdfMeshPathBake {
     // product stands in the mesh region. FinishReplacements retires the replaced group once the product has the draws.
     // Under the gate.
     private TierStart StartReplacement(Group group, Group old, int index) {
-        // A bake that draws stored rungs alone keeps drawing what it draws when the store lacks the rung asked: the
-        // group is asked again only once its demand names another tier (Group.RetierRefused). Live geometry has no
-        // stored rung to lack: its tiers bake as its steps do, and a tier of a live group is live.
+        // A tier of a live group is live: its tiers bake as its steps do, and no cache holds them.
         group.InheritLive(from: old);
+        // A bake that starts from a shipped cache counts each rung asked that the cache did not carry, before the stored
+        // rung below or a bake answers it.
         if ((Library.Policy == SdfMeshCachePolicy.Stored) && !group.Live && !Stores(group: group, identity: Identity.Value)) {
             CountRungMissed(asked: group, drawn: old.Tier, first: group.FirstDetail);
-            old.RetierRefused = true;
-            group.Retired = true;
-            return TierStart.None;
         }
-        // A bake that bakes its demand takes a stored rung that answers the tier asked before it bakes one the store lacks.
+        // A bake takes a stored rung that answers the tier asked before it bakes one the store lacks.
         if (DemandRung(drawn: old.Tier, identity: Identity.Value, planned: group) is { } rung) {
             rung.FirstDetail = group.FirstDetail;
             rung.RetierDeltaBytes = group.RetierDeltaBytes;
