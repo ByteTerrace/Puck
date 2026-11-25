@@ -13,7 +13,9 @@ namespace Puck.World.Client;
 /// <param name="Position">The predicted foot point.</param>
 /// <param name="Velocity">The predicted velocity over the last predicted step, in metres per second.</param>
 /// <param name="Orientation">The predicted attitude.</param>
-public readonly record struct WorldPredictedBody(WorldAuthorityEndpoint Endpoint, int Index, ulong ContinuationTick, ulong Tick, FixedVector3 Position, FixedVector3 Velocity, FixedQuaternion Orientation) {
+/// <param name="Error">The distance, in metres, by which the latest continuation missed what an earlier prediction
+/// reached for its tick; <see cref="FixedQ4816.MaxValue"/> until the authority has answered one.</param>
+public readonly record struct WorldPredictedBody(WorldAuthorityEndpoint Endpoint, int Index, ulong ContinuationTick, ulong Tick, FixedVector3 Position, FixedVector3 Velocity, FixedQuaternion Orientation, FixedQ4816 Error) {
     /// <summary>Gets the authority ticks the prediction runs ahead of its continuation.</summary>
     public ulong Steps => (Tick - ContinuationTick);
 }
@@ -54,11 +56,21 @@ public sealed class WorldSeatSentInput {
     /// <summary>Gets the batches held.</summary>
     public int Count => m_count;
 
-    /// <summary>Records a batch as it is sent.</summary>
+    /// <summary>Gets the authority the held batches were sent to.</summary>
+    public WorldAuthorityEndpoint? Endpoint { get; private set; }
+
+    /// <summary>Records a batch as it is sent. A batch sent to another authority than the held ones forgets them, since
+    /// every authority numbers its input epochs and ticks itself.</summary>
     /// <param name="clientTick">The seat clock, in ticks of the authority's rate, it is sent at.</param>
     /// <param name="submission">The batch.</param>
-    public void Record(ulong clientTick, in IntentSubmission submission) {
+    /// <param name="endpoint">The authority it is sent to.</param>
+    public void Record(ulong clientTick, in IntentSubmission submission, WorldAuthorityEndpoint endpoint) {
         var sequence = 0U;
+
+        if (!ReferenceEquals(objA: Endpoint, objB: endpoint)) {
+            Clear();
+            Endpoint = endpoint;
+        }
 
         foreach (ref readonly var input in submission.Input.Events.Span) {
             sequence = Math.Max(val1: sequence, val2: input.Sequence);

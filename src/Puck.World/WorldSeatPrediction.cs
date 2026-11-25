@@ -32,7 +32,7 @@ namespace Puck.World;
 public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldDefinition?> packageDocument) : IWorldSeatPrediction {
     /// <summary>The most authority ticks a prediction steps past its continuation: a round trip longer than this is
     /// not predicted, and the seat steers from what was delivered.</summary>
-    public const int MaxSteps = 60;
+    public const int MaxSteps = 90;
 
     private sealed class Seat {
         public WorldDefinition? Definition;
@@ -43,7 +43,15 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         public bool Decoded;
         // The authority tick an input sent at seat clock tick zero lands at: an answered batch's answer tick less the seat
         // clock tick it was sent at, the latest one answered.
+        public WorldAuthorityEndpoint? Endpoint;
+        // The tip of each prediction by the authority tick it reached, and the distance by which the authority last missed one.
+        public readonly (ulong Tick, FixedVector3 Position)[] Trail = new (ulong Tick, FixedVector3 Position)[64];
+        public ulong ConfirmedAt = ulong.MaxValue;
+        public FixedQ4816 Error = FixedQ4816.MaxValue;
         public long Offset;
+        public readonly long[] Samples = new long[16];
+        public int SampleNext;
+        public int SampleCount;
         public bool HasOffset;
         public uint OffsetSequence;
         public ulong OffsetEpoch;
@@ -84,7 +92,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         var seat = m_seats[slot];
 
         return (seat.Predicted
-            ? string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"predicted {seat.Body.Steps} tick(s) past tick {seat.Body.ContinuationTick}; offset {seat.Offset}; {Predictions} prediction(s), {StepsTaken} step(s), {PopulationsBuilt} population(s)")
+            ? string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"predicted {seat.Body.Steps} tick(s) past tick {seat.Body.ContinuationTick}, last missed by {(double)seat.Error:0.###} m; offset {seat.Offset}; {Predictions} prediction(s), {StepsTaken} step(s), {PopulationsBuilt} population(s)")
             : $"off({seat.Reason})");
     }
     // Predicts one seat's body, answering null, or why it predicted nothing.
@@ -116,9 +124,29 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
 
         var sent = client.SeatSentInput(slot: slot);
 
+        // Every authority numbers its own ticks: a seat that crossed to another times its input against it afresh.
+        if (!ReferenceEquals(objA: seat.Endpoint, objB: endpoint)) {
+            seat.Endpoint = endpoint;
+            seat.SampleCount = 0;
+            seat.ConfirmedAt = ulong.MaxValue;
+            seat.Error = FixedQ4816.MaxValue;
+            seat.HasOffset = false;
+        }
+        if (!ReferenceEquals(objA: sent.Endpoint, objB: endpoint)) {
+            return "no input is sent to the seat's authority yet";
+        }
+
         if (mirror.TryInputAnswer(answer: out var answer, owner: owner) && ((answer.Sequence != seat.OffsetSequence) || (answer.Epoch != seat.OffsetEpoch)) &&
             sent.TryFindSent(clientTick: out var sentAt, epoch: answer.Epoch, sequence: answer.Sequence)) {
-            seat.Offset = ((long)answer.Tick - (long)sentAt);
+            // The least of the recent samples: a batch held up in a burst lands later than the link's own delay, and
+            // predicting that far ahead would carry the body past where the authority takes the next input.
+            seat.Samples[seat.SampleNext] = ((long)answer.Tick - (long)sentAt);
+            seat.SampleNext = ((seat.SampleNext + 1) % seat.Samples.Length);
+            seat.SampleCount = Math.Min(val1: (seat.SampleCount + 1), val2: seat.Samples.Length);
+            seat.Offset = long.MaxValue;
+            foreach (var sample in seat.Samples.AsSpan(start: 0, length: seat.SampleCount)) {
+                seat.Offset = Math.Min(val1: seat.Offset, val2: sample);
+            }
             seat.OffsetSequence = answer.Sequence;
             seat.OffsetEpoch = answer.Epoch;
             seat.HasOffset = true;
@@ -143,6 +171,15 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
 
         if (!TryDecode(own: in own, seat: seat)) {
             return "the continuation does not decode";
+        }
+
+        // The authority's answer to an earlier prediction: what was predicted for the continuation's tick against where the
+        // body stood after it. A prediction is relied on only while the authority keeps confirming it.
+        var reached = seat.Trail[(int)(own.Tick % ((ulong)seat.Trail.Length))];
+
+        if ((reached.Tick == own.Tick) && (own.Tick != seat.ConfirmedAt)) {
+            seat.ConfirmedAt = own.Tick;
+            seat.Error = (reached.Position - seat.Entry.Body.Pose.Position).Length;
         }
 
         var population = seat.Population!;
@@ -187,6 +224,11 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
             population.CompleteStep(tick: tick);
             engineTick += stepTicks;
         }
+        if (steps > 0L) {
+            var tip = (own.Tick + ((ulong)steps));
+
+            seat.Trail[(int)(tip % ((ulong)seat.Trail.Length))] = (tip, predicted.FixedPosition);
+        }
 
         var rate = FixedQ4816.FromInteger(value: definition.SimulationRateHz);
         var velocity = ((steps > 0L) ? ((predicted.FixedPosition - previous) * rate) : default);
@@ -200,7 +242,8 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
             Orientation: predicted.FixedOrientation,
             Position: predicted.FixedPosition,
             Tick: (own.Tick + ((ulong)steps)),
-            Velocity: velocity
+            Velocity: velocity,
+            Error: seat.Error
         );
         return null;
     }

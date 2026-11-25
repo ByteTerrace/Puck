@@ -135,6 +135,10 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
         cache.NavigationRevision = document.NavigationRevision;
         return document.LastNavigation;
     }
+    /// <summary>The distance, in metres, by which the authority may last have missed a prediction for it still to be
+    /// steered from: a miss wider than a walker's corner reach turns the next corner on a body that is not there, and the
+    /// seat steers from the delivery until the authority confirms the prediction again.</summary>
+    public const double ConfirmedMetres = 0.25;
     /// <summary>Describes a seat's latest prediction, or that this host predicts none.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <returns>A one-line reading.</returns>
@@ -148,7 +152,8 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
     /// and index it read.</returns>
     public Reading Predict(in Reading reading, int slot) {
         if ((prediction is not { } predictor) || !predictor.TryPredict(body: out var body, slot: slot) ||
-            !ReferenceEquals(objA: body.Endpoint, objB: reading.Endpoint) || (body.Index != reading.Index)) {
+            !ReferenceEquals(objA: body.Endpoint, objB: reading.Endpoint) || (body.Index != reading.Index) ||
+            (body.Error > FixedQ4816.FromDouble(value: ConfirmedMetres))) {
             return reading;
         }
 

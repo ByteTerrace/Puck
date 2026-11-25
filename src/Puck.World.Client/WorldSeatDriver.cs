@@ -77,8 +77,9 @@ public sealed class WorldSeatDriver {
     private ulong m_stepAuthorityStart;
     private ulong m_deadline;
     private ulong m_authorityTicks;
-    // The chapter's ticks steered from a predicted body.
+    // The chapter's ticks steered from a predicted body, and this tick's delivered reading, which paths are planned from.
     private ulong m_predictedTicks;
+    private WorldSeatSenses.Reading m_delivered;
     private ulong m_authorityBudget;
     private ulong m_lastBodyTick;
     private string? m_lastBodyAuthority;
@@ -382,6 +383,7 @@ public sealed class WorldSeatDriver {
         // and the chapter's clock were judged above from what the authority delivered.
         var steered = m_senses.Predict(reading: in read, slot: m_slot);
 
+        m_delivered = read;
         if (steered.Predicted) {
             m_predictedTicks++;
         }
@@ -1076,7 +1078,7 @@ public sealed class WorldSeatDriver {
             }
         }
         if (m_plannedIn != WorldKey(read: in read)) {
-            if (!Plan(go: go, read: in read, tick: tick)) {
+            if (!Plan(go: go, reading: in read, tick: tick)) {
                 return still;
             }
             planned = true;
@@ -1186,14 +1188,14 @@ public sealed class WorldSeatDriver {
             (Planar(from: strayFrom, to: target) > FixedQ4816.FromDouble(value: 0.25)) &&
             (Stray(from: strayFrom, point: read.Position, to: target) > strayLimit)
         ) {
-            return Plan(go: go, read: in read, tick: tick) ? Go(go: go, planned: true, rateHz: rateHz, read: in read, still: still, tick: tick) : still;
+            return Plan(go: go, reading: in read, tick: tick) ? Go(go: go, planned: true, rateHz: rateHz, read: in read, still: still, tick: tick) : still;
         }
         if (!planned && moveAnswered && ((m_authorityTicks - m_progressTick) > StuckTicks)) {
             if (++m_stuckPlans > MaxStuckPlans) {
                 Fail(kind: "stuck", place: read.Place, reason: $"made no progress toward {(go.Place ?? Vector(go.Point))} after {MaxStuckPlans} plans", tick: tick);
                 return still;
             }
-            return Plan(go: go, read: in read, tick: tick, stuck: true) ? Go(go: go, planned: true, rateHz: rateHz, read: in read, still: still, tick: tick) : still;
+            return Plan(go: go, reading: in read, tick: tick, stuck: true) ? Go(go: go, planned: true, rateHz: rateHz, read: in read, still: still, tick: tick) : still;
         }
 
         var dx = (target.X - read.Position.X);
@@ -1456,7 +1458,11 @@ public sealed class WorldSeatDriver {
     // domains' route straightened to its corners, with the places its nodes stand in as the corridor.
     // A navigated path waits for the navigation of the world the seat stands in to finish baking off the pump: the
     // body stands, and the step plans on the tick it is ready, within the chapter's time.
-    private bool Plan(WorldRouteStep.Go go, in WorldSeatSenses.Reading read, ulong tick, bool stuck = false) {
+    // A path is planned from where the authority delivered the body, whatever the seat steers from: a prediction runs ahead
+    // through what it cannot see (another body, a moving floor), and a plan is a judgment on the world's ground.
+    private bool Plan(WorldRouteStep.Go go, in WorldSeatSenses.Reading reading, ulong tick, bool stuck = false) {
+        var read = (reading.Predicted ? m_delivered : reading);
+
         if (!go.Direct && (m_senses.Navigation(endpoint: read.Endpoint) is { Ready: false } baking)) {
             baking.Prepare();
             m_plannedIn = null;

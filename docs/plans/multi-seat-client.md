@@ -644,8 +644,15 @@ is a real divergence, never rounding.
   spent, on a tick with none, as `WorldTick.ApplyFederatedIntents` does.
 - *What reads it.* A route's seat driver steers from the predicted body
   (`WorldSeatSenses.Predict`), so a corner is turned and a stop is braked for
-  as a local seat does; walls, the corridor and the chapter's clock are still
-  judged from the delivery. What is predicted is the seat's own body: a body
+  as a local seat does; walls, the corridor, the chapter's clock and every path
+  it plans are still judged from the delivery.
+- *Confirmation.* Each prediction's tip is kept by the authority tick it
+  reached; when a continuation for that tick arrives, the distance between them
+  is the prediction's error. The driver steers from a prediction only while the
+  authority's last answer missed it by less than
+  `WorldSeatSenses.ConfirmedMetres`, so a prediction that runs through
+  something it cannot see (another body, a portal's carry) hands steering back
+  to the delivery until the authority confirms it again. What is predicted is the seat's own body: a body
   riding another (a mount) is not predicted, and neither is anything the seat
   does not drive.
 
