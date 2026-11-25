@@ -1440,9 +1440,9 @@ laws exercise that boundary.
 - **A published mesh is what the store answers.** `SdfMeshLibrary.Store` writes the entry and publishes the baked
   mesh in the form a decode of that entry gives (`SdfMeshStoreCodec.Conform`: positions on the entry's grid, unit
   normals through their octahedral words, every other plane exact), without reading the entry back, so a cold bake
-  draws the mesh a warm boot loads (`AStoredMeshIsWhatItsEntryAnswersWithoutTheEntryBeingRead`), and every store-published mesh's normals
-  and coarser levels' indices can be let go once no region owes its words and restored from the entry when a
-  region owes them again (`SdfMesh.Restore.cs`; the residency's store line reads `mesh-releases`, `mesh-restores`,
+  draws the mesh a warm boot loads (`AStoredMeshIsWhatItsEntryAnswersWithoutTheEntryBeingRead`), and every store-published mesh's planes
+  (positions, indices, normals, triangle materials and every level's) can be let go once nothing has held them for
+  `SdfMesh.IdleSeconds` and restored from the entry when a reader holds them again (`SdfMesh.Restore.cs`; the residency's store line reads `mesh-releases`, `mesh-restores`,
   `mesh-released-now` and `mesh-restore-misses`). Restores run on at most a quarter of the processors' pool
   items and decode into the blocks outside the storage's gate; any failure, an allocation's included, ends the storage lost. A
   library that publishes from a set pins it (`SdfMeshStore.Hold`, `CacheRetention.HoldSet`: a shared lease
