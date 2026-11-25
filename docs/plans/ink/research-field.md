@@ -91,7 +91,7 @@ knows decides what an edge signal can be made from.
 |---|---|---|
 | The program | Every shape, its blend and blend radius, its material, its group, and the slot that moves it | `SdfProgram`, `SdfProgramBuilder` |
 | The bake | The field's value and gradient at lattice corners and at each edge crossing; at any point, which shape won and with which material and slot | `passes/sdf-mesh-bake.comp.hlsl`, `sdfComposeCandidate` in `field/sdf-blend.hlsli`, `SdfSampledLattice.GradientPoints` |
-| The mesh | Per vertex a position and a normal (`SdfMeshRecord.VertexWords`, six words); per triangle a material (`SdfMesh.TriangleMaterials`); for a skinned group, each vertex's second owner, its share and the share's gradient (`SdfMeshInfluence`) | `SdfMesh` |
+| The mesh | Per vertex a position and a normal (`SdfMeshRecord.VertexWords`, six words); per triangle a material (`SdfMesh.Held.TriangleMaterials`); for a skinned group, each vertex's second owner, its share and the share's gradient (`SdfMeshInfluence`) | `SdfMesh` |
 | The visibility record | Per pixel, eight words: distance along the ray, identity (the draw), material, triangle, slot, normal, mean curvature with ambient occlusion, and four shadow visibilities | `frame/sdf-visibility.hlsli`, `SdfWorldPackage.VisibilityRecordByteLength` |
 | The shade program | The stamp: the record's values plus the pixel's world size at the hit, the ray, the lanes and, in a light's phase, that light | `SdfShadeOps.Inputs` |
 
