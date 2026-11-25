@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using System.IO.Hashing;
 using System.Runtime.InteropServices;
 using Puck.Maths;
@@ -175,9 +176,7 @@ public sealed partial class SdfWorldTables {
         return (Shadows?.CascadesOf(frame: frame, view: view) ?? default);
     }
     private ViewInputs ViewInputsOf(int index) {
-        if (index >= m_viewInputs.Length) {
-            Array.Resize(array: ref m_viewInputs, newSize: Math.Max(val1: (index + 1), val2: (m_viewInputs.Length * 2)));
-        }
+        ArrayCapacity.EnsureLength(array: ref m_viewInputs, required: (index + 1));
         return (m_viewInputs[index] ??= new ViewInputs());
     }
     private ViewInputs FitOf(SdfFrame frame, int view) {

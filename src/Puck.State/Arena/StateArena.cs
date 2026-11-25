@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using Puck.Maths;
 using System.Diagnostics.CodeAnalysis;
 
@@ -570,9 +571,7 @@ public sealed partial class StateArena {
     public int BeginScope() {
         var depth = m_journal.Scopes;
 
-        if (depth == m_keyMarks.Length) {
-            Array.Resize(array: ref m_keyMarks, newSize: (depth * 2));
-        }
+        ArrayCapacity.EnsureLength(array: ref m_keyMarks, required: (depth + 1));
         m_keyMarks[depth] = m_keys.Count;
         return m_journal.BeginScope();
     }

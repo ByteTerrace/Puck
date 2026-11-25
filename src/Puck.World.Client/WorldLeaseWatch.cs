@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using Puck.Abstractions.Collections;
 
 namespace Puck.World.Client;
@@ -116,9 +117,7 @@ internal sealed class WorldLeaseWatch {
             if ((index > 0) && (m_scratch[(index - 1)] == slot)) {
                 continue;
             }
-            if (slot >= m_holdersBySlot.Length) {
-                Array.Resize(array: ref m_holdersBySlot, newSize: Math.Max(val1: (slot + 1), val2: (m_holdersBySlot.Length * 2)));
-            }
+            ArrayCapacity.EnsureLength(array: ref m_holdersBySlot, required: (slot + 1));
 
             (m_holdersBySlot[slot] ??= []).Add(item: holder);
             slots.Add(item: slot);

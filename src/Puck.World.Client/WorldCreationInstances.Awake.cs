@@ -1,3 +1,4 @@
+using Puck.Abstractions.Memory;
 using System.Numerics;
 using Puck.Abstractions.Collections;
 using Puck.SdfVm;
@@ -206,9 +207,7 @@ public sealed partial class WorldCreationInstances {
         if (double.IsPositiveInfinity(d: due)) {
             return;
         }
-        if (m_deadlineCount == m_deadlines.Length) {
-            Array.Resize(array: ref m_deadlines, newSize: Math.Max(val1: 16, val2: (m_deadlines.Length * 2)));
-        }
+        ArrayCapacity.EnsureLength(array: ref m_deadlines, required: (m_deadlineCount + 1));
 
         BinaryHeap.Push(count: ref m_deadlineCount, heap: m_deadlines.AsSpan(), item: (due, index, live), order: default(DeadlineOrder));
     }
