@@ -514,8 +514,9 @@ starts empty. A hit is read from creation feedback (core in Vulkan 1.3): a
 creation the driver marks as answered by the application's pipeline cache. A
 driver that reports no valid feedback counts every creation as a miss.
 
-The file lives under the host's state root, at
-`pipeline-cache/<backend>/<vendor>-<device>-<driver>/<kernel-set>.bin`. The
+The file lives under the device cache root (`WorldCacheRoots.Pipelines`,
+beside the meshes and compiles, never the state root), at
+`pipelines/<backend>/<vendor>-<device>-<driver>/<kernel-set>.bin`. The
 device segment is the device identity's `CacheKey`, the same format on both
 backends: the PCI vendor and device IDs in four hexadecimal digits and the raw
 driver version in sixteen (`<vendor>-<device>-<driver-version>`). A driver version the

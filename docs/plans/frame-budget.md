@@ -385,9 +385,10 @@ pass's cost. Then the time:
    it is exact everywhere else; at a depth edge a running mean would follow
    the jitter, which is the shimmer the window exists to remove, so such a
    pixel needs either the per-phase word or no window. Decide by a presented
-   burst of a fogged silhouette. The standing resolve also sums every phase
-   every frame; a sum kept in fixed point with one phase replaced reads one
-   phase instead of eight.
+   burst of a fogged silhouette. The standing resolve no longer sums every
+   phase every frame: it
+   [replaces one term](frame-production.md#3-the-main-view-costs-a-pixel-what-changed-in-it)
+   of a mean it keeps.
 10. **Count what the slots give up.** A slot lists at most eight lights its
     corners disagree on, and the pool holds an extra for one pixel in eight.
     Count the lights rounded and the groups that kept no extra, on

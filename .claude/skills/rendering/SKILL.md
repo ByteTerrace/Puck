@@ -900,7 +900,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   and the two history rings together or restarts all three
   (`ShaderPipelineRenderNode.PreserveCarriedStorages`).
   Replacing one phase and summing in fixed order removes periodic newest-phase
-  bias and keeps samples the current neighborhood misses. Moving and reactive
+  bias and keeps samples the current neighborhood misses. A complete window is
+  summed in full only once a period, on its 8 by 8 group's turn; on the other
+  frames it keeps its mean and replaces the one phase's term in it (the
+  replacing branch of `sdfResolveTemporal`). That branch rests on three things
+  a change to the resolve must keep: a full stored mask means the frame before
+  stored the window's mean at this pixel (the history color, the transport
+  words); the window's first word holds the sum of the phases' packed weights
+  above the mask (`sdfWindowSampleWeight`, `sdfWindowWeight`); and the turn is
+  uniform over a group, since a turn chosen by pixel puts a summing lane in
+  nearly every wave and saves nothing. Moving and reactive
   pixels use the clipped resolve while their window fills. A stationary window
   keeps its validated receiver while the footprint still sees it; choosing a
   new thin adjoining face each phase can reject the window on the next phase.

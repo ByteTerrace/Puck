@@ -419,7 +419,6 @@ public static partial class CanaryCommand {
             Cancellation: cancellation.Token,
             Clock: Stopwatch.StartNew(),
             Packages: new CanaryPackages(),
-            Seed: new CanaryPipelineCacheSeed(),
             Tally: new CanaryTally(),
             Total: TimeSpan.FromSeconds(value: plan.BudgetSeconds)
         );
@@ -576,7 +575,6 @@ public static partial class CanaryCommand {
             built: (world is { Reused: false }),
             endings: endings,
             plan: plan,
-            seed: budget.Seed,
             tally: budget.Tally
         );
         Console.WriteLine(value: $"canary counts: {ended.ToString(provider: CultureInfo.InvariantCulture)} leg(s) ran for {legTime.TotalSeconds.ToString(format: "0", provider: CultureInfo.InvariantCulture)}s of leg time in {budget.Clock.Elapsed.TotalSeconds.ToString(format: "0", provider: CultureInfo.InvariantCulture)}s of wall time, up to {capacity.Processes.ToString(provider: CultureInfo.InvariantCulture)} World process(es) and {capacity.GpuLegs.ToString(provider: CultureInfo.InvariantCulture)} GPU leg(s) at once.");
@@ -870,8 +868,8 @@ public static partial class CanaryCommand {
     // that true whatever order legs start in: a leg waits only while some other leg runs, so the time spent before it
     // starts never exceeds the timeouts of the legs that started before it; the warm boots run first, under their own
     // summed timeouts. Packages holds the run's shader
-    // packages, Seed the pipeline cache the warm boots left, and Tally counts what the run starts.
-    private readonly record struct CanaryBudget(Stopwatch Clock, TimeSpan Total, CancellationToken Cancellation, CanaryPackages Packages, CanaryPipelineCacheSeed Seed, CanaryTally Tally) {
+    // packages, and Tally counts what the run starts.
+    private readonly record struct CanaryBudget(Stopwatch Clock, TimeSpan Total, CancellationToken Cancellation, CanaryPackages Packages, CanaryTally Tally) {
         public TimeSpan Remaining => CliProcess.RemainingBudget(
             budget: Total,
             clock: Clock
@@ -925,11 +923,6 @@ public static partial class CanaryCommand {
         var stateDirectory = Path.Combine(
             path1: runDirectory,
             path2: "state"
-        );
-        // An offscreen or windowed leg starts from the pipeline cache the run's warm boots left.
-        var seeded = (
-            (manifest.BootShape is CanaryBootShape.Offscreen or CanaryBootShape.Windowed) &&
-            budget.Seed.TrySeed(stateDirectory: stateDirectory)
         );
         var stdoutPath = Path.Combine(
             path1: runDirectory,
@@ -1099,10 +1092,6 @@ public static partial class CanaryCommand {
                     encoding: new UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
                 );
             }
-        }
-
-        if (seeded) {
-            budget.Seed.Observe(stateDirectory: stateDirectory);
         }
 
         File.WriteAllText(

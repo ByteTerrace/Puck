@@ -27,7 +27,9 @@ namespace Puck.Abstractions.Gpu;
 /// the thread pool once creations have been quiet for <see cref="WriteQuiet"/>, or once the oldest owed one has waited
 /// <see cref="WriteLatest"/>, whichever comes first (<see cref="QuietTrigger"/>). A cold start creating pipelines for a
 /// minute therefore writes the file a handful of times rather than once a pipeline, and its bytes written grow with the
-/// cache, not with its square. <see cref="Close"/> writes what is still owed when the backend's cache goes away.
+/// cache, not with its square. A background write never makes a creation wait: the backend's serializer is asked not to
+/// wait, and one that finds a creation in flight defers, which leaves the write owed and asks for it again after the
+/// next quiet period. <see cref="Close"/> writes what is still owed when the backend's cache goes away, and waits.
 /// </para>
 /// <para>
 /// Several processes may share the directory. A write goes to a temporary file beside the target and then replaces the
@@ -55,7 +57,7 @@ public sealed class GpuPipelineCacheFile {
     // replaces a newer one.
     private readonly Lock m_writeGate = new();
 
-    private Func<ReadOnlyMemory<byte>>? m_serialize;
+    private Func<bool, ReadOnlyMemory<byte>?>? m_serialize;
     private QuietTrigger? m_trigger;
     private int m_touched;
     private long m_unsaved;
@@ -231,10 +233,12 @@ public sealed class GpuPipelineCacheFile {
     /// quiet, and <see cref="Close"/> writes what is still owed. A file kept in memory only binds nothing.</summary>
     /// <param name="serialize">Serializes the backend's cache on whatever thread writes; empty when the cache is gone or
     /// its serialization failed (reported by the backend). It synchronizes with the backend's own creations and
-    /// release.</param>
+    /// release. Its argument says whether it may wait for creations in flight: the closing write may, and a background
+    /// write may not, so a serializer that cannot read its cache beside a creation answers <see langword="null"/>
+    /// instead of waiting, which leaves the write owed.</param>
     /// <exception cref="ArgumentNullException"><paramref name="serialize"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidOperationException">A serializer is already bound.</exception>
-    public void Attach(Func<ReadOnlyMemory<byte>> serialize) {
+    public void Attach(Func<bool, ReadOnlyMemory<byte>?> serialize) {
         ArgumentNullException.ThrowIfNull(argument: serialize);
 
         if (Path is null) {
@@ -248,7 +252,7 @@ public sealed class GpuPipelineCacheFile {
         _ = Interlocked.Exchange(
             location1: ref m_trigger,
             value: new QuietTrigger(
-                action: Flush,
+                action: FlushWithoutWaiting,
                 latest: WriteLatest,
                 quiet: WriteQuiet
             )
@@ -262,7 +266,9 @@ public sealed class GpuPipelineCacheFile {
             trigger.Dispose();
         }
 
-        Flush();
+        if (Volatile.Read(location: ref m_serialize) is { } serialize) {
+            _ = PersistOwed(serialize: () => serialize(arg: true));
+        }
     }
     /// <summary>Counts one pipeline created through the cache. A miss owes a write and a hit a refresh of the file's
     /// last-write time; both run in the background once a serializer is bound (<see cref="Attach"/>), or at the next
@@ -290,6 +296,12 @@ public sealed class GpuPipelineCacheFile {
     public void Persist<TState>(TState state, Func<TState, ReadOnlyMemory<byte>> serialize) {
         ArgumentNullException.ThrowIfNull(argument: serialize);
 
+        _ = PersistOwed(serialize: () => serialize(arg: state));
+    }
+
+    // The one write: what is owed, through a serializer that may defer (null), which leaves the write owed. Returns
+    // whether it deferred.
+    private bool PersistOwed(Func<ReadOnlyMemory<byte>?> serialize) {
         lock (m_writeGate) {
             var unsaved = Interlocked.Exchange(
                 location1: ref m_unsaved,
@@ -298,7 +310,7 @@ public sealed class GpuPipelineCacheFile {
             var touched = (Interlocked.Exchange(location1: ref m_touched, value: 0) != 0);
 
             if (Path is null) {
-                return;
+                return false;
             }
 
             if (unsaved == 0L) {
@@ -306,13 +318,20 @@ public sealed class GpuPipelineCacheFile {
                     Refresh(path: Path);
                 }
 
-                return;
+                return false;
             }
 
-            var data = serialize(arg: state);
+            if (serialize() is not { } data) {
+                _ = Interlocked.Add(
+                    location1: ref m_unsaved,
+                    value: unsaved
+                );
+
+                return true;
+            }
 
             if (data.IsEmpty) {
-                return;
+                return false;
             }
 
             if (!Save(
@@ -324,12 +343,15 @@ public sealed class GpuPipelineCacheFile {
                     value: unsaved
                 );
             }
+
+            return false;
         }
     }
-    // The background write and the closing one: what is owed, through the bound serializer.
-    private void Flush() {
-        if (Volatile.Read(location: ref m_serialize) is { } serialize) {
-            Persist(serialize: static serialize => serialize(), state: serialize);
+    // The background write: what is owed, through the bound serializer, which is asked not to wait. A deferred write
+    // asks for the next one, which the trigger runs once creations have gone quiet again.
+    private void FlushWithoutWaiting() {
+        if ((Volatile.Read(location: ref m_serialize) is { } serialize) && PersistOwed(serialize: () => serialize(arg: false))) {
+            Volatile.Read(location: ref m_trigger)?.Request();
         }
     }
     /// <summary>Reads the file.</summary>

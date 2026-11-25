@@ -193,7 +193,6 @@ public static partial class CountersCommand {
         foreach (var backend in WorldOffscreenLeg.Backends) {
             var stateDirectory = WorldOffscreenLeg.StateDirectoryOf(backend: backend, runDirectory: runDirectory);
 
-            CountersPipelineCache.Seed(backend: backend, root: CountersPipelineCache.DefaultRoot, stateDirectory: stateDirectory);
             var leg = WorldOffscreenLeg.Run(
                 cancellationToken: cancellationToken,
                 arguments: [],
@@ -215,7 +214,6 @@ public static partial class CountersCommand {
             if (leg != CliExit.Success) {
                 return leg;
             }
-            CountersPipelineCache.Persist(backend: backend, root: CountersPipelineCache.DefaultRoot, stateDirectory: stateDirectory);
             if (!CountersReading.TryRead(
                 backend: backend,
                 compiler: compiler,

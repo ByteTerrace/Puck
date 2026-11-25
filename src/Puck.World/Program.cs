@@ -350,7 +350,8 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
     var caches = new WorldCacheRoots(
         compilations: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "compilations") : Path.Join(path1: cacheRoot, path2: "compilations")),
         compiledWorlds: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "compiled-worlds") : Path.Join(path1: cacheRoot, path2: "compiled-worlds")),
-        meshes: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "meshes") : Path.Join(path1: cacheRoot, path2: "meshes"))
+        meshes: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "meshes") : Path.Join(path1: cacheRoot, path2: "meshes")),
+        pipelines: ((cacheRoot is null) ? PuckUserDirectory.Resolve(name: "pipelines") : Path.Join(path1: cacheRoot, path2: "pipelines"))
     ) {
         // A player's build starts from the meshes its channel shipped and bakes what they lack; a producer or a check
         // boot of a folder not yet marked complete names its policy.

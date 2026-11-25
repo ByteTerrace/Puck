@@ -7,11 +7,14 @@ namespace Puck.Vulkan.Interop;
 /// One logical device's <c>VkPipelineCache</c>, seeded from the device's <see cref="GpuPipelineCacheFile"/>, passed to
 /// every compute and graphics pipeline creation on the device, and written back by the file in the background once
 /// creations go quiet, and on disposal. Created without the externally-synchronized flag, so the driver synchronizes it
-/// internally and pipelines may be created on several threads at once; reading the cache's data still waits for every
-/// creation in flight (<see cref="Enter"/>): a cold boot that read it while other threads created pipelines through it
-/// faulted inside <c>vkGetPipelineCacheData</c> on NVIDIA's driver under the validation layer. Because the file writes
-/// only after creations have been quiet, that wait rarely meets a creation. The file owns where the cache lives and when
-/// it is written; this type owns only the native cache and the header check.
+/// internally and pipelines may be created on several threads at once; reading the cache's data still never runs beside
+/// a creation (<see cref="Enter"/>): a cold boot that read it while other threads created pipelines through it faulted
+/// inside <c>vkGetPipelineCacheData</c> on NVIDIA's driver under the validation layer. A background read does not wait
+/// for the creations in flight, because a reader waiting on them makes every later creation queue behind it for as long
+/// as the earlier ones compile: it takes the cache only when no creation holds it, and otherwise defers its write to the
+/// file's next quiet period. A creation therefore waits at most for one read already under way. The closing read waits,
+/// since no creation follows it. The file owns where the cache lives and when it is written; this type owns only the
+/// native cache and the header check.
 /// <para>
 /// A file is loaded only when its header names this device: header version one, the device's vendor and device IDs
 /// and its pipeline-cache UUID (<see cref="GpuDeviceIdentity.PipelineCacheUuid"/>). A file that fails that check, or
@@ -104,9 +107,14 @@ public sealed unsafe class VulkanPipelineCache : IDisposable {
 
         return null;
     }
-    // The cache's current data, or empty when the driver could not return it (reported), read while no creation runs.
-    private static ReadOnlyMemory<byte> Serialize(VulkanPipelineCache cache) {
-        cache.m_use.EnterWriteLock();
+    // The cache's current data, or empty when the driver could not return it (reported), read while no creation runs;
+    // null when a creation is in flight and the caller may not wait for it.
+    private static ReadOnlyMemory<byte>? Serialize(VulkanPipelineCache cache, bool wait) {
+        if (wait) {
+            cache.m_use.EnterWriteLock();
+        } else if (!cache.m_use.TryEnterWriteLock(millisecondsTimeout: 0)) {
+            return null;
+        }
         try {
             return SerializeAlone(cache: cache);
         } finally {
@@ -236,10 +244,11 @@ public sealed unsafe class VulkanPipelineCache : IDisposable {
         m_use.Dispose();
     }
 
-    // The cache's data for the file's writer, on whatever thread writes, or empty once the cache is destroyed.
-    private ReadOnlyMemory<byte> SerializeUnlessDisposed() {
+    // The cache's data for the file's writer, on whatever thread writes, empty once the cache is destroyed, or null when
+    // a creation is in flight and the writer may not wait.
+    private ReadOnlyMemory<byte>? SerializeUnlessDisposed(bool wait) {
         lock (m_gate) {
-            return (m_disposed ? ReadOnlyMemory<byte>.Empty : Serialize(cache: this));
+            return (m_disposed ? ReadOnlyMemory<byte>.Empty : Serialize(cache: this, wait: wait));
         }
     }
 

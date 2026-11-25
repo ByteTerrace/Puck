@@ -21,6 +21,227 @@ The rule this plan builds toward: **a world is produced by its own job, and
 only for a frame that shows it.** The frame thread decides what the frame
 shows and joins the work; it does not do the work of each world in turn.
 
+## The whole frame as one architecture
+
+The clean window on both machines
+([the RTX 4070's](measurements/2026-11-25-window.md)) reads one shape from
+three sides. The GPU binds on both machines, with the main view's passes at
+15 to 16 ms on the RTX 4070 and 21 to 25 ms on the RTX 2060. The frame thread
+scales with the worlds and views a client holds: hiding the session windows
+halves produce. And every pass does all of its work for every pixel on every
+frame. This section is the one design the CPU frame and the GPU frame are now
+built to. The sections after it describe what stands today, and
+[the GPU frame's budget](frame-budget.md) keeps each stage's share.
+
+**The rule.** A frame costs what changed and what the display shows. The
+frame thread's work does not grow with the instances, worlds or views a client
+holds, and a pass's work does not grow with pixels whose inputs stand.
+
+It has four parts, each with the one door that holds its invariant.
+
+### 1. The scene is resident on the GPU and changes by deltas
+
+A residency's tables already stay on the device between frames, and its draw
+records are written by difference (`GpuUploadRuns.AddDifferences`). What still
+scales with the scene on the frame thread is posing and dressing: every
+animated slot is posed on the CPU each frame
+(`WorldCreationInstances.PackTransforms`), every posed slot is judged for the
+shadows, and the dresser walks the bindings of every changed pose
+(`SdfMeshDresser.Dress`).
+
+A transform slot is one of three kinds, decided when its creation is
+registered, from the creation's program:
+
+| Kind | Who writes it | When |
+|---|---|---|
+| Still | the host | once, when the slot is made or its creation changes |
+| Simulated (a body, an effector, anything a rule or contact reads) | the host | when its pose epoch moves |
+| Programmed (authored presentation motion that reads only time, state cells and constants) | a GPU kernel running the compiled motion program | every frame, on the device |
+
+A programmed slot's program is authored Puck and stays so: the engine compiles
+it to rows a fixed kernel interprets, as an authored `shade` program's rows
+are, and the host uploads the rows once and the frame's clocks and cells in
+the frame block. The kernel writes each slot's current and previous transform
+before selection, so reprojection and every view read one table. Each
+programmed slot carries a swept box derived from its program, which culling
+and the shadows' moved rectangles take in place of a per-slot judgement.
+Picking evaluates the one slot on the CPU on demand. Nothing in simulation
+reads a programmed pose.
+
+Draw lists are the device's already: every raster pass selects its draws in a
+kernel and compacts the survivors in slot order, so a phase executes the
+commands it draws (`SdfMeshOcclusion`, the count and compact steps of
+`passes/sdf-mesh-occlusion.comp.hlsl`).
+
+Invariant: a slot has one writer. Door: the slot's kind, fixed at
+registration, which the host's pack and the motion kernel both select by; a
+slot of one kind is not in the other's list. Where it stops: a creation whose
+eligibility changes (an effector attached to a programmed creation) is
+registered again, which moves its slots' kind with their generation.
+
+Built so far: the selection and its compaction. Nothing of the motion kernel:
+the host's pack is forked across the pool and spares still shapes (steps 9,
+11, 14 and 15 below). [The remainder](#what-is-left-of-the-architecture)
+orders the rest.
+
+### 2. Secondary views are one view system
+
+Every view that is not a seat's own (a session window, a portal, a mirror, a
+camera on a screen, a sky view of another world) is a render-graph instance
+with its own passes, storage and recording job, and a window nested in a
+window is another instance: the debug world's fifteen paintings, nested two
+deep, install about 150 instances. Their cadence is earned already, from the
+display height they cover (`SdfUpdateRateTiers.ViewHertz`). Three things are
+not earned:
+
+- **Cadence does not follow motion.** The tiers assume content moving half
+  the view's height a second (`SdfUpdateRateTiers.ViewParallaxPerSecond`)
+  whatever the viewer and the destination do. A view's rate comes instead
+  from what moves in it: its camera's measured motion across its image (the
+  viewer's parallax through the glass) and the fastest content its world
+  reports, under the same perceptible step. A viewer standing before a still
+  garden then holds its window at the slowest tier, and one walking past it
+  takes the rate the parallax needs.
+- **Storage is held per instance.** Every installed instance keeps a whole
+  pass family's working storage at its last extent, which is the fixed class
+  the device bar fails on, and a window's growth installs a new graph beside
+  the old one on the frame thread (`ShaderPipelineRenderNode.InstallPending`,
+  which leads the route's 100 ms produce hitches). A secondary view owns its
+  published image and, where it reconstructs, its history. Its working
+  storage (visibility records, probe records, filter and glass scratch) is
+  leased for the frames it renders from a pool held by extent octave, shared
+  by every secondary view on the device.
+- **Recording is per instance.** One recording job a residency already groups
+  its views (`IRenderGraphPackageRecorder.RecordingDomain`); within it each
+  view records its whole pass family. The views of one residency due in a
+  frame are packed into rects of one atlas at their earned extents, and each
+  pass kind dispatches once over the atlas, a tile naming its view. Recording
+  then costs a residency, not a view.
+
+Invariant: a view's image is rendered from one camera and one frame of its
+residency, whatever it shares storage with. Door: the lease, which a view
+takes before it records and holds until its submission retires
+(`GpuImageLeases`), so no two views write one scratch in one frame.
+
+The decision's earlier answer (one instance a view, layered views only if the
+counts called for them) stands for seats, whose views are few and large. The
+counts now call for the batch for secondary views: one painting in sight adds
+about 2 ms of produce and 1.9 ms of GPU, and a hub shows dozens.
+
+### 3. The main view costs a pixel what changed in it
+
+A pixel's work splits by how fast its inputs change. Visibility (the mesh
+pass and the records) follows the camera. Lighting inputs (the indirect
+lookup, the tiles' light lists, the shadow and occlusion filter) change
+slower than the camera moves across them. A still pixel's reconstruction has
+nothing new to sum but one phase.
+
+Reading the main view on the live World, each part compiled out in a scratch
+copy of the kernels and reloaded, changed what this part of the design can
+promise. Two findings:
+
+- **No pass holds one large part.** At 2560 by 1440 the six heavy passes cost
+  about 1 to 3.4 ms each, and no part of any of them read here is over a
+  millisecond. The resolve, the largest standing, splits as the table below
+  shows. A coarser shading rate (`viewsRate.maxRate` 2 in the `high` table)
+  still does not pay as built: the probe lookup, which classifies the tiles,
+  rose from about 1 ms to 2.3 ms and the views pass did not fall.
+- **Work held in screen space pays only while the camera stands.** A record
+  kept by tile or by pixel (a probe slot, a light list, a filtered shadow, a
+  phase of the window) was built for the receiver that stood in that pixel.
+  When the camera moves, every pixel holds another receiver, so every such
+  record is due at once and nothing is saved. Amortizing over frames
+  therefore lowers the standing frame, which is where the frame sits at the
+  edge of its period indoors, and leaves the frame in motion to two other
+  levers: each pass doing less for a pixel, and records kept in world space,
+  which survive the camera's motion (the probe cache a residency in
+  [the budget's steps](frame-budget.md#the-steps)).
+
+| The resolve's part, RTX 4070, 2560 by 1440 | Standing, ms | Turning, ms |
+|---|---|---|
+| The whole pass | 3.44 | 2.61 |
+| The stationary window's sum of eight phases | 0.9 | none (a moving pixel keeps no window) |
+| The previous point of the nearest hit (`sdfPreviousPoint`) | | 0.55 |
+| The air along each tile sample's ray | 0.2 | 0.2 |
+| The sub-pixel feature test | | 0.2 |
+| The history's sixteen taps against one | | 0.1 |
+
+The rules that follow:
+
+- **The resolve costs a still pixel one phase.** Built. A complete window
+  keeps its mean, which the frame before stored at the pixel, and the sum of
+  its phases' packed weights in the window's first word. Replacing one phase
+  moves the mean by that phase's weight share of the difference between its
+  new sample and its old one, so the pixel reads one phase's words where the
+  sum read all eight. A component the phase did not change is carried
+  exactly, since its difference is zero. The stored mean is a half float, so a
+  phase that did change leaves the mean within an ulp of the full sum's, and
+  every 8 by 8 group of pixels sums its windows in full once a period, on its
+  own frame of the period, so that rounding never gathers. The turn is the
+  group's and never the pixel's, because a wave runs both paths when its
+  lanes differ
+  ([gpu cost](../../.claude/skills/rendering/references/gpu-cost.md#registers-set-occupancy-occupancy-is-not-speed)).
+  A first form that held the mean only while the replaced phase packed to the
+  very words it held saved nothing: light that turns with the day changes
+  most phases' low bits every period.
+
+  Invariant: the mean a window shows is the weighted mean of its eight
+  phases' packed words, to within the half float it is stored in. Door: the
+  one branch in `passes/sdf-resolve.comp.hlsl` that replaces a term, which
+  runs only for a window whose stored mask was full (so the frame before
+  stored its mean unzeroed) and whose replaced phase kept its packed weight
+  (so the weights' sum stands). Where it stops: the bounds clamp the full sum
+  applies is skipped on a replacing frame, so the mean may leave its samples'
+  range by an ulp until its group's next full sum.
+
+  What showed it: the resolve standing in the hall fell from 3.27 to 2.58 ms
+  and at the spawn from 3.45 to 2.80 ms, and stayed at 2.61 ms turning.
+- **A pass reads records, not the scene.** Not built. The resolve finds its
+  nearest hit's previous point by resolving the hit and comparing its draw's
+  pose words with the previous table's, about 27 words a pixel for a draw
+  that did not move. A moved bit a draw, written where the host stages a
+  pose, would cut that to a word, but a bit that reads unmoved for a draw
+  that moved keeps a stale window on a moving body, so the bit needs one door
+  every pose write passes before it is trusted.
+- **Lighting inputs in world space.** Not built: the budget's probe cache.
+
+### 4. The frame is pipelined once its camera is latched
+
+[Step 13](#the-steps) below, unchanged: frame N's recordings run on the pool
+while the frame thread captures N+1, with the seat's camera evaluated again
+from the newest look sample just before the recordings open
+([decision](../decisions/rendering.md#the-pipeline-foundation)). Parts 1 and 2
+shorten both halves first, so the pipeline splits a chain that already costs
+what changed.
+
+### What is left of the architecture
+
+In the order that moves the bars most for the least risk, each with its check:
+
+1. **The Vulkan defects.** Built: the device's pipeline caches live in the
+   device cache root, so every boot is warm, and reading the cache for its
+   file never makes a creation wait. Left, with their designs:
+   [the capture copy and the record fork](#the-vulkan-frame).
+2. **The main view in motion.** The resolve's previous point by a moved bit
+   (about half a millisecond turning), the sample record the views pass
+   writes for it, and the shadow classification and world-space probe cache
+   of [the budget's steps](frame-budget.md#the-steps). Check:
+   `world.gpu-timing` turning at the stage (`player.signal gamepad.rightStick
+   0.03 0` holds a slow turn) and over the route.
+3. **Cadence by motion** for secondary views. Check: `world.rates` reads the
+   garden window at the slowest tier with the viewer standing, and at the
+   parallax's tier walking past it; a presented burst shows no step over the
+   perceptible bound.
+4. **Pooled working storage** for secondary views. Check: `host.memory
+   families 0` reads the `session` family near its published images, and no
+   `InstallPending` sample on the route's frame thread.
+5. **The motion kernel** (programmed slots). Check: `sdf.transforms.packed-rows`
+   over `sdf.creations.packs` falls to the simulated slots at the spawn, and a
+   presented burst at the meadow shows the blades moving as before.
+6. **The view atlas.** Check: `render.record.jobs` over `render.record.frames`
+   does not move when a second painting of one world comes into sight.
+7. **The pipeline with its latch** (step 13).
+
 ## What a frame does
 
 In order, on the frame thread unless a step says otherwise:
@@ -651,6 +872,72 @@ across a benchmark chapter and divided by the frames.
     spares nothing more until the next staging, which only places more slots.
     What shows it: `host.frames`' `pack` part and the frame thread's samples
     in `JoinPack` (`puck host samples --focus ProduceFrameBatched`).
+
+## The Vulkan frame
+
+Three costs the clean window read on Vulkan alone.
+
+**A boot creates its pipelines from a warm cache, and a cache write never
+makes a creation wait.** Built. The warm boot took 104 s to its first world
+frame, and the samples showed pipeline creation waiting on a lock the cache's
+writer held. Two causes, both removed:
+
+- The driver's pipeline cache lived under the state root, and every World a
+  tool starts gets a state directory of its own, so every such boot started
+  cold however warm the meshes were. A pipeline cache is a derived product
+  keyed by its backend, device, driver and kernel set, so it lives in the
+  device cache root with the meshes and compiles (`WorldCacheRoots.Pipelines`).
+  The two verbs that copied cache files between state directories to work
+  around the cold start (the counters legs and the canary's seed) lost that
+  code: their Worlds read the device cache root like any other.
+- The writer read the cache under a lock every creation shares, and it waited
+  for the creations in flight, which made every later creation queue behind
+  it. A background write now takes the cache only when no creation holds it
+  and otherwise defers to the file's next quiet period
+  (`GpuPipelineCacheFile.Attach`'s serializer answers "not now").
+
+  Invariant: the cache's data is never read beside a creation through it (the
+  driver faulted when it was). Door: the reader-writer hold every creation
+  enters through `VulkanPipelineCache.Enter`. Where it stops: a creation that
+  begins during a read already under way waits for that one read.
+
+What shows it: a second windowed Vulkan boot from a fresh state directory
+reads `world.counters pipeline-cache.vulkan` with no miss, and reaches its
+first world frame in about the time Direct3D 12 does.
+
+**A desktop capture's pixels reach the device without the frame thread
+comparing them.** Designed, not built. On Direct3D 12 the platform copies a
+captured window into shared textures on the device. Vulkan has no exporter
+(`IGpuSurfaceExportProvider` has one implementation), so the capture's CPU
+frames go through `WorldCapturePixels.Pull`, and the frame thread pays three
+passes over every frame: `GpuRegion.Write` compares the new pixels with the
+region's host copy, copies them into it, and the staging copies them again.
+The platform already captures and reads back on its own thread
+(`Win32GraphicsCaptureFeed` publishes into a triple buffer, and `TryCapture`
+swaps a buffer in), so what moves is the compare:
+
+- A lane of the capture's own (`JobLane`) takes each frame, copies it into a
+  buffer the capture owns and finds the runs of words that differ from the
+  frame before (`GpuUploadRuns.AddDifferences`).
+- The frame thread collects the unit and hands the region the runs alone
+  (`GpuRegion.WriteRuns`), which copies what changed and compares nothing. A
+  desktop that changed a caret costs the frame thread a caret.
+- Invariant: runs are applied only to a region that holds the frame they
+  were found against. Door: the converter says whether its region holds the
+  last pixels handed to it (false before its first whole write and after a
+  device loss), and the capture posts its next unit only once the frame it
+  collected was written, so the lane's previous frame is always the region's.
+
+The device-side copy on Vulkan (an import of the capture's shared texture) is
+the step after: it removes the frame thread's part altogether and needs
+Vulkan's external-memory path.
+
+**Vulkan's record fork.** Not diagnosed. The window read Record at 8 to 9 ms
+in motion against Direct3D 12's 3 to 4, inside `RenderGraphRuntime.RecordWave`'s
+fork. It needs a frame-thread trace of a settled Vulkan route
+(`puck host samples --focus RecordWave --depth 5`); this machine's Vulkan
+mesh store was cold and its memory taken while this plan's Vulkan boots ran,
+and a trace of a baking World holds almost no recording.
 
 ## Systems considered
 

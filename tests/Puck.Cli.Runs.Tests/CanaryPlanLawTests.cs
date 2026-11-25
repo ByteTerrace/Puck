@@ -1,5 +1,4 @@
 using Puck.Cli.Canary;
-using Puck.Testing;
 
 using Xunit;
 
@@ -210,44 +209,6 @@ public sealed class CanaryPlanLawTests {
         Assert.Contains(expectedSubstring: "warm on vulkan from plain's positive world never landed its capture, so the display encode's pipeline was not built", actualString: Refusal(backend: "vulkan", stderr: EngineReady, stdout: Counts));
         Assert.Contains(expectedSubstring: "never landed its capture", actualString: Refusal(backend: "vulkan", stderr: (EngineReady + "[capture] refused D:\\run\\vulkan-encode.png: the run ended before any frame served it\n"), stdout: Counts));
         Assert.Contains(expectedSubstring: "never landed its capture", actualString: Refusal(backend: "directx", stderr: Ready, stdout: Counts));
-    }
-    /// <summary>A leg starts from exactly the files the warm boots persisted, and counts as having built no pipeline
-    /// outside them only when its cache holds those same files, byte for byte, after it exits: a changed file or an
-    /// added one (a device the warm never saw) does not count.</summary>
-    [Fact]
-    public void AWarmedCacheSeedsEachLegAndCountsOnlyTheLegsThatWroteNothingBack() {
-        using var scratch = new TemporaryDirectory(prefix: "puck-cache-seed-");
-        var root = scratch.RootPath;
-
-        var warmed = Path.Combine(path1: root, path2: "warm", path3: "pipeline-cache");
-        var cache = Path.Combine(path1: warmed, path2: "vulkan", path3: "device");
-
-        Directory.CreateDirectory(path: cache);
-        File.WriteAllBytes(path: Path.Combine(path1: cache, path2: "key.bin"), bytes: [1, 2, 3]);
-        File.WriteAllBytes(path: Path.Combine(path1: cache, path2: "key.bin.tmp"), bytes: [9]);
-
-        var seed = new CanaryCommand.CanaryPipelineCacheSeed();
-
-        Assert.False(condition: seed.TrySeed(stateDirectory: Path.Combine(path1: root, path2: "empty")));
-        seed.Capture(directory: warmed);
-
-        string[] legs = [.. Enumerable.Range(count: 3, start: 0).Select(selector: index => Path.Combine(path1: root, path2: $"leg{index}", path3: "state"))];
-
-        foreach (var leg in legs) {
-            Assert.True(condition: seed.TrySeed(stateDirectory: leg));
-            Assert.Equal(expected: [1, 2, 3], actual: File.ReadAllBytes(path: Path.Combine(paths: [leg, "pipeline-cache", "vulkan", "device", "key.bin"])));
-            Assert.False(condition: File.Exists(path: Path.Combine(paths: [leg, "pipeline-cache", "vulkan", "device", "key.bin.tmp"])));
-        }
-
-        File.WriteAllBytes(path: Path.Combine(paths: [legs[1], "pipeline-cache", "vulkan", "device", "key.bin"]), bytes: [1, 2, 3, 4]);
-        Directory.CreateDirectory(path: Path.Combine(paths: [legs[2], "pipeline-cache", "directx", "device"]));
-        File.WriteAllBytes(path: Path.Combine(paths: [legs[2], "pipeline-cache", "directx", "device", "key.bin"]), bytes: [5]);
-
-        foreach (var leg in legs) {
-            seed.Observe(stateDirectory: leg);
-        }
-
-        Assert.Equal(expected: (3, 1), actual: (seed.Seeded, seed.Unchanged));
     }
     [Fact]
     public void OnlyAManifestThatDeclaresItRunsAloneAndEveryGraphicsDeviceLegHoldsAGpuSlot() {

@@ -26,7 +26,9 @@ public readonly record struct WorldPortalLead(bool Leads, string Why, float Metr
 /// </summary>
 /// <remarks>Every member runs on the thread that pumps and presents, as <see cref="WorldSeatSenses"/> does. A walk is
 /// measured again only once its seat's foot has moved <see cref="ReuseMetres"/> or its navigation or lead changed, so a
-/// still viewer costs a lookup a glass a frame.</remarks>
+/// still viewer costs a lookup a glass a frame. A walk no domain covered is one of those: what could cover it is a
+/// domain's bake landing (<see cref="IWorldSeatNavigation.Domains"/>) or the foot's move, so it too waits for one of
+/// them rather than searching again every frame.</remarks>
 /// <param name="senses">What each seat's client was delivered: the seats' bodies and the navigation of their worlds; <see langword="null"/> where no seat is read, which judges every glass by line.</param>
 public sealed class WorldPortalReach(WorldSeatSenses? senses) {
     /// <summary>How far in front of a glass, in metres, its facing side reaches: a walk ends at a cell whose foot stands
@@ -47,6 +49,8 @@ public sealed class WorldPortalReach(WorldSeatSenses? senses) {
         public IWorldSeatNavigation? Navigation;
         public Vector3 From;
         public float Limit;
+        // The domains baked when the walk was measured: an uncovered walk is measured again once more are.
+        public int Baked;
         public WorldSeatReach Reach;
         public bool Judged;
     }
@@ -80,9 +84,12 @@ public sealed class WorldPortalReach(WorldSeatSenses? senses) {
                 m_measured.Add(key: glass, value: measured = new Measured(goal: new FacingGoal(glass: glass)));
             }
             measured.Judged = true;
+            var baked = navigation.Domains.Baked;
+
             if (!ReferenceEquals(objA: measured.Navigation, objB: navigation) || (measured.Limit != limit) || (Vector3.Distance(value1: measured.From, value2: foot) > ReuseMetres)
-                || (measured.Reach.Kind == WorldSeatReachKind.Uncovered)) {
+                || ((measured.Reach.Kind == WorldSeatReachKind.Uncovered) && (measured.Baked != baked))) {
                 measured.Reach = navigation.Reach(from: FixedVector3.FromVector3(value: foot), goal: measured.Goal, goalProbe: measured.Goal.Probe, limit: FixedQ4816.FromDouble(value: limit));
+                measured.Baked = baked;
                 measured.Navigation = navigation;
                 measured.Limit = limit;
                 measured.From = foot;

@@ -36,7 +36,8 @@ public sealed class WorldBootCompositionLawTests {
             Caches: new WorldCacheRoots(
                 compilations: Path.Join(path1: scratch.RootPath, path2: "compilations"),
                 compiledWorlds: Path.Join(path1: scratch.RootPath, path2: "compiled-worlds"),
-                meshes: Path.Join(path1: scratch.RootPath, path2: "meshes")
+                meshes: Path.Join(path1: scratch.RootPath, path2: "meshes"),
+                pipelines: Path.Join(path1: scratch.RootPath, path2: "pipelines")
             ),
             Extensions: extensions,
             HostSettings: WorldHostSettings.Resolve(
