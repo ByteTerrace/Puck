@@ -2528,6 +2528,16 @@ frame and the pixel-pass gap at locked clocks.
   the owner was already armed or aliased, and make a mid-batch split safe or
   have the door refuse it while recording. GPU lifetimes are a review-only
   hazard class.
+- [medium] **One Direct3D 12 device hang on the RTX 2060, undiagnosed.** A
+  benchmark route (`world.benchmark run debug loops 2`, D3D12, 1920 by 1080,
+  `world.device-profile rtx2060`) lost its device once with
+  `DXGI_ERROR_DEVICE_HUNG` (0x887A0006) in loop 2's garden painting chapter;
+  four later routes on the same machine have not repeated it (the commit that
+  records this entry names the build). If it recurs,
+  keep the World's stderr log and the last checkpoint the route wrote, and
+  read the hang's last recorded passes (`gpu.capture`, or the device-removed
+  breadcrumbs if enabled) before changing anything. Check: a route that
+  passes the garden painting in both loops with no device loss.
 - [high] **One screen row of the main view is unwritten at some window
   sizes.** At 1600 by 900 on Direct3D 12 (RTX 4070), a one-pixel row at about
   y 488 across the left 77% of the frame reads no hit in the visibility buffer
