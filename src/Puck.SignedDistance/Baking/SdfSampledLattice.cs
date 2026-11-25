@@ -2923,7 +2923,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
             } else {
                 var slot = FineSlot(fx, fy, fz);
                 m_fineGradients[slot] = gradient;
-                m_gradientAnswered[slot >> 6] |= 1UL << (slot & 63);
+                BitWords.Add(index: slot, words: m_gradientAnswered.GetSpan());
             }
         }
     }
@@ -3401,7 +3401,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // A fine sample's gradient: the one measured there, or else the trilinear interpolation of its coarse cell's corners'.
     private bool TryFineGradient(int x, int y, int z, out Vector3 gradient) {
         var slot = FineSlot(x, y, z);
-        if (slot >= 0 && (slot >> 6) < m_gradientAnswered.Length && (m_gradientAnswered[slot >> 6] & (1UL << (slot & 63))) != 0) {
+        if (BitWords.Contains(index: slot, words: m_gradientAnswered.GetSpan())) {
             gradient = m_fineGradients[slot];
             return true;
         }

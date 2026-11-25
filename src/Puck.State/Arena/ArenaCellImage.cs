@@ -1,3 +1,4 @@
+using Puck.Maths;
 namespace Puck.State;
 
 /// <summary>A stored cell crossing a snapshot boundary. It carries no authorization or declaration.</summary>
@@ -83,7 +84,7 @@ public sealed partial class StateArena {
 
     // Whether a slot already holds exactly what clearing it and importing the image would leave there.
     private bool StoresProjection(in ArenaRowLayout layout, int rowOrdinal, int slot, in ArenaCellImage image) {
-        var stored = (Bit(index: slot, words: m_presence) ? ValueAt(layout: in layout, slot: slot) : default);
+        var stored = (BitWords.Contains(index: slot, words: m_presence) ? ValueAt(layout: in layout, slot: slot) : default);
         var behavior = (layout.HasColumn(column: ArenaColumn.Behavior) ? (long)image.Behavior : 0L);
         var clock = image.Clock;
 

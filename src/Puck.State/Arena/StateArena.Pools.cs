@@ -1,3 +1,4 @@
+using Puck.Maths;
 namespace Puck.State;
 
 public sealed partial class StateArena {
@@ -196,7 +197,7 @@ public sealed partial class StateArena {
 
             if (
                 (((uint)slot) < ((uint)address.Capacity)) &&
-                ((address.Occupancy[(slot >> 6)] & (1UL << (slot & 63))) != 0UL) &&
+                BitWords.Contains(index: slot, words: address.Occupancy) &&
                 (m_numbers[(address.DomainCellStart + slot)] == handle.Generation)
             ) {
                 position = slot;
@@ -215,7 +216,7 @@ public sealed partial class StateArena {
 
             if (
                 (((uint)slot) < ((uint)address.Capacity)) &&
-                ((address.Occupancy[(slot >> 6)] & (1UL << (slot & 63))) != 0UL)
+                BitWords.Contains(index: slot, words: address.Occupancy)
             ) {
                 handle = m_catalog.CreateInstanceHandle(generation: m_numbers[(address.DomainCellStart + slot)], poolOrdinal: poolOrdinal, slot: slot);
                 return true;
@@ -285,7 +286,7 @@ public sealed partial class StateArena {
             if (((uint)fieldOrdinal) < ((uint)fields.Length)) {
                 field = fields[fieldOrdinal];
                 cell = (field.CellStart + slot);
-                if (((m_presence[(cell >> 6)] >> (cell & 63)) & 1UL) != 0UL) {
+                if (BitWords.Contains(index: cell, words: m_presence)) {
                     return true;
                 }
             }
@@ -341,7 +342,7 @@ public sealed partial class StateArena {
         }
         ref readonly var layout = ref m_layout[m_catalog.Pools[handle.PoolOrdinal].Fields[fieldOrdinal].RowOrdinal];
 
-        if ((layout.Kind != CellKind.Vector) || !Bit(words: m_presence, index: (layout.CellStart + position))) {
+        if ((layout.Kind != CellKind.Vector) || !BitWords.Contains(words: m_presence, index: (layout.CellStart + position))) {
             return false;
         }
         components = VectorSpan(slot: (layout.CellStart + position));
@@ -556,7 +557,7 @@ public sealed partial class StateArena {
     /// <summary>Attempts to resolve the catalog-seeded numeric key for one pool identity slot.</summary>
     public bool TryPoolKey(int slot, out CellKey key) => m_catalog.TryGetPoolKey(key: out key, slot: slot);
 
-    private bool PoolSlotOccupied(int poolOrdinal, int slot) => ((m_poolOccupancy[poolOrdinal][(slot >> 6)] & (1UL << (slot & 63))) != 0UL);
+    private bool PoolSlotOccupied(int poolOrdinal, int slot) => BitWords.Contains(index: slot, words: m_poolOccupancy[poolOrdinal]);
     private int FirstFreePoolSlot(StatePoolDescriptor pool) {
         var occupancy = m_poolOccupancy[pool.Ordinal];
 

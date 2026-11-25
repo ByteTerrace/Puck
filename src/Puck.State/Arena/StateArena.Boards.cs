@@ -1,3 +1,4 @@
+using Puck.Maths;
 namespace Puck.State;
 
 public sealed partial class StateArena {
@@ -23,7 +24,7 @@ public sealed partial class StateArena {
         for (var cell = 0; (cell < layout.CellCapacity); cell++) {
             var slot = (layout.CellStart + cell);
 
-            values[cell] = (Bit(
+            values[cell] = (BitWords.Contains(
                 index: slot,
                 words: m_presence
             )
@@ -52,7 +53,7 @@ public sealed partial class StateArena {
             var slot = (layout.CellStart + cell);
 
             Visit(lanes: 1L);
-            value = (Bit(
+            value = (BitWords.Contains(
                 index: slot,
                 words: m_presence
             )
@@ -100,7 +101,7 @@ public sealed partial class StateArena {
 
         var slot = (layout.CellStart + cell);
         var row = DocumentRow(rowOrdinal: rowOrdinal);
-        var current = (Bit(
+        var current = (BitWords.Contains(
             index: slot,
             words: m_presence
         )
@@ -217,14 +218,14 @@ public sealed partial class StateArena {
 
         Visit(lanes: count);
         for (var position = 0; (position < count); position++) {
-            if ((m_numbers[CellSlotAt(layout: tokens, position: position)] == cell) && (!sparseTokens || Bit(words: m_presence, index: CellSlotAt(layout: tokens, position: position)))) {
+            if ((m_numbers[CellSlotAt(layout: tokens, position: position)] == cell) && (!sparseTokens || BitWords.Contains(words: m_presence, index: CellSlotAt(layout: tokens, position: position)))) {
                 winner = position;
             }
         }
 
         var slot = (board.CellStart + ((int)cell));
         var sparseCodes = ((m_poolOfDomainRow.Length != 0) && m_catalog.IsPoolRow(rowOrdinal: board.InverseCodesOrdinal));
-        var value = (((winner >= 0) && (sparseCodes ? ((winner < codes.CellCapacity) && Bit(words: m_presence, index: CellSlotAt(layout: codes, position: winner))) : (winner < m_memberCounts[board.InverseCodesOrdinal])))
+        var value = (((winner >= 0) && (sparseCodes ? ((winner < codes.CellCapacity) && BitWords.Contains(words: m_presence, index: CellSlotAt(layout: codes, position: winner))) : (winner < m_memberCounts[board.InverseCodesOrdinal])))
             ? m_numbers[CellSlotAt(layout: codes, position: winner)]
             : board.Empty
         );

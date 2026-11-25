@@ -1,3 +1,4 @@
+using Puck.Maths;
 namespace Puck.State;
 
 public sealed partial class StateArena {
@@ -19,7 +20,7 @@ public sealed partial class StateArena {
                     reason = $"state row '{m_rows[ordinal].Name}': key '{m_keys[key]}' is outside token domain '{m_rows[layout.DomainOrdinal].Name}'";
                     return false;
                 }
-                if (!Bit(index: slot, words: m_presence)) { continue; }
+                if (!BitWords.Contains(index: slot, words: m_presence)) { continue; }
                 if ((layout.Shape == RowShape.Ordered) && (ValueAt(layout: in layout, slot: slot).Raw != 1L)) {
                     reason = "an ordered zone's membership must be true"; return false;
                 }

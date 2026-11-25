@@ -247,14 +247,7 @@ public sealed class WorldQueryArtifact {
     /// <param name="cellIndex">The row-major cell index (<c>(row * Width) + column</c>).</param>
     /// <returns><see langword="true"/> when the cell carries a blocker.</returns>
     public bool IsBlockedCell(int cellIndex) {
-        var word = (cellIndex >> 6);
-
-        return (
-            (cellIndex >= 0) &&
-            (cellIndex < m_cellCount) &&
-            (word < m_blocked.Length) &&
-            ((m_blocked[word] & (1UL << (cellIndex & 63))) != 0UL)
-        );
+        return ((cellIndex < m_cellCount) && BitWords.Contains(index: cellIndex, words: m_blocked));
     }
     /// <summary>Reads the authored ground height at <paramref name="cellIndex"/>. An index outside the layer, an
     /// absent layer, and a cell carrying <see cref="NoHeightSentinel"/> all answer <see langword="false"/> — the same

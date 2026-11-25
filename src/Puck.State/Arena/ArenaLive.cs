@@ -38,7 +38,7 @@ public sealed partial class StateArena {
     /// <summary>Samples an eased follower directly from its stored clock and compiled trait.</summary>
     public bool TryReadDynamics(int rowOrdinal, CellKey key, in ArenaTime time, out SecondOrderSample sample) {
         sample = default;
-        return TryCellSlot(rowOrdinal: rowOrdinal, key: key, slot: out var slot) && Bit(index: slot, words: m_presence) &&
+        return TryCellSlot(rowOrdinal: rowOrdinal, key: key, slot: out var slot) && BitWords.Contains(index: slot, words: m_presence) &&
             (LiveBehavior(rowOrdinal: rowOrdinal, key: key).Dynamics is { } dynamics) &&
             TrySampleDynamics(row: m_catalog.Rows[rowOrdinal], dynamics: dynamics, baseValue: m_numbers[slot], slot: slot, time: in time, sample: out sample);
     }
@@ -97,7 +97,7 @@ public sealed partial class StateArena {
     /// <remarks>A cell under no trait, and every <see cref="CellKind.Text"/> or <see cref="CellKind.Vector"/>
     /// cell, reads exactly what <see cref="StateArena.TryRead(int, CellKey, out CellValue)"/> answers.</remarks>
     public bool TryReadLive(int rowOrdinal, CellKey key, in ArenaTime time, out CellValue value) {
-        if (!TryCellSlot(key: key, rowOrdinal: rowOrdinal, slot: out var slot) || !Bit(index: slot, words: m_presence)) {
+        if (!TryCellSlot(key: key, rowOrdinal: rowOrdinal, slot: out var slot) || !BitWords.Contains(index: slot, words: m_presence)) {
             value = default;
             return false;
         }
@@ -118,7 +118,7 @@ public sealed partial class StateArena {
     /// <returns><see langword="true"/> when the row holds a numeric cell there.</returns>
     public bool TryReadLiveNumber(int rowOrdinal, CellKey key, in ArenaTime time, out long value) {
         if (TryCellSlot(key: key, rowOrdinal: rowOrdinal, slot: out var slot) &&
-            Bit(index: slot, words: m_presence) && (m_layout[rowOrdinal].Kind is not (CellKind.Text or CellKind.Vector))) {
+            BitWords.Contains(index: slot, words: m_presence) && (m_layout[rowOrdinal].Kind is not (CellKind.Text or CellKind.Vector))) {
             value = LiveNumberAt(key: key, rowOrdinal: rowOrdinal, slot: slot, time: in time);
             return true;
         }
@@ -140,7 +140,7 @@ public sealed partial class StateArena {
             TryRowLayout(layout: out var layout, rowOrdinal: rowOrdinal) &&
             (((uint)position) < ((uint)HashCellExtent(layout: layout))) &&
             (layout.Kind is not (CellKind.Text or CellKind.Vector)) &&
-            Bit(index: CellSlotAt(layout: layout, position: position), words: m_presence)
+            BitWords.Contains(index: CellSlotAt(layout: layout, position: position), words: m_presence)
         ) {
             value = LiveNumberAtSlot(rowOrdinal: rowOrdinal, slot: CellSlotAt(layout: layout, position: position), time: in time);
             return true;
@@ -237,7 +237,7 @@ public sealed partial class StateArena {
             );
         }
 
-        var stored = (Bit(
+        var stored = (BitWords.Contains(
             index: slot,
             words: m_presence
         )
