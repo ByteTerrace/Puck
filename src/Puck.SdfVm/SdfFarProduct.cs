@@ -115,16 +115,17 @@ public sealed class SdfFarProduct {
 
                 digest = digest.Add(element: DrawElement(draw: in draw, placement: in placement));
 
-                using var held = draw.Mesh.Hold();
+                var piece = draw.Mesh.Piece(index: draw.Piece);
+
+                using var held = piece.Hold();
 
                 if (!held.Readable) { continue; }
 
-                var piece = draw.Mesh.Piece(index: draw.Piece);
                 var level = piece.Levels.Count;
-                var pieceIndices = ((level == 0) ? piece.Indices : piece.Levels[(level - 1)].Indices).Span;
-                var pieceMaterials = ((level == 0) ? piece.TriangleMaterials : piece.Levels[(level - 1)].TriangleMaterials).Span;
-                var piecePositions = piece.Positions.Span;
-                var pieceNormals = piece.Normals.Span;
+                var pieceIndices = held.LevelIndices(level: level).Span;
+                var pieceMaterials = held.LevelMaterials(level: level).Span;
+                var piecePositions = held.Positions.Span;
+                var pieceNormals = held.Normals.Span;
 
                 if (pieceIndices.IsEmpty) { continue; }
                 if (!SpansAtLeast(indices: pieceIndices, placement: in placement, positions: piecePositions, size: options.MinimumSize)) { continue; }

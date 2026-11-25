@@ -19,6 +19,7 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/Cli/ConsoleCapture.cs" Link="ConsoleCapture.cs" />
+        <Compile Include="../Shared/SdfMeshPlanes.cs" Link="SdfMeshPlanes.cs" />
         <Compile Include="../Shared/Cli/ThreadPoolFloor.cs" Link="ThreadPoolFloor.cs" />
         <Compile Include="../Shared/Cli/TrackedPuckSources.cs" Link="TrackedPuckSources.cs" />
         <Compile Include="../Shared/DirectoryLinks.cs" Link="DirectoryLinks.cs" />

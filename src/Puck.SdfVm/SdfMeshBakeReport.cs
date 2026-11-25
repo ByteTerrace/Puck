@@ -348,7 +348,7 @@ internal static class SdfMeshBakeReport {
     public static void Done(string residency, string residencyId, IReadOnlyList<Finished> groups, Accounts accounts, double seconds, Func<string>? dispatches) {
         var meshes = groups.Count(predicate: static group => (group.Mesh is not null));
         var triangles = groups.Sum(selector: static group => ((long)(group.Mesh?.TriangleCount ?? 0)));
-        var vertices = groups.Sum(selector: static group => ((long)(group.Mesh?.Positions.Length ?? 0)));
+        var vertices = groups.Sum(selector: static group => ((long)(group.Mesh?.VertexCount ?? 0)));
         // The meshes some of whose vertices ride a member's slot rather than the group's.
         var skinned = groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }));
         // The meshes with coarser levels, and the triangles every mesh draws at its first and second coarser level (its
@@ -458,6 +458,20 @@ internal static class SdfMeshBakeReport {
         }.Where(predicate: static read => (read is not null)));
 
         Say(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] rung-missed residency={residency} group={group.Selector} {(group.Dynamic ? "dynamic" : "static")} shape={group.Shape:x32} geometry={group.Sealed.Hash:x32} reads={((reads.Length == 0) ? "none" : reads)} {(first ? "first-detail" : "plan")} asked={group.Tier} drawn={drawn} tiers={group.FinestTier}-{group.CoarsestTier}"));
+    }
+    /// <summary>Writes the line for a group that began baking because neither the library nor its store held its
+    /// geometry (<see cref="SdfMeshCache.GroupsBaked"/>), naming why the bake asked for that tier, so a boot over a warm
+    /// store can say which tiers it lacked.</summary>
+    /// <param name="residency">The residency's name.</param>
+    /// <param name="group">The group as planned: its selector, shape, geometry, tier and ladder.</param>
+    /// <param name="why">Why the tier was asked: <c>arrival</c>, <c>first-detail</c>, <c>finer</c> or <c>coarser</c> than
+    /// the tier the group drew (<paramref name="drawn"/>), <c>fill</c> or <c>evict</c>.</param>
+    /// <param name="drawn">The tier the group drew while this one bakes, or -1 for an arrival.</param>
+    /// <param name="loadMissed">Whether the store named the geometry but its read failed.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="group"/> is <see langword="null"/>.</exception>
+    public static void BakeBegun(string residency, SdfMeshBakeGroup group, string why, int drawn, bool loadMissed) {
+        ArgumentNullException.ThrowIfNull(argument: group);
+        Say(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] bake-begun residency={residency} group={group.Selector} {(group.Dynamic ? "dynamic" : "static")} shape={group.Shape:x32} geometry={group.Sealed.Hash:x32} why={why} tier={group.Tier} drawn={drawn} tiers={group.FinestTier}-{group.CoarsestTier} floor={group.FloorTier}{(loadMissed ? " load-missed" : string.Empty)}"));
     }
     /// <summary>Writes the line for the tiers missed of a sampled field's reader geometry that its field then moved past
     /// (<see cref="SdfMeshCache.RungsMissedLive"/>): its earlier <c>rung-missed</c> lines name live geometry.</summary>

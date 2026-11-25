@@ -374,7 +374,7 @@ methods in types that follow the dispose pattern"
 Measuring native allocations. Puck already routes mesh payloads through its own
 allocator with statistics (`src/Puck.Platform/Memory/MimallocAllocator.cs:14`:
 `public sealed partial class MimallocAllocator : IAllocator, IAllocatorStatistics {`),
-and `host.memory` prints `allocator-committed` beside `managed-committed`. What
+and `host.memory` reads its arenas by their pages (`allocator-arenas`, the native-allocator row) beside `managed-committed`. What
 escapes it: `NativeMemory` calls (`src/Puck.Abstractions/Gpu/Residency/GpuRegion.cs:394`:
 `m_contents = ((byte*)NativeMemory.AllocZeroed(byteCount: ((nuint)byteCount)));`),
 driver allocations and the CLR's own heaps. For those the readings are the OS

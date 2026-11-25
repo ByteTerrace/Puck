@@ -12,6 +12,7 @@
     <ItemGroup>
         <ProjectReference Include="../../src/Puck.SdfVm/Puck.SdfVm.csproj" />
         <Compile Include="../Shared/AppliedCodeUpdate.cs" Link="AppliedCodeUpdate.cs" />
+        <Compile Include="../Shared/SdfMeshPlanes.cs" Link="SdfMeshPlanes.cs" />
         <Compile Include="../Shared/SdfEncodingTrades.cs" Link="SdfEncodingTrades.cs" />
         <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />

@@ -44,10 +44,11 @@ internal static class MeshAuditImage {
     // One row: the mesh seen from forward, its shading normals on the left and its face normals on the right.
     private static void Draw(SdfMesh mesh, Vector3 center, Vector3 forward, float halfWidth, byte[] rgba, int row) {
         var view = MeshView.Looking(center: center, halfWidth: halfWidth, toward: forward);
-        var positions = mesh.Positions.Span;
-        var normals = mesh.Normals.Span;
-        var indices = mesh.Indices.Span;
-        var seen = MeshRaster.Draw(height: Side, mesh: mesh, nearLimit: halfWidth, positions: positions, view: view, width: Side);
+        using var held = mesh.Hold();
+        var positions = held.Positions.Span;
+        var normals = held.Normals.Span;
+        var indices = held.Indices.Span;
+        var seen = MeshRaster.Draw(height: Side, indices: indices, nearLimit: halfWidth, positions: positions, view: view, width: Side);
 
         for (var y = 0; (y < Side); y++) {
             for (var x = 0; (x < Side); x++) {

@@ -122,9 +122,10 @@ the order it reads them, and what it never reads lives elsewhere.
   slab test of both children touches adjacent memory and no object headers.
 - **Split by field when loops read different fields.** The hierarchy build keeps
   bounds and centroids in separate arrays (`m_lows`, `m_highs`, `m_centroids` in `SdfMeshIrradianceScene.Hierarchy`); `SdfMesh` keeps positions, normals, indices and materials apart
-  ([`SdfMesh.Positions`](../../../../src/Puck.SdfVm/SdfMesh.cs), `Normals`, `Indices`), so the trace
-  reads positions and indices alone and never copies them (a copy of the debug
-  world's meshes is about 1.1 GB).
+  ([`SdfMesh.Held`](../../../../src/Puck.SdfVm/SdfMesh.Restore.cs): `Positions`, `Normals`, `Indices`), so the trace
+  copies only the traced level's positions and indices, the vertices that level reaches,
+  and the mesh's own planes go once read (a resident copy of the debug world's meshes
+  is about 0.9 GB).
 - **Keep cold state off the hot path.** A step captures a 46-field
   [`WorldBodyIntegrationResidue`](../../../../src/Puck.World.Server/WorldBodyIntegrationResidue.cs) plus transfer state for every body every step
   ([`WorldBody.CaptureMotion`](../../../../src/Puck.World.Server/WorldBody.SweepRefusal.cs)),

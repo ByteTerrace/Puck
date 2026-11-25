@@ -43,8 +43,14 @@ internal static class SdfMeshTraceJudge {
     /// <param name="finer">A mesh of the same geometry at a finer tier, in the same frame.</param>
     /// <returns>Whether the floor is admitted; <see langword="false"/> also for a pair past <see cref="MostWitnesses"/>.</returns>
     public static bool Admits(SdfMesh floor, SdfMesh finer) {
-        using var floorJoined = new Joined(mesh: floor);
-        using var finerJoined = new Joined(mesh: finer);
+        // The holds keep both meshes' planes, which their pieces share, resident for the whole check.
+        using var floorHeld = floor.Hold();
+        using var finerHeld = finer.Hold();
+
+        if (!floorHeld.Readable || !finerHeld.Readable) { return false; }
+
+        using var floorJoined = new Joined(held: in floorHeld);
+        using var finerJoined = new Joined(held: in finerHeld);
         var floorMesh = (floorJoined.Positions, floorJoined.Indices);
         var finerMesh = (finerJoined.Positions, finerJoined.Indices);
 
@@ -101,9 +107,9 @@ internal static class SdfMeshTraceJudge {
         }
         return total;
     }
-    // A mesh's pieces as one triangle list: a published chunked mesh keeps no joined indices. A one-piece mesh is read
-    // where it lies; a chunked one is joined into rented arrays the check returns when it ends, since a pair of tiers
-    // runs to tens of megabytes and a bake checks one pair per admitted floor.
+    // A held mesh's pieces as one triangle list: a published chunked mesh keeps no joined indices. A one-piece mesh is
+    // read where it lies, for as long as its hold stands; a chunked one is joined into rented arrays the check returns
+    // when it ends, since a pair of tiers runs to tens of megabytes and a bake checks one pair per admitted floor.
     private readonly struct Joined : IDisposable {
         private readonly Vector3[]? m_positions;
         private readonly uint[]? m_indices;
@@ -111,10 +117,12 @@ internal static class SdfMeshTraceJudge {
         public ReadOnlyMemory<Vector3> Positions { get; }
         public ReadOnlyMemory<uint> Indices { get; }
 
-        public Joined(SdfMesh mesh) {
+        public Joined(in SdfMesh.Held held) {
+            var mesh = held.Mesh;
+
             if (mesh.PieceCount == 1) {
-                Positions = mesh.Positions;
-                Indices = mesh.Indices;
+                Positions = held.Positions;
+                Indices = held.Indices;
                 return;
             }
 
@@ -122,8 +130,8 @@ internal static class SdfMeshTraceJudge {
             var corners = 0;
 
             for (var piece = 0; (piece < mesh.PieceCount); piece++) {
-                vertices += mesh.Piece(index: piece).Positions.Length;
-                corners += mesh.Piece(index: piece).Indices.Length;
+                vertices += mesh.Piece(index: piece).VertexCount;
+                corners += mesh.Piece(index: piece).IndexCount;
             }
 
             m_positions = RentedArrays.Rent<Vector3>(minimumLength: vertices);
@@ -133,11 +141,12 @@ internal static class SdfMeshTraceJudge {
             var cornerAt = 0;
 
             for (var piece = 0; (piece < mesh.PieceCount); piece++) {
-                var part = mesh.Piece(index: piece);
+                using var part = mesh.Piece(index: piece).Hold();
+                var positions = part.Positions.Span;
 
-                part.Positions.Span.CopyTo(destination: m_positions.AsSpan(start: vertexAt));
+                positions.CopyTo(destination: m_positions.AsSpan(start: vertexAt));
                 foreach (var index in part.Indices.Span) { m_indices[cornerAt++] = (index + (uint)vertexAt); }
-                vertexAt += part.Positions.Length;
+                vertexAt += positions.Length;
             }
             Positions = m_positions.AsMemory(start: 0, length: vertices);
             Indices = m_indices.AsMemory(start: 0, length: corners);

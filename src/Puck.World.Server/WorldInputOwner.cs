@@ -1,4 +1,5 @@
 using System.Globalization;
+using Puck.Abstractions.Collections;
 using Puck.Maths;
 using Puck.World.Protocol;
 
@@ -17,20 +18,33 @@ public sealed partial class WorldInputOwner {
     private readonly Dictionary<ushort, int> m_handles;
     private readonly HashSet<ulong> m_reboundActivations;
     private readonly HashSet<string> m_reboundSources;
-    private readonly WorldInputRecord[] m_history;
-    private readonly WorldInputSwitch[] m_switches;
+    // The history and switch rings, and the step's event scratch, hold what the owner has written and grow by doubling
+    // to their admitted capacities (m_historyCapacity, m_switchCapacity, m_scratchCapacity), so an owner that sees few
+    // events (most of a world's producer-driven bodies) never holds its whole bound. Every capacity test reads the
+    // capacity, never a storage length; a grown ring is laid out oldest first from slot zero, so its order is unchanged.
+    // Record ids index the claim tables modulo the history capacity.
+    private WorldInputRecord[] m_history;
+    private WorldInputSwitch[] m_switches;
+    private readonly int m_historyCapacity;
+    private readonly int m_switchCapacity;
+    private readonly int m_scratchCapacity;
 
     private int m_switchHead;
     private int m_switchCount;
 
-    private readonly WorldInputRecord[] m_eventScratch;
+    private WorldInputRecord[] m_eventScratch;
     private readonly (ushort Channel, long Press, long Release, int Direction)[] m_crossings;
     private readonly bool[] m_crossingHeld;
     private readonly bool[] m_crossingScratch;
     private readonly bool m_usesFacing;
 
     private readonly WorldInputHold[] m_holds = new WorldInputHold[ChannelLimits.MaxChannels];
-    private readonly WorldInputHold[] m_holdScratch = new WorldInputHold[ChannelLimits.MaxChannels];
+    // The holds a call stages before it commits them to m_holds: per-call scratch, so one per thread serves every owner.
+    // A switch or restore clears it before writing; an admission reads back only the addresses it wrote this call
+    // (its holdsWritten mask), so nothing a call leaves behind is read by the next.
+    [ThreadStatic]
+    private static WorldInputHold[]? HoldScratchStorage;
+    private static WorldInputHold[] HoldScratch => (HoldScratchStorage ??= new WorldInputHold[ChannelLimits.MaxChannels]);
     private readonly Int128[] m_sum = new Int128[ChannelLimits.MaxChannels];
     private readonly long[] m_maximum = new long[ChannelLimits.MaxChannels];
 
@@ -63,24 +77,27 @@ public sealed partial class WorldInputOwner {
         m_seen = new bool[sources.Count];
         m_reboundActivations = new HashSet<ulong>(capacity: sources.Count);
         m_reboundSources = new HashSet<string>(capacity: sources.Count, comparer: StringComparer.Ordinal);
-        m_history = new WorldInputRecord[catalog.HistoryCapacity(ingressCapacity: policy.EventCapacity)];
-        m_switches = new WorldInputSwitch[policy.EventCapacity];
-        m_eventScratch = new WorldInputRecord[policy.MaximumEventsPerStep];
+        m_historyCapacity = catalog.HistoryCapacity(ingressCapacity: policy.EventCapacity);
+        m_switchCapacity = policy.EventCapacity;
+        m_scratchCapacity = policy.MaximumEventsPerStep;
+        m_history = [];
+        m_switches = [];
+        m_eventScratch = [];
         m_patterns = CompiledWorldInputPattern.Compile(catalog: catalog, declarations: (patterns ?? []), policy: policy);
         var stages = ((m_patterns.Length == 0) ? 0 : m_patterns.Max(selector: static row => row.Stages.Length));
 
         m_matchWidth = ((m_patterns.Length == 0) ? 0 : m_patterns.Max(selector: static row => row.Width));
-        var matchSize = checked(((stages * m_history.Length) * m_matchWidth));
+        var matchSize = checked(((stages * m_historyCapacity) * m_matchWidth));
 
         if (matchSize > (1024 * 1024)) { throw new ArgumentException(message: "inputPatterns matching scratch exceeds 4 MiB per owner"); }
         m_matchPaths = new int[matchSize];
-        m_matchValid = new bool[(stages * m_history.Length)];
-        m_matchNext = new int[(m_matchWidth * m_history.Length)];
-        m_matchPrevious = new int[(m_matchWidth * m_history.Length)];
+        m_matchValid = new bool[(stages * m_historyCapacity)];
+        m_matchNext = new int[(m_matchWidth * m_historyCapacity)];
+        m_matchPrevious = new int[(m_matchWidth * m_historyCapacity)];
         m_matchCache = new WorldInputMatch[m_patterns.Length];
         m_matchCached = new bool[m_patterns.Length];
         m_claimed = new ulong[((m_patterns.Length == 0) ? 0 : (m_patterns.Max(selector: static row => row.Group) + 1))][];
-        for (var group = 0; (group < m_claimed.Length); group++) { m_claimed[group] = new ulong[m_history.Length]; }
+        for (var group = 0; (group < m_claimed.Length); group++) { m_claimed[group] = new ulong[m_historyCapacity]; }
         m_crossings = new (ushort, long, long, int)[(policy.Crossings?.Count ?? 0)];
         m_crossingHeld = new bool[m_crossings.Length];
         m_crossingScratch = new bool[m_crossings.Length];
@@ -163,6 +180,12 @@ public sealed partial class WorldInputOwner {
         record = default;
         return false;
     }
+    // Makes room for `count` records in the history ring, at most its capacity, laying a grown ring out oldest first.
+    private void ReserveHistory(int count) =>
+        m_history = Rings.Regrown(capacity: m_historyCapacity, count: m_count, head: ref m_head, needed: count, ring: m_history);
+    // Makes room for `count` boundaries in the switch ring, at most its capacity.
+    private void ReserveSwitches(int count) =>
+        m_switches = Rings.Regrown(capacity: m_switchCapacity, count: m_switchCount, head: ref m_switchHead, needed: count, ring: m_switches);
     /// <summary>Expires records in sequence order, retaining original held identity separately.</summary>
     public void Expire(WorldInputInterval now) {
         var time = now.Time(default);
@@ -365,7 +388,7 @@ public sealed partial class WorldInputOwner {
                     var press = (input.Kind == WorldInputEventKind.Press);
                     if ((shape != ChannelShape.Binary) || (input.RawValue != (press ? FixedQ4816.One.Value : 0)) ||
                         ((eventImage[address] != FixedQ4816.Zero) == press)) { reason = "input.transition: impossible press/release sequence"; return false; }
-                    holdPress = (press ? id : (((holdsWritten & (UInt128.One << address)) != 0) ? m_holdScratch[address] : m_holds[address]).Press);
+                    holdPress = (press ? id : (((holdsWritten & (UInt128.One << address)) != 0) ? HoldScratch[address] : m_holds[address]).Press);
                     eventImage = eventImage.WithChannel(ordinal: address, value: (press ? FixedQ4816.One : FixedQ4816.Zero));
                     break;
                 case WorldInputEventKind.AxisSample:
@@ -405,10 +428,10 @@ public sealed partial class WorldInputOwner {
                 }
             }
             if (input.Kind == WorldInputEventKind.Press) {
-                m_holdScratch[address] = new(input.Channel, id, record, false);
+                HoldScratch[address] = new(input.Channel, id, record, false);
                 holdsWritten |= (UInt128.One << address);
             } else if (input.Kind == WorldInputEventKind.Release) {
-                m_holdScratch[address] = default;
+                HoldScratch[address] = default;
                 holdsWritten |= (UInt128.One << address);
             }
             sequence = input.Sequence;
@@ -439,9 +462,10 @@ public sealed partial class WorldInputOwner {
             for (var written = holdsWritten; (written != 0); written &= (written - 1)) {
                 var address = (int)UInt128.TrailingZeroCount(value: written);
 
-                m_holds[address] = m_holdScratch[address];
+                m_holds[address] = HoldScratch[address];
             }
             m_crossingScratch.CopyTo(array: m_crossingHeld, index: 0);
+            ReserveHistory(count: (m_count + eventCount));
             for (var index = 0; (index < eventCount); index++) { m_history[((m_head + m_count++) % m_history.Length)] = m_eventScratch[index]; }
             m_sequence = sequence;
             m_lastCapture = lastCapture;
@@ -484,7 +508,7 @@ public sealed partial class WorldInputOwner {
     }
 
     private bool TryStageEvent(WorldInputRecord record, ref int count, int prior, WorldInputInterval admission, out string reason) {
-        if ((count >= (m_eventScratch.Length - prior)) || (count >= Math.Max(val1: 0, val2: (m_policy.EventCapacity - m_count)))) {
+        if ((count >= (m_scratchCapacity - prior)) || (count >= Math.Max(val1: 0, val2: (m_policy.EventCapacity - m_count)))) {
             RefusedBatches++;
             Array.Clear(array: m_history);
             m_head = 0;
@@ -492,6 +516,12 @@ public sealed partial class WorldInputOwner {
             Switch(Mapping, admission, reset: true);
             reason = "input.capacity: derived events exceed step or retained history capacity; owner reset";
             return false;
+        }
+        if (count >= m_eventScratch.Length) {
+            var grown = new WorldInputRecord[Math.Min(val1: m_scratchCapacity, val2: Math.Max(val1: 8, val2: (m_eventScratch.Length * 2)))];
+
+            m_eventScratch.AsSpan(start: 0, length: count).CopyTo(destination: grown);
+            m_eventScratch = grown;
         }
         m_eventScratch[count++] = record;
         reason = string.Empty;
@@ -550,7 +580,7 @@ public sealed partial class WorldInputOwner {
         var previous = Mapping;
 
         Expire(now: interval);
-        if (m_switchCount == m_switches.Length) {
+        if (m_switchCount == m_switchCapacity) {
             RefusedBatches++;
             reset = true;
             Array.Clear(array: m_switches);
@@ -559,7 +589,7 @@ public sealed partial class WorldInputOwner {
         }
         var image = default(PlayerIntent);
 
-        Array.Clear(array: m_holdScratch);
+        Array.Clear(array: HoldScratch);
         Array.Clear(array: m_sum);
         Array.Clear(array: m_maximum);
         m_reboundActivations.Clear();
@@ -593,7 +623,7 @@ public sealed partial class WorldInputOwner {
             var hold = m_holds[previous.Address(logicalId: channel)];
 
             if ((source.RawValue != 0) && (hold.Press != 0)) {
-                m_holdScratch[address] = hold with { Consumed = (hold.Consumed || consumedActivations.Contains(value: hold.Origin.Event.Activation)) };
+                HoldScratch[address] = hold with { Consumed = (hold.Consumed || consumedActivations.Contains(value: hold.Origin.Event.Activation)) };
             }
         }
         foreach (var channel in next.Live) {
@@ -605,20 +635,20 @@ public sealed partial class WorldInputOwner {
                 (long)Int128.Clamp(m_sum[address], ((shape == ChannelShape.Bipolar) ? -FixedQ4816.One.Value : 0), FixedQ4816.One.Value));
 
             image = image.WithChannel(ordinal: address, value: next.Channels.Quantize(ordinal: address, value: FixedQ4816.FromRawBits(value: raw)));
-            if (image[address] == FixedQ4816.Zero) { m_holdScratch[address] = default; }
+            if (image[address] == FixedQ4816.Zero) { HoldScratch[address] = default; }
         }
         var cancellations = 0;
 
         foreach (var hold in m_holds) {
-            if ((hold.Press != 0) && ((next.Address(logicalId: hold.Channel) < 0) || (m_holdScratch[next.Address(logicalId: hold.Channel)].Press != hold.Press))) { cancellations++; }
+            if ((hold.Press != 0) && ((next.Address(logicalId: hold.Channel) < 0) || (HoldScratch[next.Address(logicalId: hold.Channel)].Press != hold.Press))) { cancellations++; }
         }
-        if ((m_count + cancellations) > m_history.Length) {
+        if ((m_count + cancellations) > m_historyCapacity) {
             // A terminal boundary cannot be refused. Overflow resets all continuation and uses the reserved cancellation slots.
             RefusedBatches++;
             Array.Clear(array: m_history);
             m_head = 0;
             m_count = 0;
-            Array.Clear(array: m_holdScratch);
+            Array.Clear(array: HoldScratch);
             image = default;
             reset = true;
             for (var index = 0; (index < m_sources.Length); index++) {
@@ -629,8 +659,9 @@ public sealed partial class WorldInputOwner {
         }
         var epoch = checked((Epoch + 1));
 
+        ReserveHistory(count: (m_count + cancellations));
         foreach (var hold in m_holds) {
-            if ((hold.Press == 0) || ((next.Address(logicalId: hold.Channel) >= 0) && (m_holdScratch[next.Address(logicalId: hold.Channel)].Press == hold.Press))) { continue; }
+            if ((hold.Press == 0) || ((next.Address(logicalId: hold.Channel) >= 0) && (HoldScratch[next.Address(logicalId: hold.Channel)].Press == hold.Press))) { continue; }
             var cause = (consumedActivations.Contains(value: hold.Origin.Event.Activation) ? hold.Origin.Event.Activation : 0);
             var input = new WorldInputEvent(hold.Channel, WorldInputEventKind.Cancel, 0, interval.Tick, default, 0, cause);
 
@@ -651,7 +682,7 @@ public sealed partial class WorldInputOwner {
 
             decisions.Add(item: new(channel, Image[address].Value, raw, reason, hold.Press, ((hold.Press == 0) ? default : hold.Origin.Time(policy: WorldInputJudgement.Capture))));
         }
-        m_holdScratch.CopyTo(array: m_holds, index: 0);
+        HoldScratch.CopyTo(array: m_holds, index: 0);
         Mapping = next;
         Image = image;
         m_steadyImageVerified = false;
@@ -663,6 +694,7 @@ public sealed partial class WorldInputOwner {
         m_lastCapture = default;
         m_lastOffset = default;
         LastSwitch = new(interval, Epoch, previous.Id, next.Id, consumedActivations.ToArray(), reset, decisions.ToArray());
+        ReserveSwitches(count: (m_switchCount + 1));
         m_switches[((m_switchHead + m_switchCount++) % m_switches.Length)] = LastSwitch;
         foreach (var claims in m_claimed) { Array.Clear(array: claims); }
         Array.Clear(array: m_matchCached);

@@ -94,7 +94,7 @@ public sealed partial class WorldInputOwner {
 
             if (channels[record.Event.Channel] >= 0) { history.Add(item: Translate(record, channels[record.Event.Channel])); }
         }
-        var retained = Math.Min(val1: history.Count, val2: Math.Max(val1: 0, val2: ((m_history.Length - holds.Count) - inactive.Count)));
+        var retained = Math.Min(val1: history.Count, val2: Math.Max(val1: 0, val2: ((m_historyCapacity - holds.Count) - inactive.Count)));
 
         Restore(checkpoint: new(Revision, previous.Epoch, Mapping.Id, image, calibration, default, previous.RefusedBatches,
             0, previous.m_eventId, default, default, interval.Tick, 0, sources, holds.ToArray(),
@@ -110,6 +110,7 @@ public sealed partial class WorldInputOwner {
         }
         LastSwitch = LastSwitch with { Decisions = decisions.ToArray() };
         m_switches[(((m_switchHead + m_switchCount) - 1) % m_switches.Length)] = LastSwitch;
+        ReserveHistory(count: (m_count + inactive.Count));
         foreach (var hold in inactive) {
             var input = new WorldInputEvent(hold.Channel, WorldInputEventKind.Cancel, 0, interval.Tick, default, 0, 0);
 

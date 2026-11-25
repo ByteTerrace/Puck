@@ -38,6 +38,7 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="../Shared/DirectXTestDevices.cs" Link="DirectXTestDevices.cs" />
+        <Compile Include="../Shared/SdfMeshPlanes.cs" Link="SdfMeshPlanes.cs" />
         <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
         <Compile Include="../Shared/FaultingDevice.cs" Link="FaultingDevice.cs" />
         <Compile Include="../Shared/HeadlessVulkanDevice.cs" Link="HeadlessVulkanDevice.cs" />

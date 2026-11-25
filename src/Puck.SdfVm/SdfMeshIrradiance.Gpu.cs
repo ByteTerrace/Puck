@@ -39,14 +39,13 @@ public sealed partial class SdfMeshIrradiance {
     // completion. Its GPU feedback is exactly the preceding completed batches, independent of display uploads.
     private readonly MarkedIndexSet m_gpuDirty = new();
     private uint[]? m_gpuVolume;
-    // The worker's GPU scratch, grown and kept across its batches. Only the worker task's body touches it, and a worker
-    // starts only once the last one completed, so it takes no gate; a job reads the origins, input and updates before
-    // Submit returns, and the readback arrays are read before the next job is submitted.
+    // The worker's GPU scratch, grown and kept across its batches, but for the answers' array, which a batch rents and
+    // returns (BatchEnded). Only the worker task's body touches it, and a worker starts only once the last one completed,
+    // so it takes no gate; a job reads the origins, input and updates before Submit returns, and the readback arrays are
+    // read before the next job is submitted.
     private Vector4[] m_gpuOrigins = [];
     private uint[] m_gpuInput = [];
     private uint[] m_gpuAnswer = [];
-    private uint[] m_gpuHits = [];
-    private uint[] m_gpuSavedHits = [];
     private uint[] m_gpuFresh = [];
     private int[] m_gpuDestinations = [];
     // The candidate each row of a selection answers for (ListGpu).

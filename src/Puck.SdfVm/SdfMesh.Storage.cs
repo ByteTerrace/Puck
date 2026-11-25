@@ -15,13 +15,13 @@ public sealed partial record SdfMesh {
         BakedSites = source.BakedSites;
         Chunks = source.Chunks;
         Encloses = source.Encloses;
-        Positions = source.Positions;
+        m_positions = source.m_positions;
         PositionLow = source.PositionLow;
         PositionHigh = source.PositionHigh;
-        Normals = source.Normals;
+        m_normals = source.m_normals;
         m_indices = source.m_indices;
         m_triangleCount = source.m_triangleCount;
-        TriangleMaterials = source.TriangleMaterials;
+        m_triangleMaterials = source.m_triangleMaterials;
         Members = source.Members;
         VertexMembers = source.VertexMembers;
         Influences = source.Influences;
@@ -46,11 +46,11 @@ public sealed partial record SdfMesh {
         BakeCell = chunks[0].BakeCell;
         Chunks = chunks;
         Encloses = encloses;
-        Positions = positions;
+        m_positions = positions;
         PositionLow = low;
         PositionHigh = high;
-        Normals = normals;
-        TriangleMaterials = materials;
+        m_normals = normals;
+        m_triangleMaterials = materials;
         m_triangleCount = ((int)triangles);
         m_joinedIndicesOmitted = true;
         m_payload = payload;
@@ -92,12 +92,12 @@ public sealed partial record SdfMesh {
     }
     // A mesh's array bytes: its indices and levels, and with `attributes` its vertex and triangle attributes too.
     private static long OwnArrayBytes(SdfMesh mesh, bool attributes) {
-        var bytes = (((long)mesh.Indices.Length) * sizeof(uint));
+        var bytes = (((long)mesh.m_indices.Length) * sizeof(uint));
 
-        foreach (var level in mesh.Levels) { bytes += ((((long)level.Indices.Length) + level.TriangleMaterials.Length) * sizeof(uint)); }
+        foreach (var level in mesh.Levels) { bytes += ((((long)level.IndexCount) + level.MaterialCount) * sizeof(uint)); }
         if (attributes) {
-            bytes += ((((long)mesh.Positions.Length) + mesh.Normals.Length) * (3 * sizeof(float)));
-            bytes += (((long)mesh.TriangleMaterials.Length) * sizeof(uint));
+            bytes += ((((long)mesh.m_positions.Length) + mesh.m_normals.Length) * (3 * sizeof(float)));
+            bytes += (((long)mesh.m_triangleMaterials.Length) * sizeof(uint));
             bytes += (((((long)mesh.Members.Length) * System.Runtime.CompilerServices.Unsafe.SizeOf<SdfMeshMember>()) + mesh.VertexMembers.Length) + (12L * mesh.Influences.Length));
         }
         return bytes;
@@ -110,11 +110,11 @@ public sealed partial record SdfMesh {
         var triangles = 0L;
 
         foreach (var chunk in Chunks) {
-            if ((chunk.Normals.IsEmpty != Normals.IsEmpty) || (chunk.TriangleMaterials.IsEmpty != TriangleMaterials.IsEmpty) || !chunk.VertexMembers.IsEmpty) { return false; }
-            vertices += chunk.Positions.Length;
+            if ((chunk.HasNormals != HasNormals) || (chunk.HasTriangleMaterials != HasTriangleMaterials) || !chunk.VertexMembers.IsEmpty) { return false; }
+            vertices += chunk.VertexCount;
             triangles += chunk.TriangleCount;
         }
-        return ((vertices == Positions.Length) && (triangles == TriangleCount) && VertexMembers.IsEmpty);
+        return ((vertices == VertexCount) && (triangles == TriangleCount) && VertexMembers.IsEmpty);
     }
 
     /// <summary>Copies a managed mesh into native storage under the process account, the copy holding its first claim; a
@@ -144,19 +144,20 @@ public sealed partial record SdfMesh {
             for (var piece = 0; (piece < shape.Pieces.Length); piece++) {
                 var source = Piece(index: piece);
 
-                if (storage.Positions(destination: out var positions, piece: piece) && (stored is null || stored.Grid.Width == 4)) { source.Positions.Span.CopyTo(destination: positions); }
-                if (storage.Normals(destination: out var normals, piece: piece)) { source.Normals.Span.CopyTo(destination: normals); }
+                // The source is a managed mesh (a published one is claimed again above), whose planes are its arrays.
+                if (storage.Positions(destination: out var positions, piece: piece) && (stored is null || stored.Grid.Width == 4)) { source.m_positions.Span.CopyTo(destination: positions); }
+                if (storage.Normals(destination: out var normals, piece: piece)) { source.m_normals.Span.CopyTo(destination: normals); }
                 if (stored is not null) { SdfMeshStoreCodec.Conform(stored, piece, positions, normals); }
-                if (storage.Indices(destination: out var indices, piece: piece)) { source.Indices.Span.CopyTo(destination: indices); }
-                if (storage.Materials(destination: out var materials, piece: piece)) { source.TriangleMaterials.Span.CopyTo(destination: materials); }
+                if (storage.Indices(destination: out var indices, piece: piece)) { source.JoinedIndices.Span.CopyTo(destination: indices); }
+                if (storage.Materials(destination: out var materials, piece: piece)) { source.m_triangleMaterials.Span.CopyTo(destination: materials); }
                 if (!shape.Chunked) {
                     if (storage.Members(destination: out var members, piece: piece)) { source.Members.Span.CopyTo(destination: members); }
                     if (storage.VertexMembers(destination: out var vertexMembers, piece: piece)) { source.VertexMembers.Span.CopyTo(destination: vertexMembers); }
                     if (storage.Influences(destination: out var influences, piece: piece)) { source.Influences.Span.CopyTo(destination: influences); }
                 }
                 for (var level = 0; (level < source.Levels.Count); level++) {
-                    if (storage.LevelIndices(destination: out var levelIndices, level: level, piece: piece)) { source.Levels[level].Indices.Span.CopyTo(destination: levelIndices); }
-                    if (storage.LevelMaterials(destination: out var levelMaterials, level: level, piece: piece)) { source.Levels[level].TriangleMaterials.Span.CopyTo(destination: levelMaterials); }
+                    if (storage.LevelIndices(destination: out var levelIndices, level: level, piece: piece)) { source.Levels[level].UnheldIndices.Span.CopyTo(destination: levelIndices); }
+                    if (storage.LevelMaterials(destination: out var levelMaterials, level: level, piece: piece)) { source.Levels[level].UnheldMaterials.Span.CopyTo(destination: levelMaterials); }
                 }
             }
 
@@ -211,10 +212,12 @@ public sealed partial record SdfMesh {
                 if (shape.Chunked) {
                     var shared = m_payload.Part(owner: account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "mesh"));
 
-                    m_positions = Take<Vector3>(block: out _, length: shape.Pieces.Sum(selector: static piece => piece.Vertices), owner: shared);
+                    m_positions = Take<Vector3>(block: out var positions, length: shape.Pieces.Sum(selector: static piece => piece.Vertices), owner: shared);
+                    restorable?.Add(block: positions, owner: shared, piece: -1, plane: Plane.Positions);
                     m_normals = Take<Vector3>(block: out var normals, length: shape.Pieces.Sum(selector: static piece => piece.Normals), owner: shared);
-                    restorable?.AddNormals(block: normals, owner: shared, piece: -1);
-                    m_materials = Take<uint>(block: out _, length: shape.Pieces.Sum(selector: static piece => piece.Materials), owner: shared);
+                    restorable?.Add(block: normals, owner: shared, piece: -1, plane: Plane.Normals);
+                    m_materials = Take<uint>(block: out var materials, length: shape.Pieces.Sum(selector: static piece => piece.Materials), owner: shared);
+                    restorable?.Add(block: materials, level: 0, owner: shared, piece: -1, plane: Plane.Materials);
                     var vertex = 0;
                     var normal = 0;
                     var material = 0;
@@ -222,10 +225,12 @@ public sealed partial record SdfMesh {
                     for (var index = 0; (index < m_parts.Length); index++) {
                         var piece = shape.Pieces[index];
                         var owner = m_payload.Part(owner: account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "mesh"));
+                        var indices = Take<uint>(block: out var indexBlock, length: piece.Indices, owner: owner);
 
+                        restorable?.Add(block: indexBlock, level: 0, owner: owner, piece: index, plane: Plane.Indices);
                         owner.Borrow(source: shared);
                         m_parts[index] = new Part {
-                            Indices = Take<uint>(block: out _, length: piece.Indices, owner: owner),
+                            Indices = indices,
                             Materials = ((piece.Materials == 0) ? default : m_materials.Slice(length: piece.Materials, start: material)),
                             Normals = ((piece.Normals == 0) ? default : m_normals.Slice(length: piece.Normals, start: normal)),
                             Owner = owner,
@@ -239,17 +244,20 @@ public sealed partial record SdfMesh {
                 } else if (m_parts.Length != 0) {
                     var piece = shape.Pieces[0];
                     var part = new Part {
-                        Indices = Take<uint>(block: out _, length: piece.Indices, owner: m_payload),
                         Influences = Take<SdfMeshInfluence>(block: out _, length: piece.Influences, owner: m_payload),
                         Members = Take<SdfMeshMember>(block: out _, length: piece.Members, owner: m_payload),
                         Owner = m_payload,
-                        Positions = Take<Vector3>(block: out _, length: piece.Vertices, owner: m_payload),
                         VertexMembers = Take<byte>(block: out _, length: piece.VertexMembers, owner: m_payload),
                     };
 
+                    part.Positions = Take<Vector3>(block: out var positions, length: piece.Vertices, owner: m_payload);
+                    restorable?.Add(block: positions, owner: m_payload, piece: 0, plane: Plane.Positions);
+                    part.Indices = Take<uint>(block: out var indices, length: piece.Indices, owner: m_payload);
+                    restorable?.Add(block: indices, level: 0, owner: m_payload, piece: 0, plane: Plane.Indices);
                     part.Normals = Take<Vector3>(block: out var normals, length: piece.Normals, owner: m_payload);
-                    restorable?.AddNormals(block: normals, owner: m_payload, piece: 0);
-                    part.Materials = Take<uint>(block: out _, length: piece.Materials, owner: m_payload);
+                    restorable?.Add(block: normals, owner: m_payload, piece: 0, plane: Plane.Normals);
+                    part.Materials = Take<uint>(block: out var materials, length: piece.Materials, owner: m_payload);
+                    restorable?.Add(block: materials, level: 0, owner: m_payload, piece: 0, plane: Plane.Materials);
                     TakeLevels(part: part, piece: 0, shape: piece);
                     m_parts[0] = part;
                 }
@@ -268,9 +276,10 @@ public sealed partial record SdfMesh {
             part.LevelIndices = new Memory<uint>[shape.Levels.Length];
             part.LevelMaterials = new Memory<uint>[shape.Levels.Length];
             for (var level = 0; (level < shape.Levels.Length); level++) {
-                part.LevelIndices[level] = Take<uint>(block: out var block, length: shape.Levels[level].Indices, owner: part.Owner);
-                m_restorable?.AddLevel(block: block, level: level, owner: part.Owner, piece: piece);
-                part.LevelMaterials[level] = Take<uint>(block: out _, length: shape.Levels[level].Materials, owner: part.Owner);
+                part.LevelIndices[level] = Take<uint>(block: out var indices, length: shape.Levels[level].Indices, owner: part.Owner);
+                m_restorable?.Add(block: indices, level: level, owner: part.Owner, piece: piece, plane: Plane.LevelIndices);
+                part.LevelMaterials[level] = Take<uint>(block: out var materials, length: shape.Levels[level].Materials, owner: part.Owner);
+                m_restorable?.Add(block: materials, level: level, owner: part.Owner, piece: piece, plane: Plane.LevelMaterials);
             }
         }
 
@@ -370,14 +379,14 @@ public sealed partial record SdfMesh {
         BakeCell = source.BakeCell;
         Chunks = chunks;
         Encloses = source.Encloses;
-        Positions = source.Positions;
+        m_positions = source.m_positions;
         PositionLow = source.PositionLow;
         PositionHigh = source.PositionHigh;
-        Normals = source.Normals;
+        m_normals = source.m_normals;
         m_indices = source.m_indices;
         m_triangleCount = source.m_triangleCount;
         m_joinedIndicesOmitted = source.m_joinedIndicesOmitted;
-        TriangleMaterials = materials;
+        m_triangleMaterials = materials;
         Members = source.Members;
         VertexMembers = source.VertexMembers;
         Influences = source.Influences;
@@ -399,6 +408,12 @@ public sealed partial record SdfMesh {
     // chunked mesh's chunks view one renumbered copy of its triangle materials. A native chunked mesh's chunks always
     // view its attributes (NativeCopy refuses any other, and NativeStorage builds no other).
     internal SdfMesh RenumberNative(SdfMeshMaterials.Remap map, IAllocator allocator, MemoryAccount account) {
+        // The source's triangle materials and its levels' are read here alone: the hold, whose storage its chunks share,
+        // keeps them resident for the copy.
+        using var held = Hold();
+
+        if (!held.Readable) { throw new InvalidOperationException(message: "A mesh whose store could not restore its planes cannot be renumbered."); }
+
         var payload = new Payload(owner: account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "mesh-materials"));
 
         ReadOnlyMemory<uint> Remap(Payload owner, ReadOnlyMemory<uint> source) {
@@ -416,7 +431,7 @@ public sealed partial record SdfMesh {
 
             var chunks = new SdfMesh[Chunks.Count];
             var shared = ((chunks.Length != 0) ? payload.Part(owner: account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "mesh-materials")) : payload);
-            var materials = Remap(owner: shared, source: TriangleMaterials);
+            var materials = Remap(owner: shared, source: m_triangleMaterials);
             var triangle = 0;
 
             for (var index = 0; (index < chunks.Length); index++) {
@@ -427,7 +442,7 @@ public sealed partial record SdfMesh {
                 part.Borrow(source: shared);
                 chunks[index] = new SdfMesh(
                     chunks: [],
-                    levels: chunk.Levels.Select(selector: level => new SdfMeshLevel(level.Indices, Remap(owner: part, source: level.TriangleMaterials), level.Error)).ToArray(),
+                    levels: chunk.Levels.Select(selector: level => new SdfMeshLevel(level.UnheldIndices, Remap(owner: part, source: level.UnheldMaterials), level.Error)).ToArray(),
                     materials: (materials.IsEmpty ? default : materials.Slice(start: triangle, length: chunk.TriangleCount)),
                     payload: part.Seal(),
                     source: chunk);
@@ -435,7 +450,7 @@ public sealed partial record SdfMesh {
             }
             return new SdfMesh(
                 chunks: chunks,
-                levels: Levels.Select(selector: level => new SdfMeshLevel(level.Indices, Remap(owner: payload, source: level.TriangleMaterials), level.Error)).ToArray(),
+                levels: Levels.Select(selector: level => new SdfMeshLevel(level.UnheldIndices, Remap(owner: payload, source: level.UnheldMaterials), level.Error)).ToArray(),
                 materials: materials,
                 payload: payload.Seal(),
                 source: this);

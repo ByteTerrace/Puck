@@ -653,7 +653,14 @@ working set mixes warm-up, caches and garbage. The owner's method:
    whole into every Direct3D 12 process and touches most of it at device
    creation, so a few hundred megabytes to a gigabyte of a windowed World's
    mapped working set is that file's clean pages.
-8. Attribute managed holders by walking the heap, not by a sampled dump:
+8. Name the native and runtime rows before chasing them. mimalloc keeps a heap and its statistics per thread, so its
+   own committed figure trails its arenas by gigabytes and a thread's freed pages go back only on that thread:
+   `host.memory`'s `allocator-arenas` reads the arenas by their pages (an arena whose pages are all free still reads
+   as unnamed private memory in `private-largest`, a 1 GiB reservation without `,allocator`), `nt-heaps` names
+   HeapAlloc's share of runtime-and-driver, and `host.memory names` sums the thousands of small owners (one per
+   published mesh payload) that `owners` never lists. A worker that allocates native workspace returns its heap's
+   free pages as it goes idle (`MemoryAccount.ReturnThreadMemory`).
+9. Attribute managed holders by walking the heap, not by a sampled dump:
    `dotnet-gcdump report` samples a multi-GB heap and its per-type totals do
    not add up to it. A scratch ClrMD program (`Microsoft.Diagnostics.Runtime`
    4.x reads .NET 11; attach with `suspend: true`, since a snapshot of a large

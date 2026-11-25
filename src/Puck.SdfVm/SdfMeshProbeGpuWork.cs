@@ -258,9 +258,15 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     // for its next call and reads only the rows it asked for, since the words beyond are an earlier call's. Every job has
     // been answered or cancelled before this returns or throws, so the caller may then overwrite the arrays its jobs'
     // memories view. One coordinator calls this at a time.
+    // A rented answer array of at least `words`, the too-small one the caller handed back returned to the pool: the
+    // caller returns the array it keeps once it stops calling (SdfMeshIrradiance's batches end).
+    private static uint[] Grown(uint[]? reuse, int words) {
+        if (reuse is { Length: > 0 }) { RentedArrays.Return(array: reuse); }
+        return RentedArrays.Rent<uint>(minimumLength: words);
+    }
     private uint[] Run(int count, int rowWords, uint[]? reuse, Func<int, Job> next) {
         var words = (count * rowWords) + 1;
-        var answer = ((reuse is { } array) && (array.Length >= words)) ? array : new uint[words];
+        var answer = ((reuse is { } array) && (array.Length >= words)) ? array : Grown(reuse: reuse, words: words);
 
         try {
             for (var start = 0; ((start < count) || (m_window.Count > 0));) {

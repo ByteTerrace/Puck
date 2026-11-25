@@ -109,7 +109,7 @@ public sealed partial class SdfProgram {
     // packed into a section of its own as Of packs a fresh program's.
     private SdfProgram WithAppearance(SdfAppearance appearance) {
         var program = (SdfProgram)MemberwiseClone();
-        var section = new uint[m_appearanceWords.Length];
+        var section = new uint[m_appearanceWordCount];
 
         appearance.Pack(materialVector: ((int)m_words[ProgramMaterialOffsetLane]), section: section);
         program.m_appearanceWords = section;
