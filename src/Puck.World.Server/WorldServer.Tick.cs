@@ -112,6 +112,12 @@ public sealed partial class WorldServer {
     }
     /// <inheritdoc cref="WorldTick.Lapse"/>
     public ulong Lapse(ulong ticks) => m_tick.Lapse(ticks: ticks);
+    /// <inheritdoc cref="WorldTick.SettleLapsed"/>
+    public bool SettleLapsed() {
+        m_output.Collect();
+        DrainMailbox();
+        return m_tick.SettleLapsed();
+    }
     /// <summary>Gets whether an intent is queued for the next step: input addressed to a body or a session of this
     /// world that only a step applies.</summary>
     public bool HasQueuedIntents {

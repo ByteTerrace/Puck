@@ -167,12 +167,8 @@ public sealed partial class WorldInstanceHost {
             return instance.OccupiedBetweenTicks;
         }
 
-        var population = instance.Server.Population;
-        var occupied = false;
+        var occupied = (instance.Server.Population.NextHumanOccupied(from: 0) >= 0);
 
-        for (var index = 0; (!occupied && (index < population.Capacity)); index++) {
-            occupied = population.IsHumanOccupied(bodyIndex: index);
-        }
         instance.OccupiedBetweenTicks = occupied;
 
         return occupied;

@@ -150,6 +150,7 @@ public static class WorldReplayEntryDescriber {
             WorldReplayEntry.RateLever lever => (lever.Paused
             ? "rate paused"
             : "rate resumed"),
+            WorldReplayEntry.Lapse lapse => $"lapse {lapse.Ticks.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} tick(s)",
             WorldReplayEntry.Transfer transfer => $"transfer #{transfer.TransferId} -> '{transfer.Target}'{(transfer.TargetRemote
             ? " (remote)"
             : string.Empty)} '{transfer.DestinationName}' scope={transfer.ScopeKey} generation={transfer.GenerationId} {transfer.Outcome} departed=[{string.Join(

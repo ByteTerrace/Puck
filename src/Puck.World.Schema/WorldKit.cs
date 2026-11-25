@@ -101,10 +101,10 @@ public sealed record WorldAutonomyCadence(
 /// <see cref="WorldAutonomyCadence.SteeringSeconds"/>.</param>
 public sealed record WorldAutonomyFar(float Beyond, float MotionSeconds = 0f, float SteeringSeconds = 0f);
 /// <summary>A kit's compiled far cadences (<see cref="WorldAutonomyFar"/>).</summary>
-/// <param name="BeyondSquared">The squared distance beyond which a body is far.</param>
+/// <param name="Beyond">The distance beyond which a body is far.</param>
 /// <param name="MotionTicks">The far motion cadence in engine ticks; zero means every authority tick.</param>
 /// <param name="SteeringTicks">The far producer cadence in engine ticks; zero means every authority tick.</param>
-public readonly record struct FixedAutonomyFar(FixedQ4816 BeyondSquared, ulong MotionTicks, ulong SteeringTicks) {
+public readonly record struct FixedAutonomyFar(FixedQ4816 Beyond, ulong MotionTicks, ulong SteeringTicks) {
     /// <summary>Compiles an authored far tier.</summary>
     /// <param name="far">The authored tier.</param>
     /// <returns>The compiled tier.</returns>
@@ -112,10 +112,8 @@ public readonly record struct FixedAutonomyFar(FixedQ4816 BeyondSquared, ulong M
     public static FixedAutonomyFar Compile(WorldAutonomyFar far) {
         ArgumentNullException.ThrowIfNull(argument: far);
 
-        var beyond = FixedQ4816.FromDouble(value: far.Beyond);
-
         return new FixedAutonomyFar(
-            BeyondSquared: (beyond * beyond),
+            Beyond: FixedQ4816.FromDouble(value: far.Beyond),
             MotionTicks: Ticks(seconds: far.MotionSeconds),
             SteeringTicks: Ticks(seconds: far.SteeringSeconds)
         );

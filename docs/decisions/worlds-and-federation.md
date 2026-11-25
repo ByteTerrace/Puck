@@ -462,12 +462,15 @@ Four things make that precise.
   or wall clock enters the reading, so a presentation cannot change what an
   authority computes, and a remote authority reads the same facts a local one
   does.
-- **A lapse is input.** The same document and the same input, the lapses
-  included, give the same state on every run. Two runs of one host with the
-  same input lapse the same ticks, because the reading above is a function of
-  authority state. This holds by construction and is not yet checked by a
-  replay or by `puck test --reproduce`: a recorded row never lapses, so those
-  compare runs in which nothing lapsed (see "Where it stops" below).
+- **A lapse is input, and the tape records it.** The same document and the
+  same input, the lapses included, give the same state on every run. Two runs
+  of one host with the same input lapse the same ticks, because the reading
+  above is a function of authority state and reads nothing about whether a row
+  is recorded. The host writes each lapse on the row's tape as it makes it
+  (`WorldReplayEntry.Lapse`, from `WorldReplayTape.NoteLapse`), in order among
+  the tick's other entries, and a replay or a reproduction applies it through
+  the same door. A recorded run and an unrecorded run of one world therefore
+  reach the same state.
 - **Time is a law, and a lapse keeps it.** A lapse moves the tick ordinal and
   the engine tick together, in the ratio a step moves them. Every value that
   is a function of those clocks reads after a lapse what it would have read had
@@ -476,9 +479,12 @@ Four things make that precise.
   timer that ran out while nobody looked has run out, and a follower of the
   world's clock predicts it correctly throughout.
 - **Everything else holds.** Bodies stand where they stood, rules that were
-  not evaluated did not fire, machines did not run. Input that reaches a lapsed
-  world (a mutation, an adopted followed row, a session's press) is applied and
-  answered with one step, so its rules see it.
+  not evaluated did not fire, machines did not run. Input that only a step
+  applies (a mutation, an adopted followed row, a session's press) is held for
+  one and owes the world that step, so its rules see it; nothing buffered
+  applies outside a step, which is also where a replay applies it. An operation
+  that applies at once (a grant, a console command, a session's admission) is
+  applied while the world lapses and is seen at its next step.
 
 Within a world that is stepping, the same idea applies to bodies by an authored
 tier and needs no input at all: a kit's `autonomy.far` names coarser cadences
@@ -492,7 +498,7 @@ Which cadence a body keeps is a function of the world's state.
 |---|---|---|---|
 | A. Every world steps always | A view never pauses a destination | Observation can never change an outcome | Cost grows with worlds that exist, not worlds that matter: a hub of destinations pays for every one, and a shard pays for every empty zone |
 | B. The engine skips only what it can prove | A world advances straight to the next tick at which anything can happen, proved per subsystem (deadline tables, cadences, a rule's gate bounded over an interval of ticks) | Exact: skipped ticks are the ticks that would have changed nothing | A moving body, a running machine or a rule with no bound makes every tick an event; proving the bound for rules is an interval evaluator the rule compiler does not have |
-| C. The author states what attention buys, and attention is input | This decision | Unobserved worlds cost a clock move; the default is option A; replay holds because the lapse is input | What a lapsed body should have done is not simulated (see below); recorded and neighbouring worlds are excluded until their records carry lapses |
+| C. The author states what attention buys, and attention is input | This decision | Unobserved worlds cost a clock move; the default is option A; replay holds because the lapse is input | What a lapsed body should have done is not simulated (see below); a world that neighbours another always steps |
 | D. A presentation tells the authority what it shows | The client's views drive the simulation rate | The cheapest signal | Presentation feeds simulation: a modified client steers what the authority computes, and two viewers disagree |
 
 Option C is taken, with option B as the direction its exact part grows in: a
@@ -518,20 +524,13 @@ reading uses the authority's positions and sessions, never a client's report.
 An observer in another process counts as watching (`IWorldWatchingSink`), so a
 remote viewer's world is not frozen under it by a host that cannot measure it.
 
-**Where it stops.** A recorded row never lapses, because its tape has no entry
-for a lapse yet. That exclusion is wide: a recording tapes the other rows of
-its process as companions (`WorldReplayTape.TryRecordCompanion`), and a hosted
-silo tapes its rows. While a recording runs, no world lapses, so a world that
-authors a bar steps on every tick, and a recorded run of it reaches a different
-state from an unrecorded one. The second point above, that two runs lapse the
-same ticks, is therefore shown only for hosts that record nothing: a replay or
-a reproduction compares runs in which nothing lapsed, and cannot yet check a
-lapse. Carrying the lapse on the tape closes this and is the first step of the
-[plan](../plans/simulation-attention.md). A world that neighbours another
-through an adjacency, or holds a transfer in flight, always steps, since a
-neighbour and a lease read its ticks one by one. A lapsed body does not coast:
-a citizen is where it stood, not where its errand would have taken it. The
-plan owns each of these as a step.
+**Where it stops.** A world that neighbours another through an adjacency, or
+holds a transfer in flight, always steps, since a neighbour and a lease read
+its ticks one by one. A row whose tape is driving a replay takes its lapses
+from the tape, never from the host's reading. A lapsed body does not coast: a
+citizen is where it stood, not where its errand would have taken it. The
+[plan](../plans/simulation-attention.md) owns the adjacency and the coast as
+steps.
 
 **Rulings it rests on.** Determinism pins the mapping (rule 4); authors rule (a
 world's document, never the engine, decides whether attention may matter);

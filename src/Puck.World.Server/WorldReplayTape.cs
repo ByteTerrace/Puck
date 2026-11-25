@@ -350,6 +350,28 @@ public sealed partial class WorldReplayTape {
 
         m_currentAuthority.Add(item: new WorldReplayEntry.RateLever(Paused: paused));
     }
+
+    // The lapse entry NoteLapse last appended, while a following lapse may still be folded into it: none once a
+    // recording or a probe has begun since, whose start skips the entries gathered before it by count and would skip
+    // the ticks folded into one of them.
+    private WorldReplayEntry.Lapse? m_openLapse;
+
+    /// <summary>Records a lapse of this tape's authority into the open tick's authority stream, in the order it
+    /// happened among the tick's other entries: a no-op while nothing captures. A lapse that directly follows another
+    /// is folded into it, so a world that lapses for an hour records one entry a tick it steps, not one a tick it
+    /// lapsed.</summary>
+    /// <param name="ticks">The ticks the authority's clocks passed over.</param>
+    public void NoteLapse(ulong ticks) {
+        if (!m_capturing || (ticks == 0UL)) {
+            return;
+        }
+        if ((m_openLapse is { } open) && (m_currentAuthority.Count != 0) && ReferenceEquals(objA: m_currentAuthority[^1], objB: open)) {
+            m_currentAuthority[^1] = m_openLapse = new WorldReplayEntry.Lapse(Ticks: checked(open.Ticks + ticks));
+
+            return;
+        }
+        m_currentAuthority.Add(item: m_openLapse = new WorldReplayEntry.Lapse(Ticks: ticks));
+    }
     /// <summary>Closes the current tick: the submissions captured since the last call become one tick's input group,
     /// handed to the active recording and to the attached <see cref="WorldHistory"/>, and the accumulators reset for
     /// the next tick; a live drive compares and advances instead. Called once per fixed tick from
@@ -716,6 +738,7 @@ public sealed partial class WorldReplayTape {
         m_startCheckpoint = start;
         m_startSkipAuthority = ((start is null) ? 0 : m_currentAuthority.Count);
         m_startSkipIntents = ((start is null) ? 0 : m_currentIntents.Count);
+        m_openLapse = null;
         m_definitionJson = ((start is null)
             ? WorldDefinitionSerialization.Serialize(definition: m_liveServer.Definition)
             : start.Server.DefinitionJson);

@@ -4,10 +4,9 @@
 // the window the watched world steps. The two scenarios show what a lapse keeps: the day reads the same whether the
 // world was watched throughout or only for two seconds, and the counter reads the ticks it was watched for.
 //
-// Run it with `puck test worlds/debug/attention-tests.puck`. Under `--reproduce` the first scenario fails its
-// `steps < 75` gate: a reproduction records, a recording tapes the watched world as a companion, and a recorded row
-// never lapses, so the watched world steps on every tick. That gate is the check for carrying a lapse on the tape
-// (docs/plans/simulation-attention.md, step 1), and passes under `--reproduce` once it is built.
+// `puck test worlds/debug/attention-tests.puck --reproduce` records both worlds and replays each from its start. The
+// watched world's tape carries its lapses, so the first scenario's `steps < 75` gate holds recorded as it does
+// unrecorded, and the replay moves the watched world's clocks over the same ticks.
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "attention-tests"

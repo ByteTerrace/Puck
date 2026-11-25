@@ -159,8 +159,8 @@ public sealed class WorldInstance : IDisposable {
     /// over without stepping it, because it stood below the attention it steps at. A host counter, not simulation
     /// state: <see cref="CompletedTicks"/> less this is the ticks the instance stepped in this process.</summary>
     public ulong LapsedTicks { get; internal set; }
-    /// <summary>Gets or sets whether the instance owes one step whatever its attention: an administrative drain applied
-    /// something to it while it lapsed, or input is queued for it, and only a step lets its rules see either.</summary>
+    /// <summary>Gets or sets whether the instance owes one step whatever its attention: while it lapsed, a document
+    /// operation was buffered for it or an intent was queued for it, and only a step applies either.</summary>
     internal bool StepOwed { get; set; }
 
     /// <summary>Resolves <see cref="SourcePath"/> as <see cref="WorldFileOrigin.TryResolveCanonicalPath"/> does, probing
@@ -196,8 +196,10 @@ public sealed class WorldInstance : IDisposable {
 
     private bool m_canonicalResolves;
 
-    /// <summary>This row's own replay tape, or <see langword="null"/> for a row nothing records (every row but a
-    /// desktop's boot instance today).</summary>
+    /// <summary>Gets or sets this row's own replay tape, or <see langword="null"/> for a row nothing records. A
+    /// desktop's boot row and a hosted row carry one; any other row gains one when a recording tapes it as a companion
+    /// (<see cref="WorldReplayTape.TryRecordCompanion"/>) or a reproduction observes it
+    /// (<see cref="WorldReplayTape.ObserveReplay(WorldInstance)"/>).</summary>
     public WorldReplayTape? Tape { get; set; }
 
     /// <summary>This instance's portal-crossing edge state, read and written by <see cref="WorldInstanceHost"/>'s

@@ -18,8 +18,6 @@ public sealed partial class WorldPopulation {
     private ulong[] m_fieldInputPasses = [];
     // The producer fault last narrated for each body slot, so each transition is narrated once. Diagnostic only.
     private readonly Puck.Abstractions.ReasonLatch<int> m_producerFaults = new();
-    // Where the bodies humans occupy stood as this tick's plan began, in slot order (ReadAttendedPoints).
-    private readonly List<FixedVector3> m_attendedPoints = [];
 
     private static void ApplyVariation(Entry entry, CompiledBodyProducer producer, FixedQ4816 phase, FixedQ4816 weaveUnit, FixedQ4816 activityUnit, bool resetPhase) {
         entry.ProducerState.WeaveFrequency = (producer.Scalar(parameter: BodyProducerParameter.WeaveFrequencyBase) + (producer.Scalar(parameter: BodyProducerParameter.WeaveFrequencyRange) * weaveUnit));
@@ -994,34 +992,6 @@ public sealed partial class WorldPopulation {
             remaining = 1UL;
         }
     }
-    // Whether every attended point stands farther from a position than a kit's far distance; with nobody in the world,
-    // every position is far.
-    private bool StandsFar(in FixedVector3 position, FixedQ4816 beyondSquared) {
-        foreach (var point in m_attendedPoints) {
-            if ((point - position).LengthSquared <= beyondSquared) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-    // Reads where humans stand, before any body plans its tick: the points a kit's far cadence measures against. A
-    // seat is read where it stood when the tick began, since the seats advance after the simulated bodies.
-    private void ReadAttendedPoints() {
-        m_attendedPoints.Clear();
-
-        var tiered = false;
-
-        foreach (var kit in m_kits) { tiered |= (kit.AutonomousFar is not null); }
-        if (!tiered) {
-            return;
-        }
-        for (var index = 0; (index < Capacity); index++) {
-            if (IsHumanOccupied(bodyIndex: index) && (m_entries[index].Body is { } body)) {
-                m_attendedPoints.Add(item: body.FixedPosition);
-            }
-        }
-    }
     private static bool CadenceDue(ulong period, ulong stepTicks, ref ulong elapsed, ref ulong remaining, out ulong elapsedTicks) {
         if (period == 0UL) {
             elapsedTicks = stepTicks;
@@ -1094,7 +1064,9 @@ public sealed partial class WorldPopulation {
         // change mid-loop (nothing here writes either) can never wake half a tick's peers and not the other half.
         var contactFieldVersion = ContactFieldVersion;
 
-        ReadAttendedPoints();
+        // A kit's far cadence measures against where humans stood as the tick began: a seat advances after the
+        // simulated bodies, and a peer's body moves among them.
+        if (HasFarCadence()) { ReadOccupied(); }
         // The kit advance split (WorldPopulation.Partitions.cs): the bodies whose step is local advance first, in fixed
         // partitions of slots over the frozen image, and every other body then advances here, serially, in index order.
         PlanKitStep(contactFieldVersion: contactFieldVersion, stepBodies: stepBodies, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks);
@@ -1214,7 +1186,8 @@ public sealed partial class WorldPopulation {
                     CadenceComesDue(period: autonomy.MotionPeriodTicks, remaining: autonomy.MotionRemainingTicks, stepTicks: stepTicks) ||
                     CadenceComesDue(period: autonomy.SteeringPeriodTicks, remaining: autonomy.SteeringRemainingTicks, stepTicks: stepTicks)
                 ) {
-                    isFar = StandsFar(position: player.FixedPosition, beyondSquared: far.BeyondSquared);
+                    // With nobody in the world, every body is far.
+                    isFar = (NearestOccupiedSquared(point: player.FixedPosition, reach: far.Beyond) is null);
                 }
                 if (isFar) {
                     motionPeriod = farMotion;

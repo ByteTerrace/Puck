@@ -927,10 +927,7 @@ public sealed partial class WorldTick {
         lock (Host.AuthorityGate) {
             if (Host.AuthorityRetiring || (BlockedReason is not null)) { return false; }
             Host.MutationBudget.BeginTick();
-            // A paused or stopped world still ends a session whose observer faulted or detached itself.
-            Host.EndObserverEndedSessions();
-            DrainOrdered();
-            Host.Extensions.Drain();
+            SettleUnstepped();
             var applied = DrainPendingOps(tick: m_lastCompletedTick);
             Host.FlushMutationJournal?.Invoke();
 
@@ -977,6 +974,29 @@ public sealed partial class WorldTick {
 
             return engineTicks;
         }
+    }
+    /// <summary>Settles the authority on a host step it lapses: ends the sessions whose observers ended, applies the
+    /// ordered entries that apply at once, and drains the extensions, as a step's opening does. It applies no buffered
+    /// document operation: a mutation, a rebuild or an undo applies only inside a step, where a re-drive of the tape
+    /// applies it too, so a lapsing authority and its recording never part on when one landed.</summary>
+    /// <returns><see langword="true"/> when a buffered document operation or a queued intent waits for a step, which
+    /// the host then owes the authority whatever its attention.</returns>
+    internal bool SettleLapsed() {
+        lock (Host.AuthorityGate) {
+            if (Host.AuthorityRetiring || (BlockedReason is not null)) { return false; }
+            SettleUnstepped();
+            Host.Document.TakePreparedRebuilds();
+
+            return ((Host.Document.Pending.Count != 0) || (m_intents.Count != 0));
+        }
+    }
+    // What a world that takes no step this host step still settles, paused, stopped or lapsing alike: a session whose
+    // observer faulted or detached itself ends, the ordered entries that apply at once apply, and the extensions drain.
+    // The caller holds the authority gate.
+    private void SettleUnstepped() {
+        Host.EndObserverEndedSessions();
+        DrainOrdered();
+        Host.Extensions.Drain();
     }
     /// <summary>Buffers one entity's submitted intent for the next <see cref="Step"/>.</summary>
     /// <param name="submission">The tick, entity index, and merged intent.</param>

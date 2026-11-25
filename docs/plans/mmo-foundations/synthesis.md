@@ -808,7 +808,7 @@ nothing in `src/` binds an authority to an account or marks one neutral
 **The seat's view.** The first revision moved the host's view of a table from
 the dealer to the room without noticing. A screen in a player's room observes
 a nested destination as the room's authority, into the room's mirror
-**[opened]** (`src/Puck.World.Server/WorldInstanceHost.ScreenSessions.cs:316-319`):
+**[opened]** (`src/Puck.World.Server/WorldInstanceHost.ScreenSessions.cs:312-315`):
 
 ```csharp
         if (target!.Server.TryObserveAsSession(

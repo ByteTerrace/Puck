@@ -266,10 +266,12 @@ public sealed partial class WorldInstanceHost {
         _ = row.Instance.Server.DrainAdministrative();
         SettleScreenSessions(instance: row.Instance, stepped: false);
     }
-    // A lapsing row's host step: its clocks pass over every whole tick it has banked (WorldTick.Lapse), leaving the
-    // remainder banked, so it keeps its phase against the master timeline and steps on its own schedule the moment
-    // attention returns; then it settles as a paused row does. Anything that settle applied, and any input queued for
-    // the row, owes it one step (WorldInstance.StepOwed), so its rules see what entered while nobody looked.
+    // A lapsing row's host step: its clocks pass over every whole tick it has banked, leaving the remainder banked, so
+    // it keeps its phase against the master timeline and steps on its own schedule the moment attention returns. This
+    // is the one caller of WorldServer.Lapse outside a replay, and it writes the lapse on the row's tape in the same
+    // breath (WorldReplayTape.NoteLapse), so a recorded row lapses exactly as an unrecorded one does and a re-drive
+    // moves its clocks at the same point. The row then settles what applies at once; a document operation or an intent
+    // that waits for a step owes it one (WorldInstance.StepOwed), where the row's rules see it and its tape replays it.
     private void SettleLapsed(WaveRow row) {
         var instance = row.Instance;
         var ticks = (instance.ScheduleAccumulatorTicks / row.StepWidth);
@@ -278,13 +280,14 @@ public sealed partial class WorldInstanceHost {
             var engineTicks = instance.Server.Lapse(ticks: ticks);
 
             if (engineTicks != 0UL) {
+                instance.Tape?.NoteLapse(ticks: ticks);
                 instance.ScheduleAccumulatorTicks -= engineTicks;
                 instance.ElapsedEngineTicks += engineTicks;
                 instance.LapsedTicks += ticks;
                 instance.PublishTick(obj: instance.CompletedTicks);
             }
         }
-        if (instance.Server.DrainAdministrative() || instance.Server.HasQueuedIntents) { instance.StepOwed = true; }
+        if (instance.Server.SettleLapsed()) { instance.StepOwed = true; }
         SettleScreenSessions(instance: instance, stepped: false);
     }
     // Copies how each slice of the collected wave ended into its row, so a row settled after a held one keeps it.

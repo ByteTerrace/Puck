@@ -17,6 +17,15 @@ step (`WorldInstanceHost`'s `ReadAttention`), and a wave row below its bar
 takes no step: `WorldTick.Lapse` moves its tick ordinal and engine tick over
 the whole ticks it banked. A world that authors no bar steps on every tick.
 
+**A tape records a lapse.** The host writes each lapse on the row's tape as it
+makes it (`WorldReplayTape.NoteLapse`, a `WorldReplayEntry.Lapse` among the
+tick's authority entries), and a replay, a reproduction or a drive applies the
+entry through `WorldTick.Lapse`. Whether a row is recorded is no part of the
+decision to lapse it, so a recorded run and an unrecorded run reach the same
+state. A lapsing row applies no buffered document operation between steps: a
+mutation, a rebuild or an undo waits for a step and owes the row one, which is
+where a replay applies it too.
+
 **An observing surface states how far its attention reaches.** A session
 source's `attention` (`WorldSessionAttention`) gives two distances from the
 surface to the nearest occupied body of the world that declares it: within the
@@ -28,7 +37,9 @@ a glimpse.
 (`WorldAutonomyFar`) names the cadences a body takes while every occupied body
 stands farther from it than a distance. The tier a body is bound to stands
 until one of its cadences comes due, so a far body reads the distance once a
-refresh.
+refresh. The distance is one query over one image of where humans stand
+(`WorldPopulation.NearestOccupiedSquared` over `ReadOccupied`, through
+`FixedSweepGrid`), which a surface's attention reads too.
 
 **Each instance's cost is counted.** `world.rate` reads back an instance's
 attention, its bar, the ticks it lapsed, and the body advances and producer
@@ -41,8 +52,9 @@ standard citizen and vehicle kits carry a far tier.
 
 ## The invariant
 
-A world's state is a function of its document and its input, and attention is
-part of that input only for a world whose document says so.
+A world's state is a function of its document and its input. A lapse is part of
+that input, only a world whose document authors a bar is ever lapsed, and a
+lapse is recorded where it is made.
 
 Three places enforce it, and a new caller cannot get round them.
 
@@ -50,67 +62,50 @@ Three places enforce it, and a new caller cannot get round them.
   reads who stands in each world, the sessions the host's worlds hold on each
   other with each surface's fixed-point reading, and whether an observer in
   another process is attached (`WorldOutputHub.Watchers`). No presentation,
-  camera or clock enters it.
+  camera or clock enters it, and nothing about whether a row is recorded.
 - **One decision.** `Lapses` is the only place a row is told not to step for
   want of attention. It answers false for a world with no bar, since nothing is
   below `Unobserved`.
-- **One clock move.** `WorldTick.Lapse` is the only way an authority's time
-  passes without a step. It takes a tick count and derives the engine ticks
-  from the world's own rate, so a caller cannot move the two clocks out of the
-  ratio a step keeps.
+- **One clock move, written down where it is made.** `WorldTick.Lapse` is the
+  only way an authority's time passes without a step. It takes a tick count
+  and derives the engine ticks from the world's own rate, so a caller cannot
+  move the two clocks out of the ratio a step keeps. The host's `SettleLapsed`
+  is its one caller outside a replay and notes the lapse on the row's tape in
+  the same place; a replay reaches it only by applying that entry.
 
-The guarantee stops at three places, each a step below: a recorded row, a
-world with an adjacency, and a world holding a transfer always step.
+The guarantee stops at two places, the first a step below: a world with an
+adjacency and a world holding a transfer always step. A row whose tape is
+driving takes its lapses from the tape.
 
 ## Steps
 
 Each step names the check that shows it worked.
 
-1. **A tape records a lapse.** This step comes first, because the invariant
-   is unchecked without it. A recorded row never lapses, since
-   `WorldReplayTape` has no entry for a lapse, and recorded rows are common: a
-   recording tapes the other rows of its process as companions
-   (`WorldReplayTape.TryRecordCompanion`), and a hosted silo tapes its rows.
-   Three things follow today. A recorded run of a world that authors a bar
-   steps it on every tick, so it reaches a different state from an unrecorded
-   run. `puck test --reproduce` and a replay drive compare runs in which
-   nothing lapsed, so neither can show that two runs lapse the same ticks. A
-   silo's rows save nothing. Add the entry beside the rate lever's, re-apply
-   it on a drive, then drop the tape test from `Lapses`. Check:
-   `puck test worlds/debug/attention-tests.puck --reproduce` passes its first
-   scenario, whose step counter reads the ticks the world was watched for and
-   not every tick, and a recording taken across a lapse verifies as a match.
-2. **Worlds joined by an adjacency lapse together.** The moon and the debug
+1. **Worlds joined by an adjacency lapse together.** The moon and the debug
    world share the `sky` seam, so neither lapses as an instance. A neighbour
    reads this world's ticks one by one; lapse the pair as one unit when both
    stand below their bars. Check: `world.rate` on the moon reads lapsed ticks
    while nobody stands near either side of the seam, and
    `worlds/debug/moon-seam-tests.puck` still reproduces.
-3. **A lapsed body coasts by its producer's law.** A lapsed body stands where
+2. **A lapsed body coasts by its producer's law.** A lapsed body stands where
    it stood. A curve follower's station has an exact closed form already
    (`WorldPopulation`'s `AdvanceCurveArc`, which carries its remainder); a
    navigated body needs its route's arc advanced by speed and time. The law is
    an authored member of the producer program, with standing still as the
    neutral default. Check: a scenario in which a curve follower's station
    after a lapse equals its station when stepped throughout.
-4. **Name the bodies behind the producer-run excess.** With the city watched
+3. **Name the bodies behind the producer-run excess.** With the city watched
    from outside, its producer runs read about eleven a tick above what the
    authored cadences give, while its body advances match. The unconfirmed
    reading is that a body whose producer stands down counts a run on every
    tick it is planned. Check: a per-kit count of producer runs in `world.rate`
    or `world.counters` that sums to the instance's.
-5. **Read the distance to observers through a spatial index.** `StandsFar`
-   scans every occupied body at each refresh. That is cheap with a few
-   observers and grows with their product with far bodies. Route it through
-   `FixedSweepGrid`, which the sleep index and the interest frame already use.
-   Check: distance reads per tick, counted, stay proportional to refreshes
-   rather than to refreshes times observers.
-6. **A remote observer's attention arrives with its session.** An observer in
+4. **A remote observer's attention arrives with its session.** An observer in
    another process always counts as watching, because its distance cannot be
    measured here. Carry the observing surface's reading on the federation
    observation. Check: a remote observer far from its surface leaves the
    destination lapsing.
-7. **Rule evaluation skips what it can prove.** A lapse is exact for values
+5. **Rule evaluation skips what it can prove.** A lapse is exact for values
    that are a law of time and holds everything else. Each subsystem that can
    name its next event narrows what an author has to accept: the deadline
    tables can today, and a rule's gate can once it is bounded over an interval

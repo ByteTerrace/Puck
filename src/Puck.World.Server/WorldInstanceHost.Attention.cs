@@ -1,5 +1,4 @@
 using Puck.Maths;
-using Puck.World.Server;
 
 namespace Puck.World;
 
@@ -7,24 +6,21 @@ namespace Puck.World;
 // (simulation.stepsAt); the host reads each running world's attention once a host step, from authority facts alone,
 // and a wave row that stands below its document's bar lapses instead of stepping (SettleLapsed, in the waves).
 //
-// The invariant: a world's state is a function of its document and its input, and attention is part of that input
-// only for a world whose document says so. What enforces it:
+// The invariant: a world's state is a function of its document and its input, and a lapse is part of that input: the
+// host decides it, the row's tape records it, and a re-drive applies it. What enforces it:
 // - One reading. ReadAttention is the only place attention is derived, and it reads authority state: who stands in
 //   each world (the population), which sessions the host's worlds hold on each other and how far each surface's
 //   attention reaches (fixed-point distances the owning world's settle measured), and whether an observer in another
-//   process is attached. No presentation, camera or clock enters it, so the same input lapses the same ticks.
+//   process is attached. No presentation, camera or clock enters it, and nothing about whether the row is recorded,
+//   so a recorded host and an unrecorded one lapse the same ticks.
 // - One door. Lapses is the only place a row is told not to step for want of attention, and it answers false for a
 //   world whose document authors no bar (WorldDefinition.SimulationStepsAt reads Unobserved, which nothing is below).
-// - One clock move. WorldTick.Lapse is the only way an authority's time passes without a step.
-// Where it stops: a row that is recorded (a tape), that neighbours another world, or that holds a transfer in flight
-// always steps, because a tape does not yet carry a lapse entry and a neighbour or a lease reads this world's ticks
-// one by one. A desktop's boot row is stepped by the pump, never by a wave, so it never lapses.
-//
-// The recorded case is not an edge: a recording tapes the other rows of its process as companions
-// (WorldReplayTape.TryRecordCompanion) and a hosted silo tapes its rows, so while one records, no row lapses and a
-// world that authors a bar steps every tick. A recorded run and an unrecorded run of such a world therefore reach
-// different states, and a replay or a reproduction compares runs in which nothing lapsed. Until the tape carries a
-// lapse entry, the invariant above holds for unrecorded hosts only.
+// - One clock move, written down where it is made. WorldTick.Lapse is the only way an authority's time passes without
+//   a step; SettleLapsed is its one caller outside a replay and notes the lapse on the row's tape as it calls it, and
+//   a replay reaches it only by applying that entry (WorldReplayEntry.Lapse).
+// Where it stops: a row that neighbours another world or holds a transfer in flight always steps, because a neighbour
+// and a lease read its ticks one by one, and a row whose tape is driving steps the ticks, and takes the lapses, its
+// tape recorded. A desktop's boot row is stepped by the pump, never by a wave, so it never lapses.
 public sealed partial class WorldInstanceHost {
     // Each running world's attention as of the host step being composed; a world absent from it is unobserved.
     private readonly Dictionary<string, WorldAttention> m_attention = new(comparer: StringComparer.Ordinal);
@@ -89,9 +85,10 @@ public sealed partial class WorldInstanceHost {
     }
 
     // THE LAPSE DECISION. Whether a wave row lapses this host step in place of stepping: it stands below the attention
-    // its document steps at, and nothing obliges it to step. A recorded row, a row that neighbours another world and a
-    // row holding a transfer always step (see the remarks above); so does a row that owes a step for input it took
-    // while lapsed.
+    // its document steps at, and nothing obliges it to step. A row that neighbours another world and a row holding a
+    // transfer always step (see the remarks above); so does a row that owes a step for input only a step applies, and
+    // a row whose tape is driving, which takes its lapses from the tape. Whether the row is being recorded is no part
+    // of the answer.
     private static bool Lapses(WorldInstance instance) {
         var server = instance.Server;
         var definition = server.Configuration;
@@ -99,7 +96,7 @@ public sealed partial class WorldInstanceHost {
         return (
             (instance.Attention < definition.SimulationStepsAt) &&
             !instance.StepOwed &&
-            (instance.Tape is null) &&
+            (instance.Tape is not { Mode: WorldReplayMode.Replaying }) &&
             (definition.Adjacencies is not { Count: > 0 }) &&
             (server.TransferEscrow.Counts.ActiveTransactions == 0) &&
             !server.HasQueuedIntents
@@ -107,9 +104,9 @@ public sealed partial class WorldInstanceHost {
     }
 
     // Reads how closely each of an owning world's sessions attends its destination, from the owning world's own
-    // population: the squared distance from the surface's frame to the nearest body a human occupies, against the
-    // surface's authored reach. Runs in the owning world's settle, when its population may be read; a surface that
-    // authors no reach reads no body.
+    // population: the squared distance from the surface's frame to the nearest body a human occupies within the
+    // surface's farthest authored reach, against that reach. Runs in the owning world's settle, when its population
+    // may be read; a surface that authors no reach reads no body, and the population is read once however many do.
     private static void ReadSiteAttention(WorldInstance owner, SortedList<WorldObservationSite, WorldObservationSession> sessions) {
         WorldFaceCatalog? faces = null;
 
@@ -127,10 +124,17 @@ public sealed partial class WorldInstanceHost {
             FixedQ4816? nearest = null;
 
             if (sessions.Keys[index] is WorldObservationSite.Screen screen) {
-                faces ??= WorldFaceCatalog.For(definition: owner.Server.Configuration);
+                if (faces is null) {
+                    faces = WorldFaceCatalog.For(definition: owner.Server.Configuration);
+                    owner.Server.Population.ReadOccupied();
+                }
                 foreach (var row in faces.Rows) {
                     if (row.ScreenIndex == screen.Index) {
-                        nearest = NearestOccupiedSquared(population: owner.Server.Population, point: row.Frame.Origin);
+                        // Nobody past the farthest authored reach changes the reading, so the search ends there.
+                        nearest = owner.Server.Population.NearestOccupiedSquared(
+                            point: row.Frame.Origin,
+                            reach: FixedQ4816.FromDouble(value: MathF.Max(x: (reach.WatchedWithin ?? 0f), y: (reach.GlimpsedWithin ?? 0f)))
+                        );
 
                         break;
                     }
@@ -141,24 +145,5 @@ public sealed partial class WorldInstanceHost {
 
             session.Attention = ((read < most) ? read : most);
         }
-    }
-
-    // The squared distance from a point to the nearest body a human occupies, or null when nobody stands in the world.
-    private static FixedQ4816? NearestOccupiedSquared(WorldPopulation population, FixedVector3 point) {
-        FixedQ4816? nearest = null;
-
-        for (var index = 0; (index < population.Capacity); index++) {
-            if (!population.IsHumanOccupied(bodyIndex: index) || (population.EntryBody(index) is not { } body)) {
-                continue;
-            }
-
-            var squared = (body.FixedPosition - point).LengthSquared;
-
-            if ((nearest is not { } least) || (squared < least)) {
-                nearest = squared;
-            }
-        }
-
-        return nearest;
     }
 }

@@ -718,10 +718,12 @@ declaring world), and whether an observer in another process is attached. No pre
 reading. Below its bar the world lapses: it takes no step, and `WorldTick.Lapse` moves its tick
 ordinal and engine tick over the ticks it banked, so its advancing rows, cycles, music clock and
 deadlines read what they would have read had it stepped, while its bodies, rules and machines stand
-where the last step left them. Input that reaches a lapsed world is applied and answered with one
-step. A lapse is not a pause: the world's clocks keep the master timeline's time, and it steps on its
-own schedule the moment its attention returns. A recorded row, a world with an adjacency and a world
-holding a transfer never lapse. `world.rate` reads back each instance's attention, its bar, its
+where the last step left them. A document operation or an intent that reaches a lapsed world waits
+for a step and owes the world one. A lapse is not a pause: the world's clocks keep the master
+timeline's time, and it steps on its own schedule the moment its attention returns. The host writes
+each lapse on the row's tape (`WorldReplayEntry.Lapse`), and a replay applies it, so a recorded world
+lapses exactly as an unrecorded one does. A world with an adjacency and a world holding a transfer
+never lapse. `world.rate` reads back each instance's attention, its bar, its
 lapsed ticks and the body advances its population has run
 ([decision](../decisions/worlds-and-federation.md#simulation-follows-attention)).
 `world.rate` reads back declared rate, effective rate, paused state, step width (or `stopped`), and
