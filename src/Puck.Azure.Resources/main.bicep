@@ -1968,14 +1968,10 @@ module applicationInsightsContainers 'br/public:avm/res/insights/component:0.8.0
     publicNetworkAccessForIngestion: 'Enabled'
     publicNetworkAccessForQuery: 'Enabled'
     retentionInDays: 30
-    // The world silo's azure.monitor telemetry sink signs in as the silo identity; local auth is disabled.
-    roleAssignments: [
-      {
-        principalId: worldSiloIdentity.outputs.principalId
-        principalType: 'ServicePrincipal'
-        roleDefinitionIdOrName: 'Monitoring Metrics Publisher'
-      }
-    ]
+    // The world silo's azure.monitor sink needs Monitoring Metrics Publisher here (local auth is disabled). The CI
+    // principal was refused that role assignment on the 036c66a885 deploy despite its delegation listing the role;
+    // until the identity owner settles why, the grant is not deployed and the sink's sign-in fails without failing the
+    // silo (open items: the silo telemetry grant).
     samplingPercentage: 100
     tags: union(tags, resources.containerEnvironment.applicationInsights.?tags ?? {})
     workspaceResourceId: logAnalyticsWorkspace.outputs.resourceId
