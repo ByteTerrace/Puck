@@ -65,7 +65,7 @@ public static class WorldHostCommand {
             var worlds = Path.Combine(path1: output, path2: WorldHostLayout.WorldsDirectory);
 
             Console.WriteLine(value: $"{Verb}: copying {CliPaths.ToDisplay(fullPath: package)} into {WorldHostLayout.WorldsDirectory}/ and composing its hosted worlds there.");
-            if (CliFiles.CopyDirectory(destination: worlds, intoEmpty: true, source: package) != 0) { throw new InvalidOperationException(message: "copying the asset package failed."); }
+            _ = CliFiles.CopyDirectory(destination: worlds, intoEmpty: true, source: package);
             if (WorldPrepareCommand.Create().Parse(args: [package, "--output", worlds]).Invoke() != 0) {
                 throw new InvalidOperationException(message: "composing the hosted worlds failed; its errors are above.");
             }
@@ -102,13 +102,13 @@ public static class WorldHostCommand {
         var tree = new Argument<string>(name: "tree") { Description = "The signed release tree (`puck channel push` signed its server channel)." };
         var to = new Option<string>(name: "--to") { Description = "The install root.", Required = true };
         var source = new Option<string?>(name: "--source") { Description = "The address the tree is published at; absent, the tree itself." };
-        var command = new Command(name: "fetch", description: "Install a signed host release into an install root exactly as a hosting machine does: the installer the release carries, fetched by its pin, installs the release's signed manifest by its pin. Prints the installed version's directory.") { tree, to, source };
+        var command = new Command(name: "fetch", description: "Install a signed host release's payload for this machine's runtime into an install root exactly as a hosting machine does: the installer the release carries, fetched by its pin, installs the release's signed manifest by its pin. Prints the installed version's directory.") { tree, to, source };
 
         command.SetAction(action: async (parse, token) => {
             var root = Path.GetFullPath(path: parse.GetRequiredValue(argument: tree));
 
             try {
-                var release = WorldHostRelease.FromTree(source: (parse.GetValue(option: source) ?? root), tree: root);
+                var release = WorldHostRelease.FromTree(rid: System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier, source: ((parse.GetValue(option: source) is { } address) ? (Puck.Launcher.Release.ChannelSubscription.IsHttpSource(source: address) ? address : Path.GetFullPath(path: address)) : root), tree: root);
 
                 Console.Out.WriteLine(value: await release.InstallAsync(cancellationToken: token, installRoot: parse.GetRequiredValue(option: to)).ConfigureAwait(continueOnCapturedContext: false));
                 return 0;

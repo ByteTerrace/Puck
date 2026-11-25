@@ -14,7 +14,7 @@ namespace Puck.World.Silo.Tests;
 
 /// <summary>
 /// A hosted world's relative machine content resolves beside the silo document's <c>documentDirectory</c>, the layout
-/// the silo image ships its composed documents in: the first activation and the recovery from its checkpoint both
+/// a host release ships its composed documents in: the first activation and the recovery from its checkpoint both
 /// prepare the machine from it. Without one, a hosted document has no directory, and its machine is refused, naming
 /// the content, rather than reading it from wherever the process runs.
 /// </summary>

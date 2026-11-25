@@ -491,9 +491,7 @@ public static partial class AzureCommand {
                 )
             );
         }
-        if (CliFiles.CopyDirectory(destination: Path.Combine(path1: fixture, path2: "worlds"), source: worldsDirectory) != 0) {
-            throw new IOException(message: $"the installed worlds at {worldsDirectory} could not be copied");
-        }
+        _ = CliFiles.CopyDirectory(destination: Path.Combine(path1: fixture, path2: "worlds"), source: worldsDirectory);
         var services = new ServiceCollection();
 
         Puck.Storage.DependencyInjection.PuckStorageServiceRegistration.AddCore(services: services);

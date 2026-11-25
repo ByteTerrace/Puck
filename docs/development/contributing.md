@@ -998,10 +998,13 @@ unverified when no device run exists.
 - Docker Desktop's service can be set to start manually, so a stopped engine
   is not a missing one. When `docker version` reports no server, start Docker
   Desktop and wait until `docker version --format '{{.Server.Version}}'`
-  answers. Then the container legs run locally: build an image as CI does
-  (`docker build --file src/<Project>/Dockerfile --tag puck/<image>:local .`
-  from the root) and run `puck azure test-world-container --image
-  puck/world-silo:local`.
+  answers. Then the actors container leg runs locally: build its image as CI
+  does (`docker build --file src/Puck.Actors/Dockerfile --tag puck/web-actors:local .`
+  from the root). The world host needs no container: `puck world host build`,
+  `puck publish`, `puck channel push --to <mirror> --signing-key <file>` and
+  `puck world host fetch` install a host release locally, and `puck azure
+  test-world-host --install <root>` and `puck world release rehearse --install
+  <root>` run it.
 - `dotnet build <file>.cs` builds a file-based app (`src/Puck.Azure.Resources/bootstrap.cs`)
   only while the command carries no MSBuild switch: with `-nodeReuse:false` or
   any other the SDK loads the `.cs` file as a project and fails with `MSB4025`.

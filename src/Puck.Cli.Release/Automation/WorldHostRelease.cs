@@ -17,7 +17,7 @@ namespace Puck.Cli.Automation;
 /// <param name="Manifest">The content pin of the signed manifest's bytes.</param>
 /// <param name="ManifestSize">The signed manifest's byte length.</param>
 /// <param name="Installer">The content pin of the installer (<c>launcher/Puck.Launcher.Setup</c>) the payload carries.</param>
-/// <param name="Engine">The payload identity of the release's <c>linux-x64</c> payload.</param>
+/// <param name="Engine">The payload identity of the release's payload for the machine's runtime.</param>
 public sealed record WorldHostRelease(
     [property: JsonPropertyName("source")] string Source,
     [property: JsonPropertyName("trust")] string Trust,
@@ -26,18 +26,20 @@ public sealed record WorldHostRelease(
     [property: JsonPropertyName("installer")] string Installer,
     [property: JsonPropertyName("engine")] string Engine
 ) {
-    /// <summary>The runtime a host release's payload targets.</summary>
-    public const string Rid = "linux-x64";
-    // The installer inside a payload, as the launcher directory lays it.
-    private static readonly string InstallerPath = $"{PlayerBuildLayout.LauncherDirectoryName}/Puck.Launcher.Setup";
+    /// <summary>The runtime a hosting machine runs.</summary>
+    public const string MachineRid = "linux-x64";
 
     /// <summary>Reads a signed host release from the channel tree <c>puck channel push</c> signed.</summary>
     /// <param name="tree">The release tree's root, holding <c>server/manifest.json</c> and <c>server/trust.json</c>.</param>
     /// <param name="source">The address machines install the tree from (its published URL, or the tree itself).</param>
+    /// <param name="rid">The runtime of the machines that install it; <see langword="null"/> is <see cref="MachineRid"/>.</param>
     /// <returns>The release.</returns>
-    /// <exception cref="InvalidDataException">The tree's manifest is unsigned, carries no <see cref="Rid"/> payload or
-    /// no installer, or its trust file is missing.</exception>
-    public static WorldHostRelease FromTree(string tree, string source) {
+    /// <exception cref="InvalidDataException">The tree's manifest is unsigned, carries no payload for the runtime or no
+    /// installer, or its trust file is missing.</exception>
+    public static WorldHostRelease FromTree(string tree, string source, string? rid = null) {
+        rid ??= MachineRid;
+        // The installer inside a payload, as the launcher directory lays it.
+        var installerPath = $"{PlayerBuildLayout.LauncherDirectoryName}/Puck.Launcher.Setup{(rid.StartsWith(value: "win", comparisonType: StringComparison.Ordinal) ? ".exe" : "")}";
         var directory = Path.Combine(path1: tree, path2: WorldHostLayout.Channel);
         var bytes = File.ReadAllBytes(path: Path.Combine(path1: directory, path2: ChannelSubscription.ManifestFileName));
         var manifest = (JsonSerializer.Deserialize<ReleaseManifest>(options: DocumentJsonOptions.Shared, utf8Json: bytes) ?? throw new InvalidDataException(message: "the host release manifest is empty"));
@@ -45,8 +47,8 @@ public sealed record WorldHostRelease(
         if (manifest.Signature is null) { throw new InvalidDataException(message: $"{directory} holds an unsigned manifest; push the channel first."); }
         var anchor = (ChannelSubscription.ParseAnchor(bytes: File.ReadAllBytes(path: Path.Combine(path1: directory, path2: ChannelSubscription.TrustFileName)))
             ?? throw new InvalidDataException(message: $"{directory} holds no trust anchor."));
-        var payload = (manifest.Payloads.SingleOrDefault(predicate: static payload => payload.Rid == Rid) ?? throw new InvalidDataException(message: $"the host release carries no {Rid} payload"));
-        var installer = (payload.Files.SingleOrDefault(predicate: static file => file.Path == InstallerPath) ?? throw new InvalidDataException(message: $"the host release carries no {InstallerPath}"));
+        var payload = (manifest.Payloads.SingleOrDefault(predicate: payload => payload.Rid == rid) ?? throw new InvalidDataException(message: $"the host release carries no {rid} payload"));
+        var installer = (payload.Files.SingleOrDefault(predicate: file => file.Path == installerPath) ?? throw new InvalidDataException(message: $"the host release carries no {installerPath}"));
 
         return new(Engine: ReleasePayloadIdentity.Of(payload: payload, stateGeneration: manifest.StateGeneration), Installer: installer.Hash,
             Manifest: ContentPin.Compute(content: bytes).ToString(), ManifestSize: bytes.LongLength, Source: source.TrimEnd('/'), Trust: anchor.Domain);

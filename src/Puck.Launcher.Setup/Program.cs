@@ -92,5 +92,5 @@ try {
     return 1;
 }
 Console.Out.WriteLine(value: $"setup: {installed} is current in {root}.");
-Console.Out.WriteLine(value: $"setup: start it with {SetupInstall.StartCommand(installRoot: root, version: installed!)}");
+if (arguments.Start == SetupArguments.DefaultStart) { Console.Out.WriteLine(value: $"setup: start it with {SetupInstall.StartCommand(installRoot: root, version: installed!)}"); }
 return 0;
