@@ -3976,6 +3976,14 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
+- [high] **The D3D12 mesh bake identity differs between machines.** For the same
+  commit, CI computed one directx identity and the lead machine another, while
+  the Vulkan identities agreed (the commit and both values are in this item's
+  commit message). The identity hashes the
+  bake's code and its kernel bytecode, so DXIL from CI's DXC and the local DXC
+  differ (a compiler version, the container hash or signing). An identity must be
+  machine-independent: pin and verify the DXC both use, or hash the shader source
+  and the compiler's identity instead of the emitted container.
 - [high, M1] **A player has no way to get the deployment's sign-in file.** The
   deploy writes `artifacts/world-authentication.json` (the sign-in provider and
   the primary world's transport-key pin, `AzureWorld`), but published it nowhere,
