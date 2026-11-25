@@ -1061,6 +1061,35 @@
                 "description": "How often its selected producer refreshes steering. The most recent image is reused between refreshes.",
                 "type": "number",
                 "default": 0
+              },
+              "far": {
+                "description": "The cadences a body takes while it stands far from everyone (WorldAutonomyFar), or null for a kit whose bodies keep one cadence wherever anyone stands.",
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "beyond": {
+                    "description": "The distance in metres to the nearest body a human occupies beyond which the body is far.",
+                    "type": "number"
+                  },
+                  "motionSeconds": {
+                    "description": "How often a far body\u0027s motion program advances; at least the kit\u0027s MotionSeconds.",
+                    "type": "number",
+                    "default": 0
+                  },
+                  "steeringSeconds": {
+                    "description": "How often a far body\u0027s producer refreshes steering; at least the kit\u0027s SteeringSeconds.",
+                    "type": "number",
+                    "default": 0
+                  }
+                },
+                "required": [
+                  "beyond"
+                ],
+                "additionalProperties": false,
+                "default": null,
+                "title": "WorldAutonomyFar"
               }
             },
             "additionalProperties": false,

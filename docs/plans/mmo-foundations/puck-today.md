@@ -311,7 +311,7 @@ Every reservation decoded from the federation wire is a peer admission
 incarnation this authority minted at that slot
 (`src/Puck.World.Server/WorldServer.Crossings.cs:43-58`) **[opened]**. The
 architecture page states the consequence **[opened]**
-(`docs/architecture/worlds.md:841-843`):
+(`docs/architecture/worlds.md:860-862`):
 
 ```text
 Remote round trips do not adopt: a remote incarnation claim is unauthenticated, and a federation

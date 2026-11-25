@@ -1275,6 +1275,19 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path}.session.camera must be non-empty when present.");
         }
 
+        if (session.Attention is { } attention) {
+            // A reach is a distance; the glimpse reaches at least as far as the watch, or the bands would cross.
+            if (attention.WatchedWithin is { } watched && !(float.IsFinite(f: watched) && (watched >= 0f))) {
+                errors.Add(item: $"{path}.session.attention.watchedWithin {watched} must be a finite distance of at least 0.");
+            }
+            if (attention.GlimpsedWithin is { } glimpsed && !(float.IsFinite(f: glimpsed) && (glimpsed >= 0f))) {
+                errors.Add(item: $"{path}.session.attention.glimpsedWithin {glimpsed} must be a finite distance of at least 0.");
+            }
+            if ((attention.GlimpsedWithin is { } far) && ((attention.WatchedWithin is not { } near) || (far < near))) {
+                errors.Add(item: $"{path}.session.attention.glimpsedWithin {far} must be at least watchedWithin: a surface that watches at any distance, or farther than it glimpses, never glimpses.");
+            }
+        }
+
         // WINDOW needs the SAME face's own portal facet: the aperture (WorldFaceCatalog) and the isometry that maps
         // the viewer's eye through it both come from the SAME mapped border pair, so a face with no counterpart has
         // no destination-space frame to fit an off-axis frustum against. A top-level screens row or magazine entry

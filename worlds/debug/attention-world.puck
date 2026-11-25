@@ -1,0 +1,43 @@
+// The world attention-tests.puck looks into: a bare world that steps only while it is watched (`simulation.stepsAt`).
+// It owns a day that advances by its own trait, a counter its rule raises on every tick it steps, and a bell its rule
+// rings once its second second has passed. Unwatched it lapses: the day keeps time, the counter stands, and the bell
+// rings on the first tick it steps again.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "attention-world"
+
+simulation {
+  rateHz: 30
+  stepsAt: Watched
+}
+
+admission [
+  {
+    admits: Session
+    disclosure: Replica
+    domain: "*"
+    grants [
+      { budget: 64, capability: Observe, subject: "all" }
+    ]
+    mode: FederatedAuthority
+  }
+]
+
+state {
+  world [
+    { name: "day", kind: "Fixed", value: "0.25", advance { perSecondNumerator: 1, perSecondDenominator: 1440 } }
+    { name: "steps", kind: "Int", value: 0 }
+    { name: "rang", kind: "Int", value: 0 }
+  ]
+}
+
+rule "count" {
+  when $tick >= 0
+  mode: Level
+  steps = steps + 1
+}
+rule "bell" {
+  when $tick >= 60
+  mode: Edge
+  rang = 1
+}

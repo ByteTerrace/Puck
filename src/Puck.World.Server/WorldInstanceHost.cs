@@ -1841,5 +1841,12 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     /// <param name="StepWidthTicks">The engine-tick step width (<c>50400 / RateHz</c>), or <see langword="null"/>
     /// when <paramref name="Stopped"/> (a stopped world has no step period to report).</param>
     /// <param name="CompletedTicks">This instance's own completed-tick count — frozen while stopped or paused.</param>
-    public readonly record struct WorldInstanceRateStatus(int RateHz, bool Stopped, bool Paused, ulong? StepWidthTicks, ulong CompletedTicks);
+    /// <param name="Attention">The attention the host last read for the instance.</param>
+    /// <param name="StepsAt">The least attention the instance's document steps at.</param>
+    /// <param name="LapsedTicks">The completed ticks the host passed over without stepping the instance
+    /// (<see cref="WorldInstance.LapsedTicks"/>); the rest of <paramref name="CompletedTicks"/> it stepped.</param>
+    /// <param name="BodyAdvances">The simulated body advances the instance's population has run
+    /// (<see cref="Server.WorldPopulation.BodyAdvances"/>).</param>
+    /// <param name="BodySteers">The producer runs the instance's population has run.</param>
+    public readonly record struct WorldInstanceRateStatus(int RateHz, bool Stopped, bool Paused, ulong? StepWidthTicks, ulong CompletedTicks, WorldAttention Attention, WorldAttention StepsAt, ulong LapsedTicks, long BodyAdvances, long BodySteers);
 }

@@ -545,6 +545,107 @@ orbit).
 
 **Evidence.** [Cross-world interaction, physics across worlds](../plans/cross-world.md#physics-across-worlds).
 
+## Simulation follows attention
+
+**Decided.** A world's state never depends on who observes it unless the
+world's own document says it may. The document says so by stating the least
+attention the world steps at (`simulation.stepsAt`, a `WorldAttention`); a
+world that states none steps on every tick whoever watches. Below its bar a world lapses: its host steps nothing in it, and its
+clocks move over the unstepped ticks in closed form (`WorldTick.Lapse`). No
+tick is ever replayed to catch up.
+
+Four things make that precise.
+
+- **Attention is an authority fact.** A world is `Occupied` when a human
+  stands in it, `Watched` or `Glimpsed` through another world's session
+  according to how far the observing surface's attention reaches
+  (`WorldSessionAttention`, measured in fixed point from the surface to the
+  nearest occupied body of the world that declares it) and what that world's
+  own attention passes on, and `Unobserved` otherwise. The host reads it once a
+  host step (`WorldInstanceHost`'s `ReadAttention`). No camera, frustum, frame
+  or wall clock enters the reading, so a presentation cannot change what an
+  authority computes, and a remote authority reads the same facts a local one
+  does.
+- **A lapse is input, and the tape records it.** The same document and the
+  same input, the lapses included, give the same state on every run. Two runs
+  of one host with the same input lapse the same ticks, because the reading
+  above is a function of authority state and reads nothing about whether a row
+  is recorded. The host writes each lapse on the row's tape as it makes it
+  (`WorldReplayEntry.Lapse`, from `WorldReplayTape.NoteLapse`), in order among
+  the tick's other entries, and a replay or a reproduction applies it through
+  the same door. A recorded run and an unrecorded run of one world therefore
+  reach the same state.
+- **Time is a law, and a lapse keeps it.** A lapse moves the tick ordinal and
+  the engine tick together, in the ratio a step moves them. Every value that
+  is a function of those clocks reads after a lapse what it would have read had
+  the world stepped: an advancing row, a cycle, an eased follower, the music
+  clock, and the comparison a deadline makes with the tick. A day keeps time, a
+  timer that ran out while nobody looked has run out, and a follower of the
+  world's clock predicts it correctly throughout.
+- **Everything else holds.** Bodies stand where they stood, rules that were
+  not evaluated did not fire, machines did not run. Input that only a step
+  applies (a mutation, an adopted followed row, a session's press) is held for
+  one and owes the world that step, so its rules see it; nothing buffered
+  applies outside a step, which is also where a replay applies it. An operation
+  that applies at once (a grant, a console command, a session's admission) is
+  applied while the world lapses and is seen at its next step.
+
+Within a world that is stepping, the same idea applies to bodies by an authored
+tier and needs no input at all: a kit's `autonomy.far` names coarser cadences
+for a body farther than a distance from every occupied body, read from the
+bodies' own fixed-point positions when one of the body's cadences comes due.
+Which cadence a body keeps is a function of the world's state.
+
+**Options weighed.**
+
+| Option | What it is | What it closes | What it leaves open |
+|---|---|---|---|
+| A. Every world steps always | A view never pauses a destination | Observation can never change an outcome | Cost grows with worlds that exist, not worlds that matter: a hub of destinations pays for every one, and a shard pays for every empty zone |
+| B. The engine skips only what it can prove | A world advances straight to the next tick at which anything can happen, proved per subsystem (deadline tables, cadences, a rule's gate bounded over an interval of ticks) | Exact: skipped ticks are the ticks that would have changed nothing | A moving body, a running machine or a rule with no bound makes every tick an event; proving the bound for rules is an interval evaluator the rule compiler does not have |
+| C. The author states what attention buys, and attention is input | This decision | Unobserved worlds cost a clock move; the default is option A; replay holds because the lapse is input | What a lapsed body should have done is not simulated (see below); a world that neighbours another always steps |
+| D. A presentation tells the authority what it shows | The client's views drive the simulation rate | The cheapest signal | Presentation feeds simulation: a modified client steers what the authority computes, and two viewers disagree |
+
+Option C is taken, with option B as the direction its exact part grows in: a
+lapse is already exact for everything that is a law of time, and each
+subsystem that can prove its next event (the deadline tables can today)
+narrows what an author has to accept.
+
+**Why.** At the scale Puck aims at, most worlds are unobserved at any moment,
+and their cost has to be nothing. No engine in the genre simulates what nobody
+can see; what differs is whether the authority or the client decides, and
+whether the result is reproducible. Puck places the decision with the
+authority, from facts every authority holds, and the permission with the
+author: a card table's world, a dungeon instance or a town can each say whether
+being unwatched may freeze it, while a world that says nothing keeps today's
+guarantee. Keeping time a law across a lapse is what makes the lapse
+acceptable for a persistent world: schedules, days and timers stay true, so a
+visitor finds a world whose clock never stopped.
+
+**Attacks it closes.** A viewer cannot change another world's outcome unless
+that world's author allowed attention to matter, and then only through the
+levels the author named. A client cannot claim attention it does not have: the
+reading uses the authority's positions and sessions, never a client's report.
+An observer in another process counts as watching (`IWorldWatchingSink`), so a
+remote viewer's world is not frozen under it by a host that cannot measure it.
+
+**Where it stops.** A world that neighbours another through an adjacency, or
+holds a transfer in flight, always steps, since a neighbour and a lease read
+its ticks one by one. A row whose tape is driving a replay takes its lapses
+from the tape, never from the host's reading. A lapsed body does not coast: a
+citizen is where it stood, not where its errand would have taken it. The
+[plan](../plans/simulation-attention.md) owns the adjacency and the coast as
+steps.
+
+**Rulings it rests on.** Determinism pins the mapping (rule 4); authors rule (a
+world's document, never the engine, decides whether attention may matter);
+brute force is a defect where a closed form answers; the CPU, GPU and memory
+foundation, which names simulation that runs for nobody as an architecture
+defect.
+
+**Evidence.** [Simulation follows attention](../plans/simulation-attention.md);
+`worlds/debug/attention-tests.puck`; the clean measurement window's tick
+findings ([the RTX 4070's report](../plans/measurements/2026-11-25-window.md)).
+
 ## The tables
 
 **Decided.**

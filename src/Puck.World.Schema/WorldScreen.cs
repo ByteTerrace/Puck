@@ -144,6 +144,9 @@ public abstract record WorldScreenSource {
     /// whole glass that fade within about a second. Presentation only (the shading reads the
     /// contact and the clock; nothing in the simulation depends on it). Requires <see cref="WorldScreenProjection.Window"/>.
     /// Omitted from the wire when false.</param>
+    /// <param name="Attention">How far this surface's attention reaches (<see cref="WorldSessionAttention"/>): what the
+    /// destination's host reads when it decides whether the destination steps. Absent watches the destination at any
+    /// distance. Omitted from the wire when null.</param>
     public sealed record Session(
         [property: DocumentText("a destination name")] string Destination,
         [property: DocumentText("a camera name")]
@@ -152,7 +155,8 @@ public abstract record WorldScreenSource {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenResolution? Resolution = null,
         [property: DocumentText("a fallback color")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Fallback = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Ripple = false
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Ripple = false,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldSessionAttention? Attention = null
     ) : WorldScreenSource;
     /// <summary>Authored reading text on the screen face, rendered through the engine's glyph-decal tier
     /// (<c>Puck.SdfVm.SdfWorldTables.SetScreenDecal</c>): a fixed monospace cell grid sampled from the world's packed

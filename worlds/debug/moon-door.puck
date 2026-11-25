@@ -99,6 +99,7 @@ placements {
             destination: "moon"
             fallback: "#CFC8BC"
             projection: window
+            attention: windowAttention
             ripple: true
           }
         }

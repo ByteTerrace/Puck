@@ -1150,6 +1150,29 @@ public static partial class WorldDefinitionValidator {
             ) {
                 errors.Add(item: $"{path}.autonomy.motionSeconds must be 0 when bodyContact is Solid; a deferred body cannot preserve per-tick dynamic-contact semantics.");
             }
+            if (kit.Autonomy.Far is { } far) {
+                if (!(float.IsFinite(f: far.Beyond) && (far.Beyond >= 0f))) {
+                    errors.Add(item: $"{path}.autonomy.far.beyond {far.Beyond} must be a finite distance of at least 0.");
+                }
+                // A far body is never updated more often than a near one: the tier only coarsens.
+                RequireRange(
+                    value: far.MotionSeconds,
+                    min: kit.Autonomy.MotionSeconds,
+                    max: WorldAutonomyCadence.MaximumSeconds,
+                    name: new Subject(Member: ".autonomy.far.motionSeconds", Path: path),
+                    errors: errors
+                );
+                RequireRange(
+                    value: far.SteeringSeconds,
+                    min: kit.Autonomy.SteeringSeconds,
+                    max: WorldAutonomyCadence.MaximumSeconds,
+                    name: new Subject(Member: ".autonomy.far.steeringSeconds", Path: path),
+                    errors: errors
+                );
+                if ((kit.BodyContact == WorldBodyContactMode.Solid) && (far.MotionSeconds > 0f)) {
+                    errors.Add(item: $"{path}.autonomy.far.motionSeconds must be 0 when bodyContact is Solid; a deferred body cannot preserve per-tick dynamic-contact semantics.");
+                }
+            }
 
             // Actions is a channel-NAME-keyed map now (never a fixed Primary/Secondary pair): a kit naming an
             // undeclared or non-composition channel is a dead reference; a declared composition channel with no

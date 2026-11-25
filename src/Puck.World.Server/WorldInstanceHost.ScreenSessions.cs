@@ -74,6 +74,11 @@ public sealed class WorldObservationSession {
     /// edit of its destination opens a new session instead.</summary>
     public WorldScreenSource.Session Source { get; internal set; }
 
+    /// <summary>Gets how closely the declaring surface attends its destination, as the declaring world's last settle
+    /// read it from its own population and the surface's authored reach (<see cref="WorldSessionAttention"/>). The
+    /// destination's attention is at most this, and at most what the declaring world's own attention passes on.</summary>
+    public WorldAttention Attention { get; internal set; } = WorldAttention.Watched;
+
     // Set once a destination that ended the session refused another: the observer's picture is withdrawn.
     internal bool ReadmissionRefused { get; set; }
     // Whether the last settle forwarded input through this screen, so a stop sends one cancellation boundary.
@@ -162,12 +167,8 @@ public sealed partial class WorldInstanceHost {
             return instance.OccupiedBetweenTicks;
         }
 
-        var population = instance.Server.Population;
-        var occupied = false;
+        var occupied = (instance.Server.Population.NextHumanOccupied(from: 0) >= 0);
 
-        for (var index = 0; (!occupied && (index < population.Capacity)); index++) {
-            occupied = population.IsHumanOccupied(bodyIndex: index);
-        }
         instance.OccupiedBetweenTicks = occupied;
 
         return occupied;
@@ -645,6 +646,7 @@ public sealed partial class WorldInstanceHost {
             }
         }
 
+        ReadSiteAttention(owner: instance, sessions: owned.Rows);
         ForwardScreenSessions(
             owner: instance,
             sessions: owned.Rows,

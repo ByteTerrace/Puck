@@ -306,6 +306,8 @@ public sealed partial class WorldPopulation {
         }
         WorldBodyWork.Process.Add(amount: saves, kind: WorldBodyWork.StepSaves);
         WorldBodyWork.Process.Add(amount: savedBytes, kind: WorldBodyWork.StepSavedBytes);
+        BodyAdvances += moved;
+        BodySteers += steered;
         WorldBodyWork.Process.Add(amount: moved, kind: WorldBodyWork.Advances);
         WorldBodyWork.Process.Add(amount: moved, kind: WorldBodyWork.LocalAdvances);
         WorldBodyWork.Process.Add(amount: steered, kind: WorldBodyWork.LocalSteers);

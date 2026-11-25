@@ -707,6 +707,25 @@ takes effect.
 
 Pause is never view-driven. Closing, hiding or throttling a portal view releases presentation work
 but cannot pause an embodied destination. Only the destination authority/operator can pause it.
+
+A world's document may let attention decide whether it steps. `simulation.stepsAt` names the least
+attention (`WorldAttention`: `Unobserved`, `Glimpsed`, `Watched`, `Occupied`) the world steps at;
+absent, it is `Unobserved` and the world steps on every tick. The host that runs the world reads its
+attention once a host step from authority facts alone: who stands in it, which worlds hold a session
+on it and how closely each of those is attended, how far each observing surface's attention reaches
+(a session source's `attention`, distances from the surface to the nearest occupied body of the
+declaring world), and whether an observer in another process is attached. No presentation enters the
+reading. Below its bar the world lapses: it takes no step, and `WorldTick.Lapse` moves its tick
+ordinal and engine tick over the ticks it banked, so its advancing rows, cycles, music clock and
+deadlines read what they would have read had it stepped, while its bodies, rules and machines stand
+where the last step left them. A document operation or an intent that reaches a lapsed world waits
+for a step and owes the world one. A lapse is not a pause: the world's clocks keep the master
+timeline's time, and it steps on its own schedule the moment its attention returns. The host writes
+each lapse on the row's tape (`WorldReplayEntry.Lapse`), and a replay applies it, so a recorded world
+lapses exactly as an unrecorded one does. A world with an adjacency and a world holding a transfer
+never lapse. `world.rate` reads back each instance's attention, its bar, its
+lapsed ticks and the body advances its population has run
+([decision](../decisions/worlds-and-federation.md#simulation-follows-attention)).
 `world.rate` reads back declared rate, effective rate, paused state, step width (or `stopped`), and
 the compiler-derived admissible band/floors with their named constraints; derivation is queryable,
 not only a validator refusal.

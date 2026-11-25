@@ -911,16 +911,76 @@ public sealed partial class WorldTick {
         lock (Host.AuthorityGate) {
             if (Host.AuthorityRetiring || (BlockedReason is not null)) { return false; }
             Host.MutationBudget.BeginTick();
-            // A paused or stopped world still ends a session whose observer faulted or detached itself.
-            Host.EndObserverEndedSessions();
-            DrainOrdered();
-            Host.Extensions.Drain();
+            SettleUnstepped();
             var applied = DrainPendingOps(tick: m_lastCompletedTick);
             Host.FlushMutationJournal?.Invoke();
 
             if (applied) { EmitSnapshot(stepTicks: m_lastStepTicks, tick: m_lastCompletedTick); }
             return applied;
         }
+    }
+    /// <summary>THE LAPSE DOOR. Moves the authority's clocks over <paramref name="ticks"/> ticks nothing stepped: the
+    /// tick ordinal by that count and the engine tick by the same count of the world's step width, with the music clock
+    /// beside them. Nothing else runs: no rule, body, machine, field, deadline sweep or delivery. This is the one
+    /// place an authority's time moves without a step, and it moves both clocks in the ratio a step does, so every
+    /// value that is a law of time (a <see cref="Puck.State.StateAdvance"/> over engine ticks, a cycle or an eased
+    /// follower over ticks, the music clock, a tick-stamped deadline's comparison) reads after a lapse exactly what it
+    /// would have read had the world stepped that long. Everything else stands where the last step left it, which is
+    /// what a world's document accepts when it authors <see cref="WorldSimulationDefaults.StepsAt"/>.</summary>
+    /// <remarks>A lapse is authority input: the host that reads the world's attention decides it, from authority facts
+    /// alone, and the same facts lapse the same ticks on every run.</remarks>
+    /// <param name="ticks">The ticks to pass over; zero moves nothing.</param>
+    /// <returns>The engine ticks the clocks moved by.</returns>
+    /// <exception cref="InvalidOperationException">A tick is prepared, executing or held, or the world's authored rate
+    /// is zero: a world that never steps has no step width to lapse by.</exception>
+    internal ulong Lapse(ulong ticks) {
+        using (Host.EnterAtTickBoundary()) {
+            Host.ThrowIfTickPending();
+            if ((ticks == 0UL) || Host.AuthorityRetiring) {
+                return 0UL;
+            }
+
+            var rate = Host.Definition.SimulationRateHz;
+
+            if (rate <= 0) {
+                throw new InvalidOperationException(message: "A world that never steps has no step width to lapse by.");
+            }
+
+            var engineTicks = checked(ticks * FixedTickConversion.PerRate(ratePerSecond: ((uint)rate)));
+
+            m_lastCompletedTick = checked(m_lastCompletedTick + ticks);
+            m_lastCompletedEngineTicks = checked(m_lastCompletedEngineTicks + engineTicks);
+            m_deliveryTick = m_lastCompletedTick;
+            // The boundary a lapse crosses reaches no listener: nobody attends the world it lapses.
+            _ = m_musicClock?.Advance(stepTicks: engineTicks);
+            WorldTickWork.Process.Add(kind: WorldTickWork.Lapses, amount: 1L);
+            WorldTickWork.Process.Add(kind: WorldTickWork.LapsedTicks, amount: checked((long)ticks));
+
+            return engineTicks;
+        }
+    }
+    /// <summary>Settles the authority on a host step it lapses: ends the sessions whose observers ended, applies the
+    /// ordered entries that apply at once, and drains the extensions, as a step's opening does. It applies no buffered
+    /// document operation: a mutation, a rebuild or an undo applies only inside a step, where a re-drive of the tape
+    /// applies it too, so a lapsing authority and its recording never part on when one landed.</summary>
+    /// <returns><see langword="true"/> when a buffered document operation or a queued intent waits for a step, which
+    /// the host then owes the authority whatever its attention.</returns>
+    internal bool SettleLapsed() {
+        lock (Host.AuthorityGate) {
+            if (Host.AuthorityRetiring || (BlockedReason is not null)) { return false; }
+            SettleUnstepped();
+            Host.Document.TakePreparedRebuilds();
+
+            return ((Host.Document.Pending.Count != 0) || (m_intents.Count != 0));
+        }
+    }
+    // What a world that takes no step this host step still settles, paused, stopped or lapsing alike: a session whose
+    // observer faulted or detached itself ends, the ordered entries that apply at once apply, and the extensions drain.
+    // The caller holds the authority gate.
+    private void SettleUnstepped() {
+        Host.EndObserverEndedSessions();
+        DrainOrdered();
+        Host.Extensions.Drain();
     }
     /// <summary>Buffers one entity's submitted intent for the next <see cref="Step"/>.</summary>
     /// <param name="submission">The tick, entity index, and merged intent.</param>

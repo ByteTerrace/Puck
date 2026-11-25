@@ -116,6 +116,13 @@ public abstract record WorldReplayEntry {
     /// <param name="Paused"><see langword="true"/> for a pause, <see langword="false"/> for a resume.</param>
     internal sealed record RateLever(bool Paused) : WorldReplayEntry;
 
+    /// <summary>A lapse: the authority's clocks moved over <paramref name="Ticks"/> ticks it did not step, because its
+    /// world stood below the attention its document steps at (<see cref="WorldTick.Lapse"/>). A lapse is authority
+    /// input, so a re-drive applies it where it was recorded among the tick's entries, through the same door, and the
+    /// drive's clocks stand where the recording's stood when each later entry applies and when the tick steps.</summary>
+    /// <param name="Ticks">The ticks the clocks passed over; at least one.</param>
+    internal sealed record Lapse(ulong Ticks) : WorldReplayEntry;
+
     /// <summary>A seat's switch from the identity the tape pinned to another, applied at the head of the tick it is recorded on.
     /// A fork records one for each seat its drive rebound to the live owned identity, so the fork's tape holds the identity
     /// the fork actually continues with and a re-drive switches at the same step the live fork did. The seat takes the
@@ -579,6 +586,10 @@ public sealed partial class WorldReplaySnapshot {
                     // Deliberately a no-op: a paused span recorded zero ticks live, so re-driving exactly
                     // Ticks.Count steps already reproduces the identical stepping cadence with no lever to apply.
                     break;
+                case WorldReplayEntry.Lapse lapse:
+                    _ = server.Lapse(ticks: lapse.Ticks);
+
+                    break;
                 case WorldReplayEntry.FederatedIntents federated:
                     server.ReplaceFederatedIntents(held: federated.Held);
 
@@ -916,6 +927,8 @@ public sealed partial class WorldReplaySnapshot {
                 }
             case 9:
                 return new WorldReplayEntry.RateLever(Paused: reader.ReadBoolean());
+            case 27:
+                return new WorldReplayEntry.Lapse(Ticks: reader.ReadUInt64());
             case 10:
                 return ReadTransferEntry(reader: ref reader);
             case 11: {
@@ -1572,6 +1585,11 @@ public sealed partial class WorldReplaySnapshot {
             case WorldReplayEntry.RateLever rateLever:
                 writer.WriteByte(value: 9);
                 writer.WriteBoolean(value: rateLever.Paused);
+
+                break;
+            case WorldReplayEntry.Lapse lapse:
+                writer.WriteByte(value: 27);
+                writer.WriteUInt64(value: lapse.Ticks);
 
                 break;
             case WorldReplayEntry.SeatIdentity seatIdentity:

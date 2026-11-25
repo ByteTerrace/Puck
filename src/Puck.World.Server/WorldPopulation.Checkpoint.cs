@@ -789,8 +789,8 @@ public sealed partial class WorldPopulation {
             throw new InvalidOperationException(message: "population checkpoint carries invalid autonomous cadence state.");
         }
         if (
-            ((state.MotionPeriodTicks != 0UL) && (state.MotionPeriodTicks != kit.AutonomousMotionTicks)) ||
-            ((state.SteeringPeriodTicks != 0UL) && (state.SteeringPeriodTicks != kit.AutonomousSteeringTicks))
+            ((state.MotionPeriodTicks != 0UL) && (state.MotionPeriodTicks != kit.AutonomousMotionTicks) && (state.MotionPeriodTicks != kit.AutonomousFar?.MotionTicks)) ||
+            ((state.SteeringPeriodTicks != 0UL) && (state.SteeringPeriodTicks != kit.AutonomousSteeringTicks) && (state.SteeringPeriodTicks != kit.AutonomousFar?.SteeringTicks))
         ) {
             throw new InvalidOperationException(message: "population checkpoint autonomous cadence does not match its compiled kit.");
         }

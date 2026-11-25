@@ -117,11 +117,17 @@ public static class WorldTickWork {
     public static WorkKind Waves { get; } = new(name: "world.tick.waves", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the tick slices those units executed.</summary>
     public static WorkKind WaveTicks { get; } = new(name: "world.tick.wave-ticks", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the lapses: each move of an authority's clocks over ticks it did not step
+    /// (<see cref="WorldTick.Lapse"/>), because its world stood below the attention it steps at.</summary>
+    public static WorkKind Lapses { get; } = new(name: "world.tick.lapses", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the ticks those lapses passed over. Read against <see cref="WaveTicks"/>, it is
+    /// the share of the host's worlds' ticks that cost a clock move in place of a step.</summary>
+    public static WorkKind LapsedTicks { get; } = new(name: "world.tick.lapsed-ticks", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the ledger a host's servers count into. Declared after the kinds, which it reads as it is
     /// created.</summary>
     public static WorkCounterSet Process { get; } = new(
         kinds: [
-            PumpVisits, HostSteps, PumpWaits, Waves, WaveTicks,
+            PumpVisits, HostSteps, PumpWaits, Waves, WaveTicks, Lapses, LapsedTicks,
             InterestCandidates, InterestBodies, InterestBytes,
             FederatedBatches, FederatedRetimed, FederatedStale, FederatedRestarts,
             InputAdmissions, InputAdmissionsStanding, InputAdmissionsSteady, InputRefreshes, InputRefreshesStanding,

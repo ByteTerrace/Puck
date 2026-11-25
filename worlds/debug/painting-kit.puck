@@ -12,6 +12,11 @@ let paintingInkRow = { color: "#3A3F47", roughness: 0.6 }
 // What a glass shows past the deepest level of windows inside windows when its destination is this world itself.
 let fallbackSelf = "#10141B"
 
+// How far a painting's or a frame's attention reaches, in metres from its glass to the nearest player in the world
+// that hangs it: within the first its destination is watched, within the second glimpsed, and beyond it unobserved. A
+// destination reads this against its own `simulation.stepsAt`, so a world nobody stands near costs its clocks alone.
+let windowAttention = { watchedWithin: 12, glimpsedWithin: 26 }
+
 // A door onto `destination` and a window showing what lies past it, rippling like an event horizon: a slow shimmer all
 // the time and rings from every body that touches or passes through. A crossing arrives out of `counterpart`, a face of
 // the destination's document, or of this world's own for the destination `self`.
@@ -31,6 +36,7 @@ template paintingFace(destination, counterpart, fallback) {
         destination: destination
         fallback: fallback
         projection: window
+        attention: windowAttention
         ripple: true
       }
     }

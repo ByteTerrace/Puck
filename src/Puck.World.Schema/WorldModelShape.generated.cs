@@ -2762,6 +2762,15 @@ public static partial class WorldModelShape {
             [
                 M("motionSeconds", typeof(global::System.Single), typeof(global::Puck.World.WorldAutonomyCadence), "MotionSeconds", Read | Write, static value => ((global::Puck.World.WorldAutonomyCadence)value).MotionSeconds),
                 M("steeringSeconds", typeof(global::System.Single), typeof(global::Puck.World.WorldAutonomyCadence), "SteeringSeconds", Read | Write, static value => ((global::Puck.World.WorldAutonomyCadence)value).SteeringSeconds),
+                M("far", typeof(global::Puck.World.WorldAutonomyFar), typeof(global::Puck.World.WorldAutonomyCadence), "Far", Read | Write, static value => ((global::Puck.World.WorldAutonomyCadence)value).Far),
+            ],
+            []),
+        T(typeof(global::Puck.World.WorldAutonomyFar), true, JsonTypeInfoKind.Object, null,
+            [],
+            [
+                M("beyond", typeof(global::System.Single), typeof(global::Puck.World.WorldAutonomyFar), "Beyond", Read | Write | Required, static value => ((global::Puck.World.WorldAutonomyFar)value).Beyond),
+                M("motionSeconds", typeof(global::System.Single), typeof(global::Puck.World.WorldAutonomyFar), "MotionSeconds", Read | Write, static value => ((global::Puck.World.WorldAutonomyFar)value).MotionSeconds),
+                M("steeringSeconds", typeof(global::System.Single), typeof(global::Puck.World.WorldAutonomyFar), "SteeringSeconds", Read | Write, static value => ((global::Puck.World.WorldAutonomyFar)value).SteeringSeconds),
             ],
             []),
         T(typeof(global::Puck.World.WorldBindingBarAnchor), true, JsonTypeInfoKind.Object, null,
@@ -3433,6 +3442,7 @@ public static partial class WorldModelShape {
                 M("populationReconnectGraceTicks", typeof(global::System.Object), typeof(global::Puck.World.WorldDefinition), "PopulationReconnectGraceTicks", None),
                 M("schema", typeof(global::System.String), typeof(global::Puck.World.WorldDefinition), "Schema", Read | Write, static value => ((global::Puck.World.WorldDefinition)value).Schema, text: "a schema or program version"),
                 M("simulationRateHz", typeof(global::System.Int32), typeof(global::Puck.World.WorldDefinition), "SimulationRateHz", None),
+                M("simulationStepsAt", typeof(global::Puck.World.WorldAttention), typeof(global::Puck.World.WorldDefinition), "SimulationStepsAt", None),
                 M("spatialQueryIndex", typeof(global::System.Object), typeof(global::Puck.World.WorldDefinition), "SpatialQueryIndex", None),
                 M("authoredState", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldStateRow>), typeof(global::Puck.World.WorldDefinition), "AuthoredState", None),
                 M("enums", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.State.StateEnum>), typeof(global::Puck.World.WorldDefinition), "Enums", None),
@@ -6382,6 +6392,7 @@ public static partial class WorldModelShape {
                 M("resolution", typeof(global::System.Nullable<global::Puck.World.WorldScreenResolution>), typeof(global::Puck.World.WorldScreenSource.Session), "Resolution", Read | Write, static value => ((global::Puck.World.WorldScreenSource.Session)value).Resolution),
                 M("fallback", typeof(global::System.String), typeof(global::Puck.World.WorldScreenSource.Session), "Fallback", Read | Write, static value => ((global::Puck.World.WorldScreenSource.Session)value).Fallback, text: "a fallback color"),
                 M("ripple", typeof(global::System.Boolean), typeof(global::Puck.World.WorldScreenSource.Session), "Ripple", Read | Write, static value => ((global::Puck.World.WorldScreenSource.Session)value).Ripple),
+                M("attention", typeof(global::Puck.World.WorldSessionAttention), typeof(global::Puck.World.WorldScreenSource.Session), "Attention", Read | Write, static value => ((global::Puck.World.WorldScreenSource.Session)value).Attention),
             ],
             []),
         T(typeof(global::Puck.World.WorldScreenSource.Text), true, JsonTypeInfoKind.Object, null,
@@ -6643,6 +6654,13 @@ public static partial class WorldModelShape {
                 M("step", typeof(global::System.Single), typeof(global::Puck.World.WorldSequence), "Step", Read | Write | Required, static value => ((global::Puck.World.WorldSequence)value).Step),
             ],
             []),
+        T(typeof(global::Puck.World.WorldSessionAttention), true, JsonTypeInfoKind.Object, null,
+            [],
+            [
+                M("watchedWithin", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldSessionAttention), "WatchedWithin", Read | Write, static value => ((global::Puck.World.WorldSessionAttention)value).WatchedWithin),
+                M("glimpsedWithin", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldSessionAttention), "GlimpsedWithin", Read | Write, static value => ((global::Puck.World.WorldSessionAttention)value).GlimpsedWithin),
+            ],
+            []),
         T(typeof(global::Puck.World.WorldShaping), true, JsonTypeInfoKind.Object, null,
             [],
             [
@@ -6672,6 +6690,7 @@ public static partial class WorldModelShape {
             [],
             [
                 M("rateHz", typeof(global::System.Int32), typeof(global::Puck.World.WorldSimulationDefaults), "RateHz", Read | Write | Required, static value => ((global::Puck.World.WorldSimulationDefaults)value).RateHz),
+                M("stepsAt", typeof(global::Puck.World.WorldAttention), typeof(global::Puck.World.WorldSimulationDefaults), "StepsAt", Read | Write, static value => ((global::Puck.World.WorldSimulationDefaults)value).StepsAt),
             ],
             []),
         T(typeof(global::Puck.World.WorldSolid), true, JsonTypeInfoKind.Object, null,

@@ -6020,6 +6020,8 @@ export type WorldAnchorSeat = {
   partId?: string | null;
 };
 
+export type WorldAttention = "Unobserved" | "Glimpsed" | "Watched" | "Occupied";
+
 export type WorldAudioCue = {
   /**
    * The published engine token or rule-emitted cue name.
@@ -6073,6 +6075,25 @@ export type WorldAutonomyCadence = {
   motionSeconds?: number;
   /**
    * How often its selected producer refreshes steering. The most recent image is reused between refreshes.
+   */
+  steeringSeconds?: number;
+  /**
+   * The cadences a body takes while it stands far from everyone (WorldAutonomyFar), or null for a kit whose bodies keep one cadence wherever anyone stands.
+   */
+  far?: WorldAutonomyFar | null;
+};
+
+export type WorldAutonomyFar = {
+  /**
+   * The distance in metres to the nearest body a human occupies beyond which the body is far.
+   */
+  beyond: number;
+  /**
+   * How often a far body's motion program advances; at least the kit's MotionSeconds.
+   */
+  motionSeconds?: number;
+  /**
+   * How often a far body's producer refreshes steering; at least the kit's SteeringSeconds.
    */
   steeringSeconds?: number;
 };
@@ -14053,6 +14074,10 @@ export type WorldScreenSourceSession = {
    * Whether the opening ripples: its image is refracted by slow interfering waves all the time, with a faint highlight riding them, and a body that touches or passes through sends rings across the whole glass that fade within about a second. Presentation only (the shading reads the contact and the clock; nothing in the simulation depends on it). Requires Window. Omitted from the wire when false.
    */
   ripple?: boolean;
+  /**
+   * How far this surface's attention reaches (WorldSessionAttention): what the destination's host reads when it decides whether the destination steps. Absent watches the destination at any distance. Omitted from the wire when null.
+   */
+  attention?: WorldSessionAttention | null;
 };
 
 /**
@@ -14591,6 +14616,20 @@ export type WorldSequenceNullable = {
   step: number;
 };
 
+/**
+ * How far an observing surface's attention reaches: the distances, from the surface to the nearest body a human occupies in the world that declares it, within which the destination is watched and within which it is glimpsed.
+ */
+export type WorldSessionAttention = {
+  /**
+   * The distance in metres within which the destination is Watched; absent watches at any distance.
+   */
+  watchedWithin?: number | null;
+  /**
+   * The distance in metres within which the destination is at least Glimpsed; absent glimpses at any distance. It is never less than WatchedWithin.
+   */
+  glimpsedWithin?: number | null;
+};
+
 export type WorldShadowMode = "always" | "auto" | "never";
 
 export type WorldShadowOverflow = "instant" | "queue";
@@ -14649,6 +14688,10 @@ export type WorldSimulationDefaults = {
    * The simulation rate in Hz. Zero is a legal, distinct rate: a resident, non-stepping world — a static diorama the authoritative server never advances a fixed step for, though it still applies ordered submissions (mutations, session requests, connects/disconnects) through the administrative drain, so a rate-0 world can accept the very write that revives it. At rate 0, a simulation-tick duration authored as a positive value means never — not zero and not "already expired" — since there is no tick mapping for a world that never advances (see CompiledTickDuration, PopulationReconnectGraceTicks). A positive rate must be a divisor of TicksPerSecond (50400) exactly, so Puck.Maths.FixedTickConversion.PerRate always derives a whole engine-tick step width — never truncated, never remainder-carried (WorldDefinitionValidator refuses a non-divisor, naming the nearest valid rates; a negative rate is refused outright, at any magnitude). 45 and 90 Hz — Steam Deck OLED's two refresh rates — both divide 50400 exactly (1120 and 560 engine ticks per step). The engine holds no rate of its own: an authored section states its rate, and a world authoring no simulation section runs at UnauthoredSimulationRateHz — the distinct rate-0 resident world is reached only by authoring rateHz 0 by name. The derived-floor seam. This record is deliberately the one place a follow-on validation pass adds the physics floor (from body size/speed), the interactivity floor (from input latency), and the representable band; these floors are not built yet. The rigid solver already clamps authored contact frequency to RateHz * n / 8 at substep count n, supplied by collision.bodyContacts.rigidSubstepCeiling. It coincides with RateHz / 4 only at n = 2. A derived floor belongs here, beside the rate it constrains, never as a second section.
    */
   rateHz: number;
+  /**
+   * The least attention the world steps at (WorldAttention). Below it the host that runs the world does not step it: the world lapses, and when attention returns its clocks jump the whole lapsed span in one closed-form move before it steps again, so nothing in it ran while nobody looked and no tick is replayed. Absent is Unobserved: the world steps whoever observes it, and its state never depends on attention. A lapse is authority input, so a world that authors a higher value states that observation may decide what happens in it.
+   */
+  stepsAt?: WorldAttention;
 };
 
 export type WorldSkyBlend = "over" | "add" | "multiply" | "screen";

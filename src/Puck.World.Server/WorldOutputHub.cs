@@ -56,21 +56,17 @@ public sealed partial class WorldOutputHub {
         public WorldSinkDisclosure Disclosure;
         public Func<WorldSnapshot, WorldSnapshot>? Present;
         public bool Active = true;
+        // Whether the sink is an observer whose attention the host cannot read (IWorldWatchingSink).
+        public readonly bool Watches;
 
         public Subscription(WorldOutputHub hub, IClientSink sink, WorldSinkDisclosure disclosure) {
             m_hub = hub;
             Disclosure = disclosure;
+            Watches = (sink is IWorldWatchingSink);
             Route = hub.RouteTo(sink: sink, fault: exception => hub.Detach(subscription: this, callSite: "the outbox's collect", exception: exception));
         }
 
-        public void Dispose() {
-            if (!Active) {
-                return;
-            }
-
-            Active = false;
-            m_hub.m_activeCount--;
-        }
+        public void Dispose() => m_hub.Deactivate(subscription: this);
     }
 
     /// <summary>Body records and their bytes encoded during the last snapshot publication, before sharing.</summary>
@@ -92,6 +88,12 @@ public sealed partial class WorldOutputHub {
     /// nobody would receive. Reflects only active subscribers —
     /// a detached-but-not-yet-compacted slot never counts.</summary>
     public bool HasTypedSubscribers => (m_activeCount > 0);
+    /// <summary>Gets the number of active subscribers that watch the world from where its host cannot read their
+    /// attention (<see cref="IWorldWatchingSink"/>): while one is attached the host counts the world as watched.</summary>
+    public int Watchers => m_watchingCount;
+
+    // Count of active subscriptions whose sink is an IWorldWatchingSink, kept with m_activeCount.
+    private int m_watchingCount;
 
     /// <summary>Gets or sets whether the timeline's deliveries (a definition, a state update, a tick's snapshot) and
     /// the compositions a re-simulated tick re-applies reach no subscriber. A history seek withholds them for its whole
@@ -120,6 +122,7 @@ public sealed partial class WorldOutputHub {
         if (subscription.Active) {
             subscription.Active = false;
             m_activeCount--;
+            if (subscription.Watches) { m_watchingCount--; }
         }
     }
     // Detaches a faulting sink and narrates it loudly (naming its concrete type, never swallowed silently) — a broken
@@ -379,6 +382,7 @@ public sealed partial class WorldOutputHub {
         route = subscription.Route;
         m_typed.Add(item: subscription);
         m_activeCount++;
+        if (subscription.Watches) { m_watchingCount++; }
 
         return subscription;
     }

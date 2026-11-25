@@ -147,6 +147,7 @@ public sealed partial class WorldReplayTape {
         var probe = new WorldReplayProbe(server: m_liveServer, tape: this,
             skipAuthority: m_currentAuthority.Count, skipIntents: m_currentIntents.Count);
 
+        m_openLapse = null;
         m_probes.Add(item: probe);
         RefreshCapture();
         return probe;

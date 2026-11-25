@@ -77,12 +77,54 @@ public sealed record WorldKit(
 /// <param name="MotionSeconds">How often the body's physics/motion program advances.</param>
 /// <param name="SteeringSeconds">How often its selected producer refreshes steering. The most recent image is reused
 /// between refreshes.</param>
-public sealed record WorldAutonomyCadence(float MotionSeconds = 0f, float SteeringSeconds = 0f) {
+/// <param name="Far">The cadences a body takes while it stands far from everyone (<see cref="WorldAutonomyFar"/>), or
+/// <see langword="null"/> for a kit whose bodies keep one cadence wherever anyone stands.</param>
+public sealed record WorldAutonomyCadence(
+    float MotionSeconds = 0f,
+    float SteeringSeconds = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldAutonomyFar? Far = null
+) {
     /// <summary>The greatest supported autonomous update interval.</summary>
     public const float MaximumSeconds = 1f;
 
     /// <summary>Full authority-rate motion and steering.</summary>
     public static WorldAutonomyCadence FullRate { get; } = new();
+}
+/// <summary>The coarser cadences a non-human body takes while every body a human occupies in its world stands farther
+/// from it than <paramref name="Beyond"/>, and while nobody stands in the world at all. The distance is read in fixed
+/// point from the bodies' own positions each time one of the body's cadences comes due, so which cadence a body
+/// keeps is a function of the world's state and replays with it.</summary>
+/// <param name="Beyond">The distance in metres to the nearest body a human occupies beyond which the body is far.</param>
+/// <param name="MotionSeconds">How often a far body's motion program advances; at least the kit's
+/// <see cref="WorldAutonomyCadence.MotionSeconds"/>.</param>
+/// <param name="SteeringSeconds">How often a far body's producer refreshes steering; at least the kit's
+/// <see cref="WorldAutonomyCadence.SteeringSeconds"/>.</param>
+public sealed record WorldAutonomyFar(float Beyond, float MotionSeconds = 0f, float SteeringSeconds = 0f);
+/// <summary>A kit's compiled far cadences (<see cref="WorldAutonomyFar"/>).</summary>
+/// <param name="Beyond">The distance beyond which a body is far.</param>
+/// <param name="MotionTicks">The far motion cadence in engine ticks; zero means every authority tick.</param>
+/// <param name="SteeringTicks">The far producer cadence in engine ticks; zero means every authority tick.</param>
+public readonly record struct FixedAutonomyFar(FixedQ4816 Beyond, ulong MotionTicks, ulong SteeringTicks) {
+    /// <summary>Compiles an authored far tier.</summary>
+    /// <param name="far">The authored tier.</param>
+    /// <returns>The compiled tier.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="far"/> is <see langword="null"/>.</exception>
+    public static FixedAutonomyFar Compile(WorldAutonomyFar far) {
+        ArgumentNullException.ThrowIfNull(argument: far);
+
+        return new FixedAutonomyFar(
+            Beyond: FixedQ4816.FromDouble(value: far.Beyond),
+            MotionTicks: Ticks(seconds: far.MotionSeconds),
+            SteeringTicks: Ticks(seconds: far.SteeringSeconds)
+        );
+    }
+
+    /// <summary>Converts an authored autonomy interval to engine ticks.</summary>
+    /// <param name="seconds">The interval in seconds; zero or less means every authority tick.</param>
+    /// <returns>The interval in engine ticks, or zero for every authority tick.</returns>
+    public static ulong Ticks(float seconds) => ((seconds > 0f)
+        ? FixedTickConversion.DurationEngineTicks(seconds: ((decimal)seconds))
+        : 0UL);
 }
 /// <summary>Declares how a kit responds to other dynamic bodies. Interactions and targeting remain available in
 /// both modes; only <see cref="Solid"/> authorizes physical depenetration.</summary>
@@ -124,6 +166,8 @@ public enum WorldBodyContactMode : byte {
 /// <param name="Channels">The compiled typed input table.</param>
 /// <param name="Tether">The kit's compiled tether facet, or <see langword="null"/> for a kit that carries no rope.</param>
 /// <param name="Mount">The kit's compiled mount facet, or <see langword="null"/> for a kit whose bodies carry no rider.</param>
+/// <param name="AutonomousFar">The cadences a non-human body takes while it stands far from everyone, or
+/// <see langword="null"/> for a kit that authors none.</param>
 public readonly record struct FixedWorldKit(
     CompiledBodyMotionProgram BodyMotionProgram,
     IReadOnlyDictionary<string, CompiledBodyProducer> Producers,
@@ -144,7 +188,8 @@ public readonly record struct FixedWorldKit(
     FixedWorldCarry? Carry = null,
     FixedWorldTether? Tether = null,
     WorldChannelTable? Channels = null,
-    FixedWorldMount? Mount = null
+    FixedWorldMount? Mount = null,
+    FixedAutonomyFar? AutonomousFar = null
 ) {
     /// <summary>Compiles the world's named action-state register file: every <c>state.body</c> declaration in
     /// document order, then every <c>state.identity</c> one.</summary>
@@ -366,12 +411,9 @@ public readonly record struct FixedWorldKit(
                 holds: kit.Motion.Holds
             ),
             Tuning: tuning,
-            AutonomousMotionTicks: ((kit.Autonomy.MotionSeconds > 0f)
-            ? FixedTickConversion.DurationEngineTicks(seconds: ((decimal)kit.Autonomy.MotionSeconds))
-            : 0UL),
-            AutonomousSteeringTicks: ((kit.Autonomy.SteeringSeconds > 0f)
-            ? FixedTickConversion.DurationEngineTicks(seconds: ((decimal)kit.Autonomy.SteeringSeconds))
-            : 0UL),
+            AutonomousMotionTicks: FixedAutonomyFar.Ticks(seconds: kit.Autonomy.MotionSeconds),
+            AutonomousSteeringTicks: FixedAutonomyFar.Ticks(seconds: kit.Autonomy.SteeringSeconds),
+            AutonomousFar: ((kit.Autonomy.Far is { } far) ? FixedAutonomyFar.Compile(far: far) : (FixedAutonomyFar?)null),
             Rigid: rigid,
             Carry: carry,
             Tether: tether,

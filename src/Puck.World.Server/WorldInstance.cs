@@ -152,6 +152,16 @@ public sealed class WorldInstance : IDisposable {
     public WorldServer Server { get; }
     /// <summary>The document path this instance currently answers for.</summary>
     public string SourcePath => m_origin();
+    /// <summary>Gets the attention the host last read for this instance (<see cref="WorldInstanceHost"/>'s attention
+    /// reading, once a host step): operational state the host derives again every step, never checkpointed.</summary>
+    public WorldAttention Attention { get; internal set; }
+    /// <summary>Gets the ticks this instance has lapsed since it was admitted: the ticks its host moved its clocks
+    /// over without stepping it, because it stood below the attention it steps at. A host counter, not simulation
+    /// state: <see cref="CompletedTicks"/> less this is the ticks the instance stepped in this process.</summary>
+    public ulong LapsedTicks { get; internal set; }
+    /// <summary>Gets or sets whether the instance owes one step whatever its attention: while it lapsed, a document
+    /// operation was buffered for it or an intent was queued for it, and only a step applies either.</summary>
+    internal bool StepOwed { get; set; }
 
     /// <summary>Resolves <see cref="SourcePath"/> as <see cref="WorldFileOrigin.TryResolveCanonicalPath"/> does, probing
     /// the file system once for each path the instance answers for, so a crossing that compares running instances'
@@ -186,8 +196,10 @@ public sealed class WorldInstance : IDisposable {
 
     private bool m_canonicalResolves;
 
-    /// <summary>This row's own replay tape, or <see langword="null"/> for a row nothing records (every row but a
-    /// desktop's boot instance today).</summary>
+    /// <summary>Gets or sets this row's own replay tape, or <see langword="null"/> for a row nothing records. A
+    /// desktop's boot row and a hosted row carry one; any other row gains one when a recording tapes it as a companion
+    /// (<see cref="WorldReplayTape.TryRecordCompanion"/>) or a reproduction observes it
+    /// (<see cref="WorldReplayTape.ObserveReplay(WorldInstance)"/>).</summary>
     public WorldReplayTape? Tape { get; set; }
 
     /// <summary>This instance's portal-crossing edge state, read and written by <see cref="WorldInstanceHost"/>'s
