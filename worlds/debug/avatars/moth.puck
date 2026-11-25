@@ -4007,12 +4007,13 @@ render {
   }
 }
 
-// Fly: seat 1 pressing rise without jump (the fly bindings, not Space or South, which press both) switches flight mode
-// on, so she takes off and climbs. One rule a local seat, since a rule reads a seat as a literal (`bodies.localSeats`).
-rule "fly-1" {
-  when channel(1, rise) >= 1 and channel(1, jump) == 0 and bodyState(body, 0, flightFuel) == 0
+// Fly: a player pressing rise without jump (the fly bindings, not Space or South, which press both) switches flight
+// mode on, so she takes off and climbs. One rule over every player's body, a seat's or a visitor's.
+rule "fly" {
+  when channel(each, rise) >= 1 and channel(each, jump) == 0 and bodyState(each, flightFuel) == 0
   mode: Level
-  setBodyState(key: 0, state: "flightFuel", expression: 1000)
+  forEach: $players
+  setBodyState(key: $each, state: "flightFuel", expression: 1000)
 }
 
 // The flight pose and wings deploy only in flight mode; an ordinary jump keeps her upright.

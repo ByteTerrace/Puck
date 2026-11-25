@@ -32,6 +32,8 @@ public sealed record WorldRegionIteration(string PlacementId, int Occupants, int
     public override int KeySpan => BodyCapacity;
     /// <inheritdoc/>
     public override bool Versioned => true;
+    /// <inheritdoc/>
+    public override bool BindsBodies => true;
 
     /// <inheritdoc/>
     public override void Collect(IEffectHost host, List<CellKey> into) => ((IWorldRegionOccupants)host).CollectRegionOccupants(into: into, placementId: PlacementId, priced: Occupants);

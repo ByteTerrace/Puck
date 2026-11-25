@@ -269,7 +269,7 @@ public static partial class WorldFactsCompiler {
         if (rule.Mode != ActionTriggerMode.Level) {
             throw Refuse(detail: "requires Level rule mode");
         }
-        if ((rule.ForEach?.Spelling is RuleFacts.ForEachZones or RuleFacts.ForEachBodies) || (rule.ForEach?.Call is { Channel: "region" })) {
+        if ((rule.ForEach?.Spelling is RuleFacts.ForEachZones or RuleFacts.ForEachBodies) || (rule.ForEach?.Call is { Channel: "region" or WorldPlayerIteration.Channel })) {
             throw Refuse(detail: $"iterates a keyed row's body keys, never '{rule.ForEach.Spelling}' — forEach names a keyed row");
         }
         if (

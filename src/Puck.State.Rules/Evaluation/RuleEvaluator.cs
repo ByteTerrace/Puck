@@ -454,7 +454,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             return;
         }
         if (rule.ForEachBodies) {
-            BodyKeys();
+            BodyKeys(rule: rule);
 
             return;
         }
@@ -470,12 +470,11 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
             m_eachKeyScratch.Add(item: key);
         }
     }
-    // A body sweep binds each live body's index key in ascending index order. The compiler interned every index the
-    // body capacity admits, so a live body always resolves; RuleNeeds.Admit already refused a host that is not an
-    // ILiveBodies, which the rule's needs name.
-    private void BodyKeys() {
-        m_bodyIndexScratch.Clear();
-        ((ILiveBodies)m_host).CollectLiveBodies(into: m_bodyIndexScratch);
+    // A body sweep binds each live body's index key in ascending index order, the set the due list's visit binds
+    // (CollectSweptBodies). The compiler interned every index the body capacity admits, so a live body always
+    // resolves; RuleNeeds.Admit already refused a host that is not an ILiveBodies, which the rule's needs name.
+    private void BodyKeys(CompiledRule rule) {
+        CollectSweptBodies(into: m_bodyIndexScratch, rule: rule);
 
         var keys = m_host.Arena.Keys;
 
@@ -680,11 +679,7 @@ public sealed partial class RuleEvaluator : Puck.Abstractions.Counting.IWorkCoun
         var firings = 0;
 
         foreach (var key in m_eachKeyScratch) {
-            var eachBinding = new LatchKey(
-                Left: key.Ordinal,
-                Right: -1,
-                LeftGeneration: (rule.Iteration?.Generation(host: m_host, key: key) ?? 0)
-            );
+            var eachBinding = SweepLatchKey(key: key, rule: rule);
 
             // A sweep that has spent its firings leaves its remaining bindings as they stand, so an open edge waits for
             // the tick that reaches it instead of being closed by the sweep's end.

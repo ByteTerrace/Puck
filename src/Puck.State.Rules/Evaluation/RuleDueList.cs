@@ -31,7 +31,7 @@ internal sealed class RuleDueList {
         /// <summary>A keyed row's sweep, due per key.</summary>
         RowSweep,
 
-        /// <summary>A live-body sweep, due per body.</summary>
+        /// <summary>A sweep whose keys are body indices (the live bodies, or a host set that binds bodies), due per body.</summary>
         BodySweep,
     }
 
@@ -395,7 +395,9 @@ internal sealed class RuleDueList {
             }
             if (m_eachFactReaders.TryGetValue(key: moved.Source, value: out var each)) {
                 foreach (var reader in each) {
-                    MarkBody(index: reader, body: moved.Body);
+                    if (Binds(index: reader, body: moved.Body)) {
+                        MarkBody(index: reader, body: moved.Body);
+                    }
                 }
             }
             if (m_wholeFactReaders.TryGetValue(key: moved.Source, value: out var whole)) {
@@ -482,11 +484,10 @@ internal sealed class RuleDueList {
 
                 bits &= (bits - 1UL);
                 if (!swept && keys.TryResolveIndex(index: body, key: out var key)) {
-                    latch.Forget(binding: new LatchKey(Left: key.Ordinal, Right: -1), journal: journal, state: state);
+                    latch.Forget(binding: m_evaluator.SweepLatchKey(key: key, rule: Rules[index]), journal: journal, state: state);
                 }
                 if (!gathered) {
-                    m_liveNow.Clear();
-                    ((ILiveBodies)m_host).CollectLiveBodies(into: m_liveNow);
+                    m_evaluator.CollectSweptBodies(into: m_liveNow, rule: Rules[index]);
                     gathered = true;
                 }
                 if (m_liveNow.BinarySearch(item: body) < 0) {
@@ -509,7 +510,7 @@ internal sealed class RuleDueList {
         if (evaluator.Owns(rule: rule)) {
             return Visit.Whole;
         }
-        if (rule.ForEachBodies) {
+        if (rule.ForEachBodies || (rule.Iteration is { BindsBodies: true })) {
             return Visit.BodySweep;
         }
 
@@ -565,7 +566,7 @@ internal sealed class RuleDueList {
 
                 return;
             case Visit.BodySweep:
-                if (m_host.Arena.Keys.TryCandidateIndex(index: out var body, key: key)) {
+                if (m_host.Arena.Keys.TryCandidateIndex(index: out var body, key: key) && Binds(index: index, body: body)) {
                     SetBinding(binding: body, index: index);
                 }
 
@@ -576,6 +577,17 @@ internal sealed class RuleDueList {
                 return;
         }
     }
+    // Whether a move read for one body, under $each, can reach a binding of a body sweep: the body was in the set the
+    // sweep's last visit bound (SnapshotLive), so its binding stands. A body outside that set has no binding to judge
+    // until the set itself moves, and every move of the set reaches the sweep through the set's own schedule (the live
+    // bodies' move for the body that joined or left, a region's occupancy move in full), never through this read. A
+    // sweep never visited yet is due in full, so nothing is filtered for it.
+    private bool Binds(int index, int body) => (
+        (m_kinds[index] != Visit.BodySweep) ||
+        (body < 0) ||
+        (m_live[index] is not { } live) ||
+        BitWords.Contains(index: body, words: live)
+    );
     // A move of one body's fact: that body's binding of a keyed sweep, or the whole rule otherwise. A move reported
     // for the source as a whole marks the rule in full. A row sweep's binding for a body is the key that spells the
     // body's index, which is what the host binds $each to for the read.

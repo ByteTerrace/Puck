@@ -27,6 +27,8 @@
 import "../standard/bounds"
 import "../standard/kits"
 import "../standard/skies"
+import "place-kit"
+import "reach"
 import "shapes"
 // The companion hears the lift's authored door edge through its read-only sensory projection.
 exports {
@@ -228,16 +230,19 @@ let liftPads = map(
 let carPadHi = 16.85
 let carPadPitch = (1.9 / 6)
 let carKeys = ["0", "1", "2", "3", "open", "close"]
+// The panel's reach, which the six cells split: from the cab's west wall to its east wall, before the back wall.
+let carPadX0 = 14.6
+let carPadX1 = 17.2
+let carPadZ0 = 38.5
+let carPadZ1 = 39.6
 let carPads = map(
   range(0, 6),
   j => {
     slot: j
     key: carKeys[j]
     x: (carPadHi - (carPadPitch * (j + 0.5)))
-    x0: ((j == 5) ? 14.6 : (carPadHi - (carPadPitch * (j + 1))))
-    x1: ((j == 0) ? 17.2 : (carPadHi - (carPadPitch * j)))
-    z0: 38.5
-    z1: 39.6
+    x0: ((j == 5) ? carPadX0 : (carPadHi - (carPadPitch * (j + 1))))
+    x1: ((j == 0) ? carPadX1 : (carPadHi - (carPadPitch * j)))
   }
 )
 // The panel's back wall: its plate stands 1.25 m over the car's floor, 5 cm proud of the back wall's inner face.
@@ -1386,6 +1391,27 @@ placements {
       position [liftX, galleryFloor[level.level], 35.65]
     }
   }
+
+  // The reaches a press acts in (reach.puck): each landing's CALL plate, each light switch, and the car's button
+  // panel, whose reach rides the car's body over the floor the six buttons' cells split.
+  for pad in liftPads {
+    reach(id: $"lift-pad-{pad.level}-reach", box: pad)
+  }
+  for switch in switchReach {
+    reach(id: $"{switch.rule}-reach", box: switch)
+  }
+  placement "lift-car-reach" {
+    prototype: "place"
+    position [((carPadX0 + carPadX1) / 2), 0, ((carPadZ0 + carPadZ1) / 2)]
+    attach {
+      bodyIndex: liftBody
+      localOffset [(((carPadX0 + carPadX1) / 2) - liftX), (0.15 - liftRoot), (((carPadZ0 + carPadZ1) / 2) - liftZ)]
+    }
+    region {
+      halfExtents [((carPadX1 - carPadX0) / 2), 0.35, ((carPadZ1 - carPadZ0) / 2)]
+      capacity: reachCapacity
+    }
+  }
 }
 
 // The exposure's floor and key through the day (the `exposure` block below): EV 7 and a stop and a quarter from dawn to
@@ -1770,75 +1796,46 @@ for k in range(0, 4) {
   }
 }
 
-// The context button on a landing's CALL plate calls the car there; any seated or visiting human presses.
+// The context button on a landing's CALL plate calls the car there: one rule a landing over whoever stands in its
+// reach, any seated or visiting human.
 for pad in liftPads {
-  for b in range(0, (seatPopulation + visitorPopulation)) {
-    let suffix = ((b == 0) ? "" : $"-{b}")
-    rule $"lift-pad-{pad.level}{suffix}" {
-      when (channel(body, b, interact) >= 1 and
-        bodyPosition(body, b, x) > pad.x0 and
-        bodyPosition(body, b, x) < pad.x1 and
-        bodyPosition(body, b, z) > pad.z0 and
-        bodyPosition(body, b, z) < pad.z1 and
-        bodyPosition(body, b, y) > pad.y0 and
-        bodyPosition(body, b, y) < pad.y1)
-      mode: Edge
-      liftHall[$"level{pad.level}"] = 1
-    }
+  rule $"lift-pad-{pad.level}" {
+    when pressing()
+    mode: Edge
+    forEach: region($"lift-pad-{pad.level}-reach")
+    liftHall[$"level{pad.level}"] = 1
   }
 }
 
-// The same press in the car, at the button the body stands before: only a body on the car's floor counts.
+// The same press in the car, at the button the body stands before: the car's reach rides its floor, so only a body on
+// it counts, and the body's x picks the button.
+function inCarCell(pad) = bodyPosition(each, x) > pad.x0 and bodyPosition(each, x) < pad.x1
 for pad in filter(carPads, p => p.slot < 4) {
-  for b in range(0, (seatPopulation + visitorPopulation)) {
-    let suffix = ((b == 0) ? "" : $"-{b}")
-    rule $"lift-car-pad-{pad.slot}{suffix}" {
-      when (channel(body, b, interact) >= 1 and
-        bodyPosition(body, b, x) > pad.x0 and
-        bodyPosition(body, b, x) < pad.x1 and
-        bodyPosition(body, b, z) > pad.z0 and
-        bodyPosition(body, b, z) < pad.z1 and
-        bodyPosition(body, b, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
-        bodyPosition(body, b, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
-      mode: Edge
-      liftCarCall[$"level{pad.slot}"] = 1
-    }
+  rule $"lift-car-pad-{pad.slot}" {
+    when pressing() and inCarCell(pad)
+    mode: Edge
+    forEach: region("lift-car-reach")
+    liftCarCall[$"level{pad.slot}"] = 1
   }
 }
 for pad in filter(carPads, p => p.slot == 4) {
-  for b in range(0, (seatPopulation + visitorPopulation)) {
-    let suffix = ((b == 0) ? "" : $"-{b}")
-    rule $"lift-car-pad-open{suffix}" {
-      when (channel(body, b, interact) >= 1 and
-        bodyPosition(body, b, x) > pad.x0 and
-        bodyPosition(body, b, x) < pad.x1 and
-        bodyPosition(body, b, z) > pad.z0 and
-        bodyPosition(body, b, z) < pad.z1 and
-        bodyPosition(body, b, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
-        bodyPosition(body, b, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
-      mode: Edge
-      liftLamp.open = 1
-      schedule liftClock.pulse in 0.4s
-      liftOpenReq = 1
-    }
+  rule "lift-car-pad-open" {
+    when pressing() and inCarCell(pad)
+    mode: Edge
+    forEach: region("lift-car-reach")
+    liftLamp.open = 1
+    schedule liftClock.pulse in 0.4s
+    liftOpenReq = 1
   }
 }
 for pad in filter(carPads, p => p.slot == 5) {
-  for b in range(0, (seatPopulation + visitorPopulation)) {
-    let suffix = ((b == 0) ? "" : $"-{b}")
-    rule $"lift-car-pad-close{suffix}" {
-      when (channel(body, b, interact) >= 1 and
-        bodyPosition(body, b, x) > pad.x0 and
-        bodyPosition(body, b, x) < pad.x1 and
-        bodyPosition(body, b, z) > pad.z0 and
-        bodyPosition(body, b, z) < pad.z1 and
-        bodyPosition(body, b, y) > (bodyPosition(body, liftBody, y) - liftRoot - 0.2) and
-        bodyPosition(body, b, y) < (bodyPosition(body, liftBody, y) - liftRoot + 0.5))
-      mode: Edge
-      liftLamp.close = 1
-      schedule liftClock.pulse in 0.4s
-      liftCloseReq = 1
-    }
+  rule "lift-car-pad-close" {
+    when pressing() and inCarCell(pad)
+    mode: Edge
+    forEach: region("lift-car-reach")
+    liftLamp.close = 1
+    schedule liftClock.pulse in 0.4s
+    liftCloseReq = 1
   }
 }
 
@@ -2008,22 +2005,14 @@ rule "lift-arrow-down" {
   liftArrow = 2
 }
 
-// A press of the context button inside a switch's reach box flips that level's lights; the reach box stands before the
-// plate, so standing there puts the plate ahead of the body. The edge fires once a press.
+// A press of the context button in a switch's reach flips that level's lights; the reach stands before the plate, so
+// standing there puts the plate ahead of the body. The edge fires once a press.
 for reach in switchReach {
-  for b in range(0, (seatPopulation + visitorPopulation)) {
-    let suffix = ((b == 0) ? "" : $"-{b}")
-    rule $"{reach.rule}{suffix}" {
-      when (channel(body, b, interact) >= 1 and
-        bodyPosition(body, b, x) > reach.x0 and
-        bodyPosition(body, b, x) < reach.x1 and
-        bodyPosition(body, b, z) > reach.z0 and
-        bodyPosition(body, b, z) < reach.z1 and
-        bodyPosition(body, b, y) > reach.y0 and
-        bodyPosition(body, b, y) < reach.y1)
-      mode: Edge
-      hallLights[$"level{reach.level}"] = 1 - hallLights[$"level{reach.level}"]
-    }
+  rule $"{reach.rule}" {
+    when pressing()
+    mode: Edge
+    forEach: region($"{reach.rule}-reach")
+    hallLights[$"level{reach.level}"] = 1 - hallLights[$"level{reach.level}"]
   }
 }
 

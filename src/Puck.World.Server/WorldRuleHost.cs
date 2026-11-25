@@ -8,7 +8,7 @@ namespace Puck.World.Server;
 /// groups, interactions and tables, their edge latches, the decision, pattern, identity-fact and influence-fact
 /// runtimes, the queries, the trace and the world's own effect arms. The arena is the store every read and write
 /// addresses, and the world facts only the server can answer reach a fact as the facet its declaration names.</summary>
-public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTransformHost, IArenaUndoHost, IRuleOwner, IRuleRefusalSink, IWorldFacts, ILiveBodies, IWorldInputEvents, IWorldRegionOccupants {
+public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTransformHost, IArenaUndoHost, IRuleOwner, IRuleRefusalSink, IWorldFacts, ILiveBodies, IWorldPlayers, IWorldInputEvents, IWorldRegionOccupants {
     private readonly List<int> m_occupantScratch = [];
 
     /// <inheritdoc/>
@@ -305,6 +305,19 @@ public sealed partial class WorldRuleHost : IStateReader, IEffectHost, IArenaTra
         for (var index = 0; (index < population.Capacity); index++) {
             if (population.IsActive(index: index)) {
                 into.Add(item: index);
+            }
+        }
+    }
+    /// <inheritdoc/>
+    /// <remarks>A player's body is one <c>$channel:</c> reads input for (<see cref="WorldPopulation.IsHumanOccupied"/>).</remarks>
+    public void CollectPlayers(List<CellKey> into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        var population = Host.Population;
+
+        for (var index = 0; (index < population.Capacity); index++) {
+            if (population.IsHumanOccupied(bodyIndex: index) && Arena.Keys.TryResolveIndex(index: index, key: out var key)) {
+                into.Add(item: key);
             }
         }
     }

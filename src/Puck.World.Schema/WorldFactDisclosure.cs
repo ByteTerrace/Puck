@@ -122,6 +122,10 @@ public static class WorldRuleDisclosure {
             into.Add(reach: WorldDisclosureReach.Bodies);
             into.AddPlacement(placementId: occupants.PlacementId);
         }
+        if (rule.Iteration is WorldPlayerIteration) {
+            // A sweep over the players fires for whichever bodies players hold, which is the population's to disclose.
+            into.Add(reach: WorldDisclosureReach.Bodies);
+        }
         if (rule is CompiledWorldFactsRule world) {
             if (world.Interaction is not null) {
                 // A sweep pairs carriers across the whole population, so whether it fires depends on every body.

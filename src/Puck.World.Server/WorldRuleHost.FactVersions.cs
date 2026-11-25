@@ -277,7 +277,11 @@ public sealed partial class WorldRuleHost {
 
         switch (payload) {
             // A seat's channel, its pointer and its place at a board are read for a literal seat: from the image and
-            // ray its body integrated, its application set and its body's position.
+            // ray its body integrated, its application set and its body's position. The watch derives one value with
+            // no binding in place, so a channel read for the body a sweep binds to $each has no version here and
+            // stays volatile.
+            case ChannelOperand { Body.Kind: not CompiledBodyRefKind.Literal }:
+                return false;
             case ChannelOperand or PointerOperand or BoardSeatOperand:
                 facts.Add(item: new FactRead(Body: WatchValue(fact: bodyOperand, readsInput: true, spelling: bodyOperand.Describe), Source: ValueSource));
 

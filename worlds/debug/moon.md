@@ -31,11 +31,18 @@ world.state moonDoorOpen
 player.signal keyboard.w press
 ```
 
-The same door stands in the open on the launch field: a gilt frame east of the
-pad (`moon-door-valley`). A press on the ground before it makes the same offer,
-and while the door stands open walking through it arrives out of the same
-socket. Headless, `body.pose 100 0.3 78.9 0 0 0 0` stands a seat on its step.
-The socket's way back still leads to the painting.
+A second door stands in the open on the launch field: a gilt frame east of the
+pad (`moon-door-valley`). A press on the ground before it makes its own offer
+(`valleyDoorOffer`), the moon grants it with its own socket on the pad's west
+rim, and while that door stands open walking through it arrives out of that
+socket, whose way back leads to the frame. Headless, `body.pose 100 0.3 78.9 0 0 0 0`
+stands a seat on its step and `world.state valleyDoorOpen` reads it.
+
+Each door is an agreement between the two worlds, each owning its half
+([the standard's agreement template](../standard/agreement.puck)): this world
+owns the offer, the pass and the door, and the moon owns the grant, its lease
+and its refusal row (`moonDoorRefuses`, `valleyDoorRefuses`).
+[moon-door-tests.puck](moon-door-tests.puck) presses each door and walks through.
 
 The frame at the moon's north pole is the moon's own way home: walking into it
 arrives before the painting whether or not the door is open.

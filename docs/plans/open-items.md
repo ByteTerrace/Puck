@@ -3120,7 +3120,7 @@ P1 last. The plan owns the feature end to end; these are the defects it does not
   the surface) with its values in the standard package. Seen at
   (-65.6, -0.8, 27.8).
 - [medium] Swimming switched the Moth into flight mode with `flightFuel` at
-  1000, though `fly-1` needs rise without jump; suspected, jump reads zero for
+  1000, though `fly` needs rise without jump; suspected, jump reads zero for
   a tick across the hold change. `body.hold` also kept answering `hold=swim`
   on the grass afterwards.
 - [medium] The carved channel's acceptance gaps: at stage 1 the river is so
@@ -3879,6 +3879,16 @@ Owner: language lane (transpiler) · medium · Next: the cost corpus, then the
   - A rule over a trait row is volatile and judged every tick. A rule that
     compares a clock row with thresholds (the city's `citizen-phase-*`) could
     carry the tick its comparison next changes, as a `$tick` deadline does.
+  - A channel read for the body bound to `$each` (`channel(each, interact)`)
+    is volatile, so every press and toggle written as a rule over a set
+    (`forEach: $players`, `forEach: region(reach)`) is judged every tick over
+    the set's members: `WorldRuleHost.ScheduleFact` watches a channel as one
+    value derived with no binding in place. Versioning each body's composed
+    channels (a per-body source the input derivation moves, read as
+    `FactRead.EachBody`) makes those rules visited only for the body whose
+    channel moved. *Check:* `world.budget.rules --spent` on a headless debug
+    boot shows `suit-toggle` and `moonDoor-offer` elided on ticks with no
+    input.
   The sheet also proves a firing closes its own gate in two shapes only
   (`RuleResponse.ClosesItself`); a transition written another way is priced as
   firing every tick.

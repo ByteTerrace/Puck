@@ -76,8 +76,14 @@ bodies). `forEach: region(placement)` (document form `$region:<id>`,
 `WorldRegionIteration`) iterates the bodies inside a placement's region,
 ascending, each bound as a body index: a rule about a place costs its
 occupants, priced at the region's `capacity`
-(`WorldRuleWorkBudget.RegionSweepCapacity`), and is visited when the
-occupants change or something its bindings read moves. `maxFirings: n` on an iterating rule ends its sweep after `n` firings,
+(`WorldRuleWorkBudget.RegionSweepCapacity`), and is visited in full when the
+occupants change and otherwise per occupant whose own fact or cell moved.
+`forEach: $players` (`WorldPlayerIteration`) iterates the bodies players hold,
+a local seat's or an admitted visitor's wherever admission placed it,
+ascending, priced at `localSeats + networkPlayers`: the form for a rule about
+what any player does, never a `for b in range(...)` copy per body index. A
+press at a plate or door is a `forEach: region(<reach>)` rule gated on
+`channel(each, interact)` over a reach region (`worlds/debug/reach.puck`). `maxFirings: n` on an iterating rule ends its sweep after `n` firings,
 leaving later bindings' latches untouched, and the work sheet prices its
 firings at `n`; author it where the gate already admits that few (a batch
 window over a distinct ordinal row, one held piece), since an over-priced
