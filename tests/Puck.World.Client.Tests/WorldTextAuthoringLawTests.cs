@@ -653,6 +653,7 @@ public sealed class WorldTextAuthoringLawTests {
         var decals = new WorldScreenDecals(
             catalog: () => fonts,
             colors: new WorldBakedColors(mirror: mirror),
+            screens: 1,
             textAt: static index => ((index == 0)
                 ? new WorldScreenSource.Text(
                     Lines: ["{state.discovered}"],
@@ -716,7 +717,7 @@ public sealed class WorldTextAuthoringLawTests {
 
         mirror.Install(engineTick: 0, tick: 0);
         var fonts = FontAtlasCatalogPacker.Pack("body", new Dictionary<string, FontAtlas> { ["body"] = AtlasForText(text: "X") });
-        var decals = new WorldScreenDecals(catalog: () => fonts, colors: new WorldBakedColors(mirror: mirror),
+        var decals = new WorldScreenDecals(catalog: () => fonts, colors: new WorldBakedColors(mirror: mirror), screens: 1,
             textAt: index => ((index == 0) ? source : null));
 
         Assert.Equal((columns ?? 1), decals.Providers[0]()!.Columns);
