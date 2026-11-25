@@ -636,31 +636,16 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{path} is structure, which a key never states; keys move values, and a count, seed, kind, name, slot or frame is the same at every key.");
         }
     }
-    // A section key states the literal a field holds at its time. A member that keys the field itself keeps its own
-    // keys (WorldRenderKeys), so a section key never competes with them.
-    private static void RequireKeyScalar(BindableScalar? value, string path, List<string> errors) {
-        if ((value is { } stated) && (stated.Literal is null)) {
-            errors.Add(item: $"{path} must be a literal: a section key states the value the field holds at its time, never a binding or keys of its own.");
-        }
-    }
-    private static void RequireKeyColor(BindableColor? value, string path, List<string> errors) {
-        if ((value is { } stated) && (stated.Literal is null)) {
-            errors.Add(item: $"{path} must be a #RRGGBB or #RRGGBBAA literal: a section key states the value the field holds at its time, never a binding or keys of its own.");
-        }
-    }
-    private static void RequireKeyDirection(BindableDirection? value, string path, List<string> errors) {
-        if ((value is { } stated) && (stated.Literal is null)) {
-            errors.Add(item: $"{path} must be a literal [x, y, z]: a section key states the value the field holds at its time, never keys of its own.");
-        }
-    }
-    private static void RequireKeyVector(BindableVector2? value, string path, List<string> errors) {
-        if ((value is { } stated) && (stated.Literal is null)) {
-            errors.Add(item: $"{path} must be a literal [x, y]: a section key states the value the field holds at its time, never keys of its own.");
-        }
-    }
-    private static void RequireKeyVector(BindableVector3? value, string path, List<string> errors) {
-        if ((value is { } stated) && (stated.Literal is null)) {
-            errors.Add(item: $"{path} must be a literal [x, y, z]: a section key states the value the field holds at its time, never keys of its own.");
+    // A section key states the literal a field holds at its time, in the field's own literal form. A member that keys
+    // the field itself keeps its own keys (WorldRenderKeys), so a section key never competes with them.
+    private static void RequireKeyScalar(BindableScalar? value, string path, List<string> errors) => RequireKeyLiteral(errors: errors, form: "a literal", path: path, stated: (value is { Literal: null }));
+    private static void RequireKeyColor(BindableColor? value, string path, List<string> errors) => RequireKeyLiteral(errors: errors, form: "a #RRGGBB or #RRGGBBAA literal", path: path, stated: (value is { Literal: null }));
+    private static void RequireKeyDirection(BindableDirection? value, string path, List<string> errors) => RequireKeyLiteral(errors: errors, form: "a literal [x, y, z]", path: path, stated: (value is { Literal: null }));
+    private static void RequireKeyVector(BindableVector2? value, string path, List<string> errors) => RequireKeyLiteral(errors: errors, form: "a literal [x, y]", path: path, stated: (value is { Literal: null }));
+    private static void RequireKeyVector(BindableVector3? value, string path, List<string> errors) => RequireKeyLiteral(errors: errors, form: "a literal [x, y, z]", path: path, stated: (value is { Literal: null }));
+    private static void RequireKeyLiteral(bool stated, string form, string path, List<string> errors) {
+        if (stated) {
+            errors.Add(item: $"{path} must be {form}: a section key states the value the field holds at its time, never a binding or keys of its own.");
         }
     }
 }

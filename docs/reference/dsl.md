@@ -564,7 +564,9 @@ that carries a dimension into a field that admits none is PUCK024. Which of a do
 or an angle is that document's own vocabulary (`WorldDocumentEmitterUnits.Classify` says `delaySeconds` is a time);
 what a unit measures and is worth is `UnitConversion`'s, the one table, which a second vocabulary reuses. A unit
 converts to its canonical unit where it is written: metres, seconds, lumens, candela, kelvin, and an angle in degrees
-where its field holds degrees (`yawDegrees: 0.5rad`) and in radians everywhere else.
+where its field holds degrees (`yawDegrees: 0.5rad`) and in radians everywhere else. An argument to an author's
+`function` fills no field: it admits any dimension, converts there (an angle to radians), and carries its dimension
+into the body, which is judged where the body fills a field (`walkableOver(..., districtReach, ...)` in the city).
 
 `schedule <row> in 250ms` reads its delay as the value `scheduleState(delaySeconds: 250ms)` takes, so it converts
 against the same field and accepts the same expressions (a number, a template parameter, arithmetic); the two

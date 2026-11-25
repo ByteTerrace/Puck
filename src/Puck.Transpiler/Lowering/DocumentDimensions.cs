@@ -43,7 +43,16 @@ public static class DocumentDimensions {
     /// <summary>The field key a trigonometric function's argument is lowered under: an angle, written in
     /// radians.</summary>
     public const string AngleArgument = "$angle";
+    /// <summary>The field key an author's <c>function</c> argument is lowered under: no field, so a value of any
+    /// dimension is admitted there in its canonical unit (an angle in radians), and the dimension travels with the
+    /// argument into the body (<see cref="Carry"/>), which is judged where the body fills a field.</summary>
+    public const string ArgumentPosition = "$argument";
     private const int MaximumDepth = 64;
+
+    // A function argument's lowered value, which its body reads as a local, keyed to the dimension the argument carried.
+    // The same node is the same value wherever it is read, so it carries one dimension.
+    [SideTable(reason: "records the dimension a function argument carried into the body that reads it")]
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<JsonNode, object> Carried = new();
     private static readonly PhysicalDimension Angle = new(Angle: 1);
 
     [ThreadStatic]
@@ -58,7 +67,7 @@ public static class DocumentDimensions {
         ArgumentNullException.ThrowIfNull(scope);
 
         return fieldKey switch {
-            null => UnitDimension.None,
+            null or ArgumentPosition => UnitDimension.None,
             AngleArgument => UnitDimension.Radians,
             _ => scope.Vocabulary.ClassifyField(fieldKey: fieldKey),
         };
@@ -85,7 +94,7 @@ public static class DocumentDimensions {
 
         var inferred = Infer(expression: expression, scope: scope);
 
-        if (inferred.Knowledge != DimensionKnowledge.Known) {
+        if ((inferred.Knowledge != DimensionKnowledge.Known) || (fieldKey == ArgumentPosition)) {
             return;
         }
 
@@ -113,6 +122,19 @@ public static class DocumentDimensions {
                 message: $"{FieldName(fieldKey: fieldKey)} admits no unit, but this value is {Spelling(dimension: inferred.Dimension)}; remove the unit",
                 span: expression.Span
             );
+        }
+    }
+    /// <summary>Records the dimension a function argument carries on the value its body reads as a local, so the body's
+    /// fields judge the dimension the argument was written with.</summary>
+    /// <param name="argument">The argument as written.</param>
+    /// <param name="scope">The caller's scope.</param>
+    /// <param name="value">The argument's lowered value, or <see langword="null"/>.</param>
+    public static void Carry(ExpressionNode argument, DocumentScope scope, JsonNode? value) {
+        ArgumentNullException.ThrowIfNull(argument);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        if ((value is not null) && (Infer(expression: argument, scope: scope) is { Knowledge: DimensionKnowledge.Known } inferred)) {
+            Carried.AddOrUpdate(key: value, value: inferred.Dimension);
         }
     }
     /// <summary>Returns whether a <c>let</c>'s annotated value is read in its unit: a free value is (<c>let reach: cm
@@ -215,6 +237,10 @@ public static class DocumentDimensions {
     // and a let or a template's argument is inferred from its expression where it was written.
     private static InferredDimension Identifier(string name, DocumentScope scope) {
         if (scope.Locals.TryGetValue(key: name, value: out var local)) {
+            if ((local is not null) && Carried.TryGetValue(key: local, value: out var carried)) {
+                return InferredDimension.Of(dimension: ((PhysicalDimension)carried));
+            }
+
             return ((local is JsonValue value) && DocumentLowering.TryReadNumber(node: value, number: out _))
                 ? InferredDimension.Free
                 : InferredDimension.Unknown;

@@ -194,20 +194,4 @@ public static class WorldKeyedValues {
             }
         }
     }
-    /// <summary>Visits a track and every track its keys nest, depth first, each once.</summary>
-    /// <param name="track">The track, or <see langword="null"/> for none.</param>
-    /// <param name="visit">Called with each track.</param>
-    public static void VisitTracks(IWorldKeyTrack? track, Action<IWorldKeyTrack> visit) {
-        ArgumentNullException.ThrowIfNull(argument: visit);
-
-        if (track is null) {
-            return;
-        }
-
-        visit(obj: track);
-
-        for (var index = 0; (index < track.Count); index++) {
-            VisitTracks(track: track.NestedAt(index: index), visit: visit);
-        }
-    }
 }

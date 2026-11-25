@@ -3916,9 +3916,9 @@ what they leave open:
 
 - [medium] Template and function parameters take no unit annotation
   (`template lift(height: m = 2)`), so a dimension crosses a call only when the
-  argument carries it; a call to an author's `function` infers as unknown. The
-  annotation would check the argument at the binding (`DocumentScope.BindArgument`)
-  as a `let`'s is checked (`DocumentDimensions.ReadsInUnit`).
+  argument carries it (`DocumentDimensions.Carry`), and the value a call to an
+  author's `function` returns infers as unknown. The annotation would check the
+  argument at the binding as a `let`'s is checked (`DocumentDimensions.ReadsInUnit`).
 - [medium] The world's field table (`WorldDocumentEmitterUnits.Classify`)
   classifies fields by name and holds no compound dimension, so a speed or an
   angular rate field (`moveSpeed`, a sky layer's `spin`) admits no unit. Deriving

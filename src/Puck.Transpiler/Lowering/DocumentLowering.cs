@@ -599,7 +599,11 @@ public static partial class DocumentLowering {
         var locals = new Dictionary<string, JsonNode?>(comparer: StringComparer.Ordinal);
 
         for (var at = 0; (at < bound.Length); at++) {
-            locals[function.Parameters[at].Name] = EvaluateValue(expr: ((bound[at] >= 0) ? call.Arguments[bound[at]].Value : function.Parameters[at].DefaultValue!), fieldKey: null, scope: scope);
+            var argument = ((bound[at] >= 0) ? call.Arguments[bound[at]].Value : function.Parameters[at].DefaultValue!);
+            var value = EvaluateValue(expr: argument, fieldKey: DocumentDimensions.ArgumentPosition, scope: scope);
+
+            DocumentDimensions.Carry(argument: argument, scope: scope, value: value);
+            locals[function.Parameters[at].Name] = value;
         }
         var functionSource = DocumentScope.DefinitionPathOf(value: function);
         var useSite = ((functionSource is not null)
