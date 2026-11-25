@@ -431,13 +431,13 @@ channel's release objects already do.
 
 **A cache set fits by identity, never by commit.** The mesh bake identity
 hashes the bake's code and kernel bytecode, so every machine that built the
-same bake from the same sources computes it. A consumer build never derives a
-mesh (the owner's ruling: the consumer machine runs what a player runs and
-never cold-bakes), so a set that misses any group the release's world needs,
-whether its identity moved or its world documents changed, does not ship: the
-`player` job holds the channel's publish for that build and names the miss,
-and the lead produces the set before the release is retried. The job fails and
-the deploy does not; the channel keeps its last complete release. Whether the
+same bake from the same sources computes it. A player can bake (the owner's
+ruling, correcting an agent's overstated "a consumer build never derives a
+mesh"): a set is a warm start, never a precondition. When no set matches a
+build's identity, or a set misses groups the release's world needs, the
+`player` job warns and the channel still ships; the player's machine derives
+what the channel did not carry, on its play bar, and the lead produces the
+set for the next release when it pays. Whether the
 documents moved is read without a GPU: a set's record carries the hashes of the
 groups its world planned, and the release compares its own world's plan
 (`WorldCachePlan`, from the rest scene `puck mesh audit` also plans). The plan
@@ -474,8 +474,8 @@ the world's documents author, so no target, distance or budget can ask a tier
 the set lacks, and the set no longer depends on which targets it was made for.
 A dynamic group's mesh is stored under its form as well as its posed geometry,
 so a body at another pose loads it. A player's build then runs the stored
-policy: where a tier is missing it draws the nearest stored one and never bakes
-it, and an entry its memory has no room to read is held (the tier it draws
+policy: where a tier is missing it draws the nearest stored one rather than
+waiting on a bake, and an entry its memory has no room to read is held (the tier it draws
 stays) or read again, never baked. Only two things bake. A shape the store holds no tier of does, because nothing
 else can draw it: a world whose rules make new static geometry in play (dealt
 cards, set type) bakes that geometry on any machine. So does live geometry, a
