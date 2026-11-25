@@ -322,18 +322,13 @@ public sealed class CommandEcho {
             value: index
         );
 
-        while (
-            (index < line.Length) &&
-            char.IsWhiteSpace(c: line[index])
-        ) {
-            index++;
-        }
-
-        if (index >= line.Length) {
+        if (line.AsSpan(start: index).IndexOfAnyExceptWhiteSpace() is not (var skip and >= 0)) {
+            index = line.Length;
             token = string.Empty;
 
             return false;
         }
+        index += skip;
 
         var builder = new StringBuilder();
         var quoted = false;

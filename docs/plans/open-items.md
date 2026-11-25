@@ -5057,16 +5057,6 @@ their lane order; this packet keeps the single duplicates and leads.
     changes. Read the done line's `retier`, `observe` and `dress` holds on a clean
     cold bake, then keep the aggregates the decision sums and the kept floors'
     names incrementally.
-  - **Commands: one whitespace token rule.** [low] `CommandRegistry.LeadingVerb`
-    and `CommandRegistry.Tokenize`, `WorldCommandArguments.EndOfToken` and
-    `WorldCommandArguments.LastTokenStart`, and `CommandEcho.TryReadToken`
-    each scan `char.IsWhiteSpace` runs by hand, and three comments say they
-    must agree. The comment in `WorldCommandArguments` gives the reason for
-    scanning as "not a listed set"; .NET 11 ships that exact set as span
-    searches (`IndexOfAnyWhiteSpace`, `IndexOfAnyExceptWhiteSpace`). Have the
-    three share one token-rule helper built on them and delete the comment's
-    reason. Command lines are short, so this unifies a rule and claims no
-    speed.
   - **MCP: two uncancelled timeouts.** [low] `OperatorMcpFront.RunAsync`
     waits twice with `Task.WhenAny` over a `Task.Delay` that nothing cancels
     when the other task wins, the shape analyzer CA2027 names. Replace each
