@@ -270,13 +270,6 @@ Left open, in the order they matter to the trip:
     crossing no longer depends on them; two bodies meeting across a seam
     still do. The tape needs the contact band's content: the neighbour's
     bodies within reach of the seam, and its definition's identity.
-11. **A re-drive of the tick a seat boards on diverged** in the boot world's
-    input: the routed input from the pilot to the ship records the
-    population's revision, 2 live and 3 replayed
-    (`WorldTick.AppendRoutedInputHash`). Boarding on the ground reproduces
-    (`moon-trip-tests.puck`, `puck test --reproduce`); the recorded divergence
-    boarded in the air near the seam in the debug world, which no committed
-    scenario yet reaches.
 
 ## The owner's rulings
 

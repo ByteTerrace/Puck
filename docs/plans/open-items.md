@@ -215,7 +215,7 @@ defects, not looks.
    with `memory`); altitude in the air, so sky, fog and exposure fade from
    blue through the limb to black (the view clock in the plan's gap 5); a
    pilot camera rig the seat takes while it drives a body; boost on a
-   scripted tape so a flight is one line; the boarding re-drive's divergence.
+   scripted tape so a flight is one line.
    Success line: a recorded continuous round trip, pad to moon landing and
    back, presented in motion on D3D12 and Vulkan with no visible seam.
    It owns [a hosted world on a client](#a-hosted-world-on-a-client) (M1):

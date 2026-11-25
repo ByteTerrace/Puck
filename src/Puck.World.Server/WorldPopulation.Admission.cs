@@ -399,18 +399,7 @@ public sealed partial class WorldPopulation {
                 entry.Parked = true;
                 entry.ParkedUntilTick = null;
             } else if (m_reconnectGraceTicks.IsZero) {
-                entry.Body = null;
-                entry.Active = false;
-                entry.IsRemoteHuman = false;
-                entry.IsAuthorityTransferred = false;
-                entry.PlacementId = null;
-                entry.AdmissionInstalledGrantTemplates = [];
-                entry.AdmissionRevokedKeys.Clear();
-                entry.IdentityDomain = string.Empty;
-                entry.IdentitySubject = string.Empty;
-                entry.AdmissionTrust = null;
-                entry.Parked = false;
-                entry.ParkedUntilTick = null;
+                entry.Retire(clearAdmission: true);
             } else {
                 entry.Parked = true;
                 entry.ParkedUntilTick = unchecked((((long)tick) + m_reconnectGraceTicks.Ticks));
@@ -718,23 +707,7 @@ public sealed partial class WorldPopulation {
     }
 
     // The full-teardown half of an expired park, shared by both the rescan and the plain table drain below it.
-    private static void RetireParkedEntry(Entry entry) {
-        entry.Body = null;
-        entry.Active = false;
-        entry.Parked = false;
-        entry.ParkedUntilTick = null;
-        entry.IsAuthorityTransferred = false;
-        entry.PlacementId = null;
-
-        if (entry.IsRemoteHuman) {
-            entry.IsRemoteHuman = false;
-            entry.AdmissionInstalledGrantTemplates = [];
-            entry.AdmissionRevokedKeys.Clear();
-            entry.IdentityDomain = string.Empty;
-            entry.IdentitySubject = string.Empty;
-            entry.AdmissionTrust = null;
-        }
-    }
+    private static void RetireParkedEntry(Entry entry) => entry.Retire(clearAdmission: entry.IsRemoteHuman);
 
     // The placement an inhabitant binds to in a definition, and its kit: false when the placement is gone, carries no
     // inhabit facet, or names a kit that does not resolve, which retires the inhabitant.
@@ -1267,22 +1240,11 @@ public sealed partial class WorldPopulation {
 
         m_actionStateLane.Input?.DepartBody(slot);
         profile = body.Profile;
-        entry.Body = null;
-        entry.Active = false;
-        entry.Parked = false;
-        entry.ParkedUntilTick = null;
         ClearDesignations(entry: entry);
-        entry.PlacementId = null;
-        entry.IsAuthorityTransferred = false;
-        if (entry.IsRemoteHuman) {
-            entry.IsRemoteHuman = false;
-            entry.AdmissionInstalledGrantTemplates = [];
-            entry.AdmissionRevokedKeys.Clear();
-            entry.IdentityDomain = string.Empty;
-            entry.IdentitySubject = string.Empty;
-            entry.AdmissionTrust = null;
-            m_simulatedCount = CountActiveCensus();
-        }
+        var remoteHuman = entry.IsRemoteHuman;
+
+        entry.Retire(clearAdmission: remoteHuman);
+        if (remoteHuman) { m_simulatedCount = CountActiveCensus(); }
         m_revision++;
 
         return true;
