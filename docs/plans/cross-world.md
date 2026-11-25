@@ -198,19 +198,21 @@ and an eclipse is a rule over the delayed rows.
 One engine limit the toys met is fixed with them: a solid placement attached
 to a body collides under the field contact provider, as it did under the
 analytic one (the pebble's ball rides its body in a world of field solids). A
-second is changed and not yet shown to work: a grounded body whose up follows
-its surface now gives that up back to a field that has come to pull it off the
-surface (`StandsBySurface` in `WorldBody`), which is the first open item below.
+second is a kit body's gravity: it takes the field as a vector, its component
+along the body's up in the vertical channel and the rest in a ballistic
+tangent the drive never shapes, and it stands only on a surface the field
+presses it onto (`ApplyHoldGravity`, `FieldHoldsOn` and `SetUp` in
+`WorldBody`). So a field turned over or across under a standing body carries
+it, turning, to the surface the field now holds it on, and a tide too faint to
+turn a walker's up still draws her along the tensor.
 
 What has run: `galaxy-tests.puck` (a drop onto home's side, two launches, the
-turnover's switch, the pebble's orbit and its return to the rails), and, in a
-headless debug world driven over its console, the sun's switch (the moon's
-received light reads dark while the valley's still reads full, then both) and
-the bottle world's lever (the debug world's vector changes at once and the
-bottle world's a second later). What is authored and has not run:
-`tide-tests.puck` and `gravity-worlds-tests.puck`, so the tide (mechanism 7),
-a walk through either new painting and both scenarios' reproduction are
-unproven until they do.
+turnover's flip carrying the body to the ceiling, the pebble's orbit and its
+return to the rails), `tide-tests.puck` (two marbles and a walker drifting as
+the tensor says, and nothing moving once the mass is gone) and
+`gravity-worlds-tests.puck` (a walk through the galaxy painting, the bottle
+world's lever standing the visitor on the west wall a second after it turns,
+and the sun's dark reaching the moon before the valley).
 
 ### The toy worlds
 
@@ -227,17 +229,7 @@ by a `puck test --reproduce` scenario.
 
 In the order they matter:
 
-0. **The turnover does not lift a body off its floor.** The pad writes
-   `turnoverPull` to -1 and the area's pull turns up, but the body is still
-   grounded below the ceiling eight seconds later (`galaxy-tests.puck` asserted
-   a height over 31 m and failed; the assertion is removed and the scenario now
-   claims only the row). The cause is not found. Where to look: `ResolveUp`'s
-   steer through the antipodal turn while the body is grounded, the ground
-   hold's cone against the new gravity-up, and whether the body slid off the
-   slab while its up turned. *Check:* restore the height assertion and read
-   `body.where` each second after the flip. The same question decides whether
-   the bottle world turns a standing visitor over.
-1. **A body leaves the rails at rest and rejoins the orbit it left.** An orbit
+0. **A body leaves the rails at rest and rejoins the orbit it left.** An orbit
    is authored elements; taking a body off it (`riding` to zero) leaves the body
    to its kit from a standstill, and putting it back closes on the same orbit
    at the join speed. The fit that gives a perturbed body the orbit it is now
@@ -249,30 +241,22 @@ In the order they matter:
    velocity and a rejoining one hands the fit its own. *Check:* a pebble
    knocked off its orbit by a rule's impulse rides a different orbit after it
    settles, the same one on a second run and after a checkpoint restore.
-2. **A kit body feels a tide's size and not its direction.** A kit body
-   integrates the field's magnitude along its own up, and a field under a metre
-   a second squared does not turn that up, so a tide moves a walker or a ship
-   along the up it has; a rigid body takes the vector (`tide-tests.puck` uses
-   marbles for that reason). A ship coasting between worlds should drift as the
-   tensor says. The fix is the vector applied to a kit body's velocity where
-   the field is too faint to be its up. *Check:* a ship parked beside the
-   moon's reach drifts along the line to the planet.
-3. **The valley's own sun does not dim.** The valley follows the sun's light
+1. **The valley's own sun does not dim.** The valley follows the sun's light
    (`sunLight` in `sun-watch.puck`) and nothing there reads it yet: its key
    light is a chain of two keyed tracks (the day and the viewer's height), and
    the received light is a third factor that chain has to take. The moon's key
    light, a single track, does dim. *Check:* `sun.switch 0` darkens the valley
    floor a little over half a second after the moon in its sky.
-4. **Eclipses.** The moon's phase is the shared day's; an eclipse (the planet
+2. **Eclipses.** The moon's phase is the shared day's; an eclipse (the planet
    between the sun and the moon) is a keyed track over the day that multiplies
    the received light, authored from the three bodies' places in
    `moon-frame.puck`. Not authored yet.
-5. **A delayed follow's values in flight are host memory.** A restored
+3. **A delayed follow's values in flight are host memory.** A restored
    authority delays again from its next observation, so a value in flight at
    the checkpoint arrives late by up to one delay. Carrying the line in the
    checkpoint closes it. *Check:* a restore between a leader's write and its
    arrival delivers it at the tick an unrestored run does.
-6. **Laws.** `FixedConicOrbit` and `GravityTide` carry no law in
+4. **Laws.** `FixedConicOrbit` and `GravityTide` carry no law in
    `tests/Puck.Maths.Tests` or `tests/Puck.Physics.Tests`. The properties worth
    one: the Kepler solve's residual at every phase below the eccentricity
    ceiling, the fit's round trip, and the tide against the difference of two

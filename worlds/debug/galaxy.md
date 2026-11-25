@@ -26,7 +26,9 @@ travels to a placement.
 | Pipe | A tube walked on the inside | An `axial` area that pushes outward | On the tube's ceiling: walk round the inside |
 
 In the turnover, the pad at the far end of the floor writes `turnoverPull` to
--1, which turns the pull up; the pad on the ceiling writes it back. A body standing on the floor is not yet lifted to the ceiling ([left open](../../docs/plans/cross-world.md#left-open)).
+-1, which turns the pull up; the pad on the ceiling writes it back. A body
+standing on the floor rises straight to the ceiling, turning over on the way,
+and stands on it.
 
 A pebble moon circles home on rails (`gravity.orbits`): its position is the
 orbit's closed form at every tick, and it carries a small pull of its own, so

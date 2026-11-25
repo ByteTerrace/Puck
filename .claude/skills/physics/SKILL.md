@@ -166,18 +166,32 @@ same change.
   checkpoint restore. Restore keeps the captured sample; the next tick reads the restored arena.
 - **Workspaces are reused and not thread-safe.** The hierarchical gravity
   solvers and navigation domains allocate once and keep their arrays.
-- **A kit body feels a field's magnitude along its own up; a rigid body feels
-  the vector.** `ApplyHoldGravity` integrates the solved magnitude along the
-  body's up, and the up turns toward the field only at a metre a second
-  squared and above (`MinFieldUpMagnitude`). A faint field (a tide, open
-  space) therefore moves a kit body along the up it already has.
-- **A standing body's up is its surface until the field pulls it off.**
-  Under `GradientDerivedUp` a grounded body keeps the surface's up while the
-  field presses it on (`WorldBody.StandsBySurface`, asked by `ResolveUp` and by
-  the contact phase's adoption of the measured normal). A field that turns to
-  pull it away gives the axis back to the field. That change does not yet lift
-  a standing body off its floor
-  ([left open](../../../docs/plans/cross-world.md#left-open)).
+- **Every body feels the field as a vector.** A rigid body integrates it. A kit
+  body splits it in `ApplyHoldGravity`: the signed component along its up
+  drives the vertical channel (a field pulling toward the head lifts the body
+  and clears `m_grounded`, as a jump does), and the rest fills
+  `m_ballisticTangent`, the airborne velocity across the up that the drive
+  never shapes. The up turns toward the field only at a metre a second squared
+  and above (`MinFieldUpMagnitude`), so a faint field (a tide) moves a kit body
+  through the tangent without turning it.
+- **An airborne body's ballistic velocity is world truth.** `SetUp` re-expresses
+  the vertical channel and the tangent against a new up with their sum
+  unchanged, and carries only the drive's planar velocity with the frame; on
+  the ground the vertical channel turns with the surface. The tangent ends on
+  the ground, in a hold that owns the vertical channel, at a teleport or
+  exclusive move, and at every world-space write (`SplitVelocity` hands it to
+  the planar channel); a transfer carries it as planar velocity. It is a
+  `BodyMotionSection` field, so checkpoints and a refused sweep keep it.
+- **Ground is what the field presses the body onto.** `FieldHoldsOn` accepts a
+  contact normal within the world's walkable slope of the field's up (any
+  normal under no field or one too faint to orient); the contact phase grounds
+  a body only on such a surface, so a floor a field turned over or across is
+  slid off, not stood on. Under `GradientDerivedUp` a grounded body keeps its
+  surface's up while that holds (`StandsBySurface`, asked by `ResolveUp` and by
+  the contact phase's adoption of the measured normal); otherwise the field
+  steers the up while the body travels to the surface the field now holds it on.
+  The hold system's walkable reads (`WalkableUnderHoldUp`) measure from
+  `HoldGravityUp`, the same axis its cones use.
 - **A moving solid is one root.** A solid placement attached to a body, or
   sized by state, is a root of the moving set (`WorldColliderSet.Build`'s
   `movingOnly` rows) under either provider; the field provider's static
