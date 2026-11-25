@@ -368,14 +368,20 @@ background job whole before the frame submitted after it, so the jobs queued
 ahead of one frame together fit one frame's allowance: each take is handed what
 is left of `SdfGpuWorkBudget.FrameAllowanceSeconds` after the charged jobs
 still in flight on the queue, whichever residency's service submitted them
-(`SdfGpuWorkBudget.Allowance`, an `SdfGpuWorkAllowance`), and while work is
+(`SdfGpuWorkBudget.AllowanceOf`, an `SdfGpuWorkAllowance`), and while work is
 queued a client takes no job priced past it, deciding before it takes
 anything. A client whose job waits for room keeps its turn in its service, so
 the bake's batches, cut to whatever is left, do not starve the irradiance
 volume's queries, which the coordinator cuts to the whole allowance. A job with
 nothing queued ahead of it runs whatever its price, so a
 bake lattice larger than the allowance (a lattice is never split) still runs,
-alone. Jobs are cut at their kind's measured rate (`SdfGpuWorkRate`): the
+alone. While the frame is over its period (`over-period:yes`) such a job runs
+only once the share has paid for it: the first service whose job does not fit
+holds the budget (`SdfGpuWorkBudget.Hold`, `holding:` on the `work-budget`
+line), the credit banks the job's price at the share's rate while every other
+budgeted job waits, and the holder's next take then runs alone. A device whose
+frames stay over their period still lands every lattice, at the share's pace,
+and its bakes settle. Jobs are cut at their kind's measured rate (`SdfGpuWorkRate`): the
 irradiance volume's traces and relights, and the bake's batches, whose rate
 follows the mean because a batch mixes groups whose evaluations differ in
 cost. The `work-budget` line prints what is queued (`queued:`), and the

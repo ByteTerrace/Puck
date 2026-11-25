@@ -496,24 +496,34 @@ public sealed partial class SdfMeshPathBake {
     /// keeping the detail moving. A wait that releases unsettled prints it.</summary>
     /// <returns>The reasons, or an empty string when the bake is settled.</returns>
     public string DescribeUnsettled() {
+        const int NamedUnsettled = 4;
+
         using (EnterGate(site: BakeGate.Read)) {
             var parts = new List<string>();
 
             if (m_ahead.Count > 0) { parts.Add(item: $"{m_ahead.Count} product(s) landing ahead of the draws"); }
             if ((m_program is not null) && (m_dressedRevision != m_productRevision)) { parts.Add(item: "a landed product the dressed frame has not taken"); }
             if (m_slice is not null) { parts.Add(item: "a field slice sampling"); }
-            if (m_successors > 0) { parts.Add(item: $"{m_successors} successor(s) waiting"); }
+            if (m_successors > 0) {
+                // The groups holding them, by what keeps each from done, since Promote starts a successor only once its
+                // group is.
+                var holders = m_inputReaders.Select(selector: index => m_groups[index]).Where(predicate: static group => group.Successor is not null).Take(count: NamedUnsettled).Select(selector: static group => group.State());
+
+                parts.Add(item: $"{m_successors} successor(s) waiting [{string.Join(separator: "; ", values: holders)}]");
+            }
             if (m_firstDetailsOwed > 0) { parts.Add(item: $"{m_firstDetailsOwed} first detail(s) owed"); }
 
             var baking = 0;
             var live = 0;
+            var named = new List<string>();
 
             for (var index = DoneThrough(); (index < m_groups.Count); index++) {
                 if (m_groups[index].Done) { continue; }
                 baking++;
                 if (m_groups[index].Live) { live++; }
+                if (named.Count < NamedUnsettled) { named.Add(item: m_groups[index].State()); }
             }
-            if (baking > 0) { parts.Add(item: $"{baking} group(s) baking ({live} live)"); }
+            if (baking > 0) { parts.Add(item: $"{baking} group(s) baking ({live} live) [{string.Join(separator: "; ", values: named)}]"); }
             if (!DetailSettled && m_detailHold.Holds) { parts.Add(item: $"detail held: {m_detailHold}"); }
             return string.Join(separator: "; ", values: parts);
         }
@@ -3295,6 +3305,36 @@ public sealed partial class SdfMeshPathBake {
 
         public bool QueueWork() {
             lock (m_lifecycle) { if (Retired) { return false; } m_jobs++; return true; }
+        }
+        // Where the group stands in its bake, for a wait that releases unsettled (SdfMeshPathBake.DescribeUnsettled): its
+        // place and tier, then each state that keeps it from done. Under the bake's gate.
+        public string State() {
+            var line = new System.Text.StringBuilder();
+
+            _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"{Selector}/{(Dynamic ? "slot" : "instances")}{(Dynamic ? Slot : Instances)} tier{Tier} shape={(ulong)Shape:x16}");
+            if (Done) { _ = line.Append(value: " done"); }
+            if (Live) { _ = line.Append(value: " live"); }
+            if (!Listed) { _ = line.Append(value: " unlisted"); }
+            if (Retired) { _ = line.Append(value: " retired"); }
+            if (Leader is { } leader) { _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" leader={leader.Selector}{(leader.Done ? "(done)" : string.Empty)}{(leader.Retired ? "(retired)" : string.Empty)}"); }
+            if (Joined is { } joined) { _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" joined={joined.Bake.Residency}{(joined.Resolved ? "(resolved)" : string.Empty)}"); }
+            if (Share is not null) { _ = line.Append(value: " leads-share"); }
+            if (Contouring) { _ = line.Append(value: " contouring"); }
+            if (InFlight) { _ = line.Append(value: " in-flight"); }
+            if (Next is { } next) { _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" next=slab{next.Slab}"); }
+            if (Deferred is not null) { _ = line.Append(value: " deferred-lattice"); }
+            if (Final is not null) { _ = line.Append(value: " final"); }
+            if (Admitted) { _ = line.Append(value: " admitted"); }
+            if (AwaitsStage) { _ = line.Append(value: " awaits-stage"); }
+            if (DeferredReported) { _ = line.Append(value: " admission-deferred"); }
+            if (Replaces is { } replaced) { _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" replaces={replaced.Selector}/tier{replaced.Tier}"); }
+            if (Ahead) { _ = line.Append(value: " ahead"); }
+            if (Fill) { _ = line.Append(value: " fill"); }
+            if (Successor is { } successor) { _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" successor=tier{successor.Tier}"); }
+            if (LoadRetries > 0) { _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" load-retries={LoadRetries}"); }
+            if (Failed) { _ = line.Append(value: " failed"); }
+            _ = line.Append(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $" jobs={Volatile.Read(location: ref m_jobs)}");
+            return line.ToString();
         }
         public void EndWork() {
             lock (m_lifecycle) { m_jobs--; TryRelease(); }

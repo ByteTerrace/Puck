@@ -1104,7 +1104,7 @@ batches are cut to one frame's allowance, and lighting is granted work for
 each second, so a game presenting 30 frames a second gets the lighting of one
 presenting 60. Each job is admitted against the frame's deadline: the jobs
 queued ahead of one frame together fit one frame's allowance
-(`SdfGpuWorkBudget.Allowance`), and the frames background work may have cost
+(`SdfGpuWorkBudget.AllowanceOf`), and the frames background work may have cost
 are counted (`SdfGpuWorkBudget.FramesMissedBehind`, `world.residency`'s
 `frames-behind`). What remains is splitting a bake lattice, and the route
 reading of that count.

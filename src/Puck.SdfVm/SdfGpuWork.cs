@@ -320,7 +320,7 @@ public sealed class SdfGpuWorkDeferredException : Exception {
 /// share (<see cref="Weigh"/>), and a step the turn holds counts as <c>turn-holds</c>.</para>
 /// <para>Invariant: the budgeted jobs queued ahead of one frame together fit one frame's allowance. The service's one
 /// take hands every client what its job may take (<see cref="ISdfGpuWorkClient.TryTake"/>'s <c>allowance</c>): the
-/// budget's live <see cref="SdfGpuWorkBudget.Allowance"/>, the frame allowance less the priced length of every charged
+/// budget's live <see cref="SdfGpuWorkBudget.AllowanceOf"/>, the frame allowance less the priced length of every charged
 /// job still in flight on the presentation's queue, whichever service submitted it, since the queue runs each of them
 /// whole before the frame submitted after it and the jobs ahead of a frame delay it by their sum whatever the average
 /// share; and no bound for a held frame's own work. With the allowance spent, or a client's next job priced past what is
@@ -1041,14 +1041,16 @@ public sealed class SdfGpuWork : IDisposable {
             var allowance = (budgeted ? m_budget.UploadAllowance : MostUploadJobBytes);
             // A held frame queues no frame behind its own work, so its jobs are cut to nothing but their clients' most.
             // Background work fits what the jobs already queued ahead of the next frame leave of its allowance.
-            var fit = (budgeted ? m_budget.Allowance : SdfGpuWorkAllowance.Unbounded);
+            var fit = (budgeted ? m_budget.AllowanceOf(turn: m_turn) : SdfGpuWorkAllowance.Unbounded);
 
             if (fit.Queued && !(fit.Seconds > 0.0)) {
                 m_deadlineHolds++;
                 return Stop.Deadline;
             }
             // With work queued, a client whose next job does not fit what is left takes none and holds the room for it;
-            // a completion of this service's own job wakes it, and another service's frees room by the next pump.
+            // a completion of this service's own job wakes it, and another service's frees room by the next pump. With
+            // nothing queued and the frame over its period nothing will complete to make room, so the job holds the
+            // budget until the share has paid for it (SdfGpuWorkBudget.Hold).
             if (!TryTake(allowance: fit, client: out var client, estimate: out var estimate, held: out var held, job: out var job, tables: tables, uploadBytes: allowance)) {
                 if (!held) {
                     // A service with nothing to take holds no other service to its pace.
@@ -1056,6 +1058,7 @@ public sealed class SdfGpuWork : IDisposable {
                     m_refillRested = true;
                     return Stop.None;
                 }
+                if (budgeted) { m_budget.Hold(seconds: estimate, turn: m_turn); }
                 m_deadlineHolds++;
                 return Stop.Deadline;
             }
@@ -1072,7 +1075,8 @@ public sealed class SdfGpuWork : IDisposable {
         return Stop.None;
     }
     // Offers the clients a take in turn from the one after the last that took. False with held when a client's next job
-    // waits for room while work is queued: that client keeps the turn. An owed take (ISdfGpuWorkClient.TryTakeOwed)
+    // waits for room while work is queued: that client keeps the turn, and the estimate is that job's price, which a hold
+    // banks (SdfGpuWorkBudget.Hold). An owed take (ISdfGpuWorkClient.TryTakeOwed)
     // offers the clients in the service's order and moves no turn, since it comes before every ordinary one.
     private bool TryTake(SdfWorldTables tables, int uploadBytes, SdfGpuWorkAllowance allowance, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out ISdfGpuWorkClient? client, out double estimate, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out object? job, out bool held, bool owed = false) {
         var first = (owed ? 0 : m_nextClient);
@@ -1105,7 +1109,7 @@ public sealed class SdfGpuWork : IDisposable {
         }
         held = (allowance.Queued && (estimate > 0.0));
         client = null;
-        estimate = 0.0;
+        if (!held) { estimate = 0.0; }
         job = null;
         return false;
     }
