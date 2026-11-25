@@ -11,7 +11,7 @@ namespace Puck.Cli.Automation;
 
 /// <summary>Operator-facing release preparation and durable deployment-group inspection commands.</summary>
 public static class WorldReleaseCommand {
-    public static int Prepare(string packageDirectory, string siloPath, string? outputPath, string label, string sourceRevision, string engineImageDigest, string persistenceContract, string peerProtocolContract) {
+    public static int Prepare(string packageDirectory, string siloPath, string? outputPath, string label, string sourceRevision, string engine, string persistenceContract, string peerProtocolContract) {
         if (!Directory.Exists(path: packageDirectory)) {
             throw new DirectoryNotFoundException(message: packageDirectory);
         }
@@ -133,7 +133,7 @@ public static class WorldReleaseCommand {
             CoordinatorContract = WorldReleaseManifest.CurrentCoordinatorContract,
             DefinitionFiles = definitionFiles,
             Definitions = definitions,
-            EngineImageDigest = engineImageDigest,
+            Engine = engine,
             Label = label,
             PeerProtocolContract = peerProtocolContract,
             PersistenceContract = persistenceContract,
@@ -290,23 +290,23 @@ public static class WorldReleaseCommand {
     /// <summary>Creates the <c>world release</c> verb; <paramref name="clock"/> bounds its leases and qualification
     /// runs.</summary>
     /// <param name="clock">The CLI host's clock.</param>
-    /// <param name="containers">The container engine <c>qualify</c> runs its legs in, or <see langword="null"/> for
-    /// Docker.</param>
+    /// <param name="engines">What runs <c>qualify</c>'s legs' installed engines, or <see langword="null"/> to run them as
+    /// processes.</param>
     /// <returns>The verb.</returns>
-    public static Command Create(TimeProvider clock, IWorldReleaseQualificationContainers? containers = null) {
+    public static Command Create(TimeProvider clock, IWorldReleaseQualificationEngines? engines = null) {
         var host = new Option<string?>(name: "--host") { Description = "Installed release host key; defaults to the single installed host.", Recursive = true };
         var package = new Argument<string>(name: "package-directory") { Description = "Package directory containing composed worlds and release artifacts." };
         var silo = new Option<string>("--silo") { Description = "Validated silo configuration whose owner/world rows name the composed definitions; each definition validates beside its documentDirectory, the asset layout it runs in.", Required = true };
         var output = CliOptions.Output(description: "The manifest's path; absent, release.json in the package directory.");
         var label = new Option<string>("--label") { Description = "The release's human-readable label.", Required = true };
         var revision = new Option<string>("--source-revision") { Description = "The full source commit the release was built from.", Required = true };
-        var image = new Option<string>("--engine-image-digest") { Description = "The sha256 digest of the engine image that runs the release.", Required = true };
+        var engine = new Option<string>("--engine") { Description = "The payload identity (sha256/<hex>) of the host release that runs the release, as its signed manifest names it.", Required = true };
         var persistence = new Option<string>("--persistence-contract") { Description = "The persistence contract the release reads and writes, such as puck.world.persistence.v1.", Required = true };
         var peer = new Option<string>("--peer-protocol-contract") { Description = "The peer protocol contract the release speaks, such as puck.world.peer.v1.", Required = true };
         var prepare = new Command(
             description: "Create and verify an immutable hosted-world release manifest.",
             name: "prepare"
-        ) { package, silo, output, label, revision, image, persistence, peer };
+        ) { package, silo, output, label, revision, engine, persistence, peer };
 
         prepare.SetAction(action: parse => Prepare(
             packageDirectory: Path.GetFullPath(path: parse.GetRequiredValue(argument: package)),
@@ -314,7 +314,7 @@ public static class WorldReleaseCommand {
             outputPath: parse.GetValue(option: output),
             label: parse.GetRequiredValue(option: label),
             sourceRevision: parse.GetRequiredValue(option: revision),
-            engineImageDigest: parse.GetRequiredValue(option: image),
+            engine: parse.GetRequiredValue(option: engine),
             persistenceContract: parse.GetRequiredValue(option: persistence),
             peerProtocolContract: parse.GetRequiredValue(option: peer)
         ));
@@ -356,8 +356,8 @@ public static class WorldReleaseCommand {
         var sourceManifest = new Argument<string>(name: "source-manifest") { Description = "The release.json of the release being left." };
         var targetManifest = new Argument<string>(name: "target-manifest") { Description = "The release.json of the release being entered." };
         var fixture = new Argument<string>(name: "fixture-directory") { Description = "The offline fixture whose saved worlds each leg imports." };
-        var sourceImage = new Option<string>("--source-image") { Description = "The engine image of the source release.", Required = true };
-        var targetImage = new Option<string>("--target-image") { Description = "The engine image of the target release.", Required = true };
+        var sourceEngine = new Option<string>("--source-engine") { Description = "The install root holding the source release's host release (puck world host build, installed from its channel).", Required = true };
+        var targetEngine = new Option<string>("--target-engine") { Description = "The install root holding the target release's host release.", Required = true };
         var evidenceDirectory = CliOptions.Output(
             description: "The directory that retains the isolated legs and their qualification evidence.",
             required: true
@@ -368,14 +368,14 @@ public static class WorldReleaseCommand {
             description: "Exercise exact packaged releases in both directions against an offline fixture.",
             name: "qualify"
         ) {
-            sourceManifest, targetManifest, fixture, sourceImage, targetImage, evidenceDirectory, qualificationSteps, assetLayout,
+            sourceManifest, targetManifest, fixture, sourceEngine, targetEngine, evidenceDirectory, qualificationSteps, assetLayout,
         };
 
         qualify.Detail(detail: """
             Exit codes: 0 the pair qualified and its receipt is under --output; 1 the pair was exercised and a leg failed
             its claim (a packaged engine exited nonzero or overran its limit, a report was incomplete, or two imports
             disagreed); 2 a refusal (unreadable manifests, an unsupported pair, an unmarked or mismatched fixture, an
-            image that is not the release's, or a container engine that cannot run a leg).
+            install that does not hold the release's engine, or an engine that cannot start).
             """);
 
         qualify.SetAction(action: async (parse, token) => {
@@ -427,12 +427,12 @@ public static class WorldReleaseCommand {
             var runner = new WorldReleaseQualificationRunner(
                 Path.GetFullPath(path: parse.GetRequiredValue(argument: fixture)),
                 evidence,
-                parse.GetRequiredValue(option: sourceImage),
-                parse.GetRequiredValue(option: targetImage),
+                Path.GetFullPath(path: parse.GetRequiredValue(option: sourceEngine)),
+                Path.GetFullPath(path: parse.GetRequiredValue(option: targetEngine)),
                 parse.GetValue(option: qualificationSteps),
                 archive,
                 clock,
-                containers,
+                engines,
                 ((parse.GetValue(option: assetLayout) is { } layout)
                     ? Puck.Abstractions.PuckPaths.Normalize(path: Path.GetFullPath(path: layout))
                     : null

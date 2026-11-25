@@ -17,7 +17,7 @@ public sealed partial class WorldReleaseCoordinatorSafetyLawTests {
         c: image,
         count: 40
     ),
-        EngineImageDigest = ("sha256:" + new string(
+        Engine = ("sha256/" + new string(
         c: image,
         count: 64
     )),

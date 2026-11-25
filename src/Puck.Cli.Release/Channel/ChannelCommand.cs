@@ -86,7 +86,18 @@ public static class ChannelCommand {
             using var key = await host.LoadSigningKeyAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
             var signed = ReleaseSigner.Sign(manifest: (manifest with { Signature = null }), root: key, sequence: sequence, validity: validity);
 
-            File.WriteAllBytes(path: manifestPath, bytes: JsonSerializer.SerializeToUtf8Bytes(options: DocumentJsonOptions.Shared, value: signed.Manifest));
+            var signedBytes = JsonSerializer.SerializeToUtf8Bytes(options: DocumentJsonOptions.Shared, value: signed.Manifest);
+
+            File.WriteAllBytes(path: manifestPath, bytes: signedBytes);
+            // The signed manifest is also an object of its own, so the release stays installable by its pin
+            // (PinnedReleaseSource) after the channel's manifest moves on; objects are written before any document.
+            var manifestPin = Puck.Assets.ContentPin.Compute(content: signedBytes);
+            var manifestObject = Puck.Assets.ContentAddressedStore.ObjectRelativePath(pin: manifestPin);
+
+            Directory.CreateDirectory(path: Path.GetDirectoryName(path: Path.Combine(path1: tree, path2: manifestObject))!);
+            File.WriteAllBytes(path: Path.Combine(path1: tree, path2: manifestObject), bytes: signedBytes);
+            objects.Add(item: manifestObject);
+            Console.Out.WriteLine(value: $"{Verb}: the signed manifest is object {manifestPin} ({signedBytes.Length} bytes).");
             File.WriteAllBytes(path: Path.Combine(path1: tree, path2: channel, path3: ChannelSubscription.TrustFileName), bytes: ChannelSubscription.SerializeAnchor(anchor: signed.TrustAnchor));
 
             var channelDirectory = Path.Combine(path1: tree, path2: channel);

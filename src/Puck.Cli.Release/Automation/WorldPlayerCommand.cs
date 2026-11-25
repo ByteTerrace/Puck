@@ -26,7 +26,7 @@ public static class WorldPlayerCommand {
     private const string CacheName = Puck.Launcher.Release.PlayerBuildLayout.CacheDirectoryName;
     private const string LogsName = Puck.Launcher.Release.PlayerBuildLayout.LogsDirectoryName;
     private const string LauncherName = Puck.Launcher.Release.PlayerBuildLayout.LauncherDirectoryName;
-    private static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(minutes: 45);
+    internal static readonly TimeSpan BuildTimeout = TimeSpan.FromMinutes(minutes: 45);
 
     /// <summary>One baking boot: the device profile it applies (or the adapter's own, <c>auto</c>) and its window size.</summary>
     /// <param name="Profile">The world's <c>render.devices</c> profile name, or <c>auto</c>.</param>
@@ -395,10 +395,10 @@ public static class WorldPlayerCommand {
     // The launcher a release carries in launcher/: the stub that starts an installed version and the installer that
     // installs and updates one (Puck.Launcher.Setup), each published as one self-contained file, since a consumer machine
     // has no .NET. The installer lays them beside the install's release record.
-    private static void PublishLauncher(string repository, string output) {
+    internal static void PublishLauncher(string repository, string output, string verb = Verb) {
         // The installer first: it references the stub, so the stub publish that follows writes the stub file last.
         foreach (var project in new[] { "src/Puck.Launcher.Setup/Puck.Launcher.Setup.csproj", "src/Puck.Launcher.Stub/Puck.Launcher.Stub.csproj" }) {
-            Console.WriteLine(value: $"{Verb}: publishing {Path.GetFileNameWithoutExtension(path: project)} self-contained into {LauncherName}/.");
+            Console.WriteLine(value: $"{verb}: publishing {Path.GetFileNameWithoutExtension(path: project)} self-contained into {LauncherName}/.");
             _ = CliProcess.RunCheckedAsync(
                 arguments: ["publish", CliOptions.NoNodeReuse, "-m:2", "--disable-build-servers", Path.Combine(path1: repository, path2: project), "-c", "Release", "--nologo",
                     "-p:PuckSelfContained=true", "-p:DebugType=none", "-p:PublishDocumentationFile=false", "-p:PublishReferencesDocumentationFiles=false", "-o", Path.Combine(path1: output, path2: LauncherName)],
@@ -410,7 +410,7 @@ public static class WorldPlayerCommand {
     }
     // An extension installs as the host discovers one (PuckExtensionDiscovery): extensions/<name>/<name>.dll beside its
     // dependency manifest.
-    private static string PublishExtension(string repository, string project, string output) {
+    internal static string PublishExtension(string repository, string project, string output, string verb = Verb) {
         var path = Path.GetFullPath(path: Path.Combine(path1: repository, path2: project));
         var file = (Directory.Exists(path: path) ? Directory.EnumerateFiles(path: path, searchPattern: "*.csproj").SingleOrDefault() : path);
 
@@ -420,7 +420,7 @@ public static class WorldPlayerCommand {
 
         var name = Path.GetFileNameWithoutExtension(path: file);
 
-        Console.WriteLine(value: $"{Verb}: installing the extension {name}.");
+        Console.WriteLine(value: $"{verb}: installing the extension {name}.");
         _ = CliProcess.RunCheckedAsync(
             arguments: ["publish", CliOptions.NoNodeReuse, "--disable-build-servers", file, "-c", "Release", "--nologo", "-o", Path.Combine(path1: output, path2: "extensions", path3: name)],
             fileName: "dotnet",
