@@ -1396,19 +1396,18 @@ what lets every other byte be evictable.
 **The question.** Which CPU copies can go once the GPU copy is resident, and
 what each release needs first.
 
-**Evidence.** A store-published mesh already lets its normals and coarser
-levels' indices go and restores them through one door (`SdfMesh.Hold`) when a
-reader needs them. That door restores only those two planes: its storage
-declines positions, level-zero indices, materials, members and influences
-**[opened]**. Positions, level-zero indices and triangle materials stay, and
-the region reads a mesh's words again through the hold for a flush, a
+**Evidence.** A store-published mesh lets every plane but its members, vertex
+members and influences go once nothing has held it for `SdfMesh.IdleSeconds`,
+and restores them through one door (`SdfMesh.Hold`, the only maker of
+`SdfMesh.Held`, which is the only way to read a plane) when a reader needs
+them. The region reads a mesh's words again through the hold for a flush, a
 relocation, a moved mesh the region cannot copy on the GPU and a landing
-(`SdfMeshRegionStore.MeshWords`); the lighting's trace scene claims every static
-mesh and builds its CPU hierarchy from positions and level-zero indices,
-leaving dynamic and glass meshes out (`SdfMeshDraw.IsStatic`); a
-renumbered variant reads the materials; a device loss lands everything again.
-A hold can also run a restore on its caller or wait for one (the restore's
-`NeedResident`). The mesh library forgets a mesh a residency still holds, so a
+(`SdfMeshRegionStore.MeshWords`); the lighting's trace scene copies each
+static mesh's traced level over the vertices it reaches and each draw mesh's
+traced materials (`SdfMeshIrradianceScene.Geometry`), leaving dynamic and glass
+meshes out (`SdfMeshDraw.IsStatic`); a renumbered variant reads the
+materials; a device loss lands everything again. A hold can also run a restore
+on its caller or wait for one (the restore's `NeedResident`). The mesh library forgets a mesh a residency still holds, so a
 later plan decodes a second copy (`SdfMeshLibrary.TryTake` misses it). Every
 one of these bytes is a cache: the store holds the same planes, and the field
 can derive them again.
@@ -1421,9 +1420,7 @@ hold, and each reader is retired in the order its prerequisite lands.**
 | The library's second copy | Nothing | A payload stays findable while any claim lives, and the library's weight charges cached-only payloads (`MemoryCategory.Cached`) |
 | Native allocator slack | [Step 2](#the-build-order) naming it | Collected when an arrival settles |
 | The composed-document store | Confirming what a reload and a hot reload read: `WorldDefinitionFileSource.ForgetComposedDocuments` has no caller in `src/` | Released after boot where nothing reads it |
-| Dynamic and glass meshes' positions and level-zero indices | The restore widened to those planes, with a mesh's counts, bounds and slices kept apart from the planes they describe; an inventory of every reader by the path it reads on, not by whether the lighting uses it; and a landing that asks for its words ahead and reads them once they are resident | Released through the same door. Relocation, a second residency's landing and a device loss restore from the store |
-| Static meshes' positions and level-zero indices | The row above; decision 5's relocation within the device, so a pack reads no host words; probe placement and depth classification reading the GPU trace ([decision 9](#decision-9-lighting-reads-the-same-demand-and-pays-on-demand)) | Released; a device loss restores from the store as a warm boot does |
-| The trace scene's CPU hierarchy | The same migration of placement, depth classification and the diagnostics that read it | Freed |
+| The trace scene's CPU hierarchy and its traced-level copies | Probe placement, depth classification and the diagnostics that read it reading the GPU trace ([decision 9](#decision-9-lighting-reads-the-same-demand-and-pays-on-demand)) | Freed |
 
 **The rule that keeps a release from becoming a seam.** A reader on the
 frame's path never restores: it reads words a need raised earlier has already

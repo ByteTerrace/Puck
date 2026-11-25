@@ -186,8 +186,12 @@ public sealed partial class WorldColliderSet {
     // its evaluator's own box bounds prove a body clear, an identical box reusing its answer (a body at rest asks the same
     // box every tick). The evaluator indexes regions, so a body's query walks the shapes near the body and not the whole
     // creation: a query's cost follows what stands beside the body, whatever the creation's size.
+    // A placement's copies share one rotation and scale, so copies whose local frames agree (every copy without a
+    // reflection, or every copy with the same one) read one program: they share its evaluator, which answers concurrent
+    // queries and whose region tapes record lock-free, through `shared`. Each copy keeps its own bounds cache, whose lock
+    // serializes only that copy's box queries.
     private static FixedColliderField ReliefField(CreationDocument document, in FixedCreationStampTransform transform, float margin, bool bounded,
-        IReadOnlyList<FixedStaticCollider> bases, FixedFieldPartition? partition) {
+        IReadOnlyList<FixedStaticCollider> bases, FixedFieldPartition? partition, Dictionary<FixedCreationStampTransform, SdfFieldEvaluator>? shared = null) {
         var relieved = Relieves(document: document);
         // The finest octave's wavelength in world units: the creation's units scaled by the stamp; none without relief.
         var finest = (relieved ? MathF.Abs(x: document.Noise!.Frequency) : 0f);
@@ -199,7 +203,10 @@ public sealed partial class WorldColliderSet {
         var wavelength = ((finest > 0f) ? (((float)transform.Scale) / finest) : float.PositiveInfinity);
         var step = Math.Max(val1: ReliefGradientFloor, val2: Math.Min(val1: ((float)FixedColliderField.DefaultGradientStep), val2: (wavelength / 16f)));
 
-        var evaluator = new SdfFieldEvaluator(program: ReliefProgram(document: document, margin: margin, relieved: relieved, transform: transform), reading: SdfFieldReading.Contact, regional: true, recordsRegions: true);
+        if ((shared is null) || !shared.TryGetValue(key: transform, value: out var evaluator)) {
+            evaluator = new SdfFieldEvaluator(program: ReliefProgram(document: document, margin: margin, relieved: relieved, transform: transform), reading: SdfFieldReading.Contact, regional: true, recordsRegions: true);
+            shared?.Add(key: transform, value: evaluator);
+        }
 
         return new FixedColliderField(
             field: evaluator,
@@ -222,7 +229,10 @@ public sealed partial class WorldColliderSet {
     }
     // One static copy's field collider: its frame is the world box's centre, unturned, so the program carries the stamp's
     // own translation less that centre, and its rotation. Null for a copy contact keeps no shape of.
-    private static FixedStaticCollider? ReliefCollider(CreationDocument document, FixedCreationStampTransform transform, float margin, bool partitioned = true) {
+    // `shared` holds the evaluators of one placement's copies, keyed by local frame (ReliefField); one placement's
+    // document and margin are the same for every key it holds.
+    private static FixedStaticCollider? ReliefCollider(CreationDocument document, FixedCreationStampTransform transform, float margin, bool partitioned = true,
+        Dictionary<FixedCreationStampTransform, SdfFieldEvaluator>? shared = null) {
         if (!CreationStampEmitter.EmitsContact(document: document)) {
             return null;
         }
@@ -237,7 +247,7 @@ public sealed partial class WorldColliderSet {
 
         var (center, half) = ((unbounded || box.IsEmpty) ? (transform.Origin, FixedVector3.Zero) : (box.Center, box.Extent));
         var local = (transform with { Origin = (transform.Origin - center) });
-        var field = ReliefField(bases: primitives, bounded: !unbounded, document: document, margin: margin, partition: partition, transform: local);
+        var field = ReliefField(bases: primitives, bounded: !unbounded, document: document, margin: margin, partition: partition, shared: shared, transform: local);
 
         return FixedStaticCollider.FieldSurface(center: center, rotation: FixedQuaternion.Identity, halfExtent: half, field: field);
     }

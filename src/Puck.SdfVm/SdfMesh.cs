@@ -15,13 +15,13 @@ namespace Puck.SdfVm;
 public sealed partial record SdfMesh {
     // A cut or merge can pass its weld to the next bake stage. Published meshes need only their planes.
     internal int[]? BakedSites { get; init; }
-    internal int[] Sites() => BakedSites ?? SdfMeshWeld.Sites(Positions.Span);
+    internal int[] Sites() => BakedSites ?? SdfMeshWeld.Sites(m_positions.Span);
 
     /// <summary>The actual contour lattice spacing in object space; zero for an authored triangle mesh.</summary>
     public Vector3 BakeCell { get; init; }
     /// <summary>Gets the independently drawn pieces of a large static union; empty for a single mesh. Only the pieces
     /// enter the mesh region, the irradiance scene and the store. An offline mesh's own triangles concatenate their merged
-    /// surfaces for whole-group queries; a published one keeps no joined indices (<see cref="Indices"/>).</summary>
+    /// surfaces for whole-group queries; a published one keeps no joined indices (<see cref="Held.Indices"/>).</summary>
     public IReadOnlyList<SdfMesh> Chunks { get; init; } = [];
     /// <summary>Gets how many independently drawn meshes the mesh is: its <see cref="Chunks"/>, or one, itself.</summary>
     public int PieceCount => Math.Max(val1: 1, val2: Chunks.Count);
@@ -154,13 +154,13 @@ public sealed partial record SdfMesh {
             }
         }
 
-        Positions = positions;
+        m_positions = positions;
         PositionLow = low;
         PositionHigh = high;
         m_indices = indices;
         m_triangleCount = (indices.Length / 3);
-        Normals = normals;
-        TriangleMaterials = triangleMaterials;
+        m_normals = normals;
+        m_triangleMaterials = triangleMaterials;
         Members = members;
         VertexMembers = vertexMembers;
     }
@@ -174,24 +174,30 @@ public sealed partial record SdfMesh {
     /// <summary>The vertex member of a vertex that rides its draw rather than a member.</summary>
     public const byte NoMember = byte.MaxValue;
 
-    /// <summary>Gets three vertex indices per triangle.</summary>
-    /// <exception cref="InvalidOperationException">The mesh is a published chunked mesh, which keeps no joined indices:
-    /// its chunks hold its triangles, and only they are drawn, traced and stored.</exception>
-    public ReadOnlyMemory<uint> Indices => (m_joinedIndicesOmitted
+    // The mesh's planes, with its joined indices (m_indices) and its levels': read through a hold (Held), which keeps a
+    // published mesh's planes resident while they are read (SdfMesh.Restore.cs).
+    private readonly ReadOnlyMemory<Vector3> m_positions;
+    private readonly ReadOnlyMemory<Vector3> m_normals;
+    private readonly ReadOnlyMemory<uint> m_triangleMaterials;
+
+    // Three vertex indices per triangle; a published chunked mesh keeps none, its chunks holding its triangles.
+    private ReadOnlyMemory<uint> JoinedIndices => (m_joinedIndicesOmitted
         ? throw new InvalidOperationException(message: "A published chunked mesh keeps no joined indices; read its chunks' triangles.")
         : m_indices);
-    /// <summary>Gets one object-space normal per vertex, or none.</summary>
-    public ReadOnlyMemory<Vector3> Normals { get; }
-    /// <summary>Gets the object-space vertex positions.</summary>
-    public ReadOnlyMemory<Vector3> Positions { get; }
+    /// <summary>Gets the vertex count.</summary>
+    public int VertexCount => m_positions.Length;
+    /// <summary>Gets the index count, three a triangle; a chunked mesh's is its chunks' together.</summary>
+    public int IndexCount => (3 * m_triangleCount);
+    /// <summary>Gets whether the mesh carries one normal per vertex.</summary>
+    public bool HasNormals => !m_normals.IsEmpty;
+    /// <summary>Gets whether the mesh carries one palette entry per triangle.</summary>
+    public bool HasTriangleMaterials => !m_triangleMaterials.IsEmpty;
     /// <summary>Gets the least corner of the box the positions span, object space.</summary>
     public Vector3 PositionLow { get; }
     /// <summary>Gets the greatest corner of the box the positions span, object space.</summary>
     public Vector3 PositionHigh { get; }
     /// <summary>Gets the triangle count; a chunked mesh's is its chunks' together.</summary>
     public int TriangleCount => m_triangleCount;
-    /// <summary>Gets one palette entry per triangle, added to its draw's material, or none.</summary>
-    public ReadOnlyMemory<uint> TriangleMaterials { get; }
     /// <summary>Gets the slots besides its draw's frame slot whose motion carries some of its vertices, or none.</summary>
     public ReadOnlyMemory<SdfMeshMember> Members { get; }
     /// <summary>Gets each vertex's index in <see cref="Members"/>, or <see cref="NoMember"/> for a vertex that rides its
@@ -218,20 +224,20 @@ public sealed partial record SdfMesh {
             foreach (var level in value) {
                 ArgumentNullException.ThrowIfNull(level);
 
-                if (level.Indices.IsEmpty || ((level.Indices.Length % 3) != 0) || (level.TriangleMaterials.Length != (TriangleMaterials.IsEmpty ? 0 : (level.Indices.Length / 3)))) {
+                if ((level.IndexCount == 0) || ((level.IndexCount % 3) != 0) || (level.MaterialCount != (m_triangleMaterials.IsEmpty ? 0 : level.TriangleCount))) {
                     throw new ArgumentException(message: "A level holds at least one triangle, three indices a triangle and one triangle material a triangle when its mesh carries them.", paramName: nameof(Levels));
                 }
                 if (!float.IsFinite(f: level.Error) || (level.Error < error)) {
                     throw new ArgumentException(message: $"A level's error is finite and no smaller than a finer level's; {level.Error} follows {error}.", paramName: nameof(Levels));
                 }
-                foreach (var index in level.Indices.Span) {
-                    if (index >= ((uint)Positions.Length)) {
-                        throw new ArgumentException(message: $"Level index {index} names no vertex of the {Positions.Length} the mesh has.", paramName: nameof(Levels));
+                foreach (var index in level.UnheldIndices.Span) {
+                    if (index >= ((uint)m_positions.Length)) {
+                        throw new ArgumentException(message: $"Level index {index} names no vertex of the {m_positions.Length} the mesh has.", paramName: nameof(Levels));
                     }
                 }
 
                 error = level.Error;
-                triangles += (level.Indices.Length / 3);
+                triangles += level.TriangleCount;
             }
             if (triangles > MaxTriangles) {
                 throw new ArgumentException(message: $"A mesh and its levels hold at most {MaxTriangles} triangles, each numbered by a value the mesh target's float holds exactly; these hold {triangles}.", paramName: nameof(Levels));
@@ -272,6 +278,31 @@ public sealed partial record SdfMesh {
     // Whether this is a published chunked mesh, whose joined indices were never copied (SdfMesh.Storage.cs).
     private readonly bool m_joinedIndicesOmitted;
 
+    /// <summary>Renumbers a triangle list's vertices in the order the list first names them: the one compaction a subset
+    /// of a mesh's triangles takes to carry only the vertices it reaches.</summary>
+    /// <param name="indices">The triangle list, three vertex indices a triangle.</param>
+    /// <param name="remap">One entry per vertex of the mesh the list indexes, which receives each named vertex's new
+    /// number and -1 for every other.</param>
+    /// <param name="compacted">The list renumbered, as long as <paramref name="indices"/>.</param>
+    /// <param name="sources">Each new vertex's index in the mesh, in new order; at least as long as the fewer of the
+    /// list's indices and the mesh's vertices.</param>
+    /// <returns>The count of vertices the list names.</returns>
+    public static int CompactVertices(ReadOnlySpan<uint> indices, Span<int> remap, Span<uint> compacted, Span<int> sources) {
+        remap.Fill(value: -1);
+
+        var count = 0;
+
+        for (var at = 0; (at < indices.Length); at++) {
+            var vertex = ((int)indices[at]);
+
+            if (remap[vertex] < 0) {
+                remap[vertex] = count;
+                sources[count++] = vertex;
+            }
+            compacted[at] = ((uint)remap[vertex]);
+        }
+        return count;
+    }
     private static void RequireAttribute(int count, int expected, string name, string per) {
         if ((count != 0) && (count != expected)) {
             throw new ArgumentException(
@@ -282,17 +313,36 @@ public sealed partial record SdfMesh {
     }
 }
 /// <summary>One coarser level of detail of a baked mesh (<see cref="SdfMesh.Levels"/>): a triangle list over the mesh's
-/// own vertices, which a pass draws in the mesh's place where its error cannot show (<see cref="SdfMeshDetail"/>).</summary>
-/// <param name="Indices">Three vertex indices of the mesh per triangle.</param>
-/// <param name="TriangleMaterials">One palette entry per triangle, as the mesh's own are, or none for a mesh without
-/// them.</param>
-/// <param name="Error">The largest distance, in object units, from any vertex of the mesh's own triangles to the
-/// level's surface, measured to a triangle of the vertex's material within <see cref="SdfMeshCollapse"/>'s normal
-/// bound, and from any vertex or edge midpoint of a crease or a material's edge to that line as the level draws it: the
-/// most the level moves the surface, a crease or a material's edge.</param>
-public sealed record SdfMeshLevel(ReadOnlyMemory<uint> Indices, ReadOnlyMemory<uint> TriangleMaterials, float Error) {
+/// own vertices, which a pass draws in the mesh's place where its error cannot show (<see cref="SdfMeshDetail"/>). Its
+/// planes are read through its mesh's hold (<see cref="SdfMesh.Held.LevelIndices"/>).</summary>
+public sealed record SdfMeshLevel {
+    /// <summary>Initializes a new instance of the <see cref="SdfMeshLevel"/> class.</summary>
+    /// <param name="Indices">Three vertex indices of the mesh per triangle.</param>
+    /// <param name="TriangleMaterials">One palette entry per triangle, as the mesh's own are, or none for a mesh
+    /// without them.</param>
+    /// <param name="Error">The largest distance, in object units, from any vertex of the mesh's own triangles to the
+    /// level's surface, measured to a triangle of the vertex's material within <see cref="SdfMeshCollapse"/>'s normal
+    /// bound, and from any vertex or edge midpoint of a crease or a material's edge to that line as the level draws it:
+    /// the most the level moves the surface, a crease or a material's edge.</param>
+    public SdfMeshLevel(ReadOnlyMemory<uint> Indices, ReadOnlyMemory<uint> TriangleMaterials, float Error) {
+        UnheldIndices = Indices;
+        UnheldMaterials = TriangleMaterials;
+        this.Error = Error;
+    }
+
+    // The level's planes, read through its mesh's hold (SdfMesh.Held.LevelIndices, LevelMaterials), which keeps them
+    // resident while read; only the mesh's own storage reads them otherwise.
+    internal ReadOnlyMemory<uint> UnheldIndices { get; init; }
+    internal ReadOnlyMemory<uint> UnheldMaterials { get; init; }
+
+    /// <summary>Gets the most the level moves the surface, a crease or a material's edge, in object units.</summary>
+    public float Error { get; init; }
     /// <summary>Gets the level's triangle count.</summary>
-    public int TriangleCount => (Indices.Length / 3);
+    public int TriangleCount => (UnheldIndices.Length / 3);
+    /// <summary>Gets the level's index count, three a triangle.</summary>
+    public int IndexCount => UnheldIndices.Length;
+    /// <summary>Gets the level's triangle material count: one a triangle, or none for a mesh without them.</summary>
+    public int MaterialCount => UnheldMaterials.Length;
 }
 /// <summary>A slot whose motion carries some of a mesh's vertices (<see cref="SdfMesh.Members"/>): a shape of a baked group
 /// riding a slot of its own beside the group's.</summary>
@@ -331,7 +381,7 @@ public readonly record struct SdfMeshDraw {
     /// <see cref="Puck.Abstractions.Cameras.ViewProjection"/>. A draw placed by its slot (<see cref="PlacedBySlot"/>) keeps
     /// only its scale, the length of its first row; its pose is its slot's row.</param>
     /// <param name="material">The material-table index the triangles shade with, as an SDF hit's material does; a mesh
-    /// with <see cref="SdfMesh.TriangleMaterials"/> adds each triangle's entry to it.</param>
+    /// with <see cref="SdfMesh.Held.TriangleMaterials"/> adds each triangle's entry to it.</param>
     /// <param name="identity">The host's picking identity, also the fallback motion key when <see cref="MotionIdentity"/>
     /// is absent. <see cref="SdfMeshHistory"/> observes the stable key and mesh at each staged index to seed previous
     /// matrices and invalidate GPU visibility/detail history together.</param>
@@ -806,14 +856,14 @@ public static class SdfMeshRegion {
             if (meshes.TryAdd(
                 key: mesh,
                 value: new SdfMeshRegionMesh(
-                    IndexCount: mesh.Indices.Length,
+                    IndexCount: mesh.IndexCount,
                     IndexWord: indices,
                     MaterialWord: materials,
                     VertexWord: vertices,
                     SkinWord: skins
                 )
             )) {
-                vertices = checked((vertices + mesh.Positions.Length));
+                vertices = checked((vertices + mesh.VertexCount));
                 materials = checked((materials + MaterialWordsOf(mesh: mesh)));
                 indices = checked((indices + IndexWordsOf(mesh: mesh)));
                 skins = checked((skins + SkinWordsOf(mesh: mesh)));
@@ -853,7 +903,7 @@ public static class SdfMeshRegion {
     public static int WordsOf(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(mesh);
 
-        return checked(((((mesh.Positions.Length * SdfMeshRecord.VertexWords) + MaterialWordsOf(mesh: mesh)) + IndexWordsOf(mesh: mesh)) + SkinWordsOf(mesh: mesh)));
+        return checked(((((mesh.VertexCount * SdfMeshRecord.VertexWords) + MaterialWordsOf(mesh: mesh)) + IndexWordsOf(mesh: mesh)) + SkinWordsOf(mesh: mesh)));
     }
     /// <summary>The words the presentation's mesh region places for one mesh (<see cref="SdfMeshRegionStore"/>): every
     /// word of a mesh that owns its geometry (<see cref="WordsOf"/>), and the triangle materials alone of one renumbered
@@ -899,7 +949,7 @@ public static class SdfMeshRegion {
     public static int MaterialWordsOf(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(mesh);
 
-        return (mesh.TriangleMaterials.IsEmpty ? 0 : mesh.LevelledTriangleCount);
+        return (mesh.HasTriangleMaterials ? mesh.LevelledTriangleCount : 0);
     }
     /// <summary>The words a mesh's members take: none for a mesh without them, otherwise their count, each member's
     /// <see cref="SdfMeshRecord.MemberWords"/> words and SkinVertexWords per vertex.</summary>
@@ -1029,7 +1079,7 @@ public static class SdfMeshRegion {
         writer[SdfMeshRecord.IndexCountWord] = ((uint)placement.IndexCount);
         writer[SdfMeshRecord.VertexWord] = ((uint)placement.VertexWord);
         writer[SdfMeshRecord.FlagsWord] =
-            (mesh.Normals.IsEmpty ? 0u : SdfMeshRecord.NormalsFlag) | (mesh.TriangleMaterials.IsEmpty ? 0u : SdfMeshRecord.MaterialsFlag) | (mesh.VertexMembers.IsEmpty ? 0u : SdfMeshRecord.SkinFlag) | (draw.UsesRootMaterialFrame ? 0u : SdfMeshRecord.WorldMaterialFlag) |
+            (mesh.HasNormals ? SdfMeshRecord.NormalsFlag : 0u) | (mesh.HasTriangleMaterials ? SdfMeshRecord.MaterialsFlag : 0u) | (mesh.VertexMembers.IsEmpty ? 0u : SdfMeshRecord.SkinFlag) | (draw.UsesRootMaterialFrame ? 0u : SdfMeshRecord.WorldMaterialFlag) |
             ((clip == default) ? 0u : SdfMeshRecord.ClipFlag) | ((draw.ObjectKey & SdfMeshRecord.ObjectKeyMask) << SdfMeshRecord.ObjectKeyShift);
         writer[SdfMeshRecord.TriangleMaterialWord] = ((uint)placement.MaterialWord);
         writer[SdfMeshRecord.FrameSlotWord] = unchecked((uint)(draw.FrameSlot ?? SdfProgram.NoDynamicTransformSlot));
@@ -1220,8 +1270,8 @@ public static class SdfMeshRegion {
 
         ArgumentNullException.ThrowIfNull(argument: mesh, paramName: nameof(held));
 
-        var positions = mesh.Positions.Span;
-        var normals = mesh.Normals.Span;
+        var positions = held.Positions.Span;
+        var normals = held.Normals.Span;
         var vertexWords = destination[placement.VertexWord..];
 
         for (var vertex = 0; (vertex < positions.Length); vertex++) {
@@ -1239,17 +1289,17 @@ public static class SdfMeshRegion {
             words[5] = BitConverter.SingleToUInt32Bits(value: normal.Z);
         }
 
-        mesh.TriangleMaterials.Span.CopyTo(destination: destination[placement.MaterialWord..]);
-        mesh.Indices.Span.CopyTo(destination: destination[placement.IndexWord..]);
+        var materialWord = placement.MaterialWord;
+        var indexWord = placement.IndexWord;
 
-        var materialWord = (placement.MaterialWord + mesh.TriangleMaterials.Length);
-        var indexWord = (placement.IndexWord + mesh.Indices.Length);
+        for (var level = 0; (level <= mesh.Levels.Count); level++) {
+            var levelMaterials = held.LevelMaterials(level: level).Span;
+            var levelIndices = held.LevelIndices(level: level).Span;
 
-        foreach (var level in mesh.Levels) {
-            level.TriangleMaterials.Span.CopyTo(destination: destination[materialWord..]);
-            level.Indices.Span.CopyTo(destination: destination[indexWord..]);
-            materialWord += level.TriangleMaterials.Length;
-            indexWord += level.Indices.Length;
+            levelMaterials.CopyTo(destination: destination[materialWord..]);
+            levelIndices.CopyTo(destination: destination[indexWord..]);
+            materialWord += levelMaterials.Length;
+            indexWord += levelIndices.Length;
         }
         // A shared table after this mesh's indices, independent of draw count and of the baker's current two levels.
         var firstTriangle = 0;

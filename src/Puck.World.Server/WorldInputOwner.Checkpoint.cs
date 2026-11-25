@@ -22,7 +22,7 @@ public sealed partial class WorldInputOwner {
 
         for (var group = 0; (group < m_claimed.Length); group++) {
             foreach (var record in history) {
-                if (m_claimed[group][((int)(record.Id % ((ulong)m_history.Length)))] == record.Id) { claims.Add(item: new(group, record.Id)); }
+                if (m_claimed[group][((int)(record.Id % ((ulong)m_historyCapacity)))] == record.Id) { claims.Add(item: new(group, record.Id)); }
             }
         }
         return new(Revision, Epoch, Mapping.Id, Image, Calibration, LastSwitch, RefusedBatches, m_sequence, m_eventId,
@@ -38,7 +38,7 @@ public sealed partial class WorldInputOwner {
     public void Restore(WorldInputOwnerCheckpoint checkpoint) {
         ArgumentNullException.ThrowIfNull(checkpoint);
         if ((checkpoint.Revision != Revision) || (checkpoint.Epoch == 0) || (checkpoint.Mapping >= m_catalog.Mappings.Length) ||
-            (checkpoint.History.Length > m_history.Length) || (checkpoint.Switches.Length > m_switches.Length) || (checkpoint.Sources.Length != m_sources.Length) || (checkpoint.Crossings.Length != m_crossings.Length) ||
+            (checkpoint.History.Length > m_historyCapacity) || (checkpoint.Switches.Length > m_switchCapacity) || (checkpoint.Sources.Length != m_sources.Length) || (checkpoint.Crossings.Length != m_crossings.Length) ||
             (checkpoint.Holds.Length > ChannelLimits.MaxChannels) || (checkpoint.Calibration < -m_calibrationLimit) ||
             (checkpoint.Calibration > m_calibrationLimit) || (checkpoint.StepEvents < 0) || (checkpoint.StepEvents > m_policy.MaximumEventsPerStep)) {
             throw new ArgumentException(message: "input checkpoint violates admitted owner bounds", paramName: nameof(checkpoint));
@@ -49,14 +49,14 @@ public sealed partial class WorldInputOwner {
             if (checkpoint.Sources[index].Source != m_sources[index].Source) { throw new ArgumentException(message: "input checkpoint source registry differs", paramName: nameof(checkpoint)); }
         }
         Restores++;
-        Array.Clear(array: m_holdScratch);
+        Array.Clear(array: HoldScratch);
         foreach (var hold in checkpoint.Holds) {
             if ((hold.Channel >= m_catalog.Channels.Length) || (mapping.Address(logicalId: hold.Channel) < 0) || (hold.Press == 0) ||
                 (hold.Origin.Id != hold.Press) || (hold.Origin.Event.Kind != WorldInputEventKind.Press) ||
-                (hold.Origin.Event.Channel != hold.Channel) || (m_holdScratch[mapping.Address(logicalId: hold.Channel)].Press != 0)) {
+                (hold.Origin.Event.Channel != hold.Channel) || (HoldScratch[mapping.Address(logicalId: hold.Channel)].Press != 0)) {
                 throw new ArgumentException(message: "input checkpoint has an invalid or duplicate hold origin", paramName: nameof(checkpoint));
             }
-            m_holdScratch[mapping.Address(logicalId: hold.Channel)] = hold;
+            HoldScratch[mapping.Address(logicalId: hold.Channel)] = hold;
         }
         var previousId = 0UL;
 
@@ -99,17 +99,21 @@ public sealed partial class WorldInputOwner {
         m_stepEvents = checkpoint.StepEvents;
         checkpoint.Sources.CopyTo(array: m_sources, index: 0);
         checkpoint.Crossings.CopyTo(array: m_crossingHeld, index: 0);
-        m_holdScratch.CopyTo(array: m_holds, index: 0);
+        HoldScratch.CopyTo(array: m_holds, index: 0);
         Array.Clear(array: m_history);
-        checkpoint.History.CopyTo(array: m_history, index: 0);
         m_head = 0;
+        m_count = 0;
+        ReserveHistory(count: checkpoint.History.Length);
+        checkpoint.History.CopyTo(array: m_history, index: 0);
         m_count = checkpoint.History.Length;
         Array.Clear(array: m_switches);
-        checkpoint.Switches.CopyTo(array: m_switches, index: 0);
         m_switchHead = 0;
+        m_switchCount = 0;
+        ReserveSwitches(count: checkpoint.Switches.Length);
+        checkpoint.Switches.CopyTo(array: m_switches, index: 0);
         m_switchCount = checkpoint.Switches.Length;
         foreach (var group in m_claimed) { Array.Clear(array: group); }
-        foreach (var claim in checkpoint.Claims) { m_claimed[claim.Group][((int)(claim.Event % ((ulong)m_history.Length)))] = claim.Event; }
+        foreach (var claim in checkpoint.Claims) { m_claimed[claim.Group][((int)(claim.Event % ((ulong)m_historyCapacity)))] = claim.Event; }
         Array.Clear(array: m_matchCached);
     }
     /// <summary>Hashes canonical future-decision state independently of ring storage layout.</summary>
@@ -141,7 +145,7 @@ public sealed partial class WorldInputOwner {
             for (var index = 0; (index < m_count); index++) {
                 var record = Record(index: index);
 
-                hash.Add(value: ((byte)((m_claimed[group][((int)(record.Id % ((ulong)m_history.Length)))] == record.Id) ? 1 : 0)));
+                hash.Add(value: ((byte)((m_claimed[group][((int)(record.Id % ((ulong)m_historyCapacity)))] == record.Id) ? 1 : 0)));
             }
         }
     }

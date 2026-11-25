@@ -67,7 +67,7 @@ public static class SdfMeshCollapse {
 
         var cell = MathF.Max(x: mesh.BakeCell.X, y: MathF.Max(x: mesh.BakeCell.Y, y: mesh.BakeCell.Z));
 
-        if ((mesh.Normals.Length == 0) || !mesh.Members.IsEmpty || !(cell > 0f) || (mesh.TriangleCount < 4)) {
+        if (!mesh.HasNormals || !mesh.Members.IsEmpty || !(cell > 0f) || (mesh.TriangleCount < 4)) {
             return mesh;
         }
 
@@ -229,9 +229,11 @@ public static class SdfMeshCollapse {
         // each read is bounded by the place, triangle or sample count, never the array's length.
         public Collapser(SdfMesh mesh, bool preserveFeatures, RentedScope scope) {
             m_lineLimit = (preserveFeatures ? (Math.Max(val1: mesh.BakeCell.X, val2: Math.Max(val1: mesh.BakeCell.Y, val2: mesh.BakeCell.Z)) / 8.0) : double.PositiveInfinity);
-            var positions = mesh.Positions.Span;
-            var indices = mesh.Indices.Span;
-            var materials = mesh.TriangleMaterials.Span;
+            using var held = mesh.Hold();
+            var positions = held.Positions.Span;
+            var indices = held.Indices.Span;
+            var materials = held.TriangleMaterials.Span;
+            var normals = held.Normals.Span;
             var vertices = positions.Length;
             var sites = mesh.Sites();
             m_placeOf = scope.Rent<int>(minimumLength: vertices);
@@ -243,8 +245,8 @@ public static class SdfMeshCollapse {
                 m_point[m_placeOf[vertex]] = new Point { X = positions[vertex].X, Y = positions[vertex].Y, Z = positions[vertex].Z };
             }
 
-            m_normals = scope.Rent<Vector3>(minimumLength: mesh.Normals.Length);
-            mesh.Normals.Span.CopyTo(destination: m_normals);
+            m_normals = scope.Rent<Vector3>(minimumLength: normals.Length);
+            normals.CopyTo(destination: m_normals);
             m_carriesMaterials = !materials.IsEmpty;
             m_triangles = mesh.TriangleCount;
             m_corners = scope.Rent<int>(minimumLength: (3 * m_triangles));

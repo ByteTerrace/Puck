@@ -326,15 +326,18 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
 
             var materials = new HashSet<int>();
             var materialRuns = new HashSet<(ReadOnlyMemory<uint> Triangles, int Base)>();
-
             for (var index = 0; (index < draws.Count); index++) {
                 var draw = draws[index];
 
                 if (!draw.IsStatic) { continue; }
-                if (Instance.TryCreate(draw: in draw, geometry: geometries[GeometryKey.Of(error: traceError, mesh: draw.Mesh)], instance: out var instance)) {
+
+                var geometry = geometries[GeometryKey.Of(error: traceError, mesh: draw.Mesh)];
+                var triangleMaterials = geometry.MaterialsOf(mesh: draw.Mesh);
+
+                if (Instance.TryCreate(draw: in draw, geometry: geometry, instance: out var instance, triangleMaterials: triangleMaterials)) {
                     content.Instances[content.InstanceCount++] = instance;
-                    if (materialRuns.Add(item: (draw.Mesh.TriangleMaterials, draw.Material))) {
-                        AddMaterials(draw: in draw, materials: materials);
+                    if (materialRuns.Add(item: (triangleMaterials, draw.Material))) {
+                        AddMaterials(draw: in draw, materials: materials, triangles: triangleMaterials.Span);
                     }
                 }
             }
@@ -367,10 +370,8 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     /// meets the scene reads, and the only ones whose values its bounce light depends on.</summary>
     public int[] Materials { get; private init; } = [];
 
-    // Adds the program material ids a draw's triangles carry: its base, offset by each distinct triangle material.
-    private static void AddMaterials(HashSet<int> materials, in SdfMeshDraw draw) {
-        var triangles = draw.Mesh.TriangleMaterials.Span;
-
+    // Adds the program material ids a draw's traced triangles carry: its base, offset by each distinct triangle material.
+    private static void AddMaterials(HashSet<int> materials, in SdfMeshDraw draw, ReadOnlySpan<uint> triangles) {
         if (triangles.IsEmpty) {
             _ = materials.Add(item: draw.Material);
             return;
@@ -743,21 +744,26 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             return ((distance > 1.0e-4f) && (distance < maximum));
         }
     }
-    // A geometry's identity: its mesh's position buffer and the index buffer of the level it traces. A mesh renumbered
-    // into another program's materials (SdfMeshLibrary) shares both, so its draws take the same geometry and read their
-    // own triangle materials of that level.
-    internal readonly record struct GeometryKey(ReadOnlyMemory<Vector3> Positions, ReadOnlyMemory<uint> Indices, int Level) {
+    // A geometry's identity: the mesh whose positions and indices it traces (a mesh renumbered into another program's
+    // materials names the mesh it was renumbered from, SdfMesh.GeometrySource, so its draws take the same geometry and
+    // read their own triangle materials of that level) and the level it traces.
+    internal readonly record struct GeometryKey(SdfMesh Source, int Level) {
         // The mesh's coarsest level whose measured error lies within `error` (SdfMeshLevel.Error, in the mesh's object
         // units; a level's vertices are the mesh's own, so it moves the surface by no more than that), else its own
         // triangles, level zero. Zero traces level zero always.
         public static GeometryKey Of(SdfMesh mesh, float error) {
             var levels = mesh.Levels;
+            var source = (mesh.GeometrySource ?? mesh);
 
             for (var level = levels.Count; (level > 0); level--) {
-                if (levels[(level - 1)].Error <= error) { return new(Indices: levels[(level - 1)].Indices, Level: level, Positions: mesh.Positions); }
+                if (levels[(level - 1)].Error <= error) { return new(Level: level, Source: source); }
             }
-            return new(Indices: mesh.Indices, Level: 0, Positions: mesh.Positions);
+            return new(Level: 0, Source: source);
         }
+
+        // A mesh is one by reference: the record's value equality would compare its storage's views field by field.
+        public bool Equals(GeometryKey other) => (ReferenceEquals(objA: Source, objB: other.Source) && (Level == other.Level));
+        public override int GetHashCode() => HashCode.Combine(value1: RuntimeHelpers.GetHashCode(o: Source), value2: Level);
     }
 
     // The world bounds of a box in a draw's frame: its eight corners carried out through the draw's transform.
@@ -805,7 +811,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         public float BakeHalfDiagonal { get; init; }
 
         // A draw whose transform has no inverse (a zero scale) draws nothing a ray can meet.
-        public static bool TryCreate(in SdfMeshDraw draw, Geometry geometry, out Instance instance) {
+        public static bool TryCreate(in SdfMeshDraw draw, Geometry geometry, ReadOnlyMemory<uint> triangleMaterials, out Instance instance) {
             var matrix = draw.FixedPlacement;
 
             instance = default;
@@ -823,7 +829,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 Material = draw.Material,
                 NormalToWorld = normalToWorld,
                 ObjectToWorld = matrix,
-                TriangleMaterials = ((geometry.Level == 0) ? draw.Mesh.TriangleMaterials : draw.Mesh.Levels[(geometry.Level - 1)].TriangleMaterials),
+                TriangleMaterials = triangleMaterials,
                 WorldToObject = inverse,
                 BakeHalfDiagonal = ((0.5f * Vector3.TransformNormal(draw.Mesh.BakeCell, matrix).Length()) +
                     (geometry.Error * MathF.Max(x: new Vector3(x: matrix.M11, y: matrix.M12, z: matrix.M13).Length(), y: MathF.Max(x: new Vector3(x: matrix.M21, y: matrix.M22, z: matrix.M23).Length(), y: new Vector3(x: matrix.M31, y: matrix.M32, z: matrix.M33).Length())))),
@@ -893,6 +899,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             Frames = [];
             Nodes = [];
             Triangles = [];
+            lock (m_materialsGate) { m_materials.Clear(); }
             ReleaseStorage(storage);
             m_mesh.Release(cached: true);
         }
@@ -927,6 +934,36 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         public int Depth { get; init; }
         public int MedianSplits { get; init; }
 
+        // Each draw mesh's triangle materials of the traced level, copied into the geometry's storage the first time a scene
+        // draws that mesh over it (its own mesh's at the build, a renumbered variant's at its first draw), so a scene's build
+        // reads no mesh's planes for a geometry it reuses. A variant's entry holds the variant's object, never a claim.
+        private readonly Dictionary<SdfMesh, ReadOnlyMemory<uint>> m_materials = new(comparer: ReferenceEqualityComparer.Instance);
+        private readonly Lock m_materialsGate = new();
+
+        public ReadOnlyMemory<uint> MaterialsOf(SdfMesh mesh) {
+            lock (m_materialsGate) {
+                if (m_materials.TryGetValue(key: mesh, value: out var held)) { return held; }
+            }
+
+            ReadOnlyMemory<uint> copied = default;
+
+            using (var hold = mesh.Hold()) {
+                var level = hold.LevelMaterials(level: Level).Span;
+
+                if (!level.IsEmpty) {
+                    var copy = storage.AllocateArray<uint>(level.Length);
+
+                    level.CopyTo(destination: copy);
+                    copied = copy;
+                }
+            }
+            lock (m_materialsGate) {
+                if (m_materials.TryGetValue(key: mesh, value: out var raced)) { return raced; }
+                m_materials.Add(key: mesh, value: copied);
+            }
+            return copied;
+        }
+
         // The leaf position's triangle as its first corner and its two edges from it, the terms the ray test reads.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void Corner(ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, int triangle, out Vector3 v0, out Vector3 e1, out Vector3 e2) {
@@ -945,33 +982,25 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         }
 
         private static Geometry Build(GeometryKey key, SdfMesh mesh, MemoryAccount.Owner workspace, MemoryAccount.Owner storage) {
-            var (level, first, error, traced) = (0, 0, 0f, mesh.Indices);
+            var level = key.Level;
+            var first = 0;
 
-            if (key.Level > 0) {
-                // A hold restores the level's indices if the mesh let them go; the copy keeps none of the mesh's parts past
-                // the build. A mesh the store can no longer restore traces its own triangles, which it always keeps.
-                using var held = mesh.Hold();
+            for (var finer = 0; (finer < level); finer++) { first += ((finer == 0) ? mesh.TriangleCount : mesh.Levels[(finer - 1)].TriangleCount); }
 
-                if (held.Readable) {
-                    level = key.Level;
-                    first = mesh.TriangleCount;
-                    for (var finer = 1; (finer < level); finer++) { first += mesh.Levels[(finer - 1)].TriangleCount; }
-                    error = mesh.Levels[(level - 1)].Error;
-
-                    var copy = storage.AllocateArray<uint>(key.Indices.Length);
-
-                    key.Indices.Span.CopyTo(destination: copy);
-                    traced = copy;
-                }
-            }
-
+            var error = ((level == 0) ? 0f : mesh.Levels[(level - 1)].Error);
+            // The traced level's triangles over the vertices they reach, copied while a hold keeps the mesh's planes
+            // resident: the geometry keeps none of the mesh's planes past its build, and a coarse level reaches a few of
+            // its mesh's vertices.
+            var (positionsCopy, tracedCopy, materialsCopy) = CompactCopy(level: level, mesh: mesh, storage: storage);
+            ReadOnlyMemory<Vector3> compact = positionsCopy;
+            ReadOnlyMemory<uint> traced = tracedCopy;
             var count = (traced.Length / 3);
             var chunks = count.CeilingDivide(divisor: ParallelPrimitives);
             var pieces = new Pieces[chunks];
 
             // Each chunk's pieces in triangle order, joined in chunk order, so a geometry builds alike on every run.
             Chunked(count: count, body: (start, end) => {
-                var positions = mesh.Positions.Span;
+                var positions = compact.Span;
                 var indices = traced.Span;
                 var own = new Pieces(capacity: (end - start), workspace);
 
@@ -1004,7 +1033,10 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                         triangles[index] = owners[order[index]];
                     }
 
-                    return new Geometry(storage) { Braids = braids, Frames = frames, Indices = traced, Level = level, FirstTriangle = first, Error = error, Mesh = mesh, Nodes = nodes, Positions = mesh.Positions, Triangles = triangles, Depth = depth, MedianSplits = medians };
+                    var geometry = new Geometry(storage) { Braids = braids, Frames = frames, Indices = traced, Level = level, FirstTriangle = first, Error = error, Mesh = mesh, Nodes = nodes, Positions = compact, Triangles = triangles, Depth = depth, MedianSplits = medians };
+
+                    geometry.m_materials.Add(key: mesh, value: materialsCopy);
+                    return geometry;
                 } finally {
                     RentedArrays.Return(array: order, owner: workspace);
                 }
@@ -1015,6 +1047,30 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
             }
         }
 
+        // Copies a mesh level's triangles over the vertices they name, renumbered in first-use order, and its triangle
+        // materials into the geometry's storage: none for a mesh whose store could not restore its planes.
+        private static (Vector3[] Positions, uint[] Indices, uint[] Materials) CompactCopy(SdfMesh mesh, int level, MemoryAccount.Owner storage) {
+            using var held = mesh.Hold();
+            var indices = held.LevelIndices(level: level).Span;
+            var positions = held.Positions.Span;
+            var levelMaterials = held.LevelMaterials(level: level).Span;
+
+            if (indices.IsEmpty) { return ([], [], []); }
+
+            var materials = (levelMaterials.IsEmpty ? [] : storage.AllocateArray<uint>(levelMaterials.Length));
+
+            levelMaterials.CopyTo(destination: materials);
+
+            var compacted = storage.AllocateArray<uint>(indices.Length);
+
+            using var remapLease = RentedArrays.Rent<int>(minimumLength: positions.Length, array: out var remap);
+            using var sourcesLease = RentedArrays.Rent<int>(minimumLength: Math.Min(val1: indices.Length, val2: positions.Length), array: out var sources);
+            var count = SdfMesh.CompactVertices(compacted: compacted, indices: indices, remap: remap.AsSpan(start: 0, length: positions.Length), sources: sources);
+            var copy = storage.AllocateArray<Vector3>(count);
+
+            for (var vertex = 0; (vertex < count); vertex++) { copy[vertex] = positions[sources[vertex]]; }
+            return (copy, compacted, materials);
+        }
         private static void Chunked(int count, Action<int, int> body) {
             if (count < ParallelPrimitives) {
                 body(arg1: 0, arg2: count);

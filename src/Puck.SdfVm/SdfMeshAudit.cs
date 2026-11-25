@@ -208,10 +208,9 @@ public static class SdfMeshAudit {
             return SdfMeshChunks.Join(chunks: mesh.Chunks.Select(selector: chunk => Surface(level: level, mesh: chunk)).ToArray());
         }
         var selected = Math.Min(val1: level, val2: mesh.Levels.Count);
-        var indices = ((selected == 0) ? mesh.Indices : mesh.Levels[(selected - 1)].Indices);
-        var materials = ((selected == 0) ? mesh.TriangleMaterials : mesh.Levels[(selected - 1)].TriangleMaterials);
+        using var held = mesh.Hold();
 
-        return Subset(indices: indices.Span, materials: materials, mesh: mesh, sources: out _);
+        return Subset(indices: held.LevelIndices(level: selected).Span, materials: held.LevelMaterials(level: selected).ToArray(), mesh: mesh, sources: out _);
     }
     /// <summary>Returns the triangles an index list names over a mesh's vertices as a mesh of their own, holding only the
     /// vertices they reference, with their normals and members, and the mesh's members, cell and enclosure.</summary>
@@ -224,32 +223,23 @@ public static class SdfMeshAudit {
     public static SdfMesh Subset(SdfMesh mesh, ReadOnlySpan<uint> indices, ReadOnlyMemory<uint> materials, out int[] sources) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
 
-        var remap = new int[mesh.Positions.Length];
-
-        Array.Fill(array: remap, value: -1);
-        var kept = new List<int>();
-        var positions = new List<Vector3>();
-        var normals = new List<Vector3>();
-        var members = new List<byte>();
-        var influences = new List<SdfMeshInfluence>();
+        using var held = mesh.Hold();
         var compact = new uint[indices.Length];
+        var kept = new int[Math.Min(val1: indices.Length, val2: mesh.VertexCount)];
+        var count = SdfMesh.CompactVertices(compacted: compact, indices: indices, remap: new int[mesh.VertexCount], sources: kept);
 
-        for (var at = 0; (at < indices.Length); at++) {
-            var vertex = ((int)indices[at]);
+        sources = kept.AsSpan(start: 0, length: count).ToArray();
 
-            if (remap[vertex] < 0) {
-                remap[vertex] = positions.Count;
-                kept.Add(item: vertex);
-                positions.Add(item: mesh.Positions.Span[vertex]);
-                if (!mesh.Normals.IsEmpty) { normals.Add(item: mesh.Normals.Span[vertex]); }
-                if (!mesh.VertexMembers.IsEmpty) { members.Add(item: mesh.VertexMembers.Span[vertex]); }
-                if (!mesh.Influences.IsEmpty) { influences.Add(item: mesh.Influences.Span[vertex]); }
-            }
-            compact[at] = ((uint)remap[vertex]);
+        static T[] Gather<T>(ReadOnlySpan<T> plane, int[] at) {
+            if (plane.IsEmpty) { return []; }
+
+            var gathered = new T[at.Length];
+
+            for (var index = 0; (index < at.Length); index++) { gathered[index] = plane[at[index]]; }
+            return gathered;
         }
-        sources = [.. kept];
-        return new SdfMesh(positions: positions.ToArray(), indices: compact, normals: normals.ToArray(), triangleMaterials: materials,
-            members: mesh.Members, vertexMembers: members.ToArray(), influences: influences.ToArray()) { BakeCell = mesh.BakeCell, Encloses = mesh.Encloses };
+        return new SdfMesh(positions: Gather(at: sources, plane: held.Positions.Span), indices: compact, normals: Gather(at: sources, plane: held.Normals.Span), triangleMaterials: materials,
+            members: mesh.Members, vertexMembers: Gather(at: sources, plane: mesh.VertexMembers.Span), influences: Gather(at: sources, plane: mesh.Influences.Span)) { BakeCell = mesh.BakeCell, Encloses = mesh.Encloses };
     }
     /// <summary>Returns a triangle's unit face normal by its winding, or zero for a degenerate triangle (a height under a
     /// five-hundredth of its longest edge), whose corners are collinear to rounding and whose facing is noise.</summary>
@@ -483,11 +473,14 @@ public static class SdfMeshAudit {
         ArgumentNullException.ThrowIfNull(argument: options);
 
         var reference = mesh;
-        var referenceCell = ((options.Level == 0) ? 0f : MedianEdge(edges: Edges(indices: mesh.Indices.Span, welded: mesh.Sites()), positions: mesh.Positions.Span));
+        using var referenceHeld = reference.Hold();
+        var referenceCell = ((options.Level == 0) ? 0f : MedianEdge(edges: Edges(indices: referenceHeld.Indices.Span, welded: mesh.Sites()), positions: referenceHeld.Positions.Span));
 
         mesh = Surface(mesh: mesh, level: options.Level);
-        var positions = mesh.Positions.Span;
-        var indices = mesh.Indices.Span;
+        using var surfaceHeld = mesh.Hold();
+        using var accountedHeld = ((accounted ?? mesh).Hold());
+        var positions = surfaceHeld.Positions.Span;
+        var indices = surfaceHeld.Indices.Span;
         var triangles = mesh.TriangleCount;
         var welded = mesh.Sites();
         var edges = Edges(indices: indices, welded: welded);
@@ -543,7 +536,7 @@ public static class SdfMeshAudit {
         // The mesh winds one way; a triangle is judged against the way most of them wind.
         var winding = Winding(faceNormals: faceNormals, gradients: gradients);
         var flipped = 0;
-        var normals = mesh.Normals.Span;
+        var normals = surfaceHeld.Normals.Span;
         var shadingErrors = new float[(normals.IsEmpty ? 0 : triangles)];
 
         for (var triangle = 0; (triangle < triangles); triangle++) {
@@ -624,7 +617,7 @@ public static class SdfMeshAudit {
             }
         }
 
-        var (crossings, missing) = Missing(accounted: accounted, cell: cell, defects: defects, field: field, flagged: flagged, indices: indices, mesh: reference, options: options, positions: positions);
+        var (crossings, missing) = Missing(accounted: ((accounted is null) ? null : (accountedHeld.Positions, accountedHeld.Indices)), cell: cell, defects: defects, field: field, flagged: flagged, indices: indices, mesh: reference, options: options, positions: positions);
         var clusters = Cluster(cell: cell, flagged: flagged)
             .Take(count: options.Clusters)
             .Select(selector: cluster => cluster with { Shapes = Nearest(count: options.Shapes, probes: cluster.Probes, shapes: shapes) })
@@ -821,7 +814,8 @@ public static class SdfMeshAudit {
     public static (int Open, int NonManifold, bool[] OpenTriangles) EdgeCounts(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(argument: mesh);
 
-        var edges = Edges(indices: mesh.Indices.Span, welded: mesh.Sites());
+        using var surface = mesh.Hold();
+        var edges = Edges(indices: surface.Indices.Span, welded: mesh.Sites());
         var openTriangles = new bool[mesh.TriangleCount];
         var open = 0;
         var nonManifold = 0;
@@ -890,7 +884,7 @@ public static class SdfMeshAudit {
 
     // The field's zero set on a lattice over the mesh's box: each lattice edge whose ends differ in sign holds a crossing,
     // refined by bisection and flagged where no triangle, of the mesh or of the accounted surface, lies within a cell of it.
-    private static (int Crossings, int Missing) Missing(SdfFieldEvaluator field, SdfMesh mesh, ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, float cell, SdfMeshAuditOptions options, List<Sample> flagged, List<(SdfMeshDefectClass Class, Vector3 Position)> defects, SdfMesh? accounted) {
+    private static (int Crossings, int Missing) Missing(SdfFieldEvaluator field, SdfMesh mesh, ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, float cell, SdfMeshAuditOptions options, List<Sample> flagged, List<(SdfMeshDefectClass Class, Vector3 Position)> defects, (ReadOnlyMemory<Vector3> Positions, ReadOnlyMemory<uint> Indices)? accounted) {
         if ((positions.Length == 0) || !(cell > 0f)) { return (0, 0); }
 
         var low = (mesh.PositionLow - new Vector3(value: (3f * cell)));
@@ -913,7 +907,7 @@ public static class SdfMeshAudit {
         }
 
         using var triangles = new SdfMeshTriangleGrid(cellSize: (2f * cell), indices: indices, positions: positions);
-        using var excused = ((accounted is null) ? null : new SdfMeshTriangleGrid(cellSize: (2f * cell), indices: accounted.Indices.Span, positions: accounted.Positions.Span));
+        using var excused = ((accounted is not { } surface) ? null : new SdfMeshTriangleGrid(cellSize: (2f * cell), indices: surface.Indices.Span, positions: surface.Positions.Span));
         var crossings = 0;
         var missing = 0;
 
@@ -936,7 +930,7 @@ public static class SdfMeshAudit {
             var nearest = triangles.Nearest(indices: corners, point: crossing, positions: mesh, reach: (4f * cell));
 
             crossings++;
-            if ((nearest > cell) && ((excused is null) || (excused.Nearest(indices: accounted!.Indices.Span, point: crossing, positions: accounted.Positions.Span, reach: (4f * cell)) > cell))) {
+            if ((nearest > cell) && ((excused is null) || (excused.Nearest(indices: accounted!.Value.Indices.Span, point: crossing, positions: accounted.Value.Positions.Span, reach: (4f * cell)) > cell))) {
                 missing++;
                 flagged.Add(item: new Sample(Kind: SampleKind.Missing, Position: crossing, Severity: (nearest / cell), Value: nearest));
                 defects.Add(item: (SdfMeshDefectClass.ShortTip, crossing));

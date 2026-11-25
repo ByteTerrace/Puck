@@ -817,6 +817,7 @@ public sealed partial class WorldColliderSet : IContactField {
         var fields = 0;
         var composed = CollidesAsField(document: creation.EngineDocument);
         var rotation = stamp.FixedRotation;
+        var fieldsByFrame = (composed ? new Dictionary<FixedCreationStampTransform, Puck.SignedDistance.Queries.SdfFieldEvaluator>() : null);
 
         stamp.ForEachFixed(visitor: instance => {
             var transform = new FixedCreationStampTransform(
@@ -827,7 +828,7 @@ public sealed partial class WorldColliderSet : IContactField {
             );
 
             if (composed) {
-                if (ReliefCollider(document: creation.EngineDocument, margin: solid.Margin, transform: transform) is not { } relief) {
+                if (ReliefCollider(document: creation.EngineDocument, margin: solid.Margin, shared: fieldsByFrame, transform: transform) is not { } relief) {
                     return;
                 }
 

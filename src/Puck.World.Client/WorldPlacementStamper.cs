@@ -351,13 +351,15 @@ public static partial class WorldPlacementStamper {
     // A closed mesh drawn under a mirror: the same triangles with each one's winding reversed, which the mirror reverses
     // back, so its faces stay outward where it is drawn.
     private static SdfMesh Mirrored(SdfMesh mesh) => MirroredMeshes.GetValue(key: mesh, derive: static closed => {
-        var indices = closed.Indices.ToArray();
+        // An authored mesh is managed: its planes are arrays the mirrored mesh shares.
+        using var held = closed.Hold();
+        var indices = held.Indices.ToArray();
 
         for (var index = 0; (index < indices.Length); index += 3) {
             (indices[(index + 1)], indices[(index + 2)]) = (indices[(index + 2)], indices[(index + 1)]);
         }
 
-        return new SdfMesh(indices: indices, positions: closed.Positions);
+        return new SdfMesh(indices: indices, positions: held.Positions);
     });
 
     private static readonly Puck.Abstractions.CodeDerivedTable<SdfMesh, SdfMesh> MirroredMeshes = new();

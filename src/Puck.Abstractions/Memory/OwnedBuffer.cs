@@ -57,9 +57,16 @@ public sealed class HostMemoryRefusedException(string owner, long bytes)
 }
 /// <summary>Optional physical allocator readings; these include allocator slack and are not payload counts.</summary>
 public interface IAllocatorStatistics {
-    /// <summary>Reads the allocator's committed and reserved address-space bytes.</summary>
-    /// <returns>The committed and reserved byte readings, including allocator metadata and slack.</returns>
+    /// <summary>Reads the allocator's committed and reserved address-space bytes as its own statistics count them.</summary>
+    /// <returns>The committed and reserved byte readings, including allocator metadata and slack. An allocator that keeps
+    /// statistics per thread (mimalloc) can trail what its arenas hold; a walk of the address space reads them by their
+    /// pages through <see cref="Owns"/>.</returns>
     (long Committed, long Reserved) ReadStatistics();
+    /// <summary>Returns whether an address lies in memory the allocator manages (its arenas), so a walk of the process's
+    /// address space can name the allocator's regions by their own pages rather than by its statistics.</summary>
+    /// <param name="address">The address.</param>
+    /// <returns><see langword="true"/> when the allocator manages the address.</returns>
+    bool Owns(nint address);
     /// <summary>Asks the allocator to release idle storage. Live allocations are unaffected.</summary>
     void Collect();
 }
