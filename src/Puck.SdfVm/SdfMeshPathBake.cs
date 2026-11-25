@@ -417,6 +417,8 @@ public sealed partial class SdfMeshPathBake {
 
     // How many of the first groups Pending found done; every write of a group lowers it to that group's index (Replace).
     private int m_doneThrough;
+    // How many of the first groups StillPending found done or live and showing a mesh; lowered with m_doneThrough.
+    private int m_stillThrough;
 
     private readonly Stopwatch m_clock = new();
 
@@ -496,6 +498,13 @@ public sealed partial class SdfMeshPathBake {
     /// in the mesh region ahead of the draws, which move no draw until they take them. A view whose latest render
     /// stands need not render again while only those wait. Never waits, as <see cref="Pending"/>.</summary>
     public bool DrawsPending => (((Volatile.Read(location: ref m_owing) & OwingWork) != 0) || DressOwed());
+    /// <summary>Gets whether the bake owes anything besides live geometry's next plans (<see cref="Pending"/> less what a
+    /// group reading an operand's pose or a moving sampled field owes once it draws a mesh of its own shape): what a wait
+    /// on the bakes settling holds on. Live geometry is made as the world runs, so a body that keeps cutting or a field
+    /// that keeps moving owes a newer plan for as long as it moves; each lands as it is baked, and the plan before it draws
+    /// meanwhile. A live group that draws nothing holds the wait as any group does. Never waits, as
+    /// <see cref="Pending"/>.</summary>
+    public bool StillPending => (((Volatile.Read(location: ref m_owing) & OwingStill) != 0) || StillDressOwed());
 
     // What the bake owed as the latest holder of its lock left it, for the frame's reads that must not wait on the
     // workers holding it (Pending, DrawsPending): products landing ahead of the draws, and work (Owes, less the dressed
@@ -506,11 +515,16 @@ public sealed partial class SdfMeshPathBake {
 
     private const int OwingAhead = 1;
     private const int OwingWork = 2;
+    // Work or a product ahead of the draws that is not live geometry's next plan (StillPending).
+    private const int OwingStill = 4;
 
     // Publishes what the bake owes, at a release of its lock. Under the gate.
-    private void PublishOwing() => Volatile.Write(location: ref m_owing, value: (((m_ahead.Count > 0) ? OwingAhead : 0) | (OwesWork() ? OwingWork : 0)));
+    private void PublishOwing() => Volatile.Write(location: ref m_owing, value: (((m_ahead.Count > 0) ? OwingAhead : 0) | (OwesWork() ? OwingWork : 0) | (OwesStill() ? OwingStill : 0)));
     // Whether a landed product has not reached the dressed frame: the dresser acknowledges outside the lock.
     private bool DressOwed() => ((Volatile.Read(location: ref m_program) is not null) && (Volatile.Read(location: ref m_dressedRevision) != Volatile.Read(location: ref m_productRevision)));
+    // Whether a landed product of anything but live geometry has not reached the dressed frame. The revisions only grow,
+    // and the dresser acknowledges the product revision it read, so it has taken every change up to the one it names.
+    private bool StillDressOwed() => ((Volatile.Read(location: ref m_program) is not null) && (Volatile.Read(location: ref m_dressedRevision) < Volatile.Read(location: ref m_stillRevision)));
 
     /// <summary>Gets whether every group of the bake's program draws a mesh of its own geometry at some tier, or has
     /// finished with none: no group draws nothing while it bakes, and none still draws the mesh it took from the group it
@@ -582,6 +596,27 @@ public sealed partial class SdfMeshPathBake {
         while ((m_doneThrough < m_groups.Count) && m_groups[m_doneThrough].Done) { m_doneThrough++; }
         return m_doneThrough;
     }
+    // OwesWork, less live geometry's next plans once it draws a mesh of its own shape (StillPending). Under the gate.
+    private bool OwesStill() {
+        if ((m_slice is not null) || (m_firstDetailsOwed > 0)) { return true; }
+        foreach (var group in m_ahead) {
+            if (!group.Live) { return true; }
+        }
+        if (m_successors > 0) {
+            foreach (var index in m_inputReaders) {
+                if ((m_groups[index] is { Successor: not null } holder) && !holder.Live) { return true; }
+            }
+        }
+        return (StillThrough() < m_groups.Count);
+    }
+    // Advances and returns the still cursor: the index every group before which is done or is live geometry showing a
+    // mesh. Either only turns on while a group holds its place (Done, Live, a shown mesh), and every replacement of a place
+    // moves the cursor back to it with the done cursor (Replace, Restart), so the groups before it stay so. Under the
+    // gate.
+    private int StillThrough() {
+        while ((m_stillThrough < m_groups.Count) && (m_groups[m_stillThrough] is var group) && (group.Done || (group.Live && (group.Shown is not null)))) { m_stillThrough++; }
+        return m_stillThrough;
+    }
 
     /// <summary>Gets whether an opaque static group still owes a mesh, or a landed mesh has not reached the dressed
     /// frame. Only these groups enter the irradiance scene: animated groups, glass and diagnostic field slices must
@@ -646,6 +681,9 @@ public sealed partial class SdfMeshPathBake {
 
     // A changed landed product is acknowledged only after the dresser has published its draws and ownership claims.
     private long m_productRevision;
+    // The product revision at the latest change Touch made of a group that is not live geometry, or of the whole list:
+    // what StillPending asks the dresser to have taken.
+    private long m_stillRevision;
 
     private long m_dressedRevision = -1;
     // The groups whose product lands in the mesh region ahead of the draws (Group.Ahead); the count of changes to
@@ -747,12 +785,14 @@ public sealed partial class SdfMeshPathBake {
 
     private void Touch(Group group) {
         m_productRevision++;
+        if (!group.Live) { m_stillRevision = m_productRevision; }
         if (m_touchedAll) { return; }
         _ = m_touched.Add(group: group);
     }
     // Marks every group changed, for a change that names none.
     private void TouchAll() {
         m_productRevision++;
+        m_stillRevision = m_productRevision;
         m_touchedAll = true;
     }
     // Hands the dresser the groups changed since it last took them, and starts the next list.
@@ -1573,6 +1613,7 @@ public sealed partial class SdfMeshPathBake {
         }
         CountHoles(group: group, listed: true);
         m_doneThrough = Math.Min(val1: m_doneThrough, val2: index);
+        m_stillThrough = Math.Min(val1: m_stillThrough, val2: index);
     }
     // Starts the bake of a new program: one group per dynamic slot and per run of static instances baked together (one rigid
     // copy), each starting at the coarse lattice over its bounding box. The meshes of the previous groups keep drawing until
@@ -1591,6 +1632,7 @@ public sealed partial class SdfMeshPathBake {
         m_groups.Clear();
         TouchAll();
         m_doneThrough = 0;
+        m_stillThrough = 0;
         // A slice samples one program and set: a new one takes every lattice again.
         m_slice?.Reset();
         // Read before the rungs being filled stand down below: such a rung stands at its group's own tier.
