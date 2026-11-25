@@ -96,12 +96,7 @@ public sealed class OwnedLongMap<TValue> : IDisposable where TValue : unmanaged 
     private int Home(long key) => (int)(InvertibleBitMix.Mix64(value: (ulong)key) & (ulong)m_mask);
     // A power of two at least sixteen that keeps `count` keys at most half the table.
     private static int SlotsFor(int count) => (int)Math.Max(val1: 16UL, val2: (((ulong)Math.Max(val1: 1, val2: count)) * 2UL).NextPowerOfTwo());
-    private OwnedBuffer<T> Table<T>(int slots, bool clear = false) where T : unmanaged {
-        var table = new OwnedBuffer<T>(allocator: m_allocator, capacity: slots, observer: m_observer);
-
-        table.Resize(clear: clear, length: slots);
-        return table;
-    }
+    private OwnedBuffer<T> Table<T>(int slots, bool clear = false) where T : unmanaged => OwnedBuffer<T>.OfLength(allocator: m_allocator, clear: clear, length: slots, observer: m_observer);
     private void Grow() {
         var keys = m_keys;
         var values = m_values;
