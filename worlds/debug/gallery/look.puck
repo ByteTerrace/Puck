@@ -57,8 +57,8 @@ let lookCabinetBezel = "#15121B"
 let lookCabinetInk = "#2E1838"
 // How bright a marquee's panel glows, and the picture's peak luminance: an arcade monitor's, bright enough that the
 // games read as lit screens from across the nave.
-let lookCabinetGlow = 120
-let lookCabinetLuminance = 320nit
+let lookCabinetGlow = 600
+let lookCabinetLuminance = 900nit
 // A cabinet's materials in the standard's slot order (architecture.puck's arcadeCabinet).
 function lookCabinetPalette(c) = [
   { color: c.body, roughness: 0.3, specular: 0.04, coat: 0.5 }
