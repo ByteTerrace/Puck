@@ -260,10 +260,11 @@ holding its place so no group behind it is admitted first, and a group that
 does not fit when nothing of its bake is admitted is admitted anyway as the
 process's one forced job (`MemoryAccount.Owner.TryReserveForced`,
 `[sdf.mesh-bake] admitted alone`), or waits while another bake holds that
-allowance. So a bake under `host.memory budget 1`, or on a machine with little
-free memory, which the account reads itself, still settles, one group at a
-time in the whole process, and a lockstep World never holds its frame
-forever. Transient scratch that a cache's read needs (a mesh store entry and
+allowance. The forced job and a progress floor still leave the machine its
+floor (`MemoryAccount.FitsMachine`: nothing while the system signals low
+memory, nothing past its free physical memory less the headroom), so on a
+machine with little free memory a bake waits, one group at a time in the whole
+process, rather than exhausting it, and settles as memory comes back. Transient scratch that a cache's read needs (a mesh store entry and
 its expanded planes) reserves through `MemoryAccount.Owner.TryReserveWithin`:
 admitted with room or as the forced job, and otherwise after a bounded wait,
 past which the read is a miss. Device storage states a class (`MemoryClass`): elastic and workspace
