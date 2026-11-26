@@ -1606,7 +1606,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             var submission = input.Publish(m_roster.PrincipalOf(slot: slot), targets[slot], tick, seat, intent);
 
             endpoint.Submissions.SubmitIntent(submission: in submission);
-            if (!endpoint.ClockOwnedHere) { m_sentInput[slot].Record(clientTick: SeatClockTicks(rateHz: definition.SimulationRateHz), endpoint: endpoint, incarnation: input.OwnerIncarnation, submission: in submission); }
+            if (!endpoint.ClockOwnedHere) { m_sentInput[slot].Record(clientTick: SeatClockTicks(rateHz: definition.SimulationRateHz), deliveredTick: endpoint.Mirror.Tick, endpoint: endpoint, incarnation: input.OwnerIncarnation, submission: in submission); }
             m_lastSubmittedIntent[slot] = intent;
             m_lastSubmissionEpoch[slot] = routes[slot]!.Epoch;
             m_lastSubmissionTick[slot] = tick;

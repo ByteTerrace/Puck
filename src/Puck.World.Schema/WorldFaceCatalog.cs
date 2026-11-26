@@ -38,6 +38,14 @@ public readonly record struct WorldFaceRow(
     GpuSamplerFilter Filter = GpuSamplerFilter.Nearest,
     string? Material = null
 );
+/// <summary>One portal door of a document (<see cref="WorldFaceCatalog.PortalDoors"/>): a placement face row naming a
+/// portal, and the region its face opens.</summary>
+/// <param name="Row">The placement's 0-based index in <see cref="WorldDefinition.Placements"/>.</param>
+/// <param name="Face">The placement's face row.</param>
+/// <param name="Portal">The face row's portal.</param>
+/// <param name="Aperture">The region the face opens at the document's crossing floor.</param>
+public readonly record struct WorldPortalDoor(int Row, WorldPlacementFace Face, WorldPlacementPortal Portal, WorldFaceAperture Aperture);
+
 /// <summary>
 /// The one derivation of a document's placement faces — <c>(placements x declared creation faces)</c> walked once,
 /// in document order, into geometry plus a resolved screen source. Trigger, arrival, render, and the
@@ -105,6 +113,9 @@ public sealed class WorldFaceCatalog {
     private readonly WorldFaceAperture?[] m_apertures;
 
     private StrongBox<FixedQ4816>? m_crossingFloor;
+    // Every definition sharing this catalog (CarryAcrossState, CarryAcrossHolding) keeps the placements' order and face
+    // rows, so the doors hold for each of them.
+    private IReadOnlyList<WorldPortalDoor>? m_portalDoors;
 
     /// <summary>Gets how many rows resolved to a source that renders something, and so asked for a screen slot.</summary>
     public int ClaimingFaceCount { get; }
@@ -570,6 +581,39 @@ public sealed class WorldFaceCatalog {
         m_apertures[index] = aperture;
 
         return true;
+    }
+    /// <summary>Gets every portal door of a document: each placement face row that names a portal and whose face opens a
+    /// region at the crossing floor, in document order (placements outer, each placement's face rows inner), built once
+    /// for the catalog. Whether a door stands open is state, read by its consumer.</summary>
+    /// <param name="definition">A definition this catalog was derived for.</param>
+    /// <returns>The doors.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public IReadOnlyList<WorldPortalDoor> PortalDoors(WorldDefinition definition) {
+        ArgumentNullException.ThrowIfNull(definition);
+
+        if (m_portalDoors is { } built) {
+            return built;
+        }
+
+        var doors = new List<WorldPortalDoor>();
+        var placements = definition.Placements;
+
+        for (var row = 0; (row < placements.Count); row++) {
+            if (placements[row]?.FaceSources is not { Count: > 0 } faces) {
+                continue;
+            }
+
+            for (var index = 0; (index < faces.Count); index++) {
+                var face = faces[index];
+
+                if ((face.Portal is { } portal) && TryFindAperture(aperture: out var aperture, definition: definition, faceName: face.Face, placementId: placements[row].Id)) {
+                    doors.Add(item: new WorldPortalDoor(Aperture: aperture!, Face: face, Portal: portal, Row: row));
+                }
+            }
+        }
+
+        m_portalDoors = doors;
+        return doors;
     }
     /// <summary>Finds the first derived face row, in document order, seated at a screen index.</summary>
     /// <param name="screenIndex">The derived-face screen index.</param>

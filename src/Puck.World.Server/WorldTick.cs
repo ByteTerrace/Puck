@@ -137,6 +137,9 @@ public sealed partial class WorldTick {
     // The stream lease id is server-minted; an older socket's finally block can therefore never clear a replacement
     // socket's state after a reconnect.
     private readonly WorldFederatedIntentState[] m_federatedIntents;
+    // The storage behind each slot's pending window (WorldFederatedIntentState.Pending), which only
+    // AppendOnlyWindows.Append writes.
+    private readonly (IntentSubmission[]? Storage, int End)[] m_federatedPending;
     // The reason each body's federated input was last dropped for; an input that names no body shares key -1.
     private readonly Puck.Abstractions.ReasonLatch<int> m_federatedDrops = new();
 
@@ -243,6 +246,7 @@ public sealed partial class WorldTick {
         m_untrustedAcceptedMask = new ChannelHeldMask[capacity];
         m_untrustedSum = new long[(capacity * ChannelLimits.MaxChannels)];
         m_federatedIntents = new WorldFederatedIntentState[capacity];
+        m_federatedPending = new (IntentSubmission[]?, int)[capacity];
         m_host = host;
 
         if (
