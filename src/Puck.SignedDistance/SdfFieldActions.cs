@@ -136,6 +136,7 @@ internal enum SdfCertificateAction {
     Capsule,
     Superellipsoid,
     Trapezoid,
+    Sweep,
     Unavailable,
 }
 
@@ -143,7 +144,6 @@ internal enum SdfCertificateAction {
 internal enum SdfShapePointAction : byte {
     Formula,
     ConvexPolygon,
-    Sweep,
     Path,
     Unsupported,
 }

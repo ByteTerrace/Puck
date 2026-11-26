@@ -22,6 +22,9 @@ internal static partial class SdfFieldFormulas {
     private static readonly Scalar Half = Literal(0.5);
     private static readonly Scalar One = Literal(1);
     private static readonly Scalar Two = Literal(2);
+    private static readonly Scalar Three = Literal(3);
+    // The carrier's least step, 2⁻¹⁶ (one raw).
+    private static readonly Scalar Epsilon = Literal(1.0 / 65536.0);
     // SdfProgram.SqrtHalf and SdfProgram.SmoothRadiusMin, held by the evaluator in fixed point and generated into the
     // kernels' ISA declarations.
     private static readonly Scalar SqrtHalf = Constant("SqrtHalf", "SDF_SQRT_HALF");
@@ -56,6 +59,14 @@ internal static partial class SdfFieldFormulas {
     // The lane a morph pop reads. The fixed-point reader walks static fields, where no dynamic slot is selected and
     // every lane reads zero, as the kernels' sdfFieldLane reads it there.
     private static readonly SdfFormulaOperand<SdfScalar> MorphLane = new("FixedQ4816.Zero", "sdfFieldLane(currentSlot, (uint)data0.x)");
+    // A sweep's curve and radius profile, from the side table its Data0.x names (SdfShapeType.Sweep): the evaluator's
+    // compiled curve and the kernels' program words (field/sdf-shapes.hlsli's sdfSweepA and the rest).
+    private static readonly SdfFormulaOperand<SdfVector3> SweepA = new("SweepA(instruction)", "sdfSweepA(data0)");
+    private static readonly SdfFormulaOperand<SdfVector3> SweepB = new("SweepB(instruction)", "sdfSweepB(data0)");
+    private static readonly SdfFormulaOperand<SdfVector3> SweepC = new("SweepC(instruction)", "sdfSweepC(data0)");
+    private static readonly SdfFormulaOperand<SdfScalar> SweepRadiusStart = new("SweepRadiusStart(instruction)", "sdfSweepRadiusStart(data0)");
+    private static readonly SdfFormulaOperand<SdfScalar> SweepRadiusEnd = new("SweepRadiusEnd(instruction)", "sdfSweepRadiusEnd(data0)");
+    private static readonly SdfFormulaOperand<SdfScalar> SweepBulge = new("SweepBulge(instruction)", "sdfSweepBulge(data0)");
 
     private static Scalar X(Vector2 value) => Scalar.Of(SdfFormulaOp.X, value);
     private static Scalar Y(Vector2 value) => Scalar.Of(SdfFormulaOp.Y, value);
@@ -100,6 +111,13 @@ internal static partial class SdfFieldFormulas {
         Scalar.Of(SdfFormulaOp.Fbm3, q, seed, octaves, gain, lacunarity);
     private static Scalar CellDistance(Vector3 q, SdfValue<SdfIndex> seed, SdfValue<SdfIndex> mode, Scalar jitter) =>
         Scalar.Of(SdfFormulaOp.CellDistance, q, seed, mode, jitter);
+    private static Vector3 Lerp(Vector3 from, Vector3 to, Scalar amount) => Vector3.Of(SdfFormulaOp.Lerp, from, to, amount);
+    private static Scalar Sqrt(Scalar value) => Scalar.Of(SdfFormulaOp.Sqrt, value);
+    // A value whose derivative the dual readers take as zero: a parameter the distance is stationary in, where the
+    // envelope theorem makes the distance's gradient the partial one at that parameter.
+    private static Scalar Detach(Scalar value) => Scalar.Of(SdfFormulaOp.Detach, value);
+    private static Scalar SweepSearch(Vector3 p, Vector3 a, Vector3 b, Vector3 c, Scalar radiusStart, Scalar radiusEnd, Scalar bulge, Scalar strands, Scalar twist, Scalar strandOffset) =>
+        Scalar.Of(SdfFormulaOp.SweepSearch, p, a, b, c, radiusStart, radiusEnd, bulge, strands, twist, strandOffset);
 
     // === Helpers ======================================================================================================
 
@@ -190,6 +208,101 @@ internal static partial class SdfFieldFormulas {
         f.ReturnIf(h <= Zero, b);
         f.ReturnIf(h >= One, a);
         f.Return(Lerp(a, b, One - h) - ((k * h) * (One - h)));
+    });
+
+    // === The swept tube ===============================================================================================
+    // A quadratic Bézier B from a through b to c, swept with a radius r tapering linearly from radiusStart to radiusEnd: the
+    // union of the spheres of radius r(t) about B(t). Its field is the least gap g(t) = |p - B(t)| - r(t) over t in [0, 1];
+    // each gap is 1-Lipschitz in p, so the least is exact outside and a bound inside.
+
+    /// <summary>The Newton steps each of the tube's two brackets takes (SweepParameter).</summary>
+    internal const int SweepNewtonSteps = 6;
+
+    private static readonly SdfFormula<SdfVector3> BezierPoint = Helper<SdfVector3>("sdfBezierPoint", static f => {
+        var a = f.ParameterOf<SdfVector3>("a");
+        var b = f.ParameterOf<SdfVector3>("b");
+        var c = f.ParameterOf<SdfVector3>("c");
+        var t = f.ParameterOf<SdfScalar>("t");
+        f.Return(Lerp(Lerp(a, b, t), Lerp(b, c, t), t));
+    });
+    // The gap from p to the tube's sphere at t.
+    private static readonly SdfFormula<SdfScalar> SweepTubeGap = Helper("sdfSweepTubeGap", static f => {
+        var p = f.ParameterOf<SdfVector3>("p");
+        var a = f.ParameterOf<SdfVector3>("a");
+        var b = f.ParameterOf<SdfVector3>("b");
+        var c = f.ParameterOf<SdfVector3>("c");
+        var radiusStart = f.ParameterOf<SdfScalar>("radiusStart");
+        var radiusEnd = f.ParameterOf<SdfScalar>("radiusEnd");
+        var t = f.ParameterOf<SdfScalar>("t");
+        f.Return(Length(p - BezierPoint.Call(a, b, c, t)) - Lerp(radiusStart, radiusEnd, t));
+    });
+    // One bracketed Newton step toward a root of h(t) = d·v - k·|d|, with d = B(t) - p = e + t(2u + tw), v = B'(t) =
+    // 2(u + tw) and k = r'(t): h is g' times |d|, so it has g's stationary points for roots and stays smooth where |d|
+    // vanishes, which g' does not. The state is (t, low, high): the sign of h at t moves the bracket's end on that side to
+    // t, and the Newton step from t stands where it lands inside the bracket, else its midpoint does.
+    // h' = v·v + 2d·w - k(d·v)/|d|.
+    private static readonly SdfFormula<SdfVector3> SweepNewton = Helper<SdfVector3>("sdfSweepNewton", static f => {
+        var e = f.ParameterOf<SdfVector3>("e");
+        var u = f.ParameterOf<SdfVector3>("u");
+        var w = f.ParameterOf<SdfVector3>("w");
+        var k = f.ParameterOf<SdfScalar>("k");
+        var state = f.ParameterOf<SdfVector3>("state");
+        var t = f.Bind("t", X(state));
+        var d = f.Bind("d", e + Scale(Scale(u, Two) + Scale(w, t), t));
+        var v = f.Bind("v", Scale(u + Scale(w, t), Two));
+        var l = f.Bind("l", Max(Length(d), Epsilon));
+        var dv = f.Bind("dv", Dot(d, v));
+        var h = f.Bind("h", dv - (k * l));
+        var slope = f.Bind("slope", (Dot(v, v) + (Two * Dot(d, w))) - (k * (dv / l)));
+        var low = f.Bind("low", Select(h < Zero, t, Y(state)));
+        var high = f.Bind("high", Select(h < Zero, Z(state), t));
+        var newton = f.Bind("newton", t - (h / Max(slope, Epsilon)));
+        f.Return(Vec3(Select(((slope > Zero) & (newton >= low)) & (newton <= high), newton, Half * (low + high)), low, high));
+    });
+    // The parameter of the tube's least gap. The centreline's squared distance |d|² has the derivative 4f, f(t) = w·w t³ +
+    // 3u·w t² + (2u·u + e·w)t + e·u, whose own derivative 3w·w t² + 6u·w t + (2u·u + e·w) has the roots s1 <= s2. Where f
+    // falls, between them, (d·v)' = 2f' < 0 makes |d| concave, and a linear taper leaves g'' = |d|'', so g has no minimum
+    // there: every interior minimum lies in [0, s1] or [s2, 1]. A centreline without two such ranges splits [0, 1] at f's
+    // inflection instead. Each bracket takes SweepNewtonSteps steps from its midpoint, and the answer is whichever of the
+    // start, the end and the two brackets' parameters reads the least gap, the start first on a tie, so the tube never
+    // reads above the gap at its start (SdfFieldEvaluator.SweepBounds rests on that).
+    private static readonly SdfFormula<SdfScalar> SweepParameter = Helper("sdfSweepParameter", static f => {
+        var p = f.ParameterOf<SdfVector3>("p");
+        var a = f.ParameterOf<SdfVector3>("a");
+        var b = f.ParameterOf<SdfVector3>("b");
+        var c = f.ParameterOf<SdfVector3>("c");
+        var radiusStart = f.ParameterOf<SdfScalar>("radiusStart");
+        var radiusEnd = f.ParameterOf<SdfScalar>("radiusEnd");
+        var e = f.Bind("e", a - p);
+        var u = f.Bind("u", b - a);
+        var w = f.Bind("w", (a - Scale(b, Two)) + c);
+        var k = f.Bind("k", radiusEnd - radiusStart);
+        var ww = f.Bind("ww", Dot(w, w));
+        var uw = f.Bind("uw", Dot(u, w));
+        var discriminant = f.Bind("discriminant", (uw * uw) - ((ww * ((Two * Dot(u, u)) + Dot(e, w))) / Three));
+        var curved = f.Bind("curved", ww > Epsilon);
+        var inflection = f.Bind("inflection", Select(curved, Clamp(-uw / ww, Zero, One), Half));
+        var root = f.Bind("root", Sqrt(Max(discriminant, Zero)));
+        var split = f.Bind("split", curved & (discriminant > Zero));
+        var first = f.Bind("first", Select(split, Clamp((-uw - root) / ww, Zero, One), inflection));
+        var second = f.Bind("second", Select(split, Clamp((root - uw) / ww, Zero, One), inflection));
+        var below = f.Bind("below0", Vec3(Half * first, Zero, first));
+        var above = f.Bind("above0", Vec3(Half * (second + One), second, One));
+        for (var step = 1; step <= SweepNewtonSteps; step++) {
+            below = f.Bind("below" + step, SweepNewton.Call(e, u, w, k, below));
+            above = f.Bind("above" + step, SweepNewton.Call(e, u, w, k, above));
+        }
+        var belowT = f.Bind("belowT", X(below));
+        var aboveT = f.Bind("aboveT", X(above));
+        var startGap = f.Bind("startGap", SweepTubeGap.Call(p, a, b, c, radiusStart, radiusEnd, Zero));
+        var endGap = f.Bind("endGap", SweepTubeGap.Call(p, a, b, c, radiusStart, radiusEnd, One));
+        var belowGap = f.Bind("belowGap", SweepTubeGap.Call(p, a, b, c, radiusStart, radiusEnd, belowT));
+        var aboveGap = f.Bind("aboveGap", SweepTubeGap.Call(p, a, b, c, radiusStart, radiusEnd, aboveT));
+        var endsT = f.Bind("endsT", Select(endGap < startGap, One, Zero));
+        var endsGap = f.Bind("endsGap", Min(startGap, endGap));
+        var nearT = f.Bind("nearT", Select(belowGap < endsGap, belowT, endsT));
+        var nearGap = f.Bind("nearGap", Min(endsGap, belowGap));
+        f.Return(Select(aboveGap < nearGap, aboveT, nearT));
     });
 
     // === Shapes =======================================================================================================
@@ -314,6 +427,24 @@ internal static partial class SdfFieldFormulas {
         var norm = f.Bind("norm", m * Power((ux + uy) + uz, One / exponent));
         f.ReturnIf((Two < exponent) & (exponent <= Literal(SuperellipsoidClampedExponent)), ClampSuperellipsoidNorm.Call(norm, Length(q), exponent) - minRadius);
         f.Return(norm - minRadius);
+    });
+    // The sweep (SdfShapeType.Sweep): a tube tapering linearly takes its least gap at SweepParameter's parameter, which
+    // the dual readers hold constant, since the gap is stationary in t there. A bulging radius or a strand orbiting the
+    // centreline takes the search primitive instead.
+    internal static readonly SdfFormula<SdfScalar> Sweep = Shape("sdfSweep", static f => {
+        var p = f.Input("p", Point);
+        var a = f.Input("a", SweepA);
+        var b = f.Input("b", SweepB);
+        var c = f.Input("c", SweepC);
+        var radiusStart = f.Input("radiusStart", SweepRadiusStart);
+        var radiusEnd = f.Input("radiusEnd", SweepRadiusEnd);
+        var bulge = f.Input("bulge", SweepBulge);
+        var strands = f.Input("strands", Data0Y);
+        var twist = f.Input("twist", Data0Z);
+        var strandOffset = f.Input("strandOffset", Data0W);
+        f.ReturnIf(Equal(bulge, Zero) & Equal(strandOffset, Zero),
+            SweepTubeGap.Call(p, a, b, c, radiusStart, radiusEnd, Detach(SweepParameter.Call(p, a, b, c, radiusStart, radiusEnd))));
+        f.Return(SweepSearch(p, a, b, c, radiusStart, radiusEnd, bulge, strands, twist, strandOffset));
     });
 
     // === Blends =======================================================================================================
