@@ -191,10 +191,13 @@ let westBays = [
 ]
 let eastBays = [[northAisleMid], [4.4, northAisleMid], [4.4, northAisleMid], [4.4, northAisleMid]]
 
-// The painting wing: level 0's south aisle east of the entrance lobby, x 30 .. 59.7. Two fins stand out from the south
-// wall, at x 30 and x 44.3, each 4.2 m long; the fall's well is at (52.5, 6.2), under a hole in level 1's floor.
+// The painting wing: level 0's south aisle east of the entrance lobby, x 30 to the east wall. Three fins stand out from
+// the south wall, each 4.2 m long: at x 30, at x 44.3, and against the west side of the south-east stair's well, which
+// fills the wing's last bay, so the east court ends at that fin; the fall's well is at (52.5, 6.2), under a hole in
+// level 1's floor.
 let courtWest = 30
 let courtFin = 44.3
+let courtStairFin = (galleryStair("south-east").well.x0 - galleryWall)
 let courtFinLength = 4.2
 let fallPlan = [52.5, 6.2]
 // The paintings that hang on the painting wing's south wall, as the centre of each along it (paintings.puck hangs them;

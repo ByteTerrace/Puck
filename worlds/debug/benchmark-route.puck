@@ -11,20 +11,29 @@
 // through the looping pair, back to the lobby, into Wonderland through the big painting to the machines and out
 // through the mouse hole. Then the seams: the valley into the lobby and back, the garden painting, the city painting, and
 // the lift ridden by its buttons. Places are places.puck's regions (`place-*`); headings are yaws (0 faces -Z, 90 faces
-// -X, 180 faces +Z, 270 faces +X); points are world coordinates on the floor.
+// -X, 180 faces +Z, 270 faces +X); points are on the floor. A point in the hall is given in the building's frame and
+// stood where the world stands the building (gallery/layout.puck's `galleryWorld`), and a point in Wonderland where its
+// room stands beside the hall's west wall (`galleryWestShift`, as wonderland.puck places it), so the walk follows the
+// plan when it changes.
 
-// A floor's height in the hall (shapes.puck's galleryFloor).
-let floor0 = 0.05
-let floor3 = 13.55
+import "gallery/layout"
 
-// The lift (gallery/gallery.puck), in world coordinates: the landing's call plate reach box east of the car's door, the
-// car's door in the south wall, and the car's rail at its back, whose buttons for levels 0 to 3 stand left to right
+// A floor's height in the hall.
+let floor0 = galleryFloor[0]
+let floor3 = galleryFloor[3]
+
+// The lift (gallery/gallery.puck), in the building's frame: the landing's call plate reach box east of the car's door,
+// the car's door in the south wall, and the car's rail at its back, whose buttons for levels 0 to 3 stand left to right
 // from the viewer facing it (-Z).
-let liftPad = 29.8
-let liftPadZ = 12.9
-let liftDoorX = 28.8
-let liftPanelZ = 9.4
-function liftButton(level) = (liftDoorX - (0.95 - ((1.9 / 6) * (level + 0.5))))
+let liftPadX = (liftX + 1)
+let liftPadZ = (galleryWall + 0.6)
+let liftPanelZ = (liftZ - 0.95)
+function liftButton(level) = (liftX - (0.95 - ((1.9 / 6) * (level + 0.5))))
+// The line through the middle of the hall's entrance, in the building's frame.
+let entranceMid = ((entranceWest + entranceEast) / 2)
+// A point on Wonderland's floor on the line through its big painting and its mouse hole, `x` as authored against the
+// hall's west wall at x 10.3.
+function wonderAt(x) = [(x + galleryWestShift), floor0, 30.5]
 
 // Steps the chapters share.
 function stand(seconds) = { $type: "rest", seconds: seconds }
@@ -38,17 +47,17 @@ function press(action, seconds) = { $type: "press", action: action, seconds: sec
 // the door, press the level's button on the panel, ride until the car reaches that level, and step out as its doors
 // open. Inside the car every step walks.
 function ride(from, to, level, pace) = [
-  goTo([liftPad, from, liftPadZ], pace, 0.15)
+  goTo(galleryWorld(liftPadX, from, liftPadZ), pace, 0.15)
   face(0, 0.5)
   press("interact", 3)
-  step([liftDoorX, from, 13.4])
-  step([liftDoorX, from, 10.8])
-  step([liftButton(level), from, liftPanelZ], 0.12)
+  step(galleryWorld(liftX, from, (galleryWall + 1.1)))
+  step(galleryWorld(liftX, from, (liftZ + 0.45)))
+  step(galleryWorld(liftButton(level), from, liftPanelZ), 0.12)
   face(0, 0.5)
   { $type: "press", action: "interact", until: $"place-gallery-level-{level}", seconds: 40 }
   stand(4)
-  step([liftDoorX, to, 11])
-  step([liftDoorX, to, 13.6])
+  step(galleryWorld(liftX, to, (liftZ + 0.65)))
+  step(galleryWorld(liftX, to, (galleryWall + 1.3)))
 ]
 
 // The seams (docs/plans/streaming-and-memory.md#the-seam-walk), each from its own spawn so a chapter fails alone. The
@@ -59,8 +68,8 @@ function valleySeam(name, pace) = {
   steps [
     { $type: "pose", spawn: `seam-valley` }
     stand(1)
-    goTo([36, floor0, 18], pace)
-    goTo([36, floor0, -14], pace)
+    goTo(galleryWorld(entranceMid, floor0, 5.4), pace)
+    goTo(galleryWorld(entranceMid, floor0, -26.6), pace)
     go("place-lobby", pace)
     stand(1)
   ]
@@ -131,7 +140,7 @@ routes [
             stand(1)
             go("place-hall-entrance", "run")
             go("place-lobby", "run")
-            goTo([36, floor0, 19], "walk")
+            goTo(galleryWorld(entranceMid, floor0, 6.4), "walk")
           ]
         }
         {
@@ -140,11 +149,11 @@ routes [
             go("place-nave", "run")
             go("place-painting-room", "run")
             go("place-loop-portal-east", "walk")
-            goTo([68.4, floor0, 14.4], "walk", 0.1)
+            goTo(galleryWorld((courtStairFin - 1.3), floor0, 2.4), "walk", 0.1)
             face(270, 0.5)
             { $type: "cross", headingDegrees: 270, until: "place-loop-portal-west", pace: "walk", metres: 6 }
             stand(1)
-            { $type: "rest", seconds: 2, lookAt [44.4, 1.5, 12.3] }
+            { $type: "rest", seconds: 2, lookAt: galleryWorld(courtWallDoors[0], 1.5, galleryWall) }
             go("place-nave", "run")
             go("place-lobby", "run")
           ]
@@ -153,15 +162,15 @@ routes [
           name: "Wonderland's machines"
           steps [
             go("place-wonderland-threshold", "walk")
-            goTo([11.6, floor0, 30.5], "walk", 0.15)
+            goTo(wonderAt(11.6), "walk", 0.15)
             face(90, 0.5)
             { $type: "cross", headingDegrees: 90, until: "place-wonderland", pace: "walk", metres: 4 }
-            goTo([3.6, floor0, 30.5], "walk", 0.2)
-            { $type: "rest", seconds: 4, lookAt [1.4, 0.6, 30.5] }
-            goTo([8.7, floor0, 30.5], "walk", 0.08)
+            goTo(wonderAt(3.6), "walk", 0.2)
+            { $type: "rest", seconds: 4, lookAt [(1.4 + galleryWestShift), 0.6, 30.5] }
+            goTo(wonderAt(8.7), "walk", 0.08)
             face(270, 0.5)
             { $type: "cross", headingDegrees: 270, until: "place-west-hall", pace: "walk", metres: 3 }
-            goTo([16, floor0, 26], "walk")
+            goTo(galleryWorld(6.2, floor0, 13.4), "walk")
           ]
         }
       ],
