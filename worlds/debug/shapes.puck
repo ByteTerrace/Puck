@@ -117,31 +117,31 @@ let galleryLevels = [
 let galleryDisplayRows = [
   {
     id: "primitives", title: "PRIMITIVES", level: 0, names: uniformRow, what: "each primitive at a uniform scale"
-    x: (displayNaveXs[0] - galleryTile), z: displayNaveSouth, yaw: 180
+    x: bayX(showcaseBays[3]), z: tileZ(showcaseRowSouth), yaw: 180
   }
   {
     id: "stretched", title: "STRETCHED", level: 0, names: stretchedRow, what: "each primitive scaled unevenly"
-    x: (displayNaveXs[1] - (3 * galleryTile)), z: displayNaveSouth, yaw: 180
+    x: bayX(showcaseBays[4]), z: tileZ(showcaseRowSouth), yaw: 180
   }
   {
     id: "extruded", title: "EXTRUDED", level: 0, names: extrudeRow, what: "each prism profile, extruded"
-    x: (displayNaveXs[0] - galleryTile), z: displayNaveNorth, yaw: 0
+    x: bayX(showcaseBays[3]), z: tileZ(showcaseRowNorth), yaw: 0
   }
   {
     id: "revolved", title: "REVOLVED", level: 0, names: revolveRow, what: "each prism profile, revolved"
-    x: (displayNaveXs[1] - (3 * galleryTile)), z: displayNaveNorth, yaw: 0
+    x: bayX(showcaseBays[4]), z: tileZ(showcaseRowNorth), yaw: 0
   }
   {
     id: "facets", title: "SWEEPS AND FACETS", level: 0, names: facetRow, what: "sweeps, rounding, shells, warps, relief"
-    x: (displayNaveXs[0] - (9 * galleryTile)), z: displayNaveSouth, yaw: 180
+    x: bayX(showcaseBays[2]), z: tileZ(showcaseRowSouth), yaw: 180
   }
   {
     id: "blends", title: "BLENDS", level: 0, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere"
-    x: (displayNaveXs[1] + (5 * galleryTile)), z: displayNaveSouth, yaw: 180
+    x: bayX(showcaseBays[5]), z: tileZ(showcaseRowSouth), yaw: 180
   }
   {
     id: "folds", title: "FOLDS", level: 0, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds"
-    x: (displayNaveXs[1] + (5 * galleryTile)), z: displayNaveNorth, yaw: 0
+    x: bayX(showcaseBays[5]), z: tileZ(showcaseRowNorth), yaw: 0
   }
   {
     id: "motion", title: "MOTION", level: motionLevel, names: motionRow, what: "the stamp pool: swings, slides, moving blends"
@@ -153,25 +153,25 @@ let galleryDisplayRows = [
   }
   {
     id: "warps", title: "WARPS II", level: 0, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph"
-    x: (displayNaveXs[0] - (25 * galleryTile)), z: displayNaveNorth, yaw: 0
+    x: bayX(showcaseBays[0]), z: tileZ(showcaseRowNorth), yaw: 0
   }
   {
     id: "forms", title: "FORMS", level: 0, names: formRow, what: "exponents, tapers, paths, a braid"
-    x: (displayNaveXs[0] - (9 * galleryTile)), z: displayNaveNorth, yaw: 0
+    x: bayX(showcaseBays[2]), z: tileZ(showcaseRowNorth), yaw: 0
   }
   {
     id: "surfaces", title: "SURFACES", level: 0, names: surfaceRow, what: "palette channels, wear, panels, text"
-    x: (displayNaveXs[0] - (17 * galleryTile)), z: displayNaveNorth, yaw: 0
+    x: bayX(showcaseBays[1]), z: tileZ(showcaseRowNorth), yaw: 0
   }
   {
     id: "styles", title: "STYLES", level: 0, names: styleRow
     what: "a cel style per material, beside continuous ones, the grey card and tiles"
-    x: (displayNaveXs[0] - (17 * galleryTile)), z: displayNaveSouth, yaw: 180
+    x: bayX(showcaseBays[1]), z: tileZ(showcaseRowSouth), yaw: 180
   }
   {
     id: "glass", title: "GLASS", level: 0, names: glassRow
     what: "glass over the opaque image: tint, depth, refraction, frost"
-    x: (displayNaveXs[0] - (25 * galleryTile)), z: displayNaveSouth, yaw: 180
+    x: bayX(showcaseBays[0]), z: tileZ(showcaseRowSouth), yaw: 180
   }
 ]
 // Every display stands on a floor tile's centre (layout.puck's module), so its pad lies square on the tiles.

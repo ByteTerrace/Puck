@@ -612,7 +612,7 @@ let naveEndPiers = map(range(0, 4), i => ((tallBayZs[0] - naveEndSpan) + ((2 * n
 // the stairs, the entrance, the lift's door, a fin of the painting wing or a painting's door stands. The upper levels
 // keep a planter at each end of the bridge's middle, one at each storey's south-west corner, and the terrace's along its
 // parapet.
-let shellPlanterBays = map(range(0, 6), i => (naveWest + (arcadePitch * ((2 * i) - 1.5))))
+let shellPlanterBays = map(showcaseBays, b => bayX(b))
 let shellPlanterBlocked = concat(
   shellBenchBlocked,
   [[stairWest, stairEast], [entranceWest, entranceEast], [(courtFin + galleryWall), ((courtFin + galleryWall) + 1)]],
@@ -620,26 +620,26 @@ let shellPlanterBlocked = concat(
 )
 function shellPlanterClear(x) = (length(filter(shellPlanterBlocked, span => (((x + galleryTile) > span[0]) and ((x - galleryTile) < span[1])))) == 0)
 let shellPlanters = concat(
-  map(filter(shellPlanterBays, x => shellPlanterClear(x)), x => { x: x, y: 0, z: (galleryWall + (galleryTile / 2)), yaw: 0 }),
-  map(shellPlanterBays, x => { x: x, y: 0, z: (galleryNorth - (galleryTile / 2)), yaw: 0 }),
+  map(filter(shellPlanterBays, x => shellPlanterClear(x)), x => { x: x, y: 0, z: tileZ(wallRowSouth), yaw: 0 }),
+  map(shellPlanterBays, x => { x: x, y: 0, z: tileZ(wallRowNorth), yaw: 0 }),
   flatMap(range(1, 3), k => [
     { x: (naveWest - (galleryTile * 1.5)), y: k, z: (naveMid - (galleryTile * 3)), yaw: 90 }
     { x: (naveWest - (galleryTile * 1.5)), y: k, z: (naveMid + (galleryTile * 3)), yaw: 90 }
   ]),
-  map(range(1, 2), k => { x: (galleryWestIn + (galleryTile * 1.5)), y: k, z: (galleryWall + (galleryTile / 2)), yaw: 0 }),
-  map(range(0, 4), i => { x: ((galleryWestOut + 2) + (4 * i)), y: 3, z: (galleryWall + (galleryTile / 2)), yaw: 0 })
+  map(range(1, 2), k => { x: (galleryWestIn + (galleryTile * 1.5)), y: k, z: tileZ(wallRowSouth), yaw: 0 }),
+  map(range(0, 4), i => { x: ((galleryWestOut + 2) + (4 * i)), y: 3, z: tileZ(wallRowSouth), yaw: 0 })
 )
 // The benches stand in the floor's empty bays, each two tiles long and centred on a tile, so its ends lie on the
 // centres of the tiles either side (the placements snap each to its nearest tile centre). On level 0 they keep the
 // displays' rhythm: the displays' pairs fill every other arcade bay, and in each bay between them a bench stands against
 // each long wall, in the first tile row. A south bay is left bare where its bench would stand across the lift's door or
 // a fin of the painting wing.
-let shellBenchBays = map(range(0, 7), i => (naveWest + (arcadePitch * ((2 * i) - 2.5))))
+let shellBenchBays = map(restBays, b => bayX(b))
 let shellBenchBlocked = [[liftDoorway.a0, liftDoorway.a1], [courtWest, (courtWest + galleryWall)], [courtFin, (courtFin + galleryWall)]]
 function shellBenchClear(x) = (length(filter(shellBenchBlocked, span => (((x + galleryTile) > span[0]) and ((x - galleryTile) < span[1])))) == 0)
 let shellBenches = concat(
-  map(filter(shellBenchBays, x => shellBenchClear(x)), x => { x: x, y: 0, z: (galleryWall + (galleryTile / 2)), yaw: 0 }),
-  map(shellBenchBays, x => { x: x, y: 0, z: (galleryNorth - (galleryTile / 2)), yaw: 0 }),
+  map(filter(shellBenchBays, x => shellBenchClear(x)), x => { x: x, y: 0, z: tileZ(wallRowSouth), yaw: 0 }),
+  map(shellBenchBays, x => { x: x, y: 0, z: tileZ(wallRowNorth), yaw: 0 }),
   [
     { x: 6, y: 1, z: 5, yaw: 0 }, { x: 6, y: 1, z: naveMid, yaw: 90 }, { x: 52, y: 1, z: 3, yaw: 0 }
     { x: 6, y: 2, z: 5, yaw: 0 }, { x: 6, y: 2, z: naveMid, yaw: 90 }
