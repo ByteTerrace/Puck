@@ -171,6 +171,16 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="instance">The authored machine instance name; an undeclared name is ignored.</param>
     /// <param name="runs">The condition's verdict: <see langword="true"/> to advance the instance on this tick.</param>
     void GateRunning(string instance, bool runs);
+    /// <summary>Mounts the library title a machine's <see cref="WorldMachine.ContentBy"/> cell selects. The tick calls it
+    /// for every machine that authors one, beside <see cref="GateRunning"/> (<c>WorldTick.GateMachines</c>), and the host
+    /// acts only when the title differs from the one it last mounted: it creates the machine afresh on the title's file
+    /// (<see cref="WorldMachineContentFolder.TryTitle"/>), or on its own content for 0 or a number the library does not
+    /// hold, and retires the runtime it replaces. The document keeps the authored content
+    /// (<see cref="CaptureInstances"/>). A machine in a live cable link, or one whose replacement cannot be created, keeps
+    /// what it runs and the refusal is narrated once, by title number, never by file name.</summary>
+    /// <param name="instance">The authored machine instance name; an undeclared name is ignored.</param>
+    /// <param name="title">The selected 1-based library title, or 0 for the machine's own content.</param>
+    void SelectContent(string instance, int title);
     /// <summary>Prepares the machine-runtime delta between <paramref name="current"/> and <paramref name="candidate"/>.</summary>
     /// <param name="current">The current live definition, or <see langword="null"/> at boot.</param>
     /// <param name="candidate">The candidate definition to prepare against. A machine's relative content path

@@ -16,6 +16,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                 w.WriteByte(value: ((byte)row.Kind));
                 w.WriteUInt64(value: row.Generation); w.WriteInt64(value: row.CompletedSteps);
                 w.WriteBlock(value: row.RuntimeState);
+                w.WriteInt32(value: row.ContentSelection);
             }
         );
         writer.WriteArray(
@@ -61,7 +62,8 @@ public static partial class WorldAuthorityCheckpointCodec {
                 r.ReadBlock(
                     field: "machine runtime",
                     maxBytes: MaxSectionBytes
-                )
+                ),
+                r.ReadInt32()
             ),
             maximum: MaxCollectionCount
         );

@@ -99,6 +99,20 @@ public static partial class WorldDefinitionValidator {
             } else if (machine.PreferFolderDefault) {
                 errors.Add(item: $"{path}.preferFolderDefault needs contentFolders to hold the default.");
             }
+            if (machine.ContentBy is { } contentBy) {
+                if (machine.ContentFolders is null) {
+                    errors.Add(item: $"{path}.contentBy needs contentFolders to hold the library it selects from.");
+                }
+                if (ValidateStateCell(
+                    row: contentBy.State,
+                    key: contentBy.Key,
+                    entryPath: $"{path}.contentBy.state",
+                    definition: definition,
+                    errors: errors
+                ) is CellKind.Text) {
+                    errors.Add(item: $"{path}.contentBy.state '{contentBy.State}' is a Text row; a title is selected by a number.");
+                }
+            }
             ValidateMachineBindings(
                 definition: definition,
                 errors: errors,

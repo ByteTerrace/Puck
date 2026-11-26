@@ -4744,6 +4744,7 @@ public static partial class WorldModelShape {
                 M("contentFolders", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.WorldMachine), "ContentFolders", Read | Write, static value => ((global::Puck.World.WorldMachine)value).ContentFolders, text: "a path or document locator"),
                 M("preferFolderDefault", typeof(global::System.Boolean), typeof(global::Puck.World.WorldMachine), "PreferFolderDefault", Read | Write, static value => ((global::Puck.World.WorldMachine)value).PreferFolderDefault),
                 M("runsWhen", typeof(global::Puck.World.WorldPlacementResponseCondition.StateCondition), typeof(global::Puck.World.WorldMachine), "RunsWhen", Read | Write, static value => ((global::Puck.World.WorldMachine)value).RunsWhen),
+                M("contentBy", typeof(global::Puck.World.WorldMachineContentSelector), typeof(global::Puck.World.WorldMachine), "ContentBy", Read | Write, static value => ((global::Puck.World.WorldMachine)value).ContentBy),
             ],
             []),
         T(typeof(global::Puck.World.WorldMachineCable), true, JsonTypeInfoKind.Object, null,
@@ -4751,6 +4752,13 @@ public static partial class WorldModelShape {
             [
                 M("name", typeof(global::System.String), typeof(global::Puck.World.WorldMachineCable), "Name", Read | Write | Required, static value => ((global::Puck.World.WorldMachineCable)value).Name, text: "a link-cable name"),
                 M("position", typeof(global::System.Int32), typeof(global::Puck.World.WorldMachineCable), "Position", Read | Write | Required, static value => ((global::Puck.World.WorldMachineCable)value).Position),
+            ],
+            []),
+        T(typeof(global::Puck.World.WorldMachineContentSelector), true, JsonTypeInfoKind.Object, null,
+            [],
+            [
+                M("state", typeof(global::System.String), typeof(global::Puck.World.WorldMachineContentSelector), "State", Read | Write | Required, static value => ((global::Puck.World.WorldMachineContentSelector)value).State, kind: WorldNameKind.State, role: WorldNameRole.Names, facet: WorldExportFacet.Read),
+                M("key", typeof(global::System.String), typeof(global::Puck.World.WorldMachineContentSelector), "Key", Read | Write, static value => ((global::Puck.World.WorldMachineContentSelector)value).Key, kind: WorldNameKind.State, role: WorldNameRole.Key, facet: WorldExportFacet.Read),
             ],
             []),
         T(typeof(global::Puck.World.WorldMachineMemory), true, JsonTypeInfoKind.Object, null,
