@@ -653,6 +653,43 @@ public static partial class WorldPlacementStamper {
             );
         }
 
+        // One source tile: an instance bounded by the tile's box whose scope holds the shapes reaching it and the relief,
+        // cut by the box (an intersection inside the scope, so it cuts nothing outside it). The closing face lies inside
+        // the neighbour's solid, so it takes the material of the tile's first solid shape and is never seen.
+        private void EmitSourceTile(CreationNoiseDocument relief, CreationStampTransform stampTransform, SourceTile tile) {
+            var center = ((tile.Low + tile.High) * 0.5f);
+            var half = ((tile.High - tile.Low) * 0.5f);
+
+            _ = builder.BeginInstance(
+                boundCenter: center,
+                boundRadius: (half.Length() + PlacementBoundMargin),
+                box: (tile.Low, tile.High),
+                detail: ReliefDetail(detail: CreationDetail(document: creation, hidden: tile.Hidden, scale: placement.Scale), noise: relief, scale: placement.Scale),
+                parts: tile.Parts
+            );
+            _ = builder.PushField(compose: SdfBlendOp.Union);
+            EmitPlacedShapes(
+                builder: builder,
+                creation: creation,
+                hidden: tile.Hidden,
+                inScope: true,
+                paletteIds: paletteIds,
+                placement: placement,
+                placementOrigin: stampTransform.Origin,
+                placementRotation: rotation,
+                reflectionNormal: stampTransform.ReflectionNormal
+            );
+            CreationStampEmitter.EmitNoise(builder: builder, noise: relief, transform: stampTransform);
+            _ = builder.ResetPoint().Translate(offset: center).Box(
+                blend: SdfBlendOp.Intersection,
+                halfExtents: half,
+                material: paletteIds[Math.Clamp(value: tile.Material, max: (paletteIds.Length - 1), min: 0)],
+                round: 0f
+            );
+            _ = builder.PopField();
+            _ = builder.EndInstance();
+        }
+
         public void Visit(CreationStampInstance instance) {
             AppendStaticVolumes(
                 creation: creation,
@@ -766,49 +803,58 @@ public static partial class WorldPlacementStamper {
                 );
                 var bound = (instance.Origin - new Vector3(value: reach), instance.Origin + new Vector3(value: reach));
 
-                // Text that stays among the shapes declares its detail through its glyphs (SdfInstanceRange.Glyphs), so it
-                // refines its own box and not the whole creation. A scoped creation's shapes and relief each declare a part
-                // (WorldShapeDetail.PartsOf), so each refines its own box at its own detail rather than the finest of them
-                // spreading over the creation's whole bound.
-                _ = builder.BeginInstance(
-                    boundCenter: instance.Origin,
-                    boundRadius: (reach + PlacementBoundMargin),
-                    detail: ReliefDetail(detail: CreationDetail(document: creation, hidden: hiddenOpaque, scale: placement.Scale), noise: (scoped ? creation.Noise : null), scale: placement.Scale),
-                    parts: (scoped
-                        ? WorldShapeDetail.PartsOf(document: creation, hidden: hiddenOpaque, relief: creation.Noise, reliefBounds: ((hasText && !textApart) ? bound : null), slot: SdfInstancePart.StaticSlot, transform: stampTransform)
-                        : null)
-                );
-                if (scoped) {
-                    _ = builder.PushField(compose: SdfBlendOp.Union);
-                }
-                EmitPlacedShapes(
-                    builder: builder,
-                    creation: creation,
-                    hidden: hiddenOpaque,
-                    inScope: scoped,
-                    paletteIds: paletteIds,
-                    placement: placement,
-                    placementOrigin: instance.Origin,
-                    placementRotation: rotation,
-                    reflectionNormal: instance.ReflectionNormal
-                );
-                if (hasText && !textApart) {
-                    EmitTextRuns(instance: instance);
-                }
-                if (
-                    scoped &&
-                    (creation.Noise is { } noise)
-                ) {
-                    CreationStampEmitter.EmitNoise(
-                        builder: builder,
-                        noise: noise,
-                        transform: stampTransform
+                // A relieved creation larger than one tile, with no text among its shapes, bakes as source tiles
+                // (SourceTilesOf), each its own group with its own tiers.
+                if (scoped && !(hasText && !textApart) && (creation.Noise is { } relief) &&
+                    (SourceTilesOf(document: creation, hidden: hiddenOpaque, transform: stampTransform) is { } tiles)) {
+                    foreach (var tile in tiles) {
+                        EmitSourceTile(relief: relief, stampTransform: stampTransform, tile: tile);
+                    }
+                } else {
+                    // Text that stays among the shapes declares its detail through its glyphs (SdfInstanceRange.Glyphs), so it
+                    // refines its own box and not the whole creation. A scoped creation's shapes and relief each declare a part
+                    // (WorldShapeDetail.PartsOf), so each refines its own box at its own detail rather than the finest of them
+                    // spreading over the creation's whole bound.
+                    _ = builder.BeginInstance(
+                        boundCenter: instance.Origin,
+                        boundRadius: (reach + PlacementBoundMargin),
+                        detail: ReliefDetail(detail: CreationDetail(document: creation, hidden: hiddenOpaque, scale: placement.Scale), noise: (scoped ? creation.Noise : null), scale: placement.Scale),
+                        parts: (scoped
+                            ? WorldShapeDetail.PartsOf(document: creation, hidden: hiddenOpaque, relief: creation.Noise, reliefBounds: ((hasText && !textApart) ? bound : null), slot: SdfInstancePart.StaticSlot, transform: stampTransform)
+                            : null)
                     );
+                    if (scoped) {
+                        _ = builder.PushField(compose: SdfBlendOp.Union);
+                    }
+                    EmitPlacedShapes(
+                        builder: builder,
+                        creation: creation,
+                        hidden: hiddenOpaque,
+                        inScope: scoped,
+                        paletteIds: paletteIds,
+                        placement: placement,
+                        placementOrigin: instance.Origin,
+                        placementRotation: rotation,
+                        reflectionNormal: instance.ReflectionNormal
+                    );
+                    if (hasText && !textApart) {
+                        EmitTextRuns(instance: instance);
+                    }
+                    if (
+                        scoped &&
+                        (creation.Noise is { } noise)
+                    ) {
+                        CreationStampEmitter.EmitNoise(
+                            builder: builder,
+                            noise: noise,
+                            transform: stampTransform
+                        );
+                    }
+                    if (scoped) {
+                        _ = builder.PopField();
+                    }
+                    _ = builder.EndInstance();
                 }
-                if (scoped) {
-                    _ = builder.PopField();
-                }
-                _ = builder.EndInstance();
             }
 
             if (textApart) {

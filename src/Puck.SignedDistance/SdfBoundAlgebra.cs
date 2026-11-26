@@ -104,4 +104,17 @@ public static class SdfBoundAlgebra {
 
         return ((Vector3.Min(value1: accumulated.Low, value2: operand.Low) - growth), (Vector3.Max(value1: accumulated.High, value2: operand.High) + growth));
     }
+    /// <summary>Returns whether two closed boxes share a point: touching faces meet.</summary>
+    /// <param name="low">The first box's low corner.</param>
+    /// <param name="high">The first box's high corner.</param>
+    /// <param name="otherLow">The second box's low corner.</param>
+    /// <param name="otherHigh">The second box's high corner.</param>
+    /// <returns><see langword="true"/> when the boxes meet; <see langword="false"/> when they are apart or either is
+    /// inverted along an axis where the other lies.</returns>
+    public static bool BoxesMeet(Vector3 low, Vector3 high, Vector3 otherLow, Vector3 otherHigh) {
+        var from = Vector3.Max(value1: low, value2: otherLow);
+        var to = Vector3.Min(value1: high, value2: otherHigh);
+
+        return ((from.X <= to.X) && (from.Y <= to.Y) && (from.Z <= to.Z));
+    }
 }

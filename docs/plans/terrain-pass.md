@@ -615,14 +615,18 @@ alone, a measurement request.
    and no shape's detail spreads over the creation's bound. What still holds a
    sector coarser than its relief declares is one lattice's fine-sample budget
    ([what set the cell](#what-set-a-sectors-cell)); the tiles below lift it.
-2. **Terrain tiles as residency units.** A terrain placement declares a tile
-   size and the stamper emits one static instance per tile, bounded by the
-   tile's box, each its own group, so a tile is demanded, baked at the tier its
-   demand chooses, kept and evicted like any group. The unit and the rule where
-   two tiles meet are the streaming plan's
+2. **Terrain tiles as residency units.** Built, core: a static relieved
+   creation larger than one tile emits one static instance per cell of a
+   world-axis grid (`WorldPlacementStamper.SourceTilesOf`), each the creation's
+   field cut by the cell's box grown into its neighbours
    ([the source tile and its seam rule](streaming-and-memory.md#the-source-tile-and-its-seam-rule):
-   neighbours overlap and each tile is closed on its own), built in its step
-   10; terrain consumes it and does not take it early for itself. Before
+   neighbours overlap and each tile is closed on its own), so each is its own
+   group, demanded, baked at the tier its demand chooses, kept and evicted like
+   any group. A tile holds only the shapes whose boxes reach it. The tile's edge
+   follows the relief's spacing (`TileReliefCells`); a placement does not yet
+   declare it. What remains: the closing face takes the cut's material rather
+   than the terrain's at its rim, the overlap is a share of the tile rather than
+   the coarsest tier's measured error, and the seam is unread in motion. Before
    building terrain tiles at scale, run a dedicated **terrain research round**
    to settle the dual-contouring seam rule versus overlap, tile scaling and the
    cost of a height-field hybrid (Lengyel's transition cells join 2:1 grids and
