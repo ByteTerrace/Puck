@@ -18,7 +18,6 @@
 #ifdef SDF_VIEWS_PASS
 #include "sdf-views-probes.hlsli"
 #include "sdf-views-reflections.hlsli"
-#include "sdf-views-light-sums.hlsli"
 
 // An unbound screen's face: dark glass with nothing behind it, tinted faintly by the sun.
 static const float3 ScreenGlassColor = float3(0.02, 0.025, 0.03);
@@ -71,9 +70,7 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
     bool sampledScreen = false;
     reactivity = ((material >= SDF_SCREEN_MATERIAL) ? 1.0 : 0.0);
 
-    // A screen's face walks no light, so the light pass reads no picture: only a material below SDF_SCREEN_MATERIAL walks,
-    // and only such a material samples nothing.
-#if defined(SDF_SCREEN_SOURCES) && !defined(SDF_VIEWS_LIGHT_PASS)
+#ifdef SDF_SCREEN_SOURCES
     if (useFinalShading) {
         // A bound screen source wins over both the flat sentinel and the unbound glass: emissive and unlit (the diegetic
         // screen is its own light source, like a real display), drawn through its screen material before the shared
@@ -210,21 +207,14 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             shadeSurface.probed = sdfMeshAnswers(probes);
             shadeSurface.probes = probes;
 
-            float3 ambientTerm = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientOcclusion;
-            // What the walk adds: the lights' diffuse terms, their rim and specular terms, the product of their
-            // attenuations, and the line the light phases raise, the largest over the walk, which the compose and ink
-            // phases read. A binned view's light pass walks them into the light sums and its views kernels read them
-            // there (sdf-views-light-sums.hlsli); every other kernel walks them here.
-            SdfViewsLightSum walked;
-
-            walked.diffuse = float3(0.0, 0.0, 0.0);
-            walked.rim = float3(0.0, 0.0, 0.0);
-            walked.specular = float3(0.0, 0.0, 0.0);
-            walked.attenuation = 1.0;
-            walked.linework = 0.0;
-#if defined(SDF_VIEWS_BINNED) && !defined(SDF_VIEWS_LIGHT_PASS)
-            walked = sdfViewsLightSumAt(p.pixel, p.viewIndex);
-#elif !defined(SDF_VIEWS_OMIT_LIGHTS)
+            float3 radiance = indirectSky ? 0.0 : worldSkyIrradiance(normal) * ambientOcclusion;
+            float3 ambientTerm = radiance;
+            float3 rim = float3(0.0, 0.0, 0.0);
+            float3 specular = float3(0.0, 0.0, 0.0);
+            float attenuation = 1.0;
+            // The line the light phases raise, the largest over the walk, which the compose and ink phases read.
+            float linework = 0.0;
+#if !defined(SDF_VIEWS_OMIT_LIGHTS)
             SdfLightWalk walk = sdfLightWalkStart(lights);
             SdfLightSource light;
             SdfShadeCarry shadeCarry = sdfShadeLightPrologue(shadeBinding, shadeStamp);
@@ -233,23 +223,13 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             while (sdfLightNext(walk, light)) {
                 SdfLightResponse response = sdfShadeLightPhase(shadeBinding, shadeStamp, shadeCarry, light, shadeSurface);
 
-                walked.diffuse += response.diffuse;
-                walked.rim += response.rim;
-                walked.specular += response.specular;
-                walked.attenuation *= response.attenuation;
-                walked.linework = max(walked.linework, response.linework);
+                radiance += response.diffuse;
+                rim += response.rim;
+                specular += response.specular;
+                attenuation *= response.attenuation;
+                linework = max(linework, response.linework);
             }
 #endif
-#if defined(SDF_VIEWS_LIGHT_PASS)
-            sdfViewsStoreLightSum(p.pixel, p.viewIndex, walked);
-            return color;
-#endif
-
-            float3 radiance = (ambientTerm + walked.diffuse);
-            float3 rim = walked.rim;
-            float3 specular = walked.specular;
-            float attenuation = walked.attenuation;
-            float linework = walked.linework;
 
             // The specular layer's directional albedo about the view (sdfMaterialEnvironmentBrdf): the share of the light
             // arriving from every side that the specular reflection returns, which therefore never reaches the diffuse

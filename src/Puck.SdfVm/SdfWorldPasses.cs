@@ -181,10 +181,9 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         }
         return new Built(view: view);
     }
-    // Whether a views or light pass shades in bins: its fragment gave it the filter record to read (SdfWorldPackage.WithBins),
-    // which every light pass is given.
+    // Whether a views pass shades in bins: its fragment gave it the filter record to read (SdfWorldPackage.WithBins).
     internal static bool ShadesInBins(RenderGraphPackageRecorderContext context) =>
-        ((context.Part is SdfWorldPackage.Parts.Views or SdfWorldPackage.Parts.ViewsLights) &&
+        ((context.Part == SdfWorldPackage.Parts.Views) &&
             context.Inputs.Any(predicate: static input => input.Name.EndsWith(value: FilterSuffix, comparisonType: StringComparison.Ordinal)));
     private static readonly string FilterSuffix = RenderGraphPackageFragment.Spliced(name: SdfWorldPackage.Parts.Filter, pass: string.Empty);
     // The on-demand pipelines a pass records with (SdfWorldPipelines.AcquiredOnDemand), which its build waits for.
@@ -194,7 +193,6 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
         SdfWorldPackage.Parts.ViewsFilter => [SdfKernel.ViewsFilter],
         SdfWorldPackage.Parts.ViewsBins => [SdfKernel.ViewsBins],
         SdfWorldPackage.Parts.Views when ShadesInBins(context: context) => [SdfKernel.ViewsShade, SdfKernel.ViewsShadePlain],
-        SdfWorldPackage.Parts.ViewsLights => [SdfKernel.ViewsLights, SdfKernel.ViewsLightsPlain],
         _ => [],
     };
     /// <inheritdoc/>

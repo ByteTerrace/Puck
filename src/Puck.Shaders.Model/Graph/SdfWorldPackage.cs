@@ -512,8 +512,6 @@ public static partial class SdfWorldPackage {
         Written(element: ShaderValueType.Uint, name: MeshPyramidWritten),
         Read(element: ShaderValueType.Uint, name: ViewsFilterRecords),
         Written(element: ShaderValueType.Uint, name: ViewsFilterRecordsWritten),
-        Read(element: ShaderValueType.Uint4, name: ViewsLightSums),
-        Written(element: ShaderValueType.Uint4, name: ViewsLightSumsWritten),
         Read(element: ShaderValueType.Uint, name: ViewsProbeRecords),
         Written(element: ShaderValueType.Uint, name: ViewsProbeRecordsWritten),
         Read(element: ShaderValueType.Uint, name: ShadeTiles),

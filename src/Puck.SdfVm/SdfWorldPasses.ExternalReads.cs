@@ -56,7 +56,7 @@ public sealed partial class SdfWorldPasses {
             images.List = reads;
             Observe(images: images, latch: in latch, reads: reads);
         }
-        var screens = MarkSampled(entry: entry, frame: frame, sky: (sampled == ExternalReads.Sky), tables: tables, view: view, views: (part is SdfWorldPackage.Parts.Views or SdfWorldPackage.Parts.ViewsLights));
+        var screens = MarkSampled(entry: entry, frame: frame, sky: (sampled == ExternalReads.Sky), tables: tables, view: view, views: (part == SdfWorldPackage.Parts.Views));
         var hash = Fnv1aHash.Create();
 
         foreach (var screen in BitWords.Members(mask: screens)) {

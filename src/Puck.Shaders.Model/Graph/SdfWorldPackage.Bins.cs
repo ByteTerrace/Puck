@@ -9,12 +9,6 @@ public static partial class SdfWorldPackage {
     public const string ViewsFilterRecords = "sdfViewsFilterRecords";
     /// <summary>The views filter's record as the filter pass writes it.</summary>
     public const string ViewsFilterRecordsWritten = "sdfViewsFilterRecordsRW";
-    /// <summary>The light sums as the binned views pass reads them: one <c>uint4</c> a render-extent pixel, what the light
-    /// pass's walk added there (<c>sdf-views-light-sums.hlsli</c> owns the packing), addressed like the visibility
-    /// record.</summary>
-    public const string ViewsLightSums = "sdfViewsLightSums";
-    /// <summary>The light sums as the light pass writes them.</summary>
-    public const string ViewsLightSumsWritten = "sdfViewsLightSumsRW";
     /// <summary>The shade bins as the binned views pass reads them: per view a header of <see cref="ShadeTileHeaderWords"/>
     /// words (each bin's tile count, its first entry in the tile list and the scatter's cursor), each tile's bin, the
     /// tile list sorted by bin, then each tile's light masks, <see cref="ShadeTileLightWords"/> words a tile
@@ -52,10 +46,9 @@ public static partial class SdfWorldPackage {
     /// views filter's tile gather moves into <see cref="Parts.ViewsFilter"/>, which writes each pixel's filtered
     /// occlusion and shadows into a record of its own and each 8 by 8 tile's bin and light masks into the shade bins;
     /// <see cref="Parts.ViewsBins"/> counts the bins into offsets, the indirect arguments of each bin's jobs and the tile
-    /// list sorted by bin; <see cref="Parts.ViewsLights"/> walks each pixel's lights by the same jobs into the light sums;
-    /// and <see cref="Parts.Views"/> dispatches each bin's jobs indirectly with that bin's kernel, reading the sums, so a
-    /// tile with no program never carries the registers of one and the shading kernel carries no light walk. A view of a
-    /// frame with no program runs the fragment as it stands and allocates none of this.</summary>
+    /// list sorted by bin; and <see cref="Parts.Views"/> dispatches each bin's jobs indirectly with that bin's kernel, so
+    /// a tile with no program never carries the registers of one. A view of a frame with no program runs the fragment as
+    /// it stands and allocates none of this.</summary>
     /// <param name="fragment">The fragment, any of the package's.</param>
     /// <returns>The fragment with the filter and bins passes and their storages.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="fragment"/> is <see langword="null"/>.</exception>
@@ -86,14 +79,10 @@ public static partial class SdfWorldPackage {
             // The filter reads the probe records for the lights each tile's probes see.
             passes.Add(item: Pass(inputs: [Parts.Visibility, Parts.Probes], name: Parts.ViewsFilter, outputs: [Parts.Filter, Parts.ShadeTiles]));
             passes.Add(item: Pass(name: Parts.ViewsBins, outputs: [Parts.ShadeBinned, Parts.ShadeArguments]));
-            // The light pass shades each pixel's surface as views does and walks its tile's lights, by views' own jobs.
-            passes.Add(item: Pass(inputs: [Parts.Visibility, Parts.Probes, Parts.Filter, Parts.ShadeBinned], name: Parts.ViewsLights, outputs: [Parts.LightSums]) with {
-                Dispatch = ShaderPipelineDispatch.Indirect(arguments: Parts.ShadeArguments),
-            });
             passes.Add(item: pass with {
                 Dispatch = ShaderPipelineDispatch.Indirect(arguments: Parts.ShadeArguments),
-                InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead],
-                Inputs = [.. pass.Inputs, new ResourceReference(Name: Parts.Filter), new ResourceReference(Name: Parts.ShadeBinned), new ResourceReference(Name: Parts.LightSums)],
+                InputAccesses = [.. pass.InputAccesses, RenderGraphPortAccess.ComputeRead, RenderGraphPortAccess.ComputeRead],
+                Inputs = [.. pass.Inputs, new ResourceReference(Name: Parts.Filter), new ResourceReference(Name: Parts.ShadeBinned)],
             });
         }
 
@@ -102,7 +91,6 @@ public static partial class SdfWorldPackage {
             Resources = [
                 .. fragment.Resources,
                 visibility with { Name = Parts.Filter, StrideBytes = sizeof(uint), Count = [.. pixels.Select(selector: static term => term with { Elements = ViewsFilterWords })] },
-                visibility with { Name = Parts.LightSums, StrideBytes = (4 * sizeof(uint)) },
                 visibility with { Name = Parts.ShadeTiles, StrideBytes = sizeof(uint), Count = [Term(ShadeTileHeaderWords, ShaderPipelineCountBasis.Viewports), .. tiles] },
                 new ShaderPipelineResource(
                     Count: [Term(ShadeTileHeaderWords, ShaderPipelineCountBasis.Viewports), .. tiles],
@@ -129,11 +117,6 @@ public static partial class SdfWorldPackage {
         /// <summary>The bins pass of a binned view: each bin's offset, its jobs' indirect arguments and the tile list
         /// sorted by bin.</summary>
         public const string ViewsBins = "views-bins";
-        /// <summary>The light pass of a binned view: each pixel's light walk, by the bins' jobs, into the light sums the
-        /// views pass reads.</summary>
-        public const string ViewsLights = "views-lights";
-        /// <summary>The light sums the light pass writes.</summary>
-        public const string LightSums = "viewsLightSums";
         /// <summary>The views filter record the filter pass writes.</summary>
         public const string Filter = "viewsFilter";
         /// <summary>The shade bins as the filter pass leaves them: each tile's bin and light masks and each bin's
