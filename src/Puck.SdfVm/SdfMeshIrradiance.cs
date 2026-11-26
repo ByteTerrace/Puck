@@ -767,14 +767,19 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             settling = true;
             names?.Add(item: name);
         }
-        Term(holds: (m_gpuCameraSampleTask is { IsCompleted: false } or { IsFaulted: true }), name: "camera-sample");
-        Term(holds: (m_worker is { IsCompleted: false } or { IsFaulted: true }), name: "worker");
-        Term(holds: (m_build is { IsCompleted: false } or { IsFaulted: true }), name: "build");
+        Term(holds: (m_gpuCameraSampleTask is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_gpuCameraSampleTask, name: "camera-sample"));
+        Term(holds: (m_worker is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_worker, name: "worker"));
+        Term(holds: (m_build is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_build, name: "build"));
         Term(holds: ((m_scene is not null) && m_owed), name: "owed");
         Term(holds: m_refillOwed, name: "refill");
         Term(holds: Dirty, name: (m_republishOwed ? "unpublished-republish-owed" : "unpublished"));
         Term(holds: m_wrote, name: "wrote");
         return settling;
+
+        // A task's term, naming its fault where it faulted; only a description asks.
+        string Named(Task? task, string name) => (((names is not null) && (task is { IsFaulted: true } faulted))
+            ? $"{name}-faulted:{faulted.Exception?.GetBaseException().GetType().Name}:{faulted.Exception?.GetBaseException().Message}"
+            : name);
     }
     // The settling terms that hold, by name, or none; under the gate.
     private string DescribeSettling() {
