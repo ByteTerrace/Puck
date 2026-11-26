@@ -20,6 +20,13 @@
 // `nearMargin` how far short of the body cutaway's near plane stops, `retractionSkin` how far short of a hit the probe
 // reports the room, and `obstructedTargetSkin` how far out cutaway's sweep starts when the target is inside geometry
 // (a portal frame round the pivot).
+//
+// `wall` adds a second framing for a body that holds a face it cannot stand on (a climber): `wallFraming(...)` pulls
+// the eye back and looks up the face. Each case then blends its ground framing with its wall framing by the
+// `cameraOnWall` row, which a rule sets to 1 while the body's `HoldingUnwalkable` fact holds and which eases on the
+// `camera-wall` response, so the camera drifts out as she takes a wall and back as she lets go or pulls up over the top.
+// A player's zoom keeps both framings in proportion. `faceFrame: Body` makes movement on a face the body's own: forward
+// climbs and sideways traverses wherever the camera orbits.
 
 // The interactive boom's zoom: the nearest and farthest requested distance and the distance one input unit moves.
 let cameraBoom = { minimum: 1.5, maximum: 12, step: 0.6 }
@@ -39,6 +46,17 @@ function lookCamera(name, eye, target, fov, focusDistance = 6, width = 1280, hei
     ]
     version: "puck.camera.program.v1"
   }
+}
+
+// A chase camera's framing of a body on a face it cannot stand on, for `chaseCamera(wall:)`: `distance` metres of boom
+// at `pitch` radians of elevation (negative looks up from below the pivot) about `pivotOffset` in the body's frame, and
+// the response the blend eases on: `frequency` hertz, `damping` ratio (1 never overshoots).
+function wallFraming(distance = 5.4, pitch = -0.12, pivotOffset = [0, 1.8, 0], frequency = 1, damping = 1) = {
+  distance: distance
+  pitch: pitch
+  pivotOffset: pivotOffset
+  frequency: frequency
+  damping: damping
 }
 
 // The shared look feel and the `camera-boom` response a chase rig eases on.
@@ -95,8 +113,72 @@ template cameraFeel() {
 // preference row's starting value: 0 fade, 1 cutaway.
 template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0], cutawayCloseTarget = [0, 1.55, 0], eyePoint = [
   0, 1.75, 0.22
-], distance = 4.2, pitch = 0.3, fieldOfView = 0.96, minPitch = -0.5, maxPitch = 1.2, yawReference = "World", clearance = 0, fadeMaxRise = 0.35, cutawayMaxRise = 1.1, eyeRadius = 0.3, surfaceSkin = 0.1, closeTargetStart = 0.6, closeTargetFull = 0.2, fadeStart = 1.25, fadeEnd = 0.45, minimumBoom = 0.35, nearMargin = 0.05, retractionSkin = 0.05, obstructedTargetSkin = 1.1, hideRadius = 0.45, transitionSeconds = 0.5, autoFirstPerson = false, autoEntryDistance = 0.85, autoEntrySeconds = 0.2, autoExitDistance = 1.35, autoExitSeconds = 0.15) {
+], distance = 4.2, pitch = 0.3, fieldOfView = 0.96, minPitch = -0.5, maxPitch = 1.2, yawReference = "World", clearance = 0, fadeMaxRise = 0.35, cutawayMaxRise = 1.1, eyeRadius = 0.3, surfaceSkin = 0.1, closeTargetStart = 0.6, closeTargetFull = 0.2, fadeStart = 1.25, fadeEnd = 0.45, minimumBoom = 0.35, nearMargin = 0.05, retractionSkin = 0.05, obstructedTargetSkin = 1.1, hideRadius = 0.45, transitionSeconds = 0.5, autoFirstPerson = false, autoEntryDistance = 0.85, autoEntrySeconds = 0.2, autoExitDistance = 1.35, autoExitSeconds = 0.15, wall = null, faceFrame = "Body", seats = 4, capacity = 16) {
   cameraResponse()
+
+  // The framings each clearance case resolves: the ground framing alone, or the ground and the wall framing a blend
+  // mixes.
+  let framings = ((wall == null)
+    ? [{ suffix: "", distance: distance, pitch: pitch, pivotOffset: pivotOffset }]
+    : [
+      { suffix: "-ground", distance: distance, pitch: pitch, pivotOffset: pivotOffset }
+      { suffix: "-wall", distance: wall.distance, pitch: wall.pitch, pivotOffset: wall.pivotOffset }
+    ])
+  let cases = [
+    {
+      suffix: "fade"
+      closeTarget: fadeCloseTarget
+      cutaway: 0
+      maxRise: fadeMaxRise
+      minimumBoom: minimumBoom
+      fadeStart: fadeStart
+      fadeEnd: fadeEnd
+      obstructedTargetSkin: 0
+    }
+    {
+      suffix: "cutaway"
+      closeTarget: cutawayCloseTarget
+      cutaway: 1
+      maxRise: cutawayMaxRise
+      minimumBoom: 0
+      fadeStart: 0
+      fadeEnd: 0
+      obstructedTargetSkin: obstructedTargetSkin
+    }
+  ]
+
+  if wall != null {
+    export binding cameraOnWall
+
+    dynamics [
+      { name: "camera-wall", f: wall.frequency, r: 0, zeta: wall.damping }
+    ]
+
+    state {
+      world {
+        // 1 while a body holds a face it cannot stand on, by body index; the rig reads its eased value.
+        row {
+          name: "cameraOnWall"
+          kind: "Fixed"
+          capacity: capacity
+          dynamics { row: "camera-wall" }
+          cells: map(range(0, seats), seat => { key: $"{seat}", value: "0" })
+        }
+      }
+    }
+
+    rule "camera-on-wall" {
+      forEach: $players
+      local onWall = fact(each, HoldingUnwalkable)
+      when (onWall == 1 and cameraOnWall[$each] < 0.5) or (onWall == 0 and cameraOnWall[$each] > 0.5)
+      mode: Level
+      if onWall == 1 {
+        cameraOnWall[$each] = 1
+      } else {
+        cameraOnWall[$each] = 0
+      }
+    }
+  }
 
   export binding cameraClearance
 
@@ -138,6 +220,7 @@ template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0
       maxPitch: maxPitch
       minPitch: minPitch
       yawReference: yawReference
+      faceFrame: faceFrame
     }
 
     seatRig {
@@ -155,37 +238,15 @@ template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0
       ]
     }
 
-    // The two cases the seat rig selects between: one orbit, look, lens, ease and first-person eye, and the
-    // clearance each trades the room by.
-    programs: map(
-      [
-        {
-          suffix: "fade"
-          closeTarget: fadeCloseTarget
-          cutaway: 0
-          maxRise: fadeMaxRise
-          minimumBoom: minimumBoom
-          fadeStart: fadeStart
-          fadeEnd: fadeEnd
-          obstructedTargetSkin: 0
-        }
-        {
-          suffix: "cutaway"
-          closeTarget: cutawayCloseTarget
-          cutaway: 1
-          maxRise: cutawayMaxRise
-          minimumBoom: 0
-          fadeStart: 0
-          fadeEnd: 0
-          obstructedTargetSkin: obstructedTargetSkin
-        }
-      ],
-      case => {
-        name: $"{rig}-{case.suffix}"
+    // The two cases the seat rig selects between: one orbit, look, lens, ease and first-person eye per framing, and
+    // the clearance each trades the room by. With a wall framing a case is the blend of its two framings.
+    programs: concat(
+      flatMap(cases, case => map(framings, framing => {
+        name: $"{rig}-{case.suffix}{framing.suffix}"
         version: "puck.camera.program.v1"
         operations [
-          orbit(distance: distance, pitch: pitch, pivotOffset: pivotOffset, yaw: 0)
-          lookAt(focusDistance: distance, subject: reference(), targetOffset: pivotOffset, worldAxes: true)
+          orbit(distance: framing.distance, pitch: framing.pitch, pivotOffset: framing.pivotOffset, yaw: 0)
+          lookAt(focusDistance: framing.distance, subject: reference(), targetOffset: framing.pivotOffset, worldAxes: true)
           clearance(
             cutaway: case.cutaway,
             eyeRadius: eyeRadius,
@@ -205,7 +266,16 @@ template chaseCamera(rig, pivotOffset = [0, 1, 0], fadeCloseTarget = [0, 1.74, 0
           dynamics(row: `camera-boom`)
           firstPerson(eyePoint: eyePoint, active: 0, transitionSeconds: transitionSeconds, hideRadius: hideRadius)
         ]
-      }
+      })),
+      ((wall == null)
+        ? []
+        : map(cases, case => {
+          name: $"{rig}-{case.suffix}"
+          version: "puck.camera.program.v1"
+          operations [
+            blend(a: $"{rig}-{case.suffix}-ground", b: $"{rig}-{case.suffix}-wall", weight: "state.cameraOnWall.$body")
+          ]
+        }))
     )
   }
 }
