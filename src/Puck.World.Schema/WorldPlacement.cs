@@ -65,10 +65,15 @@ public sealed record WorldPrototype(
 
     private static CreationRig Compile(CreationDocument document) => CreationRig.Compile(document: Puck.World.Authoring.CreationFrame.ToEngine(document: CreationCanonicalizer.Normalize(document: document)));
     // The rig every row of this document's canonical bytes shares; a document the canonicalizer refuses has no such name,
-    // and compiles a rig of its own, which the validator then refuses by name.
+    // and compiles a rig of its own, which the validator then refuses by name. So does a document that names a shade
+    // program its world's table has not handed it yet (a row a mutation submits, read before the compose boundary
+    // resolves it): the canonical bytes name a program by its key alone, so its rig, whose document holds the palette,
+    // is not interchangeable with the rig of the same bytes resolved, and sharing it would hand every later row of
+    // those bytes a palette that names programs it does not hold.
     private CreationRig SharedRig() {
         string key;
 
+        if (!ShadeReference.HoldsEvery(palette: Document.Palette)) { return Compile(document: Document); }
         try { key = CanonicalHash; } catch (Puck.Assets.Documents.DocumentValidationException) { return Compile(document: Document); }
         return SharedRigs.GetValue(derive: static document => Compile(document: document), key: key, state: Document);
     }

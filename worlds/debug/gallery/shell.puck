@@ -29,6 +29,9 @@ let shellCream = 8
 let shellGlass = 9
 let shellBrass = 10
 let shellPaving = 11
+// A floor north of the nave's centre line is a second slot of the same tile, since a slot draws eight paints and a level
+// holds more pads than that leaves beside its tiles and joints.
+let shellFloorNorth = 12
 // The floor is terracotta tiles 1.2 m square with a 1 cm joint (the kit's floor-and-ceiling sheet): the slot's colour is
 // the joint's, and one box paint a joint smaller than its cell repeats over it, each tile's tone varied between two
 // terracottas. The ceiling is coffered on the same module: a paler square in each cell with a small lamp at its centre.
@@ -41,6 +44,23 @@ let shellTiles = {
   color: "#B4553A"
   repeat { cell [1.2, 0, 1.2], tone: "#C86E48", seed: 7 }
 }
+// The joints again, drawn over the pads so a pad reads as tiles of another clay rather than a sheet laid on the floor.
+let shellJoints = [
+  {
+    type: "Box"
+    position [(shellTileCentre[0] + 0.6), 0, shellTileCentre[2]]
+    scale [0.005, 40, 0.6]
+    color: "#8A4A34"
+    repeat { cell [1.2, 0, 1.2] }
+  }
+  {
+    type: "Box"
+    position [shellTileCentre[0], 0, (shellTileCentre[2] + 0.6)]
+    scale [0.6, 40, 0.005]
+    color: "#8A4A34"
+    repeat { cell [1.2, 0, 1.2] }
+  }
+]
 let shellCoffers = [
   {
     type: "Box"
@@ -58,29 +78,42 @@ let shellCoffers = [
     repeat { cell [1.2, 0, 1.2] }
   }
 ]
-let shellFloorRow = { color: "#8A3F2C", roughness: 0.3, specular: 0.05 }
+// The building's surfaces are brushed (the standard's `brushed`): each large face drifts a few hundredths in value over
+// patches a couple of metres across and leans warm where it lifts, so a wall, a pier or a floor reads as laid by hand
+// and no face is one flat value. One program serves every row that asks for the same drift.
+function shellBrushed(base, amount = 0.07, scale = 1.9) = galleryCel((base with { shade: brushed(amount, scale, [1, 0.86, 0.62], 41) }))
+// A floor slot's paints: the tiles, the pads on its side of the nave's centre line, and the joints over both.
+let shellMidWorld = galleryWorld(0, 0, naveMid)[2]
+function shellFloorPaints(pads, north) = concat(
+  [shellTiles],
+  filter(pads, pad => ((north == 1) ? (pad.position[2] >= shellMidWorld) : (pad.position[2] < shellMidWorld))),
+  shellJoints
+)
+// The floor is glazed tile: smooth enough that the windows and the lit ceiling lie on it as the room's reflection.
+let shellFloorRow = { color: "#8A3F2C", roughness: 0.16, specular: 0.05 }
 function shellPalette(pads, lit) = [
-  galleryCel({ color: "#EADBBE", roughness: 0.85, specular: 0.04 })
-  galleryCel((shellFloorRow with { paints: concat([shellTiles], pads) }))
-  galleryCel({ color: "#2C5A63", roughness: 0.6, specular: 0.05 })
+  shellBrushed({ color: "#EADBBE", roughness: 0.85, specular: 0.04 })
+  shellBrushed((shellFloorRow with { paints: shellFloorPaints(pads, 0) }), 0.09, 2.6)
+  shellBrushed({ color: "#2F6E7A", roughness: 0.6, specular: 0.04 })
   ((lit == 1) ? { color: "#FFFFFF", roughness: 0.5, emissive: 4000nit } : { color: "#D9D9D9", roughness: 0.5, specular: 0.06 })
-  galleryCel({ color: "#F1E6CF", roughness: 0.6 })
-  galleryCel({ color: "#F3E9D4", roughness: 0.9, specular: 0.02, paints: shellCoffers })
+  shellBrushed({ color: "#F1E6CF", roughness: 0.6 })
+  shellBrushed({ color: "#F3E9D4", roughness: 0.9, specular: 0.02, paints: shellCoffers }, 0.04)
   { color: "#FFFFFF", roughness: 0.5, emissive: 120nit }
-  galleryCel({ color: "#E0A13A", roughness: 0.6, specular: 0.04 })
-  galleryCel({ color: "#EFE3C8", roughness: 0.6, specular: 0.04 })
-  { color: "#BFE6E0", roughness: 0.03, glass { depth: 0.04, ior: 1.5 } }
+  shellBrushed({ color: "#E0A13A", roughness: 0.6, specular: 0.04 }, 0.09)
+  shellBrushed({ color: "#EFE3C8", roughness: 0.6, specular: 0.04 })
+  { color: "#EEF8F6", roughness: 0.03, glass { depth: 0.04, ior: 1.5 } }
   { color: "#C8902E", roughness: 0.3, metal: 1 }
-  galleryCel({ color: "#C46F4C", roughness: 0.6, specular: 0.04 })
+  shellBrushed({ color: "#C46F4C", roughness: 0.6, specular: 0.04 }, 0.09, 2.6)
+  shellBrushed((shellFloorRow with { paints: shellFloorPaints(pads, 1) }), 0.09, 2.6)
 ]
 let shellPlain = shellPalette([], 1)
 let shellLooks = [{ suffix: "", lit: 1 }, { suffix: "-dark", lit: 0 }]
 // The kit's palettes in the gallery's cel style; glass and brass keep their own shading.
 let shellKit = map(
   range(0, length(kitPalette)),
-  i => (((i == kitGlass) or (i == kitBrass)) ? kitPalette[i] : galleryCel(kitPalette[i]))
+  i => (((i == kitGlass) or (i == kitBrass)) ? kitPalette[i] : shellBrushed(kitPalette[i]))
 )
-let shellStructure = [galleryCel(structurePalette[0]), structurePalette[1]]
+let shellStructure = [shellBrushed(structurePalette[0], 0.1), structurePalette[1]]
 
 // A level's cream pads: one under each exhibit line on it, from 1.05 m behind the plinths to 1.45 m before their
 // consoles, as a rounded rectangle painted into the floor over its tiles. A paint on a static creation is placed in the
@@ -477,14 +510,20 @@ template shellTower() {
 // The cream bands of the outside: a thick rounded band round the building at each upper floor and a deeper one as the
 // roof's parapet, each a strip standing proud of a wall face. A strip names the face it lies on (the fixed coordinate
 // and the side the outside is on) and its run along it.
+// The tall bays pass through levels 1 and 3, so the east wall's bands there stop at the bays' outer jambs.
+let tallBaysSouth = ((tallBayZs[0] - (tallBayWidth / 2)) - 0.6)
+let tallBaysNorth = ((tallBayZs[2] + (tallBayWidth / 2)) + 0.6)
 let shellRings = concat(
   flatMap(range(1, 3), k => concat(
     [
       { id: $"north-{k}", axis: "x", at: galleryDepth, out: 1, a0: 0, a1: galleryWidth, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
       { id: $"west-{k}", axis: "z", at: 0, out: -1, a0: 0, a1: galleryDepth, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
-      { id: $"east-{k}", axis: "z", at: galleryWidth, out: 1, a0: ((k >= wingLevel) ? wingSouth : 0), a1: galleryDepth, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
+      { id: $"east-{k}", axis: "z", at: galleryWidth, out: 1, a0: ((k >= wingLevel) ? wingSouth : 0), a1: (((k % 2) == 1) ? tallBaysSouth : galleryDepth), y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
       { id: $"south-{k}", axis: "x", at: 0, out: -1, a0: 0, a1: ((k >= wingLevel) ? wingWest : galleryWidth), y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
     ],
+    (((k % 2) == 1) ? [
+      { id: $"east-north-{k}", axis: "z", at: galleryWidth, out: 1, a0: tallBaysNorth, a1: galleryDepth, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
+    ] : []),
     ((k >= wingLevel) ? [
       { id: $"wing-south-{k}", axis: "x", at: wingSouth, out: -1, a0: wingWest, a1: galleryWidth, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
       { id: $"wing-west-{k}", axis: "z", at: wingWest, out: -1, a0: wingSouth, a1: 0, y0: ((galleryStorey * k) - 0.5), y1: ((galleryStorey * k) + 0.3) }
@@ -617,7 +656,8 @@ template shellPrototypes() {
       name: "gallery-floor-0"
       schema: "puck.creation.v1"
       palette: shellPalette(shellPads(0), 1)
-      boundsBox(label: "ground", x0: galleryWall, x1: galleryEast, y0: 0, y1: galleryFloor[0], z0: galleryWall, z1: galleryNorth, slot: shellFloor)
+      boundsBox(label: "ground", x0: galleryWall, x1: galleryEast, y0: 0, y1: galleryFloor[0], z0: galleryWall, z1: naveMid, slot: shellFloor)
+      boundsBox(label: "ground-north", x0: galleryWall, x1: galleryEast, y0: 0, y1: galleryFloor[0], z0: naveMid, z1: galleryNorth, slot: shellFloorNorth)
       boundsBox(label: "threshold", x0: entranceWest, x1: entranceEast, y0: 0, y1: galleryFloor[0], z0: 0, z1: galleryWall, slot: shellFloor)
       boundsBox(label: "lift-threshold", x0: liftDoorway.a0, x1: liftDoorway.a1, y0: 0, y1: galleryFloor[0], z0: 0, z1: galleryWall, slot: shellTrim)
     }
@@ -639,7 +679,8 @@ template shellPrototypes() {
               y0: ((galleryStorey * k) - 0.25),
               y1: galleryFloor[k],
               z0: piece.z0,
-              z1: piece.z1
+              z1: piece.z1,
+              top: ((piece.z0 >= naveMid) ? shellFloorNorth : shellFloor)
             )
           }
           boundsBox(
@@ -783,7 +824,7 @@ template shellPrototypes() {
         name: $"gallery-fan-tall-{k}"
         schema: "puck.creation.v1"
         palette: shellKit
-        fanShade(base: 0, signal: $"state.hallBlinds.level{k}", dynamics: "gallery-shade", radius: 2.5, leaves: 7, spread: 140)
+        fanShade(base: 0, signal: $"state.hallBlinds.level{k}", dynamics: "gallery-shade", radius: 2.5, leaves: 5, spread: 58, leaf: 0.26)
       }
     }
   }
@@ -957,13 +998,15 @@ template shellPlacements() {
         yawDegrees: 270
         solid
       }
+    }
+    for n in [0, 2] {
       placement $"gallery-fan-tall-{tier}-{n}" {
         prototype: $"gallery-fan-tall-{tier}"
         parent: "gallery"
         position [
           ((galleryWidth - (galleryWall / 2)) + 0.26),
           (galleryFloor[tier] + windowHubHeight(tallBayHeight, baySill)),
-          z
+          tallBayZs[n]
         ]
         yawDegrees: 270
       }

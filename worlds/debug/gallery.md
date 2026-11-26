@@ -113,9 +113,17 @@ thick cream bands and ochre cladding, inset glazing, a glass lift tower where
 the wings meet, deep-teal arches under the projecting wing and orange fan
 shades on dark hubs.
 
-Floors are terracotta tiles 1.2 m square with a 1 cm joint, a repeating paint,
-and each exhibit line stands on a cream pad painted over them. Ceilings are
-coffered on the same module.
+Floors are glazed terracotta tiles 1.2 m square with a 1 cm joint, a repeating
+paint, and each exhibit line stands on a cream pad painted over them with the
+joints carried across it. Ceilings are coffered on the same module. Every
+large surface is brushed (the standard's `brushed` shade program): its value
+drifts a few hundredths over patches a couple of metres across, so no wall,
+pier or floor is one flat colour. The kit's paints are plain dielectrics, and
+the primitives that open the nave each take a material of their own.
+
+The slice the look is judged on is the nave's east end on level 0: stand in
+the centre aisle 23 m from the east wall at 1.6 m and look east, with the day
+pinned (`world.state.cell.set day $value 0.5`, and 0.62 for the afternoon).
 
 ## What is still open
 

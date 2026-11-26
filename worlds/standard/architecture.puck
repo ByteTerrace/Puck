@@ -129,7 +129,7 @@ template exhibitPlinth(base) {
 let structureTeal = 0
 let structureBrass = 1
 let structurePalette = [
-  { color: "#2C5A63", roughness: 0.55, specular: 0.3 }
+  { color: "#2F6E7A", roughness: 0.6, specular: 0.04 }
   { color: "#C8902E", roughness: 0.3, metal: 1 }
 ]
 let structureAcross = [0.7071, 0, 0, 0.7071]
@@ -199,21 +199,23 @@ let kitLeaf = 10
 let kitLeafPale = 11
 let kitLeafDeep = 12
 let kitTimber = 13
+// Every row but the brass is a plain dielectric: a specular above a few hundredths reflects the room over the paint and
+// greys it. The glass is nearly clear, so what lies beyond a window keeps its colour.
 let kitPalette = [
-  { color: "#EFE3C8", roughness: 0.55, specular: 0.2 }
-  { color: "#E0A13A", roughness: 0.5, specular: 0.25 }
-  { color: "#2C5A63", roughness: 0.55, specular: 0.3 }
-  { color: "#B85A3C", roughness: 0.45, specular: 0.25 }
+  { color: "#EFE3C8", roughness: 0.6, specular: 0.04 }
+  { color: "#E0A13A", roughness: 0.55, specular: 0.04 }
+  { color: "#2F6E7A", roughness: 0.6, specular: 0.04 }
+  { color: "#B85A3C", roughness: 0.5, specular: 0.04 }
   { color: "#C8902E", roughness: 0.3, metal: 1 }
-  { color: "#BFE6E0", roughness: 0.03, glass { depth: 0.012, ior: 1.5 } }
-  { color: "#EE7F2D", roughness: 0.7, specular: 0.08 }
-  { color: "#D9661F", roughness: 0.7, specular: 0.08 }
-  { color: "#1F3A42", roughness: 0.4, specular: 0.4 }
+  { color: "#EEF8F6", roughness: 0.03, glass { depth: 0.012, ior: 1.5 } }
+  { color: "#EE7F2D", roughness: 0.7, specular: 0.04 }
+  { color: "#D9661F", roughness: 0.7, specular: 0.04 }
+  { color: "#1F3A42", roughness: 0.45, specular: 0.05 }
   { color: "#4A3426", roughness: 0.95, specular: 0.02 }
-  { color: "#3F7A3A", roughness: 0.7, specular: 0.1 }
-  { color: "#8FB03E", roughness: 0.7, specular: 0.1 }
-  { color: "#2F5E38", roughness: 0.7, specular: 0.1 }
-  { color: "#B8623A", roughness: 0.5, specular: 0.2 }
+  { color: "#3F7A3A", roughness: 0.7, specular: 0.04 }
+  { color: "#8FB03E", roughness: 0.7, specular: 0.04 }
+  { color: "#2F5E38", roughness: 0.7, specular: 0.04 }
+  { color: "#B8623A", roughness: 0.55, specular: 0.04 }
 ]
 // A quarter turn that lays a shape's +Y along +X, for a bar or a rail that runs across a piece.
 let kitAlong = [0, 0, -0.7071, 0.7071]
@@ -284,8 +286,9 @@ template windowBay(base, width = 3.2, height = 3.3, sill = 0.55, wall = 0.3) {
 // leaves that stack upright over the hub while `signal` reads 0 and spread into a fan of `spread` degrees as it rises to
 // 1, each a little proud of the last so the stack's edges show. The leaves ride one driver, named for the state cell the
 // shade follows (`state.<row>.<key>`), through the `dynamics` row the importing world declares under the name it
-// passes, so a shade eases open and settles. A creation that holds it is animated.
-template fanShade(base, signal, dynamics, radius = 1.9, leaves = 6, spread = 150) {
+// passes, so a shade eases open and settles. A leaf is `leaf` of the radius wide at its tip. A creation that holds it is
+// animated.
+template fanShade(base, signal, dynamics, radius = 1.9, leaves = 6, spread = 150, leaf = 0.42) {
   drivers [
     { name: "spread", signal: signal, cadence: 1, dynamics: dynamics }
   ]
@@ -314,7 +317,7 @@ template fanShade(base, signal, dynamics, radius = 1.9, leaves = 6, spread = 150
       material: (base + (((i % 2) == 0) ? kitShade : kitShadeDeep))
       position [0, ((radius / 2) + 0.16), (0.1 + (0.02 * i))]
       rotation [0, 0, 1, 0]
-      scale [(radius * 0.21), (radius / 2), 0.008]
+      scale [((radius * leaf) / 2), (radius / 2), 0.008]
       taper: 0.16
       swings [
         swing("spread", [0, 0, 1], (((i - ((leaves - 1) / 2)) * (spread / leaves)) * 0.017453293), [0, 0, 0]) with { wave: "linear" }

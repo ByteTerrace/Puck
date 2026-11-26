@@ -69,6 +69,20 @@ public sealed class ShadeReference : IEquatable<ShadeReference> {
         return Keys.GetValue(key: definition, derive: static definition => $"{definition.Name}/{ContentPin.Compute(
             content: CanonicalJsonDocument.SerializeCompact(value: definition, jsonTypeInfo: CreationJsonContext.Document.SdfShadeDefinition)).Hex}");
     }
+    /// <summary>Returns whether every shade program a palette uses is held, rather than only named: each slot's own
+    /// and each of its selected cases'.</summary>
+    /// <param name="palette">The palette, or <see langword="null"/> for none.</param>
+    /// <returns><see langword="false"/> when a use still waits for its world's table.</returns>
+    public static bool HoldsEvery(IReadOnlyList<PaletteEntryDocument>? palette) {
+        foreach (var entry in (palette ?? [])) {
+            if (entry.Shade is { IsResolved: false }) { return false; }
+            foreach (var look in (entry.ToonSelect?.Cases ?? [])) {
+                if (look?.Shade is { IsResolved: false }) { return false; }
+            }
+        }
+
+        return true;
+    }
     /// <summary>Returns this reference holding <paramref name="definition"/>, which must be the program its key names.</summary>
     /// <param name="definition">The program a table holds under this reference's key.</param>
     /// <param name="resolved">This reference when it already holds a program, else a resolved copy.</param>

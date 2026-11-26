@@ -243,6 +243,8 @@ let galleryStyle = celStyle with {
   ink: standardInk with { weight: 0.022, bold: 1.8, tint [0.42, 0.42, 0.48], crease: 0.6, fold: 0.45, uneven: 0 }
 }
 function galleryCel(base) = celMaterial(base, galleryStyle)
+// The primitives that open the gallery each take a material of their own (`exhibit`'s `subject`): a glazed torus, a
+// bronze sphere, a gilt cone, so the nave's first exhibits read as a collection and each form by its own surface.
 // The exhibits' own grey is a plain dielectric, so a subject's form reads by its shading and no exhibit is glossier than
 // its plaque says: an exhibit that shows gloss, metal or a coat authors it in its own slots.
 let galleryPalette = [
@@ -256,10 +258,10 @@ let accent = { color: "#D9822B", roughness: 0.5, specular: 0.04 }
 // shapes, so an exhibit's subtraction or intersection never reaches the plinth. `extra` appends palette slots from 3 on,
 // `runs` text runs after the label, and `note` is the plaque: what the exhibit demos and what to look for, in small
 // type under the label (each non-whitespace glyph adds bake work, so a note stays under ~120 glyphs).
-template exhibit(label, extra = [], runs = [], note = "") {
+template exhibit(label, extra = [], runs = [], note = "", subject = galleryPalette[0]) {
   name: label
   schema: "puck.creation.v1"
-  palette: concat(galleryPalette, extra)
+  palette: concat([subject], map(range(1, (length(galleryPalette) - 1)), i => galleryPalette[i]), extra)
   textRuns: concat(
     [
       {
@@ -2787,7 +2789,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.5, 0.5, 0.5]
       }
-      exhibit(label: "SPHERE")
+      exhibit(label: "SPHERE", subject: { color: "#B98A4E", roughness: 0.32, metal: 1 })
     }
   }
   prototype "shape-box" {
@@ -2797,7 +2799,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "BOX")
+      exhibit(label: "BOX", subject: { color: "#E9DFCB", roughness: 0.7, specular: 0.04 })
     }
   }
   prototype "shape-torus" {
@@ -2808,7 +2810,7 @@ template galleryPrototypes() {
         rotation [0.5, 0, 0, 0.866025]
         scale [0.6, 0.6, 0.6]
       }
-      exhibit(label: "TORUS")
+      exhibit(label: "TORUS", subject: { color: "#2F78A8", roughness: 0.12, specular: 0.05, coat: 0.6 })
     }
   }
   prototype "shape-cylinder" {
@@ -2818,7 +2820,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.4, 0.5, 0.4]
       }
-      exhibit(label: "CYLINDER")
+      exhibit(label: "CYLINDER", subject: { color: "#C8553A", roughness: 0.4, specular: 0.04 })
     }
   }
   prototype "shape-capsule" {
@@ -2828,7 +2830,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.3, 0.4, 0.3]
       }
-      exhibit(label: "CAPSULE")
+      exhibit(label: "CAPSULE", subject: { color: "#5E9E8F", roughness: 0.3, specular: 0.05, coat: 0.4 })
     }
   }
   prototype "shape-ellipsoid" {
@@ -2838,7 +2840,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.5, 0.5, 0.5]
       }
-      exhibit(label: "ELLIPSOID")
+      exhibit(label: "ELLIPSOID", subject: { color: "#D9A7B0", roughness: 0.45, specular: 0.04 })
     }
   }
   prototype "shape-round-cone" {
@@ -2848,7 +2850,7 @@ template galleryPrototypes() {
         position [0, 0.95, 0]
         scale [0.4, 0.4, 0.4]
       }
-      exhibit(label: "ROUND CONE")
+      exhibit(label: "ROUND CONE", subject: { color: "#7C6BB0", roughness: 0.35, specular: 0.05 })
     }
   }
   prototype "shape-cone" {
@@ -2858,7 +2860,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.5, 0.45]
       }
-      exhibit(label: "CONE")
+      exhibit(label: "CONE", subject: { color: "#E2A72E", roughness: 0.3, specular: 0.05, coat: 0.4 })
     }
   }
   prototype "shape-superellipsoid" {
@@ -2869,7 +2871,7 @@ template galleryPrototypes() {
         position [0, 1.2, 0]
         scale [0.45, 0.45, 0.45]
       }
-      exhibit(label: "SUPERELLIPSOID")
+      exhibit(label: "SUPERELLIPSOID", subject: { color: "#9FC6DC", roughness: 0.18, specular: 0.05, coat: 0.5 })
     }
   }
   prototype "shape-plane" {

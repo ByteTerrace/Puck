@@ -173,6 +173,20 @@ function flowed(base, layer, world = 1, velocityLane = -1, coverageLane = -1, gl
 // `settle`. With `settleWidth` 0 the deposit follows that cover linearly; a positive width steps it at
 // `settleThreshold` over that width instead, so a crisp line (snow on ledges, dust on tops) is authored as a threshold
 // and a narrow width.
+// Painterly variation over a large surface: the colour's value drifts by `amount` (a share of it, either way) over soft
+// patches about `scale` metres across with a finer stroke inside them, and leans toward `lean` where it drifts up, as a
+// brush loaded twice lays a wall. The patches stand in the world, so every copy of a stamped piece takes its own. The
+// row's paints are under it, and a style named after it lights what it wrote.
+shade template brushed(amount, scale, lean, seed) {
+  surface {
+    let p = surface.position / scale
+    let rate = surface.footprint / scale
+    let broad = lattice(p, seed) * shadeFade(rate)
+    let stroke = lattice(p * [3.7, 1.3, 3.7] + 17, xor(seed, uint(2654435769))) * shadeFade(rate * 3.7)
+    let drift = shadeClamp((broad + 0.6 * stroke) / 1.166, -1, 1)
+    albedo: mix(material.albedo, lean, saturate(drift) * amount) * (1 + amount * drift)
+  }
+}
 shade template weathered(under, deposit, seed, scale, linesAmount, settle, edgeAmount, reach, threshold, noiseAmount, patternScale, softness, octaveRatio, octaveGain, turn, settleThreshold = 0.5, settleWidth = 0, structural octaves = 2) {
   surface {
     let frequency = scale * patternScale
