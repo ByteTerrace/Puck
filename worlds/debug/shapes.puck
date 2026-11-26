@@ -1,28 +1,28 @@
 // The shape gallery: every authorable signed-distance construct, one prototype an exhibit, each held 1.2 m over a
 // labelled plinth so it reads from every side, underside included. The debug world expands `galleryPrototypes()` inside
 // its `prototypes` block, `galleryPlacements()` inside its `placements` block and `galleryState()` (the motion rows'
-// console controls) inside its `state.world` block. The exhibits stand inside the gallery hall (hall.puck), four levels
-// of rows running along +X, every exhibit 2.6 m from the next and its label facing -Z:
+// console controls) inside its `state.world` block. The exhibits stand inside the gallery (gallery/gallery.puck), on
+// the lines its plan gives (gallery/layout.puck, gallery.md): the nave's two lines and the north aisle on level 0, and
+// the galleries round the nave's void above, each plinth's console facing its walkway:
 //
 //   level 0  shape: primitives at a uniform scale and stretched, prism profiles extruded and revolved
 //   level 1  composition: sweeps and the per-shape facets, every shape blend, the domain folds
 //   level 2  motion: the stamp pool's rotation, swings, slides, moving blends, paints, IK and frames, and warps II; the
-//            board game room fills its east end (hall.puck)
+//            board game room fills its south gallery (gallery.md)
 //   level 3  form and surface: parameter forms, palette channels and wear, cel styles, glass
 //
-// A sign hangs over the west end of each row naming the row, a map board in the lobby by the entrance lists the levels
+// A sign hangs over the start of each row naming the row, a map board in the lobby by the entrance lists the levels
 // and rows, a board over the lift door names each level, and every plinth's plaque says what the exhibit demos and what
 // to look for. Each exhibit has a spawn point 2.8 m in front of its plinth, named after it (gallerySpawns says how she
 // stands there so the chase camera frames the exhibit), and the gallery.* commands
 // (galleryCommands) walk, frame, inspect and flag exhibits through them. shapes.md beside this file holds the levels,
 // the coverage table, the operator camera line that frames each exhibit and the console controls the motion rows answer
-// to. This file is a library: debug.puck and hall.puck expand its templates and lets.
+// to. This file is a library: debug.puck and gallery/gallery.puck expand its templates and lets.
+import "gallery/layout"
 import "../standard/styles"
 import "../standard/rig"
 import "../standard/architecture"
 
-// The hall's storey height and each level's floor top: level k's floor stands at 4.5k + 0.05 (hall.puck).
-let galleryStorey = 4.5
 let seatPopulation = 4
 let visitorPopulation = 8
 let galleryPopulation = (41 + seatPopulation + visitorPopulation)
@@ -39,18 +39,7 @@ let cardBodies = 54
 let boardRoomBodies = (granaryBodies + alchemyBodies + goBodies + reversiBodies)
 // The launch field's ship (launch.puck) takes the population's highest slot, and debug.puck's capacity is one more.
 let launchShipBody = (galleryPopulation + 2 + boardRoomBodies + cardBodies + seatPopulation + 1)
-let galleryFloor = map(range(0, 4), k => ((galleryStorey * k) + 0.05))
-let galleryMapDirections = "stairs and lift north-west: press CALL, or gallery.lift <level>"
-
-// The axis of the painting wing's endless fall (paintings.puck): a painting in level 0's floor under its twin in the
-// ceiling at (fallX, fallZ). A body that falls out of the ceiling twin needs 2.2 m of air over it, so level 1's slab is
-// holed over the ceiling twin, `fallHole` either side of the axis (hall.puck), and a rail stands round the hole.
-let fallX = 66
-let fallZ = 22.6
-let fallHole = 1
-
-let galleryX = 23
-let gallerySpacing = 2.6
+let galleryMapDirections = "stairs and lift beside the entrance: press CALL, or gallery.lift <level>"
 
 let uniformRow = [
   "shape-sphere", "shape-box", "shape-torus", "shape-cylinder", "shape-capsule", "shape-ellipsoid", "shape-round-cone",
@@ -105,15 +94,8 @@ let warpRow = [
   "shape-stairs-union", "shape-stairs-subtraction", "shape-morph"
 ]
 
-let foldZ = 33
 let motionLevel = 2
-let motionZ = 17
-let motionZB = 25
-let warpZ = 33
 let surfaceLevel = 3
-let surfaceZ = 25
-let glassZ = 37
-let styleZ = 31
 
 // The levels, in walking order: the board over each lift door names its level and what it shows.
 let galleryLevels = [
@@ -123,78 +105,112 @@ let galleryLevels = [
   { level: 3, title: "LEVEL 3  FORM AND SURFACE", what: "forms, surfaces, styles, glass" }
 ]
 
-// Every row, in walking order: its sign's title, its level, the z it stands on, its exhibit names and what it shows.
+// Every row, in walking order: its sign's title, its level, the lines its exhibits stand on in order (layout.puck's
+// `galleryLine`), where its sign hangs and the yaw the sign faces from, and what it shows.
 let galleryRows = [
-  { title: "PRIMITIVES", level: 0, z: 16, names: uniformRow, what: "each primitive at a uniform scale" }
-  { title: "STRETCHED", level: 0, z: 22, names: stretchedRow, what: "each primitive scaled unevenly" }
-  { title: "EXTRUDED", level: 0, z: 28, names: extrudeRow, what: "each prism profile, extruded" }
-  { title: "REVOLVED", level: 0, z: 34, names: revolveRow, what: "each prism profile, revolved" }
-  { title: "SWEEPS AND FACETS", level: 1, z: 17, names: facetRow, what: "sweeps, rounding, shells, warps, relief" }
   {
-    title: "BLENDS"
-    level: 1
-    z: 25
-    names: map(blendExhibits, entry => entry.id)
-    what: "every blend of a box and a sphere"
-  }
-  { title: "FOLDS", level: 1, z: foldZ, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds" }
-  {
-    title: "MOTION"
-    level: motionLevel
-    z: motionZ
-    names: motionRow
-    what: "the stamp pool: swings, slides, moving blends"
+    title: "PRIMITIVES", level: 0, names: uniformRow, what: "each primitive at a uniform scale"
+    lines [galleryLine(14.4, naveLineSouth, 3.4, 2, 180), galleryLine(28.6, naveLineSouth, 3.4, 8, 180)]
+    sign { x: 28.6, z: naveLineSouth, yaw: 90 }
   }
   {
-    title: "MOTION II"
-    level: motionLevel
-    z: motionZB
-    names: motionRowB
-    what: "moving paints, twist, bend, cells, IK"
-  }
-  { title: "WARPS II", level: 2, z: warpZ, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph" }
-  { title: "FORMS", level: surfaceLevel, z: 17, names: formRow, what: "exponents, tapers, paths, a braid" }
-  {
-    title: "SURFACES"
-    level: surfaceLevel
-    z: surfaceZ
-    names: surfaceRow
-    what: "palette channels, wear, panels, text"
+    title: "STRETCHED", level: 0, names: stretchedRow, what: "each primitive scaled unevenly"
+    lines [galleryLine(14.4, naveLineNorth, 3.4, 2, 0), galleryLine(28.6, naveLineNorth, linePitch, 10, 0)]
+    sign { x: 28.6, z: naveLineNorth, yaw: 90 }
   }
   {
-    title: "STYLES"
-    level: surfaceLevel
-    z: styleZ
-    names: styleRow
-    what: "a cel style per material, beside continuous ones, and the grey card"
+    title: "EXTRUDED", level: 0, names: extrudeRow, what: "each prism profile, extruded"
+    lines [galleryLine(2.6, 24.2, 2.5, 11, 0)]
+    sign { x: 27.6, z: 24.2, yaw: 270 }
   }
   {
-    title: "GLASS"
-    level: surfaceLevel
-    z: glassZ
-    names: glassRow
-    what: "glass over the opaque image: tint, depth, refraction, frost"
+    title: "REVOLVED", level: 0, names: revolveRow, what: "each prism profile, revolved"
+    lines [galleryLine(34, 24.2, 4, 6, 0)]
+    sign { x: 34, z: 24.2, yaw: 90 }
+  }
+  {
+    title: "SWEEPS AND FACETS", level: 1, names: facetRow, what: "sweeps, rounding, shells, warps, relief"
+    lines [galleryLine(28, southOuter, linePitch, 7, 180), galleryLine(28, southInner, linePitch, 6, 0)]
+    sign { x: 28, z: ((southOuter + southInner) / 2), yaw: 90 }
+  }
+  {
+    title: "BLENDS", level: 1, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere"
+    lines [galleryLine(14, northInner, linePitch, 14, 180)]
+    sign { x: 14, z: northInner, yaw: 90 }
+  }
+  {
+    title: "FOLDS", level: 1, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds"
+    lines [galleryLine(3, northOuter, linePitch, 16, 0)]
+    sign { x: 3, z: northOuter, yaw: 0 }
+  }
+  {
+    title: "MOTION", level: motionLevel, names: motionRow, what: "the stamp pool: swings, slides, moving blends"
+    lines [galleryLine(2.6, northOuter, linePitch, 11, 0)]
+    sign { x: 2.6, z: northOuter, yaw: 0 }
+  }
+  {
+    title: "MOTION II", level: motionLevel, names: motionRowB, what: "moving paints, twist, bend, cells, IK"
+    lines [galleryLine(14, northInner, linePitch, 10, 180)]
+    sign { x: 14, z: northInner, yaw: 90 }
+  }
+  {
+    title: "WARPS II", level: 2, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph"
+    lines [galleryLine(33.6, northOuter, linePitch, 9, 0)]
+    sign { x: 33.6, z: northOuter, yaw: 90 }
+  }
+  {
+    title: "FORMS", level: surfaceLevel, names: formRow, what: "exponents, tapers, paths, a braid"
+    lines [galleryLine(14, northInner, linePitch, 14, 180)]
+    sign { x: 14, z: northInner, yaw: 90 }
+  }
+  {
+    title: "SURFACES", level: surfaceLevel, names: surfaceRow, what: "palette channels, wear, panels, text"
+    lines [galleryLine(3, northOuter, linePitch, 18, 0)]
+    sign { x: 3, z: northOuter, yaw: 0 }
+  }
+  {
+    title: "STYLES", level: surfaceLevel, names: styleRow, what: "a cel style per material, beside continuous ones, and the grey card"
+    lines [galleryLine(30, 2.5, 4, 3, 180)]
+    sign { x: 30, z: 2.5, yaw: 90 }
+  }
+  {
+    title: "GLASS", level: surfaceLevel, names: glassRow, what: "glass over the opaque image: tint, depth, refraction, frost"
+    lines [galleryLine(46, 2.5, 4, 1, 180)]
+    sign { x: 46, z: 2.5, yaw: 90 }
   }
 ]
 
-// A spawn point per exhibit, named after it, 2.8 m in front of the plinth, so `body.pose spawn:<exhibit>` and
-// `gallery.go <exhibit>` walk to any exhibit by name. She stands turned `gallerySpawnTurn` degrees east of the exhibit
-// (yaw 180 faces +Z, and a larger yaw turns her toward +X), because the chase camera keeps its place behind her: square
-// to the exhibit, her body stands between the camera and the exhibit at 1.2 m and hides it. Turned, the camera (4 m back
-// along her heading, 1.2 m over her pivot) sees the exhibit about 16 degrees left of her, its plaque 24 degrees off
-// square, with the next exhibit east behind her. A first-person check that wants her square to the row turns her with
-// `body.pose - - - 180 - - <body>`.
-let gallerySpawnTurn = 40
-let gallerySpawns = flatMap(
+// Every exhibit's station, in walking order: its name, its level and floor height, where its plinth stands in the
+// building's frame, the yaw it stands at, and `front`, the sign of z its console faces along (-1 at yaw 0, 1 at 180).
+function galleryLineSlots(line) = map(
+  range(0, line.count),
+  i => { x: (line.x + (line.pitch * i)), z: line.z, yaw: line.yaw, front: ((line.yaw == 0) ? -1 : 1) }
+)
+function galleryRowSlots(row) = flatMap(row.lines, line => galleryLineSlots(line))
+let galleryStations = flatMap(
   galleryRows,
   row => map(
     row.names,
-    (name, index) => {
-      id: name
-      position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], (row.z - 2.8)]
-      yawDegrees: (180 + gallerySpawnTurn)
-    }
+    (name, index) => galleryRowSlots(row)[index] with { name: name, level: row.level, y: galleryFloor[row.level] }
   )
+)
+function galleryStation(name) = filter(galleryStations, station => (station.name == name))[0]
+
+// A spawn point per exhibit, named after it, 2.8 m in front of the plinth's console, so `body.pose spawn:<exhibit>` and
+// `gallery.go <exhibit>` walk to any exhibit by name. She stands turned `gallerySpawnTurn` degrees past facing the
+// exhibit, because the chase camera keeps its place behind her: square to the exhibit, her body stands between the
+// camera and the exhibit at 1.2 m and hides it. Turned, the camera (4 m back along her heading, 1.2 m over her pivot)
+// sees the exhibit about 16 degrees left of her, its plaque 24 degrees off square, with the next exhibit along the
+// line behind her. The points are authored in the building's frame, under its root placement.
+let gallerySpawnTurn = 40
+let gallerySpawns = map(
+  galleryStations,
+  station => {
+    id: station.name
+    parent: "gallery"
+    position [station.x, station.y, (station.z + (2.8 * station.front))]
+    yawDegrees: (((station.yaw + 180) % 360) + gallerySpawnTurn)
+  }
 )
 
 let galleryPentagon = [[0, 1], [0.95, 0.31], [0.59, -0.81], [-0.59, -0.81], [-0.95, 0.31]]
@@ -417,7 +433,7 @@ template signPrototypes() {
           ],
           [
             {
-              text: "PAINTING WING east   BOARD GAMES level 2 east   WONDERLAND west wall"
+              text: "PAINTINGS east of the door   BOARD GAMES level 2   WONDERLAND west wall"
               position [0, 0.95, 0.015]
               rotation [0, 0, 0, 1]
               emHeight: 0.026
@@ -445,18 +461,20 @@ template signPrototypes() {
   }
 }
 
-// The map hangs left of the entrance; row boards hang above the first exhibit.
+// The map hangs in the lobby facing the entrance; a row's board hangs where the row begins (`sign`).
 template gallerySignPlacements() {
   for (row, index) in galleryRows {
     placement $"gallery-sign-{index}" {
       prototype: $"gallery-sign-{index}"
-      position [galleryX, galleryFloor[row.level], row.z]
-      yawDegrees: 90
+      parent: "gallery"
+      position [row.sign.x, galleryFloor[row.level], row.sign.z]
+      yawDegrees: row.sign.yaw
     }
   }
   placement "gallery-map" {
     prototype: "gallery-map"
-    position [12.4, galleryFloor[0], 16]
+    parent: "gallery"
+    position [((entranceWest + entranceEast) / 2), galleryFloor[0], 6.8]
   }
 }
 
@@ -534,22 +552,26 @@ let galleryCommands = [
 ]
 
 template galleryPlacements() {
-  for row in galleryRows {
-    for (name, index) in row.names {
-      placement $"{name}" {
-        prototype: name
-        position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], row.z]
-      }
-      placement $"{name}-plinth" {
-        prototype: "gallery-plinth"
-        position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], row.z]
-      }
+  for station in galleryStations {
+    placement $"{station.name}" {
+      prototype: station.name
+      parent: "gallery"
+      position [station.x, station.y, station.z]
+      yawDegrees: station.yaw
+    }
+    placement $"{station.name}-plinth" {
+      prototype: "gallery-plinth"
+      parent: "gallery"
+      position [station.x, station.y, station.z]
+      yawDegrees: station.yaw
     }
   }
-  // The noisy sphere over the NOISE plinth (the fold row's last exhibit): a separate creation keeps the noise off the plinth.
+  // The noisy sphere over the NOISE plinth: a separate creation keeps the noise off the plinth.
   placement "shape-noise-subject" {
     prototype: "shape-noise-subject"
-    position [(galleryX + (gallerySpacing * (length(foldRow) - 1))), galleryFloor[1], foldZ]
+    parent: "gallery"
+    position [galleryStation("shape-noise").x, galleryStation("shape-noise").y, galleryStation("shape-noise").z]
+    yawDegrees: galleryStation("shape-noise").yaw
   }
   gallerySignPlacements()
 }
@@ -559,7 +581,7 @@ template galleryPlacements() {
 // `galleryMotion.all` and on its exhibit's own `galleryMotion` key: a zero eases that exhibit back to its rest pose.
 // `galleryInputs` holds text cells three exhibits read: `probe` places motion-state-blend's sphere, `reach` is the world
 // point motion-ik's arm reaches for, and `tint` colours shape-state-color. shapes.md gives the console lines.
-let reachX = (galleryX + (gallerySpacing * 7))
+let reachStation = galleryStation("motion-ik")
 
 template galleryState() {
   slot galleryClock = 0.5 advance(perSecond: 1)
@@ -589,7 +611,7 @@ template galleryState() {
 
   table galleryInputs {
     probe = "[0.3, 1.35, 0.05]"
-    reach = $"[{reachX + 0.35}, {galleryFloor[motionLevel] + 1.45}, {motionZB - 0.25}]"
+    reach = $"[{gallerySite[0] + reachStation.x - (0.35 * reachStation.front)}, {reachStation.y + 1.45}, {gallerySite[2] + reachStation.z + (0.25 * reachStation.front)}]"
     tint = "#D9822B"
   }
 
@@ -1459,8 +1481,7 @@ template formPrototypes() {
 
 // The static paint's world-space plane: a static placement shares one palette and draws an unparented paint in world
 // space, so the stripe names its own exhibit's place in the surface row (index 12, on level 3).
-let paintX = (galleryX + (gallerySpacing * 12))
-let paintY = (galleryFloor[surfaceLevel] + 1.2)
+let paintStation = galleryStation("shape-paint-world")
 
 // Surfaces: palette channels, weathering, panels, trims, a world-space paint, text runs, volumes and a state-bound
 // colour, each on slot 3.
@@ -1801,7 +1822,7 @@ template surfacePrototypes() {
             paints [
               {
                 type: "Plane"
-                position [paintX, paintY, surfaceZ]
+                position [(gallerySite[0] + paintStation.x), (paintStation.y + 1.2), (gallerySite[2] + paintStation.z)]
                 rotation [0, 0, 0.258819, 0.965926]
                 stroke: 0.035
                 color: "#1F4E79"

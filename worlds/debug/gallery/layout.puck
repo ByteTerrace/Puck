@@ -1,0 +1,116 @@
+// The gallery's plan, every dimension the building and what stands in it are placed by (gallery.md beside this file
+// draws it). A module library: it hands its importers lets and functions and emits no document.
+//
+// Positions are in the building's own frame, metres: x runs east from the west wall's outer face (0 .. 60), z north
+// from the south wall's outer face (0 .. 28), y up from the ground. The building's rows are placed under one root
+// placement, `gallery` (gallery.puck), so a world stands the building by giving that row a position and a turn; the
+// yaw of a row here is the row's own, with yaw 0 facing -z (south) and yaw 180 facing +z, as a placement's does.
+
+// Where the debug world stands the building: its root placement's position. A document that stands something in the
+// building by world coordinates (a table's lattice, a painting's door) adds it to a plan position with `galleryWorld`.
+let gallerySite = [10, 0, 12]
+function galleryWorld(x, y, z) = [(gallerySite[0] + x), (gallerySite[1] + y), (gallerySite[2] + z)]
+
+// Four storeys 4.5 m apart: level k's floor top stands at 4.5k + 0.05, on a slab 0.3 m thick, under a ceiling 4.2 m up.
+let galleryStorey = 4.5
+let galleryFloor = map(range(0, 4), k => ((galleryStorey * k) + 0.05))
+let galleryCeiling = map(range(0, 4), k => ((galleryStorey * (k + 1)) - 0.25))
+let galleryRoof = 18.05
+let galleryParapet = 19.1
+
+// The footprint and its walls, 0.3 m thick.
+let galleryWidth = 60
+let galleryDepth = 28
+let galleryWall = 0.3
+let galleryEast = (galleryWidth - galleryWall)
+let galleryNorth = (galleryDepth - galleryWall)
+
+// The nave runs east from x 12 to the east wall, a void from level 0's floor to the roof between the two balcony edges;
+// the aisles either side of it, and the bridge west of it, are floors on every level. The arcades' piers stand 0.4 m
+// behind each balcony edge, every 4 m.
+let naveSouth = 9
+let naveNorth = 19
+let naveWest = 12
+let naveMid = ((naveSouth + naveNorth) / 2)
+let arcadeSouth = (naveSouth - 0.4)
+let arcadeNorth = (naveNorth + 0.4)
+let arcadeXs = map(range(0, 12), i => (naveWest + (4 * i)))
+
+// The core, against the south wall: the stairs (a switchback of two 1.8 m flights either side of a spine, eighteen
+// 0.25 m risers a storey), the lift tower outside the wall east of them, and the entrance east of that.
+let stairWest = 12.4
+let stairSpine = 14.2
+let stairEast = 16.2
+let stairFoot = 5.5
+let stairLanding = 2.3
+let stairTread = 0.4
+let stairRiser = 0.25
+// The lift: the car's centre, in a tower 3.6 m square that stands outside the south wall, its door in the wall.
+let liftX = 18.8
+let liftZ = -1.5
+let towerWest = 17
+let towerEast = 20.6
+let towerSouth = -3.3
+let towerTop = 21
+let entranceWest = 24
+let entranceEast = 28
+let entranceTop = 3.3
+
+// The east wing's upper two storeys project 4 m south of the wall from x 21, carried on arches over the forecourt; the
+// west wing's top storey stops at the nave, leaving a roof terrace over its south aisle.
+let wingWest = 21
+let wingSouth = -4
+let wingLevel = 2
+let archZ = -3.4
+let archSpan = 3.75
+let archXs = map(range(0, 6), i => (22.5 + ((2 * archSpan) * i)))
+let terraceEast = stairWest
+let terraceNorth = 8.7
+
+// A window bay's opening: 3.2 m wide and 3.1 m tall, from 0.6 m over its floor, one every 4 m along a face.
+let bayWidth = 3.2
+let bayHeight = 3.1
+let baySill = 0.6
+// The nave's east wall holds three tall bays, in two tiers of two storeys each.
+let tallBayWidth = 2.6
+let tallBayHeight = 7.3
+let tallBayZs = [10.9, 14, 17.1]
+
+// The bays of each face by level, as the centre of each along its face. The south face's are the west wing's (the
+// terrace takes level 3's), level 1's over the entrance and along the painting wing, and the projecting wing's on
+// levels 2 and 3, which stand in its own south face.
+let southBaysWest = [2, 6, 10]
+let southBaysEast = map(range(0, 7), i => (31.5 + (4 * i)))
+let wingBays = map(range(0, 9), i => (23.5 + (4 * i)))
+let northBays = map(range(0, 15), i => (2 + (4 * i)))
+let westBays = [
+  [3.2, 23.5]
+  [3.2, 11.5, 16.5, 23.5]
+  [3.2, 11.5, 16.5, 23.5]
+  [11.5, 16.5, 23.5]
+]
+let eastBays = [[23.5], [4.4, 23.5], [4.4, 23.5], [4.4, 23.5]]
+
+// The painting wing: level 0's south aisle east of the entrance lobby, x 30 .. 59.7. Two fins stand out from the south
+// wall, at x 30 and x 44.3, each 4.2 m long; the fall's well is at (55.5, 6), under a hole in level 1's floor.
+let courtWest = 30
+let courtFin = 44.3
+let courtFinLength = 4.2
+let fallPlan = [55.5, 6]
+let fallHole = 1
+// The same axis in the debug world, for the paintings' and the exhibits' documents.
+let fallX = (gallerySite[0] + fallPlan[0])
+let fallZ = (gallerySite[2] + fallPlan[1])
+
+// The exhibit lines. A line is a run of stations along +x: its first station's x, its z, the pitch between stations,
+// how many it holds, and the yaw its plinths stand at (their consoles face the walkway). The nave's two lines flank the
+// centre aisle and stop either side of the cross aisle from the entrance; a gallery's outer line stands toward its
+// windows and its inner line toward the balcony edge, the two facing each other across a walkway.
+function galleryLine(x, z, pitch, count, yaw) = { x: x, z: z, pitch: pitch, count: count, yaw: yaw }
+let naveLineSouth = 11.2
+let naveLineNorth = 16.8
+let northOuter = 24.6
+let northInner = 20.9
+let southOuter = 3.4
+let southInner = 7.2
+let linePitch = 2.9
