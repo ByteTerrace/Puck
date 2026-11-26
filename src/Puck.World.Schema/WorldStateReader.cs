@@ -89,6 +89,29 @@ public static class WorldStateReader {
         : fallback
     );
 
+    /// <summary>Reads the turn a <c>Fixed</c> row's slot cell stands at, one whole unit a turn
+    /// (<see cref="StateArena.TryReadLiveTurn"/>): exact for an advancing clock row, so an orbit it turns moves smoothly
+    /// between ticks rather than in steps of a 65,536th of a turn.</summary>
+    /// <param name="definition">The document whose arena is read.</param>
+    /// <param name="rowName">The state row.</param>
+    /// <param name="tick">The tick to read as of.</param>
+    /// <param name="engineTick">The engine tick to read as of.</param>
+    /// <param name="turn">The fraction of a turn scaled by 2^64 on success; otherwise zero.</param>
+    /// <param name="arena">The live store, or <see langword="null"/> for the one bound to
+    /// <paramref name="definition"/>.</param>
+    /// <returns><see langword="true"/> when the row holds a <c>Fixed</c> slot cell.</returns>
+    public static bool TryReadTurn(WorldDefinition definition, string rowName, ulong tick, ulong engineTick, out ulong turn, StateArena? arena = null) {
+        turn = 0UL;
+        arena ??= ReadArena(definition);
+        if (!arena.Catalog.TryResolve(lane: StateLane.Document, name: rowName, handle: out var handle) ||
+            !arena.Keys.TryResolve(name: StateRow.SlotKey, key: out var cell)) {
+            return false;
+        }
+        var time = Time(definition, tick, engineTick);
+
+        return arena.TryReadLiveTurn(rowOrdinal: handle.Ordinal, key: cell, time: in time, turn: out turn);
+    }
+
     /// <summary>Reads a typed cell, including a vector, without reading a seed cell.</summary>
     public static bool TryReadValue(WorldDefinition definition, string rowName, string? key, ulong tick, ulong engineTick,
         [NotNullWhen(true)] out WorldStateRow? row, out CellValue value, StateArena? arena = null) =>

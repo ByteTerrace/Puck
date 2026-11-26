@@ -661,18 +661,13 @@ public readonly record struct FixedWorldGravityOrbit(
     /// <param name="engineTick">The engine tick.</param>
     /// <returns>The offset from the focus, in world units.</returns>
     public FixedVector3 OffsetAt(ulong engineTick) => Orbit.PositionAt(phase: unchecked((FixedConicOrbit.Phase(elapsedTicks: engineTick, periodTicks: PeriodTicks) + PhaseOffset)));
-    /// <summary>Returns the orbit's position relative to its focus where a clock row stands
-    /// (<see cref="WorldGravityOrbit.PhaseBy"/>): the row's fractional part is the turn, which the authored phase
-    /// offsets.</summary>
-    /// <param name="clock">The clock row's value; one whole unit is one turn.</param>
+    /// <summary>Returns the orbit's position relative to its focus where a clock row's turn stands
+    /// (<see cref="WorldGravityOrbit.PhaseBy"/>, read exactly by <see cref="WorldStateReader.TryReadTurn"/>), which the
+    /// authored phase offsets.</summary>
+    /// <param name="turn">The clock row's fractional turn, scaled by 2^64.</param>
     /// <returns>The offset from the focus, in world units.</returns>
-    public FixedVector3 OffsetAt(FixedQ4816 clock) => Orbit.PositionAt(phase: unchecked((TurnOf(clock: clock) + PhaseOffset)));
+    public FixedVector3 OffsetAtTurn(ulong turn) => Orbit.PositionAt(phase: unchecked((turn + PhaseOffset)));
 
-    /// <summary>Returns a clock value's fractional part as a fraction of one turn scaled by 2^64, the form
-    /// <see cref="FixedConicOrbit.PositionAt"/> reads.</summary>
-    /// <param name="clock">The clock value; one whole unit is one turn.</param>
-    /// <returns>The turn.</returns>
-    public static ulong TurnOf(FixedQ4816 clock) => (unchecked((ulong)clock.Value) << (64 - FixedQ4816.FractionBitCount));
     /// <summary>Returns a turn's fractional part as a fraction of one turn scaled by 2^64: an authored phase, or a
     /// presentation clock's.</summary>
     /// <param name="turn">The finite turn count; only its fractional part places a body.</param>
