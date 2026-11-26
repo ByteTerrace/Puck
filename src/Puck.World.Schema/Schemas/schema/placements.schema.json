@@ -143,6 +143,11 @@
             "$ref": "./common.schema.json#/$defs/WorldPointerSurface",
             "description": "The placement\u0027s pointer surface (see WorldPointerSurface): a rectangle in the row\u0027s frame that a seat\u0027s pointer ray maps onto, with named regions a rule hit-tests, or null for none. Omitted from the wire when null.",
             "default": null
+          },
+          "turn": {
+            "$ref": "./common.schema.json#/$defs/WorldPlacementTurn",
+            "description": "The placement\u0027s turn facet (see WorldPlacementTurn): the row turns about its own up axis by an angle read from state, a turntable, or null for a row that keeps its authored yaw. Omitted from the wire when null.",
+            "default": null
           }
         },
         "required": [

@@ -15,7 +15,7 @@
 | `metal` | [0, 1] | 0 | mixes reflectance toward albedo and scales diffuse by `1 − metal` |
 | `coat` | [0, 1] | 0 | a second narrow lobe at fixed roughness 0.25 — lacquer over the primary specular |
 | `wrap` | [0, 1] | 0 | widens the terminator; the skin and soft-surface control |
-| `soften` | [0, 1] | 0 | blends the shading normal toward a wide-stencil gradient, smoothing pores and seams out of the lit normal without touching the silhouette |
+| `soften` | [0, 1] | 0 | validated and packed, and read by nothing: no kernel samples the field at shading time, so it changes no pixel. Soften a mass's shading with `softVolume` ([soft volume shading](#soft-volume-shading)) |
 | `fill` | `#RRGGBB` or a state binding | black | an artistic tint on the side the key light misses, scaled by ambient occlusion |
 | `bleed` | `#RRGGBB` or a state binding | white | scales diffuse reflectance and emission sent into indirect lighting |
 | `receive` | finite ≥ 0 | 1 | scales indirect light received by the surface |
@@ -52,6 +52,32 @@ For painted metal with a clearcoat: a moderate `specular` around 0.35, a
 `roughness` in the 0.25 to 0.45 band, `metal` near 0 for paint over metal or near
 1 for bare metal, and `coat` around 0.3 to 0.5. None of it reads without
 something to reflect — see the environment section below.
+
+## Soft volume shading
+
+A mass built of many small parts (a clump of leaves, a tuft, a fleece) reads as
+noise when each part is lit by its own normal. The standard's `softVolume(row,
+radii, soft)` (`worlds/standard/shading.puck`) lights it as the one round form
+it stands for: its shade program `envelopeNormal` turns the shading normal
+`soft` of the way toward the outward normal of an ellipsoid of `radii` about the
+draw's own origin, so the parts keep the silhouette and their colour while the
+light falls across the whole. A program after it in the row's `shade` list
+reads the softened normal as `surface.normal`, so a canopy's colour ramp and a
+cel band both follow it.
+
+The ellipsoid stands in the draw's own frame, which a shade program reads as
+`surface.objectPosition`: the hit in the space its mesh's vertices lie in. For a
+static placement that is the creation's frame at the scale its mesh was baked
+at (the largest placement's), so a point's direction from the origin is the same
+for every copy while its length is not: author an envelope about the creation's
+origin and use directions, as the ellipsoid's normal does. For a draw that rides
+a transform slot (a body, an animated or attached placement) it is
+`surface.layerPosition`. `drawDirection(v)` turns a direction in that frame into
+the world's.
+
+An authored normal makes the material ask every side for its shadow, since no
+bound on where the light now reaches is proven
+([authored shading](../../rendering/references/authored-shading.md)).
 
 ## Weathering
 

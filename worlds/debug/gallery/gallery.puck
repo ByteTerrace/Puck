@@ -1414,48 +1414,75 @@ for entry in galleryCatalog {
   }
 }
 
-// The display consoles (shapes.puck's console interface). Each console's screen placement carries a pointer surface, so
-// its rules read where a seat's pointer lands on the glass and whether its tap is pressed: pointer(any, <screen>, ...)
-// answers for the first seat pointing at it. A press on the list records the row it landed on; while it is held, each
-// row the pointer passes scrolls the list a row the other way, as a finger drags a page; and a release that never left
-// its row is a tap, which shows that row's exhibit on the turntable. PREV and NEXT turn the list a page. A display's
-// selection holds a catalog index, any of the catalog's.
+// The display consoles (shapes.puck's console interface). Each console's screen placement carries a pointer surface,
+// and its rules sweep the contacts that land on the glass (forEach: contacts(<screen>)): a finger or a pen tip touching
+// it, or a mouse click, which is the mouse's contact while its primary button is held, cast through the reticle when the
+// seat looks in first person. Mouse and touch take this one door, so a click and a tap answer alike and neither is read
+// twice. A touch on the list records the row it landed on; while it stays down, each row it passes scrolls the list a
+// row the other way, as a finger drags a page; and a lift that never left its row is a tap, which shows that row's
+// exhibit on the turntable. A lift on PREV or NEXT turns the list a page, and one on the turntable's buttons posts to
+// its mailbox. A display's selection holds a catalog index, any of the catalog's. One sweep a console reads every
+// contact on its glass once, so a tick of many contacts costs one walk of them, not one a gesture.
 for display in galleryDisplays {
   let key = display.id
   let screen = $"display-{display.id}-screen"
-  rule $"gallery-console-{key}-press" {
-    when galleryPress[key] == 0 and pointer(any, screen, press, tap) > 0 and pointer(any, screen, region, list) == 1
-    mode: Edge
-    galleryPress[key] = 1
-    galleryPressRow[key] = pointer(any, screen, row, list)
-    galleryDragRow[key] = pointer(any, screen, row, list)
-    galleryPressScroll[key] = galleryScroll[key]
-    galleryDragged[key] = 0
-  }
-  rule $"gallery-console-{key}-drag" {
-    when galleryPress[key] == 1 and pointer(any, screen, press, tap) > 0 and pointer(any, screen, row, list) >= 0 and pointer(any, screen, row, list) != galleryDragRow[key]
+  rule $"gallery-console-{key}" {
+    forEach: contacts(screen)
+    when contact(each, phase) > 0
     mode: Level
-    galleryDragRow[key] = pointer(any, screen, row, list)
-    galleryDragged[key] = 1
-    galleryScroll[key] = clamp(galleryPressScroll[key] + galleryPressRow[key] - pointer(any, screen, row, list), 0, consoleScrollLast)
-  }
-  rule $"gallery-console-{key}-release" {
-    when galleryPress[key] == 1 and pointer(any, screen, press, tap) == 0
-    mode: Level
-    if galleryDragged[key] == 0 {
-      gallerySelect[key] = minimum(galleryPressScroll[key] + galleryPressRow[key], galleryLast)
+    // A touch down on the list holds its row and the scroll it started from.
+    if galleryPress[key] == 0 and contact(each, phase) == 1 and contact(each, region, list) == 1 {
+      galleryPress[key] = 1
+      galleryPressRow[key] = contact(each, row, list)
+      galleryDragRow[key] = contact(each, row, list)
+      galleryPressScroll[key] = galleryScroll[key]
+      galleryDragged[key] = 0
     }
-    galleryPress[key] = 0
+    // A move onto another row drags the list.
+    if galleryPress[key] == 1 and contact(each, phase) == 2 and contact(each, row, list) >= 0 and contact(each, row, list) != galleryDragRow[key] {
+      galleryDragRow[key] = contact(each, row, list)
+      galleryDragged[key] = 1
+      galleryScroll[key] = clamp(galleryPressScroll[key] + galleryPressRow[key] - contact(each, row, list), 0, consoleScrollLast)
+    }
+    // A lift (phase 3) that never left its row selects it; a cancel (phase 4) ends the press and selects nothing.
+    if galleryPress[key] == 1 and contact(each, phase) >= 3 {
+      if galleryDragged[key] == 0 and contact(each, phase) == 3 {
+        gallerySelect[key] = minimum(galleryPressScroll[key] + galleryPressRow[key], galleryLast)
+      }
+      galleryPress[key] = 0
+    }
+    // A lift on a button: PREV and NEXT turn the list a page, the turntable's buttons post to its mailbox (1 slower,
+    // 2 hold or release, 3 faster).
+    if contact(each, phase) == 3 and (contact(each, region, prev) + contact(each, region, next) + contact(each, region, slower) + contact(each, region, hold) + contact(each, region, faster)) > 0 {
+      galleryScroll[key] = clamp(galleryScroll[key] + (consoleRows * (contact(each, region, next) - contact(each, region, prev))), 0, consoleScrollLast)
+      galleryTurnAt[key] = contact(each, region, slower) + (2 * contact(each, region, hold)) + (3 * contact(each, region, faster))
+    }
   }
-  rule $"gallery-console-{key}-prev" {
-    when pointer(any, screen, press, tap) > 0 and pointer(any, screen, region, prev) == 1
-    mode: Edge
-    galleryScroll[key] = maximum(galleryScroll[key] - consoleRows, 0)
-  }
-  rule $"gallery-console-{key}-next" {
-    when pointer(any, screen, press, tap) > 0 and pointer(any, screen, region, next) == 1
-    mode: Edge
-    galleryScroll[key] = minimum(galleryScroll[key] + consoleRows, consoleScrollLast)
+  // The turntable's mailbox: slower and faster step the signed speed, passing from the slowest pace one way to the
+  // slowest the other way round, and set it turning; hold stops or restarts it where it stands. The rate its turn facet
+  // reads changes with the phase rebased by the same write (phase += (rate - new rate) × clock), so the angle the facet
+  // computes from the gallery clock carries on from where it stood.
+  rule $"gallery-turn-{key}" {
+    when galleryTurnAt[key] != 0
+    mode: Level
+    if galleryTurnAt[key] == 2 {
+      galleryTurnPlay[key] = 1 - galleryTurnPlay[key]
+    } else {
+      galleryTurnSpeed[key] = clamp(galleryTurnSpeed[key] + galleryTurnAt[key] - 2, 0 - turntableSpeeds, turntableSpeeds)
+      if galleryTurnSpeed[key] == 0 {
+        galleryTurnSpeed[key] = galleryTurnAt[key] - 2
+      }
+      galleryTurnPlay[key] = 1
+    }
+    setState(state: galleryTurnNext, key: $"{key}", fromState: galleryTurnRates, fromKey: $"$cell:galleryTurnSpeed:{key}")
+    if galleryTurnPlay[key] == 0 {
+      galleryTurnNext[key] = 0
+    }
+    galleryTurnPhase[key] = galleryTurnPhase[key] + ((galleryTurnRate[key] - galleryTurnNext[key]) * galleryClock)
+    galleryTurnRate[key] = galleryTurnNext[key]
+    setState(state: galleryTurnHold, key: $"{key}", fromState: galleryTurnHolds, fromKey: $"$cell:galleryTurnPlay:{key}")
+    setState(state: galleryTurnPace, key: $"{key}", fromState: galleryTurnPaces, fromKey: $"$cell:galleryTurnSpeed:{key}")
+    galleryTurnAt[key] = 0
   }
   // gallery.step's mailbox: the display shows the next or the previous exhibit of the catalog, wrapping round.
   rule $"gallery-console-{key}-step" {
@@ -1544,6 +1571,36 @@ commands [
     ]
     lines [
       "world.state.cell.set galleryStepAt {display} {step}"
+    ]
+  }
+  {
+    name: "gallery.turn.hold"
+    help: "Stops a display's turntable where it stands, or sets it turning again from there, as its console's pause and play button does."
+    parameters [
+      { name: "display", kind: Choice, values: map(galleryDisplays, display => display.id) }
+    ]
+    lines [
+      "world.state.cell.set galleryTurnAt {display} 2"
+    ]
+  }
+  {
+    name: "gallery.turn.slower"
+    help: "Steps a display's turntable a pace slower, past the slowest into turning the other way round, as its console's < button does."
+    parameters [
+      { name: "display", kind: Choice, values: map(galleryDisplays, display => display.id) }
+    ]
+    lines [
+      "world.state.cell.set galleryTurnAt {display} 1"
+    ]
+  }
+  {
+    name: "gallery.turn.faster"
+    help: "Steps a display's turntable a pace faster, as its console's > button does."
+    parameters [
+      { name: "display", kind: Choice, values: map(galleryDisplays, display => display.id) }
+    ]
+    lines [
+      "world.state.cell.set galleryTurnAt {display} 3"
     ]
   }
 ]

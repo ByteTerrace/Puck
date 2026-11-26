@@ -235,8 +235,10 @@ runs. Reads and captures are free. A mutation (`world.row.set`, `world.reload`,
 `body.*`, `player.*`, `view.override`) changes what the owner sees: make one
 only when the task allows it, and restore what you changed.
 
-To run your own edits, start a World with `puck_world_start` (`checkout`: your
-worktree's absolute path; `windowed: true` only for a granted GPU leg). The
+To run edits, start a World with `puck_world_start` (`checkout`: the worktree's
+absolute path; `windowed: true` only for a granted GPU leg). The lead does this
+for its own work and for lanes' verification requests; a delegated lane boots
+no World. The
 call returns `pending` and a `startId` promptly. Inspect the connected tool's
 schema before using optional arguments: the checkout's current implementation can
 accept capabilities absent from an older connected adapter. A windowed start's
@@ -770,11 +772,11 @@ its streams captured, is this recipe:
 dotnet run --project src/Puck.World -c Release -- --world worlds/debug --devices none --exit-after-seconds N --state-dir <tmp> < script.txt > out.log 2> err.log
 ```
 
-Add `--headless` for a boot with no window and no GPU, which is the one boot a
-lane owes its change (AGENTS.md, "Code first, verification after"): it needs no
-grant and no lease. A windowed boot is a granted GPU leg, and a check that
-needs one goes to the lead as a verification request
-([delegate](../delegate/SKILL.md#build-and-run)).
+Add `--headless` for a boot with no window and no GPU. A delegated lane boots
+no World, headless or windowed (AGENTS.md, "Code first, verification after"):
+the lead runs these recipes, and a lane's check goes to the lead as a
+verification request ([delegate](../delegate/SKILL.md#build-and-run)). A
+windowed boot is a GPU leg under `puck lease gpu`.
 
 ### An agent's World opens no physical device
 
@@ -1144,12 +1146,31 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   that can show one carries no distribution or mirror. Each of the gallery's
   display stations can show every exhibit of the catalog, motion ones included,
   this way (`displayPlacements` in `worlds/debug/shapes.puck`).
+- A placement turns about its own up axis with a `turn` facet
+  (`WorldPlacementTurn`): `clock`, `rate` and `phase`, each a literal or a
+  numeric state binding, give `phase + rate × clock` turns on top of its yaw.
+  Nothing integrates it: a clock slot carrying `advance(perSecond:)` turns it
+  with no rule a tick, a rate of 0 holds it, and a rule that changes the rate
+  rebases the phase in the same write (`phase += (rate − new) × clock`) so the
+  angle stays where it stood. The drawn copy turns every frame over the
+  presented values (`WorldTurnedPose`, the stamp pool and the rigid copies), a
+  solid row's colliders every tick in fixed point
+  (`WorldPlacementTurn.YawRadiansAt`, the moving rows
+  `WorldPlacementStamp.MovesColliders` names), so a body rides it. A turning row
+  carries no distribution, mirror, inhabit, deal, board, pointer, spatial or
+  surface facet and parents nothing (`WorldPlacement.HasStaticFrame`).
+  `world.turns` reads each turning row's angle. The gallery's twelve
+  turntables are the worked example (gallery.md, "Display consoles").
 - A placement can carry a pointer surface (`pointer`, `WorldPointerSurface`): a
   rectangle in its frame that a seat's pointer ray maps onto in fixed point, with
   named regions (a list region divides into rows). Rules read it through the
   `$pointer:` operand as they read a `Simulation` screen's face
   ([engagement](references/engagement.md#worldscreenrouteinput--where-a-pointer-hit-on-the-screen-goes)).
-  The gallery's display consoles are the worked example.
+  The gallery's display consoles are the worked example: each sweeps the
+  contacts on its glass (`forEach: contacts(display-<id>-screen)` with
+  `contact(each, region|row, <id>)`), the one door a finger, a pen and a mouse
+  click share, so no console reads `pointer(…, press, tap)` beside it and a click
+  never answers twice.
 - A moving carrier, a solid response swap or a field lattice's step wakes only
   the parked rigid bodies whose bounds, grown by the contact reach (two contact
   skins) and the rigid support probe's travel, meet the box its changed

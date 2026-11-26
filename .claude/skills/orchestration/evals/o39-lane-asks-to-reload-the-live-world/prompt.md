@@ -1,5 +1,5 @@
 ---
-description: "orchestration 'The Claude roster': the live World runs the main checkout's build, so a lane sees its edit in a World of its own named by `world` on every call, and a brief names the live mutations a lane may make."
+description: "orchestration 'The Claude roster': the live World runs the main checkout's build, so a lane never mutates it and boots no World of its own: its check goes to the lead as a verification request."
 runs: 5
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]

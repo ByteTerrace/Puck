@@ -32,7 +32,7 @@ overrides this skill and is written into it in that session.
     brief gives the reviewer the diff and the author's claim, not the author's
     reasoning, and asks it to break the change.
 - A pass runs beside the next work and never blocks a landing or pauses an
-  author: a lane lands on its build and its boot, and review comes after
+  author: a lane lands on its build, and review comes after
   (AGENTS.md, "Code first, verification after"). Docs and world content get
   none.
 - A pass fixes what it finds. Only a finding too large for the pass goes into
@@ -332,8 +332,7 @@ These are the reviewer's own rules, whichever family runs the pass.
 5. **Hand over.** Only a pass that changed files reaches this step. Merge the
    integration branch's current tip into the follow-up
    branch, then take the hand-over evidence once on that merged head: build
-   what the branch touched, boot the debug world once when a fix reaches code a
-   World runs, and run `puck docs links`, `puck scan --only duplicates --against
+   what the branch touched, and run `puck docs links`, `puck scan --only duplicates --against
    <tip>` and any check the brief names. A further merge before landing repeats
    that evidence. It is then an ordinary ready lane for the
    integration lane's next batch ([land in

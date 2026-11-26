@@ -4,7 +4,7 @@
 // are shelves round its taper that climb at a riser a body steps up. A creation built from them that sets
 // `contact: Shapes` collides as those masses' hard union, analytic primitives under its smooth blends, so a body walking
 // a whole tree runs no field solve. Detail a body never touches (a fork, a knot, twigs, leaves) is a sweep or a detail
-// shape, and leaf masses stay in a separate, non-solid creation (foliage.puck's groupedTree, leafClusters and
+// shape, and leaf masses stay in separate, non-solid creations (foliage.puck's groupedTree, leafyClump and
 // canopySurface).
 //
 // Every point is in the creation's author frame (sdf-authoring: +Z the front, +X the subject's left), the frame shape

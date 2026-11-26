@@ -83,6 +83,7 @@ public static class SdfShadeOps {
     /// <summary>The fixed stamp. Indices are generated from this table, never supplied as author addresses.</summary>
     public static IReadOnlyList<SdfShadeInput> Inputs { get; } = Array.AsReadOnly(array: new[] {
         I("surface.position", SdfShadeType.Float3), I("surface.layerPosition", SdfShadeType.Float3),
+        I("surface.objectPosition", SdfShadeType.Float3),
         I("surface.geometricNormal", SdfShadeType.Float3), I("surface.normal", SdfShadeType.Float3),
         I("surface.curvature"), I("surface.footprint", reads: SdfShadeReads.Footprint), I("surface.pixel", reads: SdfShadeReads.Footprint),
         I("surface.rayDirection", SdfShadeType.Float3), I("surface.contact", reads: SdfShadeReads.Contact),

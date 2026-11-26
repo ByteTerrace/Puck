@@ -560,9 +560,10 @@ public sealed partial class WorldColliderSet : IContactField {
             }
 
             // An ATTACHED solid row's authored Position/YawDegrees are inert (see WorldPlacement's own doc) — its
-            // geometry rides a live body instead, recomputed every tick by RefreshAttached rather than compiled here
-            // once. Collected separately; never folded into the static m_colliders array.
-            if ((placement.Attach is not null) || (creation.Document.SizeBy is not null)) {
+            // geometry rides a live body instead — and a sized or turning row's moves with state, so each is recomputed
+            // every tick by RefreshAttached rather than compiled here once. Collected separately; never folded into the
+            // static m_colliders array.
+            if (WorldPlacementStamp.MovesColliders(creation: creation, placement: placement)) {
                 if (placement.Attach is not null) {
                     attachedRows.Add(item: new MovingSolidRow(placement, creation, default, FixedQuaternion.Identity, null));
                 } else {
@@ -733,10 +734,9 @@ public sealed partial class WorldColliderSet : IContactField {
                 continue;
             }
             if (
-                (after.Attach is not null) ||
                 !m_placements.TryGetValue(key: before, value: out var compiled) ||
                 (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: after.ShownPrototypeId) is not { } creation) ||
-                (creation.Document.SizeBy is not null)
+                WorldPlacementStamp.MovesColliders(creation: creation, placement: after)
             ) {
                 return false;
             }
@@ -1039,6 +1039,10 @@ public sealed partial class WorldColliderSet : IContactField {
             if (moving.Placement.Attach is { } attach) {
                 if (!WorldPlacementAttachment.TryResolve(attach: attach, population: population, position: out origin, reason: out _, yawRadians: out var yaw)) { continue; }
                 rotation = FixedQuaternion.FromAxisAngle(angle: yaw, axis: FixedVector3.UnitY);
+            }
+            // A turning row turns about its own up axis, through its origin, on top of whatever yaw placed it.
+            if (moving.Placement.Turn is { } turn) {
+                rotation = (rotation * FixedQuaternion.FromAxisAngle(angle: turn.YawRadiansAt(arena: arena, definition: definition, engineTick: engineTick, tick: tick), axis: FixedVector3.UnitY));
             }
             var scale = FixedQ4816.One;
 

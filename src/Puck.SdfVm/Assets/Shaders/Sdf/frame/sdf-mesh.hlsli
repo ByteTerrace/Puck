@@ -241,6 +241,22 @@ float3 sdfMeshCarryPoint(uint record, float3 p) {
 
     return ((sdfMeshCarryDirection(record, p) * asfloat(sdfMeshRecordWord(record + SDF_MESH_CARRY_SCALE_WORD))) + asfloat(uint3(sdfMeshRecordWord(word), sdfMeshRecordWord(word + 1u), sdfMeshRecordWord(word + 2u))));
 }
+// A world point in a draw's object space, the frame its mesh's vertices lie in: the carry undone, then the pose
+// (sdfMeshCarryPoint over sdfMeshPoseOf, inverted). A pose's normal rows are its basis's inverse transpose up to one
+// factor, their first row's dot with the basis's first (one for a matrix's rows, the scale for a slot row's), so the
+// rows over that factor invert the basis.
+float3 sdfMeshObjectPoint(uint record, float3 p) {
+    SdfMeshPose pose = sdfMeshPoseOf(record);
+    uint translation = (record + SDF_MESH_CARRY_TRANSLATION_WORD);
+    uint rotation = (record + SDF_MESH_CARRY_ROTATION_WORD);
+    float carryScale = asfloat(sdfMeshRecordWord(record + SDF_MESH_CARRY_SCALE_WORD));
+    float3 carried = (p - asfloat(uint3(sdfMeshRecordWord(translation), sdfMeshRecordWord(translation + 1u), sdfMeshRecordWord(translation + 2u))));
+    float3 posed = (rotatePointByInverseQuaternion((carried / ((carryScale != 0.0) ? carryScale : 1.0)),
+        asfloat(uint4(sdfMeshRecordWord(rotation), sdfMeshRecordWord(rotation + 1u), sdfMeshRecordWord(rotation + 2u), sdfMeshRecordWord(rotation + 3u)))) - pose.origin);
+    float unit = dot(pose.normals[0], pose.basis[0]);
+
+    return (mul(pose.normals, posed) / ((unit != 0.0) ? unit : 1.0));
+}
 // A world point's signed distance from the draw's clip plane (SDF_MESH_CLIP_PLANE_WORD): negative where the draw is not
 // drawn, zero everywhere for a draw that clips nothing. The mesh and shadow vertex stages hand it on as SV_ClipDistance0.
 float4 sdfMeshClipPlane(uint record) {

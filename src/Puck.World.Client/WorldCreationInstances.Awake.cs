@@ -409,9 +409,9 @@ public sealed partial class WorldCreationInstances {
                 }
             }
             // A solid's sampled scale is interpolated each frame beside the bodies, in no journal. A row riding the
-            // body of a placement has no index a body's change could wake it by until that body is admitted, so every
-            // pack visits it.
-            if (live.ReadsBodies || (live.Row is { Attach.Placement: not null }) || ((live.Creation.EngineDocument.SizeBy is not null) && (live.Row is { Solid: not null }))) {
+            // body of a placement has no index a body's change could wake it by until that body is admitted, and a
+            // turning row's root moves with the presented clock, so every pack visits them.
+            if (live.ReadsBodies || (live.Row is { Attach.Placement: not null }) || (live.Row is { Turn: not null }) || ((live.Creation.EngineDocument.SizeBy is not null) && (live.Row is { Solid: not null }))) {
                 m_everyPack.Add(item: index);
             }
         }

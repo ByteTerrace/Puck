@@ -18,6 +18,7 @@ import "../standard/kits"
 // with her suit's kit there.
 
 import "../standard/ship"
+import "../standard/size-hold"
 import "pad-kit"
 import "suit"
 
@@ -152,6 +153,18 @@ rule "noclip-flight" {
   mode: Level
   forEach: $bodies
   setBodyState(key: $each, state: "flightFuel", expression: 1000)
+}
+
+// Noclip is the author's escape hatch from every size field (../standard/size-field.puck): while it is on it holds the
+// body (`sizeHold` 2), so the fields give it its full size and speed wherever it flies; when it goes off the hold drops
+// to 1, so a body that switches it off inside a small place keeps its size until it walks out of the field's zones.
+rule "noclip-size-hold" {
+  local hold = bodyState(each, sizeHold)
+  local target = (bodyState(each, noclip) == 1) ? 2.0 : ((hold == 2) ? 1.0 : hold)
+  when hold != target
+  mode: Level
+  forEach: $players
+  setBodyState(key: $each, state: "sizeHold", expression: target)
 }
 
 // The noclip toggle: a player's noclip channel flips the register of that player's own body, wherever she is. One rule

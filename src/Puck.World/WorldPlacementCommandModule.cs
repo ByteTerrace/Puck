@@ -25,6 +25,7 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
     private static readonly CommandForms WorldPlacementsForms = CommandForms.Of(verb: "world.placements", "[instance:<name>]");
     private static readonly CommandForms WorldInhabitantsForms = CommandForms.Of(verb: "world.inhabitants", "[instance:<name>]");
     private static readonly CommandForms WorldAttachmentsForms = CommandForms.Of(verb: "world.attachments", "[instance:<name>]");
+    private static readonly CommandForms WorldTurnsForms = CommandForms.Of(verb: "world.turns", "[instance:<name>]");
     private static readonly CommandForms WorldRegionForms = CommandForms.Of(verb: "world.region", "<placement> [instance:<name>]");
     // The most occupants world.region lists by index and position; its counts are always whole.
     private const int MaxRegionOccupantsListed = 64;
@@ -220,6 +221,31 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
             } else {
                 _ = builder.Append(value: $" {placement.Id}[{carrier} absent — {reason}]");
             }
+        }
+
+        return builder.Append(value: (any
+            ? ""
+            : " none")).Append(value: ']').ToString();
+    }
+    // Every turning placement's authoritative heading at the latest completed tick: the turn alone and the row's whole
+    // yaw, its compiled frame's yaw plus the turn (WorldPlacementTurn.YawRadiansAt over the live arena).
+    private string DescribeTurns(WorldInstance? instance) {
+        var authority = (instance?.Server ?? server);
+        var definition = authority.Definition;
+        var builder = new StringBuilder(value: "[world.turns:");
+        var any = false;
+
+        foreach (var placement in definition.Placements) {
+            if (placement.Turn is not { } turn) {
+                continue;
+            }
+
+            any = true;
+
+            var turned = float.RadiansToDegrees(radians: ((float)turn.YawRadiansAt(arena: authority.Arena, definition: definition, engineTick: authority.CompletedEngineTicks, tick: (authority.NextInputTick - 1UL))));
+            var yaw = ((WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement).YawDegrees + turned) % 360f);
+
+            _ = builder.Append(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $" {placement.Id}[turn={turned:0.00}° yaw={((yaw < 0f) ? (yaw + 360f) : yaw):0.00}°]"));
         }
 
         return builder.Append(value: (any
@@ -668,6 +694,28 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
 
                 return new CommandResult(Output: WithInstanceTag(
                     text: DescribeAttachments(instance: instance, context: context),
+                    instance: instance
+                ));
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
+            bindability: CommandBindability.Unbindable,
+            name: "world.turns",
+            forms: WorldTurnsForms,
+            description: WorldTurnsForms.Spelling + " — Reports every placement's TURN facet (Immediate; reads the settled state after any pending mutation): one entry per turning placement — placementId, turn= the angle its clock, rate and phase give at the latest completed tick, and yaw= the row's whole heading, its compiled frame's yaw plus the turn, both in degrees. This is the AUTHORITATIVE tick-aligned angle a solid row's colliders take; the drawn copy turns by the same formula over the values the presentation interpolates between ticks. A trailing instance:<name> token reads a named running instance instead of the boot world.",
+            handler: (context, args) => {
+                if (!TryResolveInstance(
+                    args: in args,
+                    error: out var tokenError,
+                    instance: out var instance,
+                    forms: WorldTurnsForms
+                )) {
+                    return tokenError!.Value;
+                }
+
+                return new CommandResult(Output: WithInstanceTag(
+                    text: DescribeTurns(instance: instance),
                     instance: instance
                 ));
             }

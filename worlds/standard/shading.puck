@@ -181,6 +181,23 @@ function flowed(base, layer, world = 1, velocityLane = -1, coverageLane = -1, gl
 // local +X becomes the pattern's x axis, and swirled about that axis by `twist` radians a unit along it. A `patternScale`
 // that is fine across and long along x then draws grain that runs along whatever `frame` names (a limb's axis, a trunk
 // twisting as it climbs) on any orientation of surface, where the layer's axes would draw streaks along world y only.
+// Soft volume shading: the shading normal turned `soft` of the way (0 keeps the surface's own, 1 takes the envelope's
+// alone) toward the outward normal of an ellipsoid of radii `radii` about the draw's own origin, so a mass built of small
+// parts (a clump of leaves, a tuft, a fleece) is lit as the one round form it stands for: light on its side that faces
+// the light, dark on the other, whichever way each part turns, while the parts keep the silhouette. The ellipsoid stands
+// in the draw's own frame (`surface.objectPosition`) and its normal follows the radii's ratios alone, so every copy of a
+// creation, of any size and turn, takes it. It writes the normal only: an element after it in a row's `shade` list
+// reads the softened normal as `surface.normal` (softVolume).
+shade template envelopeNormal(radii, soft) {
+  surface {
+    normal: normalize(mix(surface.normal, normalize(drawDirection(surface.objectPosition / (radii * radii))), soft))
+  }
+}
+// A row shaded as a soft volume: envelopeNormal first, then the row's own program, which colours and lights by it.
+function softVolume(base, radii, soft) = base with {
+  shade [envelopeNormal(radii, soft), base.shade]
+}
+
 // Painterly variation over a large surface: the colour's value drifts by `amount` (a share of it, either way) over soft
 // patches about `scale` metres across with a finer stroke inside them, and leans toward `lean` where it drifts up, as a
 // brush loaded twice lays a wall. The patches stand in the world, so every copy of a stamped piece takes its own. The

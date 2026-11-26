@@ -255,11 +255,17 @@ on tile (26, 14), bay 6 on the nave's centre row (layout.puck's `treeX`,
   relief, which would collide as drawn; its texture is a grain that runs along
   each limb's own axis (foliage.puck's `landscapeSurface` with `grain`), and
   twists as the trunk climbs.
-- `gallery-tree-canopy`, not solid: a crown of separate leaf clusters on a
-  dome high in the void under the skylights, laid in a sunflower spiral so sky
-  shows between them (foliage.puck's `leafClusters`), the limbs carrying them,
-  and a spray of leaves at each branch's fork, one in three blossoming in the
-  toybox's candy pink.
+- `gallery-tree-canopy`, not solid: the limbs that carry the foliage and the
+  dark mass closing the crown over the trunk's top.
+- The foliage, not solid: leafy clumps (foliage.puck's `leafyClump`, a dark
+  mass clothed in whole flat leaves), one creation for each colour family
+  (`gallery-tree-clump-crown`, `-deep`, `-warm`, `-blossom`), placed once for
+  every clump of the crown, of the two tiers under it and of each branch's fork
+  (`leafyClumps`: a sunflower spiral on a dome high in the void under the
+  skylights, so sky shows between the clumps). Every copy draws its family's
+  one baked mesh at its own size and turn, and shades as one soft volume
+  (`softVolume`), so a clump's outline is leaf tips while the light falls across
+  it as across a round mass. One fork in three is golden.
 
 **Climbing it.** The shelves start on the trunk's east side, just south of
 east, and climb a storey a turn: one every 18 degrees, each 0.225 m above the
@@ -326,10 +332,28 @@ glows on the glass in an LCARS-like layout in the kit's own palette
 whose cap names the catalog; PREV and NEXT buttons stack down the left column
 beside a list of every exhibit, the chosen one lit amber with its group beside
 it; and the right of the screen gives the chosen exhibit's title, its group and
-its place in the catalog, and its note. A tap on a row shows that exhibit; a
-drag scrolls the list a row for each row the pointer travels and taps nothing;
-PREV and NEXT turn it a page. [shapes.md](shapes.md#the-displays) lists the
-displays and the console lines.
+its place in the catalog, and its note, over the turntable's row: `<`, a pause
+and play button, `>` and the pace the turntable keeps. A tap on a row shows that
+exhibit; a drag scrolls the list a row for each row the pointer travels and taps
+nothing; PREV and NEXT turn it a page. [shapes.md](shapes.md#the-displays) lists
+the displays and the console lines.
+
+Every exhibit turns on its turntable by default, once every 24 gallery seconds
+(`turntableSecondsPerTurn` in [shapes.puck](shapes.puck)), as a collector's
+showcase turns a piece so it is seen from every side. The console's pause button
+holds it where it stands and play starts it again from there; `<` and `>` step
+its pace up to three times faster either way, `<` past the slowest pace into
+turning the other way round. The turn is the engine's placement `turn` facet,
+the exhibit's yaw growing by a rate times the gallery clock from a phase, so it
+needs no rule a tick: a button's rule changes the rate and rebases the phase in
+the same write, which keeps the angle where it stood.
+
+A tap is a contact: a finger or a pen tip on a touchscreen, or the mouse's
+primary button, which is the mouse's contact while it is held. Every console
+reads the contacts on its glass through one sweep (`forEach:
+contacts(display-<id>-screen)`), so a click and a touch answer alike. In first
+person the mouse aims with the view, so a click casts through the reticle at the
+view's centre, not where the hidden cursor last rested.
 
 The owner's ruling: a player walks up to a display, uses it, and ends up at
 the hero angle every display shares, and while using it the inputs go to the

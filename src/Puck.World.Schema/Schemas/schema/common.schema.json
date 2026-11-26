@@ -9885,6 +9885,34 @@
       "additionalProperties": false,
       "title": "WorldPointerSurface"
     },
+    "WorldPlacementTurn": {
+      "description": "A placement\u0027s turn facet: the row turns about its own up axis, through its origin, by phase \u002B rate \u00D7 clock turns added to its YawDegrees, a turntable driven from state. Each member is a literal or a numeric state binding, never keys, so the authority evaluates the angle exactly from the arena at a tick and a presentation reads the same formula over the cells its mirror presents. Nothing is integrated or stored: the angle is a function of the three values at the moment asked, so a clock row that advances on its own (a slot carrying advance(perSecond:)) turns the row continuously without a rule firing, a rate of zero holds it at its phase, and a rule that changes the rate keeps the angle continuous by rebasing the phase in the same write (phase \u002B= (rate \u2212 newRate) \u00D7 clock). Absent (null) is a row that keeps its authored yaw.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "clock": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The clock the rate multiplies, in the clock\u0027s own unit (gallery seconds, say); usually a state binding to a slot that advances."
+        },
+        "rate": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The turns per clock unit; positive turns the row the way a growing YawDegrees does. Absent is one turn per unit.",
+          "default": null
+        },
+        "phase": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The turns added before the rate\u0027s share. Absent is zero.",
+          "default": null
+        }
+      },
+      "required": [
+        "clock"
+      ],
+      "additionalProperties": false,
+      "title": "WorldPlacementTurn"
+    },
     "WorldPlacement": {
       "description": "One placement instance row \u2014 a creation asset stamped into the world by reference: transform \u002B facets as data, addressed by its stable Id. A placement whose creation carries timeline frames is animated: it replays client-side on the render clock through the reserved dynamic-transform pool (distribution/mirror facets are static-stamp-only and reject on an animated row). A placement carrying an Inhabit facet is a live population body rather than furniture (see WorldPlacementInhabit); its declared creation eyes derive WorldCamera feeds and its declared faces derive screens (both at the delivery boundary, never written to the document).",
       "type": "object",
@@ -10013,6 +10041,11 @@
         "pointer": {
           "$ref": "#/$defs/WorldPointerSurface",
           "description": "The placement\u0027s pointer surface (see WorldPointerSurface): a rectangle in the row\u0027s frame that a seat\u0027s pointer ray maps onto, with named regions a rule hit-tests, or null for none. Omitted from the wire when null.",
+          "default": null
+        },
+        "turn": {
+          "$ref": "#/$defs/WorldPlacementTurn",
+          "description": "The placement\u0027s turn facet (see WorldPlacementTurn): the row turns about its own up axis by an angle read from state, a turntable, or null for a row that keeps its authored yaw. Omitted from the wire when null.",
           "default": null
         }
       },

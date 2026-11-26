@@ -21,6 +21,13 @@ members are the view's edge search's (`passes/sdf-views-filter.hlsli`, the
 [handbook](../../../../docs/rendering/sdf/handbook/lighting-and-shading.md#ink)),
 far for a pixel whose view searched none and on every glass interface.
 `surface.pixel` is the world size of a display pixel, the unit of every width.
+`surface.objectPosition` is the hit in its draw's own frame, the space its
+mesh's vertices lie in: `sdfShadeStamp` takes the layer position for a draw
+shading in a slot's frame and inverts the record's pose and carry for one
+shading in the world's (`sdfMeshObjectPoint`, `frame/sdf-mesh.hlsli`), so every
+copy of a static creation reads the same point at the same place on it, in the
+units its mesh was baked at. `drawDirection` carries a direction of that frame
+to the world.
 
 The stamp and allowed phase reads are `SdfShadeOps.Inputs`; output members and
 types are `SdfShadeProgram.OutputType`. A light's direction, reach, probe share

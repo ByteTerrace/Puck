@@ -31,6 +31,7 @@
 //
 // The author's shortcuts are `gallery.wonder` and `gallery.go toybox` (gallery.md, "The size of level 1").
 import "../../standard/size-field"
+import "../../standard/size-hold"
 import "layout"
 import "look"
 import "../shapes"
