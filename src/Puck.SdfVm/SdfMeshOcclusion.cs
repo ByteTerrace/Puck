@@ -42,8 +42,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // The bytes of the counts a measured stage reads back: through the vertex words under the marks, which the sight
     // verdicts must end before (the constant's conversion fails to compile otherwise).
     private const ulong MeasuredBytes = ((SightWords + ((uint)(SdfKernelInterfaces.MeshVertexCountBase - SightWords)) + SdfKernelInterfaces.MeshShadowPhases) * sizeof(uint));
-    // The draws one mark word holds: two bits each.
-    private const uint DrawsPerMarkWord = 16u;
+    // The draws one mark word holds.
+    private const uint DrawsPerMarkWord = (32u / SdfKernelInterfaces.MeshMarkBits);
     // The most shares one staged draw list splits into (Stage): eight bits of the controls' fourth word.
     public const int MaxSlices = 256;
 

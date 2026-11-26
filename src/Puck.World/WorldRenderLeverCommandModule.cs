@@ -35,7 +35,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     private static readonly CommandForms WorldReflectionsForms = CommandForms.Of(verb: "world.reflections", "[off|half|full] [<steps>]");
     private static readonly CommandForms WorldCadenceForms = CommandForms.Of(verb: "world.cadence", "[on|off|status]");
     private static readonly CommandForms WorldCullForms = CommandForms.Of(verb: "world.cull", "[occlusion|camera|frustum|off|status]");
-    private static readonly CommandForms WorldDetailForms = CommandForms.Of(verb: "world.detail", "[auto|0|1|2|status]");
+    private static readonly CommandForms WorldDetailForms = CommandForms.Of(verb: "world.detail", "[auto|<level>|status]");
     private static readonly CommandForms WorldRatesForms = CommandForms.Of(verb: "world.rates", "[status|on|off|toggle]", "<bodies|views|screens|shadow-far|shadow-distant> on|off");
     private static readonly CommandForms WorldRenderScaleForms = CommandForms.Of(verb: "world.render-scale", "[<view>]", "[<view>] <tier|fraction|percent>", "[<view>] floor <tier>", "[<view>] pin <scale>", "[<view>] auto [on|off]");
     private static readonly CommandForms WorldUpscaleSharpnessForms = CommandForms.Of(verb: "world.upscale-sharpness", "[bilinear|balanced|sharp|0..1|0%..100%]");
@@ -192,12 +192,8 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     private static string TemporalEcho(WorldRenderSettings settings) =>
         $"[world.temporal: {(settings.Temporal ? "on" : "off")}]";
     // The world.detail echo's name of a level: the token that selects it.
-    private static string DetailName(SdfMeshDetailLevel level) => level switch {
-        SdfMeshDetailLevel.Level0 => "0",
-        SdfMeshDetailLevel.Level1 => "1",
-        SdfMeshDetailLevel.Level2 => "2",
-        _ => "auto",
-    };
+    private static string DetailName(SdfMeshDetailLevel level) =>
+        ((level == SdfMeshDetailLevel.Auto) ? "auto" : (((int)level) - 1).ToString(provider: System.Globalization.CultureInfo.InvariantCulture));
     // Shared on/off token parse for the boolean isolator verbs (null = unrecognized).
     private static bool? ParseOnOff(ReadOnlySpan<char> token) {
         if (token.Equals(
@@ -656,7 +652,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             bindability: CommandBindability.Bindable,
             name: "world.detail",
             forms: WorldDetailForms,
-            description: $"Selects which levels of detail of the baked meshes the raster passes draw, live (no rebuild): {WorldDetailForms.Spelling}. auto, the default, has each view's mesh pass draw each mesh at the coarsest level whose recorded error projects to at most one display pixel over the nearest point of its box, going back to a finer one only once the level it drew shows more than 1.1 pixels, and each shadow cascade at the coarsest level within one of its texels; the glass pass, and a mesh whose draw no host box bounds, draw the mesh's own triangles. 0, 1 or 2 draws that level everywhere (a mesh's coarsest where it has fewer), so a capture shows what a level changes. world.counters gpu measures what each saves (vertices).",
+            description: $"Selects which levels of detail of the baked meshes the raster passes draw, live (no rebuild): {WorldDetailForms.Spelling}. auto, the default, has each view's mesh pass draw each mesh at the coarsest level whose recorded error projects to at most one display pixel over the nearest point of its box, going back to a finer one only once the level it drew shows more than 1.1 pixels, and each shadow cascade at the coarsest level within one of its texels; the glass pass, and a mesh whose draw no host box bounds, draw the mesh's own triangles. A level number, from 0 (each mesh's own triangles) to the chain's coarsest (SdfMeshCollapse.CellShares), draws that level everywhere (a mesh's coarsest where it has fewer), so a capture shows what a level changes. world.counters gpu measures what each saves (vertices).",
             handler: (context, args) => {
                 CommandResult Echo() => new(Output: $"[world.detail: {DetailName(level: settings.Detail)}]");
 
@@ -664,13 +660,11 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     return Echo();
                 }
 
-                var level = ((args.Count != 1) ? ((SdfMeshDetailLevel?)null) : args[0] switch {
-                    "auto" => SdfMeshDetailLevel.Auto,
-                    "0" => SdfMeshDetailLevel.Level0,
-                    "1" => SdfMeshDetailLevel.Level1,
-                    "2" => SdfMeshDetailLevel.Level2,
-                    _ => ((SdfMeshDetailLevel?)null),
-                });
+                var level = ((args.Count != 1) ? ((SdfMeshDetailLevel?)null)
+                    : args.Is(index: 0, value: "auto") ? SdfMeshDetailLevel.Auto
+                    : (int.TryParse(s: args[0], provider: System.Globalization.CultureInfo.InvariantCulture, result: out var forced) && (forced >= 0) && (forced <= SdfMeshCollapse.CellShares.Length))
+                        ? ((SdfMeshDetailLevel)(forced + 1))
+                        : ((SdfMeshDetailLevel?)null));
 
                 if (level is not { } selected) {
                     return WorldDetailForms.Refuse(args: in args, got: args.Tail(start: 0).ToString());

@@ -1089,9 +1089,18 @@ laws exercise that boundary.
   boxing such a triangle in pieces (below). The done line counts `merged=`
   triangles; `SdfMeshPlanarMergeLawTests` holds the outline, the area per
   material and normal, and no opened edge.
-- **Every landed mesh then collapses into two coarser levels** (`SdfMeshCollapse`,
+- **Every landed mesh then collapses into a chain of coarser levels** (`SdfMeshCollapse`,
   `SdfMesh.Levels`, the decision in
-  [rendering](../../../../docs/decisions/rendering.md)). A place is a position;
+  [rendering](../../../../docs/decisions/rendering.md)): one for each doubling of
+  the error budget from a quarter of the contour cell to 32 cells (`CellShares`),
+  each kept only where it saves a quarter of the finer level's triangles. Every
+  draw, so every copy of a shared mesh, takes the coarsest level its own pixels
+  allow; the chain's steps bound how much finer than its pixel a copy draws, and
+  steps of eight cells left most of a forest's trees at the quarter-cell level.
+  The collapser runs every level from the state the finer one left, so a level
+  adds passes and the retries of its measured refusals, not collapses
+  (`SdfMeshCollapse.ProcessWork`: runs, kept, passes, places priced, collapses
+  tried and taken, which `puck mesh audit --cpu` prints). A place is a position;
   its copies are the crease split's vertices there. A collapse moves one place's
   copies onto a neighbour's, each side of the collapsed edge taking that side's
   copy, so a level is indices and triangle materials over the merged mesh's
@@ -1118,9 +1127,7 @@ laws exercise that boundary.
   third guard bounds each new triangle: its centroid and edge midpoints are
   measured against the old fan's same-material triangles, and each triangle
   carries the largest such distance it inherited, so a collapse cannot cut a
-  triangle through a thin rod the samples straddle. On the debug world's stored
-  set it keeps 11% of the triangles at the first level and 6% at the second, for
-  9% more stored and region bytes. Conservative triangle-box distance bounds
+  triangle through a thin rod the samples straddle. Conservative triangle-box distance bounds
   skip exact measurements that cannot improve the result; they never certify
   acceptance. Reverse edge measurements are shared across targets of an
   unchanged source fan, and unchanged failed edges are not measured again.
@@ -1128,7 +1135,9 @@ laws exercise that boundary.
   the field audit at each rendered level, not by equality with earlier meshes.
   Glass skips collapse because its pass uses only
   level zero. The done line counts `levelled=` pieces and
-  the triangles every mesh draws at `level1=` and `level2=`;
+  the triangles every mesh draws at each level (`level1=` onward, a mesh's
+  coarsest where it has fewer), and `puck mesh audit --cpu` prints each audited
+  mesh's `levels:` line, every level's triangles and recorded error;
   `SdfMeshCollapseLawTests` measures each level's contract by brute force.
 
 ## The mesh region
@@ -1840,8 +1849,8 @@ definition carries prepared font assets. Keep this offline scene path aligned wi
   10 degrees; a sound one reads under 1. A loose bound multiplies the CPU twin's
   rounding by its slope deficit: a flare raises `rough` p99 to about 6 degrees
   on every primitive in a CPU bake, which the kernel's float field does not.
-- **Audit changed collapse levels explicitly.** `--level 1` and `--level 2`
-  select the triangles those forced render levels draw, clamped per chunk to
+- **Audit changed collapse levels explicitly.** `--level <n>` selects the
+  triangles that forced render level draws, clamped per chunk to
   its last level. Only referenced vertices count. The field coverage lattice
   and error thresholds retain level zero's bounds and cell; a coarser mesh
   must not buy a cleaner report by enlarging its error budget. `--images`

@@ -206,7 +206,7 @@ public static class MeshCommand {
         output.Append(provider: CultureInfo.InvariantCulture, handler: $"mesh audit: {CliPaths.ToDisplay(fullPath: fullPath)}, {considered} group(s) of {groups.Count}: {audited} audited, {(considered - stored)} with no stored mesh, {(stored - audited)} refused\n");
         if (request.Level > 0) { output.Append(provider: CultureInfo.InvariantCulture, handler: $"  rendered level {request.Level}, thresholds from level zero\n"); }
         output.Append(value: (request.Cpu
-            ? "  baked offline on the CPU through the field evaluator\n"
+            ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"  baked offline on the CPU through the field evaluator; levels: {SdfMeshCollapse.ProcessWork.Read(kind: SdfMeshCollapse.Runs)} run, {SdfMeshCollapse.ProcessWork.Read(kind: SdfMeshCollapse.Kept)} kept, {SdfMeshCollapse.ProcessWork.Read(kind: SdfMeshCollapse.Passes)} passes, {SdfMeshCollapse.ProcessWork.Read(kind: SdfMeshCollapse.Priced)} places priced, {SdfMeshCollapse.ProcessWork.Read(kind: SdfMeshCollapse.Tried)} collapses tried, {SdfMeshCollapse.ProcessWork.Read(kind: SdfMeshCollapse.Taken)} taken\n")
             : string.Create(provider: CultureInfo.InvariantCulture, handler: $"  store {meshes}, bake identity {identity:x32} ({((request.Identity is null) ? $"{request.Backend}, build {buildDirectory}" : "named")})\n")));
 
         var ordered = Enumerable.Range(start: 0, count: groups.Count)
@@ -370,6 +370,7 @@ public static class MeshCommand {
             output.Append(provider: CultureInfo.InvariantCulture, handler: $"  cpu taps: {taps.Widened} of {taps.Samples} gradient samples answered {(SdfMeshCpuField.ResolutionSpacing * 1.0e6f):0} um out where the device's lie as close as {(taps.Narrowest * 1.0e6f):0} um; crease normals near them are not the device's\n");
         }
         if (outcome.Operands.Length > 0) { output.Append(value: outcome.Operands).Append(value: '\n'); }
+        if (outcome.Mesh is { } levelled) { output.Append(value: MeshAuditLines.LevelsLine(mesh: levelled)).Append(value: '\n'); }
         if (outcome.Mesh is { } skin) {
             var influences = SdfMeshSkin.Audit(mesh: skin);
 

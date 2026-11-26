@@ -124,8 +124,11 @@ public sealed class SdfKernelInterfaces {
     public const string ShadowBlocksWritten = "shadowBlocksRW";
     /// <summary>The first selection mark word in the raster selection's counts, past every portal sight verdict (one a
     /// screen) and the vertex words: on a marked frame each draw a phase emits a command for ORs its level plus one into
-    /// two bits, sixteen draws a word, the lowest draw in the lowest bits.</summary>
+    /// <see cref="MeshMarkBits"/> bits, the lowest draw in the lowest bits.</summary>
     public const int MeshMarkBase = ((MeshSightCountBase + SdfProgramBuilder.MaxScreenSurfaces) + MeshShadowPhases);
+    /// <summary>The bits one draw's selection mark takes: its level plus one, a level past the field's largest value marked
+    /// as that value. Four bits name every level of a mesh's chain (<c>SdfMeshCollapse.CellShares</c>) apart.</summary>
+    public const int MeshMarkBits = 4;
     /// <summary>The selection dispatch's groups per row, within both backends' per-axis limit.</summary>
     public const uint MeshSelectionGroupsPerRow = 65535u;
     /// <summary>The raster pass's GPU selection controls: one header, three level-choice rows, ten cull rows and the

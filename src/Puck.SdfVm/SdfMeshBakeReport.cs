@@ -350,16 +350,16 @@ internal static class SdfMeshBakeReport {
         var vertices = groups.Sum(selector: static group => ((long)(group.Mesh?.VertexCount ?? 0)));
         // The meshes some of whose vertices ride a member's slot rather than the group's.
         var skinned = groups.Count(predicate: static group => (group.Mesh is { VertexMembers.IsEmpty: false }));
-        // The meshes with coarser levels, and the triangles every mesh draws at its first and second coarser level (its
-        // coarsest where it has fewer).
+        // The meshes with coarser levels, and the triangles every mesh draws at each coarser level (its coarsest where it
+        // has fewer).
         var pieces = groups.Where(predicate: static group => (group.Mesh is not null)).SelectMany(selector: static group => ((group.Mesh!.Chunks.Count == 0) ? (IReadOnlyList<SdfMesh>)[group.Mesh!] : group.Mesh.Chunks)).ToArray();
         var levelled = pieces.Count(predicate: static mesh => (mesh.Levels.Count > 0));
-        var first = pieces.Sum(selector: static mesh => ((long)mesh.LevelOf(level: 1).TriangleCount));
-        var second = pieces.Sum(selector: static mesh => ((long)mesh.LevelOf(level: 2).TriangleCount));
+        var deepest = ((pieces.Length == 0) ? 0 : pieces.Max(selector: static mesh => mesh.Levels.Count));
+        var levels = string.Concat(values: Enumerable.Range(start: 1, count: deepest).Select(selector: level => $" level{level}={pieces.Sum(selector: mesh => ((long)mesh.LevelOf(level: level).TriangleCount))}"));
         // The groups that finished with no mesh, each with why: a group the bake drops renders nothing.
         var empty = string.Join(separator: "; ", values: groups.Where(predicate: static group => (group.Mesh is null)).Select(selector: static group => $"{group.Selector}: {group.Outcome}"));
 
-        Say(line: (($"[sdf.mesh-bake] done residency={residency} residency-id={residencyId} groups={groups.Count} meshes={meshes} dispatches={accounts.Dispatches} samples={accounts.Samples} discarded={accounts.Discarded} returned={accounts.Returned} taps={accounts.Taps} refined={accounts.RefinedCells} edges={accounts.CutEdges} softened={accounts.Softened} merged={accounts.Merged} loaded={accounts.Loaded} skinned={skinned} triangles={triangles} vertices={vertices} levelled={levelled} level1={first} level2={second} seconds={seconds:0.000}" + accounts.Describe(dispatches: dispatches)) + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty)));
+        Say(line: (($"[sdf.mesh-bake] done residency={residency} residency-id={residencyId} groups={groups.Count} meshes={meshes} dispatches={accounts.Dispatches} samples={accounts.Samples} discarded={accounts.Discarded} returned={accounts.Returned} taps={accounts.Taps} refined={accounts.RefinedCells} edges={accounts.CutEdges} softened={accounts.Softened} merged={accounts.Merged} loaded={accounts.Loaded} skinned={skinned} triangles={triangles} vertices={vertices} levelled={levelled}{levels} seconds={seconds:0.000}" + accounts.Describe(dispatches: dispatches)) + ((empty.Length > 0) ? $" empty=[{empty}]" : string.Empty)));
     }
     /// <summary>Writes the line for a stage that held one group's worker past <see cref="SlowStageSeconds"/>, so the
     /// bake's long poles can be found; a faster stage writes nothing.</summary>

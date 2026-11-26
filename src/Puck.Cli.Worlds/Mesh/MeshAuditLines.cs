@@ -73,6 +73,41 @@ public static partial class MeshAuditLines {
         return string.Create(provider: CultureInfo.InvariantCulture, handler: $"  topology: {report.Folds} folds ({report.CreaseFolds} on the field's creases), {report.Flipped} flipped, {report.Slivers} slivers, {report.OpenEdges} open edges, {report.NonManifoldEdges} non-manifold edges; surface: {report.Crossings} crossings, {report.MissingCrossings} uncovered");
     }
 
+    /// <summary>Returns a mesh's levels line, without its line end: the triangles each level draws, its pieces' summed, and
+    /// each coarser level's recorded error (<see cref="SdfMeshLevel.Error"/>, the largest any piece records), level zero
+    /// first, then the extent of the mesh's box, which a raster pass's level choice measures depth to. A piece with fewer
+    /// levels draws its coarsest at every level past it, as a raster pass's selection clamps.</summary>
+    /// <param name="mesh">The mesh, whole or chunked.</param>
+    /// <returns>The line.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
+    public static string LevelsLine(SdfMesh mesh) {
+        ArgumentNullException.ThrowIfNull(argument: mesh);
+
+        var deepest = 0;
+
+        for (var piece = 0; (piece < mesh.PieceCount); piece++) { deepest = Math.Max(val1: deepest, val2: mesh.Piece(index: piece).Levels.Count); }
+
+        var line = new System.Text.StringBuilder(value: "  levels:");
+
+        for (var level = 0; (level <= deepest); level++) {
+            var triangles = 0L;
+            var error = 0f;
+
+            for (var piece = 0; (piece < mesh.PieceCount); piece++) {
+                var drawn = mesh.Piece(index: piece);
+                var at = Math.Min(val1: level, val2: drawn.Levels.Count);
+
+                triangles += drawn.LevelOf(level: level).TriangleCount;
+                if (at > 0) { error = MathF.Max(x: error, y: drawn.Levels[(at - 1)].Error); }
+            }
+            line.Append(provider: CultureInfo.InvariantCulture, handler: $" L{level} {triangles}{((level == 0) ? string.Empty : $" ({(error * 1000f):0.0} mm)")}");
+        }
+        var extent = (mesh.PositionHigh - mesh.PositionLow);
+
+        line.Append(provider: CultureInfo.InvariantCulture, handler: $"; extent {extent.X:0.###}x{extent.Y:0.###}x{extent.Z:0.###} m");
+        return line.ToString();
+    }
+
     /// <summary>Returns the classes of a measured group's defects, each with the cells' refinement flags its items lie in.</summary>
     /// <param name="tallies">The report's defect tallies (<see cref="SdfMeshAuditReport.Defects"/>).</param>
     /// <returns>The classes with items, as text; <see langword="null"/> when no class has an item.</returns>

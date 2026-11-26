@@ -201,6 +201,7 @@
 #define SDF_SHADOW_CULLED_ENTRY_PHASE     5u
 #define SDF_SIGHT_COUNT_BASE              7u
 #define SDF_MESH_MARK_BASE                142u
+#define SDF_MESH_MARK_BITS                4u
 #define SDF_MESH_VERTEX_COUNT_BASE        135u
 #define SDF_MESH_SHADOW_FILTER_TEXELS     14.0
 #define SDF_SHADOW_BLOCK_EDGE             32u
