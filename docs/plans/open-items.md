@@ -167,13 +167,18 @@ defects, not looks.
 
 1. **`gpu-frame`: the GPU frame to 8 ms at 2560 by 1440 on the RTX 4070.**
    Build [the frame budget](frame-budget.md)'s architecture end to end in one
-   lane: each lighting input resolved once into a compact record; the coarse
-   probe lookup (start from `wip/gpu-architecture`); light lists replacing
-   the 128-light masks; shadow classification before filtering; the
-   prefiltered environment; pass merges; windows allocated by octave; main
-   view storage under 1,000 MiB; ink's edge search inside its share. Success
-   line: the whole route at or under 10 ms in the quiet window, the look held
-   in motion on both backends; 8 ms is the budget it keeps going toward.
+   lane. Built and unread (the `gpu-frame` readings under
+   [verification debts](#verification-debts)): the coarse probe lookup, the
+   shadow classes ahead of the filter, the samples' air for the resolve, and
+   the counts of what the probe slots give up. Left, in
+   [the budget's order](frame-budget.md#the-steps): light lists replacing the
+   128-light masks; the rest of the resolve's sample record (motion and
+   identity); windows allocated by octave; main view storage under 1,000 MiB
+   (the stationary window, glass by coverage, the history surface); the
+   prefiltered environment and ink's edge search, each after the reading that
+   says its share is still over. Success line: the whole route at or under
+   10 ms in the quiet window, the look held in motion on both backends; 8 ms
+   is the budget it keeps going toward.
    It owns, first, the diagnosis of the gallery's near-black exhibits and the
    8-frame still shimmer ([verification debts](#verification-debts), item 1),
    since its rewrite is judged against the gallery, with the 2060's captures
@@ -398,7 +403,33 @@ packet; these are the ones owed now, most valuable first.
      reference the next cache sets are checked against, and the 24 tour
      exhibits' stored meshes are audited from it
      ([bake detail](#bake-detail)).
-3. **Three render-graph laws to read before calling them stale or real.**
+9. **`gpu-frame`: the frame budget's built steps, unread.** One windowed World
+   a backend at 2560 by 1440 with `--debug-layers`, bakes and lighting
+   settled, `world.cadence off`, `world.rates off`, `world.gpu-timing on`:
+   - `world.gpu-timing` at the stage standing, at the hall's level 0 and on
+     the lawn, then over `world.benchmark run debug`: `sdf.world$surface`
+     (under 1.2 ms), `sdf.world$views-probes` (under 0.8 ms), and
+     `sdf.world$resolve` moving and standing, each beside the frame's total.
+   - The shadow classes change no image: `world.rate pause`,
+     `world.exposure pin`, `world.debug-view shadow`, a settled capture at the
+     hall's east wall and one on the lawn at a tree's shadow edge; then
+     `world.shaders.reload` of a scratch copy of the kernel tree with
+     `#define SDF_SURFACE_OMIT_SHADOW_CLASSES` at the head of
+     `passes/sdf-surface-stage.hlsli`, and the same two captures. The pairs
+     are equal, and the reload's `sdf.world$surface` reading is the classes'
+     share.
+   - `world.residency`'s `shadows` line under the turning day, read twice a
+     minute apart: each entry's `blocks…in…` counts rise with its redraws and
+     rectangles, and the pass's `recent=` time stays where it was before the
+     bounds (the reduction reads 62 by 62 texels a block).
+   - `world.counters gpu pass sdf.world$views-probes` over the route:
+     `lights-rounded` and `groups-without-extras` read zero, or the frame
+     budget's step 10 grows the list and the pool.
+   - A presented burst of a fogged silhouette (the valley rim against the
+     far wall, `world.screenshot <path>.png presented 16`) on both backends:
+     the resolve reads each sample's air from views, so the haze along a
+     silhouette holds as it did.
+10. **Three render-graph laws to read before calling them stale or real.**
    Each fails in `SdfWorldPassesLawTests` on the head after the plan changes
    of the GPU leap:
    - `CadenceRunsExactlyTheChangedClass(palette, both)`: the cadence
@@ -412,6 +443,22 @@ packet; these are the ones owed now, most valuable first.
    `CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift` look stale (the probe
    history port and the cascades' move out of the plan); update or delete
    them when the class is next touched.
+11. **`SdfWorldPassesLawTests` run whole: about fifty laws wait out a volume
+    that never settles, and the process holds about 15 GB.** On the fake
+    device about fifty of the class's 104 laws fail with "The irradiance
+    volume's lighting never settled within 200000 frames", most from the
+    rig's constructor, with the volume describing an empty scene
+    (`triangles=0 lights=0 traced=0 relit=0`) while
+    `SdfMeshIrradiance.Settling` stays true;
+    `CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift` above is one of them.
+    The integration head fails them without the `gpu-frame` changes. It may
+    be the stop the gallery's lighting showed
+    ([lighting](#lighting-and-gi)), reproduced without a device, which would
+    make one such law the cheapest witness of that fix. Unread: which of
+    `Settling`'s terms holds, and whether a rig whose constructor throws
+    leaves its volume's native storage held, which fifty failures would
+    multiply into the process's size. Until then run one law by
+    `--filter-method`, and the class only under `puck lease heavy`.
 
 ### Tooling caveats
 
@@ -893,8 +940,9 @@ stored one tier of each mesh. The replacement is built: the producer fills
 every tier (`SdfMeshCachePolicy.Ladder`), a player's build starts from its
 stored tiers and bakes only what they lack, on its play bar
 (`SdfMeshCachePolicy.Stored`, a warm start by the owner's ruling), and `puck
-world player` refuses a folder whose check boots did not settle with no tier
-missed.
+world player` refuses a folder only when a check boot did not settle: a tier a
+check missed is baked by that boot and listed under the record's
+`cacheMisses`.
 
 - [high] Both backends' fills and all four target checks
   (`rtx2060@1920x1080`, `rtx4070@2560x1440`) have run complete on the RTX
@@ -2060,10 +2108,11 @@ Owner: rendering lane (rendering, verification) · high · Next:
 step 5, the floor and eviction, an engine gap that goes first
 ([rendering research](rendering-research.md#engine-gaps-filled-first)); then
 what is left of [step 7, the backing](streaming-and-memory.md#step-7-the-backing):
-Direct3D 12's mesh region and probe scene grow in chunks of one reserved
-buffer (`IGpuMappedBuffer`), and Vulkan's still use contiguous storage, so
-Vulkan's sparse ownership behind the same interface, page-only reservation
-credit and physical compaction remain. Steps 0 to 3 are built and owe their
+the mesh region and the probe scene grow in chunks of one reserved buffer
+on both backends (`IGpuMappedBuffer`: Direct3D 12's reserved resource,
+Vulkan's sparse buffer), so page-only reservation credit and physical
+compaction remain, and Vulkan's sparse destination owes its first windowed
+boot and the hardware qualification the plan lists. Steps 0 to 3 are built and owe their
 windowed readings, and the indexed-read prototype owes one more window on the
 build its [design for review](streaming-and-memory.md#sparse-backing-design-for-review)
 was frozen at. The plan owns the decisions, the build order and each step's
@@ -2087,14 +2136,15 @@ check; this packet holds the defects beside it.
   the bake's scratch arrays, an unidentified renter of 92–98 MB `ArrayPool.Shared` arrays, and
   about 140 MB of trace-scene storage still rented managed. Check: the 2060's route ends under
   its host bar with the LOH flat across loops.
-- [medium] **mimalloc returns freed native pages only under pressure.** `MimallocAllocator` sets no
-  purge or decommit options, and `mi_collect(force: true)` runs only when the memory account asks
-  for a reclaim, when a thread returns its memory, or from a console command. Moving the GI
-  stores to native memory therefore swapped LOH fragmentation for allocator slack: on the 2060,
-  1.83 GB committed against 810 MB named, with 8.6 GB reserved. Set the purge options at process
-  start, give the large long-lived GPU-side stores their own heap or arena, and collect on a
-  cadence near the bar. Check: committed native memory tracks the named owners within a stated
-  slack on the same route.
+- [medium] **Read the native allocator's slack on the RTX 2060's route.** The 2060 read 1.83 GB
+  committed against 810 MB named, with 8.6 GB reserved, when freed ranges were decommitted only by
+  a later free and every size class committed its whole page. `MimallocAllocator`'s owner thread
+  now decommits expired ranges every `MimallocAllocator.PurgePeriod`, and pages past a slice
+  commit as their blocks are used. Check: committed native memory tracks the named owners within
+  a stated slack on the same route (`host.memory`'s native row and its residual). If the slack
+  that remains is live blocks pinning mostly empty pages, give the large long-lived stores (mesh
+  payloads, the irradiance volume) a heap of their own, apart from the bake's short-lived
+  workspace.
 - [high] Measure the session-residency fix on the RTX 4070. A cold debug-world
   boot built 55 residencies, one for each `self`, `wonderland` and nested
   session screen of the boot world, and the device pool held 15.5 GB, mostly
@@ -2159,6 +2209,25 @@ check; this packet holds the defects beside it.
   feedback volume, the hit and meter caches of `SdfMeshProbeGpuWork`) is still
   fixed storage with no reservation; only a job's slot buffers reserve
   (`SdfGpuWorkHold`).
+- [high] A volume's words stand three times: the host's copy
+  (`SdfMeshIrradiance`'s volume words), the probe service's feedback table,
+  which the relights read and commit into (`SdfMeshProbeGpuWork`), and the
+  published table the views read, which each publication copies from the
+  feedback table on the device (`SdfWorldTables.PublishMeshIrradiance`). The
+  two device tables bind one layout at one binding
+  (`SdfWorldPackage.MeshIrradiance`), and every slot carries the cell it holds,
+  so a view can reject a slot mid-move. On the RTX 2060's route the two read
+  about 230 MB each at the device's peak. Have the views bind the feedback
+  table and make a publication a revision alone, with the barriers the views'
+  stages need on that table. It changes what the passes read, so it is the
+  frame lane's edit with this plan; check that a still view stands until a
+  publication and that the probe history's serials still gate its reuse.
+- [medium] The temporal resolve's window (`historyWindow`,
+  `SdfWorldPackage.HistoryWindowWords` words an output pixel, about 207 MB at
+  1920 by 1080) follows the display and not the device's table, so the RTX
+  2060 holds what the RTX 4070 holds a pixel. A shorter period or narrower
+  words on that card is a reconstruction choice for its table, which the frame
+  budget owns.
 - [low] A mesh region's staging is named for its own owner
   (`SdfResidencySelector.RegionStagingOwner`) and states no class, so a flush
   that stages more than the pool has room for is admitted past the limit and
@@ -2205,18 +2274,42 @@ check; this packet holds the defects beside it.
   hold every column that can ever raise, with displacement closing the dry
   ones, is a design question for the field's owner.
 - One group in the debug world has a mesh no draw names, not yet identified.
-- [medium] The mesh store evicts whole sets when it nears its size limit
-  (`CacheRetention`), and a whole ladder per backend is now several times the
-  bytes of the sets that limit was sized for, so a lead machine that bakes
-  for two backends and several identities loses sets it still needs. A player
-  folder keeps only its build's sets and fails when one was evicted
-  (`puck world player`); the per-user store still needs its limit sized from
-  what a set is, or retirement by identity age, and an owner for the figure.
-- [medium] Step 2's heap walk on a headless debug world names two large-object
-  tenants the plan's [large host owners](streaming-and-memory.md#the-large-host-owners)
-  table bounds by no step: `FieldCellDelta[]` arrays held by
-  `WorldDeliveryRows` (9 objects, 33 MB) and by `WorldDocument` (3.7 MB). They
-  need an owner and a bound, or a reason they stay named only.
+- [low] The mesh store keeps its most recently used sets whole and holds the
+  older ones to a share of its volume (`SdfMeshStore.RetainedSets`,
+  `SdfMeshStore.CapacityOf`), so on a roomy volume the sets of builds no
+  checkout can produce again stand until the bytes ask for them. Retire a set
+  by the age of its last use if a lead machine's store is seen to fill with
+  them. A group that waits to bake takes a finer rung of its shape only when a
+  group of its own bake lands it (`SdfMeshPathBake.TakeLandedRungs`); a rung
+  another residency's bake landed is found at the group's plan alone.
+- [medium] A headless debug world's heap walk (`puck host heap --pid <pid>
+  --min-mib 2 --depth 2`, with the authority in the process) still names
+  three large-object tenants the plan's
+  [large host owners](streaming-and-memory.md#the-large-host-owners) table
+  bounds by no step. The composed documents' bytes
+  (`WorldComposedDocument`, about 36 MB in 5 arrays) and their layers
+  (`ComposedLayer`, about 10 MB) stand for the whole run so that a reload
+  composes only what changed; a player's process, which reloads nothing, could
+  let them go once it has booted. One `FieldCellDelta[]` of about 4 MB is held
+  by `WorldSnapshotStorage`. And for as long as the process runs no two gen2
+  collections half a minute apart, the shared byte pool keeps the arrays a
+  boot rented from it, 2, 4, 8, 16 and 64 MiB, in one thread's slots
+  (`SharedArrayPoolThreadLocalArray`): the jump past 32 MiB is the shape of one
+  `System.Text.Json` write of a string or raw value of about 13 million
+  characters through the serializer's pooled writer, which no site has been
+  matched to yet (`ContentDigest.HashText` was ruled out by bounding it). Find
+  that write with a trace taken from process start, and write it through a
+  stream.
+- [medium] A reload or a boot serializes whole documents into growing byte
+  buffers: `puck host allocations` over one `world.reload` of the headless
+  debug world sampled about 520 MiB, 208 MiB of it large objects, led by
+  `CanonicalJsonDocument.SerializeCompact` (128 MiB of `byte[]`: the
+  writer's own buffer, the `MemoryStream` it is flushed to and the array that
+  is copied out of it), `CreationDocumentJsonConverter.Write` (64 MiB) and
+  `CreationDocumentJson.Read` (57 MiB). A serialization whose reader only
+  hashes or compares the bytes needs no array of them. Owner: the document
+  and state code, with the iteration plan, since this is the edit loop's
+  garbage.
 - [low] Step 2 names the trace scene's current hierarchy only: a scene a job
   still borrows after a rebuild sits in the managed row's residual until its
   last claim ends (`SdfMeshIrradiance`'s sampled owners).
@@ -5012,6 +5105,15 @@ proves itself with `puck compile` lowering to the same document.
 [Code size](code-size.md) holds the measured map, the generator families and
 their lane order; this packet keeps the single duplicates and leads.
 
+- Two mapped buffers keep one chunk table apiece: `DirectXGpuMappedBuffer`
+  and `VulkanGpuMappedBuffer` each hold a backing a chunk, place every missing
+  chunk of a range before binding any, and revoke the chunks wholly inside a
+  range into a release (`Map`, `Unmap`). Their chunk arithmetic is shared
+  (`GpuMappedChunks`); the table, the all-or-none placement and the revoke
+  loop are still written twice. Lift them into one generic chunk table in
+  `Puck.Abstractions` that a backend supplies with its place, bind, unbind and
+  return calls. Do it in the window that first boots the Vulkan path, since
+  the Direct3D 12 half is the one hardware has qualified.
 - Two A* searches over a navigation domain's baked edges: `NavigationRuntime.Domain.FindPath`
   (`SearchPath`, per-domain workspace arrays, step costs in thousandths of a cell, no clearance
   surcharge) for a non-shared domain's followers, and `NavigationRuntime.FindRoute` (`SearchRoute`,

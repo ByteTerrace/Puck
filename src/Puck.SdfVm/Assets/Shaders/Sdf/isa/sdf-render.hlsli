@@ -200,6 +200,10 @@
 #define SDF_MESH_MARK_BASE                142u
 #define SDF_MESH_VERTEX_COUNT_BASE        135u
 #define SDF_MESH_SHADOW_FILTER_TEXELS     14.0
+#define SDF_SHADOW_BLOCK_EDGE             32u
+#define SDF_SHADOW_BLOCK_APRON            15u
+#define SDF_SHADOW_BLOCK_LAYER_WORDS      6u
+#define SDF_SHADOW_BLOCK_FLAGS_ONLY_SHIFT 16u
 
 // The irradiance volume's probe record and read (SdfMeshIrradianceProbe).
 #define SDF_MESH_IRRADIANCE_PROBE_WORDS                 247u

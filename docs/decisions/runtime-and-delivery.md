@@ -504,10 +504,14 @@ so a smaller fill comes from fewer tiers or fewer sets, not fewer places
 
 **Complete means checked as a player runs it.** `puck world player` boots each
 backend and target under the stored policy on the target's device profile,
-stands at every authored spawn point, and marks the folder complete only when
-every boot settled at every place, missed no tier and baked nothing but live
-geometry (`world.counters sdf.mesh-cache`). The invariant is that a check asks
-only for tiers the fill produced. The engine names every tier a check asks
+stands at every authored spawn point, and marks the folder complete when
+every boot settled at every place. A shipped cache is a warm start and never
+a precondition (the owner's ruling), so a check that missed a tier or baked a
+group still settles, by baking what its cache lacks as a player's machine
+does, and the folder stays complete: the verb records what the cache lacked
+(`cacheMisses`, and each boot's `cacheWhole`, from `world.counters
+sdf.mesh-cache`) and prints it. A whole cache is still what a fill aims at:
+a check then asks only for tiers the fill produced. The engine names every tier a check asks
 that the store lacks (`[sdf.mesh-bake] rung-missed`), and the verb records each
 in `player.json` with the place it stood at, the residency, the geometry and
 the tiers asked and drawn, so a miss names what the fill did not produce. A

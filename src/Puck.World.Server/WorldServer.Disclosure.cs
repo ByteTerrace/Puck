@@ -128,13 +128,35 @@ public sealed partial class WorldServer {
 /// authority's own snapshot cells are borrowed (<see cref="WorldSnapshot.FieldCells"/>). A sink hands them on within the
 /// delivery, and whatever applies, encodes or samples them copies what it keeps.</remarks>
 internal sealed class WorldDeliveryRows {
+    // The cells a scratch may stand at whatever its deliveries carry: past it, a scratch whose last delivery filled
+    // less than one part in ScratchSlack of it is let go.
+    private const int ScratchKept = 1024;
+    private const int ScratchSlack = 8;
+
     private FieldCellDelta[] m_cells = [];
     private int m_count;
+    // Whether the scratch has carried no delivery yet: a sink's first is its whole world.
+    private bool m_first = true;
     private readonly Puck.Abstractions.Collections.MarkedIndexSet m_changed = new();
     private int[] m_changedRows = [];
 
+    /// <summary>Lets the scratch go once the delivery it carried has been handed on, when it stands at a size its
+    /// deliveries do not use. A sink's first delivery carries the whole world and every later one a tick's changes, so
+    /// a scratch kept at its high-water holds a world's cells, and the rows and names they reference, for the life of
+    /// every session, a session that then goes quiet included. A scratch a sink's deliveries keep filling stays.</summary>
+    internal void Settle() {
+        if ((m_cells.Length > ScratchKept) && (m_first || (m_count < (m_cells.Length / ScratchSlack)))) {
+            m_cells = [];
+            m_count = 0;
+        }
+        m_first = false;
+    }
+
     internal ReadOnlyMemory<FieldCellDelta> Advance(WorldRecipientView view, WorldDeliveryCursor cursor,
         ReadOnlyMemory<FieldCellDelta> changes, bool rows) {
+        // The delivery before this one is over (its cells were borrowed until this call), so a sink that never calls
+        // Settle lets an oversized scratch go here.
+        if ((m_cells.Length > ScratchKept) && (m_count < (m_cells.Length / ScratchSlack))) { m_cells = []; }
         m_count = 0;
         m_changed.Clear();
         var sequence = cursor.Sequence;

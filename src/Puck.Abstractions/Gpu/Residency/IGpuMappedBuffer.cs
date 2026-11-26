@@ -57,3 +57,39 @@ public sealed class GpuMappedRelease(ulong bytes, Action? release) : IDisposable
     /// <inheritdoc/>
     public void Dispose() => m_release.Dispose();
 }
+/// <summary>The chunk arithmetic every <see cref="IGpuMappedBuffer"/> shares: which chunks a byte range touches
+/// (<see cref="IGpuMappedBuffer.Map"/> backs each of them) and which lie wholly inside it
+/// (<see cref="IGpuMappedBuffer.Unmap"/> revokes only those), so the backends agree on a range's chunks to the
+/// byte.</summary>
+public static class GpuMappedChunks {
+    /// <summary>Refuses a range that passes a buffer's size.</summary>
+    /// <param name="sizeBytes">The buffer's size (<see cref="IGpuBuffer.SizeBytes"/>).</param>
+    /// <param name="offset">The range's first byte.</param>
+    /// <param name="bytes">The range's bytes.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The range passes <paramref name="sizeBytes"/>.</exception>
+    public static void RequireRange(ulong sizeBytes, ulong offset, ulong bytes) {
+        if ((offset > sizeBytes) || (bytes > (sizeBytes - offset))) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(bytes), message: $"The range of {bytes} bytes at {offset} passes the buffer's {sizeBytes}.");
+        }
+    }
+    /// <summary>Returns the chunks a range of at least one byte touches.</summary>
+    /// <param name="offset">The range's first byte.</param>
+    /// <param name="bytes">The range's bytes; not zero.</param>
+    /// <param name="chunkBytes">The bytes of one chunk.</param>
+    /// <returns>The first and the last chunk the range touches.</returns>
+    public static (int First, int Last) Touched(ulong offset, ulong bytes, ulong chunkBytes) =>
+        (((int)(offset / chunkBytes)), ((int)((offset + (bytes - 1UL)) / chunkBytes)));
+    /// <summary>Returns the chunks that lie wholly inside a range: those it covers to their end, or to the buffer's end
+    /// for the last, which may be partial.</summary>
+    /// <param name="sizeBytes">The buffer's size.</param>
+    /// <param name="chunkCount">The buffer's chunks.</param>
+    /// <param name="offset">The range's first byte.</param>
+    /// <param name="bytes">The range's bytes.</param>
+    /// <param name="chunkBytes">The bytes of one chunk.</param>
+    /// <returns>The first such chunk and the chunk after the last; none when they are equal or cross.</returns>
+    public static (int First, int Stop) Inside(ulong sizeBytes, int chunkCount, ulong offset, ulong bytes, ulong chunkBytes) {
+        var end = (offset + bytes);
+
+        return (((int)((offset + (chunkBytes - 1UL)) / chunkBytes)), ((end == sizeBytes) ? chunkCount : ((int)(end / chunkBytes))));
+    }
+}

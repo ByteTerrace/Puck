@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.IO.Hashing;
 using Puck.Abstractions.Memory;
+using Puck.Hosting;
 using Puck.Hosting.Jobs;
 
 namespace Puck.SdfVm;
@@ -19,13 +20,19 @@ namespace Puck.SdfVm;
 /// refuses whatever a power loss leaves behind a name. The writes no bake waits for (a stage's checkpoint, a lattice's
 /// samples, a bound's enforcement) run on the store's writer, beside the bake rather than ahead of it, holding at most
 /// <see cref="MostPendingWriteBytes"/>.</para>
-/// <para>Each identity's entries are one set, kept in a directory named for the identity, and the store holds at most
-/// <see cref="CapacityBytes"/> bytes a set at a time, under Puck's one cache retention
-/// (<see cref="Puck.Abstractions.CacheRetention.EnforceSetsOnWrite"/>): a read stamps an entry, a set's last use is its
-/// most recently used entry's, and a write that passes the bound removes whole sets, least recently used first, keeping
-/// the writer's own, down to an eighth below it (<see cref="Puck.Abstractions.CacheBound.LowWater"/>). A peer's write
-/// may evict a set being baked or loaded unless it is pinned by <see cref="Hold"/>. An unpinned writer's set that alone
-/// exceeds the bound is trimmed entry by entry, keeping the entry being written. One process's
+/// <para>Each identity's entries are one set, kept in a directory named for the identity, and the store holds its sets
+/// under Puck's one cache retention (<see cref="Puck.Abstractions.CacheRetention.EnforceSetsOnWrite"/>): a read stamps
+/// an entry, a set's last use is its most recently used entry's, and a write that passes the bound removes whole sets,
+/// least recently used first, down to an eighth below it (<see cref="Puck.Abstractions.CacheBound.LowWater"/>).
+/// Invariant: no enforcement, in any process, removes the writer's own set, a set a running process pins
+/// (<see cref="Hold"/>), or one of the <see cref="RetainedSets"/> most recently used sets, whatever their bytes; the
+/// byte bound (<see cref="CapacityBytes"/>) decides only among the sets older than those. So the build a machine
+/// booted last finds its set at its next boot however large another build's bake has since grown, and what bounds the
+/// store is what it serves, a count of builds, with its bytes a share of the volume it lies on
+/// (<see cref="CapacityOf"/>) rather than a figure a larger world outgrows. The one place that enforces it is the bound
+/// <c>Enforce</c> hands the retention. Where it stops: a set older than the retained ones goes when the bytes ask, and
+/// a store on a volume that runs short of free space (<see cref="ReserveOf"/>) writes nothing new and gives back its
+/// older sets, never the retained ones. One process's
 /// writes leave the store over its bound only until its writer enforces it after each, which a process that ends waits
 /// for; Worlds writing it at once count one another's writes only at their next
 /// listing, at least once a minute while they write. A file directly in the directory, which no identity's set holds,
@@ -38,12 +45,31 @@ namespace Puck.SdfVm;
 /// in <see cref="CapacityBytes"/>. Its members are thread-safe.</para>
 /// </summary>
 public sealed class SdfMeshStore {
-    /// <summary>The bytes a store holds at most unless its owner names another bound: eight gibibytes. One per-user
-    /// store serves every World and worktree; it retains compressed mesh sets whole when they fit the bound.</summary>
-    public const long DefaultCapacityBytes = (8L << 30);
+    /// <summary>The least byte bound a store derives (<see cref="CapacityOf"/>), on a volume too small for its share to
+    /// reach it or one that cannot be read: eight gibibytes.</summary>
+    public const long LeastCapacityBytes = (8L << 30);
+    /// <summary>The share of its volume a store's finished meshes may hold, as a divisor: an eighth. One per-user store
+    /// serves every World and worktree of a machine, each build and backend a set of its own, so its room follows the
+    /// disk it was given as the host budget follows the installed memory.</summary>
+    public const int VolumeShare = 8;
+    /// <summary>The sets a store keeps whole whatever their bytes unless its owner names another count: the four most
+    /// recently used, which is the build a machine runs and the build it ran before, each on two backends.</summary>
+    public const int DefaultRetainedSets = 4;
     /// <summary>The bytes a store's intermediates hold at most unless its owner names another bound: eight gibibytes,
-    /// counted apart from the finished meshes (<see cref="DefaultCapacityBytes"/>).</summary>
+    /// counted apart from the finished meshes (<see cref="CapacityBytes"/>).</summary>
     public const long DefaultIntermediateCapacityBytes = (8L << 30);
+
+    /// <summary>Returns the byte bound a store derives from the volume it lies on: the volume's
+    /// <see cref="VolumeShare"/>, and at least <see cref="LeastCapacityBytes"/>.</summary>
+    /// <param name="volume">The volume's reading, or <see langword="null"/> when it cannot be read.</param>
+    /// <returns>The bound, in bytes.</returns>
+    public static long CapacityOf(HostVolumeReading? volume) => Math.Max(val1: LeastCapacityBytes, val2: ((volume?.TotalBytes ?? 0L) / VolumeShare));
+    /// <summary>Returns the free space a store leaves its volume: a sixteenth of the volume and at most sixteen
+    /// gibibytes. A store whose volume has less free writes nothing new, since a cache is the one tenant of a disk that
+    /// can always do without, and gives back its sets past the retained ones.</summary>
+    /// <param name="volume">The volume's reading.</param>
+    /// <returns>The reserve, in bytes.</returns>
+    public static long ReserveOf(HostVolumeReading volume) => Math.Min(val1: (16L << 30), val2: (volume.TotalBytes / 16));
     /// <summary>The suffix that names the intermediates' directory beside <see cref="Directory"/>.</summary>
     public const string IntermediateSuffix = "-intermediates";
     /// <summary>The extension of an entry's file.</summary>
@@ -67,24 +93,61 @@ public sealed class SdfMeshStore {
     /// <summary>Initializes a new instance of the <see cref="SdfMeshStore"/> class. Nothing is created until an entry is
     /// written.</summary>
     /// <param name="directory">The directory the entries are kept in, made absolute here.</param>
-    /// <param name="capacityBytes">The bytes the entries hold at most.</param>
+    /// <param name="capacityBytes">The bytes the entries past the retained sets hold at most, or
+    /// <see langword="null"/> for the bound the directory's volume gives (<see cref="CapacityOf"/>), under which the
+    /// store also leaves the volume its reserve (<see cref="ReserveOf"/>).</param>
     /// <param name="allocator">The host allocator for decode scratch, or null for managed offline decoding.</param>
     /// <param name="intermediateCapacityBytes">The bytes the intermediates hold at most.</param>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/>, empty or white
     /// space.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacityBytes"/> or
     /// <paramref name="intermediateCapacityBytes"/> is not positive.</exception>
-    public SdfMeshStore(string directory, long capacityBytes = DefaultCapacityBytes, IAllocator? allocator = null, long intermediateCapacityBytes = DefaultIntermediateCapacityBytes) {
+    public SdfMeshStore(string directory, long? capacityBytes = null, IAllocator? allocator = null, long intermediateCapacityBytes = DefaultIntermediateCapacityBytes) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: capacityBytes);
+        if (capacityBytes is { } named) { ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: named, paramName: nameof(capacityBytes)); }
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: intermediateCapacityBytes);
 
-        CapacityBytes = capacityBytes;
         IntermediateCapacityBytes = intermediateCapacityBytes;
         Directory = Path.GetFullPath(path: directory);
         IntermediateDirectory = (Path.TrimEndingDirectorySeparator(path: Directory) + IntermediateSuffix);
+        m_followsVolume = (capacityBytes is null);
+        CapacityBytes = (capacityBytes ?? CapacityOf(volume: HostVolume.Read(directory: Directory)));
         m_allocator = allocator;
     }
+
+    // Whether the store sizes itself from its volume: its byte bound is the volume's share and it keeps the volume's
+    // reserve free (Shortfall). A store whose owner named its bytes reads no volume.
+    private readonly bool m_followsVolume;
+    // The volume's shortfall as last read and when, in Environment.TickCount64 milliseconds, so the writes of a bake
+    // (thousands a minute) read the volume once in VolumeInterval; and when each kind's enforcement last ran to give
+    // bytes back, since a short volume asks at every write and a listing of the store is not cheap.
+    private long m_shortfall;
+    private long m_shortfallAt = long.MinValue;
+    private long m_relievedMeshesAt = long.MinValue;
+    private long m_relievedIntermediatesAt = long.MinValue;
+    private const long VolumeIntervalMilliseconds = 2_000L;
+
+    // The bytes the volume lacks of its reserve (ReserveOf), zero when it has them, when the volume cannot be read or
+    // when the store's owner named its bound.
+    private long Shortfall() {
+        if (!m_followsVolume) { return 0L; }
+
+        var now = Environment.TickCount64;
+        var at = Volatile.Read(location: ref m_shortfallAt);
+
+        if ((at != long.MinValue) && ((now - at) < VolumeIntervalMilliseconds)) { return Volatile.Read(location: ref m_shortfall); }
+
+        var shortfall = ((HostVolume.Read(directory: Directory) is { } volume) ? Math.Max(val1: 0L, val2: (ReserveOf(volume: volume) - volume.AvailableBytes)) : 0L);
+
+        Volatile.Write(location: ref m_shortfall, value: shortfall);
+        Volatile.Write(location: ref m_shortfallAt, value: now);
+
+        return shortfall;
+    }
+
+    /// <summary>Gets the sets the store keeps whole whatever their bytes: the most recently used, the writer's own and
+    /// the pinned among them (<see cref="DefaultRetainedSets"/> unless its owner names another count).</summary>
+    public int RetainedSets { get; init; } = DefaultRetainedSets;
 
     /// <summary>Gets the account a read reserves its workspace in before it allocates it: the process's.</summary>
     public MemoryAccount Account { get; init; } = MemoryAccount.Shared;
@@ -92,7 +155,8 @@ public sealed class SdfMeshStore {
     /// the entry (<see cref="DefaultWorkspacePatience"/>).</summary>
     public TimeSpan WorkspacePatience { get; init; } = DefaultWorkspacePatience;
 
-    /// <summary>Gets the bytes the entries hold at most.</summary>
+    /// <summary>Gets the bytes the entries hold at most, the retained sets (<see cref="RetainedSets"/>) kept whatever
+    /// it says.</summary>
     public long CapacityBytes { get; }
     /// <summary>Gets the bytes the intermediates hold at most, counted apart from <see cref="CapacityBytes"/>.</summary>
     public long IntermediateCapacityBytes { get; }
@@ -420,27 +484,48 @@ public sealed class SdfMeshStore {
     // leaves the enforcement to the store's writer, so it never lists the directory; a write already on the writer
     // enforces at once.
     private bool WriteEntry<TState>(string path, TState state, Action<Stream, TState> encode, bool queued) where TState : allows ref struct {
-        try {
-            Puck.Confinement.AtomicFile.WriteVerifiedCache(path: path, state: state, write: encode);
-        } catch (Exception exception) when (Refused(exception: exception)) {
-            return false;
+        // A volume short of its reserve takes no new entry; the enforcement below gives back what the store can spare,
+        // so the writes resume once the volume has its reserve again.
+        var written = (Shortfall() <= 0L);
+
+        if (written) {
+            try {
+                Puck.Confinement.AtomicFile.WriteVerifiedCache(path: path, state: state, write: encode);
+            } catch (Exception exception) when (Refused(exception: exception)) {
+                return false;
+            }
         }
         if (queued) {
             Enforce(path: path);
         } else {
             _ = WriteLater(bytes: 0L, behind: Behind.Inline, write: () => Enforce(path: path));
         }
-        return true;
+        return written;
     }
     private void Enforce(string path) {
         var finished = IsMeshEntry(name: path);
 
         _ = Puck.Abstractions.CacheRetention.EnforceSetsOnWrite(
-            bound: new Puck.Abstractions.CacheBound(MaxBytes: (finished ? CapacityBytes : IntermediateCapacityBytes), MaxEntries: MaxSets),
+            bound: new Puck.Abstractions.CacheBound(MaxBytes: (finished ? CapacityBytes : IntermediateCapacityBytes), MaxEntries: MaxSets) { MinEntries = (finished ? RetainedSets : 0) },
             directory: (finished ? Directory : IntermediateDirectory),
             inUse: path,
-            isEntry: (finished ? IsMeshEntry : IsIntermediateEntry)
+            isEntry: (finished ? IsMeshEntry : IsIntermediateEntry),
+            relieve: Relief(at: ref (finished ? ref m_relievedMeshesAt : ref m_relievedIntermediatesAt))
         );
+    }
+    // The bytes an enforcement gives back for a volume short of its reserve: the shortfall, asked of each kind's
+    // directory at most once every CacheRetention.EnforceInterval, since asking lists the directory whatever its tally.
+    private long Relief(ref long at) {
+        var shortfall = Shortfall();
+
+        if (shortfall <= 0L) { return 0L; }
+
+        var now = Environment.TickCount64;
+        var last = Volatile.Read(location: ref at);
+
+        if ((last != long.MinValue) && ((now - last) < ((long)Puck.Abstractions.CacheRetention.EnforceInterval.TotalMilliseconds))) { return 0L; }
+
+        return ((Interlocked.CompareExchange(comparand: last, location1: ref at, value: now) == last) ? shortfall : 0L);
     }
 
     /// <summary>The bytes the store's writer holds at most for writes it has not finished (their samples and meshes);
@@ -812,8 +897,8 @@ public sealed class SdfMeshStore {
 
             reason = own switch {
                 null => $"identity {value} unchanged: geometry new to its set, which is still being listed",
-                0 => $"identity {value} unchanged: its set was evicted, or it never stored one (a store of {CapacityBytes} bytes)",
-                _ => $"identity {value} unchanged: geometry new to its set of {own} entries (a store of {CapacityBytes} bytes)",
+                0 => $"identity {value} unchanged: its set was evicted, or it never stored one (a store of {CapacityBytes} bytes that keeps its {RetainedSets} most recent sets whole)",
+                _ => $"identity {value} unchanged: geometry new to its set of {own} entries (a store of {CapacityBytes} bytes that keeps its {RetainedSets} most recent sets whole)",
             };
         } else if (!identity.HasParts) {
             reason = $"identity {value} new, its parts unknown";

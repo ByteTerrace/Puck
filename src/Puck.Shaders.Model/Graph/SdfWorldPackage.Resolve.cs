@@ -14,6 +14,15 @@ public static partial class SdfWorldPackage {
     public const string Reactivity = "reactivity";
     /// <summary>The reactivity buffer the views pass writes in a temporal view.</summary>
     public const string ReactivityWritten = "reactivityRW";
+    /// <summary>The render samples' air as the resolve reads it: two words a render-extent pixel, laid out as the
+    /// reactivity is, holding what the atmosphere does along the sample's own ray to its surface as a transport's four
+    /// half floats (<c>shade/sdf-transport.hlsli</c>): the fog's in-scatter weight and the scaled inverse ray distance,
+    /// then the haze's and the medium's weights; zero for a sample with no surface. The resolve scales it by the
+    /// sample's coverage for the sample's transport, so it evaluates no atmosphere for a sample it gathers.</summary>
+    public const string SampleAir = "sampleAir";
+    /// <summary>The render samples' air as the views pass writes it, from the atmosphere it evaluates once a pixel for
+    /// the pixel's transmittance, in a view whose fragment resolves.</summary>
+    public const string SampleAirWritten = "sampleAirRW";
     /// <summary>The preceding frame's history color the temporal resolve reprojects: its RGB the resolved lit color, its
     /// alpha the resolved coverage, both premultiplied as the lit image is.</summary>
     public const string HistoryColor = "historyColor";
@@ -72,6 +81,7 @@ public static partial class SdfWorldPackage {
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: CurrentColor, type: ShaderValueType.Float4),
             ShaderInterfaceMember.StorageImage(format: RenderGraphPackageCatalog.WorkingFormat, group: ShaderInterfaceGroup.Pass, name: Output, type: ShaderValueType.Float4),
             Read(element: ShaderValueType.Uint, name: VisibilityRecords),
+            Read(element: ShaderValueType.Uint2, name: SampleAir),
             Written(element: ShaderValueType.Uint2, name: TransportWritten),
             Read(element: ShaderValueType.Float, name: Reactivity),
             ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: HistoryColor, type: ShaderValueType.Float4),
@@ -128,8 +138,8 @@ public static partial class SdfWorldPackage {
     }
 
     // The resolve's inputs in either mode, in port order: the render-grid color, then the visibility records the samples
-    // are read through.
-    private static string[] ResolveInputs => [CurrentColor, Parts.Visibility];
+    // are read through and the samples' air.
+    private static string[] ResolveInputs => [CurrentColor, Parts.Visibility, Parts.SampleAir];
     // The resolve's outputs in either mode, in port order: the lit image and the surface transport.
     private static string[] ResolveOutputs => [Parts.Lit, Parts.Transport];
     // The sky's inputs in either mode: the render-grid color views writes, whose coverage says where the sky is seen. The
@@ -161,12 +171,19 @@ public static partial class SdfWorldPackage {
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: CurrentColor, retained: true) with { Dimensions = ShaderPipelineDimensions.Render() },
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Parts.Lit, retained: true),
                 Buffer(count: [Term(1, ShaderPipelineCountBasis.Extent, ShaderPipelineCountBasis.Viewports)], name: Parts.Transport, sizeBytes: null, strideBytes: (2 * sizeof(uint))),
+                Buffer(count: [Term(1, ShaderPipelineCountBasis.RenderExtent, ShaderPipelineCountBasis.Viewports)], name: Parts.SampleAir, sizeBytes: null, strideBytes: (2 * sizeof(uint))),
                 .. SkyResources.Select(selector: static resource => resource with { Dimensions = ShaderPipelineDimensions.Render() }),
                 Image(format: RenderGraphPackageCatalog.WorkingFormat, from: null, name: Color, retained: false),
             ],
             Passes: [
                 .. NativeFragment.Passes.TakeWhile(predicate: static pass => (pass.Name != Parts.Sky)).Select(selector: static pass => ((pass.Name == Parts.Views)
-                    ? pass with { Outputs = [.. pass.Outputs.Select(selector: static output => ((output.Name == Parts.Lit) ? new ResourceReference(Name: CurrentColor) : output))] }
+                    ? pass with {
+                        OutputAccesses = [.. pass.OutputAccesses, RenderGraphPortAccess.ComputeWrite],
+                        Outputs = [
+                            .. pass.Outputs.Select(selector: static output => ((output.Name == Parts.Lit) ? new ResourceReference(Name: CurrentColor) : output)),
+                            new ResourceReference(Name: Parts.SampleAir),
+                        ],
+                    }
                     : pass)),
                 Pass(inputs: ResolveInputs, name: Resolve, outputs: ResolveOutputs) with { Members = ResolveMembers },
                 Pass(inputs: SkyInputs, name: Parts.Sky, outputs: SkyRuns) with { Members = SkyMembers },
@@ -213,7 +230,7 @@ public static partial class SdfWorldPackage {
                         Outputs = [.. pass.Outputs, new ResourceReference(Name: Parts.Reactivity)],
                     },
                     Resolve => pass with {
-                        InputAccesses = [.. Enumerable.Repeat(count: 5, element: RenderGraphPortAccess.ComputeRead), RenderGraphPortAccess.ComputeReadWrite],
+                        InputAccesses = [.. Enumerable.Repeat(count: (ResolveInputs.Length + 3), element: RenderGraphPortAccess.ComputeRead), RenderGraphPortAccess.ComputeReadWrite],
                         Inputs = [
                             .. ResolveInputs.Select(selector: static input => new ResourceReference(Name: input)),
                             new ResourceReference(Name: Parts.Reactivity),

@@ -75,6 +75,11 @@ static const uint SdfViewsProbeExtraShift = 29u;
 static const uint SdfViewsProbeExtras = 3u;
 static const uint SdfViewsProbeMixServed = (1u << 31u);
 static const uint SdfViewsProbeMixExtra = (1u << 30u);
+// The lookup's detail rows past its rate tiles' four (SdfWorldPassRecorder.ProbeDetails), which count what the slots
+// gave up: the lights a slot's list had no room for and rounded to seen or unseen, and the groups of cells the pool had
+// no room for, with the extra gathers they asked for.
+static const uint SdfViewsProbeRoundedDetail = 4u;
+static const uint SdfViewsProbeNoExtrasDetail = 5u;
 #if SDF_MESH_IRRADIANCE_LIGHT_WORDS != 4
 #error A slot's light agreement holds a uint4 of light bits, and a partial light's index seven bits.
 #endif
@@ -211,6 +216,7 @@ void sdfViewsProbesStoreSlot(SdfViewsProbeSlot slot, SdfMeshProbes probes, uint 
     uint4 partial = (someCorner & ~everyCorner);
     uint4 listed = uint4(0u, 0u, 0u, 0u);
     uint count = 0u;
+    uint rounded = 0u;
 
     [loop] while (any(partial != 0u)) {
         uint light = sdfViewsProbeLowestLight(partial);
@@ -225,11 +231,17 @@ void sdfViewsProbesStoreSlot(SdfViewsProbeSlot slot, SdfMeshProbes probes, uint 
 
             listed |= uint4(((word == 0u) ? shifted : 0u), ((word == 1u) ? shifted : 0u), ((word == 2u) ? shifted : 0u), ((word == 3u) ? shifted : 0u));
             count++;
-        } else if ((2.0 * share) >= weight) {
-            everyCorner |= bit;
         } else {
-            someCorner &= ~bit;
+            rounded++;
+            if ((2.0 * share) >= weight) {
+                everyCorner |= bit;
+            } else {
+                someCorner &= ~bit;
+            }
         }
+    }
+    if (rounded != 0u) {
+        puckCountDetail(SdfViewsProbeRoundedDetail, rounded, 0u, 0u, 0u, 0u);
     }
     [unroll] for (uint lightWord = 0u; (lightWord < SDF_MESH_IRRADIANCE_LIGHT_WORDS); lightWord++) {
         sdfViewsProbeRecordBuffer[slot.first + ((SdfViewsProbeLightsWord + lightWord) * slot.stride)] = sdfComponent(everyCorner, lightWord);

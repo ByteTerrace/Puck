@@ -51,9 +51,10 @@ groupshared uint sdfProbeCellExtras[SdfProbeGroupCells];
 groupshared uint sdfProbeExtraBase;
 static const uint SdfProbeNoExtras = 0xFFFFFFFFu;
 // The representatives of the group's cells and its ring, a row of SdfProbeRingEdge cells from the cell before the
-// group's first: each one's surface point with one in W where the cell holds one, and its packed normal.
+// group's first: each one's surface point with one in W where the cell holds one, and its geometric normal, decoded once
+// for the sixteen pixels of each of the four cells that weigh it.
 groupshared float4 sdfProbeRingPoint[SdfProbeRingCells];
-groupshared uint sdfProbeRingNormal[SdfProbeRingCells];
+groupshared float3 sdfProbeRingNormal[SdfProbeRingCells];
 groupshared uint sdfProbeRingPlace[SdfProbeRingCells];
 
 // The surface point, the geometric normal (and its packed word) and the metres the pixel spans at its hit, formed exactly
@@ -73,17 +74,33 @@ void sdfProbeReceiver(ViewportData view, uint2 pixel, uint viewIndex, out float3
 uint sdfProbeOrder(uint rank) {
     return ((((rank < 8u) ? 0x7421A965u : 0xFC30EDB8u) >> (4u * (rank & 7u))) & 15u);
 }
-// Whether a pixel is a hit that shades with the volume.
-bool sdfProbeWants(uint2 pixel, uint viewIndex, int viewMode) {
-    SdfVisibility visibility = sdfLoadVisibility(worldVisibilityRecord(pixel, viewIndex));
+// Whether a pixel is a hit that shades with the volume and, where it is, its receiver as sdfProbeReceiver forms it, from
+// one read of its record: the test and the receiver share the record's distance.
+bool sdfProbeWantedReceiver(ViewportData view, uint2 pixel, uint viewIndex, int viewMode, out float3 surfacePoint, out float3 normal, out uint packedNormal, out float2 tolerance) {
+    uint record = worldVisibilityRecord(pixel, viewIndex);
+    SdfVisibility visibility = sdfLoadVisibility(record);
 
-    return (sdfVisibilityHit(visibility) && sdfViewsProbesWanted(viewMode, visibility.material));
+    surfacePoint = float3(0.0, 0.0, 0.0);
+    normal = float3(0.0, 0.0, 0.0);
+    packedNormal = 0u;
+    tolerance = float2(0.0, 0.0);
+    if (!(sdfVisibilityHit(visibility) && sdfViewsProbesWanted(viewMode, visibility.material))) {
+        return false;
+    }
+
+    SdfPixel p = sdfPixelAt(view, pixel, viewIndex);
+
+    surfacePoint = sdfPixelSurfacePoint(p, visibility.t);
+    packedNormal = sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord];
+    normal = sdfVisibilityUnpackNormal(packedNormal);
+    tolerance = sdfViewsProbeTolerance((p.pixelFootprint * visibility.t), abs(dot(p.rayDirection, normal)));
+    return true;
 }
 // Finds cell `cell`'s representative and leaves it in the ring's entry `ring`: none for a cell outside the view or with
 // no pixel that wants the lookup.
 void sdfProbeRepresentative(ViewportData view, uint viewIndex, int2 cell, uint2 dims, int viewMode, uint ring) {
     float4 found = float4(0.0, 0.0, 0.0, 0.0);
-    uint packedNormal = 0u;
+    float3 facing = float3(0.0, 0.0, 0.0);
     uint place = 0u;
 
 #if !defined(SDF_VIEWS_OMIT_PROBES)
@@ -93,21 +110,21 @@ void sdfProbeRepresentative(ViewportData view, uint viewIndex, int2 cell, uint2 
         [loop] for (uint rank = 0u; ((rank < SdfProbeCellPixels) && (found.w == 0.0)); rank++) {
             uint candidate = sdfProbeOrder(rank);
             uint2 pixel = (origin + uint2((candidate % SDF_VIEWS_PROBE_RATE), (candidate / SDF_VIEWS_PROBE_RATE)));
+            float3 surfacePoint;
+            float3 normal;
+            uint packedNormal;
+            float2 tolerance;
 
-            if (all(pixel < dims) && sdfProbeWants(pixel, viewIndex, viewMode)) {
-                float3 surfacePoint;
-                float3 normal;
-                float2 tolerance;
-
-                sdfProbeReceiver(view, pixel, viewIndex, surfacePoint, normal, packedNormal, tolerance);
+            if (all(pixel < dims) && sdfProbeWantedReceiver(view, pixel, viewIndex, viewMode, surfacePoint, normal, packedNormal, tolerance)) {
                 found = float4(surfacePoint, 1.0);
+                facing = normal;
                 place = candidate;
             }
         }
     }
 #endif
     sdfProbeRingPoint[ring] = found;
-    sdfProbeRingNormal[ring] = packedNormal;
+    sdfProbeRingNormal[ring] = facing;
     sdfProbeRingPlace[ring] = place;
 }
 // The ring's cell `ring` (0 to 35) as an offset from the group's first cell: the row before the group, the row after it,
@@ -281,20 +298,19 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
             }
 
             uint mix = 0u;
+            float3 surfacePoint;
+            float3 normal;
+            uint packedNormal;
+            float2 tolerance;
 
             // A cell with no representative holds no pixel that wants the lookup.
-            if (present && sdfProbeWants(pixel, viewIndex, viewMode)) {
+            if (present && sdfProbeWantedReceiver(view, pixel, viewIndex, viewMode, surfacePoint, normal, packedNormal, tolerance)) {
                 float2 fraction;
                 int2 base = (sdfViewsProbeMixBase(pixel, fraction) - int2(firstCell));
                 float4 bilinear = float4(((1.0 - fraction.x) * (1.0 - fraction.y)), (fraction.x * (1.0 - fraction.y)), ((1.0 - fraction.x) * fraction.y), (fraction.x * fraction.y));
-                float3 surfacePoint;
-                float3 normal;
-                uint packedNormal;
-                float2 tolerance;
                 float4 weights = float4(0.0, 0.0, 0.0, 0.0);
                 float4 held = float4(0.0, 0.0, 0.0, 0.0);
 
-                sdfProbeReceiver(view, pixel, viewIndex, surfacePoint, normal, packedNormal, tolerance);
                 [unroll] for (uint corner = 0u; (corner < 4u); corner++) {
                     uint ring = sdfProbeRingEntry(base + int2((corner & 1u), (corner >> 1u)));
                     float4 representative = sdfProbeRingPoint[ring];
@@ -302,7 +318,7 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
                     if (representative.w != 0.0) {
                         held[corner] = bilinear[corner];
                         weights[corner] = (bilinear[corner]
-                            * sdfProbeBlend((surfacePoint - representative.xyz), sdfVisibilityUnpackNormal(sdfProbeRingNormal[ring]), normal, tolerance));
+                            * sdfProbeBlend((surfacePoint - representative.xyz), sdfProbeRingNormal[ring], normal, tolerance));
                     }
                 }
                 if (dot(weights, float4(1.0, 1.0, 1.0, 1.0)) > 1.0e-4) {
@@ -367,6 +383,8 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
         InterlockedAdd(sdfViewsProbeRecordsRW[sdfViewsProbePoolWord()], sdfProbeExtraCount, taken);
         if ((taken + sdfProbeExtraCount) <= sdfViewsProbePoolCapacity()) {
             sdfProbeExtraBase = taken;
+        } else {
+            puckCountDetail(SdfViewsProbeNoExtrasDetail, 1u, sdfProbeExtraCount, 0u, 0u, 0u);
         }
     }
     GroupMemoryBarrierWithGroupSync();

@@ -9,6 +9,7 @@
 #include "../frame/sdf-mesh-pyramid.hlsli"
 #include "../frame/sdf-optical-depth.hlsli"
 #include "../frame/sdf-shadow-optical.hlsli"
+#include "../frame/sdf-shadow-blocks.hlsli"
 
 // The screen-space occlusion's world radius, taps and strength. A tap occludes only past the cosine bias and the lift (a
 // height above the tangent plane in pixel footprints), which keep a tessellated curve's facets and a baked surface's
@@ -210,6 +211,126 @@ float3 sdfMeshShadowGap(bool opticalPresent, uint cascade, SdfMeshCascade c, flo
     }
     return float3(gap, 1.0);
 }
+// What a receiver's block bounds prove of its shadow before any tap (sdfMeshShadowClass).
+static const uint SdfShadowClassFilter = 0u;
+static const uint SdfShadowClassLit = 1u;
+static const uint SdfShadowClassUmbra = 2u;
+
+// One layer of a cascade entry's block bounds at the record whose first word is `first`
+// (frame/sdf-shadow-blocks.hlsli): the plane, the two bounds and the flags; all zero, a record that says nothing, where
+// the entry's bounds hold no such record (the filler an entry with no layers binds).
+struct SdfShadowBlock {
+    float3 plane;
+    float low;
+    float high;
+    uint flags;
+};
+// The record's words from one entry's bounds, into `plane` and `rest` (the two bounds and the flags), where the bounds
+// hold it.
+#define SDF_SHADOW_BLOCK_LOAD(bounds) \
+    bounds.GetDimensions(words, stride); \
+    if ((first + SDF_SHADOW_BLOCK_LAYER_WORDS) <= words) { \
+        plane = uint3(bounds[first], bounds[first + 1u], bounds[first + 2u]); \
+        rest = uint3(bounds[first + SdfShadowBlockLowWord], bounds[first + SdfShadowBlockHighWord], bounds[first + SdfShadowBlockFlagsWord]); \
+    }
+SdfShadowBlock sdfMeshShadowBlock(uint cascade, uint first) {
+    uint3 plane = uint3(0u, 0u, 0u);
+    uint3 rest = uint3(0u, 0u, 0u);
+    uint words = 0u;
+    uint stride;
+
+    if (cascade == 0u) {
+        SDF_SHADOW_BLOCK_LOAD(meshShadowNearBlocks)
+    } else if (cascade == 1u) {
+        SDF_SHADOW_BLOCK_LOAD(meshShadowFarBlocks)
+    } else if (cascade == 2u) {
+        SDF_SHADOW_BLOCK_LOAD(meshShadowSecondBlocks)
+    } else {
+        SDF_SHADOW_BLOCK_LOAD(meshShadowDistantBlocks)
+    }
+
+    SdfShadowBlock block;
+
+    block.plane = asfloat(plane);
+    block.low = asfloat(rest.x);
+    block.high = asfloat(rest.y);
+    block.flags = rest.z;
+    return block;
+}
+#undef SDF_SHADOW_BLOCK_LOAD
+// Classifies a receiver against the bounds of the block of a cascade entry's layer its texel lies in, so that only a
+// receiver near a shadow's edge pays for the blocker search and the filter. The arguments are sdfMeshShadow's own for
+// the entry: the receiver's continuous texel, its depth along the light, its plane's depth change per texel
+// (`gradient`), the texel's size in metres, the entry's penumbra slope and its inverse (`cone`), which layer the
+// receiver reads and whether the entry holds glass extinction.
+//
+// The invariant: a classified receiver's visibility is, to the bit, what the taps would have summed to. The block's
+// record bounds every texel a tap can read: every tap's texel centre lies within SDF_MESH_SHADOW_FILTER_TEXELS + 1/2 of
+// the receiver's texel along each axis (a tap offset shorter than the radius, then the floor to its texel), which the
+// record's apron covers for a receiver whose reach stays inside the layer. A caster at texel centre T stands at a depth
+// along the light between the block's plane at T less its high bound and less its low bound (the stored depth runs
+// toward the light), and the receiver's own plane, the block's plane and the difference between them are linear in T,
+// so each takes its extremes over a square of taps at the square's corners.
+// - Lit: every search tap's caster stands behind the receiver's plane, so the search finds none and the role reads
+//   fully visible exactly as the search's empty answer does. Where the entry holds glass extinction near the block, an
+//   unblocked tap reads it, so such a block proves nothing lit.
+// - Umbra: every filter tap's caster stands in front of the receiver's plane by its slope clearance and the soft ramp,
+//   and inside the light's cone over the receiver by the same ramp, so each of the filter's taps hides the light whole
+//   and counts whole, and the role reads zero. The filter's radius is bounded by the farthest caster the search could
+//   meet: the penumbra follows the gap to the blocker the search sizes it by, which is no farther than that one.
+// Each test keeps a margin (`epsilon`) past the rounding between these bounds and a tap's own arithmetic, so a receiver
+// within it of either class filters. Defining SDF_SURFACE_OMIT_SHADOW_CLASSES compiles the classes out, every receiver
+// filtering as the taps alone decide: a measuring switch for the classes' share of `sdf.world$surface`, read against a
+// reload of the same tree without it, and the still it must leave unchanged.
+uint sdfMeshShadowClass(uint cascade, SdfMeshCascade c, uint side, float2 texel, float receiver, float2 gradient, float texelWorld, float slope, float cone, bool exit, bool opticalPresent) {
+#if defined(SDF_SURFACE_OMIT_SHADOW_CLASSES)
+    return SdfShadowClassFilter;
+#else
+    // The apron is one texel wider than the filter's widest radius (SdfKernelInterfaces.MeshShadowBlockApron), so a
+    // receiver this far inside the layer reads no texel past its edge, where a tap clamps to the edge texel.
+    float reach = float(SDF_SHADOW_BLOCK_APRON);
+
+    if (any(texel < reach) || any(texel > (float(side) - reach))) {
+        return SdfShadowClassFilter;
+    }
+
+    uint2 at = (uint2(texel) / SDF_SHADOW_BLOCK_EDGE);
+    SdfShadowBlock block = sdfMeshShadowBlock(cascade, sdfShadowBlockWord(side, at, exit));
+
+    if ((block.flags & SdfShadowBlockReduced) == 0u) {
+        return SdfShadowClassFilter;
+    }
+
+    float span = (c.far - c.near);
+    float2 offset = (texel - ((float2(at) + 0.5) * float(SDF_SHADOW_BLOCK_EDGE)));
+    // How far the block's plane stands behind the receiver's plane at the receiver's texel, along the light, and the
+    // most that changes per texel along the two axes together.
+    float stand = ((c.far - ((block.plane.x + dot(block.plane.yz, offset)) * span)) - receiver);
+    float2 lean = ((-span * block.plane.yz) - gradient);
+    float leaning = (abs(lean.x) + abs(lean.y));
+    float epsilon = ((1.0e-5 * span) + (1.0e-3 * texelWorld));
+    // The farthest any caster the search can meet stands in front of the receiver's plane.
+    float farthest = ((((SdfMeshShadowMaxTexels + 0.5) * leaning) - stand) + (span * block.high));
+
+    if (farthest <= -epsilon) {
+        return ((opticalPresent && ((block.flags & SdfShadowBlockGlass) != 0u)) ? SdfShadowClassFilter : SdfShadowClassLit);
+    }
+
+    // The widest the filter can be, the half side of the square its taps' texel centres lie in, and the farthest any
+    // lies from the receiver's texel.
+    float widest = clamp(((farthest * slope) / texelWorld), 1.0, SdfMeshShadowMaxTexels);
+    float halfSide = (widest + 0.5);
+    float lateral = (widest + 0.7072);
+    float soft = (SdfMeshShadowSoftTexels * texelWorld);
+    // The least any filter tap's caster stands in front of the receiver's plane past its slope clearance, and the least
+    // any stands inside the light's cone over the receiver.
+    float blocking = ((((span * block.low) - stand) - (halfSide * leaning)) - ((SdfMeshShadowSlopeBias * texelWorld) * lateral));
+    float inCone = ((((span * block.low) - stand) - ((halfSide * span) * (abs(block.plane.y) + abs(block.plane.z))))
+        - ((texelWorld * cone) * max((lateral - SdfMeshShadowNearTexels), 0.0)));
+
+    return (((blocking >= (soft + epsilon)) && (inCone >= (soft + epsilon))) ? SdfShadowClassUmbra : SdfShadowClassFilter);
+#endif
+}
 // A shadow role's visibility at a surface point, in `x`, from the first of its cascade entries that holds it: a blocker
 // search sizes the penumbra from the entry's penumbra slope and the gap to the nearest blocker inside the light's cone
 // over the point (the nearest outside it when the search finds none in the cone), and a percentage-closer filter of
@@ -287,6 +408,14 @@ float2 sdfMeshShadow(SdfPixel p, float3 surfacePoint, float3 face, uint role) {
         float3 lightNormal = float3(dot(face, c.right), dot(face, c.up), ((facing > 0.0) ? max(facing, 0.2) : min(facing, -0.2)));
         float2 gradient = (float2((-lightNormal.x * c.aspect), lightNormal.y) * (texelWorld / lightNormal.z));
         float searchTexels = SdfMeshShadowMaxTexels;
+        // A receiver its block's bounds place wholly in the light or wholly in the umbra takes the taps' answer without
+        // them (sdfMeshShadowClass).
+        uint shadowClass = sdfMeshShadowClass(cascade, c, side, texel, receiver, gradient, texelWorld, slope, cone, exit, opticalPresent);
+
+        if (shadowClass != SdfShadowClassFilter) {
+            visibility = ((shadowClass == SdfShadowClassUmbra) ? 0.0 : 1.0);
+            continue;
+        }
         // The nearest blocker inside the light's cone over the receiver sizes the penumbra: the light it hides reaches
         // the receiver across the narrowest penumbra, and a farther blocker's wider one would carry the filter past
         // that blocker's cone (a slab over a wall's top, seen beside higher floors through a window). The search's taps
