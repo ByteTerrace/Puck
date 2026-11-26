@@ -187,8 +187,8 @@ let lookShots = [
 // luminance, and `intensity` the light each metre of the tube gives, in candela per metre (a fluorescent tube gives
 // about 200), which a level's switch writes into `hallLamps` for the stretch of the flaw that storey holds.
 let lookFlaw = {
-  core: 0.032
-  sleeve: 0.075
+  core: 0.07
+  sleeve: 0.16
   frost: 0.42
   glass: "#EAF4FF"
   depth: 0.03
