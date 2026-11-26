@@ -6,6 +6,20 @@
 function boundsCentre(box) = [((box.x0 + box.x1) / 2), ((box.y0 + box.y1) / 2), ((box.z0 + box.z1) / 2)]
 function boundsHalf(box) = [((box.x1 - box.x0) / 2), ((box.y1 - box.y0) / 2), ((box.z1 - box.z0) / 2)]
 
+// The plan of a box `{ id, x0, x1, z0, z1 }` with an opening `{ x0, x1, z0, z1 }` cut through it, as the boxes left
+// round the opening: the full-width strips south and north of it and the pieces west and east of it between them, each
+// keeping the box's other members and its id with a side's suffix. A box the opening misses is kept whole.
+// `boundsCutAll` cuts every opening of a list through every box of a list, for a slab holed by stairwells and shafts.
+function boundsCut(box, hole) = (
+  ((hole.x0 >= box.x1) or (hole.x1 <= box.x0) or (hole.z0 >= box.z1) or (hole.z1 <= box.z0)) ? [box] : concat(
+    ((hole.z0 > box.z0) ? [(box with { id: $"{box.id}-s", z1: hole.z0 })] : []),
+    ((hole.z1 < box.z1) ? [(box with { id: $"{box.id}-n", z0: hole.z1 })] : []),
+    ((hole.x0 > box.x0) ? [(box with { id: $"{box.id}-w", x1: hole.x0, z0: maximum(box.z0, hole.z0), z1: minimum(box.z1, hole.z1) })] : []),
+    ((hole.x1 < box.x1) ? [(box with { id: $"{box.id}-e", x0: hole.x1, z0: maximum(box.z0, hole.z0), z1: minimum(box.z1, hole.z1) })] : [])
+  )
+)
+function boundsCutAll(boxes, holes) = reduce(holes, boxes, (kept, hole) => flatMap(kept, box => boundsCut(box, hole)))
+
 // One box given its world bounds, for a creation standing at the origin with no yaw: the author frame is turned 180
 // degrees about up from the world's, so the row negates x and z. `bevel` chamfers it (0 leaves the box's own fillet).
 template boundsBox(label, x0, x1, y0, y1, z0, z1, slot, bevel = 0) {

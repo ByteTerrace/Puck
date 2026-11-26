@@ -6,68 +6,74 @@
 // A surface domain samples one ground per column: the first surface under its probe's start, origin height plus
 // probeUp. The start stands below every lintel a walker passes under (the hall's entrance opening is 3.3 m tall,
 // Wonderland's doorway 3.05 m, the wing's 3 m) and above the Moth's 2.06 m, so a doorway's cells find its floor rather
-// than starting inside the wall over it. The hall's switchback stairs (gallery/gallery.puck) repeat every storey, so no one
-// ground per column can hold a level and the flights above and below it, and each storey's stairwell is two domains of
-// its own. Flight A's side (x 10.25 .. 12.25) probes from under the next storey's flight A down over its treads and the
-// half landing, and shares cells with the level under it on those treads. Flight B's side (x 12.25 .. 14.5) has nothing
-// over it but the next storey's half landing, so it probes from just over the next level's floor and sees flight B's
-// treads, the half landing and that floor at the flight's head: it shares cells with the level over it on that floor,
-// and with flight A's side on the half landing (column x 12.25).
+// than starting inside the wall over it. The hall's corner stairs (gallery/layout.puck's `galleryStairs`) repeat every
+// storey, so no one ground per column can hold a level and the treads above and below it, and each storey of each stair
+// is two domains of its own. A switchback's first flight's half probes from under the next storey's first flight down
+// over its treads and the half landing, and shares cells with the level under it at its foot; its second flight's half
+// has nothing over it but the next storey's half landing, so it probes from just over the next level's floor and sees
+// the flight's treads, the half landing and that floor at its head, sharing cells with the level over it there and with
+// the first half on the landing. A spiral's turn is two halves: the half it climbs first probes from under the next
+// storey's treads over it down to the floor it starts from, and the half it climbs second from just over the next floor
+// down to where the first half ended, so the two share cells at the turn's back and each shares its floor at the front.
 //
 // A route crosses between two domains only at a cell both prove walkable at the same place and height, so every grid
 // here is aligned: cell sizes exact in fixed point (2, 0.5 and 0.25 m) and origins on the finest grid, so a coarser
 // grid's cell centers are cells of a finer one where they overlap. Cells are sized for the corridors and doorways they
-// cross: the stairs' 0.25 m cells hold one tread each (0.4 m treads, 0.25 m risers, under the Moth's 0.3 m step), the
+// cross: the stairs' 0.25 m cells sample each tread (0.47 m switchback treads, 0.25 m risers, under the Moth's 0.3 m step), the
 // hall and the spawn ground's 0.5 m cells pass the 2 m doorways with the Moth's 0.35 m radius clear of both jambs, and
 // the valley's 2 m cells cross its open floor.
 
 import "shapes"
 import "walkers"
 
+// A stair domain's grid over a plan rectangle, its origin and far edge snapped out to the 0.25 m grid in world
+// coordinates.
+let navStairCell = 0.25
+function navSnap(v) = (floor((v / navStairCell)) * navStairCell)
+function navStair(name, x0, x1, z0, z1, y, probeUp, probeDown) = walkable(
+  name,
+  [navSnap(galleryWorld(x0, 0, 0)[0]), y, navSnap(galleryWorld(0, 0, z0)[2])],
+  navStairCell,
+  (floor(((galleryWorld(x1, 0, 0)[0] - navSnap(galleryWorld(x0, 0, 0)[0])) / navStairCell)) + 1),
+  (floor(((galleryWorld(0, 0, z1)[2] - navSnap(galleryWorld(0, 0, z0)[2])) / navStairCell)) + 1),
+  probeUp,
+  probeDown,
+  ((floor(((galleryWorld(x1, 0, 0)[0] - navSnap(galleryWorld(x0, 0, 0)[0])) / navStairCell)) + 1) * (floor(((galleryWorld(0, 0, z1)[2] - navSnap(galleryWorld(0, 0, z0)[2])) / navStairCell)) + 1))
+)
+// A stair's two halves in the plan: the one its piece's +X side turns to and the one its -X side does (the yaw turns
+// the piece a half round or not at all), each reaching a cell past the centre line, and its depth reaching half a metre
+// past its front onto the floor it arrives at.
+function navHalfX0(stair, positive) = (((stair.yaw == 180) == (positive == 1)) ? (stairCentreX(stair) - navStairCell) : stair.well.x0)
+function navHalfX1(stair, positive) = (((stair.yaw == 180) == (positive == 1)) ? stair.well.x1 : (stairCentreX(stair) + navStairCell))
+function navZ0(stair) = ((stair.yaw == 180) ? stair.well.z0 : (stair.well.z0 - 0.5))
+function navZ1(stair) = ((stair.yaw == 180) ? (stair.well.z1 + 0.5) : stair.well.z1)
+// A switchback's first flight climbs its piece's +X half and its second the -X half; a spiral (turning from its front
+// toward its -X side first) climbs its -X half first and its +X half second.
+function navStairDomains(stair, level) = (
+  (stair.kind == "switchback") ? [
+    navStair($"hall-stairs-{stair.id}-a-{level}", navHalfX0(stair, 1), navHalfX1(stair, 1), navZ0(stair), navZ1(stair), (galleryFloor[level] + 2.2), 2.25, 2.6)
+    navStair($"hall-stairs-{stair.id}-b-{level}", navHalfX0(stair, 0), navHalfX1(stair, 0), navZ0(stair), navZ1(stair), galleryFloor[(level + 1)], 0.4, 2.5)
+  ] : [
+    navStair($"hall-stairs-{stair.id}-a-{level}", navHalfX0(stair, 0), navHalfX1(stair, 0), navZ0(stair), navZ1(stair), (galleryFloor[level] + 2.6), 0.4, 3.1)
+    navStair($"hall-stairs-{stair.id}-b-{level}", navHalfX0(stair, 1), navHalfX1(stair, 1), navZ0(stair), navZ1(stair), galleryFloor[(level + 1)], 0.5, 2.9)
+  ]
+)
+
 navigation {
   domains: concat(
     [
-      // The spawn's ground, the hall's level 0 and Wonderland, x -40 .. 72, z -30 .. 54.
-      walkable("grounds", [-40, 0.05, -30], 0.5, 224, 168, 2.2, 2, 1024)
+      // The spawn's ground, the hall's level 0 and Wonderland, x -40 .. 73, z -30 .. 54.
+      walkable("grounds", [-40, 0.05, -30], 0.5, 226, 168, 2.2, 2, 1024)
       // The caldera's floor out to the walls' feet (valley.puck), x and z -210 .. 210, down to the pool's basin.
       walkable("valley", [-210, 0.05, -210], 2, 211, 211, 2.2, 3, 1024)
     ],
-    // Each storey of the gallery above level 0, x 10 .. 70, z 8 .. 50 with the projecting wing: its probe starts 1.9 m
+    // Each storey of the gallery above level 0, x 6 .. 73, z 8 .. 50 with the projecting wing: its probe starts 1.9 m
     // over the floor (under every doorway, over the next storey's flights) and reaches down to the half landing under
     // it.
     map(
       range(1, 3),
-      level => walkable($"hall-level-{level}", [10, galleryFloor[level], 8], 0.5, 120, 84, 1.9, 2.35, 1024)
+      level => walkable($"hall-level-{level}", [6, galleryFloor[level], 8], 0.5, 134, 84, 1.9, 2.35, 1024)
     ),
-    // Flight A's side of the stairwell from each level to the next, x 22.25 .. 24.5, z 12 .. 18.25: its probe
-    // starts 4.45 m over the lower floor, under the next storey's flight A (4.5 m), and reaches the lower floor.
-    map(
-      range(0, 3),
-      level => walkable(
-        $"hall-stairs-a-{level}",
-        [22.25, (galleryFloor[level] + 2.2), 12],
-        0.25,
-        9,
-        25,
-        2.25,
-        2.6,
-        225
-      )
-    ),
-    // Flight B's side, x 24.25 .. 26.75: its probe starts 0.4 m over the next level's floor, under the next storey's half
-    // landing (2 m over that floor), and reaches the half landing 2.2 m below.
-    map(
-      range(0, 3),
-      level => walkable(
-        $"hall-stairs-b-{level}",
-        [24.25, galleryFloor[(level + 1)], 12],
-        0.25,
-        10,
-        25,
-        0.4,
-        2.5,
-        250
-      )
-    )
+    flatMap(galleryStairs, stair => flatMap(range(0, 3), level => navStairDomains(stair, level)))
   )
 }
