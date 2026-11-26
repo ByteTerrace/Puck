@@ -330,7 +330,11 @@ One owner returns a seat. While a departure the client has not settled still
 covers the seat, that departure's own resolution brings back the body the seat
 left with (the destination answers it `Ended` too), so the second path waits
 for it and seats the player as a new body only if the departure settles
-without bringing the seat home.
+without bringing the seat home. A refusal is acted on only while the route
+that heard it is the one the seat follows
+(`WorldInstanceHost.ReturnEndedSeats`): a route's observer can queue its
+refusal after the seat came home by the departure, and by then the seat may
+follow a new traveller, which that refusal says nothing about.
 
 `Ended` differs from the two answers a client already handled. `Missing` says
 one key is dead and leaves a confirmed commit standing. A lost connection says
@@ -520,15 +524,32 @@ checks that:
    guests' share are each refused by name, and a reservation from the other
    world of the group is then leased;
 6. a vouched identity that signed for no session, and a session no root
-   vouched for, are refused a credential;
+   vouched for, are refused a credential; over a real connection, a key the
+   issuer vouched for that signs the door's challenge with no session is
+   refused the handshake by name, and the same sign-in signing for a session
+   is given its credential;
 7. a capture with players present succeeds, and its checkpoint is a baseline
    that still holds their rows;
 8. the restored rows hold no guest and no guest's row, at the point's tick,
    and keep the row the group's own reservation left;
 9. the client's seat comes home once, with nothing owed for it, and joins the
-   restored group again;
+   restored group again. The client's commit was confirmed and its settlement
+   record never landed, so its departure is still in doubt at the restore: the
+   observation's `SessionEnded` arrives first and returns nothing while the
+   departure covers the seat, and the departure's `Ended` resolution then
+   restores the body the seat left with;
 10. the player's body walks from the entry row to the other row, the client
     goes away, the body's grace runs out where it stands, and neither row
     keeps a body, a credential or a ledger row of the session.
+
+Three laws stand beside it.
+`GuestLedgerReplayLawTests.AReplayReclaimsAGuestsSessionOnTheTickTheLiveWorldDid`
+re-drives a recording of a guest's entry and retirement in a shadow that has
+no boundary, and finds the shadow's ledger equal to the live world's on every
+tick. `ForwardedRouteRecoveryLawTests` restores a forwarding world's earlier
+checkpoint beside a neighbour's later one, and the route to a traveller the
+neighbour retired is gone after the first drain. `FederationTravelerWordLawTests`
+carries a player's absence, and a retirement, across a socket between two
+hosts.
 
 The live check is the RTX 2060's player install joining the hosted authority.

@@ -160,7 +160,12 @@ public sealed partial class WorldReleaseCutoverLawTests {
             },
         };
         using var boot = HostRow.Build(definition: clientDocument, name: WorldInstanceHost.BootInstanceName);
+        // The client's crossing log takes every record at once but a settlement, which it holds: the client's commit
+        // is confirmed and its departure stays in doubt until the probe answers the record.
+        var clientLog = new HeldSettlementLog();
+        var clientLines = new NarratedLines();
 
+        boot.Server.InstallCrossingLog(log: clientLog);
         boot.Server.OverrideAuthorityIdentity(authorityIdentity: session);
         boot.Instance.Federation = new WorldFederationIdentity(
             Authenticator: new WorldAttestedAuthenticator(oracle: oracle, remoteKeyHash: transportKey),
@@ -175,6 +180,8 @@ public sealed partial class WorldReleaseCutoverLawTests {
             seats: seats,
             stateRoot: new WorldStateRoot(path: Directory.CreateDirectory(path: clientScratch.PathOf(name: "state")).FullName)
         );
+
+        using var clientNarration = client.AttachNarrationSink(sink: clientLines);
 
         try {
             client.AdmitBoot(row: boot.Instance);
@@ -192,6 +199,12 @@ public sealed partial class WorldReleaseCutoverLawTests {
             void StepClient() {
                 _ = client.FollowRemoteJoin();
                 client.DrainPendingTransfers();
+                // The host loop steps its boot world itself, whenever that world has work of its own: here, a departure
+                // still in doubt, whose crossing record settles when the tick opens and drains the mailbox.
+                if (client.ShouldStepBoot(stepTicks: Fixtures.StepTicks)) {
+                    _ = boot.Server.DrainAdministrative();
+                    boot.Server.Advance(stepTicks: Fixtures.StepTicks);
+                }
                 client.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
             }
             bool SeatAway() => (seats.RoutedEndpoint(slot: 0)?.Identity.StartsWith(value: "$traveler/", comparisonType: StringComparison.Ordinal) == true);
@@ -406,6 +419,47 @@ public sealed partial class WorldReleaseCutoverLawTests {
             Assert.Contains(expectedSubstring: "answers only a player's session", actualString: boundary.CredentialRefusal(identity: new VerifiedPeerIdentity(Authority: "beta", ValidThrough: long.MaxValue)));
             Assert.Contains(expectedSubstring: "answers only a player's session", actualString: boundary.CredentialRefusal(identity: Session(ns: out _, subject: "pinned", vouched: false)));
 
+            // The same over a real connection. The issuer vouches for a second key of the signed-in player, and that
+            // key signs the door's challenge with no session behind it, which the engine's own client never does. The
+            // door refuses the handshake by name. The same sign-in signing for a session is given its credential.
+            using var bareKey = ECDsa.Create(curve: ECCurve.NamedCurves.nistP256);
+            var vouching = Task.Run(function: () => WorldIssuanceClient.Issue(
+                cancellationToken: Token,
+                clock: TimeProvider.System,
+                credential: credential,
+                endpoint: issuerEndpoint!,
+                key: bareKey,
+                remoteKeyHash: transportKey
+            ), cancellationToken: Token);
+
+            await silo.UntilAsync(done: () => vouching.IsCompleted, each: StepClient, what: "the issuer vouched for a second key");
+            var bare = FederationHandshakeAsync(endpoint: endpoint, oracle: new SessionlessOracle(identity: await vouching, key: bareKey));
+
+            await silo.UntilAsync(done: () => bare.IsCompleted, each: StepClient, what: "the door answered a claim that signed for no session");
+            var (bareKind, bareText) = await bare;
+
+            Assert.Equal(expected: ((byte)WorldFederationResponse.Refusal), actual: bareKind);
+            Assert.StartsWith(
+                expectedStartString: $"{nameof(WorldFederationRefusal.AuthenticationFailed)}: closed rewind group answers only a player's session",
+                actualString: bareText
+            );
+            using var sessioned = new IssuedKeySigningOracle(
+                issue: (runKey, ct) => WorldIssuanceClient.Issue(
+                    cancellationToken: ct,
+                    clock: TimeProvider.System,
+                    credential: credential,
+                    endpoint: issuerEndpoint!,
+                    key: runKey,
+                    remoteKeyHash: transportKey
+                ),
+                session: Guid.NewGuid(),
+                validity: WorldAttestedAuthenticator.MaximumClaimAge
+            );
+            var admitted = FederationHandshakeAsync(endpoint: endpoint, oracle: sessioned);
+
+            await silo.UntilAsync(done: () => admitted.IsCompleted, each: StepClient, what: "the door answered a claim that signed for a session");
+            Assert.Equal(expected: ((byte)WorldFederationResponse.Authenticated), actual: (await admitted).Kind);
+
             // 3. A capture with the player present is a baseline that still holds the player's rows.
             var capturing = source.ExportReleaseFixtureAsync(Guid.NewGuid(), Token);
 
@@ -457,8 +511,28 @@ public sealed partial class WorldReleaseCutoverLawTests {
             Assert.True(condition: candidate.Instances.TryGet(instance: out var restoredAlpha, name: "alpha"));
             Assert.Equal(expected: point.Worlds["alpha"].Tick, actual: restoredAlpha!.CompletedTicks);
 
-            // 5. The client is told its session ended there, takes its seat back and joins again as a first entry.
+            // 5. The client is told its session ended there, takes its seat back and joins again as a first entry. It is
+            // told twice. Its commit was confirmed and its settlement record never landed, so its departure is still in
+            // doubt, and the restored group answers both that departure's status question (Ended) and its traveler's
+            // observation (SessionEnded). One of the two returns the seat.
             silo = new SiloPump(host: candidate);
+            Assert.True(condition: clientLog.Holding, userMessage: "the client's settlement record was not in flight at the restore");
+            bool ToldEnded() => clientLines.Any(predicate: static line => line.Contains(value: nameof(WorldFederationRefusal.SessionEnded), comparisonType: StringComparison.Ordinal));
+            int Returns() => clientLines.Count(predicate: static line => line.Contains(value: "returned to", comparisonType: StringComparison.Ordinal));
+
+            // The observation's refusal arrives while the client is not stepped, so it is the first word the client acts on.
+            await silo.UntilAsync(done: ToldEnded, what: "the client's observation was refused as ended");
+            for (var step = 0; (step < 8); step++) {
+                StepClient();
+            }
+            // That word does not seat the player at home while the departure still holds the body the seat left with.
+            Assert.True(condition: SeatAway());
+            Assert.False(condition: boot.Server.Population.IsActive(index: 0));
+            Assert.Equal(expected: 0, actual: Returns());
+
+            // The store refuses the settlement record, and from here answers at once. The departure resolves as ended
+            // and restores the body, which is the seat's one return.
+            clientLog.Answer(durability: WorldCrossingDurability.Refused);
             var returned = false;
             string? owedAtHome = null;
 
@@ -478,6 +552,14 @@ public sealed partial class WorldReleaseCutoverLawTests {
             );
             Assert.Null(@object: owedAtHome);
             Assert.Equal(expected: 1, actual: Counts(host: candidate, world: "alpha").MobilityCredentials);
+            // The seat came home once, as the body it left with, and its new traveler is left where it stands.
+            await silo.UntilAsync(done: () => (clientLog.Settled == 2), each: StepClient, what: "the client settled its return and then its second entry");
+            for (var step = 0; (step < 16); step++) {
+                StepClient();
+            }
+            Assert.True(condition: SeatAway());
+            Assert.Equal(expected: 1, actual: Returns());
+            Assert.DoesNotContain(collection: clientLines, filter: static line => line.Contains(value: "seated again as a new body", comparisonType: StringComparison.Ordinal));
 
             // 6. The player walks on to beta. alpha keeps the session's credential and a route; beta holds the body.
             var walking = candidate.Instances.TryGet(instance: out var candidateAlpha, name: "alpha");
@@ -536,6 +618,114 @@ public sealed partial class WorldReleaseCutoverLawTests {
     }
     private const int GuestKeysPerSession = 4;
     private const int GuestKeys = 8;
+
+    // A crossing log that takes every record at once except the first settlement, which waits for the probe's answer,
+    // as a store that is slow to answer one write does.
+    private sealed class HeldSettlementLog : IWorldCrossingLog {
+        private TaskCompletionSource<WorldCrossingAppend>? m_held;
+        private bool m_answered;
+        private int m_settled;
+
+        /// <summary>Gets whether a settlement record is waiting for its answer.</summary>
+        public bool Holding => (Volatile.Read(location: ref m_held) is not null);
+        /// <summary>Gets how many settlement records are durable.</summary>
+        public int Settled => Volatile.Read(location: ref m_settled);
+
+        public ValueTask<WorldCrossingAppend> Append(in WorldCrossingEntry entry) {
+            if (entry.Record is not WorldCrossingRecord.Settlement) {
+                return new ValueTask<WorldCrossingAppend>(result: WorldCrossingAppend.Durable);
+            }
+            if (m_answered) {
+                _ = Interlocked.Increment(location: ref m_settled);
+                return new ValueTask<WorldCrossingAppend>(result: WorldCrossingAppend.Durable);
+            }
+            var held = new TaskCompletionSource<WorldCrossingAppend>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
+
+            Volatile.Write(location: ref m_held, value: held);
+            return new ValueTask<WorldCrossingAppend>(task: held.Task);
+        }
+        /// <summary>Answers the held settlement record; every later record is durable at once.</summary>
+        public void Answer(WorldCrossingDurability durability) {
+            m_answered = true;
+            if (durability == WorldCrossingDurability.Durable) {
+                _ = Interlocked.Increment(location: ref m_settled);
+            }
+            Interlocked.Exchange(location1: ref m_held, value: null)?.SetResult(result: new WorldCrossingAppend(
+                Durability: durability,
+                Reason: ((durability == WorldCrossingDurability.Durable) ? string.Empty : $"the store answered {durability}")
+            ));
+        }
+    }
+    // Every line a host narrated, in order, read from the probe's thread while route observers narrate from theirs.
+    private sealed class NarratedLines : IWorldNarrationSink, IEnumerable<string> {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> m_lines = new();
+
+        public IEnumerator<string> GetEnumerator() => m_lines.GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+        public void Narrate(in WorldNarration narration) => m_lines.Enqueue(item: narration.Text);
+    }
+    // A signing oracle the engine's own client never is: the issuer vouches for its key as it does for a player's, and
+    // its claims sign the challenge alone, with no session bytes behind it.
+    private sealed class SessionlessOracle(ECDsa key, WorldIssuedIdentity identity) : ISigningOracle {
+        public byte[] Sign(ReadOnlySpan<byte> challenge, CancellationToken cancellationToken) {
+            var codec = new CborAttestationCodec();
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+
+            return AttestationChainEnvelope.Encode(
+                chain: identity.Chain,
+                claim: codec.EncodeAttestation(attestation: AttestationSigner.SignClaim(
+                    audience: WorldAttestedAuthenticator.Audience,
+                    claimBytes: challenge.ToArray(),
+                    codec: codec,
+                    domain: identity.Domain,
+                    notAfter: Math.Min(val1: (now + 60L), val2: identity.NotAfter),
+                    notBefore: (now - 60L),
+                    purpose: WorldAttestedAuthenticator.Purpose,
+                    sequence: null,
+                    signerAlgorithm: AttestationAlgorithms.EcdsaP256Sha256,
+                    signerKey: key,
+                    subject: identity.Subject
+                ))
+            );
+        }
+    }
+    // Opens a federation connection to a door and answers its challenge with the oracle's claim, as a peer's lane does.
+    // Returns the door's answer: Authenticated, or a refusal and its text.
+    private static async Task<(byte Kind, string Text)> FederationHandshakeAsync(string endpoint, ISigningOracle oracle) {
+        // A network on the wall clock, as the probe's own client is: the silo's row verifies on system time.
+        using var network = new WorldPeerNetwork(transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
+        var address = IPEndPoint.Parse(s: endpoint);
+        await using var stream = ((Puck.Networking.Peers.PeerStream)await network.ConnectAsync(ct: Token, endpoint: address));
+
+
+        await HandshakeWireFormat.WriteHelloAsync(ct: Token, key: WorldFederationCodec.WireKey, stream: stream);
+        var challenge = await WorldFederationCodec.ReadResponseAsync(ct: Token, stream: stream);
+
+        Assert.True(condition: challenge.Ok, userMessage: challenge.Failure.ToString());
+        Assert.Equal(expected: ((byte)WorldFederationResponse.Challenge), actual: challenge.Kind);
+        var counterChallenge = RandomNumberGenerator.GetBytes(count: WorldAdmissionDoor.ChallengeBytes);
+        var proof = oracle.Sign(
+            cancellationToken: Token,
+            challenge: WorldFederationCodec.BindProofChallenge(
+                challenge: challenge.Body.Span,
+                clientKeyHash: network.Peer.Id.KeyHash,
+                counterChallenge: counterChallenge,
+                serverKeyHash: stream.Link.RemoteId.KeyHash,
+                serverProof: false
+            )
+        );
+
+        await WorldFederationCodec.WriteRequestAsync(
+            body: WorldFederationCodec.EncodeAuthentication(challenge: counterChallenge, proof: proof),
+            ct: Token,
+            kind: WorldFederationRequest.Authenticate,
+            stream: stream
+        );
+        var reply = await WorldFederationCodec.ReadResponseAsync(ct: Token, stream: stream);
+
+        Assert.True(condition: reply.Ok, userMessage: reply.Failure.ToString());
+        return (reply.Kind, ((reply.Kind == ((byte)WorldFederationResponse.Refusal)) ? System.Text.Encoding.UTF8.GetString(bytes: reply.Body.Span) : string.Empty));
+    }
 
     // A row that holds nothing of any guest: no held transaction, no credential, no leased traveler and no ledger row
     // a guest's session owns. Rows the group's own worlds hold are theirs and stay.

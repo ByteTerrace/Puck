@@ -263,13 +263,15 @@ public sealed partial class WorldInstanceHost {
                     // the committed onward route recursively, so replacing the wrapper here would tear down a live
                     // intent stream between ownership epochs and manufacture an unavailable/release window. Keying
                     // this cache by transfer id leaked one route, pump and observer for every A↔B seam crossing.
-                    var routeName = $"$traveler/{m_machineId:N}/{trackedSlot}";
+                    var routeName = TravelerRouteName(slot: trackedSlot);
 
                     if (!m_remoteAuthorities.TryGetValue(
                         key: routeName,
                         value: out var routeAuthority
                     )) {
                         WorldAuthorityEndpoint? publishedEndpoint = null;
+                        // Set once the route below exists. Its observer starts when a sink attaches, which is later.
+                        WorldRemoteAuthority? started = null;
 
                         routeAuthority = new WorldRemoteAuthority(
                             expectedAuthority: remoteTarget.PeerAuthority,
@@ -283,7 +285,9 @@ public sealed partial class WorldInstanceHost {
                             applicationStopping: m_applicationStopping,
                             narrationHub: m_narration,
                             boundary: m_linkBoundary,
-                            routeEnded: () => m_endedSeatRoutes.Enqueue(item: trackedSlot),
+                            routeEnded: () => {
+                                if (started is { } heard) { m_endedSeatRoutes.Enqueue(item: (trackedSlot, heard)); }
+                            },
                             routeChanged: route => {
                                 if (
                                     (publishedEndpoint is not null) &&
@@ -320,6 +324,7 @@ public sealed partial class WorldInstanceHost {
                                 }
                             }
                         );
+                        started = routeAuthority;
                         m_remoteAuthorities[routeName] = routeAuthority;
                         RegisterRemoteCustodyPeer(remote: routeAuthority);
                         publishedEndpoint = EndpointFor(
