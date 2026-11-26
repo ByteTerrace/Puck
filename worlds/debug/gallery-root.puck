@@ -51,3 +51,18 @@ text {
     }
   ]
 }
+
+// The exhibits, their motion controls and the cells their state-bound exhibits read (shapes.puck).
+placements {
+  galleryPlacements()
+}
+
+state {
+  world {
+    galleryState()
+  }
+}
+
+prototypes {
+  galleryPrototypes()
+}

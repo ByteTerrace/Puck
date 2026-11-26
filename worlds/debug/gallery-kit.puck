@@ -1,0 +1,31 @@
+// The gallery's kit pieces, each as a creation of its own so `puck mesh preview --world worlds/debug/gallery-kit.puck
+// --prototype <id>` judges its form in seconds without a World.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "gallery-kit"
+
+import "../standard/architecture"
+
+prototypes {
+  prototype "kit-plinth" {
+    document {
+      name: "kit-plinth"
+      schema: "puck.creation.v1"
+      palette: plinthPalette
+      exhibitPlinth(base: 0)
+      shape Sphere "subject" {
+        material: plinthBrass
+        position [0, 1.2, 0]
+        scale [0.5, 0.5, 0.5]
+      }
+    }
+  }
+}
+
+placements {
+  placement "kit-plinth" {
+    prototype: "kit-plinth"
+    position [0, 0, 4]
+  }
+}
