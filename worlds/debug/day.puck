@@ -109,26 +109,20 @@ dayCycle(
       shadows: false
       fallback: "#00000000"
     }
+    // The sun's companion (moon-frame.puck's `companionStar`) on its turn about the sun (the `pair` clock, which
+    // sun-watch.puck adopts from the sun's world), drawn over the sun's disc where the two meet.
+    starDisc(of: companionStar, name: "companion", color: companionStar.color)
+  ],
+  // The companion's light: a second, redder light and a second shadow, risen and set with the sun and dimmed by the
+  // same horizon.
+  otherLights: [
+    starLight(of: companionStar, turns: [sunTurn, companionTurn], illuminance: {
+      clock: altitude
+      keys [
+        { at: 0, value: sunIlluminance("day", companionStar.illuminance) }
+        { at: 300, value: sunIlluminance("day", companionStar.illuminance) }
+        { at: 2250, value: companionStar.illuminance, ease: Step }
+      ]
+    })
   ]
 )
-
-// The sun's companion (moon-frame.puck's `companionStar`), on its turn about the sun (the `pair` clock, which
-// sun-watch.puck adopts from the sun's world): a second, redder light and a second disc over the day's sky, risen and
-// set with the sun and dimmed by the same horizon.
-render {
-  lighting {
-    lights [
-      starLight(of: companionStar, turns: [sunTurn, companionTurn], illuminance: {
-        clock: altitude
-        keys [
-          { at: 0, value: sunIlluminance("day", companionStar.illuminance) }
-          { at: 300, value: sunIlluminance("day", companionStar.illuminance) }
-          { at: 2250, value: companionStar.illuminance, ease: Step }
-        ]
-      })
-    ]
-  }
-  sky {
-    layers [starDisc(of: companionStar, name: "companion", color: companionStar.color)]
-  }
-}
