@@ -768,7 +768,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             names?.Add(item: name);
         }
         Term(holds: (m_gpuCameraSampleTask is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_gpuCameraSampleTask, name: "camera-sample"));
-        Term(holds: (m_worker is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_worker, name: "worker"));
+        Term(holds: (m_worker is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_worker, name: (((names is not null) && (m_gpuTrace?.DescribeWait() is { } wait)) ? $"worker-{wait}" : "worker")));
         Term(holds: (m_build is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_build, name: "build"));
         Term(holds: ((m_scene is not null) && m_owed), name: "owed");
         Term(holds: m_refillOwed, name: "refill");

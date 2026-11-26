@@ -776,4 +776,17 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     }
     /// <summary>Gets the probe scenes once created, without creating them, or <see langword="null"/>.</summary>
     internal SdfMeshProbeScenes? ProbeScenesIfCreated { get { lock (m_gate) { return (m_disposed ? null : m_probeScenes); } } }
+    /// <summary>Gets whether the store owes copies only a residency's upload carries (<see cref="RecordOwed"/> and
+    /// <see cref="SdfMeshProbeScenes.RecordOwed"/>): a compaction's moves, a grown region's carry, or the probe scenes'
+    /// words. Nothing a view's signature reads moves while they wait, so a frame whose views all stand still opens an
+    /// upload for them (<see cref="SdfWorldPasses.ReadsPrepared"/>). Safe to read from any thread.</summary>
+    internal bool OwesUploadCopies {
+        get {
+            lock (m_gate) {
+                if (m_disposed) { return false; }
+                if (m_region.OwesMoves || m_region.OwesCarry) { return true; }
+            }
+            return (ProbeScenesIfCreated?.OwesCopies ?? false);
+        }
+    }
 }
