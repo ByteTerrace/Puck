@@ -234,7 +234,7 @@ public static partial class WorldDefinitionValidator {
     private static void RefuseStaticOnlyFacets(string prototypeId, WorldPlacement placement, IReadOnlyList<WorldPrototype> creations, string path, List<string> errors) {
         if (
             ((placement.Distribution is not null) || (placement.Mirror is not null)) &&
-            (WorldDefinitionRows.FindCreation(creations: creations, id: prototypeId) is { Document.Frames.Count: > 0 } or { Document.Drivers.Count: > 0 })
+            CarriesMotion(creation: WorldDefinitionRows.FindCreation(creations: creations, id: prototypeId))
         ) {
             errors.Add(item: $"{path} can show '{prototypeId}', which carries timeline frames or drivers — a row that can show an animated creation carries no distribution or mirror, which are static-stamp-only.");
         }
@@ -242,15 +242,14 @@ public static partial class WorldDefinitionValidator {
     // A prototype a dealt template stamps must resolve to a declared creation carrying no timeline frames or drivers: its
     // children are plain static stamps.
     private static void RequireStaticCreation(string prototypeId, HashSet<string> prototypeIds, IReadOnlyList<WorldPrototype> creations, string path, List<string> errors) {
-        if (!prototypeIds.Contains(item: prototypeId)) {
-            return;
-        }
-
-        if (WorldDefinitionRows.FindCreation(
-            creations: creations,
-            id: prototypeId
-        ) is { Document.Frames.Count: > 0 } or { Document.Drivers.Count: > 0 }) {
-            errors.Add(item: $"{path} '{prototypeId}' carries timeline frames or drivers — a response facet only ever swaps between static creations.");
+        if (prototypeIds.Contains(item: prototypeId) && CarriesMotion(creation: WorldDefinitionRows.FindCreation(creations: creations, id: prototypeId))) {
+            errors.Add(item: $"{path} '{prototypeId}' carries timeline frames or drivers — a dealt template's children are plain static stamps.");
         }
     }
+    // Whether a creation carries timeline frames or drivers: the validator's one reading of an animated creation, which
+    // replays through the stamp pool and carries none of a static stamp's facets (a distribution, a mirror, a portal, a
+    // deal). The presentation's fork (WorldPrototype.Rig's Animates) also counts effectors and leaves out frames that move
+    // nothing, so the two disagree on those creations.
+    private static bool CarriesMotion(WorldPrototype? creation) =>
+        (creation is { Document.Frames.Count: > 0 } or { Document.Drivers.Count: > 0 });
 }
