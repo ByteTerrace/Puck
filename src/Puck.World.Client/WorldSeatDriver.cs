@@ -931,10 +931,11 @@ public sealed class WorldSeatDriver {
         m_crossBodyTick = read.Body.Tick;
         m_lastPosition = read.Position;
 
-        var crossLagTicks = Math.Clamp(value: Math.Max(val1: 10UL, val2: m_senses.MoveLagTicks(slot: m_slot, bodyTick: read.Body.Tick)), min: 10UL, max: 20UL);
+        // The metres a remote body walks before a control sent now reaches it: its speed over the longest lag met lately
+        // (ControlLag), never less than a third of a second's.
         var inFlight = (read.SteersLocally
             ? FixedQ4816.Zero
-            : (read.PlanarSpeed * FixedQ4816.FromDouble(value: ((double)crossLagTicks / rateHz))));
+            : (read.PlanarSpeed * FixedQ4816.Max(x: ControlLag(read: in read).Peak, y: FixedQ4816.FromDouble(value: (10.0 / rateHz)))));
         var targetMetres = FixedQ4816.FromDouble(value: cross.Metres);
 
         if (cross.Until is null) {
