@@ -21,7 +21,9 @@ namespace Puck.Commands;
 /// its own, then every default-group row it leaves alone: a default page or command row drops out only when the group
 /// declares a row of the same members, or when the group's own pages bind one of that row's member controls. So a
 /// board's resting page replaces the player's resting page, and the trigger pages, the wheel and the chord commands
-/// stay reachable. Input routing and every page view read this one compiled set.</para>
+/// stay reachable. A context group's page may inherit a default-group page, so a group that changes one control (a
+/// surface's tap over the player's resting page) refines that page rather than restating it. Input routing and every
+/// page view read this one compiled set.</para>
 /// </remarks>
 public static class BindingProfile {
     /// <summary>The command-name prefix a channel destination compiles down to (see
@@ -736,10 +738,12 @@ public static class BindingProfile {
                     key: inheritedId,
                     value: out var inheritedRow
                 ) ||
-                    (inheritedRow.GroupIndex != rowGroups[rowIndex])
+                    // A context group replaces only what it declares, so its page may refine the default group's
+                    // (a surface's tap over the player's resting page); a page never inherits another context group's.
+                    ((inheritedRow.GroupIndex != rowGroups[rowIndex]) && (inheritedRow.GroupIndex != 0))
                 ) {
                     throw new ArgumentException(
-                        message: $"Page \"{page.Id}\" inherits invalid page \"{inheritedId}\"; inherited pages must exist in the same group.",
+                        message: $"Page \"{page.Id}\" inherits invalid page \"{inheritedId}\"; inherited pages must exist in the same group or the default group.",
                         paramName: nameof(document)
                     );
                 }

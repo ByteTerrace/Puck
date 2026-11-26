@@ -399,7 +399,8 @@ are the exact spellings the parser accepts.
 | Hex coordinates | `hexIndex(q, r)`, `hexQ`, `hexR`, `hexRadius`, `hexEuclideanSquared`, `hexDistance(a, b)`, `hexNeighbor(cell, direction)`, `hexRotate(cell, turns)`, `hexMirror`, `hexSwap`, `hexAdd`, `hexSubtract`, `hexMultiply`, `hexScale`, `hexTranslate(cell, dq, dr)` | Int |
 | Square coordinates | `squareIndex(x, y)`, `squareX`, `squareY`, `squareRadius`, `squareLength`, `squareEuclideanSquared`, `squareDistance(a, b)`, `squareChebyshev(a, b)`, `squareNeighbor(cell, direction)`, `squareRotate(cell, turns)`, `squareMirror`, `squareSwap`, `squareAdd`, `squareSubtract`, `squareMultiply`, `squareScale`, `squareTranslate(cell, dx, dy)` | Int |
 | Factors and cycles | `greatestCommonDivisor(a, b)`, `extendedGreatestCommonDivisor(a, b)`, `leastCommonMultiple(a, b)`, `floorDivide(a, b)`, `floorModulo(a, m)`, `floorDivideModulo(a, b)`, `divideRemainder(a, b)`, `cycleForward(a, b, m)`, `cycleDistance(a, b, m)` | Int |
-| Powers and inverses | `power(base, exponent)`, `modularPower(base, exponent, modulus)`, `modularInverse(value, modulus)` | Int |
+| Powers and inverses | `power(base, exponent)` | Int and Fixed |
+| Modular powers and inverses | `modularPower(base, exponent, modulus)`, `modularInverse(value, modulus)` | Int |
 | Sets and primes | `smallestMissing(mask)`, `isPrime(n)`, `primeAt(i)` | Int |
 | Combinations | `binomialCoefficient(n, k)`, `factorial(n)`, `subsetRank(n, mask)`, `subsetAt(n, k, rank)`, `subsetMember(n, k, rank, i)` | Int |
 | Permutations | `arrangementRank(n, packed)`, `arrangementAt(n, rank)`, `arrangementMember(n, rank, i)` | Int |
@@ -424,8 +425,14 @@ These notes cover the details that affect results:
 - `floorDivideModulo(a, b)` and `divideRemainder(a, b)` return both halves of
   one division as a pair: `pairX` reads the quotient and `pairY` the modulo or
   remainder. Either fails when a half lies outside the pair's range.
-- `power(base, exponent)` squares and multiplies; a negative exponent fails, and
-  so does a power that doesn't fit 64 bits. `power(0, 0)` is 1.
+- `power(base, exponent)` over Int squares and multiplies; a negative exponent
+  fails, and so does a power that doesn't fit 64 bits. `power(0, 0)` is 1. Over
+  Fixed it is the real power, any exponent of a positive base and a whole
+  exponent of a negative one, rounded as `FixedQ4816.Pow` rounds; zero to a
+  negative exponent and a negative base to a fraction fail. It is the geometric
+  curve's one spelling: `start * power(end / start, t)` runs from `start` at
+  `t = 0` to `end` at `t = 1`, multiplying by the same factor over every equal
+  step of `t` (the standard's `sizeField`, `worlds/standard/size-field.puck`).
 - `modularPower(base, exponent, modulus)` reduces the base into `[0, modulus)`
   and forms every product in 128 bits, so it never overflows; the modulus must
   be positive and the exponent non-negative. `modularInverse(value, modulus)`

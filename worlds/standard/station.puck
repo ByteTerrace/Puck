@@ -1,0 +1,237 @@
+// The standard's stations, a library. A station is a thing a player walks up to and uses in place: a console, a
+// terminal, a panel of controls. `stationPlay(...)` authors the engagement every station shares, and `stationFamily(...)`
+// is the input family a world lists in its `inputModes`. Neither names a place, a look or a camera: where each station
+// stands, the camera it is used from and the spawn point a player stands at are the importing world's.
+//
+// A player standing within `radius` of a station's `at` (on the ground plane, and within `height` of it up or down)
+// presses the context button (`interact`) to engage it: its body moves to the station's `spawn`, its `station` register
+// and its `stationAt` cell hold the station's number (its place in `stations` plus one), and the seat's camera eases to
+// the station's `camera` program. While engaged:
+//
+// - the seat's controls are the `station` binding group: the left mouse button (`tapSources`) presses `tap`, the
+//   surface press a pointer surface's rules read, and nothing else the mouse does turns the camera or the body; the
+//   context button (`leaveSources`) and `cancel` (`backSources`) leave;
+// - the `station` input family offers `cancel` (and what a world adds) and suspends the families a world names, so its
+//   movement does not walk the body away;
+// - leaving, by the context button, `cancel`, or the body leaving the station's reach any other way (a teleport),
+//   zeroes both cells and the camera eases back to the chase camera.
+//
+// The state, for a world's rules, panels and lamps to read, keyed by body index:
+//
+//   station       the body register: the station number the body is engaged with, 0 for none (the input family's
+//                 selector)
+//   stationAt     the same number as a world cell, which framings, binding contexts and lamps read with `$body`
+//   stationNear   the number of the station whose reach the body stands in, engaged or not, 0 for none: what the
+//                 context button does something with, so a lamp bound to it lights while the button is live
+//
+//   import "../standard/station"
+//   inputModes { global ["interact", "tap"], families [stationFamily(suspendedBy: []), ...] }
+//   stationPlay(stations: [{ at: [4, 0, 9], camera: "terminal-view", spawn: "terminal" }])
+//
+// A world whose movement family should stand still while a seat is engaged lists
+// `suspendedBy [{ family: "station", states ["engaged"] }]` on it.
+
+// The most stations one world declares: the register's range, and the engaged state's.
+let stationLimit = 64
+
+// The family that offers a station's channels while the seat is engaged. `suspendedBy` is the families whose selection
+// takes the station away; `channels` what the engaged seat may press beyond the world's globals.
+function stationFamily(suspendedBy = [], channels = ["cancel"]) = {
+  name: "station"
+  selector { kind: BodyState, name: "station" }
+  default: "free"
+  states [
+    { name: "free", ranges [{ minimum: 0, maximum: 0 }], channels [] }
+    { name: "engaged", ranges [{ minimum: 1 / 65536, maximum: stationLimit }], channels: channels }
+  ]
+  suspendedBy: suspendedBy
+  transitions []
+}
+
+// Whether a point stands within a station's reach: within `r` of its `at` on the ground plane and within `h` of it
+// vertically.
+function stationReach(station, px, py, pz, r, h) = (
+  (((px - station.at[0]) * (px - station.at[0])) + ((pz - station.at[2]) * (pz - station.at[2])) <= (r * r)) and
+  (absolute(py - station.at[1]) <= h)
+)
+
+// Pointer capture, a binding overlay row: while a seat's pointer rests on a pointer surface (a console's glass, a
+// Simulation screen), and until a press that landed there is released (the host's `pointer` context family), the left
+// mouse button (`tapSources`) is the surface's tap alone, so a drag on the surface scrolls it and never turns the camera.
+// A press that lands anywhere else stays the camera's drag, even when it crosses a surface. Everything else is the
+// resting page's (`restingPage`, which the pointer page inherits). `stationPlay` lists it after the stations' controls;
+// a world with pointer surfaces and no stations lists it in its own `bindingOverlays`.
+function pointerCapture(tapSources = ["mouse.button1"], restingPage = "base") = {
+  id: "pointer-capture"
+  document {
+    version: "puck.input.bindings.v1"
+    modifiers []
+    contexts [
+      { family: "pointer", state: "surface", group: "pointer" }
+    ]
+    chords [
+      {
+        chord []
+        group: "pointer"
+        page {
+          id: "pointer"
+          inherits: restingPage
+          label: "Pointer"
+          entries [
+            { channel: "tap", id: "pointerTap", label: "Tap", scale: 1, sources: tapSources }
+          ]
+        }
+      }
+    ]
+  }
+}
+
+// `stations` lists each station's `at` (a world point), `camera` (a camera program the seat eases to) and `spawn` (the
+// spawn point the body stands at while engaged). `margin` widens the reach a body must leave before it stops being in
+// it, so standing on the edge does not flicker. `near` is the framing's near plane, which cuts away the engaged body
+// where it stands between the station's camera and what it frames. `seats` sizes the cells (bodies 0 to seats - 1 are
+// seeded; a visitor's body takes a cell when it first engages, up to `capacity`). The stations' controls come with
+// pointer capture (`pointerCapture`), listed after them so a seat engaged at a station keeps the station's controls
+// while its pointer rests on the station's own glass; `restingPage` is the page pointer capture refines.
+template stationPlay(stations, radius = 1.6, height = 2, margin = 0.25, near = 0, seats = 4, capacity = 16, tapSources = [
+  "mouse.button1"
+], leaveSources = [
+  "keyboard.e"
+  "gamepad.rightShoulder"
+], backSources = [
+  "keyboard.backspace"
+  "mouse.button2"
+  "gamepad.buttonEast"
+], restingPage = "base") {
+  let count = length(stations)
+
+  state {
+    body [
+      {
+        name: "station"
+        kind: "Counter"
+        initial: 0
+        envelope { $type: "range", minimum: 0, maximum: stationLimit }
+      }
+    ]
+    world {
+      row {
+        name: "stationAt"
+        kind: Int
+        capacity: capacity
+        cells: map(range(0, seats), seat => { key: $"{seat}", value: 0 })
+      }
+      row {
+        name: "stationNear"
+        kind: Int
+        capacity: capacity
+        cells: map(range(0, seats), seat => { key: $"{seat}", value: 0 })
+      }
+    }
+  }
+
+  // Which station's reach each player's body stands in: a body leaves a station's reach `margin` past its radius, and
+  // takes the first station whose reach it then stands in.
+  rule "station-near" {
+    forEach: $players
+    local near = stationNear[$each]
+    local px = bodyPosition(each, x)
+    local py = bodyPosition(each, y)
+    local pz = bodyPosition(each, z)
+    mode: Level
+    for (station, i) in stations {
+      if near == i + 1 and not stationReach(station, px, py, pz, radius + margin, height) {
+        stationNear[$each] = 0
+      }
+      if near == 0 and stationReach(station, px, py, pz, radius, height) {
+        stationNear[$each] = i + 1
+      }
+    }
+  }
+
+  // The context button engages the station in reach, standing the body at its spawn point, and leaves the one engaged.
+  rule "station-use" {
+    forEach: $players
+    local at = stationAt[$each]
+    local near = stationNear[$each]
+    when channel(each, interact) >= 1
+    mode: Edge
+    if at != 0 {
+      stationAt[$each] = 0
+      setBodyState(key: $each, state: "station", expression: 0)
+    }
+    for (station, i) in stations {
+      if at == 0 and near == i + 1 {
+        stationAt[$each] = i + 1
+        setBodyState(key: $each, state: "station", expression: i + 1)
+        pose(key: $each, spawnPoint: station.spawn)
+      }
+    }
+  }
+
+  // `cancel` leaves, and so does a body that left its station's reach any other way.
+  rule "station-cancel" {
+    forEach: $players
+    when channel(each, cancel) >= 1 and stationAt[$each] != 0
+    mode: Edge
+    stationAt[$each] = 0
+    setBodyState(key: $each, state: "station", expression: 0.0)
+  }
+  rule "station-drift" {
+    forEach: $players
+    when stationAt[$each] != 0 and stationNear[$each] != stationAt[$each]
+    mode: Level
+    stationAt[$each] = 0
+    setBodyState(key: $each, state: "station", expression: 0.0)
+  }
+
+  // An engaged seat's camera eases to its station's camera: one framing whose program picks the station's camera by the
+  // seat's own cell.
+  views {
+    framings [
+      { id: "station", program: "station-view", when: "state.stationAt.$body", near: near }
+    ]
+    programs [
+      {
+        name: "station-view"
+        version: "puck.camera.program.v1"
+        operations [
+          selectProgram(
+            key: "state.stationAt.$body",
+            cases: map(stations, (station, i) => { value: i + 1, program: $"{station.camera}" }),
+            default: $"{stations[0].camera}"
+          )
+        ]
+      }
+    ]
+  }
+
+  // The station's controls, which the seat's bindings switch to while its cell names a station, then pointer capture,
+  // whose context row the station's rows come before.
+  bindingOverlays [
+    {
+      id: "station"
+      document {
+        version: "puck.input.bindings.v1"
+        modifiers []
+        contexts: map(range(1, count), number => { family: "state:stationAt", state: $"{number}", group: "station" })
+        chords [
+          {
+            chord []
+            group: "station"
+            page {
+              id: "station"
+              label: "Station"
+              entries [
+                { channel: "tap", id: "stationTap", label: "Tap", scale: 1, sources: tapSources }
+                { channel: "interact", id: "stationLeave", label: "Leave", scale: 1, sources: leaveSources }
+                { channel: "cancel", id: "stationBack", label: "Back", scale: 1, sources: backSources }
+              ]
+            }
+          }
+        ]
+      }
+    }
+    pointerCapture(tapSources: tapSources, restingPage: restingPage)
+  ]
+}

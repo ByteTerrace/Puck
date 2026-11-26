@@ -1,0 +1,72 @@
+// A size field: a stretch of the world where a body's size is a function of where it stands. A module library: it
+// hands its importers one template and emits no document.
+//
+// A field runs along a path from `from` to `to`, two world points, and reaches `reach` metres either side of it. A body
+// within reach whose foot projects onto the path at progress t (0 at `from`, 1 at `to`) is given the size
+//
+//   start * power(end / start, t)
+//
+// in its size register every tick: `start` at `from`, `end` at `to`, and the same factor over every equal step between.
+// That is the curve a flight of stairs into a small place needs: a body a sixth its size takes steps a sixth as long, so
+// each tread costs it the same share of its stride all the way up. Outside the field the register keeps the size the body
+// last took, so leaving a field at its small end leaves the body small until a field (the same one walked back, or
+// another) grows it again.
+//
+// The size is the body's own register, fixed point, written by a world rule from its live position (bodyPosition), so
+// it is world truth: its collider, speeds, step height, jump and gravity response follow it on the authority
+// (bodies.scale), and every observer, a window or another player or a spectator camera, reads the same register and
+// draws the body the size it is. Growth is held to the room about the body (WorldBody.SetScaleWithinClearance): a body
+// asked to grow under a low ceiling stays the largest size that fits, and grows on once it walks clear.
+//
+// The field's tunable values live in a world table, `sizeField-<name>`, so a running World is retuned without a reload:
+//
+//   world.state sizeField-<name>                       reads `start` and `end`
+//   world.state.cell.set sizeField-<name> end <size>   sets one; the field sizes bodies by it from the next tick
+//
+// or edit the template's arguments and let the watch reload.
+//
+// `start` and `end` are a look and feel, the author's: the standard sets no default for them.
+//
+// sizeField(
+//   name:     the field's name; names its rule `size-field-<name>` and its table `sizeField-<name>`
+//   from, to: the path's two world points, [x, y, z]; a body's progress is its foot's projection onto the path
+//   start:    the size at `from`, a multiplier of the body's authored size
+//   end:      the size at `to`
+//   reach:    how far either side of the path, in metres, the field holds a body
+//   register: the body register its size lives in; the one bodies.scale names
+// )
+template sizeField(name, from, to, start, end, reach, register = "size") {
+  state {
+    world [
+      {
+        name: $"sizeField-{name}"
+        kind: "Fixed"
+        cells [
+          { key: "start", value: $"{start}" }
+          { key: "end", value: $"{end}" }
+        ]
+      }
+    ]
+  }
+
+  // The path's span and its squared length, folded once at expansion.
+  let span = [(to[0] - from[0]), (to[1] - from[1]), (to[2] - from[2])]
+  let spanSquared = ((span[0] * span[0]) + (span[1] * span[1]) + (span[2] * span[2]))
+
+  rule $"size-field-{name}" {
+    local px = bodyPosition(each, x) - from[0]
+    local py = bodyPosition(each, y) - from[1]
+    local pz = bodyPosition(each, z) - from[2]
+    // The foot's progress along the path, held to the path's two ends, and its squared distance from that point: the
+    // field is a capsule about the path, so a body stepping off either end within reach takes that end's size exactly.
+    local along = clamp(((px * span[0]) + (py * span[1]) + (pz * span[2])) / spanSquared, 0, 1)
+    local qx = px - (along * span[0])
+    local qy = py - (along * span[1])
+    local qz = pz - (along * span[2])
+    local target = $"sizeField-{name}".start * power($"sizeField-{name}".end / $"sizeField-{name}".start, along)
+    when ((qx * qx) + (qy * qy) + (qz * qz)) <= (reach * reach) and bodyState(each, register) != target
+    mode: Level
+    forEach: $bodies
+    setBodyState(key: $each, state: register, expression: target)
+  }
+}

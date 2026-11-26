@@ -26,6 +26,24 @@ let lookTileTone = "#C86E48"
 let lookGrout = "#8A3F2C"
 let lookPad = "#EADBBE"
 let lookPadJoint = "#8A4A34"
+
+// Each level's surfaces: its walls, floor tiles and grout, its balcony fascia and the ceiling over it. Levels 0, 2 and
+// 3 wear the hall's creams and clays; level 1 is the toybox, the Wonderland floor seen across the void from every other
+// level, in bright toy colours: a mosaic of cobalt and sunflower tiles on white grout, sky walls, a tomato-red fascia
+// round its balconies and a ceiling of candy coffers.
+let lookLevelHall = {
+  wall: lookWall, tile: lookTile, tileTone: lookTileTone, grout: lookGrout, cream: lookCream
+  ceiling: lookCeiling, coffer: lookCoffer, cofferTone: lookCofferTone
+}
+let lookLevelToybox = (lookLevelHall with {
+  wall: "#8FD0EA", tile: "#2F6FD6", tileTone: "#F2B52C", grout: "#F7F3E8", cream: "#E2453C"
+  ceiling: "#FFF3D6", coffer: "#FF9BB8", cofferTone: "#8FD8FF"
+})
+let lookLevels = [lookLevelHall, lookLevelToybox, lookLevelHall, lookLevelHall]
+// The toybox's arcade: each of level 1's piers in a soft pastel instead of the hall's teal, the six colours stepping
+// along the arcade from the west wall and repeating, the same at each north and south pair so the nave stays balanced:
+// mint, lilac, peach, butter, sky, rose.
+let lookToyPiers = ["#9FE3C6", "#C6B3EA", "#FFC9A8", "#FFE98F", "#9ED4F5", "#FFA9C8"]
 // A tile's joint's width, in metres (the tile's side is the plan's module, layout.puck's galleryTile), and how smooth
 // the glaze is.
 let lookTileJoint = 0.01

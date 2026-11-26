@@ -385,7 +385,13 @@ OPEN-states family (`WorldContextFamilies.IsOpenStates`): any state token is
 admitted, and a token matching no authored layout simply never matches; and
 `editor` publishes `play|build`, the one built-in family a seat flips itself
 (`player.build [seat]`, or `player.mode editor build|play`; reset to `play` when
-the seat is vacated). The engine composes a build layer beneath every world
+the seat is vacated); and `pointer` publishes `surface|none`, whether the seat's
+pointer ray lands on a pointer surface, re-read only while the seat holds no
+pointer button (`WorldPointerRayCapture`), so a group a `surface` row selects
+owns a press that lands there until its release (the standard's
+`pointerCapture` row, `worlds/standard/station.puck`). A context group's page
+may inherit a page of the default group (never another context group's), so a
+context group refines the player's resting page instead of restating it. The engine composes a build layer beneath every world
 that binds anything and authors an `editor` section (`WorldEditorBindings.Layer`,
 prepended in `WorldSeatBindings.BaseLayers`): the section's authored `toggle`
 entry merged into the resting page of every group the world binds. The build

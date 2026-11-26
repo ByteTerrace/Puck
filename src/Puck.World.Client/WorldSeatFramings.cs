@@ -9,7 +9,9 @@ namespace Puck.World.Client;
 /// <see cref="WorldSeatFraming.When"/> reads positive for the seat is the framing it holds, the row's camera program
 /// resolves against the seat's own body pose, and the seat's camera eases onto it and back
 /// (<see cref="WorldEasedFraming"/>) on the program's own dynamics, or the chase rig's where the program authors none.
-/// A <c>$body</c> key in <c>when</c> reads the seat's body, so one row frames each seat that satisfies it and no other.
+/// A <c>$body</c> key in <c>when</c>, and in any bound operand of the row's program (a <c>selectProgram</c> key that
+/// picks which station's camera a seat frames), reads the seat's body, so one row frames each seat that satisfies it
+/// and no other, each from its own case.
 /// Presentation only: nothing here feeds the simulation.
 /// </summary>
 public sealed class WorldSeatFramings {
@@ -69,6 +71,9 @@ public sealed class WorldSeatFramings {
         }
 
         var rig = m_rig.Resolve(definition: definition, domains: domains, mirror: mirror, program: program);
+
+        rig.Reads = reads;
+
         var (frameEye, frameTarget, frameFieldOfView) = rig.Resolve(anchor: in anchor, clock: in clock);
 
         return m_ease.Apply(

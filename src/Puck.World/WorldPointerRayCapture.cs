@@ -16,6 +16,12 @@ namespace Puck.World;
 /// the aggregate cursor, or a gamepad-only seat), when the pointer leaves the seat's view or the window
 /// (<see cref="WorldPointer.ForgetPosition"/>), or when the world declares no <c>Simulation</c> screen, no placement
 /// pointer surface and no engageable tabletop; the server then reads <c>on</c> 0 and no pointed cell.
+/// <para>The same cast decides each seat's pointer context (<see cref="WorldContextFamilies.Pointer"/>): <c>surface</c>
+/// while the ray lands on a pointer surface (<see cref="WorldPointerSurfaces.Lands"/>, the rectangles a <c>$pointer:</c>
+/// read maps through), <c>none</c> otherwise, re-read only while the seat holds no pointer button. So a press that lands
+/// on a surface stays in the binding group a context row gives the surface until its release, and a drag begun
+/// elsewhere stays the seat's own controls' when it crosses one: pointer capture is a binding group the document
+/// authors, never a branch on a command here.</para>
 /// </summary>
 /// <remarks>
 /// <para>The same capture casts every pointing contact (<see cref="WorldContacts"/>: a finger, a pen tip, or the mouse
@@ -39,8 +45,11 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
     private readonly WorldPointer m_pointer;
     private readonly PlayerRoster m_roster;
     private readonly InputRouter m_router;
+    private readonly WorldSeatBindings? m_seatBindings;
     private readonly WorldSeatViewports m_viewports;
 
+    private IReadOnlyList<WorldPointerTarget> m_surfaces = [];
+    private WorldDefinition? m_surfacesOf;
     // The seat the ray is sustained on, or -1 while none is.
     private int m_sustainedSlot = -1;
 
@@ -52,9 +61,13 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
     /// <param name="router">The router whose seat lanes carry the ray.</param>
     /// <param name="contacts">The contact store whose transitions the capture casts into the seats' submissions, or
     /// <see langword="null"/> for a host that takes no contacts.</param>
-    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldPointerRayCapture(WorldPointer pointer, WorldSeatViewports viewports, PlayerRoster roster, Func<WorldDefinition> definition, InputRouter router, WorldContacts? contacts = null) {
+    /// <param name="seatBindings">The per-seat binding resolver the pointer context family
+    /// (<see cref="WorldContextFamilies.Pointer"/>) publishes into, or <see langword="null"/> for a host that publishes
+    /// none.</param>
+    /// <exception cref="ArgumentNullException">A required argument is <see langword="null"/>.</exception>
+    public WorldPointerRayCapture(WorldPointer pointer, WorldSeatViewports viewports, PlayerRoster roster, Func<WorldDefinition> definition, InputRouter router, WorldContacts? contacts = null, WorldSeatBindings? seatBindings = null) {
         m_contacts = contacts;
+        m_seatBindings = seatBindings;
         ArgumentNullException.ThrowIfNull(argument: pointer);
         ArgumentNullException.ThrowIfNull(argument: viewports);
         ArgumentNullException.ThrowIfNull(argument: roster);
@@ -68,24 +81,51 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
         m_viewports = viewports;
     }
 
+    // The document's pointer surfaces, enumerated again only when the delivered document changes.
+    private IReadOnlyList<WorldPointerTarget> Surfaces(WorldDefinition definition) {
+        if (!ReferenceEquals(objA: definition, objB: m_surfacesOf)) {
+            m_surfacesOf = definition;
+            m_surfaces = WorldPointerSurfaces.Of(definition: definition);
+        }
+
+        return m_surfaces;
+    }
     // Whether anything in the world reads a pointer ray: a Simulation screen, a placement's pointer surface, or a
     // tabletop a seat may sit at, whose rules read the cell the ray meets (board(pointer, …)).
-    private bool DeclaresPointerTarget() {
-        var definition = m_definition();
-
-        foreach (var screen in definition.Screens) {
-            if (screen.Route.Input == SourceDestination.Simulation) {
-                return true;
-            }
+    private bool DeclaresPointerTarget(WorldDefinition definition) {
+        if (Surfaces(definition: definition).Count > 0) {
+            return true;
         }
 
         foreach (var placement in definition.Placements) {
-            if ((placement.Board?.Engage is not null) || (placement.Pointer is not null)) {
+            if (placement.Board?.Engage is not null) {
                 return true;
             }
         }
 
         return false;
+    }
+    // Publishes each seat's pointer context: `surface` for the seat whose ray lands on a pointer surface, `none` for
+    // every other. A seat holding a pointer button keeps the state its press landed in, so a press is the surface's or
+    // the seat's own controls' until its release.
+    private void PublishPointer(int pointing, bool lands) {
+        if (m_seatBindings is not { } bindings) {
+            return;
+        }
+
+        for (var slot = 0; (slot < PlayerRoster.MaxSlots); slot++) {
+            if (m_pointer.IsAnyButtonDown(slot: slot)) {
+                continue;
+            }
+
+            bindings.SetContextState(
+                family: WorldContextFamilies.Pointer,
+                slot: slot,
+                state: (((slot == pointing) && lands)
+                    ? WorldContextFamilies.PointerSurface
+                    : WorldContextFamilies.PointerNone)
+            );
+        }
     }
     private void End() {
         if (m_sustainedSlot < 0) {
@@ -105,7 +145,8 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
 
     /// <inheritdoc/>
     public void CaptureFrame(ulong frameKey) {
-        var declares = DeclaresPointerTarget();
+        var definition = m_definition();
+        var declares = DeclaresPointerTarget(definition: definition);
 
         CaptureContacts(declares: declares);
 
@@ -117,14 +158,21 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
             !declares
         ) {
             End();
+            PublishPointer(lands: false, pointing: -1);
 
             return;
         }
         if (!TryCast(position: m_pointer.Position(slot: slot), ray: out var ray, slot: slot, outside: false)) {
             End();
+            PublishPointer(lands: false, pointing: -1);
 
             return;
         }
+
+        PublishPointer(
+            lands: WorldPointerSurfaces.Lands(ray: ray, targets: Surfaces(definition: definition)),
+            pointing: slot
+        );
         if (slot != m_sustainedSlot) {
             End();
         }

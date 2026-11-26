@@ -107,9 +107,37 @@ beside a list of every exhibit, the chosen one lit amber with its group beside
 it; and the right of the screen gives the chosen exhibit's title, its group and
 its place in the catalog, and its note. A tap on a row shows that exhibit; a
 drag scrolls the list a row for each row the pointer travels and taps nothing;
-PREV and NEXT turn it a page. `gallery.station <display>` frames the console
-with the exhibit. [shapes.md](shapes.md#the-displays) lists the displays and
-the console lines.
+PREV and NEXT turn it a page. [shapes.md](shapes.md#the-displays) lists the
+displays and the console lines.
+
+The owner's ruling: a player walks up to a display, uses it, and ends up at
+the hero angle every display shares, and while using it the inputs go to the
+display, as a result of Puck code rather than an engine special case. So every
+display is a station ([station.puck](../standard/station.puck), expanded in
+[gallery/gallery.puck](gallery/gallery.puck)):
+
+- Standing before a console (within 1.6 m of the display's spawn point), the
+  context button (E, or the pad's RB) uses it: she stands at the display's
+  spawn point and the seat's camera eases to the display's station view
+  (`gallery-station-<id>`, look.puck's `lookStation`), whose near plane cuts
+  her away where she stands between the camera and the console. In the debug
+  world the E key's lamp lights while she is in reach.
+- While she uses it, the left mouse button is the console's tap and nothing
+  turns the camera or walks her: the seat's controls are the station's binding
+  group, and the debug world's `station` input family suspends her movement
+  (input-modes.puck). E or Backspace (RB or B, or the right mouse button)
+  steps back, and the camera eases back to the chase camera. Leaving the
+  reach any other way (`gallery.go`, a pose) steps back too.
+- Outside a station, a press that lands on a console's glass is still the
+  console's alone until it is released (pointer capture, the standard's
+  `pointerCapture` row): a drag on the list scrolls it and never orbits the
+  camera, while a press anywhere else is the camera's drag.
+- `gallery.station <display>` still films a display from the station view
+  without using it.
+
+Read the state with `world.state stationNear` and `world.state stationAt`
+(keyed by body index: the display's place in `galleryDisplays` plus one, 0 for
+none) and `player.bindings 1` (`group=station` while engaged).
 
 Every part of a display is an engine mechanism a world authors:
 
@@ -239,6 +267,42 @@ own materials `exhibitSubjects` in [`shapes.puck`](shapes.puck). Edit a value,
 A shot's eye and aim are placed from `gallerySite` when the document compiles,
 as the other world-space pieces are.
 
+## The size walk
+
+Level 1 is the level a body shrinks into: the level stays its normal size, so
+it is giant to her. The corner staircases will carry the change, and until they
+do, [`size-walk.puck`](size-walk.puck) lays the same mechanism along level 1's
+north gallery. Walking east from plan x 40 to x 52, she shrinks from her full
+size to Alice's; walking back west, she grows again.
+
+The mechanism is the standard's size field
+([`size-field.puck`](../standard/size-field.puck)). A world rule reads her
+position every tick, takes her progress `t` along the walk (0 at the west end, 1
+at the east) and writes her `size` register (`size.puck`) to
+`start * power(end / start, t)`. Each equal step along the walk multiplies her
+size by the same factor, so on a stair each tread costs her the same share of
+her stride all the way up. The size is fixed-point state on the authority, so
+her collider, pace, step height, jump and camera follow it, and a window,
+another player or a spectator sees her the size she is. A body asked to grow
+where it does not fit (under a low ceiling) stays the largest size that fits,
+and grows on once it is clear.
+
+To try it, `debug.go size-walk` poses her two metres short of the west end,
+facing east along the walk; in the gallery root, `body.pose 47.825 4.55 45.375
+270 0 0 0` stands her there. `body.state 0` reads her `size` as she walks.
+
+The size at the east end is a look and feel, chosen for how small the
+gallery's displays and benches read beside her. Two ways to tune it live:
+
+| Console line | What it does |
+|---|---|
+| `world.state sizeField-gallery-walk` | Reads the walk's `start` and `end` sizes |
+| `world.state.cell.set sizeField-gallery-walk end 0.12` | Sets Alice's size at the east end; the next tick she is sized by it |
+
+To keep a value, edit `sizeWalkAlice` in `size-walk.puck` and let the watch
+reload it. The register's envelope (`size.puck`) allows a tenth to one, so a
+size below a tenth needs the envelope widened with it.
+
 ## What is still open
 
 - **World-space pieces.** A static creation's paints, a state lattice's origin
@@ -256,11 +320,13 @@ as the other world-space pieces are.
     brick by link cable and plays it on the console's screen, as old Nintendo
     kiosk stations did;
   - player shape molding ([Molding a shape later](#molding-a-shape-later)).
-- **A mouse tap still orbits.** The left button is both the camera's orbit drag
-  and the tap, so a drag on the list in the chase view also turns the camera;
-  `gallery.station` films from a camera the drag does not move. A press that
-  lands on a pointer surface should be captured by it
-  ([the UI decisions](../../docs/decisions/ui.md#layout-text-and-interaction)).
+- **Pointer capture ignores occlusion.** A press is the console's when the
+  pointer's ray meets any console's glass, as the `$pointer:` read does, so a
+  console far behind a wall under the cursor still takes the press from the
+  camera's drag.
+- **The station's pad controls are the leave buttons alone.** While a seat uses
+  a display, the pad steps back (RB, B) but does not yet drive the list; a pad
+  cursor or a focus over the list is the console's keyboard and gamepad work.
 - **Touch reaches the console through contacts.** The console's rules read the
   first pointing seat's ray and its tap channel. A touchscreen's contacts (a
   finger, a pen tip, the mouse while its button is held) carry their own phase

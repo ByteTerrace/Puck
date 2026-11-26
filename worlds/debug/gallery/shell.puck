@@ -41,12 +41,12 @@ let shellFloorNorth = 12
 let shellTileHalf = (galleryTile / 2)
 let shellTileCell = [galleryTile, 0, galleryTile]
 let shellTileCentre = galleryWorld(naveWest, 0, arcadeSouth)
-let shellTiles = {
+function shellTiles(look) = {
   type: "Box"
   position: shellTileCentre
   scale [(shellTileHalf - (lookTileJoint / 2)), 40, (shellTileHalf - (lookTileJoint / 2))]
-  color: lookTile
-  repeat { cell: shellTileCell, tone: lookTileTone, seed: 7 }
+  color: look.tile
+  repeat { cell: shellTileCell, tone: look.tileTone, seed: 7 }
 }
 // The joints again, drawn over the pads so a pad reads as tiles of another clay rather than a sheet laid on the floor.
 let shellJoints = [
@@ -65,14 +65,14 @@ let shellJoints = [
     repeat { cell: shellTileCell }
   }
 ]
-let shellCoffers = [
+function shellCoffers(look) = [
   {
     type: "Box"
     position: shellTileCentre
     scale [(shellTileHalf - 0.11), 40, (shellTileHalf - 0.11)]
     rounding: 0.08
-    color: lookCoffer
-    repeat { cell: shellTileCell, tone: lookCofferTone, seed: 3 }
+    color: look.coffer
+    repeat { cell: shellTileCell, tone: look.cofferTone, seed: 3 }
   }
   {
     type: "Cylinder"
@@ -88,27 +88,29 @@ let shellCoffers = [
 function shellBrushed(base, amount = lookBrush, scale = lookBrushScale) = galleryCel((base with { shade: brushed(amount, scale, lookBrushLean, lookBrushSeed) }))
 // A floor slot's paints: the tiles, the pads on its side of the nave's centre line, and the joints over both.
 let shellMidWorld = galleryWorld(0, 0, naveMid)[2]
-function shellFloorPaints(pads, north) = concat(
-  [shellTiles],
+function shellFloorPaints(pads, north, look) = concat(
+  [shellTiles(look)],
   filter(pads, pad => ((north == 1) ? (pad.position[2] >= shellMidWorld) : (pad.position[2] < shellMidWorld))),
   shellJoints
 )
 // The floor is glazed tile: smooth enough that the windows and the lit ceiling lie on it as the room's reflection.
-let shellFloorRow = { color: lookGrout, roughness: lookFloorRoughness, specular: lookFloorSpecular }
-function shellPalette(pads, lit) = [
-  shellBrushed({ color: lookWall, roughness: 0.85, specular: 0.04 })
-  shellBrushed((shellFloorRow with { paints: shellFloorPaints(pads, 0) }), lookBrushFloor, lookBrushFloorScale)
+// A palette's floor, walls and fascia wear `level`'s look (look.puck's lookLevels) and its ceiling `below`'s, since a
+// slab's underside is the ceiling of the level under it.
+function shellFloorRow(look) = { color: look.grout, roughness: lookFloorRoughness, specular: lookFloorSpecular }
+function shellPalette(pads, lit, level = 0, below = 0) = [
+  shellBrushed({ color: lookLevels[level].wall, roughness: 0.85, specular: 0.04 })
+  shellBrushed((shellFloorRow(lookLevels[level]) with { paints: shellFloorPaints(pads, 0, lookLevels[level]) }), lookBrushFloor, lookBrushFloorScale)
   shellBrushed({ color: lookTeal, roughness: 0.6, specular: 0.04 })
   ((lit == 1) ? { color: "#FFFFFF", roughness: 0.5, emissive: 4000nit } : { color: "#D9D9D9", roughness: 0.5, specular: 0.06 })
   shellBrushed({ color: lookBoard, roughness: 0.6 })
-  shellBrushed({ color: lookCeiling, roughness: 0.9, specular: 0.02, paints: shellCoffers }, lookBrushCeiling)
+  shellBrushed({ color: lookLevels[below].ceiling, roughness: 0.9, specular: 0.02, paints: shellCoffers(lookLevels[below]) }, lookBrushCeiling)
   { color: "#FFFFFF", roughness: 0.5, emissive: 120nit }
   shellBrushed({ color: lookOchre, roughness: 0.6, specular: 0.04 }, lookBrushCladding)
-  shellBrushed({ color: lookCream, roughness: 0.6, specular: 0.04 })
+  shellBrushed({ color: lookLevels[level].cream, roughness: 0.6, specular: 0.04 })
   { color: lookGlass, roughness: 0.03, glass { depth: 0.04, ior: 1.5 } }
   { color: lookBrass, roughness: 0.3, metal: 1 }
   shellBrushed({ color: lookPaving, roughness: 0.6, specular: 0.04 }, lookBrushFloor, lookBrushFloorScale)
-  shellBrushed((shellFloorRow with { paints: shellFloorPaints(pads, 1) }), lookBrushFloor, lookBrushFloorScale)
+  shellBrushed((shellFloorRow(lookLevels[level]) with { paints: shellFloorPaints(pads, 1, lookLevels[level]) }), lookBrushFloor, lookBrushFloorScale)
 ]
 let shellPlain = shellPalette([], 1)
 let shellLooks = [{ suffix: "", lit: 1 }, { suffix: "-dark", lit: 0 }]
@@ -526,9 +528,11 @@ template shellForecourt() {
 
 // The kit pieces that stand on the plan, each a list gallery.puck stamps: the arcades' piers on every level, the
 // balcony edges round the nave's void and round the fall's well, the terrace's edge, and the furniture.
-let shellPiers = flatMap(range(0, 4), k => flatMap(arcadeXs, x => [
-  { id: $"pier-south-{k}-{x}", x: x, y: galleryFloor[k], z: arcadeSouth, yaw: 180 }
-  { id: $"pier-north-{k}-{x}", x: x, y: galleryFloor[k], z: arcadeNorth, yaw: 0 }
+// A pier's prototype: the hall's teal, or on level 1 the toybox's pastel for its place along the arcade.
+function shellPierPrototype(k, b) = ((k == 1) ? $"gallery-pier-toy-{(b % length(lookToyPiers))}" : "gallery-pier")
+let shellPiers = flatMap(range(0, 4), k => flatMap(range(0, length(arcadeXs)), b => [
+  { id: $"pier-south-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeSouth, yaw: 180, prototype: shellPierPrototype(k, b) }
+  { id: $"pier-north-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeNorth, yaw: 0, prototype: shellPierPrototype(k, b) }
 ]))
 // A length of balustrade: its centre, the yaw that turns its drop side to the void, and whether it is the 2 m piece.
 let shellRails = concat(
@@ -608,7 +612,7 @@ template shellPrototypes() {
       document {
         name: $"gallery-walls-{k}"
         schema: "puck.creation.v1"
-        palette: shellPlain
+        palette: shellPalette([], 1, k, k)
         shellWalls(level: k)
       }
     }
@@ -632,7 +636,7 @@ template shellPrototypes() {
         document {
           name: $"gallery-floor-{k}{look.suffix}"
           schema: "puck.creation.v1"
-          palette: shellPalette(shellPads(k), look.lit)
+          palette: shellPalette(shellPads(k), look.lit, k, (k - 1))
           for piece in shellFloorPieces(k) {
             shellSlab(
               label: $"slab-{piece.id}",
@@ -672,7 +676,7 @@ template shellPrototypes() {
       document {
         name: $"gallery-roof{look.suffix}"
         schema: "puck.creation.v1"
-        palette: shellPalette([], look.lit)
+        palette: shellPalette([], look.lit, 3, 3)
         for piece in shellRoofPieces {
           shellSlab(label: $"roof-{piece.id}", x0: piece.x0, x1: piece.x1, y0: galleryCeiling[3], y1: galleryRoof, z0: piece.z0, z1: piece.z1, top: shellCream)
         }
@@ -755,6 +759,16 @@ template shellPrototypes() {
       schema: "puck.creation.v1"
       palette: shellStructure
       branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2), foot: [shellTileHalf, shellTileHalf])
+    }
+  }
+  for (tone, n) in lookToyPiers {
+    prototype $"gallery-pier-toy-{n}" {
+      document {
+        name: $"gallery-pier-toy-{n}"
+        schema: "puck.creation.v1"
+        palette [shellBrushed((structurePalette[0] with { color: tone }), lookBrushStructure), (structurePalette[1] with { color: lookBrass })]
+        branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2), foot: [shellTileHalf, shellTileHalf])
+      }
     }
   }
   // The nave's end: a slim pier either side of each tall bay, whose branches arch over the bay's head.
@@ -954,7 +968,7 @@ template shellPlacements() {
   }
   for pier in shellPiers {
     placement $"gallery-{pier.id}" {
-      prototype: "gallery-pier"
+      prototype: pier.prototype
       parent: "gallery"
       position [pier.x, pier.y, pier.z]
       yawDegrees: pier.yaw

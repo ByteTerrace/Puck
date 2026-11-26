@@ -16,7 +16,7 @@
 //   (4.5, 0.05, 23.7)    the room's own doorway, in its south wall: walked through at full size, she looms in it
 //
 // A body's size is its `size` register (bodies.scale, size.puck): a crossing multiplies it by the pair's scale and
-// refuses one that would leave the register's 0.25 .. 1. The register crosses with her to the garden and the night
+// refuses one that would leave the register's 0.1 .. 1. The register crosses with her to the garden and the night
 // field, which declare it too. Every value in this file is a world coordinate as authored against the lobby's west wall at x 10.3, which the
 // placements and spawn points move with the wall by layout.puck's `galleryWestShift`, except inside
 // the two paintings, which are authored in their own frame (x across the canvas, y up, z out of the wall).

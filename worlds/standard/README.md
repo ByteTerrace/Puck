@@ -18,6 +18,16 @@ its own lease, and its refusal row). A door onto another world, a trade or any
 handshake across worlds imports it under a name of its own; the debug world's
 moon doors are two (`../debug/moon-door.puck`, `../debug/moon.puck`).
 
+[station.puck](station.puck) is engagement with a thing a player walks up to and
+uses in place: `stationPlay(stations)` authors the context button's engage and
+step back, the `station` binding group, the framing that eases the seat's camera
+to each station's camera and the reach cells a lamp can read, and
+`stationFamily()` is the input family a world lists to suspend its movement while
+a seat is engaged. Its `pointerCapture` row makes a press that lands on a pointer
+surface the surface's alone until release; `stationPlay` lists it, and a world
+with surfaces but no stations lists it itself. The debug world's gallery displays
+are the worked use ([`../debug/gallery.md`](../debug/gallery.md#display-consoles)).
+
 The standard is an optional authored design package. The engine supplies input,
 layout, camera and motion mechanisms; these documents supply their design.
 
@@ -114,6 +124,12 @@ debug world's gallery is built from it (`../debug/gallery.md`), and `../debug/ga
 `bounds.puck` is a library of boxes given their bounds (`boundsBox` for a world-space box in a creation at the origin,
 `localBox` for one in the creation's own frame, `barRing` for the three bars round a canvas), for shells, furniture and
 frames built from boxes.
+
+`size-field.puck` is a library of one template, `sizeField`: a stretch of the world, a capsule about a path, where a
+body's size register is a function of its progress along the path, `start * power(end / start, t)`, so each equal step
+multiplies its size by the same factor. A world rule writes it from the body's live position each tick it moves, so
+every observer sees the true size; `start` and `end` live in a world table the console retunes live. The debug world's
+size walk (`../debug/gallery.md`, "The size walk") is the worked example.
 
 `kits.puck` is a library of kit parts: the gravity and the ground, fall and air holds a body wears (`groundHold`,
 `fallHold`, `airHold`), the motions a kit derives its own from with `with` (`walkerMotion`, the walker's 4 m/s walk

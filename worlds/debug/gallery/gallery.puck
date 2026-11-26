@@ -31,6 +31,7 @@
 import "../../standard/bounds"
 import "../../standard/kits"
 import "../../standard/architecture"
+import "../../standard/station"
 import "../place-kit"
 import "../reach"
 import "../shapes"
@@ -41,7 +42,8 @@ import "look"
 // the building binds its camera to the inspection lever's cells (the debug world's exposure.puck).
 exports {
   reads [liftDoors, gallery]
-  bindings [galleryFill]
+  // The debug world's lamp over the context button reads which display a seat stands at (debug.puck).
+  bindings [galleryFill, stationNear]
 }
 
 // What `gallery.inspect On` writes: the sky's ambient gain and the pinned exposure, in EV100 (a lit room is about 7).
@@ -1334,6 +1336,21 @@ cameras: concat(map(galleryDisplays, display => {
   renderWidth: 1672
   renderHeight: 941
 }))
+
+// Every display is a station (../../standard/station.puck): a player standing before its console presses the context
+// button (E, or the pad's RB) to use it, and stands at the display's spawn point while the seat's camera eases to the
+// display's station view above, the hero angle every display shares. Engaged, the left mouse button is the console's
+// tap and nothing turns the camera, E or Backspace (the pad's RB or B) steps back, and the camera eases back to the chase
+// camera. The station view's eye stands behind her at the spawn point, so its near plane cuts her away: along the view,
+// her body spans about 1.6 to 2.45 m from the eye and the console's glass begins past 3 m.
+stationPlay(
+  stations: map(galleryDisplays, display => {
+    at: displayWorld(display, displayStand)
+    camera: $"gallery-station-{display.id}"
+    spawn: $"display-{display.id}"
+  }),
+  near: 2.6
+)
 
 commands [
   {

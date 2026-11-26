@@ -3,7 +3,7 @@ namespace Puck.World;
 /// <summary>
 /// The engine's published registry of built-in context FAMILIES. Built-in families are outputs
 /// of one per-seat state machine holding exactly one value at a time: <see cref="Roster"/>, <see cref="Engagement"/>,
-/// <see cref="Layout"/> and <see cref="Editor"/>. A <c>state:&lt;row&gt;</c> family is data-driven instead: it publishes a
+/// <see cref="Layout"/>, <see cref="Editor"/> and <see cref="Pointer"/>. A <c>state:&lt;row&gt;</c> family is data-driven instead: it publishes a
 /// declared world-state row through <see cref="WorldStateBindingContext"/>, allowing ordinary gameplay-rule state
 /// writes to select a control group without adding another engine mode. A world may additionally AUTHOR its own
 /// per-seat mode families (<see cref="WorldSeatModeFamily"/>), flipped by the generic <c>player.mode</c> verb.
@@ -43,6 +43,16 @@ public static class WorldContextFamilies {
     public const string Layout = "layout";
     /// <summary>The layout state while the built-in seat ladder composes the window.</summary>
     public const string LayoutBuiltin = "builtin";
+    /// <summary>The pointer family: whether a seat's pointer rests on a pointer surface (a placement's pointer facet or a
+    /// <c>Simulation</c> screen's face). The host re-reads it only while none of the seat's pointer buttons is held, so a
+    /// press keeps the state it landed in until its release: a context row can give a press that lands on a surface to
+    /// the surface (its tap) and every other press to the seat's own controls (the camera's drag).</summary>
+    public const string Pointer = "pointer";
+    /// <summary>The pointer state while the seat's pointer ray lands on a pointer surface, or a press that landed there
+    /// is still held.</summary>
+    public const string PointerSurface = "surface";
+    /// <summary>The pointer state while the seat's pointer lands on no pointer surface, or casts no ray.</summary>
+    public const string PointerNone = "none";
     /// <summary>The roster family: a seat's participant-lifecycle state.</summary>
     public const string Roster = "roster";
     /// <summary>The roster state of a joined, confirmed participant. Deliberately ships with no default context row:
@@ -59,11 +69,12 @@ public static class WorldContextFamilies {
     private static readonly string[] RosterStates = [RosterUnjoined, RosterClaimed, RosterPending, RosterActive];
     private static readonly string[] EngagementStates = [EngagementEngaged, EngagementTabletop, EngagementPassthrough, EngagementNone];
     private static readonly string[] EditorStates = [EditorPlay, EditorBuild];
+    private static readonly string[] PointerStates = [PointerSurface, PointerNone];
 
     /// <summary>The built-in admitted family names, in the order the derivation read-back reports them — an
     /// authored <see cref="WorldSeatModeFamily"/>'s name is never one of these (the validator refuses the
     /// collision).</summary>
-    public static readonly IReadOnlyList<string> Families = [Roster, Engagement, Layout, Editor];
+    public static readonly IReadOnlyList<string> Families = [Roster, Engagement, Layout, Editor, Pointer];
 
     /// <summary>Whether <paramref name="family"/> is a built-in family whose state set is open (world-authored
     /// values rather than a fixed engine list) — admitted everywhere a closed family is, with no state-token
@@ -82,6 +93,7 @@ public static class WorldContextFamilies {
             Roster => RosterStates,
             Engagement => EngagementStates,
             Editor => EditorStates,
+            Pointer => PointerStates,
             _ => null,
         };
     }

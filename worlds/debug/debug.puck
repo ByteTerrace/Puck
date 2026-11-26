@@ -81,6 +81,8 @@ import "input-modes"
 import "bard"
 import "press"
 import "size"
+// A size field along level 1's north gallery, which shrinks her to Alice's size and back (size-walk.puck).
+import "size-walk"
 import "addon-hud"
 import "watchdog"
 import "guide"
@@ -482,3 +484,9 @@ render {
     }
   }
 }
+
+// The context button's key lights while it does something at a gallery display (gallery/gallery.puck): in reach of
+// one, and while using one. The press authors the lamps' own colours (press.puck).
+keyLights [
+  { id: "station-reach", bound ["interact", "stationLeave"], color: "#E8B04A", lit: "state.stationNear.$body" }
+]

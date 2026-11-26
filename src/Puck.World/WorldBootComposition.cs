@@ -1855,6 +1855,7 @@ public static class WorldBootComposition {
             pointer: sp.GetRequiredService<WorldPointer>(),
             roster: sp.GetRequiredService<PlayerRoster>(),
             router: sp.GetRequiredService<InputRouter>(),
+            seatBindings: sp.GetRequiredService<WorldSeatBindings>(),
             viewports: sp.GetRequiredService<WorldSeatViewports>()
         ));
 
