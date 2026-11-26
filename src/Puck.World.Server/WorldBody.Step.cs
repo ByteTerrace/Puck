@@ -1111,17 +1111,6 @@ public sealed partial class WorldBody {
         )
         );
     }
-    private bool TrySolvedGravityMagnitude(out FixedQ4816 magnitude) {
-        magnitude = FixedQ4816.Zero;
-
-        if (!TrySolvedGravity(acceleration: out var acceleration)) {
-            return false;
-        }
-
-        magnitude = acceleration.Length;
-
-        return true;
-    }
     // Moving the up axis rotates the frame the planar velocity lives in, so the velocity has to be carried with it.
     // Re-reading a stored tangent vector in a rotated frame is not the same motion: on a curved surface the component
     // that was tangent a tick ago points off the surface now, and re-applying it launches the body — the faster it

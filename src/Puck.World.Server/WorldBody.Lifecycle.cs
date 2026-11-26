@@ -1067,9 +1067,10 @@ public sealed partial class WorldBody {
     public BodyFacts Facts {
         get {
             var facts = BodyFacts.None;
+            var gravity = default(SolvedGravityRead);
 
             foreach (var fact in BodyFactVocabulary.Publishable) {
-                if (FactHolds(fact: fact)) {
+                if (FactHolds(fact: fact, gravity: ref gravity)) {
                     facts |= BodyFactVocabulary.Bit(fact: fact);
                 }
             }

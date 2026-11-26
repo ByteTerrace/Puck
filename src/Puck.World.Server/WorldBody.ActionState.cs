@@ -552,6 +552,13 @@ public sealed partial class WorldBody {
         : raw.ToString(provider: CultureInfo.InvariantCulture)
     );
     private bool FactHolds(ActionFact fact) {
+        var gravity = default(SolvedGravityRead);
+
+        return FactHolds(fact: fact, gravity: ref gravity);
+    }
+    // The one fact predicate. The solved-gravity answer two facts read (HoldingUnwalkable through the hold's up axis,
+    // Weightless through the pull) is read once per caller's memo, so a whole fact mask samples the field once.
+    private bool FactHolds(ActionFact fact, ref SolvedGravityRead gravity) {
         return fact switch {
             ActionFact.Grounded => m_grounded,
             ActionFact.Airborne => !m_grounded,
@@ -559,10 +566,10 @@ public sealed partial class WorldBody {
             ActionFact.Falling => ((IsRigid ? m_rigidVelocity.Y : m_verticalVelocity) < FixedQ4816.Zero),
             ActionFact.InMedium => m_inMedium,
             ActionFact.AtMediumBand => m_atMediumBand,
-            ActionFact.HoldingUnwalkable => HoldsUnwalkableSurface(),
+            ActionFact.HoldingUnwalkable => HoldsUnwalkableSurface(gravity: ref gravity),
             ActionFact.Unsupported => HoldsFree(),
             ActionFact.Resting => m_resting,
-            ActionFact.Weightless => (TrySolvedGravityMagnitude(magnitude: out var pull) && (pull < MinFieldUpMagnitude)),
+            ActionFact.Weightless => (gravity.Read(body: this).Has && (gravity.Magnitude < MinFieldUpMagnitude)),
             _ => (m_affectingSubject >= 0),
         };
     }
