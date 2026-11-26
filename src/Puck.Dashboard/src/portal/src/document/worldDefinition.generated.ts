@@ -2711,6 +2711,10 @@ export type PaletteEntryDocument = {
    */
   shade?: ShadeReference;
   /**
+   * Whether the slot's shapes cast shadows (null = true). A shape whose every slot says false casts none (CastsNoShadow): a body that stands between the surfaces and its own light, a star's ball or a lamp's bulb, lights them instead of shadowing them.
+   */
+  castsShadow?: boolean | null;
+  /**
    * Gets up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none. The list is owned (a lattice field's material sits in a cached state row).
    */
   paints?: (PalettePaintDocument | null)[] | null;
@@ -2797,6 +2801,10 @@ export type PaletteEntryDocumentVariant2 = {
    * The slot's shade program (ShadeReference), or null for the world's default.
    */
   shade?: ShadeReference;
+  /**
+   * Whether the slot's shapes cast shadows (null = true). A shape whose every slot says false casts none (CastsNoShadow): a body that stands between the surfaces and its own light, a star's ball or a lamp's bulb, lights them instead of shadowing them.
+   */
+  castsShadow?: boolean | null;
   /**
    * Gets up to MaxPalettePaints paints, each drawn over the one before; null or empty paints none. The list is owned (a lattice field's material sits in a cached state row).
    */
@@ -13593,6 +13601,10 @@ export type WorldRouteStepFly = {
    * Whether the step is a landing: it flies at the point, a point of the ground or under it, until the body, or the body it rides, is grounded, and Within ends nothing.
    */
   lands?: boolean;
+  /**
+   * The place, in the world the step is played in, that ends the step, or null for a step the point, the arrival or the landing ends.
+   */
+  until?: string | null;
 };
 
 export type WorldRouteStepGo = {

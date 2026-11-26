@@ -149,6 +149,27 @@ public sealed partial class StateArena {
         return false;
     }
 
+    /// <summary>Reads the turn a <see cref="CellKind.Fixed"/> cell's live value stands at, one whole unit a turn: the
+    /// fractional part as a fraction of a turn scaled by 2^64, exact for an advancing cell
+    /// (<see cref="StateAdvance.TurnAt"/>) and the live value's sixteen fractional bits for any other.</summary>
+    /// <param name="rowOrdinal">The row's catalog ordinal.</param>
+    /// <param name="key">The cell key, resolved by this arena's key table.</param>
+    /// <param name="time">The clocks the traits are evaluated against.</param>
+    /// <param name="turn">The turn on success; otherwise zero.</param>
+    /// <returns><see langword="true"/> when the row holds a <see cref="CellKind.Fixed"/> cell there.</returns>
+    public bool TryReadLiveTurn(int rowOrdinal, CellKey key, in ArenaTime time, out ulong turn) {
+        turn = 0UL;
+        if (!TryCellSlot(key: key, rowOrdinal: rowOrdinal, slot: out var slot) || !BitWords.Contains(index: slot, words: m_presence) || (m_layout[rowOrdinal].Kind != CellKind.Fixed)) {
+            return false;
+        }
+        if (m_layout[rowOrdinal].HasTraits && m_keys.TryGetName(key: key, name: out var name) && (BehaviorAt(name: name, rowOrdinal: rowOrdinal, slot: slot).Advance is { } advance)) {
+            turn = advance.TurnAt(baseValue: m_numbers[slot], currentEngineTick: time.EngineTick,
+                epochEngineTick: ReadNumberRaw(column: ArenaColumn.ClockEpochEngineTick, index: slot), row: DocumentRow(rowOrdinal: rowOrdinal));
+            return true;
+        }
+        turn = (unchecked((ulong)LiveNumberAt(key: key, rowOrdinal: rowOrdinal, slot: slot, time: in time)) << (64 - FixedQ4816.FractionBitCount));
+        return true;
+    }
     // Every public live read form shares this numeric evaluator after resolving storage exactly once.
     // Boolean normalization matches CellValue.Bool even when an advancing trait produces a nonzero integer.
     private long LiveNumberAt(int rowOrdinal, int slot, CellKey key, in ArenaTime time) {

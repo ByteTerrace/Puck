@@ -138,7 +138,9 @@ public abstract record WorldRouteStep {
     /// (<see cref="WorldSeatProgramOp.Rise"/>) held while the point stands above or below the body along the body's own
     /// up. No path is planned and no corridor checked. The step ends within <paramref name="Within"/> of the point,
     /// on arriving in the world <paramref name="Enters"/> names, when the way crosses a seam into it, or, with
-    /// <paramref name="Lands"/>, once the body stands on ground.</summary>
+    /// <paramref name="Lands"/>, once the body stands on ground; with <paramref name="Until"/> it ends only once the body
+    /// stands in that place, holding at the point until something carries it there (a rule that stands a body burned
+    /// beside a star back on its pad), and the chapter's timeout fails it otherwise.</summary>
     /// <param name="Point">The point flown to, in the coordinates of the world the step starts in.</param>
     /// <param name="Pace">The pace, a word the route's program reads (a held boost).</param>
     /// <param name="Within">The distance, in metres, at which the point is reached.</param>
@@ -148,6 +150,8 @@ public abstract record WorldRouteStep {
     /// for a flight that stays in one world. With it, reaching the point without arriving fails the step.</param>
     /// <param name="Lands">Whether the step is a landing: it flies at the point, a point of the ground or under it,
     /// until the body, or the body it rides, is grounded, and <paramref name="Within"/> ends nothing.</param>
+    /// <param name="Until">The place, in the world the step is played in, that ends the step, or <see langword="null"/>
+    /// for a step the point, the arrival or the landing ends.</param>
     public sealed record Fly(
         [property: JsonPropertyName("point")] DocumentVector3 Point,
         [property: DocumentText("a route pace")]
@@ -157,7 +161,9 @@ public abstract record WorldRouteStep {
         [property: JsonPropertyName("world"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? World = null,
         [property: DocumentText("a route world")]
         [property: JsonPropertyName("enters"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Enters = null,
-        [property: JsonPropertyName("lands")] bool Lands = false
+        [property: JsonPropertyName("lands")] bool Lands = false,
+        [property: DocumentText("a route place or corridor")]
+        [property: JsonPropertyName("until"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Until = null
     ) : WorldRouteStep;
     /// <summary>Stands for a time, the camera turned onto a heading or toward a point; with neither it holds the
     /// facing it has.</summary>

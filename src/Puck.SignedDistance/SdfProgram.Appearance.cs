@@ -125,7 +125,19 @@ public sealed partial class SdfProgram {
     /// <param name="end">The instruction past the range's last.</param>
     /// <returns><see langword="true"/> for a range of glass shapes.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The range lies outside the instruction stream.</exception>
-    public bool IsGlassRange(int first, int end) {
+    public bool IsGlassRange(int first, int end) => EveryShapeIs(end: end, first: first, glass: true);
+    /// <summary>Returns whether every drawn shape of an instruction range carries a material that casts no shadow
+    /// (<see cref="SdfMaterial.CastsNoShadow"/>), and at least one shape is drawn: the shapes bake into a group of their
+    /// own that no shadow drawing selects. A range with no shape casts.</summary>
+    /// <param name="first">The range's first instruction.</param>
+    /// <param name="end">The instruction past the range's last.</param>
+    /// <returns><see langword="true"/> for a range of shapes that cast no shadow.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The range lies outside the instruction stream.</exception>
+    public bool IsShadowlessRange(int first, int end) => EveryShapeIs(end: end, first: first, glass: false);
+
+    // Whether every drawn shape of a range carries a material of one outline class (glass, or casting no shadow), and at
+    // least one shape is drawn.
+    private bool EveryShapeIs(int first, int end, bool glass) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: first);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(value: end, other: m_instructions.Length);
 
@@ -135,7 +147,9 @@ public sealed partial class SdfProgram {
             var instruction = m_instructions[index];
 
             if (instruction.Op != SdfOp.ShapeBlend) { continue; }
-            if (!IsGlassMaterial(material: unchecked((int)instruction.Material))) { return false; }
+            var material = unchecked((int)instruction.Material);
+
+            if (!(glass ? m_outline.IsGlass(material: material) : m_outline.IsShadowless(material: material))) { return false; }
             shapes++;
         }
 

@@ -390,6 +390,8 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
             Debug: (DebugViewModes.PreservesScene(mode: debug) ? 0 : debug),
             Enabled: (temporal || (entry.Convergence is { IsActive: true })),
             Height: height,
+            // The view index the pass block reads its exposure at (SdfFrameBlock.Write through each recorder's clamp).
+            LightScale: view.Residency.Exposures.LightScaleOf(view: Math.Min(val1: view.View, val2: (view.Residency.Frame!.Views.Count - 1))),
             Temporal: temporal,
             Unread: unread,
             ViewsRate: (temporal && view.Residency.Frame?.Settings.ViewsRate is { MaxRate: > 1 } rate) ? rate : null,
