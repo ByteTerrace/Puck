@@ -28,7 +28,7 @@ let plinthFace = [-0.2164, 0, 0, 0.9763]
 let plinthKnob = [0.5373, 0, 0, 0.8434]
 
 // A point on the console's face: `across` along x, `up` along the face, `out` along its normal, from the face's centre.
-let plinthConsole = [0, 0.4, 0.66]
+let plinthConsole = [0, 0.46, 0.7]
 let plinthConsoleDepth = 0.09
 function plinthOnFace(across, up, out) = [
   across,
@@ -36,60 +36,91 @@ function plinthOnFace(across, up, out) = [
   ((plinthConsole[2] - (up * plinthTiltSin)) + ((plinthConsoleDepth + out) * plinthTiltCos))
 ]
 
-// A display plinth that faces +Z: a teal foot, an ochre body, a cream cap whose top stands 0.7 m up with a glowing
-// turntable ring set in it, and a cream console tilted back across the front carrying a dark screen and two brass knobs.
-// About 1.8 m wide and 1.6 m deep with its console; an exhibit stands on the cap from y 0.7.
+// A display plinth that faces +Z (docs/game/art/gallery-kit-pack/display-plinth.png): a deep-teal foot, an ochre body
+// clad in panels with dark joints between them, a thick bevelled cream cap whose top stands 0.75 m up with a glowing
+// turntable ring set in it, and a cream console tilted back across the front carrying a three-pane screen, two brass
+// knobs and a round reset button. About 1.8 m wide and 1.6 m deep with its console; an exhibit stands on the cap from
+// y 0.75. Every shape is a union, so a creation that holds it keeps panels and trims.
+let plinthCapTop = 0.75
 template exhibitPlinth(base) {
   shape Box "plinth-foot" {
     material: (base + plinthTeal)
-    position [0, 0.06, 0]
-    scale [0.8, 0.06, 0.58]
-    rounding: 0.03
+    position [0, 0.11, 0]
+    scale [0.8, 0.11, 0.58]
+    chamfer: 0.03
   }
-  shape Box "plinth-body" {
-    material: (base + plinthOchre)
-    position [0, 0.37, 0]
-    scale [0.86, 0.26, 0.64]
-    rounding: 0.07
+  shape Box "plinth-core" {
+    material: (base + plinthScreen)
+    position [0, 0.42, 0]
+    scale [0.82, 0.2, 0.6]
+  }
+  for x in [-0.56, 0, 0.56] {
+    for z in [-1, 1] {
+      shape Box $"plinth-panel-{x}-{z}" {
+        material: (base + plinthOchre)
+        position [x, 0.42, (z * 0.615)]
+        scale [0.265, 0.2, 0.03]
+        chamfer: 0.012
+      }
+    }
+  }
+  for z in [-0.3, 0.3] {
+    for x in [-1, 1] {
+      shape Box $"plinth-side-{z}-{x}" {
+        material: (base + plinthOchre)
+        position [(x * 0.835), 0.42, z]
+        scale [0.03, 0.2, 0.285]
+        chamfer: 0.012
+      }
+    }
   }
   shape Box "plinth-cap" {
     material: (base + plinthCream)
-    position [0, 0.665, 0]
-    scale [0.9, 0.035, 0.68]
-    rounding: 0.03
+    position [0, 0.685, 0]
+    scale [0.9, 0.065, 0.68]
+    chamfer: 0.045
   }
   shape Cylinder "plinth-ring" {
     material: (base + plinthGlow)
-    position [0, 0.705, 0]
+    position [0, 0.752, 0]
     scale [0.56, 0.006, 0.56]
   }
   shape Cylinder "plinth-turntable" {
     material: (base + plinthCream)
-    position [0, 0.708, 0]
+    position [0, 0.755, 0]
     scale [0.5, 0.01, 0.5]
   }
   shape Box "plinth-console" {
     material: (base + plinthCream)
     position: plinthConsole
     rotation: plinthFace
-    scale [0.62, 0.17, plinthConsoleDepth]
-    rounding: 0.04
+    scale [0.62, 0.2, plinthConsoleDepth]
+    chamfer: 0.03
   }
-  shape Box "plinth-screen" {
-    material: (base + plinthScreen)
-    position: plinthOnFace(0, 0.04, 0)
-    rotation: plinthFace
-    scale [0.52, 0.1, 0.012]
-    rounding: 0.01
+  for x in [-0.33, 0, 0.33] {
+    shape Box $"plinth-screen-{x}" {
+      material: (base + plinthScreen)
+      position: plinthOnFace(x, 0.075, 0)
+      rotation: plinthFace
+      scale [0.155, 0.075, 0.012]
+      rounding: 0.008
+    }
   }
-  for x in [-0.3, 0.3] {
+  for x in [-0.3, -0.12] {
     shape Cylinder $"plinth-knob-{x}" {
       material: (base + plinthBrass)
-      position: plinthOnFace(x, -0.12, 0.02)
+      position: plinthOnFace(x, -0.11, 0.02)
       rotation: plinthKnob
       scale [0.045, 0.025, 0.045]
       rounding: 0.008
     }
+  }
+  shape Cylinder "plinth-reset" {
+    material: (base + plinthCream)
+    position: plinthOnFace(0.22, -0.11, 0.01)
+    rotation: plinthKnob
+    scale [0.05, 0.012, 0.05]
+    rounding: 0.006
   }
 }
 

@@ -2,7 +2,7 @@
 
 The gallery's kit (`worlds/standard/architecture.puck`) is modelled from the
 selected [canyon workshop direction](canyon-workshop-pack/README.md) and the
-gallery kit pack (`gallery-kit-pack/`, being drawn). The paintings fix the look but
+[gallery kit pack](gallery-kit-pack/README.md). The paintings fix the look but
 not the measurements. This page records the real buildings and practice that
 give the kit believable sizes and behaviour, and what each one decides. Each
 fact is cited to the page it came from. Where sources disagree, both figures
