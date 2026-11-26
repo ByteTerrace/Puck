@@ -23,6 +23,11 @@
 // `passes` names body registers (state.body): a body holding any of them nonzero is given the `passSize` size inside
 // every zone instead, so a pass a puzzle grants keeps a body its full size where the field would shrink it.
 //
+// `sizeHold` is a body register (size-hold.puck, which a world imports beside this) every field reads, for an escape hatch such as a debug noclip: 2 while a source holds
+// the body (the source writes it), when every field gives it `passSize` wherever it stands, inside a zone or not; 1 once
+// the source lets go, when it keeps that size inside the zones until it stands outside every zone of the field, which
+// clears it to 0. So turning the hatch off inside a small place changes nothing until the body walks out.
+//
 // The size is the body's own register, fixed point, written by a world rule from its live position (bodyPosition), so
 // it is world truth: its collider, speeds, step height, jump, engage reach and gravity response follow it on the
 // authority (bodies.scale), and every observer, a window or another player or a spectator camera, reads the same
@@ -127,10 +132,18 @@ template sizeField(name, zones, sizes, register = "size", passes = [], passSize 
           $"sizeField-{name}"[zone.start] * power($"sizeField-{name}"[zone.end] / $"sizeField-{name}"[zone.start], $"along{z}")
         ) : 0.0)
     }
-    local target = $"held{length(passes)}" ? $"sizeField-{name}"[passKey] : $"size{count}"
-    when ($"size{count}" != 0) and bodyState(each, register) != target
+    local hold = bodyState(each, sizeHold)
+    local inside = $"size{count}" != 0
+    local target = ($"held{length(passes)}" or (hold != 0)) ? $"sizeField-{name}"[passKey] : $"size{count}"
+    local holdNext = ((hold == 1) and not inside) ? 0.0 : hold
+    when ((inside or (hold != 0)) and bodyState(each, register) != target) or (hold != holdNext)
     mode: Level
     forEach: $players
-    setBodyState(key: $each, state: register, expression: target)
+    if (inside or (hold != 0)) and bodyState(each, register) != target {
+      setBodyState(key: $each, state: register, expression: target)
+    }
+    if hold != holdNext {
+      setBodyState(key: $each, state: "sizeHold", expression: holdNext)
+    }
   }
 }

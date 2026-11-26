@@ -1,0 +1,12 @@
+// The size hold: the body register every size field (size-field.puck) reads, so an escape hatch can hold a body clear of
+// them. 2 while a source holds the body, 1 once it lets go (kept until the body stands outside every zone), 0 free.
+state {
+  body [
+    {
+      name: "sizeHold"
+      kind: "Counter"
+      initial: 0
+      envelope { $type: "set", values [0, 1, 2] }
+    }
+  ]
+}
