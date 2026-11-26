@@ -3,6 +3,7 @@ using System.Numerics;
 using Puck.Abstractions.Machines;
 using Puck.Maths;
 using Puck.World.Protocol;
+using Puck.Abstractions.Collections;
 
 namespace Puck.World.Server;
 
@@ -434,7 +435,7 @@ public sealed partial class WorldEngagement {
             : null);
 
         if (policy is { Ports: { Count: > 0 } ports }) {
-            if ((seatedPort is null) || !NamesPort(ports: ports, port: seatedPort)) {
+            if ((seatedPort is null) || !StringLists.Holds(items: ports, value: seatedPort)) {
                 _ = TryFreeSeat(
                     except: targetPrincipal,
                     port: out seatedPort,
@@ -1171,18 +1172,10 @@ public sealed partial class WorldEngagement {
         if (ports is not { Count: > 0 }) {
             return null;
         }
-        return (((held is not null) && NamesPort(ports: ports, port: held))
+        return (((held is not null) && StringLists.Holds(items: ports, value: held))
             ? held
             : ports[0]
         );
-    }
-    private static bool NamesPort(IReadOnlyList<string> ports, string port) {
-        for (var index = 0; (index < ports.Count); index++) {
-            if (string.Equals(a: ports[index], b: port, comparisonType: StringComparison.Ordinal)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /// <summary>Translates a resolved <see cref="PlayerIntent"/> to a neutral standard-controller image through
