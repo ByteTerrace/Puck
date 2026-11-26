@@ -770,7 +770,7 @@ template shellPrototypes() {
       name: "gallery-pier"
       schema: "puck.creation.v1"
       palette: shellStructure
-      branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2), foot: [(shellTileHalf - (lookTileJoint / 2)), (shellTileHalf - (lookTileJoint / 2))])
+      branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2), foot: [shellTileHalf, shellTileHalf])
     }
   }
   // The nave's end: a slim pier either side of each tall bay, whose branches arch over the bay's head.
