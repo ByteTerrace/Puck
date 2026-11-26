@@ -267,6 +267,42 @@ own materials `exhibitSubjects` in [`shapes.puck`](shapes.puck). Edit a value,
 A shot's eye and aim are placed from `gallerySite` when the document compiles,
 as the other world-space pieces are.
 
+## The size walk
+
+Level 1 is the level a body shrinks into: the level stays its normal size, so
+it is giant to her. The corner staircases will carry the change, and until they
+do, [`size-walk.puck`](size-walk.puck) lays the same mechanism along level 1's
+north gallery. Walking east from plan x 40 to x 52, she shrinks from her full
+size to Alice's; walking back west, she grows again.
+
+The mechanism is the standard's size field
+([`size-field.puck`](../standard/size-field.puck)). A world rule reads her
+position every tick, takes her progress `t` along the walk (0 at the west end, 1
+at the east) and writes her `size` register (`size.puck`) to
+`start * power(end / start, t)`. Each equal step along the walk multiplies her
+size by the same factor, so on a stair each tread costs her the same share of
+her stride all the way up. The size is fixed-point state on the authority, so
+her collider, pace, step height, jump and camera follow it, and a window,
+another player or a spectator sees her the size she is. A body asked to grow
+where it does not fit (under a low ceiling) stays the largest size that fits,
+and grows on once it is clear.
+
+To try it, `debug.go size-walk` poses her two metres short of the west end,
+facing east along the walk; in the gallery root, `body.pose 47.825 4.55 45.375
+270 0 0 0` stands her there. `body.state 0` reads her `size` as she walks.
+
+The size at the east end is a look and feel, chosen for how small the
+gallery's displays and benches read beside her. Two ways to tune it live:
+
+| Console line | What it does |
+|---|---|
+| `world.state sizeField-gallery-walk` | Reads the walk's `start` and `end` sizes |
+| `world.state.cell.set sizeField-gallery-walk end 0.12` | Sets Alice's size at the east end; the next tick she is sized by it |
+
+To keep a value, edit `sizeWalkAlice` in `size-walk.puck` and let the watch
+reload it. The register's envelope (`size.puck`) allows a tenth to one, so a
+size below a tenth needs the envelope widened with it.
+
 ## What is still open
 
 - **World-space pieces.** A static creation's paints, a state lattice's origin

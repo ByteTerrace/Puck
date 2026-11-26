@@ -2832,7 +2832,7 @@ the largest live body—refused by name otherwise) carrying each body's live
 scale multiplier: absent (the default) leaves every body's
 `Server.WorldBody.Scale` at `1` forever, at no per-tick cost. The register's
 `initial` is the size a body is born at, and the envelope is the only place the
-range is authored (`worlds/debug/size.puck` declares `size`, a quarter to one).
+range is authored (`worlds/debug/size.puck` declares `size`, a tenth to one).
 
 The register is the body's own state, so a body's size goes where the body
 goes. A rule's `setBodyState` writes it; a crossing through a portal pair of
@@ -2845,8 +2845,23 @@ envelope; a checkpoint restores it with the arena and a replay moves it at the
 same tick. A pair of two sizes between two worlds is refused by name, since a
 transfer carries the register unchanged and cannot apply the pair's scale to
 it. A `Region` interaction (or a rule gated on the body's own position) that
-writes the register must be edge-triggered, one write per entry rather than
-one per tick.
+writes the register writes only when the size changes: edge-triggered, one
+write per entry, or level-triggered behind a gate that the register differs
+from what it would write, as the standard's size field does
+(`worlds/standard/size-field.puck`: a body's size is a function of its
+progress along a path, `start * power(end / start, t)`, written every tick it
+moves).
+
+Growth is held to the room about the body. A tick's resync
+(`WorldBody.SetScaleWithinClearance`) admits a larger size only where the
+grown body, lifted 1/32 m clear of its floor, takes no push down its own up
+and no more than 1/64 m of push in all from the static contact field; past
+that it takes the largest size it fits (four halvings between the size it
+holds and the size asked) and writes that size back into the register, so
+the register, the collider and every observer agree. A body asked to grow
+under a ceiling therefore stays small and grows on once it walks clear, never
+pressed into its floor or thrown by the contact solve. Shrinking is always
+admitted, and a crossing's resync takes the pair's size whole.
 
 `WorldPopulation.SyncBodyScale` (through `SyncBodyCells`) resyncs every active
 body's `Scale` from the register once a tick after the world rules (the last

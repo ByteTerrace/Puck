@@ -14,6 +14,9 @@ import "ship-rows"
 import "shapes"
 import "exposure"
 import "gallery/gallery"
+// A body's size register, and the size field along level 1's north gallery that writes it (size-walk.puck).
+import "size"
+import "size-walk"
 
 metadata {
   title: "Gallery"
