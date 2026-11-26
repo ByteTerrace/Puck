@@ -882,7 +882,7 @@ public sealed class MemoryAccount {
     // headroom also bounds it, and with no reading the machine-derived budget stands in for it. Play's own budget (the
     // bar, or three quarters of what is installed) is not part of it: that holds play alone (LimitOf).
     private long MachineLimit(long margin) {
-        long? measured = ((m_available is { } available) ? (available.AddSaturating(right: m_availableHeld) - margin) : null);
+        var measured = MeasuredLimit(margin: margin);
 
         if ((m_budget is null) && (measured is { } free)) { return Math.Max(val1: 0L, val2: free); }
 
@@ -892,6 +892,9 @@ public sealed class MemoryAccount {
     }
     // Under m_gate: the machine's limit for the whole pool, leaving the headroom.
     private long MachineLimit() => MachineLimit(margin: Headroom);
+    // Under m_gate: the free physical memory last read, with what the pool held at that reading, less a margin; null
+    // where the host reports none.
+    private long? MeasuredLimit(long margin) => ((m_available is { } available) ? (available.AddSaturating(right: m_availableHeld) - margin) : null);
     // Under m_gate: the room authoring apart from play has left for a new promise: the machine's limit, leaving the
     // authoring margin, less what the whole pool holds and has promised; none while the system's low-memory signal stands.
     // Play's budget is not reserved out of it: what play holds is already out of the free memory and what it has promised
@@ -985,17 +988,25 @@ public sealed class MemoryAccount {
     // that can wait, fit the bar on what play holds and has promised, headroom spent: ordinary admission (Fits) leaves
     // the headroom, and what work needs to progress at all (the forced job, an owner's progress floor) may spend it, so
     // work still settles, one job at a time, under the bar. Storage that cannot give way is not held to it
-    // (AdmitPastLimit). Authoring storage apart from play reserves only within
-    // the authoring margin (Fits), but a charge past its reservation (a bake stage's scratch its peak does not cover) is
-    // transient and may spend the margin: the machine's limit leaving the headroom for storage that gives way, and all of
-    // the measured room for storage that cannot, so a busy machine defers a bake's next group rather than restarting one
-    // already running.
-    private bool FitsHostBar(PhysicalMemory pool, long extra, MemoryAllowance allowance = MemoryAllowance.Play, bool givesWay = false) {
+    // (AdmitPastLimit). Authoring storage apart from play reserves only within the authoring margin (Fits), and what it
+    // needs to progress (the forced job, a progress floor, a charge past its reservation such as a bake stage's scratch
+    // its peak does not cover) may spend that margin, never the machine's floor (FitsMachine), so a short machine
+    // defers a bake's next group or starts a stage again (a bake's Readmit) rather than exhausting the machine.
+    private bool FitsHostBar(PhysicalMemory pool, long extra, MemoryAllowance allowance = MemoryAllowance.Play) {
         if ((pool != PhysicalMemory.Host) || (extra <= 0L)) { return true; }
-        if (Apart(allowance: allowance)) { return (extra <= ((MachineLimit(margin: (givesWay ? Headroom : 0L)) - HeldOf(pool: pool)) - PromisedOf(pool: pool))); }
+        if (Apart(allowance: allowance)) { return (!m_lowMemory && (extra <= ((MachineLimit() - HeldOf(pool: pool)) - PromisedOf(pool: pool)))); }
 
         return ((m_hostBar is not { } bar) || (extra <= ((Math.Min(val1: bar, val2: DefaultBudget) - PlayHeldOf(pool: pool)) - PlayPromisedOf(pool: pool))));
     }
+    // Under m_gate: whether extra bytes of host promise leave the machine its floor: no admission while the system
+    // signals low memory, and none past the machine's free physical memory as last read, with what the pool held then,
+    // less the headroom (MeasuredLimit), which counts every program's use and the process's own beyond its owners. The
+    // one bound that work admitted past a pool's ordinary room (the forced job, a progress floor) is held to on every
+    // machine and in every build, a player's included: such work waits, and a bake degrades rather than exhausting the
+    // machine (AGENTS.md, the bars). An operator's cap (SetBudget) is not part of it, so a bake under a cap smaller than
+    // its next job still settles one job at a time while the machine has the memory.
+    private bool FitsMachine(long extra) => ((extra <= 0L) || (!m_lowMemory &&
+        ((MeasuredLimit(margin: Headroom) is not { } limit) || (extra <= ((limit - HeldOf(pool: PhysicalMemory.Host)) - PromisedOf(pool: PhysicalMemory.Host))))));
     // Under m_gate.
     private MemorySegmentLimit? RecordedLimit(GpuMemorySegment segment) {
         foreach (var recorded in m_segmentLimits) {
@@ -1418,7 +1429,7 @@ public sealed class MemoryAccount {
                 var extra = (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise);
 
                 if (!m_account.Fits(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host)) {
-                    if (!progress || !m_account.FitsHostBar(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host)) { return RefusePeak(peak); }
+                    if (!progress || !m_account.FitsMachine(extra: extra) || !m_account.FitsHostBar(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host)) { return RefusePeak(peak); }
 
                     m_account.m_pools[((int)PhysicalMemory.Host)].GrantOverLimit(bytes: extra, taker: Name);
                     m_account.m_pressure = 1;
@@ -1438,25 +1449,33 @@ public sealed class MemoryAccount {
         }
         /// <summary>Reserves the owner's peak as the process's one forced job when the authored host bar permits it,
         /// counting what the host pool's play owners hold and are promised, headroom spent, so the forced job settles
-        /// while every other admission waits for room. One owner in the
+        /// while every other admission waits for room. The machine's floor still holds: no forced job is admitted while
+        /// the system signals low memory or past the machine's free physical memory less the headroom, and an authoring
+        /// owner refused there makes the process give back what it no longer uses and asks once more, as
+        /// <see cref="TryReserve"/> does. One owner in the
         /// process holds the allowance at a time, from this call until its reservation is released
         /// (<see cref="ReleaseReservation"/>) or it is disposed; the bytes forced are counted
         /// (<see cref="MemoryAdmissionReading.Forced"/>).</summary>
         /// <param name="peak">The most bytes the owner's storage holds at once while the work runs.</param>
         /// <returns><see langword="true"/> when the reservation is held; <see langword="false"/> when another owner holds
-        /// the forced allowance or the requested peak, with what the owners hold and are promised, exceeds the host
-        /// bar.</returns>
+        /// the forced allowance, or the requested peak, with what the owners hold and are promised, exceeds the host bar
+        /// or the machine's floor.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
         /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
         /// <exception cref="InvalidOperationException">The owner is a device family or a segment's row.</exception>
-        public bool TryReserveForced(long peak) {
+        public bool TryReserveForced(long peak) => (ReserveForcedOnce(peak: peak) ||
+            ((m_allowance == MemoryAllowance.Authoring) && m_account.ReclaimForAuthoring() && ReserveForcedOnce(peak: peak)));
+        private bool ReserveForcedOnce(long peak) {
             ArgumentOutOfRangeException.ThrowIfNegative(peak);
             m_account.RefreshAvailable();
             lock (m_account.m_gate) {
                 ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
                 ThrowIfNotAdmitted();
                 if ((m_account.m_forced is { } holder) && !ReferenceEquals(objA: holder, objB: this)) { return false; }
-                if (!m_account.FitsHostBar(allowance: m_allowance, extra: (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise), pool: PhysicalMemory.Host)) { return RefusePeak(peak); }
+
+                var extra = (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise);
+
+                if (!m_account.FitsMachine(extra: extra) || !m_account.FitsHostBar(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host)) { return RefusePeak(peak); }
                 if (m_account.m_forced is null) { m_account.m_forcedJobs++; }
                 m_account.m_forced = this;
                 m_account.m_forcedBytes = peak;
@@ -1548,7 +1567,7 @@ public sealed class MemoryAccount {
                 }
                 // Past the bar a charge that gives way is refused, as authoring storage apart from play is past the
                 // machine's budget; play storage that cannot give way is admitted and counted (AdmitPastLimit).
-                if (!m_account.FitsHostBar(allowance: m_allowance, extra: extra, givesWay: givesWay, pool: PhysicalMemory.Host) &&
+                if (!m_account.FitsHostBar(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host) &&
                     !m_account.AdmitPastLimit(bytes: extra, givesWay: (givesWay || m_account.Apart(allowance: m_allowance)), pool: PhysicalMemory.Host, taker: Name)) {
                     return false;
                 }

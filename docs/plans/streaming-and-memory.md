@@ -377,7 +377,10 @@ room is never narrowed by the bytes beyond the owners: play's owners fit the
 bar less the headroom on what they hold and have promised, and fixed
 allocations, region floors, the forced job and an owner's progress floor
 (`MemoryAccount.Owner.TryReserveProgress`, a mesh bake's readback) may spend
-the headroom. No admission can shrink the bytes beyond the owners, so a limit
+the bar's headroom, though the forced job and a progress floor never the
+machine's: neither is admitted while the system signals low memory or past
+the machine's free physical memory less the headroom (`MemoryAccount.FitsMachine`),
+so a bake on a short machine waits instead of exhausting it. No admission can shrink the bytes beyond the owners, so a limit
 taken from the bar less those bytes refused the owners exactly while unclaimed
 memory grew, and a refused mesh store read baked again, which made more
 unclaimed memory. Play's part of those bytes past the bar with what play holds marks
