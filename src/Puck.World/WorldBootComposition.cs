@@ -915,7 +915,9 @@ public static class WorldBootComposition {
         // world.state (read-back at all three grains). A whole ROW is authored through
         // world.row.set/world.row.remove state <row-json>. ONE module for one substrate: a slot IS a row with one
         // cell, so there is no second family over the same rows. CORE, like the HUD module above: the document
-        // itself is server state, and no presentation dependency is needed to read or write it.
+        // itself is server state, and no presentation dependency is needed to read or write it. The pin ledger keeps the
+        // operator's state and row lines world.pins carries across a restart.
+        services.AddSingleton<WorldPinLedger>();
         services.AddSingleton<ICommandModule, WorldStateCommandModule>();
 
         // The `rules` section's READ-BACK — world.rules reads the live compiled set; the rows themselves are
@@ -1101,6 +1103,9 @@ public static class WorldBootComposition {
         services.AddSingleton<WorldSeatMotionTrace>();
         services.AddSingleton<WorldPresentationProbe>();
         services.AddSingleton<ICommandModule, WorldViewCommandModule>();
+        // world.pins: the session's operator pins (levers, composition overrides, the ledger's lines, the seats' poses)
+        // as one script a restart replays. Every home it reads is core, so it works headless.
+        services.AddSingleton<ICommandModule, WorldPinsCommandModule>();
         // world.view.touch: the console's touchscreen, core-registered so every shape knows the verb; the contact store
         // is presentation-only, so a boot with no GPU presentation refuses it by name.
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldTouchCommandModule(

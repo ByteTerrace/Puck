@@ -807,9 +807,9 @@ template gallerySignPlacements() {
 let galleryCommands = [
   {
     name: "gallery.go"
-    help: "Walks a body to an exhibit's display and shows that exhibit on its turntable (its prototype name), or walks it to the entrance (gallery, the default), and returns the view to the chase camera."
+    help: "Walks a body to an exhibit's display and shows that exhibit on its turntable (its prototype name), to the entrance (gallery, the default), or onto level 1's toybox floor (toybox), where it takes the size its pass gives it, and returns the view to the chase camera."
     parameters [
-      { name: "exhibit", kind: Choice, values: concat(["gallery"], map(galleryCatalog, entry => entry.name)), default: "gallery" }
+      { name: "exhibit", kind: Choice, values: concat(["gallery", "toybox"], map(galleryCatalog, entry => entry.name)), default: "gallery" }
       { name: "body", kind: Body, default: "0" }
     ]
     lines [
@@ -1059,8 +1059,8 @@ template displayState() {
   row {
     name: "galleryPick"
     kind: Int
-    capacity: (length(galleryCatalog) + 1)
-    cells: concat([{ key: "gallery", value: 0 }], map(galleryCatalog, entry => { key: entry.name, value: 0 }))
+    capacity: (length(galleryCatalog) + 2)
+    cells: concat([{ key: "gallery", value: 0 }, { key: "toybox", value: 0 }], map(galleryCatalog, entry => { key: entry.name, value: 0 }))
   }
 }
 

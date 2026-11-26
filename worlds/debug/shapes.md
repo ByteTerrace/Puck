@@ -42,16 +42,20 @@ The building has no sun of its own: the world that stands it lights it
 ([`day.puck`](day.puck) in the debug world). Its own light is in real units,
 and almost all of it is the flaw ([`gallery/flaw.puck`](gallery/flaw.puck)):
 one continuous glowing tube, a neon core in a frosted sleeve whose tint drifts
-along its length, that weaves through every floor. It runs east along the
-north arcade as a wave from under the roof to level 0 and back, its flanks
-passing behind the piers and through the north gallery's slabs, crosses the
-void under the roof at the east end, weaves back west along the south arcade,
-and climbs from level 0 through the bridge's three floors to where it began.
-Its path is a list of control points (`flawControls` in
-[`gallery/layout.puck`](gallery/layout.puck)); its look and its light per metre
-are `lookFlaw` and `lookFlawTint` in [`gallery/look.puck`](gallery/look.puck).
+along its length, that runs through every floor like a finely made neon
+conduit. Every run is level or plumb, on the building's lines: along each
+gallery it keeps one tile behind the arcade, just under the storey's ceiling,
+and steps down a storey a bay from under the roof to level 0 and back up, each
+step a riser standing plumb behind a pier and passing straight through the slab
+through a brass collar. It crosses the void only under the roof, under the
+arches of bays 3 and 11, and the two galleries mirror each other. Its route is
+an editable list of steps (`flawProfile` in
+[`gallery/layout.puck`](gallery/layout.puck)), which gives the corners
+(`flawRoute`) and the slabs' openings (`flawCrossings`); its look, corner
+radius, collar and light per metre are `lookFlaw`, `lookFlawTint` and
+`lookFlawCollar` in [`gallery/look.puck`](gallery/look.puck).
 It lights like a fluorescent tube: a chain of tube lights along the same
-curve, cut at each slab so every one lies in one storey, anchored to the
+route, cut at each slab so every one lies in one storey, anchored to the
 building's root and standing still, so the irradiance volume traces each: its
 light bounces about its storey and stops at the slabs. Beside it a pendant
 lights the south-west stair's well, which the flaw never enters, and the lift's car has a
@@ -111,7 +115,7 @@ judge it. The card table's cards are posed by the rules, which judge each reques
 | Stand on a level's landing | `gallery.level <level> [body]` |
 | Go to the board game room | `debug.go boardroom`, or a table's own place (a table's edge, close enough to sit) |
 | Spread or gather a level's fan shades | `gallery.blinds <level> up\|down` |
-| Inspect without the showcase lighting | `gallery.inspect on\|off`: On lights every surface from five unshadowed neutral directional fills (60 lux each), raises the sky ambient gain to 2.5 against the authored 0.40625, pins the camera at EV100 7 with no local adaptation and takes the screens out of the traced light, so a capture reads albedo and form alike at every exhibit, shadowed sides included. Off writes the authored values back exactly. It touches only those render values (`galleryFill` cells bound by the fill lights' illuminance and by the world's `render.environment.ambient`, `render.exposure.hold` and `render.indirect.sources.screens`), so the fixtures, strips, shades and traced bounce stay as `gallery.lights` and `gallery.blinds` leave them; turn it Off for a lighting or photometric check |
+| Compare exhibits at one exposure | `gallery.inspect on\|off`: On pins the camera at EV100 7 with no local adaptation (the `galleryExposure` cell the world's `render.exposure.hold` reads), so captures of different exhibits compare at one exposure; Off releases it to the automatic exposure. It adds no light: the building's own lights ([gallery.md](gallery.md#lighting)) light every exhibit as `gallery.lights` and `gallery.blinds` leave them |
 | Switch a level's lights | Stand before the level's wall switch (`body.pose spawn:hall-switch-<level>`) and press the context button (E, or RB on a pad), or `gallery.lights <level> on\|off`. The press counts while a body stands in the reach box before the plate; a rule reads no facing, so that box stands in for facing the plate |
 | Walk to an exhibit | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`) stands her before its display's console, turned past it (`gallerySpawnTurn`) so the chase camera frames the display beside her, and shows the exhibit on its turntable; `gallery.go` alone returns to the entrance |
 | Show an exhibit without walking | `gallery.show <exhibit>`: its display's turntable shows it and its screen names it |

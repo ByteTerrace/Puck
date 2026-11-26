@@ -1,0 +1,268 @@
+// The central tree: a giant old broadleaf growing at the hall's exact centre (layout.puck's treeX, treeZ), the gallery's
+// diegetic tutorial in climbing. Its treads spiral up the trunk at the stairs' riser, and two broad branches reach each
+// of levels 1 to 3, so a player who walks up the trunk learns they can climb it, and walking out along a branch learns
+// the branches lead to the other floors. The gallery module imports this, so the gallery booted alone
+// (gallery-root.puck) and the debug world both grow it.
+//
+// It is two creations on one spot. `gallery-tree` is everything a body stands on or will climb, solid: the tapering
+// trunk, its flare and buttress roots, the treads and the branches, all built from shapes contact admits
+// (standard/limbs.puck), joined by smooth blends under one bark relief, so the tree collides as it is drawn.
+// `gallery-tree-canopy` is what a body never touches, with no collision: the crown's leaf masses high in the void
+// under the skylights, the limbs that carry them, and a leafy twig off each branch.
+//
+// Every dimension is layout.puck's (the trunk, the treads, the branches and where they land), every colour look.puck's
+// (lookTree). Shapes are authored in the creation's frame, a half turn about up from the plan's, so a plan offset
+// (dx, y, dz) from the tree's centre stands at author (-dx, y, -dz), and a plan angle a round the trunk is author angle
+// a + 180.
+
+import "../../standard/foliage"
+import "../../standard/limbs"
+import "../shapes"
+import "layout"
+import "look"
+
+// A plan point as the creation's author-frame point.
+function treeAuthor(p) = [(treeX - p[0]), (p[1] - galleryFloor[0]), (treeZ - p[2])]
+let treeAuthorTurn = 180
+
+// A branch's walking line: from just inside the bark over its tread, bending round to its landing, arching a little as
+// it goes. Its control point lies halfway between a point out along its tread's bearing (so it leaves the trunk as a
+// limb does) and a point straight back from its landing across the edge (so it meets the balcony nearly square and
+// walks through level 1's gate rather than across it).
+function treeBranchA(b) = treeAuthor(treeBranchFrom(b))
+function treeBranchC(b) = treeAuthor(treeBranchTo(b))
+function treeBranchReach(b) = vectorLength((treeBranchC(b) - treeBranchA(b)) * [1, 0, 1])
+function treeBranchOut(b) = (treeBranchA(b) + polarPoint(
+  (0.45 * treeBranchReach(b)),
+  (treeTreadAngle(b.tread) + treeAuthorTurn),
+  (((treeBranchC(b)[1] - treeBranchA(b)[1]) / 2) + 0.35)
+))
+function treeBranchB(b) = ((treeBranchOut(b) + [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)]) / 2)
+// Branch widths and depths, full, metres, at the trunk and at the balcony: broad enough at the tip to walk, narrow enough
+// to pass level 1's gate and level 2's balustrade gap.
+let treeBranchWidth = [1.9, 1.3]
+let treeBranchDepth = [1.7, 0.6]
+let treeBranchSegments = 8
+
+// The buttress roots, each a plank-like fin out from the trunk: its plan bearing in degrees, its half height, the
+// height of its middle and how far it dips outward, in degrees, from the trunk into the floor. The tall ones stand
+// where the treads above them have already climbed past their tops; the low ones, under the treads' first quarter turn,
+// lie along the floor below those treads.
+let treeRootRows = [
+  { angle: 30, height: 0.75, lift: -0.3, dip: 0 }
+  { angle: 100, height: 1.05, lift: -0.3, dip: 0 }
+  { angle: 185, height: 0.95, lift: 0.9, dip: 28 }
+  { angle: 228, height: 0.95, lift: 0.9, dip: 28 }
+  { angle: 268, height: 0.9, lift: 0.85, dip: 26 }
+  { angle: 318, height: 0.95, lift: 0.9, dip: 28 }
+]
+let treeRootReach = 2.4
+let treeRootThickness = 0.32
+// How far under the floor the tree reaches, so its cut never lies in the floor's own surface, and the half width of the
+// box it stands in, reaching past every branch's landing.
+let treeBuried = 0.05
+let treeSpan = 13
+
+// The crown: one broad dome over the trunk's top and leaf masses round it at plan bearings clear of the top branches'
+// paths, each a position (plan offset from the tree's centre) and radii, all under the roof.
+let treeCrownRows = [
+  { at [0, 16, 0], r [3.6, 1.6, 3.6] }
+  { at [4.6, 15.5, 0.6], r [2.3, 1.4, 2.1] }
+  { at [2.9, 15.9, 4.1], r [2.1, 1.3, 2] }
+  { at [-4.7, 15.3, 1.6], r [2.4, 1.5, 2.2] }
+  { at [-3.4, 15.8, -3.1], r [2.2, 1.35, 2.1] }
+  { at [4.1, 15.2, -2.9], r [2, 1.3, 1.9] }
+  { at [-1.2, 16.2, 3.7], r [1.8, 1.2, 1.7] }
+]
+// A twig leaves each branch this share along it, rising `twigRise` metres over `twigReach` sideways, alternating sides,
+// and ends in a leaf tuft of `twigTuft` radii; every third tuft blossoms.
+let twigAt = 0.55
+let twigReach = 2.2
+let twigRise = 1.7
+let twigTuft = [1.05, 0.75, 1.05]
+
+// Materials.
+let treeBark = 0
+let treeTread = 1
+let treeLeaf = 0
+let treeTwig = 1
+let treeBlossom = 2
+function treeBarkSurface(color, under, seed) = galleryCel(landscapeSurface(
+  { color: color, roughness: 0.94, specular: 0.025 },
+  under: under,
+  deposit: lookTree.moss,
+  seed: seed,
+  scale: 1,
+  lines: 0,
+  settle: 0.12,
+  noise: 1,
+  patternScale: [14, 0.7, 14],
+  threshold: 0.6,
+  softness: 0.25
+))
+
+prototypes {
+  prototype "gallery-tree" {
+    document {
+      name: "gallery-tree"
+      schema: "puck.creation.v1"
+      palette [
+        treeBarkSurface(lookTree.bark, lookTree.barkUnder, 6113)
+        treeBarkSurface(lookTree.tread, lookTree.treadUnder, 6114)
+      ]
+      // The bark's relief, one over the whole tree, so trunk, roots, treads and branches read as one grown surface and
+      // collide as drawn.
+      noise {
+        frequency: lookTree.grain
+        amplitude: lookTree.relief
+        octaves: 2
+        gain: 0.45
+        seed: 6113
+      }
+      shape Cone "trunk" {
+        material: treeBark
+        position [0, (treeTrunk.apex / 2), 0]
+        scale [treeTrunk.base, (treeTrunk.apex / 2), treeTrunk.base]
+      }
+      shape Superellipsoid "flare" {
+        material: treeBark
+        exponent: 2.2
+        position [0, -0.35, 0]
+        scale [(treeTrunk.base + 0.7), 0.8, (treeTrunk.base + 0.7)]
+        blend: SmoothUnion
+        smooth: 0.4
+      }
+      for (root, i) in treeRootRows {
+        shape Superellipsoid $"root-{i}" {
+          material: treeBark
+          exponent: 2.2
+          position: polarPoint((treeTrunk.base + 0.9), (root.angle + treeAuthorTurn), root.lift)
+          rotation: compose(rotate([0, 1, 0], (0 - (root.angle + treeAuthorTurn))), rotate([0, 0, 1], (0 - root.dip)))
+          scale [treeRootReach, root.height, (treeRootThickness / 2)]
+          blend: SmoothUnion
+          smooth: 0.5
+        }
+      }
+      spiralTreads(
+        label: "tread",
+        count: treeTreadCount,
+        start: (treeTreadStart + treeAuthorTurn),
+        step: treeTreadStep,
+        rise: treeTreadRise,
+        base: treeTrunk.base,
+        apex: treeTrunk.apex,
+        material: treeTread,
+        exponent: 2.4,
+        smooth: 0.3
+      )
+      for (b, i) in treeLimbs {
+        limb(
+          label: $"branch-{b.level}-{b.side}",
+          a: treeBranchA(b),
+          b: treeBranchB(b),
+          c: treeBranchC(b),
+          width: treeBranchWidth,
+          thickness: treeBranchDepth,
+          material: treeBark,
+          segments: treeBranchSegments
+        )
+      }
+      // The cone's taper would run on past the roof, and the roots down into the ground: the tree ends inside its crown
+      // and just under the hall's floor.
+      shape Box "bounds" {
+        position [0, ((treeTrunk.top - treeBuried) / 2), 0]
+        scale [treeSpan, ((treeTrunk.top + treeBuried) / 2), treeSpan]
+        blend: Intersection
+      }
+    }
+  }
+  prototype "gallery-tree-canopy" {
+    document {
+      name: "gallery-tree-canopy"
+      schema: "puck.creation.v1"
+      palette [
+        galleryCel(canopySurface(lookTree.leaves, 6115))
+        treeBarkSurface(lookTree.bark, lookTree.barkUnder, 6116)
+        galleryCel(canopySurface([lookTree.blossom, lookTree.blossom, "#FFE3EC"], 6117))
+      ]
+      // The leaf masses' breakup, one relief over the whole canopy, so its crowns blend into one mass.
+      noise {
+        frequency: lookTree.clumpGrain
+        amplitude: lookTree.clump
+        octaves: 1
+        gain: 0.4
+        seed: 6115
+      }
+      for (crown, i) in treeCrownRows {
+        shape Superellipsoid $"crown-{i}" {
+          material: treeLeaf
+          exponent: landscapeExponent
+          position [(0 - crown.at[0]), crown.at[1], (0 - crown.at[2])]
+          scale: crown.r
+          blend: SmoothUnion
+          smooth: 0.5
+        }
+      }
+      // The limbs from the trunk's top out into the crown's outer masses.
+      for (crown, i) in filter(treeCrownRows, c => ((c.at[0] != 0) or (c.at[2] != 0))) {
+        shape Sweep $"crown-limb-{i}" {
+          material: treeTwig
+          blend: SmoothUnion
+          smooth: 0.3
+          curve {
+            a [0, (treeTrunk.top - 1.4), 0]
+            b [((0 - crown.at[0]) * 0.35), (crown.at[1] - 0.6), ((0 - crown.at[2]) * 0.35)]
+            c [((0 - crown.at[0]) * 0.8), (crown.at[1] - 0.2), ((0 - crown.at[2]) * 0.8)]
+            radiusStart: 0.55
+            radiusEnd: 0.18
+          }
+        }
+      }
+      // A twig off each branch, to one side of its walking line and up, ending in a leaf tuft.
+      for (b, i) in treeLimbs {
+        let base = quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), twigAt)
+        let ahead = (quadraticPoint(treeBranchA(b), treeBranchB(b), treeBranchC(b), (twigAt + 0.05)) - base) * [1, 0, 1]
+        let side = (([(0 - ahead[2]), 0, ahead[0]] * (1 / vectorLength(ahead))) * ((i % 2) == 0 ? 1 : -1))
+        let tip = ((base + (side * twigReach)) + [0, twigRise, 0])
+        shape Sweep $"twig-{i}" {
+          material: treeTwig
+          curve {
+            a: (base - [0, 0.25, 0])
+            b: ((base + (side * (0.6 * twigReach))) + [0, (0.3 * twigRise), 0])
+            c: tip
+            radiusStart: 0.2
+            radiusEnd: 0.07
+          }
+        }
+        shape Superellipsoid $"tuft-{i}" {
+          material: (((i % 3) == 2) ? treeBlossom : treeLeaf)
+          exponent: landscapeExponent
+          position: (tip + [0, 0.35, 0])
+          scale: twigTuft
+          blend: SmoothUnion
+          smooth: 0.3
+        }
+      }
+    }
+  }
+}
+
+placements {
+  placement "gallery-tree" {
+    prototype: "gallery-tree"
+    parent: "gallery"
+    position [treeX, galleryFloor[0], treeZ]
+    solid
+  }
+  placement "gallery-tree-canopy" {
+    prototype: "gallery-tree-canopy"
+    parent: "gallery"
+    position [treeX, galleryFloor[0], treeZ]
+  }
+}
+
+// At the foot of the treads, on the floor just short of the first, facing up the spiral (north, round the trunk's east
+// side).
+spawnPoints [
+  { id: "tree", parent: gallery, position: treeTreadPlan(-1, 1), yawDegrees: 180 }
+]

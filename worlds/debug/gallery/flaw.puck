@@ -1,71 +1,43 @@
-// The flaw: one continuous glowing tube that weaves through every floor of the gallery and is the building's light.
-// A module library: it hands gallery.puck the flaw's creation, its placement and its lights, and emits no document.
+// The flaw: one continuous glowing tube that runs through every floor of the gallery and is the building's light.
+// A module library: it hands gallery.puck the flaw's creations, their placements and its lights, and emits no document.
 //
-// The path is layout.puck's `flawControls`, the control points of a closed quadratic B-spline; the look is look.puck's
-// `lookFlaw` and `lookFlawTint`. Both the tube and its light come from the one curve: piece i of the curve is the
-// quadratic Bezier from the midpoint of points i - 1 and i, bent toward point i, to the midpoint of points i and i + 1.
-// The tube is a sweep along each piece (a neon core inside a frosted glass sleeve, each piece its own tint); the light
-// is a chain of tube lights along the same pieces, each piece cut where it crosses a slab (layout.puck's `flawCuts`)
-// so every light lies in one storey. The sweeps are solid nowhere: a body passes through the flaw.
+// The route is layout.puck's `flawRoute`, a closed polyline of level runs and plumb risers; the look is look.puck's
+// `lookFlaw`, `lookFlawTint` and `lookFlawCollar`. The tube follows the route with every corner rounded to
+// `lookFlaw.bend` (the standard's `closedRoundedPolyline`): a sweep per piece, a neon core inside a frosted glass sleeve,
+// each piece the tint of where it stands round the loop. The light is a chain of tube lights along the route's runs
+// (`loopStretches`), cut at the slabs (layout.puck's `flawCuts`) so every light lies in one storey. Where the route
+// passes through a slab a brass collar fills the slab's opening (shell.puck cuts it). The sweeps are solid nowhere: a
+// body passes through the flaw.
 
 import "../../standard/paths"
 import "../../standard/colors"
 import "layout"
 import "look"
 
-// The curve's pieces, each { a, b, c, index }: its start, its bend and its end, in the building's frame.
-let flawCount = length(flawControls)
-let flawPieces = closedQuadraticSpline(flawControls)
-// A piece's point and its tangent at a parameter t in [0, 1].
-function flawPoint(q, t) = quadraticPoint(q.a, q.b, q.c, t)
-function flawTangent(q, t) = quadraticTangent(q.a, q.b, q.c, t)
-// The parameters in (0, 1) at which a piece's height is `y`: the roots of a t^2 + b t + c = 0 with a = a.y - 2 b.y +
-// c.y, b = 2 (b.y - a.y) and c = a.y - y, or the one root of the line where a vanishes.
-function flawQuadratic(q) = ((q.a[1] - (2 * q.b[1])) + q.c[1])
-function flawLinear(q) = (2 * (q.b[1] - q.a[1]))
-function flawDiscriminant(q, y) = ((flawLinear(q) * flawLinear(q)) - ((4 * flawQuadratic(q)) * (q.a[1] - y)))
-function flawFlat(q) = (abs(flawQuadratic(q)) < 0.000001)
-function flawRootsOf(q, y) = (flawFlat(q) ? [((y - q.a[1]) / ((abs(flawLinear(q)) < 0.000001) ? 1 : flawLinear(q)))] :
-  ((flawDiscriminant(q, y) < 0) ? [] : [
-    (((0 - flawLinear(q)) + sqrt(abs(flawDiscriminant(q, y)))) / (2 * (flawFlat(q) ? 1 : flawQuadratic(q)))),
-    (((0 - flawLinear(q)) - sqrt(abs(flawDiscriminant(q, y)))) / (2 * (flawFlat(q) ? 1 : flawQuadratic(q))))
-  ]))
-function flawCutsOf(q) = sort(
-  concat([0, 1], filter(flatMap(flawCuts, y => flawRootsOf(q, y)), t => ((t > 0.001) and (t < 0.999))))
-)
-// The light of the stretch of a piece between parameters t0 and t1: the stretch is a quadratic of its own whose bend
-// stands half the stretch along its start's tangent, and the light is its chord moved a third of the way toward that
-// bend, the mean place of the arc, so the light stands where the glow is.
-function flawBend(q, t0, t1) = (flawPoint(q, t0) + (flawTangent(q, t0) * ((t1 - t0) * 0.5)))
-function flawShift(q, t0, t1) = ((flawBend(q, t0, t1) - ((flawPoint(q, t0) + flawPoint(q, t1)) * 0.5)) * (1 / 3))
-// The storey a height stands in, 0 to 3.
-function flawStorey(y) = floor((((y < 0) ? 0 : ((y > 17.9) ? 17.9 : y)) + 0.1) / galleryStorey)
-let flawStretches = flatMap(
-  flawPieces,
-  q => map(
-    range(0, (length(flawCutsOf(q)) - 1)),
-    k => {
-      index: q.index
-      cut: k
-      from: (flawPoint(q, flawCutsOf(q)[k]) + flawShift(q, flawCutsOf(q)[k], flawCutsOf(q)[(k + 1)]))
-      to: (flawPoint(q, flawCutsOf(q)[(k + 1)]) + flawShift(q, flawCutsOf(q)[k], flawCutsOf(q)[(k + 1)]))
-      storey: flawStorey(flawPoint(q, ((flawCutsOf(q)[k] + flawCutsOf(q)[(k + 1)]) * 0.5))[1])
-    }
-  )
-)
+let flawPieces = closedRoundedPolyline(flawRoute, lookFlaw.bend, lookFlaw.stretch)
+let flawStretches = loopStretches(flawRoute, flawCuts, lookFlaw.stretch)
 
 // The tints: the keys of lookFlawTint stand evenly round the loop, and the tint eases linearly between them in steps,
-// one a palette slot, as many as a creation's palette holds beside the sleeve's slot; piece i wears step `flawStep(i)`.
-let flawSteps = ((flawCount < 31) ? flawCount : 31)
-function flawStep(i) = floor(((i * flawSteps) / flawCount))
+// one a palette slot, as many as a creation's palette holds beside the sleeve's slot; a piece or light at the fraction
+// `at` of the way round wears step `flawStep(at)`.
+let flawSteps = 31
+function flawStep(at) = minimum((flawSteps - 1), floor((at * flawSteps)))
 function flawTint(step) = rgbHex(loopGradient(lookFlawTint, (step / flawSteps)))
 
-// A point of the building's frame in the flaw creation's author frame, which is turned 180 degrees about up from its
-// placement's (gallery.puck), the placement standing at the building's origin.
+// The storey a height stands in, 0 to 3.
+function flawStorey(y) = floor((((y < 0) ? 0 : ((y > 17.9) ? 17.9 : y)) + 0.1) / galleryStorey)
+
+// A point of the building's frame in a creation's author frame, which is turned 180 degrees about up from its
+// placement's, the placement standing at the building's origin.
 function flawAuthor(p) = [(0 - p[0]), p[1], (0 - p[2])]
 
+// The collar's sleeve reaches just past the corners of the slab's square opening.
+let flawCollarSleeve = ((lookFlawCollarCut * 1.4143) + 0.01)
+let flawSlab = 0.3
+
 // The flaw's creation: slot s is the core of the pieces of tint step s, lit at the core's luminance, and the last slot the
-// frosted sleeve every piece shares.
+// frosted sleeve every piece shares. The collar is a creation of its own, so it bakes at its own fine detail and is
+// stamped at every crossing: in its frame the slab's middle stands at 0.
 template flawPrototype() {
   prototype "gallery-flaw" {
     document {
@@ -79,7 +51,7 @@ template flawPrototype() {
       for q in flawPieces {
         shape Sweep $"core-{q.index}" {
           position: flawAuthor(q.a)
-          material: flawStep(q.index)
+          material: flawStep(q.at)
           curve {
             a [0, 0, 0]
             b: (flawAuthor(q.b) - flawAuthor(q.a))
@@ -102,26 +74,61 @@ template flawPrototype() {
       }
     }
   }
+  prototype "gallery-flaw-collar" {
+    document {
+      name: "gallery-flaw-collar"
+      schema: "puck.creation.v1"
+      palette [{ color: lookFlawCollar.color, roughness: lookFlawCollar.roughness, metal: 1 }]
+      shape Cylinder "sleeve" {
+        material: 0
+        scale [flawCollarSleeve, (flawSlab / 2), flawCollarSleeve]
+      }
+      for side in [-1, 1] {
+        shape Cylinder $"ring-{side}" {
+          material: 0
+          position [0, (side * ((flawSlab + lookFlawCollar.lip) / 2)), 0]
+          scale [lookFlawCollar.rim, (lookFlawCollar.lip / 2), lookFlawCollar.rim]
+          chamfer: lookFlawCollar.bevel
+        }
+      }
+      shape Cylinder "bore" {
+        blend: Subtraction
+        material: 0
+        scale [lookFlawCollar.bore, (flawSlab + lookFlawCollar.lip), lookFlawCollar.bore]
+      }
+    }
+  }
 }
+// The flaw stands at the building's origin; a collar stands at each crossing, at its slab's middle (layout.puck's
+// `flawCuts`), and is solid like the slab it finishes.
 template flawPlacement() {
   placement "gallery-flaw" {
     prototype: "gallery-flaw"
     parent: "gallery"
     position [0, 0, 0]
   }
+  for (c, n) in flawCrossings {
+    placement $"gallery-flaw-collar-{n}" {
+      prototype: "gallery-flaw-collar"
+      parent: "gallery"
+      position [c.point[0], flawCuts[c.height], c.point[2]]
+      solid
+    }
+  }
 }
-// The flaw's light: a tube light along each stretch, in its piece's tint, its intensity per metre the storey's
-// `hallLamps` cell, so a level's switch quiets the stretches that storey holds. Each is anchored to the building's root,
-// so it stands still and the irradiance volume traces it: its light bounces about its storey and stops at the slabs.
+// The flaw's light: a tube light along each stretch, in the tint of where it stands, its intensity per metre the
+// storey's `hallLamps` cell, so a level's switch quiets the stretches that storey holds. Each is anchored to the
+// building's root, so it stands still and the irradiance volume traces it: its light bounces about its storey and stops
+// at the slabs.
 function flawLights(anchor) = map(
   flawStretches,
   s => tube(
-    name: $"flaw-{s.index}-{s.cut}",
+    name: $"flaw-{s.index}",
     anchor: anchor,
     from: s.from,
     to: s.to,
     radius: lookFlaw.sleeve,
-    color: flawTint(flawStep(s.index)),
-    intensity: $"state.hallLamps.level{s.storey}"
+    color: flawTint(flawStep(s.at)),
+    intensity: $"state.hallLamps.level{flawStorey(((s.from[1] + s.to[1]) * 0.5))}"
   )
 )
