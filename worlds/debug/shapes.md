@@ -19,7 +19,9 @@ lift, lights, level boards, the displays and their rules, tour and keys.
 
 Each exhibit stands on a display station's turntable, one of a group the
 display's console steps through, and the console's screen names it and says
-what it demos and what to look for ([the displays](#the-displays)). The plinth
+what it demos and what to look for ([the displays](#the-displays)). Every
+turntable turns, once every 24 gallery seconds at boot, and its console holds,
+releases, slows and speeds it ([gallery.md](gallery.md#display-consoles)). The plinth
 is a creation of its own, so an exhibit's subtraction or intersection never
 cuts it. Slot 0 is the exhibit's grey, a plain dielectric, slots 1 and 2 two
 plain tones an exhibit may use, and slot 3 the exhibit's own second material: a
@@ -216,7 +218,10 @@ back:
 | Step a display through the catalog | `gallery.step <display>` (`gallery.step <display> -1` steps back) |
 | Read a display's screen | `world.state galleryScreenTitle`, `galleryScreenGroup`, `galleryScreenNote`, `galleryPlace` (the place in the catalog, from 1) |
 | Read a console's list | `world.state galleryScroll <display>` (the top row's catalog index) and `world.state galleryRowName` (the rows, keyed `<display>-<row>`) |
-| Point at a console and tap it | `source.pointer.origin <x> <y> <z>` and `source.pointer.direction <x> <y> <z>`, then `player.signal mouse.button1 press` and `release`; `body.channels 0` echoes where the ray lands and the regions it lies in (`placement:display-<id>-screen=on(u, v){list#3}`) |
+| Tap a console headless | `source.contact 1 down <ox> <oy> <oz> <dx> <dy> <dz>`, then the same with `up`: a contact whose world ray lands on the glass, as a finger's does (add `mouse` for a click). A lift on a list row selects it, on PREV, NEXT, `<`, pause or `>` presses that button |
+| Hold or release a turntable | `gallery.turn.hold <display>`, as the console's pause and play button does; `world.state galleryTurnHold <display>` reads the button's label (`PAUSE` while it turns) |
+| Change a turntable's pace | `gallery.turn.slower <display>` and `gallery.turn.faster <display>`, as `<` and `>` do: the signed speed (`world.state galleryTurnSpeed <display>`, 1 at boot, up to 3 either way) and its label (`galleryTurnPace`) |
+| Read a turntable's angle | `world.turns`: each turning placement's turn and whole yaw at the latest tick. Its turn is `galleryTurnPhase + galleryTurnRate × galleryClock` turns |
 
 `galleryCopy` in `shapes.puck` holds each exhibit's title and note, which
 `galleryTitles` and `galleryNotes` carry by catalog index, and `galleryGroups`

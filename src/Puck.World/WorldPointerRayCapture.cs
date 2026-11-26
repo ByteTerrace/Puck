@@ -15,7 +15,9 @@ namespace Puck.World;
 /// points: the ray ends when that mouse leaves the seat or the position names no mouse (a platform that reports only
 /// the aggregate cursor, or a gamepad-only seat), when the pointer leaves the seat's view or the window
 /// (<see cref="WorldPointer.ForgetPosition"/>), or when the world declares no <c>Simulation</c> screen, no placement
-/// pointer surface and no engageable tabletop; the server then reads <c>on</c> 0 and no pointed cell.
+/// pointer surface and no engageable tabletop; the server then reads <c>on</c> 0 and no pointed cell. A seat whose view is
+/// first person aims by it: its ray and its mouse's contacts cast through the view's centre, the reticle, since the
+/// mouse steers that view and the OS cursor rests where the view's drag locked it, or reports no position at all.
 /// <para>The same cast decides each seat's pointer context (<see cref="WorldContextFamilies.Pointer"/>): <c>surface</c>
 /// while the ray lands on a pointer surface (<see cref="WorldPointerSurfaces.Lands"/>, the rectangles a <c>$pointer:</c>
 /// read maps through), <c>none</c> otherwise, re-read only while the seat holds no pointer button. So a press that lands
@@ -150,19 +152,24 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
 
         CaptureContacts(declares: declares);
 
-        // The seat and its device in one read, so they always name the same report.
-        if (
-            (m_pointer.Positioned is not (var slot, var device)) ||
-            (m_roster.DeviceSlot(device: device) != slot) ||
-            (m_roster.KindOf(device: device) != InputDeviceKind.Mouse) ||
-            !declares
-        ) {
+        // The seat and its device in one read, so they always name the same report. A seat that aims by its view points
+        // through its reticle whether or not the OS cursor reports a position, so with no positioned mouse the fallback
+        // seat still points while its view is first person.
+        var slot = (m_pointer.Positioned?.Slot ?? WorldPointerSlot.Resolve(roster: m_roster));
+        var mouse = (
+            (m_pointer.Positioned is (var positionedSlot, var device)) &&
+            (m_roster.DeviceSlot(device: device) == positionedSlot) &&
+            (m_roster.KindOf(device: device) == InputDeviceKind.Mouse)
+        );
+        var aimed = AimsByView(slot: slot);
+
+        if (!declares || (!mouse && !aimed)) {
             End();
             PublishPointer(lands: false, pointing: -1);
 
             return;
         }
-        if (!TryCast(position: m_pointer.Position(slot: slot), ray: out var ray, slot: slot, outside: false)) {
+        if (!TryCast(position: m_pointer.Position(slot: slot), ray: out var ray, slot: slot, outside: false, aimed: aimed)) {
             End();
             PublishPointer(lands: false, pointing: -1);
 
@@ -223,7 +230,11 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
 
             var phase = transition.Phase;
 
-            if (!TryCast(position: transition.Position, ray: out var ray, slot: transition.Slot, outside: !touching)) {
+            // The mouse points where its seat points: through the reticle while the seat aims by its view. A finger or a
+            // pen tip touches the screen where it touches, whatever the view.
+            var aimed = ((transition.Device == ContactDevice.Mouse) && AimsByView(slot: transition.Slot));
+
+            if (!TryCast(position: transition.Position, ray: out var ray, slot: transition.Slot, outside: !touching, aimed: aimed)) {
                 if (touching) {
                     continue;
                 }
@@ -244,9 +255,14 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
 
         m_contactScratch.Clear();
     }
+    // Whether a seat aims by its view: in a first-person view the camera is the seat's eye and the reticle at the image's
+    // centre is where it points, so its mouse, which steers that view, points there rather than where the OS cursor last
+    // rested (a cursor the view's drag locked and hid, or one that never reported a position).
+    private bool AimsByView(int slot) => ((m_roster.Seat(slot: slot) is { } seat) && seat.View.FirstPersonLook);
     // The ray a client point casts through a seat's published camera: the one cast every pointing input takes. A point
-    // outside the seat's view casts only when the caller allows it (a contact that touched inside keeps its lift).
-    private bool TryCast(int slot, Vector2 position, bool outside, out SourceRay ray) {
+    // outside the seat's view casts only when the caller allows it (a contact that touched inside keeps its lift). An
+    // aimed cast goes through the view's centre (AimsByView) wherever the point lies.
+    private bool TryCast(int slot, Vector2 position, bool outside, out SourceRay ray, bool aimed = false) {
         var view = m_viewports.Seat(slot: slot);
         var place = m_viewports.Locate(
             framePosition: out _,
@@ -255,6 +271,9 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
             view: in view
         );
 
+        if (aimed && (place != WorldSeatPointerPlace.NoView)) {
+            (place, local) = (WorldSeatPointerPlace.Inside, new Vector2(x: 0.5f, y: 0.5f));
+        }
         if ((place == WorldSeatPointerPlace.NoView) || ((place != WorldSeatPointerPlace.Inside) && !outside)) {
             ray = default;
 

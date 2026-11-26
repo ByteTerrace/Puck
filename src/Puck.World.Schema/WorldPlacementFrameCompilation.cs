@@ -185,9 +185,7 @@ public static class WorldPlacementFrameCompilation {
         if (!visiting.Add(item: placement.Id)) { frame = default; reason = $"placement '{placement.Id}' participates in a parent cycle"; return false; }
         try {
             if (placement.Parent is { Length: > 0 } parentId) {
-                if (!byId.TryGetValue(key: parentId, value: out var parent) ||
-                    ((parent.Distribution is not null) && (parent.Deal is null)) || (parent.Mirror is not null) ||
-                    (parent.Attach is not null) || (parent.Inhabit is not null)) {
+                if (!byId.TryGetValue(key: parentId, value: out var parent) || !parent.HasStaticFrame) {
                     frame = default; reason = $"placement '{placement.Id}' requires a declared static single parent frame '{parentId}'"; return false;
                 }
                 if (!TryResolveFrame(byId: byId, frame: out var parentFrame, frames: frames, placement: parent, reason: out reason, visiting: visiting, within: within, worldSeed: worldSeed)) {
@@ -300,6 +298,11 @@ public static class WorldPlacementFrameCompilation {
                 (parent.Mirror is not null)
             ) {
                 reason = $"placement '{placement.Id}' names parent '{parentId}', which is distributed/mirrored — a child of an expanded row has no single frame.";
+
+                return false;
+            }
+            if (parent.Turn is not null) {
+                reason = $"placement '{placement.Id}' names parent '{parentId}', which turns — a turntable's frame moves with state, and a child composes over a static one.";
 
                 return false;
             }

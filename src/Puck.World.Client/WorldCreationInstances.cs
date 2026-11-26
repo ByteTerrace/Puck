@@ -538,10 +538,11 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         return false;
     }
     // Whether a placement row renders through THIS pool rather than as a static stamp: an animated creation (a replayed
-    // timeline) or an attached row (a live body root). The exact complement of WorldPlacementStamper.IsStaticStamp for a
-    // non-inhabited row — an inhabited row roots through the body-stamp census instead.
+    // timeline), an attached row (a live body root) or a turning row (a root state turns). The exact complement of
+    // WorldPlacementStamper.IsStaticStamp for a non-inhabited row — an inhabited row roots through the body-stamp census
+    // instead.
     private static bool PoolRooted(WorldPlacement row, WorldPrototype creation) =>
-        ((row.Inhabit is null) && (WorldPlacementStamper.IsAnimated(creation: creation) || (row.Attach is not null)));
+        ((row.Inhabit is null) && (WorldPlacementStamper.IsAnimated(creation: creation) || row.MovesRoot));
     // Whether the pool registers a row: one it roots that the rigid catalog does not copy. A responding row riding a body
     // is a rigid copy there (WorldRigidAssets.ReconcileStatic, which a reconcile runs first), so its responses swap a
     // template rather than recreating a registration and composing the program again.
@@ -787,10 +788,10 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         if (row.Attach is { } attach) {
             var (position, orientation) = WorldAttachedPose.Root(attach: attach, source: client);
 
-            return (position, orientation, row.Scale);
+            return (position, WorldTurnedPose.Turned(mirror: client.StateMirror, orientation: orientation, turn: row.Turn), row.Scale);
         }
 
-        return (live.StaticFrame.Position, live.StaticFrame.Rotation, live.StaticFrame.Scale);
+        return (live.StaticFrame.Position, WorldTurnedPose.Turned(mirror: client.StateMirror, orientation: live.StaticFrame.Rotation, turn: row.Turn), live.StaticFrame.Scale);
     }
     private bool TryFindBody(int bodyIndex, out int poolIndex, out Registration live) {
         if ((uint)bodyIndex < (uint)m_bodySlots.Length && m_bodySlots[bodyIndex] is var entry and > 0) {

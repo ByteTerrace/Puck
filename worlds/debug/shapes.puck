@@ -170,6 +170,16 @@ let galleryDisplayRows = [
 ]
 // Every display stands on a floor tile's centre (layout.puck's module), so its pad lies square on the tiles.
 let galleryDisplays = map(galleryDisplayRows, display => (display with { x: galleryTileX(display.x), z: galleryTileZ(display.z) }))
+// Every display's exhibit turns as on a turntable. At speed 1 it turns once in turntableSecondsPerTurn gallery seconds;
+// its console steps the speed one at a time up to turntableSpeeds either way, through the slowest pace into turning the
+// other way round, and holds and releases it. `turntableHolds` labels the hold button with what a tap does, by whether
+// the turntable turns; `turntablePace` labels the pace, its period and the way it turns.
+let turntableSecondsPerTurn = 24
+let turntableSpeeds = 3
+let turntableSpeed = 1
+let turntableRate = (1 / turntableSecondsPerTurn)
+let turntableHolds = ["PLAY", "PAUSE"]
+function turntablePace(speed) = ((speed > 0) ? $"{turntableSecondsPerTurn / speed} S  >" : $"<  {turntableSecondsPerTurn / (0 - speed)} S")
 
 // Where each display's list starts in the catalog, and every exhibit in walking order, display by display: its name,
 // the display that shows it (its index in galleryDisplays), its place in that display's list (`slot`) and in the
@@ -478,8 +488,10 @@ let galleryCopy = {
 // kit's palette (consoleLook). An ochre elbow frames the top left and turns into the top bar, whose cap names the
 // catalog; PREV and NEXT buttons stack down the left column beside a list of every exhibit in the catalog, the chosen one
 // lit amber; a rule closes the list's foot; and the right of the screen tells the chosen exhibit's title, its group and
-// place in the catalog, and its note. A tap on a row shows that exhibit on this display's turntable, a drag scrolls the
-// list a row for each row the pointer travels, and PREV and NEXT turn it a page (gallery/gallery.puck's console rules).
+// place in the catalog, and its note, over the turntable's own row: a slower button, a pause and play button, a faster
+// button and the pace the turntable keeps. A tap on a row shows that exhibit on this display's turntable, a drag scrolls
+// the list a row for each row the pointer travels, PREV and NEXT turn it a page, and the turntable's buttons slow it,
+// hold it and speed it (gallery/gallery.puck's console rules).
 //
 // Every rectangle is in the glass's own coordinates in the plinth's units, `x0..x1` across and `y0..y1` up from its
 // centre. Each becomes a paint on the display's screen creation (a static placement draws a paint in the world's frame,
@@ -496,6 +508,12 @@ let consoleList = { x0: -0.53, x1: 0.105, y0: -0.145, y1: 0.105 }
 let consolePrev = { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: -0.025, y1: 0.05 }
 let consoleNext = { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: -0.105, y1: -0.03 }
 let consoleDetail = { x0: 0.155, x1: 0.72 }
+// The turntable's row along the foot of the detail column: its three buttons, then the pace it keeps.
+let consoleTurnRow = { y0: -0.145, y1: -0.105 }
+let consoleSlower = { x0: consoleDetail.x0, x1: 0.235, y0: consoleTurnRow.y0, y1: consoleTurnRow.y1 }
+let consoleHold = { x0: 0.245, x1: 0.385, y0: consoleTurnRow.y0, y1: consoleTurnRow.y1 }
+let consoleFaster = { x0: 0.395, x1: 0.475, y0: consoleTurnRow.y0, y1: consoleTurnRow.y1 }
+let consolePace = { x0: 0.49, x1: consoleDetail.x1, y0: consoleTurnRow.y0, y1: consoleTurnRow.y1 }
 // The list's row pitch, and the font's line height in ems (Inter's ascent and descent), which set each list text's
 // line spacing so its lines fall on the rows the pointer's row read counts.
 let consoleRowPitch = ((consoleList.y1 - consoleList.y0) / consoleRows)
@@ -505,6 +523,8 @@ let consoleGroupEm = 0.0125
 
 function consoleMid(rect) = [((rect.x0 + rect.x1) / 2), ((rect.y0 + rect.y1) / 2)]
 function consoleHalf(rect) = [((rect.x1 - rect.x0) / 2), ((rect.y1 - rect.y0) / 2)]
+// A button's face less a margin, the box its label fits.
+function consoleInset(rect) = { x0: (rect.x0 + 0.008), x1: (rect.x1 - 0.008), y0: (rect.y0 + 0.006), y1: (rect.y1 - 0.006) }
 // A rectangle as the fractions of the glass a pointer hit reads: x right from the glass's left edge, y down from its
 // top edge.
 function consoleRegion(id, rect, rows = 1) = {
@@ -588,7 +608,15 @@ function consolePaints(display) = [
     0.015,
     "left"
   )
-  consoleText(display, { x0: consoleDetail.x0, x1: consoleDetail.x1, y0: consoleList.y0, y1: 0.016 }, $"{{state.galleryScreenNote.{display.id}}}", consoleLook.dim, 0.0145, "left", wrap: true)
+  consoleText(display, { x0: consoleDetail.x0, x1: consoleDetail.x1, y0: (consoleTurnRow.y1 + 0.01), y1: 0.016 }, $"{{state.galleryScreenNote.{display.id}}}", consoleLook.dim, 0.0145, "left", wrap: true)
+  // The turntable's row: slower, pause or play (the label names what a tap does), faster, and the pace it keeps.
+  consoleFill(display, consoleSlower, consoleLook.teal, 0.012)
+  consoleFill(display, consoleHold, consoleLook.cream, 0.012)
+  consoleFill(display, consoleFaster, consoleLook.teal, 0.012)
+  consoleText(display, consoleInset(consoleSlower), "<", consoleLook.ink, 0.02, "center")
+  consoleText(display, consoleInset(consoleHold), $"{{state.galleryTurnHold.{display.id}}}", consoleLook.ink, 0.017, "center")
+  consoleText(display, consoleInset(consoleFaster), ">", consoleLook.ink, 0.02, "center")
+  consoleText(display, consoleInset(consolePace), $"{{state.galleryTurnPace.{display.id}}}", consoleLook.quiet, 0.015, "right")
 ]
 // The pointer surface a display's screen placement carries: the glass's front face, carried from the plinth's author
 // frame into the placement's (author x and z point the other way), with the list and the buttons as its regions.
@@ -598,7 +626,14 @@ let consolePointer = {
   up [0, plinthTiltCos, plinthTiltSin]
   halfWidth: plinthGlassHalf[0]
   halfHeight: plinthGlassHalf[1]
-  regions [consoleRegion("list", consoleList, consoleRows), consoleRegion("prev", consolePrev), consoleRegion("next", consoleNext)]
+  regions [
+    consoleRegion("list", consoleList, consoleRows)
+    consoleRegion("prev", consolePrev)
+    consoleRegion("next", consoleNext)
+    consoleRegion("slower", consoleSlower)
+    consoleRegion("hold", consoleHold)
+    consoleRegion("faster", consoleFaster)
+  ]
 }
 template displayScreen(display) {
   prototype $"gallery-screen-{display.id}" {
@@ -917,6 +952,13 @@ template displayPlacements() {
       position [display.x, (displayFloor(display) + displayExhibitDrop), display.z]
       yawDegrees: display.yaw
       scale: displayExhibitScale
+      // The turntable: the exhibit turns by the display's rate a gallery second from its phase (gallery/gallery.puck's
+      // turntable rule rebases the phase whenever its console changes the rate, so the angle never jumps).
+      turn {
+        clock: "state.galleryClock"
+        rate: $"state.galleryTurnRate.{display.id}"
+        phase: $"state.galleryTurnPhase.{display.id}"
+      }
       respond: map(
         filter(galleryCatalog, entry => (entry.index != galleryDisplayDefaults[index])),
         entry => {
@@ -966,11 +1008,12 @@ let consoleSlots = flatMap(
   })
 )
 
-// One Int cell a display, keyed by its id and seeded from `values`, a value a display in galleryDisplays' order.
-template displayCells(name, values) {
+// One cell a display (Int unless `kind` says otherwise), keyed by its id and seeded from `values`, a value a display in
+// galleryDisplays' order.
+template displayCells(name, values, kind = "Int") {
   row {
     name: name
-    kind: Int
+    kind: kind
     capacity: length(galleryDisplays)
     cells: map(range(0, length(galleryDisplays)), index => { key: galleryDisplays[index].id, value: values[index] })
   }
@@ -988,6 +1031,35 @@ template displayState() {
   displayCells(name: "galleryDragRow", values: map(galleryDisplays, display => -1))
   displayCells(name: "galleryDragged", values: map(galleryDisplays, display => 0))
   displayCells(name: "galleryStepAt", values: map(galleryDisplays, display => 0))
+  // The turntable: its signed pace (turntableSpeeds either way), whether it turns, the rate and phase its turn facet
+  // reads, the mailbox its buttons and the gallery.turn commands write, and the two labels its console shows.
+  displayCells(name: "galleryTurnSpeed", values: map(galleryDisplays, display => turntableSpeed))
+  displayCells(name: "galleryTurnPlay", values: map(galleryDisplays, display => 1))
+  displayCells(name: "galleryTurnRate", kind: "Fixed", values: map(galleryDisplays, display => $"{turntableSpeed * turntableRate}"))
+  displayCells(name: "galleryTurnPhase", kind: "Fixed", values: map(galleryDisplays, display => "0"))
+  displayCells(name: "galleryTurnNext", kind: "Fixed", values: map(galleryDisplays, display => "0"))
+  displayCells(name: "galleryTurnAt", values: map(galleryDisplays, display => 0))
+  displayCells(name: "galleryTurnHold", kind: "Text", values: map(galleryDisplays, display => turntableHolds[1]))
+  displayCells(name: "galleryTurnPace", kind: "Text", values: map(galleryDisplays, display => turntablePace(turntableSpeed)))
+  row {
+    name: "galleryTurnHolds"
+    kind: Text
+    capacity: 2
+    cells: map(range(0, 2), play => { key: $"{play}", value: turntableHolds[play] })
+  }
+  // The rate each signed speed turns at, in turns a gallery second, and its label, keyed by the speed.
+  row {
+    name: "galleryTurnRates"
+    kind: Fixed
+    capacity: (2 * turntableSpeeds)
+    cells: map(filter(range(0 - turntableSpeeds, turntableSpeeds + 1), speed => (speed != 0)), speed => { key: $"{speed}", value: $"{speed * turntableRate}" })
+  }
+  row {
+    name: "galleryTurnPaces"
+    kind: Text
+    capacity: (2 * turntableSpeeds)
+    cells: map(filter(range(0 - turntableSpeeds, turntableSpeeds + 1), speed => (speed != 0)), speed => { key: $"{speed}", value: turntablePace(speed) })
+  }
   // One cell a row of every console's list, keyed `<display>-<row>`, seeded from each row's boot slot.
   row {
     name: "galleryRowIndex"

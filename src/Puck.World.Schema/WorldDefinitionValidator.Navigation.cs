@@ -39,10 +39,7 @@ public static partial class WorldDefinitionValidator {
                     (parent is not null) &&
                     (remaining-- > 0) &&
                     (parent.Scale == 1f) &&
-                    (parent.Attach is null) &&
-                    (parent.Inhabit is null) &&
-                    (parent.Mirror is null) &&
-                    ((parent.Distribution is null) || (parent.Deal is not null)) &&
+                    parent.HasStaticFrame &&
                     (parent.Parent is { } ancestor)
                 ) {
                     parent = placementsById.GetValueOrDefault(key: ancestor);
@@ -50,10 +47,7 @@ public static partial class WorldDefinitionValidator {
                 if (
                     (parent is null) ||
                     (parent.Scale != 1f) ||
-                    (parent.Attach is not null) ||
-                    (parent.Inhabit is not null) ||
-                    (parent.Mirror is not null) ||
-                    ((parent.Distribution is not null) && (parent.Deal is null)) ||
+                    !parent.HasStaticFrame ||
                     (remaining <= 0)
                 ) {
                     errors.Add(item: $"{path}.parent '{parentId}' must name a static, unit-scale placement with one frame.");
