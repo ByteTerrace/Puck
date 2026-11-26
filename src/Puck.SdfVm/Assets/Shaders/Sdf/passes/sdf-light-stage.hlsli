@@ -19,6 +19,11 @@
 #include "sdf-views-probes.hlsli"
 #include "sdf-views-reflections.hlsli"
 
+#if defined(SDF_VIEWS_BINNED)
+// Defined with the tile masks it reads beside (sdf-views-lights.hlsli).
+void sdfViewsProbesTile(inout SdfMeshProbes probes, SdfPixel p);
+#endif
+
 // An unbound screen's face: dark glass with nothing behind it, tinted faintly by the sun.
 static const float3 ScreenGlassColor = float3(0.02, 0.025, 0.03);
 static const float ScreenGlassBase = 0.85;
@@ -191,6 +196,10 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             // compatible pixels of its cell (sdfViewsProbesAt); the cubes are read along this pixel's shading normal.
             bool indirectSky = ((passGroup.indirectSources & SDF_INDIRECT_SOURCES_SKY) != 0u);
             SdfMeshProbes probes = sdfViewsProbesAt(p);
+
+#if defined(SDF_VIEWS_BINNED)
+            sdfViewsProbesTile(probes, p);
+#endif
 
             // Every light answers through the one interface (sdfLightResponse): its diffuse term joins the radiance the
             // material shade lights by, and its rim and specular terms and its attenuation of reflected light follow the

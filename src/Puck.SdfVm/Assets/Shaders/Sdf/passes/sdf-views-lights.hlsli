@@ -25,6 +25,12 @@
 // traced point or spot light adds nothing where its share is zero
 // (SdfLightInputs.none, which the light phase's door answers by before it runs a program). So in a room the walk visits
 // the fixtures that light it, never those whose range crosses its walls and floors from the rooms beside it.
+//
+// A binned view's filter pass also resolves the tile's traced lights' shares once for the tile (sdfViewsStoreTileShares):
+// each cell its pixels blend, its representative's share of each of the first SDF_SHADE_TILE_SHARED_LIGHTS traced lights
+// the tile keeps, which a binned pixel's walk reads in place of its slots' words (sdfViewsLightVisibility). The shares are
+// sdfViewsSlotShareOf's of the same slots the pixel blends, rounded to UNORM16, so the walk's answer is the slots' own to
+// that rounding.
 #ifndef PASSES_SDF_VIEWS_LIGHTS_HLSLI
 #define PASSES_SDF_VIEWS_LIGHTS_HLSLI
 #include "Shared/ordered-float.hlsli"
@@ -36,8 +42,24 @@
 #if SDF_SHADE_TILE_LIGHT_WORDS != 8
 #error A tile's light masks are the four words of a light mask and the four of a screen mask.
 #endif
+#if (SDF_SHADE_TILE_SHARED_LIGHTS != 8) || ((SDF_VISIBILITY_GROUP_EDGE / SDF_VIEWS_PROBE_RATE) != 2) || (SDF_SHADE_TILE_SHARE_WORDS != (4 + (16 * (SDF_SHADE_TILE_SHARED_LIGHTS / 2))))
+#error A tile's shares are a light mask and four words for each of the four by four cells its pixels blend, which its 64 lanes store a word each.
+#endif
 
 #if defined(SDF_VIEWS_BINNED)
+// Points a binned views pixel's probes at its tile's traced-light shares (sdfViewsStoreTileShares), so its walk reads a
+// resolved traced light's share of its slots from the tile's few words (sdfViewsLightVisibility); a pixel that reads an
+// extra, or none, keeps its slots' own words.
+void sdfViewsProbesTile(inout SdfMeshProbes probes, SdfPixel p) {
+#if !defined(SDF_VIEWS_OMIT_LIGHTS) && !defined(SDF_VIEWS_OMIT_LIGHT_TILES)
+    if (sdfMeshAnswers(probes) && (probes.slotCells.x != 0u)) {
+        uint first = sdfShadeTileSharesWord(p.viewIndex, sdfShadeTileOf(p.pixel));
+
+        probes.tileTraced = uint4(sdfShadeTiles[first], sdfShadeTiles[first + 1u], sdfShadeTiles[first + 2u], sdfShadeTiles[first + 3u]);
+        probes.tileShares = (first + SDF_MESH_IRRADIANCE_LIGHT_WORDS);
+    }
+#endif
+}
 // A binned kernel's tile masks, as the filter pass decided them for the pixel's tile; the view's own in a mode that walks
 // no light, which the filter pass wrote there too.
 SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfacePoint, float t) {
@@ -79,6 +101,77 @@ bool sdfViewsScreenFacesBox(float3 origin, float3 facing, float range, float lum
         && (((luminance * weight * passGroup.exposure) * (1.0 + SdfLightReachMargin)) > (SDF_LIGHT_RANGE_THRESHOLD * (nearest + weight)))
         && ((dot(facing, offset) + dot(abs(facing), extent)) > (-SdfLightReachMargin * (length(offset) + length(extent)))));
 }
+
+#if defined(SDF_VIEWS_FILTER_PASS)
+// Stores the tile's traced-light shares into the shade bins (SDF_SHADE_TILE_SHARE_WORDS words at sdfShadeTileSharesWord),
+// which the binned views kernels read a traced light's share of a pixel's slots from (sdfViewsLightVisibility) in place
+// of the slots' own agreement and list: the first SDF_SHADE_TILE_SHARED_LIGHTS of the traced lights the tile keeps
+// (`kept`), as a light mask, then for each cell of the four by four the tile's pixels blend (from one cell before the
+// tile's first to one past its last, row by row) that cell's representative's share of each of them in mask order
+// (sdfViewsSlotShareOf), two UNORM16 a word; zero for a cell outside the view or whose representative no probe answers,
+// which no pixel blends with a share above zero (sdfViewsProbesAt). A lane a cell and a pair of the lights, so the 64
+// lanes take the sixteen cells' four pairs, and every share is one slot's words read once for the whole tile.
+void sdfViewsStoreTileShares(SdfPixel p, uint lane, uint4 kept) {
+    uint4 resolved = uint4(0u, 0u, 0u, 0u);
+    uint2 order = uint2(0u, 0u);
+    uint count = 0u;
+
+    [unroll] for (uint word = 0u; (word < SDF_MESH_IRRADIANCE_LIGHT_WORDS); word++) {
+        uint bits = kept[word];
+
+        [loop] while ((bits != 0u) && (count < SDF_SHADE_TILE_SHARED_LIGHTS)) {
+            uint index = ((word * 32u) + firstbitlow(bits));
+
+            bits &= (bits - 1u);
+            // The word is the unrolled loop's, a constant index.
+            resolved[word] |= (1u << (index & 31u));
+            order = ((count < 4u) ? uint2((order.x | (index << (8u * count))), order.y) : uint2(order.x, (order.y | (index << (8u * (count - 4u))))));
+            count++;
+        }
+    }
+
+    uint first = sdfShadeTileSharesWord(p.viewIndex, sdfShadeTileOf(p.pixel));
+
+    if (lane < SDF_MESH_IRRADIANCE_LIGHT_WORDS) {
+        sdfShadeTilesRW[first + lane] = sdfComponent(resolved, lane);
+    }
+
+    uint cellIndex = (lane / 4u);
+    uint pair = (lane % 4u);
+    int2 cell = (((int2(p.pixel / SDF_VISIBILITY_GROUP_EDGE) * int(SDF_VISIBILITY_GROUP_EDGE / SDF_VIEWS_PROBE_RATE)) - 1) + int2((cellIndex % 4u), (cellIndex / 4u)));
+    float2 shares = float2(0.0, 0.0);
+
+    if (((2u * pair) < count) && all(cell >= 0) && all(cell < int2(sdfViewsProbeCells()))) {
+        uint record = sdfViewsProbeRecord(uint2(cell), p.viewIndex);
+        uint stride = sdfViewsProbePlane();
+
+        if ((sdfViewsProbeRecordBuffer[record + (SdfViewsProbeStateWord * stride)] & 0xFFFFu) != 0u) {
+            uint4 partial;
+
+            [unroll] for (uint entry = 0u; (entry < (SdfViewsProbePartialLights / 2u)); entry++) {
+                partial[entry] = sdfViewsProbeRecordBuffer[record + ((SdfViewsProbePartialWord + entry) * stride)];
+            }
+            float allWeight = asfloat(sdfViewsProbeRecordBuffer[record + (SdfViewsProbeLightsWeightWord * stride)]);
+
+            [unroll] for (uint side = 0u; (side < 2u); side++) {
+                uint rank = ((2u * pair) + side);
+
+                if (rank < count) {
+                    uint index = ((((rank < 4u) ? order.x : order.y) >> (8u * (rank & 3u))) & 0xFFu);
+                    uint lightWord = (index >> 5u);
+
+                    shares[side] = sdfViewsSlotShareOf(sdfViewsProbeRecordBuffer[record + ((SdfViewsProbeLightsWord + lightWord) * stride)],
+                        sdfViewsProbeRecordBuffer[record + ((SdfViewsProbeLightsAnyWord + lightWord) * stride)], allWeight, partial, index);
+                }
+            }
+        }
+    }
+
+    uint2 bits = (uint2)round(saturate(shares) * 65535.0);
+
+    sdfShadeTilesRW[(first + SDF_MESH_IRRADIANCE_LIGHT_WORDS) + ((cellIndex * (SDF_SHADE_TILE_SHARED_LIGHTS / 2u)) + pair)] = (bits.x | (bits.y << 16u));
+}
+#endif
 
 // The masks of the lights and screens the tile's walks visit: the view's that can reach a hit point of the tile.
 // `shades` says whether the view walks lights at all (its mode shades finally), uniform over the group; a view that does
@@ -223,10 +316,13 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
     GroupMemoryBarrierWithGroupSync();
 
     SdfLightMasks masks;
+    uint4 seenTraced = (traced & uint4(sdfViewsLightSeen[0], sdfViewsLightSeen[1], sdfViewsLightSeen[2], sdfViewsLightSeen[3]));
 
-    masks.lights = (uint4(sdfViewsLightTile[0], sdfViewsLightTile[1], sdfViewsLightTile[2], sdfViewsLightTile[3])
-        & ~(traced & ~uint4(sdfViewsLightSeen[0], sdfViewsLightSeen[1], sdfViewsLightSeen[2], sdfViewsLightSeen[3])));
+    masks.lights = (uint4(sdfViewsLightTile[0], sdfViewsLightTile[1], sdfViewsLightTile[2], sdfViewsLightTile[3]) & ~(traced & ~seenTraced));
     masks.screens = uint4(sdfViewsLightTile[4], sdfViewsLightTile[5], sdfViewsLightTile[6], sdfViewsLightTile[7]);
+#if defined(SDF_VIEWS_FILTER_PASS)
+    sdfViewsStoreTileShares(p, lane, seenTraced);
+#endif
 
     return masks;
 }

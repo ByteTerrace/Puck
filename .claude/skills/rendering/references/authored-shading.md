@@ -396,9 +396,10 @@ kernels' lifetime, publication or binning keeps all nine.
    and the visibility record alone, which the views signature (the lighting
    signature) and the visibility input's generation cover, so a views pass that
    re-records while its filter stands (a screen changed) reads bins that are
-   still the frame's. A tile's light masks, which the filter writes beside its
-   bin, depend on the lights table, the rows a light rides, the probe records
-   and the screens' emission, all of which that signature covers as well; they
+   still the frame's. A tile's light masks and traced-light shares, which the
+   filter writes beside its bin, depend on the lights table, the rows a light
+   rides, the probe records and the screens' emission, all of which that
+   signature covers as well; they
    test no screen's binding, which it does not cover, and the walk asks that
    itself.
 8. *Every job the views pass records reads arguments the bins pass wrote for

@@ -922,7 +922,20 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
      unchanged across a wall under an authored light phase.
   The kernels' registers were read on Vulkan (`[pipeline-statistics]`): the
   specialized binned views kernel compiles to 168 with the light walk and 128
-  with it compiled out, the plain binned kernel to 128 and the filter, which decides each tile's lights, to 54.
+  with it compiled out, the plain binned kernel to 128 and the filter, which decides each tile's lights, to 63.
+  The registers do not bound the walk: a kernel of the walk alone ran at 96
+  registers and still cost about as much a visit, and the walk split into a pass
+  of its own (`views-lights`, at 128 registers) cost about 2 ms there as it did
+  inside views, so the split, which runs the stage's loads and surface phase
+  twice and moves the sums through memory, was slower on the whole and was
+  taken back out ([the frame budget](frame-budget.md#where-the-time-goes) holds
+  the readings). The walk's largest part is each traced light's share of the
+  pixel's probe slots, about 0.8 ms in the hall: each traced visit read a
+  slot's agreement and list from four slots' scattered planes. The filter pass
+  now resolves those shares once a tile for the first eight traced lights the
+  tile keeps (`sdfViewsStoreTileShares`), and a binned pixel reads them from the
+  tile's words (`sdfViewsLightVisibility`). Check: `views` in the hall in the
+  quiet window against the head before it, and a still that matches.
   Direct3D 12's are unread: PIX's analysis of a debug-world capture of 2.9 GB
   took the host past 25 GB of memory before it wrote a counter. Check for the
   whole item: the route's per-chapter `world` node GPU means, read in the lead's
@@ -1095,13 +1108,14 @@ and each judged on presented frames in motion:
   clipping on luma (Salvi 2016) keeps more of a stable history than the box.
   Check: a pan past specular and ink detail shows less ghosting at equal
   shimmer, with a still pixel's history unchanged.
-- **A coarser shading rate does not pay on the RTX 4070 as built.** Per-tile
-  `viewsRate` is authored only in the RTX 2060's row
-  (`worlds/standard/quality.puck`). Read on the 4070 at `maxRate` 2, the views
-  pass does not move and the probe lookup costs more
+- **A coarser shading rate does not pay as built.** No device row authors a
+  `viewsRate` above 1: read on the 4070 at `maxRate` 2, the views pass does not
+  move and the probe lookup costs more, so the RTX 2060's row
+  (`worlds/standard/quality.puck`) shades at full rate too until the decision
+  reads the filter pass's edge distances
   ([the views item](#gpu-submission-and-routed-worlds) holds the reading and
   the step that makes it pay). The 2060's row shades three quarters of the
-  display each way as well, and its reading is still owed
+  display each way, and its reading is still owed
   ([the RTX 2060's frame](#the-rtx-2060s-frame)).
 - **Ink is remembered as a feature.** The views pass writes an ink bit so the
   resolve treats ink as a remembered sub-pixel feature, as FSR 2's lock does.

@@ -384,6 +384,8 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_SHADE_BINS", value: SdfWorldPackage.ShadeBins);
         declarations.Count(name: "SDF_SHADE_TILE_HEADER_WORDS", value: SdfWorldPackage.ShadeTileHeaderWords);
         declarations.Count(name: "SDF_SHADE_TILE_LIGHT_WORDS", value: SdfWorldPackage.ShadeTileLightWords);
+        declarations.Count(name: "SDF_SHADE_TILE_SHARE_WORDS", value: SdfWorldPackage.ShadeTileShareWords);
+        declarations.Count(name: "SDF_SHADE_TILE_SHARED_LIGHTS", value: SdfWorldPackage.ShadeTileSharedLights);
         declarations.Count(name: "SDF_VIEWS_FILTER_WORDS", value: SdfWorldPackage.ViewsFilterWords);
         declarations.Count(name: "SDF_VIEWS_REFLECTION_WORDS", value: SdfWorldPackage.ViewsReflectionWords);
         declarations.Count(name: "SDF_REFLECTION_DEPTH_LEVELS", value: SdfWorldPackage.ReflectionDepthLevels);

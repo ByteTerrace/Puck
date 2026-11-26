@@ -88,7 +88,9 @@ against the same frame:
   pass after views.
 - **`views-filter`**: two fifths is the tiles' light masks
   (`SDF_VIEWS_OMIT_LIGHTS`), the rest the occlusion and shadow filter, and in
-  a view that inks the edge search beside them (`SDF_VIEWS_OMIT_INK`).
+  a view that inks the edge search beside them (`SDF_VIEWS_OMIT_INK`). In the
+  hall: 1.65 ms, of which the masks about 0.6 ms and the edge search about
+  0.5 ms (1.05 ms without the masks, 0.55 ms without both).
 - **`views`**: a fifth with the shading compiled out
   (`SDF_VIEWS_OMIT_SHADING`: the load, the hit door, the store). Of the rest,
   the light walk (`SDF_VIEWS_OMIT_LIGHTS`) and the reflected environment
@@ -108,6 +110,22 @@ against the same frame:
   reload whose walk iterated without shading read 2.7 ms against 4.4 ms, one
   that ran the default response alone 3.75 ms, so of a visit's shading about
   three fifths was the default response and two the authored light phase.
+  The occupancy does not set the walk's cost. Read in the hall on Vulkan with
+  `--debug-layers basic` on a shared machine (attribution), by reloads that
+  compiled parts out: the walk alone, at 96 registers, cost 1.2 ms against 0.5 ms
+  without it; the walk in a pass of its own at 128 registers (`views-lights`,
+  built and taken back out) cost about 2 ms, as inside views, and the two passes
+  together read 4.2 ms against the unsplit pass's 3.55 ms. What does set it: each
+  traced visit's share of the pixel's probe slots, 0.7 to 0.8 ms of it
+  (answered 1, the walk-only kernel read 0.97 ms), whose reads waited on one
+  another behind branches on each slot's share (reading them together took
+  `views` from 4.0 ms to 3.55 ms) and lay in a slot's scattered planes (the
+  filter now resolves them once a tile, `sdfViewsStoreTileShares`). Beside the
+  walk, of what is left: the reflected environment about 0.5 ms
+  (`SDF_VIEWS_OMIT_REFLECTION` on a kernel with no walk, no material layers and no
+  surface phase took it from 1.27 to 0.76 ms), the ink phase 0.15 ms, and every
+  program's arm shading where the wave's lanes part between programs about
+  0.3 ms (one arm a wave read 3.69 ms against 4.0 ms).
 - **`mesh`** in the forest: the selection marks count 15.7 million triangles
   drawn in the main view, four a pixel, about two in five of them at the
   collapse's coarsest levels. The pass is bound by its triangles more than its
@@ -238,11 +256,12 @@ disagree on needed.
 - **A visibility buffer with deferred material evaluation.** The frame's shape
   today. Kept.
 - **A lean G-buffer.** The visibility record is 32 bytes and is the G-buffer.
-  A material G-buffer between the surface phase and the light phase would let
-  the two run as separate kernels, which is where the shading kernel's last
-  registers go; it needs an authored program's state (`SdfShadeStamp`) to cross
-  a pass, so it follows the light lists, when the light phase is the only large
-  part left.
+  A light pass of its own, which ran views' stage to the walk and stored what
+  the walk added (four words a pixel) for views to read, was built and measured
+  slower: the walk cost the same at 128 registers as at 168, and the split ran
+  the stage's loads and surface phase twice. Rejected while the walk's cost is
+  its visits' own; a composed-surface record that spared the second surface
+  phase would cost more traffic than that phase.
 - **Indirect light from a world-space cache.** A gather is already valid for
   any receiver within the normal bias on the same plane (`sdf-probe-reuse.hlsli`),
   so the history entry is a world-space cache entry addressed by screen

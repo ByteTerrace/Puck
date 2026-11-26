@@ -326,27 +326,38 @@ SdfMeshProbes sdfViewsProbesAt(SdfPixel p) {
     int2 base = sdfViewsProbeMixBase(p.pixel, fraction);
     float4 weights = float4(float(mix & 0x7Fu), float((mix >> 7u) & 0x7Fu), float((mix >> 14u) & 0x7Fu), float((mix >> 21u) & 0x7Fu));
     uint4 slots;
+    // Each corner's cell among the four by four its tile's pixels blend, plus one (sdfViewsStoreTileShares), which every
+    // corner of a pixel of the tile lies in.
+    uint4 cells;
     int2 last = (int2(sdfViewsProbeCells()) - 1);
+    int2 ring = ((int2(p.pixel / SDF_VISIBILITY_GROUP_EDGE) * int(SDF_VISIBILITY_GROUP_EDGE / SDF_VIEWS_PROBE_RATE)) - 1);
 
     // The lookup gives a share only to a cell inside the view that holds a representative. Each corner's state is read,
     // a cell outside the view at the nearest one inside it, whose share is zero.
     [unroll] for (uint corner = 0u; (corner < 4u); corner++) {
-        uint record = sdfViewsProbeRecord(uint2(clamp((base + int2((corner & 1u), (corner >> 1u))), int2(0, 0), last)), p.viewIndex);
+        int2 cell = (base + int2((corner & 1u), (corner >> 1u)));
+        uint record = sdfViewsProbeRecord(uint2(clamp(cell, int2(0, 0), last)), p.viewIndex);
+        uint2 inRing = uint2(clamp((cell - ring), int2(0, 0), int2(3, 3)));
 
         if ((sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, SdfViewsProbeStateWord)] & 0xFFFFu) == 0u) {
             weights[corner] = 0.0;
         }
         slots[corner] = (record + 1u);
+        cells[corner] = (((inRing.y * 4u) + inRing.x) + 1u);
     }
 
     float total = dot(weights, float4(1.0, 1.0, 1.0, 1.0));
 
     if (total > 0.0) {
-        uint answering = ((weights.x > 0.0) ? slots.x : ((weights.y > 0.0) ? slots.y : ((weights.z > 0.0) ? slots.z : slots.w)));
+        uint answering = ((weights.x > 0.0) ? 0u : ((weights.y > 0.0) ? 1u : ((weights.z > 0.0) ? 2u : 3u)));
+        uint answeringSlot = sdfComponent(slots, answering);
+        uint answeringCell = sdfComponent(cells, answering);
 
         probes.share = 1.0;
-        probes.slots = uint4(((weights.x > 0.0) ? slots.x : answering), ((weights.y > 0.0) ? slots.y : answering),
-            ((weights.z > 0.0) ? slots.z : answering), ((weights.w > 0.0) ? slots.w : answering));
+        probes.slots = uint4(((weights.x > 0.0) ? slots.x : answeringSlot), ((weights.y > 0.0) ? slots.y : answeringSlot),
+            ((weights.z > 0.0) ? slots.z : answeringSlot), ((weights.w > 0.0) ? slots.w : answeringSlot));
+        probes.slotCells = uint4(((weights.x > 0.0) ? cells.x : answeringCell), ((weights.y > 0.0) ? cells.y : answeringCell),
+            ((weights.z > 0.0) ? cells.z : answeringCell), ((weights.w > 0.0) ? cells.w : answeringCell));
         probes.slotStride = sdfViewsProbePlane();
         probes.slotWeights = (weights / total);
     }
@@ -394,15 +405,35 @@ float sdfViewsSlotLightVisibility(uint first, uint stride, uint lightIndex) {
         sdfViewsProbeRecordBuffer[first + ((SdfViewsProbeLightsAnyWord + word) * stride)],
         asfloat(sdfViewsProbeRecordBuffer[first + (SdfViewsProbeLightsWeightWord * stride)]), partial, lightIndex);
 }
-// The share of the probes about a views pixel that see a traced light: its slots' shares, blended. Every slot is read,
-// none behind a branch, so the four slots' words load together however the wave's lanes differ (sdfViewsProbesAt names a
-// readable slot in each of the four whenever the volume answers).
+// The share of the probes about a views pixel that see a traced light: its slots' shares, blended. A binned pixel takes a
+// light its tile's shares resolve from them (sdfViewsProbesTile), its slots' cells' words in the shade bins, where the
+// filter pass wrote each cell's share once for the whole tile (sdfViewsStoreTileShares); any other light, and every light
+// of a pixel that reads an extra, reads its slots' own agreement and list. Every slot is read, none behind a branch, so the
+// four slots' words load together however the wave's lanes differ (sdfViewsProbesAt names a readable slot in each of the
+// four whenever the volume answers).
 float sdfViewsLightVisibility(SdfMeshProbes probes, uint lightIndex) {
     if (lightIndex >= (32u * SDF_MESH_IRRADIANCE_LIGHT_WORDS)) {
         return 1.0;
     }
 
     float share = 0.0;
+#if defined(SDF_VIEWS_BINNED)
+    uint lightWord = (lightIndex >> 5u);
+    uint lightBit = (1u << (lightIndex & 31u));
+    uint resolved = sdfComponent(probes.tileTraced, lightWord);
+
+    if ((resolved & lightBit) != 0u) {
+        uint rank = (countbits(resolved & (lightBit - 1u)) + ((lightWord > 0u) ? countbits(probes.tileTraced.x) : 0u)
+            + ((lightWord > 1u) ? countbits(probes.tileTraced.y) : 0u) + ((lightWord > 2u) ? countbits(probes.tileTraced.z) : 0u));
+
+        [unroll] for (uint slot = 0u; (slot < 4u); slot++) {
+            uint pair = sdfShadeTiles[(probes.tileShares + ((probes.slotCells[slot] - 1u) * (SDF_SHADE_TILE_SHARED_LIGHTS / 2u))) + (rank >> 1u)];
+
+            share += (probes.slotWeights[slot] * (float((pair >> (16u * (rank & 1u))) & 0xFFFFu) / 65535.0));
+        }
+        return share;
+    }
+#endif
 
     [unroll] for (uint slot = 0u; (slot < 4u); slot++) {
         share += (probes.slotWeights[slot] * sdfViewsSlotLightVisibility((probes.slots[slot] - 1u), probes.slotStride, lightIndex));
