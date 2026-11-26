@@ -106,6 +106,9 @@ function treeBranchBark(i) = (3 + i)
 let treeLeaf = 0
 let treeTwig = 1
 let treeBlossom = 2
+// The lower tiers' leaves, a shade apart from the crown's so the canopy reads in depth: the first tier deeper, the second
+// warmer.
+function treeTierLeaf(k) = (3 + k)
 // Bark whose grain runs along `frame` (limbs.puck's barkAlong, barkUpright), twisting `twist` radians a metre about the
 // trunk's axis.
 function treeBarkSurface(color, under, seed, frame, twist = 0) = galleryCel(landscapeSurface(
@@ -293,7 +296,9 @@ prototypes {
       palette [
         galleryCel(canopySurface(lookTree.leaves, 6115))
         treeBarkSurface(lookTree.branch, lookTree.branchUnder, 6116, barkUpright)
-        galleryCel(canopySurface([lookTree.blossom, lookTree.blossom, "#FFE3EC"], 6117))
+        galleryCel(canopySurface(lookTree.blossom, 6117))
+        galleryCel(canopySurface(lookTree.leavesDeep, 6119))
+        galleryCel(canopySurface(lookTree.leavesWarm, 6121))
       ]
       // The leaf masses' breakup, one relief over the whole canopy.
       noise {
@@ -322,7 +327,7 @@ prototypes {
           height: tier.height,
           count: tier.count,
           size: tier.size,
-          material: treeLeaf,
+          material: treeTierLeaf(k),
           smooth: 0.25,
           turn: tier.turn
         )
@@ -346,8 +351,8 @@ prototypes {
             a: leanLocal([0, (treeTrunk.top - 1.6), 0], 0)
             b: leanLocal([(into[0] * 0.35), (into[1] - 0.9), (into[2] * 0.35)], 0)
             c: leanLocal([(into[0] * 0.85), (into[1] - 0.2), (into[2] * 0.85)], 0)
-            radiusStart: 0.5
-            radiusEnd: 0.14
+            radiusStart: 0.36
+            radiusEnd: 0.08
           }
         }
       }
@@ -364,8 +369,8 @@ prototypes {
               a: leanLocal([(into[0] * 0.08), (into[1] - 2.2), (into[2] * 0.08)], 0)
               b: leanLocal([(into[0] * 0.5), (into[1] - 1.1), (into[2] * 0.5)], 0)
               c: leanLocal([(into[0] * 0.92), (into[1] - 0.15), (into[2] * 0.92)], 0)
-              radiusStart: 0.32
-              radiusEnd: 0.08
+              radiusStart: 0.2
+              radiusEnd: 0.05
             }
           }
         }
