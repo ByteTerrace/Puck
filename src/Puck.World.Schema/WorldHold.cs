@@ -49,6 +49,18 @@ public sealed record WorldHoldMantle(
     float Seconds,
     [property: DocumentText("a per-body slot name")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null
 );
+/// <summary>How a body traversing a <see cref="BodyHoldKind.Pull"/> row gets round an outside corner. While the body is
+/// driven sideways and its face ends one body radius ahead, the row's own probe looks round the edge for a face inside
+/// the row's cone that faces the way the body is going. The body's own sweep then proves the way round (out past the
+/// corner, then in along the new face), and the body travels it over <paramref name="Seconds"/>, still held and facing
+/// the new face when it arrives. Where no such face is found or the way is not clear, the edge is an edge as before.</summary>
+/// <param name="Depth">How far past the corner, along the new face, the body's middle arrives, world units at unit
+/// scale. Positive.</param>
+/// <param name="Seconds">How long the wrap takes. Positive.</param>
+public sealed record WorldHoldCorner(
+    float Depth,
+    float Seconds
+);
 /// <summary>What the medium does to a body standing in it — the authored half of a <see cref="BodyHoldBond.Medium"/>
 /// hold. Required for that bond and refused on every other. <see cref="SettleRate"/> is the one law that turns the
 /// equilibrium error into a target velocity; the governing shaping row's own along/dynamics facet then rate-limits
@@ -143,6 +155,8 @@ public sealed record WorldHoldEnvelope(
 /// <param name="DriveSeconds">How long a body standing on ground must keep driving into a face before
 /// <paramref name="OnDrive"/> takes it, so brushing a wall is not a grab. A body in the air takes it at once. Zero,
 /// the default, takes it at once on the ground too.</param>
+/// <param name="Corner">How a body traversing off the side of this row's face gets round an outside corner onto the
+/// face past it. Admitted on a <see cref="BodyHoldKind.Pull"/> row only.</param>
 public sealed record WorldHold(
     [property: DocumentText("a hold name, local to its kit")] string Name,
     BodyHoldBond Bond,
@@ -165,7 +179,8 @@ public sealed record WorldHold(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldRestore? Restore = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? When = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldMantle? Mantle = null,
-    float DriveSeconds = 0f
+    float DriveSeconds = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldCorner? Corner = null
 );
 /// <summary>The one-time compilation of an authored hold list into the fixed-point form simulation reads. Channel
 /// names resolve through the world's compiled channel table here, the same resolved-outside/consumed-as-ordinal
@@ -199,6 +214,12 @@ public static class WorldHoldFactory {
 
             compiled[index] = new FixedBodyHold(
                 Bond: hold.Bond,
+                Corner: ((hold.Corner is { } corner)
+                ? new FixedBodyCorner(
+                    Depth: FixedQ4816.FromDouble(value: corner.Depth),
+                    DurationTicks: FixedTickConversion.DurationEngineTicks(seconds: ((decimal)corner.Seconds))
+                )
+                : default),
                 ConeAdmitsAbove: (cone.Y >= 90f),
                 ConeAdmitsBelow: (cone.X <= 90f),
                 ConeCosFar: FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: cone.Y)),

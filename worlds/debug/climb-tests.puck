@@ -3,7 +3,10 @@
 // The west wall is 30 m tall, more than one wheel of stamina climbs. Both face along X, which a camera-framed walker
 // reads as her strafe axis, so each climb also proves the command is laid onto the face. She is posed facing the wall
 // (yaw 270 faces +X, 90 faces -X) and the keys are hers: W drives where she faces, D to her right, Space jumps, Left
-// Shift runs. `puck test worlds/debug/climb-tests.puck --reproduce`.
+// Shift runs. A square pillar to the north, holdable all round, is the outside corner she swings round. Two walls to
+// the north-east stand 4 m tall with nothing behind them: a 0.4 m fin, a top narrower than she is, which a mantle would
+// leave her balanced on its far edge, so it cannot be stood on; and a 3 m ledge whose top she pulls up onto.
+// `puck test worlds/debug/climb-tests.puck --reproduce`.
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "climb-tests"
@@ -47,6 +50,42 @@ prototypes {
       }
     }
   }
+  prototype "climb-pillar" {
+    document {
+      schema: "puck.creation.v1"
+      name: "climb-pillar"
+      palette [{ color: "#8A7F72" }]
+      shape Box {
+        position [0, 0, 0]
+        scale [1, 4, 1]
+        material: 0
+      }
+    }
+  }
+  prototype "climb-fin" {
+    document {
+      schema: "puck.creation.v1"
+      name: "climb-fin"
+      palette [{ color: "#8A7F72" }]
+      shape Box {
+        position [0, 0, 0]
+        scale [0.2, 2, 2]
+        material: 0
+      }
+    }
+  }
+  prototype "climb-ledge" {
+    document {
+      schema: "puck.creation.v1"
+      name: "climb-ledge"
+      palette [{ color: "#8A7F72" }]
+      shape Box {
+        position [0, 0, 0]
+        scale [1.5, 2, 2]
+        material: 0
+      }
+    }
+  }
 }
 
 placements {
@@ -68,6 +107,34 @@ placements {
   placement "climb-tower" {
     prototype: "climb-tower"
     position [-6.2, 15, 0]
+    grip {
+      holdable: true
+    }
+    solid
+  }
+  // The pillar stands from x -1 to 1 and z -13 to -11, 8 m tall: its south face is at z -11 and its east face at x 1.
+  placement "climb-pillar" {
+    prototype: "climb-pillar"
+    position [0, 4, -12]
+    grip {
+      holdable: true
+    }
+    solid
+  }
+  // The fin stands from x 11.8 to 12.2 and z -12 to -8, 4 m tall: narrower than her 0.7 m body, so a step in over its
+  // top lands her with her middle past its far edge, resting on that edge alone.
+  placement "climb-fin" {
+    prototype: "climb-fin"
+    position [12, 2, -10]
+    grip {
+      holdable: true
+    }
+    solid
+  }
+  // The ledge stands from x 11.8 to 14.8 and z -18 to -14, as tall as the fin and deep enough to stand on.
+  placement "climb-ledge" {
+    prototype: "climb-ledge"
+    position [13.3, 2, -16]
     grip {
       holdable: true
     }
@@ -225,5 +292,181 @@ test "the ground refills the wheel and clears winded" {
   expect {
     bodyState(body, 0, winded) == 0
     bodyState(body, 0, stamina) == 10
+  }
+}
+
+// She takes the pillar's south face facing -Z, so D traverses toward +X, off the face's east end. The wrap lands her
+// on the east face, one standoff off it and facing it, where D goes on toward -Z and W climbs.
+test "traversing off an outside corner swings her round onto the next face" {
+  when {
+    ticks 15
+    seat1: body.pose 0 0.05 -10 0 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 40
+    seat1: player.signal keyboard.w release
+    seat1: player.signal keyboard.d press
+    ticks 34
+    seat1: player.signal keyboard.d release
+    ticks 5
+  }
+  expect {
+    bodyPosition(body, 0, x) > 1.2
+    bodyPosition(body, 0, x) < 1.5
+    bodyPosition(body, 0, z) < -11.2
+    bodyPosition(body, 0, z) > -12.7
+    bodyPosition(body, 0, y) > 1.5
+    fact(body, 0, HoldingUnwalkable) == 1
+  }
+}
+
+test "round the corner her keys are still hers: forward climbs the new face" {
+  when {
+    ticks 15
+    seat1: body.pose 0 0.05 -10 0 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 40
+    seat1: player.signal keyboard.w release
+    seat1: player.signal keyboard.d press
+    ticks 34
+    seat1: player.signal keyboard.d release
+    seat1: player.signal keyboard.w press
+    ticks 25
+    seat1: player.signal keyboard.w release
+  }
+  expect {
+    bodyPosition(body, 0, x) > 1.2
+    bodyPosition(body, 0, x) < 1.5
+    bodyPosition(body, 0, y) > 3.3
+    fact(body, 0, HoldingUnwalkable) == 1
+  }
+}
+
+// The right stick turns the camera, and on the ground her with it. On a wall it turns the camera alone, so W, which
+// drives where she faces, still climbs after a third of a turn.
+test "turning the camera on a wall does not turn her off it" {
+  when {
+    ticks 15
+    seat1: body.pose 5 0.05 0 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 40
+    seat1: player.signal keyboard.w release
+    seat1: player.signal gamepad.rightStick 1 0
+    ticks 20
+    seat1: player.signal gamepad.rightStick 0 0
+    seat1: player.signal keyboard.w press
+    ticks 25
+    seat1: player.signal keyboard.w release
+  }
+  expect {
+    bodyPosition(body, 0, y) > 3.3
+    bodyPosition(body, 0, x) > 5.5
+  }
+}
+
+// The left stick is camera-framed on the ground. On a wall it is hers: pushed forward it climbs wherever the camera
+// has turned to.
+test "the stick climbs whichever way the camera looks" {
+  when {
+    ticks 15
+    seat1: body.pose 5 0.05 0 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 40
+    seat1: player.signal keyboard.w release
+    seat1: player.signal gamepad.rightStick 1 0
+    ticks 20
+    seat1: player.signal gamepad.rightStick 0 0
+    seat1: player.signal gamepad.leftStick 0 1
+    ticks 25
+    seat1: player.signal gamepad.leftStick 0 0
+  }
+  expect {
+    bodyPosition(body, 0, y) > 3.3
+    bodyPosition(body, 0, x) > 5.5
+  }
+}
+
+// Driving on up the fin, she reaches its top and stays on the face: a mantle would land her middle past the far edge,
+// on the edge alone, which is no landing.
+test "a top narrower than she is is not a mantle: she hangs under it" {
+  when {
+    ticks 15
+    seat1: body.pose 11.2 0.05 -10 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 120
+    seat1: player.signal keyboard.w release
+    ticks 30
+  }
+  expect {
+    bodyPosition(body, 0, y) > 2.4
+    bodyPosition(body, 0, y) < 3.1
+    bodyPosition(body, 0, x) < 11.8
+    fact(body, 0, HoldingUnwalkable) == 1
+  }
+}
+
+// The same climb up the ledge, as tall as the fin and deep enough to stand on, ends on its top.
+test "a top she can stand on is a mantle" {
+  when {
+    ticks 15
+    seat1: body.pose 11.2 0.05 -16 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 75
+    seat1: player.signal keyboard.w release
+    ticks 40
+  }
+  expect {
+    bodyPosition(body, 0, y) > 3.9
+    bodyPosition(body, 0, y) < 4.2
+    bodyPosition(body, 0, x) > 11.9
+    bodyPosition(body, 0, x) < 14.8
+    fact(body, 0, Grounded) == 1
+    fact(body, 0, HoldingUnwalkable) == 0
+  }
+}
+
+// The fin's top is too thin to stand on, so she hangs under it. A leap there has nowhere to go: it is not made, and
+// the wheel keeps what the leap would have cost.
+test "a leap the top of the face would stop at once is not made and costs nothing" {
+  when {
+    ticks 15
+    seat1: body.pose 11.2 0.05 -10 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 75
+    seat1: player.signal keyboard.w release
+    ticks 3
+    seat1: player.signal keyboard.space press
+    ticks 3
+    seat1: player.signal keyboard.space release
+    ticks 25
+  }
+  expect {
+    bodyPosition(body, 0, y) > 2.4
+    bodyPosition(body, 0, y) < 3.1
+    fact(body, 0, HoldingUnwalkable) == 1
+    bodyState(body, 0, stamina) > 8
+  }
+}
+
+// From half way up the east wall a leap with nothing pushed goes straight up. Its top can be stood on, so where the
+// leap brings the edge within her reach it becomes the mantle.
+test "a leap that reaches a top she can stand on becomes the mantle" {
+  when {
+    ticks 15
+    seat1: body.pose 5 0.05 0 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 50
+    seat1: player.signal keyboard.w release
+    ticks 3
+    seat1: player.signal keyboard.space press
+    ticks 3
+    seat1: player.signal keyboard.space release
+    ticks 45
+  }
+  expect {
+    bodyPosition(body, 0, y) > 5.9
+    bodyPosition(body, 0, y) < 6.2
+    bodyPosition(body, 0, x) > 6.1
+    fact(body, 0, Grounded) == 1
+    fact(body, 0, HoldingUnwalkable) == 0
   }
 }

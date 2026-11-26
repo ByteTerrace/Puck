@@ -9001,6 +9001,21 @@ export type WorldHold = {
    * How long a body standing on ground must keep driving into a face before OnDrive takes it, so brushing a wall is not a grab. A body in the air takes it at once. Zero, the default, takes it at once on the ground too.
    */
   driveSeconds?: number;
+  /**
+   * How a body traversing off the side of this row's face gets round an outside corner onto the face past it. Admitted on a Pull row only.
+   */
+  corner?: WorldHoldCorner | null;
+};
+
+export type WorldHoldCorner = {
+  /**
+   * How far past the corner, along the new face, the body's middle arrives, world units at unit scale. Positive.
+   */
+  depth: number;
+  /**
+   * How long the wrap takes. Positive.
+   */
+  seconds: number;
 };
 
 export type WorldHoldEnvelope = {
@@ -9379,13 +9394,13 @@ export type WorldHudRect = {
 
 export type WorldHudSection = {
   /**
-   * The section defaults.
+   * Gets the section defaults. Absent reads as InertDefaults, coalesced in the accessor as Elements is.
    */
-  defaults: WorldHudDefaults;
+  defaults?: WorldHudDefaults | null;
   /**
    * Gets the authored world-scope panels. The absence-coalesce lives in the accessor for the same reason Elements's does.
    */
-  panels: (WorldHudPanel | null)[];
+  panels?: (WorldHudPanel | null)[] | null;
 };
 
 /**
@@ -14723,6 +14738,8 @@ export type WorldSeatCameraFeel = {
   autoFirstPerson?: boolean | null;
 };
 
+export type WorldSeatFaceFrame = "Camera" | "Body";
+
 export type WorldSeatFollow = {
   /**
    * The exponential rate (per second) the camera yaw closes on the heading — about 63% of the remaining angle per 1/rate seconds; larger is a stiffer follow.
@@ -14956,6 +14973,10 @@ export type WorldSeatViewControl = {
    * Optional authored distance limits and input step for the interactive orbit.
    */
   boom?: WorldCameraBoom | null;
+  /**
+   * The frame the seat's movement resolves in while its body holds a face it cannot stand on.
+   */
+  faceFrame?: WorldSeatFaceFrame;
 };
 
 export type WorldSeatYawReference = "World" | "Body";

@@ -572,7 +572,9 @@ revision; never capture a revision outside `Begin`'s queue. A refused reload ask
 host's explanation off the pump (`explain`); the desktop's names a restart owed when an
 engine source in the checkout is newer than the running build (`WorldBuildCurrency`).
 What the operator holds for the session (the window's size and place, levers,
-`view.override`, the state and row lines `WorldPinLedger` records, seat registers
+`view.override`, the state rows and document row lines `WorldPinLedger` records (a state row an
+operator line wrote is saved whole as it stands, its value with its `advance`, so a held clock
+comes back held at its time), seat registers
 that differ from their initial values or that an operator wrote, seat poses) survives
 a reload by living outside the source revision; `world.pins save` and `world.pins
 restore` carry it across a restart, and `pins: true` on `puck_world_stop` and

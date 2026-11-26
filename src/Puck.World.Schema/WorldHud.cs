@@ -234,21 +234,28 @@ public sealed record WorldHudCursor(float HoverRadius, float SizePx, WorldThemeR
 /// <param name="Visible">The visibility condition every world-scope panel is gated by, beside its own, or
 /// <see langword="null"/> for always.</param>
 public sealed record WorldHudDefaults(bool Enabled, WorldHudCursor? Cursor = null, [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] OverlayPredicate? Visible = null);
-/// <summary>The <c>hud</c> document section: the world-scope defaults plus the authored panel rows. A required section
-/// every document carries; an empty panel list draws nothing (the built-in default).</summary>
-/// <param name="Defaults">The section defaults.</param>
+/// <summary>The <c>hud</c> document section: the world-scope defaults plus the authored panel rows. Either member may
+/// be left out: a document that only adds panels (an imported ability's gauge) composes over whatever defaults its basis
+/// or its other imports author, and alone reads the inert defaults; an empty panel list draws nothing.</summary>
+/// <param name="Defaults">The section defaults, or <see langword="null"/> for <see cref="InertDefaults"/>.</param>
 /// <param name="Panels">The authored world-scope panels (default empty), capped at
 /// <see cref="WorldHudCapacity.MaxWorldPanels"/>, each capped at <see cref="WorldHudCapacity.MaxElementsPerPanel"/>
 /// elements.</param>
-public sealed record WorldHudSection(WorldHudDefaults Defaults, IReadOnlyList<WorldHudPanel> Panels) {
+public sealed record WorldHudSection(WorldHudDefaults? Defaults = null, IReadOnlyList<WorldHudPanel>? Panels = null) {
+    private readonly WorldHudDefaults m_defaults = (Defaults ?? InertDefaults);
     private readonly IReadOnlyList<WorldHudPanel> m_panels = (Panels ?? []);
 
-    /// <summary>Gets the inert absence: HUD disabled, no cursor, no panels. The engine holds no HUD policy of its
-    /// own — a world AUTHORS its row or inherits it from its basis.</summary>
-    public static WorldHudSection Absent { get; } = new(
-        Defaults: new WorldHudDefaults(Enabled: false),
-        Panels: []
-    );
+    /// <summary>Gets the defaults a document that authors none reads: HUD disabled, no cursor. The engine holds no HUD
+    /// policy of its own — a world AUTHORS its row or inherits it from its basis.</summary>
+    public static WorldHudDefaults InertDefaults { get; } = new(Enabled: false);
+    /// <summary>Gets the inert absence: HUD disabled, no cursor, no panels.</summary>
+    public static WorldHudSection Absent { get; } = new();
+    /// <summary>Gets the section defaults. Absent reads as <see cref="InertDefaults"/>, coalesced in the accessor as
+    /// <see cref="WorldHudPanel.Elements"/> is.</summary>
+    public WorldHudDefaults Defaults {
+        get => m_defaults;
+        init => m_defaults = (value ?? InertDefaults);
+    }
     /// <summary>Gets the authored world-scope panels. The absence-coalesce lives in the accessor for the same reason
     /// <see cref="WorldHudPanel.Elements"/>'s does.</summary>
     public IReadOnlyList<WorldHudPanel> Panels {

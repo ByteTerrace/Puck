@@ -6,8 +6,11 @@
   ],
   "properties": {
     "defaults": {
-      "description": "The section defaults.",
-      "type": "object",
+      "description": "Gets the section defaults. Absent reads as InertDefaults, coalesced in the accessor as Elements is.",
+      "type": [
+        "object",
+        "null"
+      ],
       "properties": {
         "enabled": {
           "description": "Whether the world-scope HUD panels render at all \u2014 a world-level kill switch independent of any individual panel\u0027s row (a diegetic reveal gate can flip this without editing every panel).",
@@ -95,11 +98,15 @@
         "enabled"
       ],
       "additionalProperties": false,
+      "default": null,
       "title": "WorldHudDefaults"
     },
     "panels": {
       "description": "Gets the authored world-scope panels. The absence-coalesce lives in the accessor for the same reason Elements\u0027s does.",
-      "type": "array",
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "description": "One HUD panel row \u2014 a stable id (unique within the section), a normalized viewport rect in screen space, which band it draws in, its chrome style, and its child elements. WorldMutation.UpsertHudPanel carries the whole row (elements included) as one cross-row transaction boundary; WorldMutation.UpsertHudElement/ WorldMutation.RemoveHudElement read-modify-write a single element within an already-declared panel.",
         "type": [
@@ -142,13 +149,10 @@
         ],
         "additionalProperties": false,
         "title": "WorldHudPanel"
-      }
+      },
+      "default": null
     }
   },
-  "required": [
-    "defaults",
-    "panels"
-  ],
   "additionalProperties": false,
   "default": null,
   "title": "WorldHudSection"

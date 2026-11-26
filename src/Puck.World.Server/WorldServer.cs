@@ -563,6 +563,17 @@ public sealed partial class WorldServer : IWorldServerHost {
         ),
         tick: tick
     ));
+    /// <summary>Reads one authored <c>state</c> row as it stands now: the cells the arena holds written into it, and
+    /// its moving cells settled at the completed tick (<see cref="WorldSessionCapture.SettleStateRow"/>). It
+    /// materializes the arena's cells, so it is for an operator's read, never a per-tick one. Safe from any thread.</summary>
+    /// <param name="name">The row's name.</param>
+    /// <returns>The settled row, or <see langword="null"/> when the document authors no row of that name.</returns>
+    public WorldStateRow? SettledStateRow(string name) => ExecuteAuthorityOperation(operation: () => WorldSessionCapture.SettleStateRow(
+        definition: MaterializeArena(),
+        engineTick: m_tick.CompletedEngineTicks,
+        name: name,
+        tick: m_tick.CompletedTick
+    ));
     internal bool CompactThrough(WorldDefinition @base, ImmutableList<WorldJournalEntry> saved) {
         using (EnterAtTickBoundary()) { ThrowIfTickPending(); return m_document.CompactThrough(@base: @base, saved: saved); }
     }

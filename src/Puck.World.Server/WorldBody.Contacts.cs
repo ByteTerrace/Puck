@@ -29,15 +29,7 @@ public sealed partial class WorldBody {
         ) {
             var resolvedVelocity = scratch.Velocity;
             var intended = scratch.NextPosition;
-            var step = new BodyContactStep(
-                entityIndex: scratch.EntityIndex,
-                field: field,
-                memo: ref scratch.SupportMemo,
-                orientation: scratch.Orientation,
-                up: scratch.Up,
-                volumes: ScaledColliderVolumes(),
-                volumesRevision: BroadphaseRadiusComputations
-            );
+            var step = ContactStep(field: field, scratch: ref scratch);
             var contactResolution = step.Sweep(
                 position: ref scratch.NextPosition,
                 previousPosition: m_position,
@@ -378,6 +370,17 @@ public sealed partial class WorldBody {
             return m_met;
         }
     }
+    // The body's contact step at the pose the step is integrating: the one binding the ordinary step, the support search
+    // and the hold's mantle and corner proofs sweep through, so each proof resolves against what the next step will.
+    private BodyContactStep ContactStep(IContactField field, ref BodyMotionScratch scratch) => new(
+        entityIndex: scratch.EntityIndex,
+        field: field,
+        memo: ref scratch.SupportMemo,
+        orientation: scratch.Orientation,
+        up: scratch.Up,
+        volumes: ScaledColliderVolumes(),
+        volumesRevision: BroadphaseRadiusComputations
+    );
     // One body's swept contact solve, bound to its pose and volumes: the ordinary step and every step-up move run
     // through it, so an entity-aware field resolves each of them against the other bodies too. Its support distance is
     // asked through the step's memo.

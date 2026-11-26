@@ -1730,6 +1730,47 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
             arg2: key
         ));
     }
+    // What a world.row.set line holds, for world.pins. A state row is one subject however the line spells it (a field,
+    // the whole row), read live when the pins are read (WorldStateRowPin). A field of any other row is the path, the key
+    // and the field path; a keyless section's whole row is its path; a declared property name is its own subject. A
+    // keyed section's whole row carries its key inside its JSON, so the line itself is the subject and two rows never
+    // share one.
+    private static (string Subject, Func<string?>? Live) PinOf(in WireArgs args, CommandContext context, WorldServer server) {
+        const string Verb = "world.row.set";
+
+        var path = ((args.Count > 0) ? args[0].ToString() : string.Empty);
+
+        if (string.Equals(a: path, b: PropertiesNamesPath, comparisonType: StringComparison.Ordinal)) {
+            return (WorldPinLedger.Subject(verb: Verb, args: in args, tokens: args.Count), null);
+        }
+
+        var literal = ((args.Count >= 2) && !LooksLikeJsonContainer(token: args[1]));
+        var keyed = (Sections.TryGetValue(key: path, value: out var section) && (section.Remove is not null));
+
+        if (
+            string.Equals(a: path, b: "state", comparisonType: StringComparison.Ordinal) &&
+            ((literal ? args[1].ToString() : StateRowName(json: WorldCommandArguments.RawAfter(args: in args, context: context, tokens: 2))) is { Length: > 0 } row)
+        ) {
+            return (WorldStateRowPin.Subject(row: row), WorldStateRowPin.Line(row: row, server: server));
+        }
+        if (literal) {
+            return (WorldPinLedger.Subject(verb: Verb, args: in args, tokens: (keyed ? 3 : 2)), null);
+        }
+
+        return ((keyed ? $"{Verb} {context.Text?.Trim()}" : WorldPinLedger.Subject(verb: Verb, args: in args, tokens: 1)), null);
+    }
+    // The name a whole state row's JSON carries, or null when the text is no row.
+    private static string? StateRowName(string? json) {
+        if (string.IsNullOrWhiteSpace(value: json)) { return null; }
+
+        try {
+            return ((JsonNode.Parse(json: json) is JsonObject row) && (row["name"] is JsonValue name) && name.TryGetValue<string>(value: out var text)
+                ? text
+                : null);
+        } catch (JsonException) {
+            return null;
+        }
+    }
     // The row-edit window guard's own identity string — "path.key" for a keyed section, bare "path" for a keyless
     // one — the SAME spelling world.row.step derives from its own combined address, so a step and a literal edit to
     // the same row in one tick window collide under the identical guard.
@@ -1995,9 +2036,11 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                     server: instance.Server
                 );
 
-                // Every token but the value (the path, and the key and field path a literal form names) names what the line
-                // holds; a declared property name is its own subject.
-                return (pins?.Track(args: in args, context: in context, result: submitted, subjectTokens: ((args.Count > 0) && args[0].ToString().Equals(PropertiesNamesPath, StringComparison.Ordinal) ? args.Count : (args.Count - 1)), verb: "world.row.set") ?? submitted);
+                if (pins is null) { return submitted; }
+
+                var (subject, live) = PinOf(args: in args, context: context, server: instance.Server);
+
+                return pins.Track(context: in context, live: live, result: submitted, subject: subject);
             },
             routing: CommandRouting.Simulation
         );

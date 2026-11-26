@@ -56,7 +56,8 @@ Rule 7's search, by capability. Each row is a system this plan uses rather than 
 | Buttons that act by the body's state | a kit's `actions` (`onPress`, `onFact`) with gates over facts, registers and timers (`BodyActionSpecFactory.CompileGate`) and effects (`planarImpulse`, `addState`, `startTimer`) |
 | Know a body is on a wall | the `HoldingUnwalkable` fact (`ActionFact`), on the wire in `BodyFacts` |
 | Hands and feet on the surface | a creation's `effectors` with a `surface` target and a `plant` window (`CreationEffector`), and drivers on the `travel` signal gated on `HoldingUnwalkable` (`CreationAnimation`) |
-| A camera that changes with state | `selectProgram` in a camera program (`worlds/standard/camera.puck`) |
+| A camera that changes with state | `selectProgram` and `blend` in a camera program, a `blend`'s weight bound to a state row whose `dynamics` trait eases what presentation reads (`worlds/standard/camera.puck`) |
+| A stick that keeps its meaning while the camera orbits | held free look (`SeatController.FreeLooking`), which resolves movement against the body's heading in `WorldClient.ComposeMoveFrame` |
 | A gauge on screen | a `hud` panel's `Gauge` element bound to a state row |
 
 The standard package already had `crawlHold`, which the pond's spiders use to climb a den wall onto its ceiling
@@ -80,16 +81,30 @@ the hold system had these gaps. Each is closed once, in the engine, as a mechani
 | Brushing a wall took it. | A row's `driveSeconds`: a body on the ground takes a face only after driving into it that long; a body in the air takes it at once. |
 | A press could not be read in a fact trigger, so one button could not mean "jump" on the ground and "leap" on a face. | `held(channel)` in an action gate. Under an input mapping that leaves the channel out it is never held. |
 | An impulse ignored the face, and a climber kept the heading she arrived with. | An impulse under a pull lies in the face; `forward: Surface` faces the body into it. |
+| A look that steers the body (`player.look.steer`, `player.steer`) turned a climber off her wall, and with her heading went the meaning of her keys. | A row whose `forward` is `Surface` owns the heading while it holds a face (`WorldBody.HoldOwnsHeading`): a commanded facing turns the camera alone. |
+| A camera-framed stick changed meaning as the camera orbited: seen from the side, pushing forward traversed. | `views.seatControl.faceFrame: Body` resolves a seat's movement against its body's heading while the body holds a face (`WorldClient.ComposeMoveFrame`), the frame held free look already used. |
+| An outside corner was an edge. | A row's `corner` finds the face past the corner, proves the way round with the body's sweep and carries the body there (`WorldBody.TryBeginCornerWrap`). |
+| The edge guard read only the command, so a leap carried a body off the end of its face and its cost was wasted. | The guard reads the command and the impulse together (`WorldBody.GuardHeldFace`): a leap becomes the mantle where a landing is proven and stops at the edge where none is, and a firing whose impulse an edge would stop whole is refused, so it spends nothing (`WorldBody.ImpulseStopsAtFaceEdge`). |
+| A blend between a near and a far orbit collapsed once a player zoomed, because the seat's distance replaced both. | A requested distance is read against the orbit the seat steers, and every other orbit keeps its proportion to it (`SdfCameraLook.OrbitDistance`). |
 
 ## The design
 
 The invariant: **a mantle moves a body only to a landing the body's own sweeps proved.** One place enforces it:
 `WorldBody.TryBeginMantle` is the only code that starts a mantle, and it starts one only from the landing
 `FixedStepUp.TryStep` returned (raise, step in, lower onto walkable support, each through the body's own sweep, the
-step a kerb takes). The move then runs through the ordinary swept contact step, as every timed move does. The
+step a kerb takes), and only where `FixedStepUp.Stands` finds ground under her axis at the landing, so she stands on
+it rather than resting on its far edge and rolling off. A top narrower than the landing's depth is no landing, and she
+hangs under it. The move then runs through the ordinary swept contact step, as every timed move does. The
 guarantee stops at the path between: the move follows a parabola through the top of the proven raise and not the
 proven L itself, so contact may shorten it, and a shortened mantle leaves her on the wall or in the air above the
 ledge, never inside geometry.
+
+A corner wrap holds the same invariant: **a wrap moves a body only along a way its own sweeps proved, onto a face the
+row's own probe found behind where they ended.** `WorldBody.TryBeginCornerWrap` is the only code that starts one. It
+casts back at the corner from beyond it, sweeps the body out along the traverse and then in along the face it found,
+and probes that face again from where the sweeps ended. The same limit applies: the move follows a parabola through
+the corner of the proven path, so contact may shorten it, and a shortened wrap leaves her hanging off the new face or
+falling beside it.
 
 How a climb runs, tick by tick:
 
@@ -101,26 +116,39 @@ How a climb runs, tick by tick:
    moves her; where it ends, that part of the command is removed, so she hangs at an edge.
 3. **Spend.** At the end of the step the register drains at the moving rate if the step carried her along the face,
    and at the resting rate otherwise.
-4. **Mantle.** While she drives up and the face ends within `mantle.height` of her feet, a landing is proven and she
-   is carried onto it. No row holds her meanwhile, and the row's `mantle.state` timer runs.
-5. **Let go.** A closed `when` gate (the regrab timer, winded) or an emptied register drops the row, and her climb's
+4. **Mantle.** While she drives or leaps up and the face ends within `mantle.height` of her feet, a landing is proven
+   and she is carried onto it. No row holds her meanwhile, and the row's `mantle.state` timer runs.
+5. **Corner.** While she drives or leaps sideways and the face ends one body radius ahead, the row's `corner` looks
+   for the face past the corner, proves the way round and carries her onto it, still held and turned to face it.
+6. **Let go.** A closed `when` gate (the regrab timer, winded) or an emptied register drops the row, and her climb's
    momentum carries into the fall.
 
 The authored ability, `climbAbility` in `worlds/standard/abilities.puck`: the `climb` row (walls from 60 to 120
 degrees), the `stamina` register, the `winded` lock an emptied wheel sets until it has refilled, the leap on the jump
-channel, letting go on the run channel with the `climbRest` timer, and the mantle. `staminaRestore()` is the restore
-an avatar's ground and fall rows author, and `staminaGauge()` the wheel on screen. Every number is a template
-parameter; the Moth's import (`worlds/debug/avatars/moth-climb.puck`) takes the defaults, and her rig raises her arms
-to the wall and plants each palm in turn (`cling` and `climb` drivers, two hand effectors).
+channel, letting go on the run channel with the `climbRest` timer, the mantle and the corner. `staminaRestore()` is
+the restore an avatar's ground and fall rows author, and `staminaGauge()` the wheel on screen. Every number is a
+template parameter; the Moth's import (`worlds/debug/avatars/moth-climb.puck`) takes the defaults. Her rig raises her
+arms to the wall and plants palms and toes in turn on the `climb` driver's cycle: a hand and the opposite foot hold
+together, the foot an eighth of a cycle behind its hand (`cling` and `climb` drivers, the `hand-*` and `toe-*`
+effectors in `worlds/debug/avatars/moth.puck`).
 
-The controls follow from the mechanisms, with no rule of their own. Her keys are heading-framed and she faces the
-wall, so W climbs, S descends and A and D traverse. Her stick is camera-framed, so pushing it toward the wall on
-screen climbs. Space leaps the way she is moving. Left Shift lets go.
+The controls follow from the mechanisms, with no rule of their own. The row faces her into the wall and owns her
+heading there, and the chase camera's `faceFrame: Body` reads her stick in her own frame while she holds a face, so
+W or the stick pushed forward climbs, back descends and sideways traverses, wherever the camera has been turned.
+Space leaps the way she is moving. Left Shift lets go.
+
+The camera is the standard chase camera's wall framing (`chaseCamera(wall: wallFraming())` in
+`worlds/standard/camera.puck`): each clearance case blends its ground framing with a framing that stands further back
+and looks up the face from below her shoulders, weighted by the `cameraOnWall` row. A rule sets that row from the
+`HoldingUnwalkable` fact and its `dynamics` trait eases what the rig reads, so the camera drifts out as she takes a
+wall and back as she lets go or mantles. The right stick and the mouse orbit it as on the ground.
 
 ## What is evolved, not copied
 
-- **Edges hold.** The original lets a climber shuffle off the side of a face and fall. Here a face's edge stops her
-  and a ledge pulls her up, as a caught ledge does in Assassin's Creed.
+- **Edges hold.** The original lets a climber shuffle off the side of a face and fall. Here a face's edge stops her,
+  a ledge pulls her up, as a caught ledge does in Assassin's Creed, and an outside corner carries her round.
+- **A leap is never wasted.** A leap that would run off the top becomes the pull-up where the top can be stood on,
+  and is not made, at no cost, where the face ends at once.
 - **The mantle is proven.** Other engines play a canned animation over a capsule test. Puck's lands only where the
   body's own sweep stood it, on ground no author marked.
 - **A grab is deliberate on the ground and instant in the air.** The dwell removes the accidental grab that walking
@@ -149,7 +177,8 @@ them. Three properties of the climb bear on its shape:
   relief deeper than about a hand (0.1 m) with sharp sides reads as separate faces.
 - Faces from 60 to 120 degrees from up are climbed. Branch tops within 60 degrees of level are walked, and a mantle
   lands on them whether or not they are holdable.
-- A mantle needs a landing 0.8 m in from the edge with her height clear above it.
+- A mantle needs a landing 0.8 m in from the edge with her height clear above it and the top still under her middle
+  there: a branch thinner than about 0.45 m in the direction she climbs is held, not stood on.
 
 The gallery's ground-floor walls are holdable (`gallery/shell.puck`). The upper floors' are not: level 1's so that
 the toybox is not reached round its lattice, and the others until the tree gives a route to them. Most of the long
@@ -158,24 +187,21 @@ and the west wall.
 
 ## Open work
 
-- **The climbing camera.** A `blend` in the seat rig between the chase framing and a climb framing (a longer boom,
-  looking up the wall), weighted by an eased row a rule sets from `HoldingUnwalkable`. `chaseCamera`
-  (`worlds/standard/camera.puck`) owns `views.seatRig`, so the climb framing is a parameter of it.
-- **A look pass on her climb.** The rig's `cling` pose and hand effectors are authored blind and have not been seen.
-  Her legs keep the air pose's tuck: a second effector on a leg would fight the foot's own, so feet on the wall need
-  the foot effector's gate widened instead. A mantle pose can read the `mantling` timer through a mirrored row.
-- **Outside corners.** The edge guard stops her at a convex corner. Carrying a traverse round it is a second proven
-  move, built as the mantle is.
+- **A look pass on her climb and its camera.** The `cling` pose, the hand and toe effectors and the wall framing's
+  numbers (`wallFraming` in `worlds/standard/camera.puck`) are authored blind and have not been seen in a window. Her
+  legs keep the air pose's tuck under the toe effectors. A mantle pose can read the `mantling` timer through a
+  mirrored row, and a wrap has no pose of its own.
+- **Corners the wrap does not take.** A wall thinner than the row's corner depth ends in an edge, and so does a
+  corner whose far face lies beyond the row's `reach`. A top corner (the end of a face that is also near its top) is
+  taken as whichever of mantle and wrap the command reaches first.
 - **A kit-level trigger list.** A kit's own binding for a channel replaces an imported one, so the ability carries
   its fact triggers under `run` and an avatar with its own `run` action must list them. Fact triggers belong to no
   channel; a list of their own would let abilities compose.
 - **The wheel per seat.** `staminaGauge` mirrors one row for the world. Several seats need a row keyed by body and a
-  panel that reads its seat's key.
+  panel that reads its seat's key, as the camera's `cameraOnWall` row is.
 - **Wet and icy surfaces** as a grip class per material ([the composition plan](debug-world-composition.md) records
   the precedence the owner asked for), and a rule that raises the drain on them.
 - **A vault** for walls between her step height and her waist, which need a jump first.
-- **A leap past a face's top** is not guarded: she rises off the face, falls and catches it again, the leap's
-  stamina spent.
 - **The analytic cast's cost.** Each step of a cast reads every holdable collider. A world that makes everything
   holdable wants the holdable set behind the collider grid the contact solve uses (`FixedColliderGrid`).
 
