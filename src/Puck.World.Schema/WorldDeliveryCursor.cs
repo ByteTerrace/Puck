@@ -210,6 +210,10 @@ public sealed class WorldDeliveryCursor {
     /// delivers the whole disclosed document even when its content did not move: a new generation is primed
     /// alone.</summary>
     public void ForgetDocument() => m_definition = null;
+    /// <summary>Decides a cut because the stream's reader missed records: a transport that could not keep up dropped
+    /// them, so nothing the reader holds is known to be whole. The stream owes the cut record, the whole disclosed
+    /// document and a primer under the new generation, as after any cut (<see cref="TakeCut"/>).</summary>
+    public void Lapse() => Cut();
     private void Cut() {
         m_generation = checked(m_generation + 1);
         m_cutOwed = true;

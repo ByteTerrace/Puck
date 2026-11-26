@@ -5144,17 +5144,17 @@ the stages; this packet holds what a stage does not.
 - [medium] `host.frames` reads the host loop's interval and never the time a
   frame was displayed, so judder that an even interval hides is not read
   (`HostFrameTimeline`). Stage 8 adds the displayed interval.
-- [medium] On a remote authority (`puck benchmark --route debug --remote local
-  --headless`, which now arrives in all seven chapters at `Presentation`
-  disclosure over `worlds/debug`'s authored `authorityNamespace` and
-  `visitorAdmissionRow`), an observer that falls eight records behind is
-  detached and reconnects (`WorldFederationProjectionSink.PendingDeliveryLimit`).
-  Each detach withdraws the mirror to `Undisclosed` until the projection
-  re-arrives and re-admits the traveller's input profile, dropping batches that
-  named the prior input epoch.
-- [medium] `--connect` resolves the expected remote `authorityNamespace` from
-  the booted document (`WorldInstanceHost`'s remote destination resolution)
-  rather than taking the remote subject as a CLI run input beside the endpoint.
+- [low] An observer whose wire falls a full queue behind is no longer detached:
+  it is sent nothing while its wire drains, and the next delivery cuts its
+  stream to a new generation and sends the whole projection and a primer behind
+  the cut (`WorldFederationProjectionSink.ResumeDeliveryLimit`). Two parts are
+  left. The catch-up rides a delivery, so on a paused authority, which makes
+  none, a drained observer keeps what it held until the world steps; and the
+  receiver's side of a catch-up has been read only as records on the wire.
+  Check: `puck benchmark --route debug --remote local --jitter-ms <n>` at a
+  jitter that fills the queue arrives in every chapter with no
+  `world.observation.backpressure` line, and a paused authority's observer is
+  primed when its wire drains.
 - [medium] A replica dealt to a recipient who may not read a cell still carries
   the rules that read it (`WorldStateDisclosure.Disclose` withholds the cell and
   the rule is sent whole). The receiver no longer refuses the document, since it

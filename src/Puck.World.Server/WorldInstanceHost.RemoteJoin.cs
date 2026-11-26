@@ -240,17 +240,20 @@ public sealed partial class WorldInstanceHost {
 
     /// <summary>Sends every local seat that stands in the boot world to a remote authority, now and as each one
     /// joins.</summary>
-    /// <param name="documentPath">The document the boot world was loaded from, which names the world the remote
-    /// authority is expected to hold.</param>
+    /// <param name="documentPath">The document the boot world was loaded from, which stands for the remote world
+    /// until the authority's own arrives.</param>
     /// <param name="authority">The remote authority's endpoint, an <c>ip:port</c> pair.</param>
     /// <param name="listens">Whether this host also binds a listen endpoint of its own.</param>
+    /// <param name="authorityNamespace">The namespace the remote authority must prove at its handshake, or
+    /// <see langword="null"/> to expect the one <paramref name="documentPath"/> declares.</param>
     /// <exception cref="ArgumentException"><paramref name="documentPath"/> or <paramref name="authority"/> is
     /// empty.</exception>
-    public void JoinRemote(string documentPath, string authority, bool listens = false) {
+    public void JoinRemote(string documentPath, string authority, bool listens = false, string? authorityNamespace = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: documentPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: authority);
         m_remoteJoin = TransferDestination.Remote(
             authority: authority,
+            authorityNamespace: authorityNamespace,
             documentPath: documentPath,
             name: "remote-boot"
         );

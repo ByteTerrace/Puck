@@ -904,12 +904,15 @@ An observation feed provides:
 
 The in-process output hub delivers synchronously on the tick thread. Its snapshots borrow reused storage,
 so each sink consumes or copies them before returning. The federation projection sink copies encoded records
-into a per-subscription queue bounded at several seconds of deliveries (`WorldFederationProjectionSink.PendingDeliveryLimit`), so a link that stalls or bunches deliveries for a moment is not detached.
-When that queue fills, it detaches with `world.observation.backpressure` and ends the stream with a projection
-invalidation. The hub detaches it immediately; draining the retained records does not keep the subscription alive.
-A peer reopens for a fresh primer: a snapshot alone cannot repair a missed definition revision
-or authority route. The queued records retain their original order and authority/session epochs until that
-invalidation; no later record enters a detached queue. A retired authority route detaches with
+into a per-subscription queue bounded at several seconds of deliveries (`WorldFederationProjectionSink.PendingDeliveryLimit`), so a link that stalls or bunches deliveries for a moment loses nothing.
+When that queue fills, the subscriber is behind: it is sent nothing more, and nothing is composed for it, while
+its wire drains. A snapshot alone cannot repair a missed definition revision or authority route, so the stream does
+not skip ahead record by record. Once the queue has drained to `ResumeDeliveryLimit`, the next delivery cuts the
+stream to a new generation and sends the whole disclosed document, the route if one was missed and a primer
+snapshot behind the cut record, so a slow observer catches up on the stream it holds at the rate its link carries.
+The queued records keep their order ahead of the cut. A subscriber whose wire has not drained within
+`StalledDeliveryLimit` deliveries is stalled: it detaches with `world.observation.backpressure`, the stream ends
+with a projection invalidation, and the peer reopens for a fresh primer. A retired authority route detaches with
 `world.observation.invalidated`, and a composition its recipient's disclosure refuses
 (`WorldDisclosureException`) with `world.observation.disclosure`. A record the receiver's cap for its kind
 (`WorldFederationCodec.MaxResponseBytes`) would refuse detaches with `world.observation.oversize` instead of
