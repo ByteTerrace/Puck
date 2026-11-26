@@ -18,10 +18,9 @@ namespace Puck.SignedDistance.Queries;
 //
 // The carriers name every operation as the fixed carriers do (FixedQ4816, FixedVector2, FixedVector3,
 // FixedQuaternion), which is what lets the wide lowering be the fixed lowering's text. What the formulas call that is
-// no formula (a shape with a hand-written reader, the lattice noises, the ellipse's root) is read a lane at a time
-// through the fixed-point reader, so the wide reader adds no second statement of any of them, with one exception: a
-// sweep's curve search (SdfSweepWide), dozens of curve points a read, which a lane at a time made the cost of every
-// presentation normal taken near a swept trunk or root.
+// no formula (a shape with a hand-written reader, the lattice noises, the ellipse's root, a bulging or orbiting sweep's
+// search) is read a lane at a time through the fixed-point reader, so the wide reader adds no second statement of any of
+// them.
 public sealed partial class SdfFieldEvaluator {
     /// <summary>Gets the kind counting wide walks, each one tape read at up to a vector's lanes of points.</summary>
     public static WorkKind WideWalks { get; } = new(name: "sdf.wide.walks", unit: "count", workClass: WorkClass.Pacing);
@@ -292,7 +291,7 @@ public sealed partial class SdfFieldEvaluator {
 
             foreach (var region in mask.Regions) {
                 var primitive = region.Primitive;
-                var u = (q - new Wide3(X: ((double)region.Origin.X), Y: ((double)region.Origin.Y), Z: ((double)region.Origin.Z)));
+                var u = (q - Uniform(value: region.Origin));
 
                 if (!region.Identity) {
                     u = new WideRotation(W: ((double)region.Rotation.W), X: ((double)region.Rotation.X), Y: ((double)region.Rotation.Y), Z: ((double)region.Rotation.Z)).RotateInverse(vector: u);
@@ -314,14 +313,6 @@ public sealed partial class SdfFieldEvaluator {
     private static FixedVector3 LaneToFixed(Wide3 value, int lane) =>
         new(X: LaneToFixed(value: value.X.Lanes[lane]), Y: LaneToFixed(value: value.Y.Lanes[lane]), Z: LaneToFixed(value: value.Z.Lanes[lane]));
     private static Wide EvaluateShapeEscape(in WideOperands instruction, Wide3 p) {
-        ref readonly var compiled = ref instruction.Compiled;
-
-        // A sweep with no strand offset reads its curve search across the lanes (SdfSweepWide); an offset strand's
-        // tangent frame is stated only by the fixed reader, so that sweep is read a lane at a time like the rest.
-        if ((compiled.ShapePointAction == SdfShapePointAction.Sweep) && (compiled.Data0W == FixedQ4816.Zero) && (compiled.SweepCurve is { } curve)) {
-            return SdfSweepWide(curve: curve, p: p);
-        }
-
         Span<double> lanes = stackalloc double[Vector<double>.Count];
 
         lanes.Clear();
@@ -343,102 +334,35 @@ public sealed partial class SdfFieldEvaluator {
 
         return new Wide(lanes: new Vector<double>(values: lanes));
     }
-    // KEEP IN SYNC with SdfSweep (SdfFieldEvaluator.cs) for a sweep with no strand offset, where every strand's centre is
-    // the centreline's and the strands read one answer: the same candidates, halving probes, samples and golden-section
-    // rounds at the same parameters, compared per lane, so a wide answer stands within the search's resolution of the
-    // fixed one. A sample's parameter is shared by every lane; a probe's is each lane's own, so a golden-section round
-    // probes one parameter a lane, the side each lane keeps chosen by its own compare.
-    private static Wide SdfSweepWide(SweepCurveFixed curve, Wide3 p) {
-        var a = new Wide3(X: ((double)curve.A.X), Y: ((double)curve.A.Y), Z: ((double)curve.A.Z));
-        var b = new Wide3(X: ((double)curve.B.X), Y: ((double)curve.B.Y), Z: ((double)curve.B.Z));
-        var c = new Wide3(X: ((double)curve.C.X), Y: ((double)curve.C.Y), Z: ((double)curve.C.Z));
-        var radiusStart = ((double)curve.RadiusStart);
-        var radiusEnd = ((double)curve.RadiusEnd);
-        var bulge = ((double)curve.Bulge);
+    // The sweep's side-table operands (SdfFieldFormulas.Sweep), the same in every lane.
+    private static Wide3 SweepA(in WideOperands instruction) => Uniform(value: SweepCurveOf(instruction: in instruction.Compiled).A);
+    private static Wide3 SweepB(in WideOperands instruction) => Uniform(value: SweepCurveOf(instruction: in instruction.Compiled).B);
+    private static Wide3 SweepC(in WideOperands instruction) => Uniform(value: SweepCurveOf(instruction: in instruction.Compiled).C);
+    private static Wide SweepRadiusStart(in WideOperands instruction) => ((double)SweepCurveOf(instruction: in instruction.Compiled).RadiusStart);
+    private static Wide SweepRadiusEnd(in WideOperands instruction) => ((double)SweepCurveOf(instruction: in instruction.Compiled).RadiusEnd);
+    private static Wide SweepBulge(in WideOperands instruction) => ((double)SweepCurveOf(instruction: in instruction.Compiled).Bulge);
+    private static Wide3 Uniform(FixedVector3 value) => new(X: ((double)value.X), Y: ((double)value.Y), Z: ((double)value.Z));
+    private static Wide SdfSweepSearch(Wide3 p, Wide3 a, Wide3 b, Wide3 c, Wide radiusStart, Wide radiusEnd, Wide bulge, Wide strands, Wide twist, Wide strandOffset) {
+        Span<double> lanes = stackalloc double[Vector<double>.Count];
 
-        Wide SquaredOffset(Wide t) {
-            var offset = (p - Wide3.Lerp(from: Wide3.Lerp(from: a, to: b, amount: t), to: Wide3.Lerp(from: b, to: c, amount: t), amount: t));
+        lanes.Clear();
 
-            return Wide3.Dot(left: offset, right: offset);
-        }
-        Wide Gap(Wide t) {
-            var radius = Wide.Lerp(from: radiusStart, to: radiusEnd, amount: t);
-
-            if (bulge != 0.0) {
-                radius += (((Wide)bulge) * Wide.Pow(x: Wide.Max(x: Wide.Sin(angle: (t * Math.PI)), y: Wide.Zero), y: ((double)SweepBulgeExponent)));
-            }
-
-            return (Wide.Sqrt(value: SquaredOffset(t: t)) - radius);
-        }
-
-        if ((curve.RadiusStart == curve.RadiusEnd) && (curve.Bulge == FixedQ4816.Zero)) {
-            var bestT = Wide.Zero;
-            var bestSquare = SquaredOffset(t: Wide.Zero);
-
-            void Consider(Wide t) {
-                var square = SquaredOffset(t: t);
-                var nearer = (square < bestSquare);
-
-                bestSquare = Wide.Select(mask: nearer, whenClear: bestSquare, whenSet: square);
-                bestT = Wide.Select(mask: nearer, whenClear: bestT, whenSet: t);
-            }
-
-            foreach (var fraction in SweepSampleFractions) {
-                Consider(t: ((double)fraction));
-            }
-
-            var step = ((double)SweepInitialStep);
-
-            for (var round = 0; (round < 5); round++) {
-                Consider(t: Wide.Min(x: Wide.One, y: (bestT + step)));
-                Consider(t: Wide.Max(x: Wide.Zero, y: (bestT - step)));
-                step *= 0.5;
-            }
-
-            return (Wide.Sqrt(value: bestSquare) - radiusStart);
+        for (var lane = 0; (lane < WideLanes); lane++) {
+            lanes[lane] = ((double)SdfSweepSearch(
+                a: LaneToFixed(lane: lane, value: a),
+                b: LaneToFixed(lane: lane, value: b),
+                bulge: LaneToFixed(value: bulge.Lanes[lane]),
+                c: LaneToFixed(lane: lane, value: c),
+                p: LaneToFixed(lane: lane, value: p),
+                radiusEnd: LaneToFixed(value: radiusEnd.Lanes[lane]),
+                radiusStart: LaneToFixed(value: radiusStart.Lanes[lane]),
+                strandOffset: LaneToFixed(value: strandOffset.Lanes[lane]),
+                strands: LaneToFixed(value: strands.Lanes[lane]),
+                twist: LaneToFixed(value: twist.Lanes[lane])
+            ));
         }
 
-        var spacing = (1.0 / SweepSamples);
-        var goldenLow = ((double)SweepGoldenLow);
-        var goldenHigh = ((double)SweepGoldenHigh);
-        var nearest = Wide.Zero;
-        var best = Gap(t: Wide.Zero);
-
-        for (var index = 1; (index <= SweepSamples); index++) {
-            var t = (spacing * index);
-            var gap = Gap(t: t);
-            var nearer = (gap < best);
-
-            best = Wide.Select(mask: nearer, whenClear: best, whenSet: gap);
-            nearest = Wide.Select(mask: nearer, whenClear: nearest, whenSet: t);
-        }
-
-        var low = Wide.Max(x: (nearest - spacing), y: Wide.Zero);
-        var high = Wide.Min(x: (nearest + spacing), y: Wide.One);
-        var left = Wide.Lerp(from: low, to: high, amount: goldenLow);
-        var right = Wide.Lerp(from: low, to: high, amount: goldenHigh);
-        var leftGap = Gap(t: left);
-        var rightGap = Gap(t: right);
-
-        for (var round = 0; (round < SweepRounds); round++) {
-            best = Wide.Min(x: best, y: Wide.Min(x: leftGap, y: rightGap));
-
-            // A lane whose left probe is nearer keeps [low, right] and probes a new left; any other keeps [left, high]
-            // and probes a new right.
-            var keepsLeft = (leftGap < rightGap);
-            var nextLow = Wide.Select(mask: keepsLeft, whenClear: left, whenSet: low);
-            var nextHigh = Wide.Select(mask: keepsLeft, whenClear: high, whenSet: right);
-            var probe = Wide.Select(mask: keepsLeft, whenClear: Wide.Lerp(from: nextLow, to: nextHigh, amount: goldenHigh), whenSet: Wide.Lerp(from: nextLow, to: nextHigh, amount: goldenLow));
-            var probeGap = Gap(t: probe);
-            var nextLeft = Wide.Select(mask: keepsLeft, whenClear: right, whenSet: probe);
-            var nextLeftGap = Wide.Select(mask: keepsLeft, whenClear: rightGap, whenSet: probeGap);
-            var nextRight = Wide.Select(mask: keepsLeft, whenClear: probe, whenSet: left);
-            var nextRightGap = Wide.Select(mask: keepsLeft, whenClear: probeGap, whenSet: leftGap);
-
-            (low, high, left, leftGap, right, rightGap) = (nextLow, nextHigh, nextLeft, nextLeftGap, nextRight, nextRightGap);
-        }
-
-        return Wide.Min(x: best, y: Wide.Min(x: leftGap, y: rightGap));
+        return new Wide(lanes: new Vector<double>(values: lanes));
     }
     private static Wide SampleCells(Wide3 point, uint seed, SdfCellMode mode, Wide randomness) {
         Span<double> lanes = stackalloc double[Vector<double>.Count];

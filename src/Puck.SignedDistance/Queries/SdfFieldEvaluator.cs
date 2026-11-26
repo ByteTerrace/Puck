@@ -645,13 +645,6 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             lift: instruction.Data1Y,
             capChamfer: instruction.Data1Z
         ) - instruction.Data1W),
-            SdfShapePointAction.Sweep => SdfSweep(
-            p: p,
-            curve: (instruction.SweepCurve ?? throw new UnreachableException(message: "Compile always attaches a SweepCurve to a Sweep instruction.")),
-            strands: Math.Clamp(value: ((int)((instruction.Data0Y + Half).Value >> FixedQ4816.FractionBitCount)), min: 1, max: SdfProgramBuilder.MaxSweepStrands),
-            twist: instruction.Data0Z,
-            strandOffset: instruction.Data0W
-        ),
             SdfShapePointAction.Path => SdfPathSolid(
             p: p,
             edges: (instruction.PathEdges ?? throw new UnreachableException(message: "Compile always attaches the edge table to a Path instruction.")),
@@ -708,95 +701,51 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             )
             : SdfConvexPolygon2D(p: SdfRevolve2D(p: p, o: liftAmount), vertices: vertices));
 
-    // KEEP IN SYNC with sdfBezierPoint/sdfSweepClosestT/sdfSweepRadiusAt/sdfSweep (field/sdf-shapes.hlsli). A tube of one
-    // radius finds the centreline's nearest parameter by sample-and-refine (9 fixed candidates, then 5 rounds of
-    // halving-step probes either side of the best) where the shader solves the cubic in closed form: its
-    // three-real-root branch needs acos, which FixedQ4816 does not carry. Any other sweep takes the least gap over t by
-    // the shader's own samples and golden-section rounds. The two sides answer the same question, so they agree to the
-    // search's resolution, not bit for bit.
-    /// <summary>The samples a sweep's distance search takes along its curve before its golden-section rounds (a power of
-    /// two, so every sample's parameter is exact); <c>SdfIsaHlsl</c> writes it into the kernels as
+    // The sweep's operands from its side table, which SdfFieldFormulas.Sweep reads as sdfSweepA(data0) and the rest read
+    // the packed table in the kernels.
+    private static SweepCurveFixed SweepCurveOf(in CompiledInstruction instruction) =>
+        (instruction.SweepCurve ?? throw new UnreachableException(message: "Compile always attaches a SweepCurve to a Sweep instruction."));
+    private static FixedVector3 SweepA(in CompiledInstruction instruction) => SweepCurveOf(instruction: in instruction).A;
+    private static FixedVector3 SweepB(in CompiledInstruction instruction) => SweepCurveOf(instruction: in instruction).B;
+    private static FixedVector3 SweepC(in CompiledInstruction instruction) => SweepCurveOf(instruction: in instruction).C;
+    private static FixedQ4816 SweepRadiusStart(in CompiledInstruction instruction) => SweepCurveOf(instruction: in instruction).RadiusStart;
+    private static FixedQ4816 SweepRadiusEnd(in CompiledInstruction instruction) => SweepCurveOf(instruction: in instruction).RadiusEnd;
+    private static FixedQ4816 SweepBulge(in CompiledInstruction instruction) => SweepCurveOf(instruction: in instruction).Bulge;
+
+    // The general search a sweep's formula reads for a bulging or orbiting strand, KEEP IN SYNC with sdfSweepSearch
+    // (field/sdf-shapes.hlsli): the least gap over t of each strand, the nearest of SweepSamples + 1 samples, then
+    // golden-section rounds within a sample either side of it, keeping the least gap any probe measured. A contact reading
+    // admits one strand only (see the constructor's refusal); that strand still orbits when strandOffset > 0.
+    /// <summary>The samples a bulging or orbiting sweep's distance search takes along its curve before its golden-section
+    /// rounds (a power of two, so every sample's parameter is exact); <c>SdfIsaHlsl</c> writes it into the kernels as
     /// <c>SDF_SWEEP_SAMPLES</c>.</summary>
     public const int SweepSamples = 32;
-    /// <summary>The golden-section rounds a sweep's distance search takes about its nearest sample; <c>SdfIsaHlsl</c>
-    /// writes it into the kernels as <c>SDF_SWEEP_ROUNDS</c>.</summary>
+    /// <summary>The golden-section rounds a bulging or orbiting sweep's distance search takes about its nearest sample;
+    /// <c>SdfIsaHlsl</c> writes it into the kernels as <c>SDF_SWEEP_ROUNDS</c>.</summary>
     public const int SweepRounds = 12;
 
     private static readonly FixedQ4816 SweepBulgeExponent = FixedQ4816.FromDouble(value: 0.65);
     private static readonly FixedQ4816 SweepPi = FixedQ4816.FromDouble(value: Math.PI);
     private static readonly FixedQ4816 SweepGoldenLow = FixedQ4816.FromDouble(value: 0.381966);
     private static readonly FixedQ4816 SweepGoldenHigh = FixedQ4816.FromDouble(value: 0.618034);
-    private static readonly FixedQ4816 SweepInitialStep = FixedQ4816.FromDouble(value: 0.0625);
-    private static readonly FixedQ4816[] SweepSampleFractions = [
-        FixedQ4816.FromDouble(value: 0.125),
-        FixedQ4816.FromDouble(value: 0.25),
-        FixedQ4816.FromDouble(value: 0.375),
-        FixedQ4816.FromDouble(value: 0.5),
-        FixedQ4816.FromDouble(value: 0.625),
-        FixedQ4816.FromDouble(value: 0.75),
-        FixedQ4816.FromDouble(value: 0.875),
-        FixedQ4816.One,
-    ];
 
-    private static FixedVector3 SdfBezierPoint(FixedVector3 a, FixedVector3 b, FixedVector3 c, FixedQ4816 t) =>
-        FixedVector3.Lerp(
-            from: FixedVector3.Lerp(
-                amount: t,
-                from: a,
-                to: b
-            ),
-            to: FixedVector3.Lerp(
-                amount: t,
-                from: b,
-                to: c
-            ),
-            amount: t
-        );
     private static FixedVector3 SdfBezierDerivative(FixedVector3 a, FixedVector3 b, FixedVector3 c, FixedQ4816 t) =>
         (FixedVector3.Lerp(
             amount: t,
             from: (b - a),
             to: (c - b)
         ) * FixedQ4816.FromInteger(value: 2L));
-    // Sample 9 fixed candidates, then 5 rounds of halving-step compass probes either side of the running best —
-    // deterministic, no trigonometry, converges toward the closest parameter on the centerline. See the KEEP-IN-SYNC
-    // remark above for why this evaluator does not mirror the shader's closed-form cubic solve.
-    // Candidates are compared by their exact squared offsets (CompareLengthTo): a carrier-rounded squared distance is zero
-    // under four millimetres, so every candidate inside a thin tube tied with the first and the search kept the start,
-    // reading a point beside the tube's middle as the distance to its end.
-    private static FixedQ4816 SdfSweepClosestT(FixedVector3 p, FixedVector3 a, FixedVector3 b, FixedVector3 c) {
-        var bestT = FixedQ4816.Zero;
-        var bestOffset = (p - a);
-
-        void Consider(FixedQ4816 t) {
-            var offset = (p - SdfBezierPoint(a: a, b: b, c: c, t: t));
-
-            if (offset.CompareLengthTo(other: bestOffset) < 0) {
-                bestOffset = offset;
-                bestT = t;
-            }
-        }
-
-        for (var index = 0; (index < SweepSampleFractions.Length); index++) {
-            Consider(t: SweepSampleFractions[index]);
-        }
-
-        var step = SweepInitialStep;
-
-        for (var round = 0; (round < 5); round++) {
-            Consider(t: FixedQ4816.Min(x: FixedQ4816.One, y: (bestT + step)));
-            Consider(t: FixedQ4816.Max(x: FixedQ4816.Zero, y: (bestT - step)));
-            step = (step * Half);
-        }
-
-        return bestT;
-    }
     private static FixedQ4816 SdfSweepRadiusAt(FixedQ4816 t, FixedQ4816 radiusStart, FixedQ4816 radiusEnd, FixedQ4816 bulge) {
         var taper = FixedQ4816.Lerp(
             amount: t,
             from: radiusStart,
             to: radiusEnd
         );
+
+        if (bulge == FixedQ4816.Zero) {
+            return taper;
+        }
+
         var s = FixedQ4816.Max(
             x: FixedQ4816.Sin(angle: (SweepPi * t)),
             y: FixedQ4816.Zero
@@ -807,26 +756,23 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             y: SweepBulgeExponent
         )));
     }
-    // The sweep is the union of the spheres of radius r(t) about each strand's centre: a tube of one radius about the
-    // centreline reads its nearest parameter, and any other sweep the least gap over t of each strand (sdfSweep). A
-    // contact reading admits one strand only (see the constructor's Compile-time refusal); that strand still orbits when
-    // strandOffset > 0 (an off-axis spiral tube), matching the render path's first strand.
-    private static FixedQ4816 SdfSweep(FixedVector3 p, SweepCurveFixed curve, int strands, FixedQ4816 twist, FixedQ4816 strandOffset) {
-        if ((curve.RadiusStart == curve.RadiusEnd) && (curve.Bulge == FixedQ4816.Zero) && (strandOffset == FixedQ4816.Zero)) {
-            return ((p - SdfBezierPoint(a: curve.A, b: curve.B, c: curve.C, t: SdfSweepClosestT(a: curve.A, b: curve.B, c: curve.C, p: p))).Length - curve.RadiusStart);
-        }
-
+    private static FixedQ4816 SdfSweepSearch(FixedVector3 p, FixedVector3 a, FixedVector3 b, FixedVector3 c, FixedQ4816 radiusStart, FixedQ4816 radiusEnd, FixedQ4816 bulge, FixedQ4816 strands, FixedQ4816 twist, FixedQ4816 strandOffset) {
+        var strandCount = Math.Clamp(value: ((int)((strands + Half).Value >> FixedQ4816.FractionBitCount)), min: 1, max: SdfProgramBuilder.MaxSweepStrands);
         var spacing = (FixedQ4816.One / FixedQ4816.FromInteger(value: SweepSamples));
         var result = FarDistance;
 
-        for (var strand = 0; (strand < strands); strand++) {
-            var phase = ((FixedQ4816.FromInteger(value: strand) * FixedQ4816.Tau) / FixedQ4816.FromInteger(value: strands));
+        for (var strand = 0; (strand < strandCount); strand++) {
+            var phase = ((FixedQ4816.FromInteger(value: strand) * FixedQ4816.Tau) / FixedQ4816.FromInteger(value: strandCount));
+
+            FixedQ4816 Gap(FixedQ4816 t) =>
+                ((p - SdfSweepStrandPoint(a: a, b: b, c: c, phase: phase, strandOffset: strandOffset, t: t, twist: twist)).Length - SdfSweepRadiusAt(bulge: bulge, radiusEnd: radiusEnd, radiusStart: radiusStart, t: t));
+
             var nearest = FixedQ4816.Zero;
-            var best = SdfSweepGap(curve: curve, p: p, phase: phase, strandOffset: strandOffset, t: FixedQ4816.Zero, twist: twist);
+            var best = Gap(t: FixedQ4816.Zero);
 
             for (var index = 1; (index <= SweepSamples); index++) {
                 var t = (spacing * FixedQ4816.FromInteger(value: index));
-                var gap = SdfSweepGap(curve: curve, p: p, phase: phase, strandOffset: strandOffset, t: t, twist: twist);
+                var gap = Gap(t: t);
 
                 if (gap < best) {
                     best = gap;
@@ -838,8 +784,8 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
             var high = FixedQ4816.Min(x: (nearest + spacing), y: FixedQ4816.One);
             var left = FixedQ4816.Lerp(amount: SweepGoldenLow, from: low, to: high);
             var right = FixedQ4816.Lerp(amount: SweepGoldenHigh, from: low, to: high);
-            var leftGap = SdfSweepGap(curve: curve, p: p, phase: phase, strandOffset: strandOffset, t: left, twist: twist);
-            var rightGap = SdfSweepGap(curve: curve, p: p, phase: phase, strandOffset: strandOffset, t: right, twist: twist);
+            var leftGap = Gap(t: left);
+            var rightGap = Gap(t: right);
 
             for (var round = 0; (round < SweepRounds); round++) {
                 best = FixedQ4816.Min(x: best, y: FixedQ4816.Min(x: leftGap, y: rightGap));
@@ -848,13 +794,13 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
                     right = left;
                     rightGap = leftGap;
                     left = FixedQ4816.Lerp(amount: SweepGoldenLow, from: low, to: high);
-                    leftGap = SdfSweepGap(curve: curve, p: p, phase: phase, strandOffset: strandOffset, t: left, twist: twist);
+                    leftGap = Gap(t: left);
                 } else {
                     low = left;
                     left = right;
                     leftGap = rightGap;
                     right = FixedQ4816.Lerp(amount: SweepGoldenHigh, from: low, to: high);
-                    rightGap = SdfSweepGap(curve: curve, p: p, phase: phase, strandOffset: strandOffset, t: right, twist: twist);
+                    rightGap = Gap(t: right);
                 }
             }
 
@@ -863,29 +809,16 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
 
         return result;
     }
-    // The gap from p to the sphere the strand sweeps at t (sdfSweepGap).
-    private static FixedQ4816 SdfSweepGap(FixedVector3 p, SweepCurveFixed curve, FixedQ4816 twist, FixedQ4816 strandOffset, FixedQ4816 phase, FixedQ4816 t) =>
-        ((p - SdfSweepStrandPoint(curve: curve, phase: phase, strandOffset: strandOffset, t: t, twist: twist)).Length - SdfSweepRadiusAt(bulge: curve.Bulge, radiusEnd: curve.RadiusEnd, radiusStart: curve.RadiusStart, t: t));
-    // The strand's centre at t (sdfSweepStrandPoint): the centreline point, orbited by strandOffset across the tangent at
+    // A strand's centre at t (sdfSweepStrandPoint): the centreline point, orbited by strandOffset across the tangent at
     // the phase the twist reaches there from the strand's own.
-    private static FixedVector3 SdfSweepStrandPoint(SweepCurveFixed curve, FixedQ4816 twist, FixedQ4816 strandOffset, FixedQ4816 phase, FixedQ4816 t) {
-        var basePoint = SdfBezierPoint(
-            a: curve.A,
-            b: curve.B,
-            c: curve.C,
-            t: t
-        );
+    private static FixedVector3 SdfSweepStrandPoint(FixedVector3 a, FixedVector3 b, FixedVector3 c, FixedQ4816 twist, FixedQ4816 strandOffset, FixedQ4816 phase, FixedQ4816 t) {
+        var basePoint = SdfBezierPoint(a: a, b: b, c: c, t: t);
 
         if (strandOffset == FixedQ4816.Zero) {
             return basePoint;
         }
 
-        var tangent = SdfBezierDerivative(
-            a: curve.A,
-            b: curve.B,
-            c: curve.C,
-            t: t
-        );
+        var tangent = SdfBezierDerivative(a: a, b: b, c: c, t: t);
         var tangentDirection = ((tangent.TryLength(length: out var tangentLength) && (tangentLength > FixedQ4816.Epsilon))
             ? (tangent / tangentLength)
             : new FixedVector3(
@@ -1168,5 +1101,5 @@ public sealed partial class SdfFieldEvaluator : IWorldQuery, IFieldEvaluator, IS
     // One region in fixed point: its pose (the turn's interval constants built once, for the box walk) and its primitive.
     private sealed record ReliefRegionFixed(FixedVector3 Origin, FixedQuaternion Rotation, bool Identity, RotationBounds Bounds, CompiledInstruction Primitive);
     // The compiled, fixed-point form of one SdfSweepCurve.
-    private readonly record struct SweepCurveFixed(FixedVector3 A, FixedVector3 B, FixedVector3 C, FixedQ4816 RadiusStart, FixedQ4816 RadiusEnd, FixedQ4816 Bulge);
+    private sealed record SweepCurveFixed(FixedVector3 A, FixedVector3 B, FixedVector3 C, FixedQ4816 RadiusStart, FixedQ4816 RadiusEnd, FixedQ4816 Bulge);
 }
