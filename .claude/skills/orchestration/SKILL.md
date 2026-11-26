@@ -82,15 +82,14 @@ when lanes each take it for themselves (a day in which eight lanes each booted,
 cold-baked and measured on their own lost lane-hours to admission waits and
 collided runs, while the same expensive work ran eight times).
 
-- **Brief each lane for the resource it really needs.** The default finish
-  line is the code written properly, a build of what it touched and one
-  headless boot of the debug world (AGENTS.md, "Code first, verification
-  after"); laws, counters and `puck compile --validate` are tools a brief names
-  only where the change needs one. A lane keeps a windowed World only when
-  seeing or measuring it is the work (a look it iterates on, a GPU or memory
-  attribution); otherwise its windowed checks come back as verification
-  requests ([delegate](../delegate/SKILL.md#build-and-run)), and the brief says
-  which.
+- **Brief each lane for the resource it really needs.** The finish line is
+  the code written properly and a build of what it touched (AGENTS.md, "Code
+  first, verification after"); laws, counters and `puck compile --validate`
+  are tools a brief names only where the change needs one. A lane boots no
+  World, headless or windowed, and holds no GPU: every run, look or feel check
+  comes back as a verification request
+  ([delegate](../delegate/SKILL.md#build-and-run)) that the lead runs in its
+  live World, so one boot serves several lanes' requests.
 - **The lead runs the windowed, cold-bake and timing legs in batched
   windows** on the integration head after a batch lands: one warm boot checks
   several lanes' requests, timing goes through `puck measure` or a direct
@@ -107,26 +106,17 @@ collided runs, while the same expensive work ran eight times).
   every frame-bar verdict the lead reports names the device, the size, the
   topology and the real-time route it rests on. A landing never waits for the
   window.
-- **One GPU-measuring lane at a time.** A lane whose work is measuring
-  windowed frames or GPU passes holds the GPU for long stretches; two such lanes
-  run together starve each other (a caster-culling fix round sat blocked behind a
-  views-resolve lane's GPU legs and handed back with its verification undone).
-  Run them one after another, or give the second only its code and return its
-  GPU legs as verification requests for the lead's window.
-- **At most three GPU-granted lanes hold windowed work at once.** A grant is
-  a turn in `puck lease gpu`'s queue, not a standing window: the lease shares
-  its slots between windowed Worlds while host admission covers each one's own
-  measured need (its backend and warm or cold mesh store, 12 to 20 GB) and the
-  GPU's video memory is not full, so two warm Worlds run side by side on the
-  lead machine and a third waits its turn; a timing leg takes the lease
-  `--exclusive`. A windowed leg is therefore short: a boot, the place the lane's entry names,
-  a presented burst while moving and the counters, then the World stops, and
-  two backends are two short runs. Before briefing a lane that needs a
-  windowed World, count the granted lanes in flight; a fourth works on what
-  needs no window (the change itself, a headless boot, `puck mesh preview`,
-  counted work) and takes a slot the lead schedules by name when one frees. No
-  lane polls for the lease. A lead that ran six windowed lanes at once left
-  one refused after a 30-minute admission wait while its fixes sat ready.
+- **Lanes hold no GPU; the lead's windowed legs are short.** `puck lease gpu`
+  shares its slots between windowed Worlds while host admission covers each
+  one's own measured need (its backend and warm or cold mesh store, 12 to 20
+  GB) and the GPU's video memory is not full, so two warm Worlds run side by
+  side on the lead machine and a third waits its turn; a timing leg takes the
+  lease `--exclusive`. A windowed leg is a boot, the place a request names, a
+  presented burst while moving and the counters, then the World stops, and two
+  backends are two short runs. Lanes work on what needs no World (the change
+  itself, `puck mesh preview`, counted work) and file their runs as
+  verification requests. A lead that ran six windowed lanes at once left one
+  refused after a 30-minute admission wait while its fixes sat ready.
 - **Fix the scheduler before working around it.** An admission, lease or
   harness defect that stalls a lane is a top fix, filed and briefed the day it
   is found, never a wait every lane absorbs.
@@ -142,8 +132,9 @@ collided runs, while the same expensive work ran eight times).
 **Lanes code; the lead merges, builds and tests in bulk (the owner's ruling).**
 The lead is the central builder and tester (the owner's ruling). A lane writes
 the code, compiles only the projects it changed, runs the checks that only read
-its tree, and hands back; it runs no full build, test suite or boot: it takes no windowed leg, timing or capture of its own
-change, except a look lane, for which seeing is the work. Freed of the GPU, more
+its tree, and hands back; it runs no full build, test suite or World (headless or windowed), and takes no
+timing or capture of its own change: a look lane too files what it needs seen as
+a verification request. Freed of the GPU, more
 lanes run at once, bounded by build CPU and memory. The lead runs a bulk window
 on the merged tip every few hours or every eight to ten merges: the full build,
 the test suites, a headless boot, windowed boots on both backends, the
@@ -157,7 +148,7 @@ bottleneck).**
 
 | Phase | Who and when | Evidence | Never |
 |---|---|---|---|
-| Iterate | every lane, in parallel | a build of what it touched and one boot of the debug world (AGENTS.md, "Code first, verification after"); anything more a brief asks for is load-independent only: counters, state hashes, bytes, executes, law results, captures, laws filtered to the step, a reproduce of only the scenarios the change reaches | a timing claim; a full suite per step; the same check re-run for confidence; a second heavy job queued behind one's own |
+| Iterate | every lane, in parallel | a build of what it touched and no World boot (AGENTS.md, "Code first, verification after"); anything more a brief asks for is load-independent only: counters, state hashes, bytes, executes, law results, captures, laws filtered to the step, a reproduce of only the scenarios the change reaches | a timing claim; a full suite per step; the same check re-run for confidence; a second heavy job queued behind one's own |
 | Integrate | the lead, once per landing batch | one headless boot of the batch's tip, `puck docs links`, full reproduce suites, the sweep against the tip report, windowed boots on both backends and the benchmark route, over the merged batch | per-lane repetition of the same suites |
 | Measure | the lead, in a scheduled quiet window after each batch (about every two to three hours) | lanes queue `puck measure request` with frozen before/after builds, metrics and what decides it; the lead reads `puck measure list` and drains it with `puck measure run`, its `--window-seconds` sized to answer the questions it drains (`run` prints an estimate from earlier samples' wall times before it takes the lease and each pair's wall time as it ends, so size the window from that; replication is the ABAB pairs alone, and `request` refuses a bench command's own `--samples` or `--repeats` above 1; withdraw a request whose change landed or whose frozen builds are stale with `puck measure withdraw <id> --reason <text>` instead of leaving it for a drain): one priority quiet lease plus process cleanup, repeated ABAB, median, IQR and paired difference from the existing bench/sweep reports | a lane timing its own change; an unbounded drain; a window that waits for the machine to go quiet by itself |
 
@@ -317,10 +308,9 @@ picks its next work from its track or a shared ready queue and announces it. The
 lead keeps cross-track conflicts, merges, owner-level calls, and scope and
 order. Every brief ends with the partner's own next one or two items, and the
 partner works its queue without waiting for the lead between items. A lane
-is ready on its build and its boot, plus a GPU leg only when its brief makes
-one its finish line, and once ready it waits for nothing
-([land in batches](#land-in-batches)). Neither that leg nor the batch blocks
-the partner: the
+is ready on its build, and once ready it waits for nothing
+([land in batches](#land-in-batches)). Neither the lead's runs of its
+verification requests nor the batch blocks the partner: the
 partner takes its next item from its track or the ready queue and announces
 it. A queue the
 partners cannot read is no queue: keep the lead's queue where partners can reach
@@ -349,10 +339,9 @@ brief:
 - a finish line, a stopping condition and whether the lane has a GPU grant,
   each stated outright ([lane work](references/lane-work.md#delegated-work)
   owns what each holds): the finish line is the code written, a build of what
-  the lane touched and one headless boot of the debug world; the stopping
-  condition is a product call or an owner-only action; a lane has no GPU grant
-  unless its brief makes a windowed leg its finish line, and a brief that
-  grants none says so;
+  the lane touched, with every run or look it wants checked handed back as a
+  verification request; the stopping condition is a product call or an
+  owner-only action; a lane has no GPU grant and boots no World;
 - the task's premise, checked in the code by the lead before the brief goes
   out (rule 7). A packet's claim of what is missing or what causes a cost is
   a lead to verify, not a fact. One lane was sent to add a source-generated
@@ -382,9 +371,9 @@ brief:
   input), a finish line that names the gallery exhibits and walkthrough
   segments it reaches, judged against their plaques
   ([the scripted walkthrough](../../../docs/decisions/engine-design.md#the-scripted-walkthrough)),
-  not only the creation that prompted it. The lane checks what its one boot
-  shows and lists the rest in its hand-back as unchecked, and the batch pass
-  judges those;
+  not only the creation that prompted it. The lane lists the exhibits
+  it cannot judge without a World in its hand-back as verification requests,
+  and the batch pass judges those;
 
 - for a Codex or Antigravity lane, an instruction to read the
   [`delegate` skill](../delegate/SKILL.md) before anything else (Claude's
@@ -826,7 +815,7 @@ valley wall sector empty. The mesh bake
   the new output (captures, `puck mesh audit`, counted work, exactness against
   the true field).
   The hard limits are one heavy integration job and one GPU
-  leg at a time, with at most three lanes holding a GPU grant between them
+  leg at a time, and the GPU legs are the lead's
   ([schedule the shared machine](#schedule-the-shared-machine)). A windowed debug World holds a large share of
   the machine's memory within a minute of boot (`host.memory` reads it), so
   only a couple of building lanes fit beside one. Keep windowed capture
@@ -1115,8 +1104,7 @@ leg even when only its startup is measured; a headless one is not. Use
 classification and execution.
 
 A brief's finish line follows [the integration lane](#coding-lanes-and-the-integration-lane):
-a coding lane's brief names its touched projects and its one boot of the
-debug world, never a whole-solution build, a full suite, a benchmark route or
+a coding lane's brief names its touched projects and no World boot, never a whole-solution build, a full suite, a benchmark route or
 a debug-world replay, which the integration lane (or the lead acting as it)
 runs one at a time. A finish line
 shows a feature by running it or by a sweep signal; it asks for a `test`

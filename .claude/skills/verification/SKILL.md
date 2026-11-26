@@ -17,9 +17,10 @@ that session.
 During the refactoring campaign the owner has lifted every test requirement
 ([AGENTS.md](../../../AGENTS.md#puck-is-pre-release)), and the owner's ruling
 is code first, verification after: for a lane, the landing bar below reduces
-to building what it touched and booting the debug world once. Windowed runs,
-benchmarks, look critics and broad tests are the lead's batch pass over many
-landed changes. Suites, coverage, red legs and focused tests are optional
+to building what it touched and the checks that read its tree; a lane boots no
+World, so every run, look or feel check reaches the lead as a verification
+request. Boots, windowed runs, benchmarks, look critics and broad tests are the
+lead's pass over many landed changes. Suites, coverage, red legs and focused tests are optional
 tools, and a red one holds nothing back.
 
 For settled mesh comparisons, `world.wait bakes` finishes CPU bake/contour work;
@@ -117,12 +118,13 @@ runs them to prove its own change, and never re-runs a check for confidence.
    current tip merged in. A build or check that passed before the integration
    branch moved says nothing about the merged head: merge the tip, then build
    and run again.
-2. The debug world booted once on that merged head, and the change seen
-   running in it where a headless boot can show it: a console answer, a count,
-   a log line, or the verb's own output for a tool change. The commit body
-   says what you ran and what it showed. A check that needs a window goes to
-   the lead as a verification request
-   ([delegate](../delegate/SKILL.md#build-and-run)).
+2. The checks that read the tree on that merged head (`puck compile
+   --validate`, schema and shader checks, or the verb's own output for a tool
+   change). A lane boots no World, headless or windowed: the change seen running
+   (a console answer, a count, a log line, a look, a feel) goes to the lead as
+   a verification request, with what to run and what decides it
+   ([delegate](../delegate/SKILL.md#build-and-run)). The commit body says what
+   you ran.
 3. Tests kept honest: write one only where running cannot show the behavior and
    it will outlive the next rewrite; a test the change breaks is updated or
    deleted in the same change (a refactor deletes one that stops compiling).
@@ -300,8 +302,8 @@ gates, and it is read on the benchmark route in the lead's quiet window.
 A change that is not about performance still owes a cost check when it puts
 work on a per-tick or per-frame path (delivery, disclosure, snapshot, rule
 evaluation, a recorder): the debug world's allocated bytes and the counts of
-the work it adds per tick, from a headless boot. The lane reads them in its one
-boot and names the path in its hand-back; the comparison with the previous tip
+the work it adds per tick, from a headless boot. The lane names the path in
+its hand-back as a verification request and the lead reads them; the comparison with the previous tip
 is the batch's: its counter sweep reports every counter that moved more than
 10%, and its per-tick allocation reading (`host.frames`' frame thread
 allocated bytes per iteration, which the sweep's after-collection memory
