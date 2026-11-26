@@ -25,17 +25,18 @@ let galleryWall = 0.3
 let galleryEast = (galleryWidth - galleryWall)
 let galleryNorth = (galleryDepth - galleryWall)
 
-// The nave runs east from x 12 to the east wall, 20 m wide: a void from level 0's floor to the roof between the two
+// The nave runs east from x 12 to the east wall, 21.25 m wide (seventeen tiles): a void from level 0's floor to the roof between the two
 // balcony edges, a hall about as deep from its viewpoint as it is wide (the kit pack's level-zero hall). The aisles
 // either side of it, and the bridge west of it, are floors on every level. The arcades' piers stand half a floor tile
 // behind each balcony edge, one wide bay apart, so every pier stands on a tile's centre.
-let naveSouth = 9
-let naveNorth = 29
+// The floor tile, the module the floor, the ceiling's coffers, the piers and the displays share: a pier's pitch is
+// four tiles, and a pier and a display each stand on a tile's centre.
+let galleryTile = 1.25
+// The nave's edges, a tile wider than 20 m with half the tile on each side of its centre line (z 19).
+let naveSouth = (9 - (galleryTile / 2))
+let naveNorth = (29 + (galleryTile / 2))
 let naveWest = 12
 let naveMid = ((naveSouth + naveNorth) / 2)
-// The floor tile, the module the floor, the ceiling's coffers, the piers and the displays share: a pier's pitch is
-// four tiles and the nave's width sixteen, and a pier and a display each stand on a tile's centre.
-let galleryTile = 1.25
 let arcadeSouth = (naveSouth - (galleryTile / 2))
 let arcadeNorth = (naveNorth + (galleryTile / 2))
 let arcadePitch = 5
