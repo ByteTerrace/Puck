@@ -9,4 +9,7 @@ static uint sdfWorkSteps = 0u;
 // Outputs written for this pixel: the visibility record or the output texel counts once. Zero means this invocation
 // wrote no output.
 static uint sdfWorkTexels = 0u;
+// The lights this invocation's shading walks visited (sdfLightNext answering a light), which the views and glass passes
+// add to GpuWork.LightsVisited (puckCountLights).
+static uint sdfWorkLights = 0u;
 #endif

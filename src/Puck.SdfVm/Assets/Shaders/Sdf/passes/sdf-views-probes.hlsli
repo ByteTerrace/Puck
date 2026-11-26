@@ -185,9 +185,17 @@ uint4 sdfViewsProbeLightBit(uint light) {
 
     return uint4(((word == 0u) ? bit : 0u), ((word == 1u) ? bit : 0u), ((word == 2u) ? bit : 0u), ((word == 3u) ? bit : 0u));
 }
+// The display pixels about a slot's receiver within which every pixel that reads the slot lies, taken along a surface
+// turned up to about 75 degrees from the ray: a pixel blends the representatives of the four cells about it, each within
+// two cells of it on each axis, and an extra is read only within its own cell.
+static const float SdfViewsProbeReachPixels = (4.0 * 1.41421356 * (2.0 * SDF_VIEWS_PROBE_RATE));
+
 // Resolves a gather into `slot`: its share and flags with `state` (a representative's cell bits, zero for an extra), its
-// blended cubes, its lights' agreement and the lights its corners disagree on.
-void sdfViewsProbesStoreSlot(SdfViewsProbeSlot slot, SdfMeshProbes probes, uint state) {
+// blended cubes, its lights' agreement and the lights its corners disagree on. `low` and `high` bound the points of every
+// pixel that reads the slot (SdfViewsProbeReachPixels about its receiver): a traced point or spot light that can light
+// none of them (sdfLightReachesBox) adds nothing at any, whatever its share, so it leaves the slot as one no corner sees
+// and takes no place in the list.
+void sdfViewsProbesStoreSlot(SdfViewsProbeSlot slot, SdfMeshProbes probes, uint state, float3 low, float3 high) {
     sdfViewsProbeRecordBuffer[slot.first + (SdfViewsProbeStateWord * slot.stride)] = (sdfViewsProbesFlags(probes) | state);
 
     float sky[6];
@@ -221,9 +229,23 @@ void sdfViewsProbesStoreSlot(SdfViewsProbeSlot slot, SdfMeshProbes probes, uint 
     [loop] while (any(partial != 0u)) {
         uint light = sdfViewsProbeLowestLight(partial);
         uint4 bit = sdfViewsProbeLightBit(light);
-        float share = sdfMeshLightVisibility(probes, light);
 
         partial &= ~bit;
+
+        bool reaches = (light < worldLightCount());
+
+        if (reaches) {
+            SdfLight record = sdfLights[light];
+
+            reaches = ((record.Kind != SDF_LIGHT_POINT) || sdfLightReachesBox(record, worldPointLightPosition(record), low, high));
+        }
+        if (!reaches) {
+            someCorner &= ~bit;
+            continue;
+        }
+
+        float share = sdfMeshLightVisibility(probes, light);
+
         if (count < SdfViewsProbePartialLights) {
             uint entry = ((SdfViewsProbePartialValid | (light << 8u)) | (uint)round(saturate(share) * 255.0));
             uint shifted = (entry << (16u * (count & 1u)));
@@ -256,10 +278,11 @@ void sdfViewsProbesStoreEmpty(uint record, uint rateMask) {
     sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, SdfViewsProbeStateWord)] = (rateMask << SdfViewsRateShift);
 }
 // Writes a cell's record: its representative's slot, the representative's pixel within the cell, how many extras the cell
-// holds and the pool slot of the first of them.
-void sdfViewsProbesStore(uint record, SdfMeshProbes probes, uint lane, uint rateMask, uint extras, uint firstExtra) {
+// holds and the pool slot of the first of them; `low` and `high` bound the points of the pixels that read it
+// (sdfViewsProbesStoreSlot).
+void sdfViewsProbesStore(uint record, SdfMeshProbes probes, uint lane, uint rateMask, uint extras, uint firstExtra, float3 low, float3 high) {
     sdfViewsProbesStoreSlot(sdfViewsProbeRecordSlot(record), probes,
-        ((lane << SdfViewsProbeLaneShift) | SdfViewsProbePresent | (rateMask << SdfViewsRateShift) | (extras << SdfViewsProbeExtraShift)));
+        ((lane << SdfViewsProbeLaneShift) | SdfViewsProbePresent | (rateMask << SdfViewsRateShift) | (extras << SdfViewsProbeExtraShift)), low, high);
     sdfViewsProbeRecordBuffer[sdfViewsProbeWord(record, SdfViewsProbeExtrasWord)] = firstExtra;
 }
 #else

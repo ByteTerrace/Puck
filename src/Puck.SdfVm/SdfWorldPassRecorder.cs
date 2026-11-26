@@ -724,10 +724,12 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             case SdfWorldPackage.Parts.Views: {
                     // The views kernels are the residency's shading selection, pinned for this recording's submission. A
                     // binned graph's plan is the one whose arguments its bins pass last wrote (ShadePlanOf).
+                    var lightMask = tables.LightMaskOf(frame: residency.Frame!, view: m_view.View);
+
                     m_shadePlan = (m_binned
-                        ? m_owner.ShadePlanOf(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount)
+                        ? m_owner.ShadePlanOf(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount, lightMask: lightMask)
                         : SdfShadeDispatch.For(previous: m_shadePlan, frame: residency.Frame!, width: recording.Width, height: recording.Height,
-                            screens: tables.PassValues.ScreenCount, glass: false, tier: residency.ShadeTier));
+                            screens: tables.PassValues.ScreenCount, lightMask: lightMask, glass: false, tier: residency.ShadeTier));
                     m_decided.Selection = m_shade.RecordSelection(plan: m_shadePlan, residency: residency, slot: recording.Slot);
                     break;
                 }
@@ -738,7 +740,8 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                     break;
                 }
             case SdfWorldPackage.Parts.ViewsBins: {
-                    var plan = m_owner.CommitShadePlan(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount);
+                    var plan = m_owner.CommitShadePlan(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height, screens: tables.PassValues.ScreenCount,
+                        lightMask: tables.LightMaskOf(frame: residency.Frame!, view: m_view.View));
 
                     SdfFrameBlock.WriteShadeBins(block: recording.PassBlock, plan: plan);
                     break;

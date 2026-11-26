@@ -99,4 +99,63 @@ float sdfPointReach(SdfLight light, float3 lightPosition, float3 surfacePosition
 
     return ((sdfLightWindow(distanceSquared, light.Param) * (cone * cone)) / max(distanceSquared, (SDF_LIGHT_MINIMUM_DISTANCE * SDF_LIGHT_MINIMUM_DISTANCE)));
 }
+
+// The share a reach is widened by before a box is tested against it, past the rounding between this test and the
+// response's own: a light is left out only where its response is zero by a margin.
+static const float SdfLightReachMargin = 1.0e-3;
+
+// The squared distance from `center` to the box `low`..`high`; zero inside it.
+float sdfBoxDistanceSquared(float3 center, float3 low, float3 high) {
+    float3 outside = max(max((low - center), (center - high)), 0.0);
+
+    return dot(outside, outside);
+}
+// Whether a point, spot or occluder light at `position` can add anything at a point of the box `low`..`high` in a pixel
+// pass: whether the box meets the sphere of its reach, for a spot whether the sphere about the box meets its cone, and
+// whether a point or spot light's bound over the box reaches the view's cutoff. A point or spot light gives a point at
+// most its weight times its window at the box's nearest point over that point's squared distance, times the largest
+// cone factor over the sphere about the box, and fades to nothing under the cutoff (sdfLightCutoffFade,
+// shade/sdf-light.hlsli: luminance times the view's exposure against SDF_LIGHT_RANGE_THRESHOLD; the two read one rule).
+// The cone is where saturate(dot(-l, SpotAxis) + SpotOffset) is above zero (sdfPointReach): the directions from the
+// light within the angle whose cosine is -SpotOffset / |SpotAxis| of the axis. A sphere lies wholly outside a cone of
+// half-angle a when cos(a) * across - sin(a) * along exceeds its radius, `along` and `across` its centre's offset from
+// the apex along and across the axis: that expression is never more than the centre's distance to the cone.
+bool sdfLightReachesBox(SdfLight light, float3 position, float3 low, float3 high) {
+    float reach = (((light.Kind == SDF_LIGHT_POINT) ? light.Param : (SDF_LIGHT_OCCLUDER_REACH * light.Param)) * (1.0 + SdfLightReachMargin));
+    float nearest = sdfBoxDistanceSquared(position, low, high);
+
+    if (nearest > (reach * reach)) {
+        return false;
+    }
+    if (light.Kind != SDF_LIGHT_POINT) {
+        return true;
+    }
+
+    // The light's bound at the box's nearest point, window included (sdfLightWindow falls with distance), before the cone.
+    float bound = ((light.Weight * sdfLightWindow(nearest, light.Param)) / max(nearest, (SDF_LIGHT_MINIMUM_DISTANCE * SDF_LIGHT_MINIMUM_DISTANCE)));
+    float axisLength = length(light.SpotAxis);
+
+    if ((axisLength > 0.0) && (light.SpotOffset < axisLength)) {
+        float cosine = clamp((-light.SpotOffset / axisLength), -1.0, 1.0);
+        float sine = sqrt(max((1.0 - (cosine * cosine)), 0.0));
+        float3 offset = (((low + high) * 0.5) - position);
+        float radius = ((0.5 * length(high - low)) * (1.0 + SdfLightReachMargin));
+        float distance = length(offset);
+        float along = (dot(offset, light.SpotAxis) / axisLength);
+        float across = sqrt(max(((distance * distance) - (along * along)), 0.0));
+
+        if (((cosine * across) - (sine * along)) > (radius + (SdfLightReachMargin * distance))) {
+            return false;
+        }
+        // The cone's largest factor over the sphere about the box: the cosine of the least angle from the axis to a
+        // direction into the sphere, the angle to its centre less the sphere's angular radius (one where the sphere holds
+        // the light or the axis meets it).
+        float least = ((radius >= distance) ? 0.0 : max((atan2(across, along) - asin(saturate(radius / max(distance, 1.0e-6)))), 0.0));
+        float cone = saturate((axisLength * cos(least)) + light.SpotOffset);
+
+        bound *= (cone * cone);
+    }
+
+    return (((bound * passGroup.exposure) * (1.0 + SdfLightReachMargin)) > SDF_LIGHT_RANGE_THRESHOLD);
+}
 #endif

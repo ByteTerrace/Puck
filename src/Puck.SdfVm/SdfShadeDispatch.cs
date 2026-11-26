@@ -88,24 +88,26 @@ public sealed class SdfShadeDispatch {
     public SdfShadeTier Tier { get; private set; }
 
     /// <summary>Returns a frame's plan for a pass of the given extent, reusing <paramref name="previous"/> without
-    /// allocating whenever every input in the key still holds. Prices each pixel's walk at the frame's light-walk
-    /// maximum (<see cref="SdfLights.Count"/> plus active screens), which every view's light mask
-    /// (<see cref="SdfLightSelection.Select"/>) and every tile's walk narrows and never widens, so camera motion across a
-    /// light's range never replans.</summary>
+    /// allocating whenever every input in the key still holds. Prices each pixel's walk at the view's light-walk
+    /// maximum: the lights its mask holds (<see cref="SdfLightSelection.Select"/>), which every tile's walk narrows and
+    /// never widens, rounded up to a multiple of <see cref="WalkStep"/> so camera motion across a light's range replans
+    /// only when the mask crosses a step, plus the active screens.</summary>
     /// <param name="previous">The prior plan to reuse on a key match, or <see langword="null"/>.</param>
     /// <param name="frame">The frame being shaded.</param>
     /// <param name="width">The extent's width, in pixels.</param>
     /// <param name="height">The extent's height, in pixels.</param>
     /// <param name="screens">The bound screen count.</param>
+    /// <param name="lightMask">The view's light mask (<c>SdfWorldTables.LightMaskOf</c>), which bounds every walk the
+    /// pass's pixels take through the lights table.</param>
     /// <param name="glass">Whether the pass shades glass, pricing both interfaces.</param>
     /// <param name="tier">The kernel tier the residency records the frame with.</param>
     /// <param name="binned">Whether to produce a binned plan when the tier runs programs.</param>
     /// <returns>The standing or newly built plan.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="frame"/> is <see langword="null"/>.</exception>
-    public static SdfShadeDispatch For(SdfShadeDispatch? previous, SdfFrame frame, uint width, uint height, uint screens, bool glass, SdfShadeTier tier, bool binned = false) {
+    public static SdfShadeDispatch For(SdfShadeDispatch? previous, SdfFrame frame, uint width, uint height, uint screens, UInt128 lightMask, bool glass, SdfShadeTier tier, bool binned = false) {
         ArgumentNullException.ThrowIfNull(argument: frame);
 
-        var lights = checked(((uint)frame.Lights.Count) + (frame.DisableScreenLights ? 0u : screens));
+        var lights = checked(WalkBound(lightMask: lightMask, tableLights: frame.Lights.Count) + (frame.DisableScreenLights ? 0u : screens));
         var key = new PlanKey(
             binned: binned,
             enabled: frame.ShadePrograms,
@@ -255,6 +257,21 @@ public sealed class SdfShadeDispatch {
             recording.Recorder.DispatchIndirect(commandBufferHandle: recording.CommandBuffer, argumentBufferHandle: arguments.BufferHandle,
                 argumentBufferOffset: (ShaderPipelineDispatch.ArgumentBytes * (((ulong)(uint)bin * m_tiles) + job)));
         }
+    }
+
+    /// <summary>The lights a plan's walk bound is rounded up to a multiple of: a view's mask that moves within a step
+    /// keeps its plan.</summary>
+    public const uint WalkStep = 8u;
+
+    /// <summary>Returns the most lights of the lights table a walk under a view's mask visits: the mask's lights, rounded
+    /// up to a multiple of <see cref="WalkStep"/>, and never more than the table holds.</summary>
+    /// <param name="lightMask">The view's light mask.</param>
+    /// <param name="tableLights">The lights the frame's table holds.</param>
+    /// <returns>The walk's bound, in lights.</returns>
+    public static uint WalkBound(UInt128 lightMask, int tableLights) {
+        var held = (uint)UInt128.PopCount(value: lightMask);
+
+        return Math.Min(val1: (uint)Math.Max(val1: tableLights, val2: 0), val2: (held.CeilingDivide(divisor: WalkStep) * WalkStep));
     }
 
     // The light walk's and composition's default work beside the stage's fixed work: a pixel with no program.

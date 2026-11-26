@@ -204,17 +204,23 @@ SdfMeshProbes sdfProbeGatherOf(uint at) {
     return probes;
 }
 // Resolves a job's gather into its slot: the representative's in its cell's record, or an extra's in the pool. A group
-// the pool has no room for stores no extra, and its records name none.
-void sdfProbeStoreJob(SdfProbeJob job, SdfMeshProbes probes) {
+// the pool has no room for stores no extra, and its records name none. The slot's lights are judged over the box of
+// SdfViewsProbeReachPixels display pixels about the job's receiver, along its own surface, within which every pixel that
+// reads the slot lies.
+void sdfProbeStoreJob(SdfProbeJob job, SdfMeshProbes probes, ViewportData view, uint viewIndex) {
     uint state = sdfProbeCellState[job.cellLane];
     uint extras = ((state >> 8u) & 0xFFu);
     uint base = sdfProbeExtraBase;
     uint first = ((base == SdfProbeNoExtras) ? 0u : (base + sdfProbeCellExtras[job.cellLane]));
+    SdfPixel p = sdfPixelAt(view, job.pixel, viewIndex);
+    float t = asfloat(sdfVisibilityRecordBuffer[worldVisibilityRecord(job.pixel, viewIndex) + SdfVisibilityTWord]);
+    float3 receiver = sdfPixelSurfacePoint(p, t);
+    float3 reach = ((SdfViewsProbeReachPixels * p.pixelFootprint * max(t, 0.0)) + SDF_MESH_IRRADIANCE_NORMAL_BIAS).xxx;
 
     if (job.extra == 0u) {
-        sdfViewsProbesStore(job.record, probes, (state & 0xFFu), (state >> 16u), ((base == SdfProbeNoExtras) ? 0u : extras), first);
+        sdfViewsProbesStore(job.record, probes, (state & 0xFFu), (state >> 16u), ((base == SdfProbeNoExtras) ? 0u : extras), first, (receiver - reach), (receiver + reach));
     } else if (base != SdfProbeNoExtras) {
-        sdfViewsProbesStoreSlot(sdfViewsProbePoolSlot(first + (job.extra - 1u)), probes, 0u);
+        sdfViewsProbesStoreSlot(sdfViewsProbePoolSlot(first + (job.extra - 1u)), probes, 0u, (receiver - reach), (receiver + reach));
     }
 }
 // The share, zero to one, with which a receiver blends the gather of a representative of one of the four cells about it,
@@ -447,7 +453,7 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 groupId : SV_GroupID, uint gro
 
     // Every job's gather into its slot, a job a lane.
     [loop] for (uint resolved = groupLane; resolved < jobs; resolved += SdfProbeGroupCells) {
-        sdfProbeStoreJob(sdfProbeJobOf(sdfProbeJobs[resolved], firstCell, viewIndex), sdfProbeGatherOf(resolved));
+        sdfProbeStoreJob(sdfProbeJobOf(sdfProbeJobs[resolved], firstCell, viewIndex), sdfProbeGatherOf(resolved), view, viewIndex);
     }
 
     // The pass counts each gather it ran, never one it reused.

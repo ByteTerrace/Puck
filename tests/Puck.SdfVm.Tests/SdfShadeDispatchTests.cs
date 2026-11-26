@@ -73,7 +73,7 @@ public sealed class SdfShadeDispatchTests {
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(false, true)]
-    public void CrossingLightRangeDoesNotReplanAndSteadyDispatchAllocatesNothing(bool glass, bool binned) {
+    public void PlanPricesTheViewsMaskByStepAndSteadyDispatchAllocatesNothing(bool glass, bool binned) {
         var surface = SdfShadeProgram.Compile(new("surface", [], [new(SdfShadePhase.Surface, "roughness", new("input", Name: "clock"))]));
         var rim = SdfShadeProgram.Compile(new("rim", [], [new(SdfShadePhase.Surface, "specular", new("input", Name: "material.roughness"))]));
         var fallback = SdfShadeProgram.Compile(new("fallback", [], [new(SdfShadePhase.Surface, "roughness", new("input", Name: "lanes.world2"))]));
@@ -134,30 +134,27 @@ public sealed class SdfShadeDispatchTests {
         Assert.NotEqual(expected: UInt128.PopCount(value: maskNear), actual: UInt128.PopCount(value: maskMid));
         Assert.NotEqual(expected: UInt128.PopCount(value: maskMid), actual: UInt128.PopCount(value: maskFar));
 
-        views[0] = ViewAt(z: -20f);
-        var initial = SdfShadeDispatch.For(previous: null, frame: frame, width: 1920u, height: 1080u, screens: 2u, glass: glass, tier: SdfShadeTier.Interpreted, binned: binned);
-        var selectionsBefore = SdfCadenceWork.ProcessWork.Read(kind: SdfCadenceWork.LightSelections);
+        SdfShadeDispatch Plan(SdfShadeDispatch? previous, UInt128 mask) =>
+            SdfShadeDispatch.For(previous: previous, frame: frame, width: 1920u, height: 1080u, screens: 2u, lightMask: mask, glass: glass, tier: SdfShadeTier.Interpreted, binned: binned);
 
-        views[0] = ViewAt(z: 50f);
-        var mid = SdfShadeDispatch.For(previous: initial, frame: frame, width: 1920u, height: 1080u, screens: 2u, glass: glass, tier: SdfShadeTier.Interpreted, binned: binned);
+        // A mask within the same walk step keeps the plan; one past it prices the walk it bounds.
+        var full = Plan(previous: null, mask: ((UInt128.One << 32) - UInt128.One));
+        var stepped = Plan(previous: full, mask: ((UInt128.One << 30) - UInt128.One));
+        var near = Plan(previous: stepped, mask: maskNear);
 
-        views[0] = ViewAt(z: 180f);
-        var far = SdfShadeDispatch.For(previous: mid, frame: frame, width: 1920u, height: 1080u, screens: 2u, glass: glass, tier: SdfShadeTier.Interpreted, binned: binned);
+        Assert.Same(expected: full, actual: stepped);
+        Assert.Equal(expected: SdfShadeDispatch.WalkStep * 4u, actual: SdfShadeDispatch.WalkBound(lightMask: maskFar | maskMid | maskNear | ((UInt128.One << 32) - UInt128.One), tableLights: 32));
+        Assert.True(SdfShadeDispatch.WalkBound(lightMask: maskNear, tableLights: 32) < 32u);
+        Assert.NotSame(expected: full, actual: near);
+        Assert.True(Cost(plan: near) <= Cost(plan: full));
 
-        Assert.Same(expected: initial, actual: mid);
-        Assert.Same(expected: initial, actual: far);
-        Assert.Equal(expected: selectionsBefore, actual: SdfCadenceWork.ProcessWork.Read(kind: SdfCadenceWork.LightSelections));
+        var current = near;
 
-        var positions = new[] { ViewAt(z: -20f), ViewAt(z: 50f), ViewAt(z: 180f) };
-        var step = 0;
-        var current = initial;
+        Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: () => current = Plan(previous: current, mask: maskNear)));
+        Assert.Same(expected: near, actual: current);
 
-        Assert.Equal(expected: 0L, actual: AllocationWindow.Least(window: () => {
-            views[0] = positions[step % positions.Length];
-            step++;
-            current = SdfShadeDispatch.For(previous: current, frame: frame, width: 1920u, height: 1080u, screens: 2u, glass: glass, tier: SdfShadeTier.Interpreted, binned: binned);
-        }));
-        Assert.Same(expected: initial, actual: current);
+        static ulong Cost(SdfShadeDispatch plan) =>
+            ((plan.Bins.Count != 0) ? plan.Bins[^1].TileWork : plan.Jobs.Max(selector: static job => (job.Work / job.Groups)));
     }
 
     [Fact]

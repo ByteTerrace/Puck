@@ -905,7 +905,14 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
      of a millisecond to a millisecond and a half more. `high` therefore keeps
      full rate. After step 1 a coarse tile lists a quarter of its samples and
      the saving is real; the classification's cost is then the item to cut
-     (`sdfRateTile`). Check: the same two readings after step 1.
+     (`sdfRateTile`). Read again in the hall at 2560 by 1440: at `maxRate` 2 a
+     quarter of the tiles shaded coarse and the walk's visits fell by a seventh,
+     yet `views` read 6.2 ms against 4.4 ms and `views-probes` 2.4 ms against
+     1.6 ms. In an inked view `sdfRateCell` reads every pixel of a cell's
+     border out to `SDF_EDGE_REACH`, up to 144 visibility records for a cell of
+     16 pixels, where the filter pass's edge search already measures each
+     pixel's distance to an edge; the decision belongs after that search, read
+     from its record. Check: the same two readings after step 1.
   3. **Give a static fixture an authored way out of the volume's occlusion.**
      An unanchored point or spot light is always traced
      (`WorldEnvironmentResolve`), and a traced light adds nothing where no
