@@ -121,7 +121,8 @@ the rows that moved since its stream's last delivery (`WorldDeliveryCursor.Deliv
 row overload), and a delivery pins the recipient's admission once
 (`WorldRecipientView.Admit`) rather than asking it once a row. `WorldProjectionFeed.Verify`
 composes the view whole and compares; `DeliveryReviewLawTests` asks it after every
-delivery.
+delivery. A cut owes the reader its whole document again, so the cursor counts each
+under its cause (`world.projection.cuts.lapsed`, `.lost`, `.bodies`, `.released`).
 A held anchor ahead of the authority's engine tick (a restore or a history seek
 moved the authority behind it) is stale: `WorldClockAnchorLedger.Carry` and
 `Step` drop it first, counted as a released anchor row, and carry what a fresh

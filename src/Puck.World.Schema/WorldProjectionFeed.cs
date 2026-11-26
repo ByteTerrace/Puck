@@ -509,10 +509,24 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
                 m_delta.Write("{\"clocks\":["u8);
                 var first = true;
                 for (var index = 0; index < after.Count; index++) {
-                    if (before[index] == after[index]) { continue; }
+                    var (held, clock) = (before[index]!, after[index]!);
+                    if (held == clock) { continue; }
                     if (!first) { m_delta.Write(","u8); }
                     first = false;
-                    WriteReplaced(CanonicalJsonDocument.SerializeCompact(after[index], WorldJsonContext.Default.For<WorldClock>()));
+                    if ((clock with { Anchor = held.Anchor }) == held) {
+                        // An anchor correction, the common step: the clock's anchor alone, replacing the one held.
+                        m_delta.Write("{\"name\":"u8);
+                        m_delta.Write(CanonicalJsonDocument.SerializeCompact(clock.Name, WorldJsonContext.Default.For<string>()));
+                        m_delta.Write(",\"anchor\":"u8);
+                        if (clock.Anchor is { } anchor) {
+                            WriteReplaced(CanonicalJsonDocument.SerializeCompact(anchor, WorldJsonContext.Default.For<WorldClockAnchor>()));
+                        } else {
+                            m_delta.Write("null"u8);
+                        }
+                        m_delta.Write("}"u8);
+                        continue;
+                    }
+                    WriteReplaced(CanonicalJsonDocument.SerializeCompact(clock, WorldJsonContext.Default.For<WorldClock>()));
                 }
                 m_delta.Write("]}"u8);
                 return;
@@ -604,13 +618,21 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     public WorldProjectionDelivery Step(WorldRecipientView view, WorldDeliveryCursor cursor, ulong tick, ulong engineTick) {
         if (StepTimeline(view.Source, tick, engineTick, view.Arena) is not { } timeline) { return WorldProjectionDelivery.Nothing; }
         cursor.Delivered();
+        return StepDelta(timeline: timeline, provenance: m_held!.Provenance with { Revision = checked((int)cursor.Sequence) });
+    }
+    // The delta a step owes: the timeline's changed clocks, and the provenance that numbers the delivery when a cursor
+    // numbered it.
+    private WorldProjectionDelivery StepDelta(WorldTimelineSection timeline, WorldProjectionProvenance? provenance) {
         var previous = m_held!.Timeline;
-        var provenance = m_held.Provenance with { Revision = checked((int)cursor.Sequence) };
-        m_held = m_held with { Provenance = provenance, Timeline = timeline };
+        m_held = m_held with { Provenance = provenance ?? m_held.Provenance, Timeline = timeline };
         m_delta.ResetWrittenCount();
-        m_delta.Write("{\"provenance\":"u8);
-        m_delta.Write(CanonicalJsonDocument.SerializeCompact(provenance, WorldJsonContext.Default.For<WorldProjectionProvenance>()));
-        m_delta.Write(",\"timeline\":"u8);
+        m_delta.Write("{"u8);
+        if (provenance is not null) {
+            m_delta.Write("\"provenance\":"u8);
+            m_delta.Write(CanonicalJsonDocument.SerializeCompact(provenance, WorldJsonContext.Default.For<WorldProjectionProvenance>()));
+            m_delta.Write(","u8);
+        }
+        m_delta.Write("\"timeline\":"u8);
         WriteTimeline(previous, timeline);
         m_delta.Write("}"u8);
         return Partial(projection: m_held, payload: m_delta.WrittenSpan.ToArray(), valuesOnly: true, timelineOnly: true);
@@ -685,14 +707,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     /// <param name="engineTick">The engine tick that simulation tick stands at.</param>
     /// <returns>The delivery owed.</returns>
     public WorldProjectionDelivery Step(WorldDefinition definition, ulong tick, ulong engineTick, StateArena? arena = null) {
-        if (StepTimeline(definition, tick, engineTick, arena) is not { } timeline) { return WorldProjectionDelivery.Nothing; }
-        var previous = m_held!.Timeline;
-        m_held = m_held with { Timeline = timeline };
-        m_delta.ResetWrittenCount();
-        m_delta.Write("{\"timeline\":"u8);
-        WriteTimeline(previous, timeline);
-        m_delta.Write("}"u8);
-        return Partial(projection: m_held, payload: m_delta.WrittenSpan.ToArray(), valuesOnly: true, timelineOnly: true);
+        return (StepTimeline(definition, tick, engineTick, arena) is { } timeline) ? StepDelta(timeline: timeline, provenance: null) : WorldProjectionDelivery.Nothing;
     }
     // The timeline a step owes the recipient, or null when every held prediction stands: each anchored clock carries
     // what the ledger holds, which is nothing once a stale anchor was dropped with no seed to replace it.

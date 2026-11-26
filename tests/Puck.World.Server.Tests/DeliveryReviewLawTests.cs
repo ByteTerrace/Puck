@@ -306,8 +306,14 @@ public sealed class DeliveryReviewLawTests {
     public void AValueCompositionHoldsWhatAWholeCompositionComposesAndItsDeltasRebuildItForTheRecipient() {
         var other = new WorldStateRow(Name: CellName.Parse("tally"), Kind: CellKind.Int, Domain: StateDomain.Keys.Instance,
             Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(1))]);
+        var phase = new WorldStateRow(Name: CellName.Parse("phase"), Kind: CellKind.Fixed,
+            Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Fixed(0))]);
         using var fixture = Fixtures.FreshServer(Document(tier: WorldDisclosureTier.Presentation) with {
-            StateRaw = new WorldStateSection(World: [Row(), other]),
+            StateRaw = new WorldStateSection(World: [Row(), other, phase]),
+            TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: "day", State: "phase")]),
+            RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(
+                Density: new BindableScalar(keys: new WorldKeyTrack<BindableScalar>(clock: "day", keys: [
+                    new WorldKey<BindableScalar>(At: 0, Value: 0, Ease: WorldEase.Linear), new WorldKey<BindableScalar>(At: 0.5, Value: 0.1f, Ease: WorldEase.Linear)]))))),
         });
         var images = new WorldDisclosureImages();
         var view = View(fixture, images, WorldDisclosureTier.Presentation);
@@ -347,6 +353,9 @@ public sealed class DeliveryReviewLawTests {
         Write(new WorldMutation.UpsertStateCell(Principal.Console, "tally", "b", 2, WorldDocumentWriteKind.Set));
         Write(new WorldMutation.UpsertStateCell(Principal.Console, "hand", "extra", 5, WorldDocumentWriteKind.Set));
         Write(new WorldMutation.RemoveStateCell(Principal.Console, "hand", "extra"));
+        // A state clock's correction travels as its anchor alone.
+        Write(new WorldMutation.UpsertStateCell(Principal.Console, "phase", WorldStateRow.SlotKey.Value, 16384, WorldDocumentWriteKind.Set));
+        Assert.NotNull(Assert.Single(hold.Projection!.Timeline!.Clocks!).Anchor);
         Assert.Equal(whole, Read(WorldProjectionWork.WholeCompositions));
         Assert.Equal(9L, Assert.Single(hold.Projection!.Observations!).Cells.Single(cell => cell.Key == "pub").Value);
         // A policy that withholds the recipient's cell, and one that stops the row crossing as an observation at all.

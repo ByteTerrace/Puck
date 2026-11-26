@@ -208,7 +208,7 @@ public sealed class WorldDeliveryCursor {
                 _ = m_metadataPrimers.Remove(row);
                 cut |= SeedRow(view: view, row: row, name: name, holds: holds, held: in held);
             }
-            if (cut) { Cut(); }
+            if (cut) { Cut(cause: WorldProjectionWork.CutsLost); }
         }
         Delivered();
     }
@@ -220,7 +220,7 @@ public sealed class WorldDeliveryCursor {
     /// <param name="policy">The live body policy; its cadence never cuts.</param>
     public void ObserveBodies(WorldObserverDisclosure policy) {
         var (mode, radius) = (policy.Mode, policy.Radius);
-        if (m_bodyMode is { } held && ((held != mode) || (m_bodyRadius != radius)) && (mode != WorldObserverDisclosureMode.All)) { Cut(); }
+        if (m_bodyMode is { } held && ((held != mode) || (m_bodyRadius != radius)) && (mode != WorldObserverDisclosureMode.All)) { Cut(cause: WorldProjectionWork.CutsBodies); }
         m_bodyMode = mode;
         m_bodyRadius = radius;
     }
@@ -250,12 +250,14 @@ public sealed class WorldDeliveryCursor {
     /// <summary>Decides a cut because the stream's reader missed records: a transport that could not keep up dropped
     /// them, so nothing the reader holds is known to be whole. The stream owes the cut, the whole disclosed document and
     /// a primer under the new generation, as after any cut and by the same path (<see cref="TakeCut"/>).</summary>
-    public void Lapse() => Cut();
+    public void Lapse() => Cut(cause: WorldProjectionWork.CutsLapsed);
     // A cursor whose stream another segment has opened decides nothing for it: the next segment's cut already ended
     // everything this one delivered.
-    private void Cut() {
+    // Counts each cut it decides under its cause, since every cut owes the reader its whole disclosed document again.
+    private void Cut(Puck.Abstractions.Counting.WorkKind cause) {
         if (m_lineage.Cut(owner: this)) {
             m_cutOwed = true;
+            WorldProjectionWork.Count(kind: cause);
         }
     }
     private void Seed(WorldRecipientView view) {
@@ -280,7 +282,7 @@ public sealed class WorldDeliveryCursor {
             foreach (var held in previous.Values) { cut |= (!held.Whole && held.ReadCells); }
         }
         m_seeded = true;
-        if (cut) { Cut(); }
+        if (cut) { Cut(cause: WorldProjectionWork.CutsLost); }
     }
     // Holds one row as the stream is delivered it now, answering whether the stream lost a cell of it.
     private bool SeedRow(WorldRecipientView view, int row, string name, bool holds, in HeldRow held) {
@@ -360,7 +362,7 @@ public sealed class WorldDeliveryCursor {
             m_rows[name] = new HeldRow(Image: image, Keys: WorldRowMembers.Empty);
             (result ??= []).Add(new(row, image));
         }
-        if (cut) { Cut(); }
+        if (cut) { Cut(cause: WorldProjectionWork.CutsLost); }
         if (result is null) { return []; }
         DeliveredRows(view);
         return result;
@@ -375,7 +377,7 @@ public sealed class WorldDeliveryCursor {
     /// it was delivered is lost to it. A resumed delivery seeds it again under the new generation, while the stream's
     /// sequence continues.</summary>
     public void Release() {
-        if (m_seeded) { Cut(); }
+        if (m_seeded) { Cut(cause: WorldProjectionWork.CutsReleased); }
         m_rows.Clear(); m_metadataPrimers.Clear(); m_definition = null; m_fields = null; m_seeded = false; m_rest = null; m_placements = null; m_placementsHeader = null;
     }
 }
