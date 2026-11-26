@@ -5293,6 +5293,12 @@ proves itself with `puck compile` lowering to the same document.
 [Code size](code-size.md) holds the measured map, the generator families and
 their lane order; this packet keeps the single duplicates and leads.
 
+- Two types answer "is this raw value one of a set or inside a range": `CompiledActionStateEnvelope` (`Puck.Physics`,
+  a register's runtime envelope: `Contains` by a linear search, and `Clamp`, which substitutes the initial value for a
+  set miss) and `ValueBounds` (`Puck.State.Rules`, the rule analysis's bound: a sorted set or a range, with inclusion
+  and widening). `WorldBodyStateReads.TryCounterBounds` converts one to the other. A raw-value domain both could hold
+  belongs below both projects; it moves there when a third consumer appears or the envelope's search needs the sorted
+  form.
 - Two mapped buffers keep one chunk table apiece: `DirectXGpuMappedBuffer`
   and `VulkanGpuMappedBuffer` each hold a backing a chunk, place every missing
   chunk of a range before binding any, and revoke the chunks wholly inside a
