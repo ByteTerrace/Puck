@@ -470,7 +470,7 @@ public sealed class SdfMeshLibraryLawTests {
         UInt128 identity = 6;
         var source = Piece(offset: 0f, skinned: false);
 
-        using var library = new SdfMeshLibrary(allocator: new HeapAllocator(), store: store);
+        using var library = new SdfMeshLibrary(allocator: new Puck.Abstractions.Memory.SystemAllocator(), store: store);
         SdfMesh? mesh;
 
         if (stored) {
