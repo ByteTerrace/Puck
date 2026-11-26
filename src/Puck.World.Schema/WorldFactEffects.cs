@@ -477,19 +477,16 @@ public sealed class WorldBodyStateEffect : WorldFactEffect, IValueSourcedEffect,
     /// <inheritdoc/>
     public bool Writes(ICompiledFact fact) => (fact is WorldBodyFactOperand { Payload: BodyStateOperand state } && (state.Slot == Slot));
     /// <inheritdoc/>
-    /// <remarks>Exact for a counter written to the body bound to <c>$each</c> and read for that body, whose register
-    /// declares no envelope: <c>WorldBody.ApplyRuleState</c> stores a counter's value as written unless an envelope
-    /// clamps it, and a timer's presented value ages with time.</remarks>
+    /// <remarks>Exact for a counter written to the body bound to <c>$each</c> and read for that body, when every
+    /// value the source can answer lies inside what the register keeps (<see cref="WorldBodyStateReads.TryCounterBounds"/>,
+    /// against <see cref="RuleBounds"/> of the source): <c>WorldBody.ApplyRuleState</c> stores a counter's value as
+    /// written unless its envelope clamps or replaces it, and a timer's presented value ages with time.</remarks>
     public bool SetsExactly(ICompiledFact fact, RuleCompileContext context) {
         if ((fact is not WorldBodyFactOperand { Payload: BodyStateOperand state }) || (state.Slot != Slot) || (KeyFrom is not { IsEach: true }) || (context is not WorldFactsCompileContext { Definition: var definition })) { return false; }
         if ((state.Kind != ActionStateKind.Counter) || (state.Body.Kind != CompiledBodyRefKind.Binding) || (((BoundKey)state.Body.Index) != BoundKey.Each)) { return false; }
-        var bodyState = definition.BodyState;
-        var identityState = definition.IdentityState;
 
-        if ((Slot < 0) || (Slot >= (bodyState.Count + identityState.Count))) { return false; }
-        var declared = ((Slot < bodyState.Count) ? bodyState[Slot] : identityState[(Slot - bodyState.Count)]);
-
-        return ((declared.Kind == ActionStateKind.Counter) && (declared.Envelope is null));
+        return (WorldBodyStateReads.TryCounterBounds(definition: definition, keeps: out var keeps, reads: out _, slot: Slot) &&
+            (keeps.IsUnbounded || RuleBounds.Of(context: context, kind: CellKind.Fixed, source: Source).Within(envelope: in keeps)));
     }
 
     private long CommitCost(IRuleCostContext context) {
