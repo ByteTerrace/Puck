@@ -123,8 +123,10 @@ public sealed record PaletteFlowDocument(
     float? Softness = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteSurfaceDocument? Surface = null,
     uint? Seed = null,
+    [property: DocumentRenderLane]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Lane = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfFlowFrame? Frame = null,
+    [property: DocumentRenderLane]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? CoverageLane = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteFlowRegionDocument? Region = null
 ) {
@@ -346,7 +348,7 @@ public sealed record PaletteWeatheringDocument(
     uint Seed = 0,
     float Scale = 1f,
     float Floor = 0f,
-    int Lane = 0,
+    [property: DocumentRenderLane] int Lane = 0,
     IReadOnlyList<PaletteRevealDocument>? Under = null,
     PaletteSurfaceDocument? Deposit = null,
     float Noise = 0f,

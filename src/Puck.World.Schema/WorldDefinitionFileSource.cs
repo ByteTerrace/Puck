@@ -1355,6 +1355,14 @@ public static partial class WorldDefinitionFileSource {
 
         var text = Puck.Confinement.FileContent.Utf8(content: utf8);
 
+        // A creation's lane member may name a world lane, which only the composed document can number.
+        if (!WorldRenderLaneNames.TryResolve(utf8: text, resolved: out text, reason: out var laneReason)) {
+            reason = $"{sourceName} is not a valid {WorldDefinition.SchemaVersion} document: {laneReason}";
+            refusal = null;
+
+            return false;
+        }
+
         // This is the loader's first parse: a reference into a draw site that has not filled yet stays attached and
         // resolves on the post-draw pass (WorldDefinitionLoader), the one door that runs the draw resolver.
         if (!WorldJsonPayload.TryRead(

@@ -817,9 +817,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.exposure.low` | State | Binding | Binding | `WorldRenderExposure.Low` |
 | `render.exposure.low.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.exposure.low{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
-| `render.lanes` | State | Binding | Binding | `WorldRenderDefaults.Lanes` |
-| `render.lanes[].clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
-| `render.lanes[]{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lanes[].value` | State | Binding | Binding | `WorldRenderLane.Value` |
+| `render.lanes[].value.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lanes[].value{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `screens[].origin` | State | Binding | Binding | `WorldScreen.Origin` |
 | `screens[].right` | State | Binding | Binding | `WorldScreen.Right` |
 | `screens[].up` | State | Binding | Binding | `WorldScreen.Up` |
@@ -4687,6 +4687,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.keys[].layers{*}[view].name` | `WorldRenderSkyLayer.View.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[view].destination` | `WorldRenderSkyLayer.View.Destination` | a destination name |
 | `render.sky.keys[].layers{*}[far].name` | `WorldRenderSkyLayer.Far.Name` | a sky layer name a section key addresses |
+| `render.lanes[].name` | `WorldRenderLane.Name` | a render lane's name, which a creation's lane members write |
 | `render.devices[].name` | `WorldDeviceProfile.Name` | a device profile's name, which a host selects the profile by (WorldDeviceProfiles.Find) |
 | `render.devices[].match` | `WorldDeviceProfile.Match` | a device match pattern |
 | `screens[].source[machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |

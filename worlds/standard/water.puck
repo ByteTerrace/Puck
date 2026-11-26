@@ -137,8 +137,8 @@ let streamGlass = waterGlass with { scattering: 0.9, contact { reach: 0.25, cove
 let streamMaterial = flowed(waterMaterial with { glass: streamGlass }, streamFlowLayer, glass: 1)
 // A falls runs down every sheet at the sheet's own slope: only the velocity's part along a surface moves it. Its velocity
 // and pattern are in world space, so the flow runs down a sheet however the sheet turns. A world that binds a render lane
-// to its discharge thins the foam with it (`coverageLane`, a world lane from 4 to 7: `fallsFlowLayer with { coverageLane:
-// 4 }` under `render { lanes ["state.fallsFlow"] }`).
+// to its discharge thins the foam with it (`coverageLane`, a world lane's name: `fallsFlowLayer with { coverageLane:
+// "fallsFlow" }` under `render { lanes [{ name: "fallsFlow", value: "state.fallsFlow" }] }`).
 let fallsFlowLayer = {
   frame: World
   velocity [0, -4, 0]

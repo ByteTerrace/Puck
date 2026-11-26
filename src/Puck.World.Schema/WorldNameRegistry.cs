@@ -39,7 +39,7 @@ public static partial class WorldNameRegistry {
         if (text is not null && (field is not null || string.IsNullOrWhiteSpace(text.Purpose))) {
             throw new InvalidOperationException($"{model.DeclaringType.Name}.{model.Member} must declare one spelling and give literal or local text a purpose.");
         }
-        return model with { NameField = field, TextPurpose = text?.Purpose };
+        return model with { NameField = field, TextPurpose = text?.Purpose, RenderLane = (property?.GetCustomAttribute<DocumentRenderLaneAttribute>() is not null) };
     }
 
     /// <summary>Whether a member capable of spelling a name still needs a classification.</summary>

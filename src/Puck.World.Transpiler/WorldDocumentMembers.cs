@@ -34,6 +34,12 @@ internal static class WorldDocumentMembers {
 
         _ = Visit(node: document, refuse: true, type: typeof(WorldDefinition));
         Tabulate();
+        // A lane name stays as written: the load numbers it once the document has composed (WorldRenderLaneNames).
+        if (diagnostics is not null) {
+            WorldRenderLaneNames.Resolve(document: document, refuse: (kind, message, pointer) => diagnostics.Report(diagnostic: sourceMap.Place(
+                diagnostic: Diagnostic.Error(code: ((kind == WorldRenderLaneRefusal.Unknown) ? PuckDiagnosticCodes.UnknownRenderLane : PuckDiagnosticCodes.RenderLaneDeclaration), message: message, span: SourceSpan.None),
+                jsonPointer: pointer)), rewrite: false, whole: whole);
+        }
 
         static string? AssetFamily(Type type) =>
             ((type == typeof(WorldMusicRow)) ? Puck.Assets.Documents.AssetRowFamilies.Music

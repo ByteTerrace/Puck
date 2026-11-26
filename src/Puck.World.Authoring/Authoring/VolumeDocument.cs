@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using System.Numerics;
 using System.Text.Json.Serialization;
 using Puck.Assets.Documents;
@@ -24,7 +25,7 @@ public sealed record VolumeDocument([property: JsonRequired] string Kind, [prope
     [property: JsonRequired] IReadOnlyList<VolumeDensityStopDocument> Ramp, string? Parent = null,
     float? Axis = null, float? Width = null, float? Speed = null, uint? Seed = null, int? Steps = null,
     float? Intensity = null, float? Extinction = null, float? PulseAmplitude = null, float? PulseFrequency = null,
-    int? IntensityLane = null, bool Enabled = true, float? Coverage = null, float? Softness = null, float? Scatter = null,
+    [property: DocumentRenderLane] int? IntensityLane = null, bool Enabled = true, float? Coverage = null, float? Softness = null, float? Scatter = null,
     float? Spread = null, float? Fade = null, float? NoiseScale = null, float? NoiseDepth = null) {
     /// <summary>The bounded three-dimensional cloud density family.</summary>
     public const string CloudKind = "cloud";
