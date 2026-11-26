@@ -495,9 +495,11 @@ far a surface row's probes search; required positive), `onDrive` +
 (a declared channel whose HELD read drops the row — no latch, so holding it
 down keeps the body off the face), and `spend` (drain a body-lane Counter
 slot at a rate; the row becomes ineligible the tick the slot cannot pay — the
-engine has no stamina concept of its own). `spend.restingRatePerSecond` is the
-drain while nothing is commanded: zero lets a climber hang still for free, and
-omitted it equals `ratePerSecond`. `restore { state, ratePerSecond, when }`
+engine has no stamina concept of its own). The drain is settled at the end of
+the step: `ratePerSecond` while the body is commanded and the step carried it
+along the held face, and `spend.restingRatePerSecond` while it hangs still or
+pushes against what stops it. Zero lets a climber hang for free, and omitted it
+equals `ratePerSecond`. `restore { state, ratePerSecond, when }`
 refills a Counter slot while the row holds, up to the slot's range envelope
 (which it must declare), and only while its own `when` gate is open: a fall row
 that restores `when: now(fact: Grounded)` refills a body standing on any ground
@@ -554,8 +556,9 @@ falling is upward: the floor stops depenetrating and a released body flies off.
 So a pull's lean is the body's FRAME — the plane it travels in and the attitude
 it is drawn at (`scratch.AttitudeUp`, which every attitude writer including the
 facing snap composes about) — while the contact axis stays with the ambient
-resolve. `forward` (`Heading`/`Intent`/`Velocity`) chooses what that drawn
-attitude tracks inside the row's own frame. Movement rides the face's own tangent plane: forward is gravity-up
+resolve. `forward` (`Heading`/`Intent`/`Velocity`/`Surface`) chooses what that drawn
+attitude tracks inside the row's own frame; `Surface` faces the body into the
+face it holds, as a climber faces a wall. Movement rides the face's own tangent plane: forward is gravity-up
 projected onto the face ("up the face"), right completes it, so
 `ComputePlanarTargetVelocity` needs no new operation. A face whose normal is
 parallel to gravity-up leaves that tangent undefined, and there the ordinary
@@ -581,9 +584,10 @@ Every probe is DIRECTED, for the same reason a pull's always was: an undirected
 nearest-surface query on a world whose floor, walls, ramps and overhangs are one
 holdable placement answers with the floor a body is standing on.
 `IContactField.TryHoldableSurfaceAlongDirection` is that query; both providers
-answer it, the field by ray march (`RayHit.Normal` is documented ZERO — the
+answer it with a ray cast, the field by ray march (`RayHit.Normal` is documented ZERO — the
 surface orientation is a separate `TryFieldGradient` read one step back along
-the ray). Which surfaces admit a hold at all is the collision row's
+the ray) and the analytic set by sphere-tracing its holdable colliders
+(`FixedSurfaceQuery.TryCast`). Which surfaces admit a hold at all is the collision row's
 `defaultHold` (world-level) composed with a placement's own
 `grip: { holdable: … }` override — the placement's own surface-holdability
 facet, a distinct concept from a hold row's `Pull` kind despite the shared

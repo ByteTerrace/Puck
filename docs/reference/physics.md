@@ -483,8 +483,12 @@ caller-supplied reach across two spans (`FixedSurfaceColliderSource.Static`/
 distance then a `(Source, ColliderIndex)` tie-break. `TryNearestDirected` is
 the aim-assist cone variant for tether targeting: candidates are filtered to
 a caller-supplied max distance and half-angle around an aim direction, then
-ranked by angular deviation before distance. Every reach, max distance, and
-half-angle is caller-supplied; nothing here derives one from a document.
+ranked by angular deviation before distance. `TryCast` is the ray cast a
+surface hold takes and tracks a face with: it sphere-traces `TryNearest`,
+advancing along the ray by the nearest surface's distance until the ray stands
+on a surface that faces it or leaves its reach, so a face is met at any angle
+the ray closes on it from. Every reach, max distance, and half-angle is
+caller-supplied; nothing here derives one from a document.
 
 ### The rigid solver
 
