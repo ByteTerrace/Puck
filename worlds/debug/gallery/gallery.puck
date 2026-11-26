@@ -5,7 +5,9 @@
 //                       wall; level 0's four display stations flank its centre aisle
 //   the aisles          north and south of the nave on level 0, behind arcades of branched piers, and the galleries
 //                       over them on levels 1 to 3, their balcony edges round the void and their displays along them
-//   the core            against the south wall: the stairs, the lift's glass tower outside the wall, the entrance
+//   the stairs          one in each corner of the aisles: switchbacks south-west and north-east, spirals south-east
+//                       and north-west, each serving every storey
+//   the core            against the south wall: the lift's glass tower outside the wall, the entrance
 //   the painting wing   level 0's south aisle east of the entrance (paintings.puck)
 //   the board game room level 2's south gallery and the wing that projects over the forecourt (chess.puck and the
 //                       other tables)
@@ -37,6 +39,7 @@ import "layout"
 import "shell"
 import "look"
 import "flaw"
+import "toybox"
 // The companion hears the lift's authored door edge through its read-only sensory projection, and the world that stands
 // the building binds its camera to the inspection lever's cells (the debug world's exposure.puck).
 exports {
@@ -744,7 +747,7 @@ render {
         point(
           name: "hall-stairs",
           anchor: placement(placementId: gallery),
-          position: [stairSpine, 7.6, 3.6],
+          position: [stairCentreX(galleryStair("south-west")), 10.5, (galleryStair("south-west").well.z0 + (switchbackLanding / 2))],
           temperature: 2700K,
           power: "state.hallLamps.stairs"
         )
@@ -779,10 +782,16 @@ spawnPoints: concat(
   ),
   [
     { id: "boardroom", parent: gallery, position [(wingWest + 2), galleryFloor[wingLevel], 4.6], yawDegrees: 270 }
-    // Outside the entrance, facing in; in the lift's car, facing its door; and on the stairs' first half landing.
+    // Outside the entrance, facing in; in the lift's car, facing its door; and on the south-west stair's first half
+    // landing, facing across it to the second flight.
     { id: "gallery", parent: gallery, position [((entranceWest + entranceEast) / 2), galleryFloor[0], -4], yawDegrees: 180 }
     { id: "lift", parent: gallery, position [liftX, 0.1, liftZ], yawDegrees: 180 }
-    { id: "stairs", parent: gallery, position [(stairWest + 0.9), 2.35, 1.3], yawDegrees: 270 }
+    {
+      id: "stairs"
+      parent: gallery
+      position [(galleryStair("south-west").well.x1 - 0.9), ((galleryFloor[0] + (galleryStorey / 2)) + 0.05), (galleryStair("south-west").well.z0 + 1)]
+      yawDegrees: 90
+    }
   ]
 )
 
@@ -876,6 +885,15 @@ state {
     slot liftArrow = 0 bounds(0..2)
     slot liftOpenReq = 0 bounds(0..1)
     slot liftCloseReq = 0 bounds(0..1)
+    // Whether the lift serves level 1, the toybox: 0 (it passes level 1 and opens no door there) until a rule sets it.
+    slot toyboxLift = 0 bounds(0..1)
+    // Level 1's loose lattice panels (shell.puck's `gallery-lattice-loose-<edge>`): 1 swaps a panel to its open
+    // form, which keeps its frame and crossbars and drops its uprights and sill.
+    table toyboxSlats {
+      south = 0
+      north = 0
+      bridge = 0
+    }
     // The landing calls and the car's floor calls pending, by level.
     table liftHall {
       level0 = 0
@@ -985,6 +1003,24 @@ for pad in filter(carPads, p => p.slot == 5) {
     schedule liftClock.pulse in 0.4s
     liftCloseReq = 1
   }
+}
+
+// Level 1 is the toybox, reached shrunk by its corner stairs: while `toyboxLift` is 0 the lift drops every call to level
+// 1 (a landing's plate, a car button, the mailbox) as it arrives, before any rule below reads one, so the car neither
+// stops nor turns there; and a car already standing at level 1 keeps its doors shut and refuses its door-open button.
+// A rule that sets `toyboxLift` to 1 (a puzzle solved) serves level 1 as any other.
+rule "lift-toybox-calls" {
+  when toyboxLift == 0 and (liftHall.level1 + liftCarCall.level1) > 0
+  mode: Level
+  liftHall.level1 = 0
+  liftCarCall.level1 = 0
+}
+rule "lift-toybox-doors" {
+  when toyboxLift == 0 and liftAt == liftCells and liftTarget == liftAt and (liftOpenReq + liftDoors.car + liftDoors.level1) > 0
+  mode: Level
+  liftOpenReq = 0
+  liftDoors.car = 0
+  liftDoors.level1 = 0
 }
 
 // A stopped car at a level with a call pending there serves it: the call clears and the doors are asked to open.

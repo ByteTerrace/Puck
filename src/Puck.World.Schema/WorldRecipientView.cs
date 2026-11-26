@@ -20,7 +20,30 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     internal Principal? Recipient => recipient;
     internal WorldDisclosureImages Images => images;
     internal ArenaTime Time => time();
-    internal bool Unrestricted => operates?.Invoke() == true;
+    internal bool Unrestricted => (m_holds > 0) ? m_heldUnrestricted : (operates?.Invoke() == true);
+    // Inside an admission hold (Admit) the live admission and authority answers are read once and pinned, so a
+    // delivery that asks about every row of a document asks the recipient's admission once instead of once a row.
+    private int m_holds;
+    private bool m_heldObserves;
+    private bool m_heldUnrestricted;
+    /// <summary>Pins the view's live admission (<see cref="Observes"/>) and authority answers for one delivery: until
+    /// the returned hold is disposed, every read answers what they answered when the outermost hold opened. Holds
+    /// nest. A delivery opens one around everything it reads on the thread that steps the world, where nothing that
+    /// decides admission can change mid-delivery.</summary>
+    /// <returns>The hold, which releases the pin when disposed.</returns>
+    public AdmissionHold Admit() {
+        if (m_holds == 0) {
+            m_heldObserves = observes() && (ceiling != WorldDisclosureTier.Frames);
+            m_heldUnrestricted = (operates?.Invoke() == true);
+        }
+        m_holds++;
+        return new AdmissionHold(view: this);
+    }
+    /// <summary>One delivery's pin of a view's admission (<see cref="Admit"/>).</summary>
+    public readonly struct AdmissionHold(WorldRecipientView view) : IDisposable {
+        /// <summary>Releases the pin.</summary>
+        public void Dispose() => view.m_holds--;
+    }
     internal WorldStateDisclosure.Observer Observer => ObserverAs(unrestricted: Unrestricted);
     // The observer for an answer of Unrestricted the caller already read: one that asks about many rows at one instant
     // asks the grant table once instead of once a row.
@@ -39,7 +62,7 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     /// <summary>The admission tier; no operation can raise it.</summary>
     public WorldDisclosureTier Ceiling => ceiling;
     /// <summary>Whether the capability currently discloses a document.</summary>
-    public bool Observes => observes() && ceiling != WorldDisclosureTier.Frames;
+    public bool Observes => (m_holds > 0) ? m_heldObserves : (observes() && (ceiling != WorldDisclosureTier.Frames));
     /// <summary>The live body policy and the recipient's authority-assigned body, when embodied.</summary>
     public WorldSinkDisclosure Bodies => Observes
         ? new(Source.Population.ObserverDisclosure, recipient is { Kind: PrincipalKind.Seat or PrincipalKind.Peer } body ? body.Index : -1)
@@ -186,14 +209,21 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
     /// <summary>The live observations, including rows a presentation explicitly reads.</summary>
     public IReadOnlyList<WorldObservedRow>? Observations(IReadOnlySet<string>? presented = null) {
         if (!Observes) { return null; }
+        using var hold = Admit();
         var result = new List<WorldObservedRow>();
+        var audience = images.Audience(this);
         for (var row = 0; row < Source.AuthoredState.Count; row++) {
-            var declaration = Arena.Rows[row];
-            if (declaration.HostOwned || (declaration.Visibility is null && !Arena.DeclaresCellVisibility(row) &&
-                presented?.Contains(declaration.Name.Value) != true)) { continue; }
-            if (Image(row).Observation is { } observation) { result.Add(observation); }
+            if (ObservesRow(row, presented) && (images.Image(audience, row).Observation is { } observation)) { result.Add(observation); }
         }
         return result.Count == 0 ? null : result;
+    }
+    // Whether a row can cross as an observation: a row a policy restricts by its own declaration or per cell, or one a
+    // presentation reads, and never a host-owned row. Whether it does is its image's (an observation the recipient's
+    // mask reads); every composition of a projection's observations asks this one question.
+    internal bool ObservesRow(int row, IReadOnlySet<string>? presented) {
+        var declaration = Arena.Rows[row];
+        return !declaration.HostOwned && ((declaration.Visibility is not null) || Arena.DeclaresCellVisibility(row) ||
+            (presented?.Contains(declaration.Name.Value) == true));
     }
     /// <summary>The recipient's placement projection, composed again only when something it reads moved
     /// (<see cref="WorldDisclosureImages"/>); read on the thread that steps the world.</summary>

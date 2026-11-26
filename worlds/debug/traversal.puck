@@ -20,12 +20,16 @@ let traversalStudioGoals = [
   { x: 48.0, y: 0.31, z: -48.0 } // round studio dais
   { x: 48.0, y: 0.01, z: -30.0 }
 ]
-// The host places the idle stand-in at this pass's first goal before selecting start=15, count=23.
+// The host places the idle stand-in at this pass's first goal before selecting start=15, count=26. The stairs are the
+// south-west switchback (gallery/layout.puck): its first flight climbs the east half, its second the west half.
 let traversalGalleryGoals = [
-  { x: 23.3, y: 0.05, z: 19 } // gallery stairwell approach
-  { x: 23.3, y: 2.3, z: 13.3 } // flight A and half landing
-  { x: 25.3, y: 2.3, z: 13.3 } // cross landing around the spine
-  { x: 25.3, y: 4.55, z: 18.4 } // flight B to first floor, clear of the stairwell's foot at z 17.5
+  { x: 10.175, y: 0.05, z: 19.875 } // south-west stair approach, before the first flight's foot
+  { x: 10.175, y: 2.3, z: 14.075 } // first flight and half landing
+  { x: 7.575, y: 2.3, z: 14.075 } // cross the landing round the spine
+  { x: 8.525, y: 4.55, z: 21.175 } // second flight to level 1, out past the end pier onto the bridge
+  { x: 14.5, y: 4.55, z: 21.175 } // north of the first arcade pier
+  { x: 14.5, y: 4.55, z: 18.575 } // into the south gallery between the first two piers
+  { x: 19.325, y: 4.55, z: 18.575 } // east along the gallery, clear of the bench
   { x: 29.8, y: 4.55, z: 13 } // call lift on level 1
   { x: 28.8, y: 4.55, z: 10.35 } // enter car, then request ground
   { x: 28.8, y: 0.05, z: 10.35 } // ride down

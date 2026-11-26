@@ -85,7 +85,22 @@ public sealed class WorldProjectionWork : WorkLedger<WorkCounterSet> {
     public static WorkKind ManifestMembersFetched { get; } = Registry.Declare(name: "world.projection.manifest-members-fetched", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting the bytes of the members <see cref="ManifestMembersFetched"/> counts.</summary>
     public static WorkKind ManifestFetchedBytes { get; } = Registry.Declare(name: "world.projection.manifest-fetched-bytes", unit: "bytes", workClass: WorkClass.Pacing);
-
+    /// <summary>Gets the kind counting the authored rows a value composition read: the rows the arena's journal named as
+    /// moved since the recipient's last composition and the rows whose policies read them, or every row when the
+    /// journal could not name them.</summary>
+    public static WorkKind RowsRead { get; } = Registry.Declare(name: "world.projection.rows-read", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the cuts delivery cursors decided because a stream's reader missed records: its
+    /// transport fell a full queue behind (<see cref="WorldDeliveryCursor.Lapse"/>). Each cut owes the reader its whole
+    /// disclosed document again.</summary>
+    public static WorkKind CutsLapsed { get; } = Registry.Declare(name: "world.projection.cuts.lapsed", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the cuts decided because a cell a stream read in a row that can withhold is no
+    /// longer readable or is gone.</summary>
+    public static WorkKind CutsLost { get; } = Registry.Declare(name: "world.projection.cuts.lost", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the cuts decided because the body policy changed to one that redacts.</summary>
+    public static WorkKind CutsBodies { get; } = Registry.Declare(name: "world.projection.cuts.bodies", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the cuts decided because a stream stopped observing
+    /// (<see cref="WorldDeliveryCursor.Release"/>).</summary>
+    public static WorkKind CutsReleased { get; } = Registry.Declare(name: "world.projection.cuts.released", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the ledger's kinds, in the order a report lists them.</summary>
     public static ReadOnlySpan<WorkKind> Kinds => Registry.Kinds;
 

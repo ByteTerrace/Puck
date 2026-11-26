@@ -289,7 +289,9 @@ public sealed partial class ProjectionAnchorLawTests {
         Assert.Equal(expected: 0L, actual: work.Read(kind: WorldProjectionWork.Deltas));
 
         var time = fixture.Server.Time;
-        var anchor = AnchorOf(definition: delivered[0]);
+        // The mirror's first bind withdraws to its placeholder before the joined document lands: the last document
+        // delivered is the one the join hydrated.
+        var anchor = AnchorOf(definition: delivered[^1]);
 
         Assert.NotNull(@object: anchor);
         Assert.Equal(expected: time.EngineTick, actual: anchor.Tick);
@@ -298,7 +300,7 @@ public sealed partial class ProjectionAnchorLawTests {
             actual: anchor.Predict(engineTick: time.EngineTick)
         );
         Assert.NotEqual(expected: 0UL, actual: anchor.Phase);
-        AssertPresentsAsTheHost(engineTick: time.EngineTick, host: fixture.Server.Definition, recipient: delivered[0], tick: time.Tick);
+        AssertPresentsAsTheHost(engineTick: time.EngineTick, host: fixture.Server.Definition, recipient: delivered[^1], tick: time.Tick);
         observation!.Dispose();
     }
     [Fact]

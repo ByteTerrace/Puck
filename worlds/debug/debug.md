@@ -80,8 +80,8 @@ course (`camera-course.puck`) holds four more tight spaces, each reached with
 | `camera-colonnade` | Eight 0.35 m pillars on a 1.6 m pitch, with a 1.2 m walkway between them and the wall | Pillars passing between the camera and the Moth while walking parallel to a wall |
 | `camera-bays` | Two bays under their own ceiling lamps (warm and cool) divided by a 0.15 m partition, open at the south end | Whether the camera reveals the adjacent bay when she backs against the partition |
 
-`debug.go lift` and `debug.go stairs` reach the lift car and the stairwell's
-half landing. The screen on the cool bay's back wall is the debug world's
+`debug.go lift` and `debug.go stairs` reach the lift car and the south-west
+stair's first half landing. The screen on the cool bay's back wall is the debug world's
 probe: a recorded `puck.probe.track.v1` track (`probes/beacon.probe-track.json`,
 `probe-beacon.puck`) tints a camera's view of the reference cubes and breathes
 between colours every 8 s; `probe.status` reads both probes.
@@ -272,7 +272,7 @@ case, `stage` when omitted:
 | `portal-link` | Before the west painting of the linked pair, on the east fin | -X; walk ahead to come out of the east one |
 | `portal-fall` | North of the floor painting | -Z; walk ahead to drop in |
 | `gallery` | On the forecourt, outside the gallery's entrance | +Z, through the door |
-| `lift`, `stairs` | In the lift car (call it with `gallery.lift 0`) and on the stairwell's first half landing | +Z out of the car; +X across the landing |
+| `lift`, `stairs` | In the lift car (call it with `gallery.lift 0`) and on the south-west stair's first half landing | +Z out of the car; -X across the landing to the second flight |
 | `camera-course`, `camera-tunnel`, `camera-colonnade` | (-28, 0, 18.8), (-28, 0, 30.2) and (-27.5, 0, 33.8), before the course's L-corridor, tunnel and colonnade | +X, into the structure |
 | `camera-bays` | (-23.5, 0, 36.8), before the two bays and their partition | +Z |
 | `gallery-level-0` .. `gallery-level-3` | Each level's landing in the gallery, before the lift's door | -Z, toward the lift door |

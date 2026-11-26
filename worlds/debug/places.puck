@@ -62,8 +62,15 @@ let galleryPlaces = concat(
     storeyPlace("desktop", 0, galleryWestIn, (galleryWestIn + 3), 10.4, 13)
     storeyPlace("press", 0, galleryWestIn, (galleryWestIn + 4.2), 5.4, 9.6)
     storeyPlace("wonderland-threshold", 0, galleryWestIn, (galleryWestIn + 2), 17, 20)
-    // The stairwell and the lift's tower, every storey.
-    { id: "stairs", at [((stairWest + stairEast) / 2), 9.2, ((galleryWall + stairFoot) / 2)], half [2.1, 9.7, 2.8] }
+    // The south-west stair's well (`stairs`), each corner stair's (`stairs-<corner>`) and the lift's tower, every storey.
+    { id: "stairs", at [stairCentreX(galleryStair("south-west")), 9.2, stairCentreZ(galleryStair("south-west"))], half [2.7, 9.7, 3.2] }
+    for stair in galleryStairs {
+      {
+        id: $"stairs-{stair.id}"
+        at [stairCentreX(stair), 9.2, stairCentreZ(stair)]
+        half [(((stair.well.x1 - stair.well.x0) / 2) + 0.2), 9.7, ((stair.well.z1 - stair.well.z0) / 2)]
+      }
+    }
     { id: "lift", at [liftX, 9.2, liftZ], half [1.7, 9.7, 1.9] }
     // The board game room: level 2's south gallery and the wing that projects over the forecourt.
     storeyPlace("board-room", wingLevel, wingWest, galleryEast, (wingSouth + galleryWall), naveSouth)

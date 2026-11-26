@@ -591,6 +591,14 @@ public static class WorldProjection {
         derive: static candidate => KeyedClocks(definition: candidate, values: WorldKeyedValues.AuthoredBy(definition: candidate).Keyed)
     );
 
+    // Refuses, as a composition does before anything is composed, a recipient that may no longer read a state clock a
+    // carried value keys on or a cell a bindable binds: what a policy move asks again of a projection whose document
+    // stands. Both lists are the definition's, memoized, so the check walks nothing.
+    internal static void RefuseHidden(WorldDefinition definition, StateArena arena, Principal? recipient, bool unrestricted) {
+        if (unrestricted) { return; }
+        RefuseHiddenClocks(arena: arena, definition: definition, keyed: KeyedClocksFor(definition: definition), recipient: recipient);
+        RefuseHiddenBindings(arena: arena, bound: WorldKeyedValues.AuthoredBy(definition: definition).Bound, definition: definition, recipient: recipient);
+    }
     internal static WorldTimelineSection? ComposeTimeline(WorldDefinition definition, WorldClockAnchorLedger? anchors, StateArena arena, in ArenaTime time) =>
         CarriedClocks(
             anchors: anchors,

@@ -20,8 +20,8 @@
     },
     {
       "name": "traversal-gallery",
-      "note": "The traversal bot's gallery pass (route entries 15..22): both flights of the stairwell and the lift.",
-      "lines": ["body.stop 53", "body.pose 11.2 0.05 32.5 0 0 0 53", "world.state.cell.set traversal start 15", "world.state.cell.set traversal count 23", "world.state.cell.set traversal run 1"],
+      "note": "The traversal bot's gallery pass (route entries 15..25): both flights of the south-west stair, along level 1 and down in the lift.",
+      "lines": ["body.stop 53", "body.pose 10.175 0.05 19.875 0 0 0 53", "world.state.cell.set traversal start 15", "world.state.cell.set traversal count 26", "world.state.cell.set traversal run 1"],
       "until": { "line": "world.state traversal", "metric": "run", "in": ["0"] },
       "everyTicks": 150,
       "maxTicks": 6000

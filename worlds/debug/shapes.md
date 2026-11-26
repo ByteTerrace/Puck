@@ -54,7 +54,7 @@ It lights like a fluorescent tube: a chain of tube lights along the same
 curve, cut at each slab so every one lies in one storey, anchored to the
 building's root and standing still, so the irradiance volume traces each: its
 light bounces about its storey and stops at the slabs. Beside it a pendant
-lights the stairwell, which the flaw never enters, and the lift's car has a
+lights the south-west stair's well, which the flaw never enters, and the lift's car has a
 luminous ceiling over a 6,000-lumen spot that rides the car's body. The
 camera's exposure is the world's ([`exposure.puck`](exposure.puck)).
 
@@ -105,7 +105,7 @@ judge it. The card table's cards are posed by the rules, which judge each reques
 | To | How |
 |---|---|
 | Enter | `debug.go gallery`, then walk +Z through the door |
-| Change level on foot | The stairs west of the lift: walk -Z up the first flight, step east on the half landing at the south wall, walk +Z up the second |
+| Change level on foot | A stair in each corner of the aisles. At a switchback (south-west, north-east) walk up the first flight from the nave side toward the long wall, cross the half landing behind the spine and walk up the second flight back out; at a spiral (south-east, north-west) step on from the nave side and climb one turn round the newel, stepping off where the rail opens |
 | Call the lift | Stand before the wall-mounted `CALL` plate east of the landing door and press the context button (E, or RB on a pad); its button lights until the car arrives. Or `gallery.lift <level>`, which calls as the plate does |
 | Ride the lift | Stand in the car facing its glazed back, where a rail carries a round button each for floors 0 to 3, then door open and door close. Stand before the one you want and press the context button; a floor button lights while that floor is pending |
 | Stand on a level's landing | `gallery.level <level> [body]` |

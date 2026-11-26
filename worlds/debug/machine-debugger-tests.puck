@@ -38,10 +38,16 @@ machines [
     contentFolders ["cartridges/deck"]
     preferFolderDefault: false
   }
-  // The range's televisions are no part of these checks: mounted, but not advanced.
+  // The range's televisions and the gallery toybox's cabinets are no part of these checks: mounted, but not advanced.
   { name: "range-deck-9", running: false }
   { name: "range-deck-24", running: false }
   { name: "range-deck-50", running: false }
+  { name: "toybox-tetromino", running: false }
+  { name: "toybox-tetromino-mono", running: false }
+  { name: "toybox-bounce", running: false }
+  { name: "toybox-bounce-north", running: false }
+  { name: "toybox-test-card", running: false }
+  { name: "toybox-test-card-mono", running: false }
 ]
 
 test "every machine passes the six checks on bundled diagnostic cartridges" {

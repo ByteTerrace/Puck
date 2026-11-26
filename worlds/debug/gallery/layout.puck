@@ -85,16 +85,54 @@ function galleryTileX(x) = tileX(floor(((x - gridX0) / galleryTile)))
 function galleryTileZ(z) = tileZ(floor(((z - gridZ0) / galleryTile)))
 // The north aisle's middle, where its ceiling strip, its downlights and its galleries' displays stand.
 let northAisleMid = ((naveNorth + galleryNorth) / 2)
+// How far inside a balcony's edge its balustrade (or level 1's lattice) stands, in metres.
+let balconyInset = 0.08
 
-// The core, against the south wall: the stairs (a switchback of two 1.8 m flights either side of a spine, eighteen
-// 0.25 m risers a storey), the lift tower outside the wall east of them, and the entrance east of that.
-let stairWest = 12.4
-let stairSpine = 14.2
-let stairEast = 16.2
-let stairFoot = 5.5
-let stairLanding = 2.3
-let stairTread = 0.4
-let stairRiser = 0.25
+// The stairs: one in each corner of the aisles, in the end rest bays (0 and 12) between the end wall and the first
+// arcade bay, inside the aisle's first five tile rows, every dimension a count of tiles. Switchbacks stand in the
+// south-west and north-east corners and spiral stairs in the south-east and north-west, so the plan reads the same
+// turned half round. Each serves every storey in eighteen 0.25 m risers to the storey. A row's `well` is the stair's
+// footprint in the plan, which every upper floor leaves open over it; the stair's kit piece (the standard's
+// `switchbackStair` and `spiralStair`, architecture.puck) stands at the well's centre, one copy a storey, turned by
+// `yaw` so the piece's front (+Z: where a switchback's first flight starts and its second arrives, and where a spiral
+// starts and arrives) faces the nave. A switchback fills four tiles by five: two flights two tiles wide less a spine,
+// each a run of three tiles, and a half landing two tiles deep against the long wall. A spiral fills four tiles by
+// four, one turn round its newel to the storey.
+let stairRisers = 18
+let stairTiles = galleryBayTiles
+let switchbackTiles = (galleryAisleTiles - 1)
+let switchbackLanding = (2 * galleryTile)
+let spiralRadius = ((stairTiles * galleryTile) / 2)
+let spiralNewel = 0.5
+function stairWell(i, j, across, deep) = {
+  x0: tileEdgeX(i)
+  x1: tileEdgeX((i + across))
+  z0: tileEdgeZ(j)
+  z1: tileEdgeZ((j + deep))
+}
+let galleryStairs = [
+  { id: "south-west", form: "switchback", yaw: 180, well: stairWell(0, 0, stairTiles, switchbackTiles) }
+  { id: "south-east", form: "spiral", yaw: 180, well: stairWell((gridTilesX - stairTiles), 0, stairTiles, stairTiles) }
+  { id: "north-west", form: "spiral", yaw: 0, well: stairWell(0, (gridTilesZ - stairTiles), stairTiles, stairTiles) }
+  {
+    id: "north-east"
+    form: "switchback"
+    yaw: 0
+    well: stairWell((gridTilesX - stairTiles), (gridTilesZ - switchbackTiles), stairTiles, switchbackTiles)
+  }
+]
+let galleryStairWells = map(galleryStairs, stair => stair.well)
+function galleryStair(id) = filter(galleryStairs, stair => (stair.id == id))[0]
+function stairCentreX(stair) = ((stair.well.x0 + stair.well.x1) / 2)
+function stairCentreZ(stair) = ((stair.well.z0 + stair.well.z1) / 2)
+// Whether something `halfX` by `halfZ` about (x, z) keeps clear of every stair's well: the opening the benches and
+// planters on every level yield to.
+function galleryStairClear(x, z, halfX, halfZ) = (length(filter(
+  galleryStairWells,
+  well => ((((x + halfX) > well.x0) and ((x - halfX) < well.x1)) and (((z + halfZ) > well.z0) and ((z - halfZ) < well.z1)))
+)) == 0)
+
+// The core, against the south wall: the lift tower outside the wall and the entrance east of it.
 // The lift: the car's centre, in a tower 3.6 m wide that stands outside the south wall, its door in the wall. The
 // car's floor reaches to 0.1 m short of the wall's outer face.
 let liftX = 18.8
@@ -108,14 +146,15 @@ let entranceEast = 28
 let entranceTop = 3.3
 
 // The east wing's upper two storeys project 4 m south of the wall from x 21, carried on arches over the forecourt; the
-// west wing's top storey stops at the nave, leaving a roof terrace over its south aisle.
+// west wing's top storey stops at the nave, leaving a roof terrace over its south aisle that runs east to the third
+// pier's tile.
 let wingWest = 21
 let wingSouth = -4
 let wingLevel = 2
 let archZ = -3.4
 let archSpan = 3.75
 let archXs = map(range(0, 6), i => (22.5 + ((2 * archSpan) * i)))
-let terraceEast = stairWest
+let terraceEast = tileEdgeX(((galleryBayTiles * arcadeWestBays) + 1))
 let terraceNorth = (naveSouth - galleryWall)
 
 // A window bay's opening: 3.2 m wide and 3.1 m tall, from 0.6 m over its floor, one every 4 m along a face.
@@ -133,7 +172,7 @@ let tallBayZs = [(naveMid - tallBayPitch), naveMid, (naveMid + tallBayPitch)]
 // The bays of each face by level, as the centre of each along its face. The south face's are the west wing's (the
 // terrace takes level 3's), level 1's over the entrance and along the painting wing, and the projecting wing's on
 // levels 2 and 3, which stand in its own south face.
-let southBaysWest = [2, 6, 10]
+let southBaysWest = [4, 8, 12]
 let southBaysEast = map(range(0, 7), i => (31.5 + (4 * i)))
 let wingBays = map(range(0, 9), i => (23.5 + (4 * i)))
 let northBays = map(range(0, 15), i => (2 + (4 * i)))
@@ -169,18 +208,20 @@ let fallZ = (gallerySite[2] + fallPlan[1])
 // walls of the north gallery, its crests and troughs out over the void (z 27.6); crosses the void under the roof at the
 // east end; weaves back west along the south arcade the same way; and climbs from level 0 through the bridge's three
 // floors at the west end to where it began. It keeps out of the corner stair bays (0 and 12) and clear of the showcase
-// displays. A curve crosses a slab between two points that stand either side of it; move a point and the curve and
-// every light along it follow.
+// displays, and a crest of each arcade's wave stands at bay 6 (x 29.7), where the hall's tree grows: there the flaw
+// passes 16 to 17 m up, 10 m from the trunk's axis and over every branch's landing on the balcony edges, leaving the
+// trunk and the branches' walkable tops clear. A curve crosses a slab between two points that stand either side of
+// it; move a point and the curve and every light along it follow.
 let flawControls = [
-  [12.2, 17.35, 27.6], [14.7, 15.15, 30.6], [17.2, 9.8, 30.6], [19.7, 4.45, 30.6], [22.2, 2.25, 27.6]
-  [24.7, 4.45, 30.6], [27.2, 9.8, 30.6], [29.7, 15.15, 30.6], [32.2, 17.35, 27.6], [34.7, 15.15, 30.6]
-  [37.2, 9.8, 30.6], [39.7, 4.45, 30.6], [42.2, 2.25, 27.6], [44.7, 4.45, 30.6], [47.2, 9.8, 30.6]
-  [49.7, 15.15, 30.6], [52.2, 17.35, 27.6]
+  [12.2, 15.15, 30.6], [14.7, 9.8, 30.6], [17.2, 4.45, 30.6], [19.7, 2.25, 27.6], [22.2, 4.45, 30.6]
+  [24.7, 9.8, 30.6], [27.2, 15.15, 30.6], [29.7, 17.35, 27.6], [32.2, 15.15, 30.6], [34.7, 9.8, 30.6]
+  [37.2, 4.45, 30.6], [39.7, 2.25, 27.6], [42.2, 4.45, 30.6], [44.7, 9.8, 30.6], [47.2, 15.15, 30.6]
+  [49.7, 17.35, 27.6], [52.2, 15.15, 30.6]
   [55.2, 16.9, 24.2], [56.2, 16.9, 18.4], [55.2, 16.9, 12.6]
-  [52.2, 17.35, 9.25], [49.7, 15.15, 6.4], [47.2, 9.8, 6.4], [44.7, 4.45, 6.4], [42.2, 2.25, 9.25]
-  [39.7, 4.45, 6.4], [37.2, 9.8, 6.4], [34.7, 15.15, 6.4], [32.2, 17.35, 9.25], [29.7, 15.15, 6.4]
-  [27.2, 9.8, 6.4], [24.7, 4.45, 6.4], [22.2, 2.25, 9.25]
-  [16.7, 3.2, 10.6], [10.4, 4.3, 12.8], [7.4, 7.6, 15.6], [7.0, 10.8, 19.6], [7.4, 13.8, 23.4], [9.7, 16.6, 26.4]
+  [52.2, 15.15, 6.4], [49.7, 17.35, 9.25], [47.2, 15.15, 6.4], [44.7, 9.8, 6.4], [42.2, 4.45, 6.4]
+  [39.7, 2.25, 9.25], [37.2, 4.45, 6.4], [34.7, 9.8, 6.4], [32.2, 15.15, 6.4], [29.7, 17.35, 9.25]
+  [27.2, 15.15, 6.4], [24.7, 9.8, 6.4], [22.2, 4.45, 6.4], [19.7, 2.25, 9.25]
+  [15.2, 3.4, 11.0], [10.4, 4.3, 12.8], [7.4, 7.6, 15.6], [7.0, 10.8, 19.6], [7.4, 13.8, 23.4], [9.7, 16.6, 26.4]
 ]
 // The heights the flaw's lights are cut at, each slab's middle, so every stretch of light lies in one storey and the
 // irradiance volume shuts it out of the storeys the slabs close off.
@@ -200,3 +241,25 @@ let displayExhibitScale = 2
 // How far, in metres, an exhibit floats clear of its turntable: the exhibits were authored resting on the old plinths'
 // cap, some dipping a little under it, so each stands this much higher and reads as a specimen held over the light.
 let displayExhibitLift = 0.3
+
+// Level 1's toybox (toybox.puck): an arcade cabinet in each of the three middle showcase bays on both galleries, facing
+// the nave across its void, so every other level looks across into live game screens. The bays stand clear of the
+// stairs and the lift's landing (bays 3 and 4) and the endless fall's well (bay 11). Each cabinet stands on a gallery's
+// third tile row in from its wall, mirrored about the nave, leaving about 4 m before it to the balcony edge to stand and
+// play, and a walkway behind it.
+let toyboxLevel = 1
+let toyboxBays = [showcaseBays[2], showcaseBays[3], showcaseBays[4]]
+let toyboxRows = [{ row: (wallRowSouth + 2), yaw: 180, facing: 1 }, { row: (wallRowNorth - 2), yaw: 0, facing: -1 }]
+
+// Level 1's lattice (shell.puck): a toy construction panel along every edge level 1 shares with the nave's void, and
+// either side of the stairs' head, standing on the floor and reaching into the fascia (or the slab) above, so no body
+// flies or jumps into the toybox from the void, walks into it off the stairs, or drops out of it. Its uprights stand a
+// sixteenth of a tile apart, so a four-tile bay holds 63 of them, one fold's worth, and the gap between two is narrower
+// than the smallest body the world sizes: the Moth's capsule is 0.7 m across, a tenth of that at the bottom of the size
+// envelope (size.puck), and Alice's 0.15 is wider still. The panels stand on the balustrades' line (`balconyInset`).
+let toyLatticePitch = (galleryTile / 16)
+let toyLatticeBar = 0.025
+// The loose panels: one panel on each edge that a rule can open, move or swap (gallery.md, "The lattice"), each named
+// `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: a south and a north bay, and the bridge's middle
+// tile on the nave's axis.
+let toyLatticeLooseBay = 8

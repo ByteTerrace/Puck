@@ -3,7 +3,7 @@
 The debug world's gallery is one building in the selected
 [canyon workshop](../../docs/game/art/canyon-workshop-pack/README.md) direction:
 four storeys round a nave, with the exhibits, the portal paintings, the board
-games, a stair and one lift. It is a module. Every row of it stands under one
+games, four stairs and one lift. It is a module. Every row of it stands under one
 root placement, so a world stands the whole building by placing that row, and
 [`gallery-root.puck`](gallery-root.puck) boots it alone for work on the
 building.
@@ -17,20 +17,24 @@ wall's outer face, y up from the ground. The debug world stands the building
 at `gallerySite`, with the entrance in the south wall facing the spawn.
 
 ```text
-  z 38 +----------------------------------------------------------------------+
-       |  north aisle (level 0) and north gallery (levels 1 to 3): displays   |
-  z 29 |- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o - -|
-       |  bridge |                                                            E  one
-       |  on     |   NAVE: a void from level 0's floor to the skylights,      E  tier of
-       |  1 to 3 |   four displays staged either side of the centre aisle      E  three
-       |         |                                                            E  wide bays
-  z  9 |- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o - -|
-       |  west   |stairs|      | lobby |  painting wing (level 0)             |
-       |  hall   |      | lift |       |  board game room (level 2)           |
-  z  0 +---------+------+-[  ]-+=door==+--------------------------------------+
-       x 0      12.4  16.2 17-20.6 24-28  30                                x 60
-                         tower    forecourt, arches under the projecting wing
+  z 36.85 +-------------------------------------------------------------------+
+          | (@) |  north aisle (level 0) and north gallery (1 to 3)     | Z  |
+          | NW  |  displays                                             | NE |
+  z 29    |- o ----- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o --- o-|
+          |  bridge |                                                         E  one
+          |  on     |   NAVE: a void from level 0's floor to the skylights,   E  tier of
+          |  1 to 3 |   four displays staged either side of the centre aisle   E  three
+          |         |                                                         E  wide bays
+  z  7.8  |- o ----- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o --- o-|
+          | Z  |  west hall   | lift | lobby |  painting wing (level 0)  | (@) |
+          | SW |              |      |       |  board game room (2)      | SE  |
+  z  0    +----+--------------+-[  ]-+=door==+---------------------------+-----+
+          x -3.75  1.55       17-20.6 24-28                         57.8   63.1
+                              tower   forecourt, arches under the projecting wing
 ```
+
+`Z` is a switchback stair and `(@)` a spiral stair, one in each corner of the
+aisles.
 
 | What | Where | Size |
 |---|---|---|
@@ -38,12 +42,12 @@ at `gallerySite`, with the entrance in the south wall facing the spawn.
 | Storeys | level k's floor top at 4.5k + 0.05 | slab 0.3 m, ceiling 4.2 m over the floor, roof at 18.05 |
 | Nave | x 12 to the east wall, z 9 to 29 | 20 m wide, 47.7 m long, open from level 0 to three skylights |
 | Arcades | piers every 5 m, 0.4 m behind each balcony edge | a branched pier on every level, 4.2 m tall, one wide bay between each pair |
-| Balcony edges | round the nave's void on levels 1 to 3 | glass balustrade, brass rail 1.1 m up |
-| Stairs | x 12.4 to 16.2, against the south wall | two 1.8 m flights a storey, eighteen 0.25 m risers, treads 0.4 m |
+| Balcony edges | round the nave's void on levels 1 to 3 | level 1: a toy lattice from floor to fascia ([the lattice](#the-lattice)); level 2: glass balustrade, brass rail 1.1 m up |
+| Stairs | one in each corner of the aisles, in the end bays (0 and 12), every one serving every storey: switchbacks south-west and north-east, spirals south-east and north-west, so the plan reads the same turned half round | eighteen 0.25 m risers a storey. A switchback fills 4 by 5 tiles (5 by 6.25 m): two 2.4 m flights of eight 0.47 m treads either side of a spine, a 2.5 m half landing against the long wall. A spiral fills 4 by 4 tiles round a 0.5 m newel, one turn a storey, its treads 0.52 m deep 1.5 m out; each floor rails its well but where the stair arrives |
 | Lift | car centre (18.8, -1.65), in a glass tower outside the south wall | car 2.8 by 3.1 m, door 1.8 m wide in the wall |
 | Entrance | x 24 to 28 in the south wall | 4 m wide, 3.3 m high, under the first arch |
 | Projecting wing | x 21 to 60, levels 2 and 3, 4 m south of the wall | on six arches 7.5 m apart over the forecourt |
-| Terrace | x 0 to 12.4, z 0 to 8.7, off level 3 | the roof of the west wing's south aisle |
+| Terrace | x -3.75 to 12.8, z 0 to 7.5, off level 3 | the roof of the west wing's south aisle; the south-west stair arrives on it inside a guarded well |
 | Window bays | one every 4 m along a face | opening 3.2 by 3.1 m, sill 0.6 m; the nave's end wall holds one tier of three 5 by 7.3 m bays through levels 0 and 1 |
 | Display stations | the nave's two lines, 4.5 m in from each balcony edge, and along the middle of each gallery | a display plinth 2.5 m wide with its cap 1.05 m up, staged 12 m or more apart on a cream pad |
 
@@ -55,13 +59,100 @@ of headroom over every tread.
 
 | Level | South of the nave | The nave | North of the nave |
 |---|---|---|---|
-| 0 | West hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); stairs, lift and lobby; the painting wing east of the lobby | Four displays flanking the centre aisle: primitives and stretched to the south, extruded and revolved to the north | The north aisle, open |
-| 1 | A lounge west of the stairs; the sweeps and facets display east of the lobby; the rail round the endless fall's well | void | The blends and folds displays |
-| 2 | The board game room, from the lift's landing east and out into the projecting wing | void | The motion, motion II and warps II displays |
-| 3 | The terrace west of the stairs; the styles and glass displays | void | The forms and surfaces displays |
+| 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay | The north aisle, open, between the north-west and north-east stairs |
+| 1 | The toybox: a lounge beside the south-west stair; its game stations; the rail round the endless fall's well | void | The toybox's other game stations, facing the south ones across the void |
+| 2 | The board game room, from the lift's landing east and out into the projecting wing | void | The motion and motion II displays |
+| 3 | The terrace, with the south-west stair's head | void | The north gallery, open |
 
 [shapes.md](shapes.md) lists the displays and what each exhibit shows,
 [paintings.md](paintings.md) the wing, and the tables' own pages their games.
+
+## The toybox
+
+The owner's ruling: level 1 is the Wonderland floor, with a colourful,
+childlike quality that draws players in from outside. With the floor empty,
+what draws them is the colour and the live game screens flickering there,
+showing off the games the world hosts. Players on the other levels look across
+the nave's void into it.
+
+So level 1 wears the toybox's colours (look.puck's `lookLevelToybox` and its
+pastel piers), and [gallery/toybox.puck](gallery/toybox.puck) stands six toy
+arcade cabinets on it, three on each gallery in the middle showcase bays
+(layout.puck's `toyboxBays` and `toyboxRows`), each facing the nave. The two
+cabinets in a bay play one game across the void, each on its own hardware, in
+one colourway with the game's name on its glowing marquee:
+
+| Bay | South cabinet | North cabinet |
+|---|---|---|
+| TETROMINO | a Color brick running `cartridges/cgb/tetromino.cgb.puck` | a monochrome brick running `cartridges/dmg/tetromino.dmg.puck` |
+| BOUNCE | a deck running `cartridges/deck/moving-sprite.deck` | a second deck running the same |
+| TEST CARD | an Advanced brick running `cartridges/agb/test-card.agb.puck` | a monochrome brick running `cartridges/dmg/test-card.dmg.puck` |
+
+Each cartridge moves on its own with no one playing: the tetromino game's
+title chases its colours through PRESS START, the ball bounces, and the bars
+drift. Each screen is a hosted machine's video in its cabinet's dark bezel, at
+the largest size the bezel frames for that machine's picture, through the
+standard's CRT material. Walk up to a cabinet and press the context button (E,
+or RB on a pad) to play it, through the same device route and `devicePad` kit
+as a Wonderland device ([devices.md](devices.md)). The machines are the
+toybox's own (`toybox-*`), so the gallery booted alone hosts them, and the
+debug world runs them beside the Wonderland devices. The cabinet is the
+standard's `arcadeCabinet` ([architecture.puck](../standard/architecture.puck));
+the machine rows, pictures, pad and route are the standard's
+[machines.puck](../standard/machines.puck).
+
+Read them with `machine.state` (each machine's frames advance) and
+`screen.state <index>` (screens 20 to 25). `gallery.shot toybox` looks from
+level 2's north balcony down across the void at the south cabinets, and
+`gallery.shot toybox-across` from level 1's south balcony edge at the north
+ones.
+
+### The lattice
+
+The owner's ruling: every floor can be reached by jetpack except the
+Wonderland floor, which is walled off, so its puzzles can turn on size without
+a way to cheat. A body enters level 1 shrunk, by its corner stairs, and no
+other way.
+
+So every edge level 1 shares with the nave's void stands behind a toy
+construction lattice (the standard's `lattice`,
+[architecture.puck](../standard/architecture.puck)): pastel frames stepping
+with the piers, thin uprights in the complementary pastel, and sunflower
+crossbars. A panel stands in each arcade bay along the south and north edges,
+a half-tile panel closes each to the east wall, and five panels run along the
+bridge's edge. Each stands on level 1's floor and reaches into the fascia under
+level 2's edge, and neighbouring posts overlap at every joint and corner. Its
+uprights stand a sixteenth of a tile apart (layout.puck's `toyLatticePitch` and
+`toyLatticeBar`), a gap of about 5 cm: narrower than the smallest body the
+world sizes (a tenth of the Moth's 0.7 m capsule, size.puck's envelope), so no
+body flies or jumps in from the void and none drops out, while most of each
+panel stays open to the eye. The panels are solid boxes, so a body meets each
+bar as drawn.
+
+Two more panels stand either side of the core stairs' head on level 1, between
+the stair well's glass and the void's lattice, so a body climbing the core
+stairs turns there between flights without stepping onto level 1.
+
+**Hooks for puzzles.** Three panels are loose: `gallery-lattice-loose-south`
+and `gallery-lattice-loose-north` (bay 8, layout.puck's `toyLatticeLooseBay`)
+and `gallery-lattice-loose-bridge` (the bridge's middle tile, on the nave's
+axis). Each follows its cell of the `toyboxSlats` table (`south`, `north`,
+`bridge`, all 0): at 1 the panel swaps to its open form, which keeps its frame
+and crossbars and drops its uprights and sill, so only a body small enough to
+pass between two crossbars (about 0.6 m apart) slips through. No rule sets them
+yet; `world.state.cell.set toyboxSlats south 1` opens one by hand.
+
+**The lift.** `toyboxLift` (0) decides whether the lift serves level 1. At 0
+the rule `lift-toybox-calls` drops every call to level 1 as it arrives (a
+landing's plate, a car button, `gallery.lift 1`), so the car passes level 1
+without stopping, and `lift-toybox-doors` keeps a car standing there shut. A
+rule that sets `toyboxLift` to 1 serves level 1 as any other level.
+
+The other ways in, checked: the window bays and skylights are solid glass;
+the endless fall's hole in level 1's floor is covered from below by its
+ceiling painting, a portal back to the floor painting, so a body flying up the
+well crosses to the floor rather than into level 1; the bridge is level 1's
+own floor, inside the lattice. The corner stairs are the way in.
 
 ## The displays
 
@@ -207,7 +298,7 @@ The pieces that repeat are the standard's
 ([`architecture.puck`](../standard/architecture.puck)), built to the
 [gallery kit pack](../../docs/game/art/gallery-kit-pack/README.md)'s sheets and
 stamped by the shell and the displays: the display plinth, the branched pier, the window bay,
-the fan shade, the balustrade, the planter, the bench and the banner.
+the fan shade, the balustrade, the lattice, the planter, the bench and the banner.
 [`gallery-kit.puck`](gallery-kit.puck) holds one of each for
 `puck mesh preview`. A piece bakes once however many times the plan stamps it.
 
@@ -263,6 +354,7 @@ own materials `exhibitSubjects` in [`shapes.puck`](shapes.puck). Edit a value,
 | `hall-side` | The nave from beside its south arcade, looking north-east across it |
 | `plinth`, `arcade`, `bay`, `balcony`, `floor`, `ceiling`, `furniture` | What each kit sheet draws: the primitives display's console, the north arcade, the end wall's wide bays, the balcony edges from the bridge, the tiles and a pad, a coffered soffit, a banner and planter |
 | `atrium`, `outside` | The entrance looking in, and the south front from the forecourt |
+| `toybox`, `toybox-across` | Level 1's south cabinets from level 2's north balcony, and its north cabinets from level 1's south balcony edge |
 
 A shot's eye and aim are placed from `gallerySite` when the document compiles,
 as the other world-space pieces are.
