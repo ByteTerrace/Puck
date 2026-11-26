@@ -945,7 +945,12 @@ can share pairs horizontally or vertically, or one sample across a 2×2 cell.
 The sample rotates with the jitter. A cut, disocclusion or partial tile shades
 at full rate, as do screens and draws that moved or deformed. For the tile counts
 at each rate, read `world.counters gpu pass sdf.world$views-probes` and the
-`steps` for `tiles-1x1`, `tiles-2x1`, `tiles-1x2` and `tiles-2x2`.
+`steps` for `tiles-1x1`, `tiles-2x1`, `tiles-1x2` and `tiles-2x2`. The same
+reading counts what the probe lookup's slots gave up: `lights-rounded` is the
+traced lights a slot's list of eight had no room for and rounded to seen or
+unseen, and `groups-without-extras` the groups of cells whose extra gathers the
+pool had no room for (its `texels` the gathers they asked for), whose pixels
+then read their cells' representatives.
 
 Each view's history is its own fragment's: two versions at the output extent,
 two allocations each, the one the next frame reads through

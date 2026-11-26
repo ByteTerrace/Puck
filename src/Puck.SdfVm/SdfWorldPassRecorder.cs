@@ -24,15 +24,18 @@ namespace Puck.SdfVm;
 // residency's staged tables and frame, and writes only the recorder's own state, its own sets and the command buffer.
 internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackageEmitter, IRenderGraphPackageReadback {
     // Views attribute analytic sky lighting by layer; the bins pass counts each bin's tiles (sdf-world-views-bins.comp.hlsl),
-    // a row for every bin a plan gives a width (SdfShadeDispatch.PlanBins).
+    // a row for every bin a plan gives a width (SdfShadeDispatch.PlanBins); the probe lookup counts its rate tiles by
+    // spacing (sdf-views-rate.hlsli) and then what its slots gave up (sdf-world-views-probes.comp.hlsl): in
+    // `lights-rounded` the lights a slot's list had no room for, as steps, and in `groups-without-extras` the groups of
+    // cells the pool had no room for, as steps, with the extra gathers they asked for, as texels.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part switch {
         SdfWorldPackage.Parts.Views => m_view.Residency.SkyDetails.Labels,
-        SdfWorldPackage.Parts.ViewsProbes => RateDetails,
+        SdfWorldPackage.Parts.ViewsProbes => ProbeDetails,
         SdfWorldPackage.Parts.ViewsBins => BinDetails,
         _ => [],
     };
 
-    private static readonly string[] RateDetails = ["tiles-1x1", "tiles-2x1", "tiles-1x2", "tiles-2x2"];
+    private static readonly string[] ProbeDetails = ["tiles-1x1", "tiles-2x1", "tiles-1x2", "tiles-2x2", "lights-rounded", "groups-without-extras"];
     private static readonly string[] BinDetails = ["no-program", "program"];
     // The world interface's scratch buffer members, each bound to the dummy unless a port binds it.
     private static readonly string[] ScratchMembers = [

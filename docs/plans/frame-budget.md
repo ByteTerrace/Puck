@@ -391,10 +391,11 @@ pass's cost. Then the time:
    phase every frame: it
    [replaces one term](frame-production.md#3-the-main-view-costs-a-pixel-what-changed-in-it)
    of a mean it keeps.
-10. **Count what the slots give up.** A slot lists at most eight lights its
-    corners disagree on, and the pool holds an extra for one pixel in eight.
-    Count the lights rounded and the groups that kept no extra, on
-    `world.counters gpu pass sdf.world$views-probes`. Check: both read zero
+10. **Read what the slots give up.** A slot lists at most eight lights its
+    corners disagree on, and the pool holds one extra slot a cell. The lookup
+    counts the lights rounded and the groups that kept no extra
+    (`lights-rounded` and `groups-without-extras` on
+    `world.counters gpu pass sdf.world$views-probes`). Check: both read zero
     over the route, or the list and the pool grow.
 
 ## The invariant the slots rest on
