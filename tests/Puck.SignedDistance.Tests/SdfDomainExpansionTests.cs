@@ -459,6 +459,37 @@ public sealed class SdfDomainExpansionTests {
         );
     }
     [Fact]
+    public void RepeatExpansionMatchesTheFoldedFieldWhenTheSubjectLiesCellsFromTheOrigin() {
+        // No origin is authored and the shape stands two cells up from the creation root: the fold centres on the
+        // subject's own cell, so it draws every copy the expansion holds, not the slices that cross the root's cell.
+        AssertExpansionRefinesTheFold(
+            domain: [
+                new SdfDomainOp.Repeat(
+                    Limit: new Vector3(
+                        x: 0f,
+                        y: 1f,
+                        z: 0f
+                    ),
+                    Spacing: new Vector3(
+                        x: 0f,
+                        y: 2.2f,
+                        z: 0f
+                    ),
+                    Subject: new Vector3(
+                        x: 0f,
+                        y: 4.4f,
+                        z: 0f
+                    )
+                ),
+            ],
+            position: new Vector3(
+                x: 0f,
+                y: 4.4f,
+                z: 0f
+            )
+        );
+    }
+    [Fact]
     public void SymmetryExpansionMatchesTheFoldedField() {
         AssertExpansionRefinesTheFold(
             domain: [

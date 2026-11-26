@@ -139,17 +139,16 @@ below).
 So every edge level 1 shares with the nave's void stands behind a toy
 construction lattice (the standard's `lattice`,
 [architecture.puck](../standard/architecture.puck)): pastel frames stepping
-with the piers, thin uprights in the complementary pastel, and sunflower
-crossbars. A panel stands in each arcade bay along the south and north edges,
-a half-tile panel closes each to the east wall, and five panels run along the
-bridge's edge. Each stands on level 1's floor and reaches into the fascia under
-level 2's edge, and neighbouring posts overlap at every joint and corner. Its
-uprights stand a sixteenth of a tile apart (layout.puck's `toyLatticePitch` and
-`toyLatticeBar`), a gap of about 5 cm: narrower than the smallest body the
-world sizes (a tenth of the Moth's 0.7 m capsule, size.puck's envelope), so no
-body flies or jumps in from the void and none drops out, while most of each
-panel stays open to the eye. The panels are solid boxes, so a body meets each
-bar as drawn.
+with the piers, and inside each frame a diamond rope net, its two sets of
+strands in the complementary pastel and sunflower, knotted where they cross
+(layout.puck's `toyLatticeNet`: 3.5 cm rope, knot to knot every 30 cm). A
+panel stands in each arcade bay along the south and north edges, a half-tile
+panel closes each to the east wall, and five panels run along the bridge's
+edge. Each stands on level 1's floor and reaches into the fascia under level
+2's edge, and neighbouring posts overlap at every joint and corner. The net is
+drawn only; a clear pane threaded through it holds every body, so no body
+flies or jumps in from the void and none drops out, while the panel stays open
+to the eye.
 
 **Hooks for puzzles.** Three panels are loose: `gallery-lattice-loose-south`
 and `gallery-lattice-loose-north` (bay 8, layout.puck's `toyLatticeLooseBay`)
