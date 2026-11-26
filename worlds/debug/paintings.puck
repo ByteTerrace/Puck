@@ -1,38 +1,38 @@
-// The painting wing: seven paintings in the gallery hall's east end on level 0, each a framed canvas that is a door.
-// Walk or jump into the canvas and you pass through it, as into a Mario 64 painting; its glass shows where it leads
-// while you stand outside. The debug world imports this file whole, and paintings.md beside it says how to get in,
-// what each painting does and how to get out.
+// The painting wing: paintings in the gallery's level 0, east of the entrance lobby, each a framed canvas that is a
+// door. Walk or jump into the canvas and you pass through it, as into a Mario 64 painting; its glass shows where it
+// leads while you stand outside. The debug world imports this file whole, and paintings.md beside it says how to get
+// in, what each painting does and how to get out.
 //
-//   x 51 .. 69.7, z 12.3 .. 39.7   the wing: a partition wall at x 51 (doorway z 24 .. 28) shuts it off from the exhibit
-//                                  rows, and a lining over the south, north and east walls hides their windows
-//   north wall, x = 57             the garden: a sunset plot (garden.puck)
-//   north wall, x = 64             the night field: a snowfield under stars (night.puck)
-//   south wall, x = 60             the city: a town on a river bend (city.puck)
-//   south wall, x = 66             the moon: the pale moon that hangs over the valley (moon.puck)
-//   east wall, z = 18              the sun: an outpost on a rock the system's star passes once a day (sun.puck)
-//   west and east walls, z = 34.5  two paintings facing each other: step into either and step out of the other
-//   floor and ceiling, (66, 22.6)  the endless fall: a painting in the floor under its twin in the ceiling, in this
-//                                  world itself, so a body that steps onto the floor glass drops out of the ceiling
-//                                  glass still falling, and falls through the floor again, forever; level 1's floor is
-//                                  holed over the ceiling twin and railed (hall.puck)
+// The wing is the south aisle from x 30 to the east wall, in the building's frame (gallery/layout.puck, gallery.md),
+// open to the nave through the arcade. Two fins stand out from the south wall and make it two courts:
 //
-// A wall painting hangs on its wall's face and its canvas reaches the floor, so a body's feet cross the glass. The wall
-// behind the glass holds nothing back while the body stands in the opening (Puck.World.Server.WorldPortalHoleContactField).
-// Both faces of a same-world pair name the destination `self`, which references the debug world's own document, so the
-// transfer resolves to the running World rather than a second copy of it.
+//   west fin, east face         the bottle world (globe.puck), its lever before it
+//   south wall, west court      the garden (garden.puck), the night field (night.puck), the city (city.puck)
+//   east fin, east face         one of two paintings facing each other: step into either and step out of the other
+//   south wall, east court      the moon (moon.puck, hung by moon-door.puck), the planetoids (galaxy.puck)
+//   east wall                   the other of the facing pair, and the sun (sun.puck)
+//   floor and ceiling           the endless fall, at layout.puck's `fallPlan`: a painting in the floor under its twin
+//                               in the ceiling, in this world itself, so a body that steps onto the floor glass drops
+//                               out of the ceiling glass still falling, and falls through the floor again, forever;
+//                               level 1's floor is holed over the ceiling twin and railed (gallery/shell.puck)
+//
+// Every painting stands under the building's root placement. A wall painting hangs on its wall's face and its canvas
+// reaches the floor, so a body's feet cross the glass. The wall behind the glass holds nothing back while the body
+// stands in the opening (Puck.World.Server.WorldPortalHoleContactField). Both faces of a same-world pair name the
+// destination `self`, which references the debug world's own document, so the transfer resolves to the running World
+// rather than a second copy of it.
 
 import "../standard/bounds"
 import "painting-kit"
 import "shapes"
 
-// The wing's shell bounds: the walls' inner faces and the slab above (hall.puck: level 0's floor top 0.05, level 1's
-// slab underside 4.25).
-let wingX0 = 51.3
-let wingX1 = 69.4
-let wingZ0 = 12.6
-let wingZ1 = 39.4
-let wingTop = 4.25
-let wingFloor = 0.05
+// The wing's floor and the slab above it (gallery/layout.puck).
+let wingFloor = galleryFloor[0]
+let wingTop = galleryCeiling[0]
+// The faces paintings hang on: the south wall's inner face, each fin's east face and the east wall's inner face.
+let wingSouth = galleryWall
+let wingFins = [courtWest, courtFin]
+let wingEast = galleryEast
 
 // The canvas of a wall painting: a thin rim box 2.24 m wide and 2.84 m tall whose centre is carved away, so the glass,
 // which fills the face shape a centimetre short of its faces, shows through. Its lower 0.12 m is below the floor so a
@@ -81,52 +81,52 @@ let ornate = { lip: paintLip, lipWidth: 0.05, mat: paintMat, matWidth: 0, border
 let modern = { lip: paintBlack, lipWidth: 0, mat: paintMat, matWidth: 0.14, border: paintBlack, borderWidth: 0.07 }
 let brass = { lip: paintBlack, lipWidth: 0.03, mat: paintMat, matWidth: 0, border: paintBrass, borderWidth: 0.12 }
 
-// The wall paintings. `x` and `z` stand the painting's foot on the wall it hangs on, `yaw` turns its front (yaw 0 faces
-// -Z, 180 faces +Z, 90 faces -X, 270 faces +X), and `counterpart` is the face a crossing arrives out of.
+// The wall paintings. `x` and `z` stand the painting's foot on the wall it hangs on, in the building's frame, `yaw`
+// turns its front (yaw 0 faces -Z, 180 faces +Z, 90 faces -X, 270 faces +X), and `counterpart` is the face a crossing
+// arrives out of.
 let wallPaintings = [
   {
-    name: "garden", x: 57, z: wingZ1, yaw: 0, frame: ornate, destination: "garden", counterpart: "arrival/glass", fallback: fallbackGarden
+    name: "garden", x: 34.4, z: wingSouth, yaw: 180, frame: ornate, destination: "garden", counterpart: "arrival/glass", fallback: fallbackGarden
     title: "THE GARDEN", note: "A sunset plot beyond the glass. Walk or jump in; the frame behind you leads back."
   }
   {
-    name: "night", x: 64, z: wingZ1, yaw: 0, frame: modern, destination: "night", counterpart: "arrival/glass", fallback: fallbackNight
+    name: "night", x: 38, z: wingSouth, yaw: 180, frame: modern, destination: "night", counterpart: "arrival/glass", fallback: fallbackNight
     title: "THE NIGHT FIELD", note: "A snowfield under the stars. Step in; turn round to come back."
   }
   {
-    name: "city", x: 60, z: wingZ0, yaw: 180, frame: ornate, destination: "city", counterpart: "arrival/glass", fallback: fallbackCity
+    name: "city", x: 41.6, z: wingSouth, yaw: 180, frame: ornate, destination: "city", counterpart: "arrival/glass", fallback: fallbackCity
     title: "THE CITY", note: "A town on a river bend, its market, terraces, works and quay. Step in; the frame behind you leads back."
   }
   {
-    name: "moon", x: 66, z: wingZ0, yaw: 180, frame: modern, destination: "moon", counterpart: "moon-socket/glass", fallback: fallbackMoon
+    name: "moon", x: 48.5, z: wingSouth, yaw: 180, frame: modern, destination: "moon", counterpart: "moon-socket/glass", fallback: fallbackMoon
     title: "THE MOON", note: "The pale moon over the valley, the same one a ship from the launch field lands on. Knock and wait for the moon to answer; the frame it opens leads back."
   }
   {
-    name: "galaxy", x: 54, z: wingZ0, yaw: 180, frame: brass, destination: "galaxy", counterpart: "arrival/glass", fallback: fallbackGalaxy
+    name: "galaxy", x: 52.5, z: wingSouth, yaw: 180, frame: brass, destination: "galaxy", counterpart: "arrival/glass", fallback: fallbackGalaxy
     title: "THE PLANETOIDS", note: "Six small worlds in open space, each with gravity of its own shape. Step in; the glowing pads launch you from one to the next."
   }
   {
-    name: "globe", x: wingX0, z: 18, yaw: 270, frame: ornate, destination: "globe", counterpart: "arrival/glass", fallback: fallbackGlobe
-    title: "THE BOTTLE WORLD", note: "A room whose gravity this gallery owns. Press the lever before it and watch which way the marbles fall; step in and someone out here can turn you over."
-  }
-  {
-    name: "sun", x: wingX1, z: 18, yaw: 90, frame: brass, destination: "sun", counterpart: "arrival/glass", fallback: fallbackSun
+    name: "sun", x: wingEast, z: 6.6, yaw: 90, frame: brass, destination: "sun", counterpart: "arrival/glass", fallback: fallbackSun
     title: "PERIHELION", note: "A rock the sun passes once a day, the same sun that lights the valley. Step in and watch it come; keep to the rock while it passes, and do not fly to it."
   }
   {
-    name: "link-west", x: wingX0, z: 34.5, yaw: 270, frame: brass, destination: "self", counterpart: "painting-link-east/glass", fallback: fallbackSelf
+    name: "globe", x: (wingFins[0] + galleryWall), z: 2.4, yaw: 270, frame: ornate, destination: "globe", counterpart: "arrival/glass", fallback: fallbackGlobe
+    title: "THE BOTTLE WORLD", note: "A room whose gravity this gallery owns. Press the lever before it and watch which way the marbles fall; step in and someone out here can turn you over."
+  }
+  {
+    name: "link-west", x: (wingFins[1] + galleryWall), z: 2.4, yaw: 270, frame: brass, destination: "self", counterpart: "painting-link-east/glass", fallback: fallbackSelf
     title: "ACROSS THE ROOM", note: "Step in and you step out of its twin on the far wall, facing out."
   }
   {
-    name: "link-east", x: wingX1, z: 34.5, yaw: 90, frame: brass, destination: "self", counterpart: "painting-link-west/glass", fallback: fallbackSelf
+    name: "link-east", x: wingEast, z: 2.4, yaw: 90, frame: brass, destination: "self", counterpart: "painting-link-west/glass", fallback: fallbackSelf
     title: "ACROSS THE ROOM", note: "Step in and you step out of its twin on the far wall, facing out."
   }
 ]
 
-// The floor and ceiling paintings of the endless fall (shapes.puck's fallX and fallZ) stand over the same point; the
-// ceiling one hangs under the slab, in the hole level 1's floor leaves over it (hall.puck), and a rail rings that hole.
+// The floor and ceiling paintings of the endless fall (layout.puck's `fallPlan`) stand over the same point; the ceiling
+// one hangs under the slab, in the hole level 1's floor leaves over it, and a balustrade rings that hole
+// (gallery/shell.puck).
 let fallHalf = 1.12
-let railGap = 0.15
-let railTop = 5.5
 
 // A wall painting: face 0, the rim, names the glass, which stands `canvasProud` out from the wall; the frame is the
 // rings round it and the plaque stands on the wall to its right.
@@ -231,9 +231,6 @@ let wingPalette = [
   { color: "#F2EEE4", roughness: 0.6 }
   { color: "#3A3F47", roughness: 0.6 }
 ]
-let doorZ0 = 24
-let doorZ1 = 28
-let doorTop = 3
 
 references [
   {
@@ -252,140 +249,38 @@ destinations [
 ]
 
 prototypes {
-  prototype "wing-shell" {
+  // The wing's two fins, each a wall standing out from the south wall to the slab above, and the board that names the
+  // wing where the lobby meets it.
+  prototype "wing-fins" {
     document {
-      name: "wing-shell"
+      name: "wing-fins"
       schema: "puck.creation.v1"
       palette: wingPalette
-      // The partition: x 51 .. 51.3, solid but for the doorway.
-      boundsBox(
-        label: "partition-south",
-        x0: 51,
-        x1: wingX0,
-        y0: wingFloor,
-        y1: wingTop,
-        z0: 12.3,
-        z1: doorZ0,
-        slot: wingWall
-      )
-      boundsBox(
-        label: "partition-north",
-        x0: 51,
-        x1: wingX0,
-        y0: wingFloor,
-        y1: wingTop,
-        z0: doorZ1,
-        z1: 39.7,
-        slot: wingWall
-      )
-      boundsBox(
-        label: "partition-lintel",
-        x0: 51,
-        x1: wingX0,
-        y0: doorTop,
-        y1: wingTop,
-        z0: doorZ0,
-        z1: doorZ1,
-        slot: wingWall
-      )
-      // The lining over the three outer walls.
-      boundsBox(
-        label: "lining-south",
-        x0: wingX0,
-        x1: 69.7,
-        y0: wingFloor,
-        y1: wingTop,
-        z0: 12.3,
-        z1: wingZ0,
-        slot: wingWall
-      )
-      boundsBox(
-        label: "lining-north",
-        x0: wingX0,
-        x1: 69.7,
-        y0: wingFloor,
-        y1: wingTop,
-        z0: wingZ1,
-        z1: 39.7,
-        slot: wingWall
-      )
-      boundsBox(
-        label: "lining-east",
-        x0: wingX1,
-        x1: 69.7,
-        y0: wingFloor,
-        y1: wingTop,
-        z0: wingZ0,
-        z1: wingZ1,
-        slot: wingWall
-      )
-      // Skirting along the inside of every wall.
-      boundsBox(
-        label: "skirting-south",
-        x0: wingX0,
-        x1: wingX1,
-        y0: wingFloor,
-        y1: 0.2,
-        z0: wingZ0,
-        z1: 12.7,
-        slot: wingTrim
-      )
-      boundsBox(
-        label: "skirting-north",
-        x0: wingX0,
-        x1: wingX1,
-        y0: wingFloor,
-        y1: 0.2,
-        z0: 39.3,
-        z1: wingZ1,
-        slot: wingTrim
-      )
-      boundsBox(
-        label: "skirting-east",
-        x0: 69.3,
-        x1: wingX1,
-        y0: wingFloor,
-        y1: 0.2,
-        z0: wingZ0,
-        z1: wingZ1,
-        slot: wingTrim
-      )
-      boundsBox(
-        label: "skirting-west",
-        x0: wingX0,
-        x1: 51.4,
-        y0: wingFloor,
-        y1: 0.2,
-        z0: wingZ0,
-        z1: wingZ1,
-        slot: wingTrim
-      )
-      // The board over the doorway, on the partition's west face.
-      boundsBox(label: "doorboard", x0: 50.97, x1: 51, y0: 3.25, y1: 3.95, z0: 24.2, z1: 27.8, slot: wingBoard)
-      textRuns [
-        {
-          text: "PAINTING WING"
-          position [-50.968, 3.72, -26]
-          rotation [0, 0.707107, 0, 0.707107]
-          emHeight: 0.2
-          depth: 0.004
-          mode: "emboss"
-          material: wingInk
-          align: "center"
-        }
-        {
-          text: "walk or jump into a canvas"
-          position [-50.968, 3.46, -26]
-          rotation [0, 0.707107, 0, 0.707107]
-          emHeight: 0.1
-          depth: 0.003
-          mode: "emboss"
-          material: wingInk
-          align: "center"
-        }
-      ]
+      for (x, n) in wingFins {
+        boundsBox(
+          label: $"fin-{n}",
+          x0: x,
+          x1: (x + galleryWall),
+          y0: wingFloor,
+          y1: wingTop,
+          z0: galleryWall,
+          z1: (galleryWall + courtFinLength),
+          slot: wingWall
+        )
+        boundsBox(
+          label: $"fin-skirting-{n}",
+          x0: (x - 0.02),
+          x1: ((x + galleryWall) + 0.02),
+          y0: wingFloor,
+          y1: 0.2,
+          z0: galleryWall,
+          z1: ((galleryWall + courtFinLength) + 0.02),
+          slot: wingTrim
+        )
+      }
     }
   }
+  sectionSign(name: "wing-sign", title: "PAINTING WING", what: "walk or jump into a canvas")
 
   for painting in wallPaintings {
     prototype $"painting-{painting.name}" {
@@ -456,87 +351,6 @@ prototypes {
 
   // The rail round the hole over the ceiling painting on level 1: a black parapet with a gilt cap, so nobody drops into
   // the wing by accident, and a line of text on its south face. Written in world bounds (boundsBox), solid.
-  prototype "painting-fall-rail" {
-    document {
-      name: "painting-fall-rail"
-      schema: "puck.creation.v1"
-      palette: paintingPalette
-      boundsBox(
-        label: "north",
-        x0: (fallX - fallHole - railGap),
-        x1: (fallX + fallHole + railGap),
-        y0: galleryFloor[1],
-        y1: railTop,
-        z0: (fallZ + fallHole),
-        z1: (fallZ + fallHole + railGap),
-        slot: paintBlack
-      )
-      boundsBox(
-        label: "south",
-        x0: (fallX - fallHole - railGap),
-        x1: (fallX + fallHole + railGap),
-        y0: galleryFloor[1],
-        y1: railTop,
-        z0: (fallZ - fallHole - railGap),
-        z1: (fallZ - fallHole),
-        slot: paintBlack
-      )
-      boundsBox(
-        label: "east",
-        x0: (fallX + fallHole),
-        x1: (fallX + fallHole + railGap),
-        y0: galleryFloor[1],
-        y1: railTop,
-        z0: (fallZ - fallHole),
-        z1: (fallZ + fallHole),
-        slot: paintBlack
-      )
-      boundsBox(
-        label: "west",
-        x0: (fallX - fallHole - railGap),
-        x1: (fallX - fallHole),
-        y0: galleryFloor[1],
-        y1: railTop,
-        z0: (fallZ - fallHole),
-        z1: (fallZ + fallHole),
-        slot: paintBlack
-      )
-      boundsBox(
-        label: "cap",
-        x0: (fallX - fallHole - railGap - 0.03),
-        x1: (fallX + fallHole + railGap + 0.03),
-        y0: railTop,
-        y1: (railTop + 0.05),
-        z0: (fallZ - fallHole - railGap - 0.03),
-        z1: (fallZ + fallHole + railGap + 0.03),
-        slot: paintGilt
-      )
-      textRuns [
-        {
-          text: "THE ENDLESS FALL"
-          position [(0 - fallX), 5.12, (0 - (fallZ - fallHole - railGap - 0.001))]
-          rotation [0, 0, 0, 1]
-          emHeight: 0.1
-          depth: 0.004
-          mode: "emboss"
-          material: paintGilt
-          align: "center"
-        }
-        {
-          text: "below, in the wing"
-          position [(0 - fallX), 4.95, (0 - (fallZ - fallHole - railGap - 0.001))]
-          rotation [0, 0, 0, 1]
-          emHeight: 0.05
-          depth: 0.003
-          mode: "emboss"
-          material: paintMat
-          align: "center"
-        }
-      ]
-    }
-  }
-
-  // The ceiling painting: the same square hanging face down against the slab above.
   prototype "painting-fall-ceiling" {
     document {
       behavior {
@@ -565,58 +379,60 @@ prototypes {
 }
 
 placements {
-  placement "wing-shell" {
-    prototype: "wing-shell"
+  placement "wing-fins" {
+    prototype: "wing-fins"
+    parent: "gallery"
     position [0, 0, 0]
     solid
   }
+  placement "wing-sign" {
+    prototype: "wing-sign"
+    parent: "gallery"
+    position [(courtWest + 1.4), wingFloor, 6.4]
+    yawDegrees: 90
+  }
 
-  // The moon painting is a door opened in play, placed with its gate and its curtain (moon-door.puck).
   for painting in filter(wallPaintings, p => (p.name != "moon")) {
     placement $"painting-{painting.name}" {
       prototype: $"painting-{painting.name}"
+      parent: "gallery"
       position [painting.x, wingFloor, painting.z]
       yawDegrees: painting.yaw
       paintingFace(destination: painting.destination, counterpart: painting.counterpart, fallback: painting.fallback)
     }
   }
 
-  placement "painting-fall-rail" {
-    prototype: "painting-fall-rail"
-    position [0, 0, 0]
-    solid
-  }
-
   placement "painting-fall-floor" {
     prototype: "painting-fall-floor"
-    position [fallX, wingFloor, fallZ]
+    parent: "gallery"
+    position [fallPlan[0], wingFloor, fallPlan[1]]
     paintingFace(destination: "self", counterpart: "painting-fall-ceiling/glass", fallback: fallbackSelf)
   }
 
   placement "painting-fall-ceiling" {
     prototype: "painting-fall-ceiling"
-    position [fallX, (wingTop - 0.03), fallZ]
+    parent: "gallery"
+    position [fallPlan[0], (wingTop - 0.03), fallPlan[1]]
     yawDegrees: 180
     paintingFace(destination: "self", counterpart: "painting-fall-floor/glass", fallback: fallbackSelf)
   }
 }
 
 // A spawn point before each painting, facing it, and two that frame several at once for the chase camera, which keeps
-// its place behind the body (4 m back along its heading): `painting-room` just inside the doorway, looking across the
-// room with the garden and night paintings on its left and the east wall's linked painting on its right, and `portals`
-// before the north wall, turned so the garden painting stands left of the body and the night painting right of it.
+// its place behind the body (4 m back along its heading): `painting-room` where the lobby meets the wing, looking east
+// along the south wall's paintings, and `portals` before the west court's three. Each is in the building's frame.
 spawnPoints [
-  { id: "painting-room", position [55, wingFloor, 26], yawDegrees: 227 }
-  { id: "portals", position [57.5, wingFloor, 31], yawDegrees: 198 }
-  { id: "portal-garden", position [57, wingFloor, 36.3], yawDegrees: 180 }
-  { id: "portal-night", position [64, wingFloor, 36.3], yawDegrees: 180 }
-  { id: "portal-city", position [60, wingFloor, 15.7], yawDegrees: 0 }
-  { id: "portal-moon", position [66, wingFloor, 15.7], yawDegrees: 0 }
-  { id: "portal-galaxy", position [54, wingFloor, 15.7], yawDegrees: 0 }
-  { id: "portal-sun", position [(wingX1 - 3.1), wingFloor, 18], yawDegrees: 270 }
-  { id: "portal-globe", position [54.4, wingFloor, 18], yawDegrees: 90 }
-  { id: "portal-link", position [54.5, wingFloor, 34.5], yawDegrees: 90 }
-  { id: "portal-fall", position [fallX, wingFloor, (fallZ - 4)], yawDegrees: 180 }
-  // Eleven metres south of the garden painting, facing it: the seam walk's second crossing (walkthrough-tests.puck).
-  { id: "seam-painting", position [57, wingFloor, 28], yawDegrees: 180 }
+  { id: "painting-room", parent: gallery, position [(courtWest + 1.5), wingFloor, 6.8], yawDegrees: 300 }
+  { id: "portals", parent: gallery, position [38, wingFloor, 6], yawDegrees: 18 }
+  { id: "portal-garden", parent: gallery, position [34.4, wingFloor, 3.4], yawDegrees: 0 }
+  { id: "portal-night", parent: gallery, position [38, wingFloor, 3.4], yawDegrees: 0 }
+  { id: "portal-city", parent: gallery, position [41.6, wingFloor, 3.4], yawDegrees: 0 }
+  { id: "portal-moon", parent: gallery, position [48.5, wingFloor, 3.4], yawDegrees: 0 }
+  { id: "portal-galaxy", parent: gallery, position [52.5, wingFloor, 3.4], yawDegrees: 0 }
+  { id: "portal-sun", parent: gallery, position [(wingEast - 3.1), wingFloor, 6.6], yawDegrees: 270 }
+  { id: "portal-globe", parent: gallery, position [((wingFins[0] + galleryWall) + 3.1), wingFloor, 2.4], yawDegrees: 90 }
+  { id: "portal-link", parent: gallery, position [((wingFins[1] + galleryWall) + 3.2), wingFloor, 2.4], yawDegrees: 90 }
+  { id: "portal-fall", parent: gallery, position [fallPlan[0], wingFloor, (fallPlan[1] + 3.2)], yawDegrees: 0 }
+  // Eleven metres north of the garden painting, facing it: the seam walk's second crossing (walkthrough-tests.puck).
+  { id: "seam-painting", parent: gallery, position [34.4, wingFloor, 11.3], yawDegrees: 0 }
 ]

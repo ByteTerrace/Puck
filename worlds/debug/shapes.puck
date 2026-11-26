@@ -170,13 +170,13 @@ let galleryRows = [
   }
   {
     title: "STYLES", level: surfaceLevel, names: styleRow, what: "a cel style per material, beside continuous ones, the grey card and tiles"
-    lines [galleryLine(30, 2.5, 4, 3, 180)]
-    sign { x: 30, z: 2.5, yaw: 90 }
+    lines [galleryLine(28, 2.5, 4, 4, 180)]
+    sign { x: 28, z: 2.5, yaw: 90 }
   }
   {
     title: "GLASS", level: surfaceLevel, names: glassRow, what: "glass over the opaque image: tint, depth, refraction, frost"
-    lines [galleryLine(46, 2.5, 4, 1, 180)]
-    sign { x: 46, z: 2.5, yaw: 90 }
+    lines [galleryLine(50, 2.5, 4, 1, 180)]
+    sign { x: 50, z: 2.5, yaw: 90 }
   }
 ]
 
@@ -207,7 +207,7 @@ let gallerySpawns = map(
   galleryStations,
   station => {
     id: station.name
-    parent: "gallery"
+    parent: gallery
     position [station.x, station.y, (station.z + (2.8 * station.front))]
     yawDegrees: (((station.yaw + 180) % 360) + gallerySpawnTurn)
   }
@@ -1696,10 +1696,10 @@ template surfacePrototypes() {
             roughness: 0.85
             paints [
               // World space on a static placement: the lattice repeats along x and y, and the box's depth stands
-              // about the row's z, where the panel is.
+              // about the exhibit's z in the world, where the panel is.
               {
                 type: "Box"
-                position [0, 0, styleZ]
+                position [0, 0, (gallerySite[2] + galleryStation("shape-paint-tiles").z)]
                 scale [0.145, 0.145, 1]
                 color: "#B4553A"
                 repeat { cell [0.3, 0.3, 0], tone: "#C86E48", seed: 7 }

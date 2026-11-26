@@ -1,0 +1,97 @@
+// The debug world's camera exposure, its sky's ambient gain and the screens' share of the traced light. The gallery's
+// inspection lever (`gallery.inspect`, gallery/gallery.puck) drives the three through its `galleryFill` cells, which hold
+// exactly the values the basis authors while the lever is Off, so the authored lighting renders unchanged. The world
+// owns these values and the building owns the lever: a world that stands the building without binding them keeps the
+// lever's fill lights alone.
+
+import "../standard/skies"
+import "shapes"
+
+// The exposure's floor and key through the day (the `exposure` block below): EV 7 and a stop and a quarter from dawn to
+// dusk, EV 2 and the meter's own key at night.
+let hallDayFloor = {
+  clock: day
+  keys [
+    { at: 0, value: 2 }
+    { at: 18900, value: 2 }
+    { at: 23400, value: 7 }
+    { at: 63000, value: 7 }
+    { at: 67500, value: 2 }
+  ]
+}
+let hallDayKey = {
+  clock: day
+  keys [
+    { at: 0, value: 0 }
+    { at: 18900, value: 0 }
+    { at: 23400, value: 1.25 }
+    { at: 63000, value: 1.25 }
+    { at: 67500, value: 0 }
+  ]
+}
+
+render {
+  // The inspection lever (`gallery.inspect`). Each of the values below reads a `galleryFill` cell that the lever's
+  // rules write, and the cells hold exactly the values the basis authors while the lever is Off, so the authored
+  // lighting renders unchanged: the fill lights in the list above (illuminance zero), the sky's ambient gain (the
+  // basis's 0.40625, restated with its reflection gain, since a section member replaces the basis's whole), the camera
+  // exposure (the basis's automatic bounds restated, plus the hold that pins it while the lever is On) and the
+  // screens' share of the traced light.
+  environment {
+    ambient: "state.galleryFill.ambient"
+    reflection: 1
+  }
+  // The exposure's floor follows the day (day.puck's `day` clock): EV 7 from dawn to dusk, the hall's lit rooms
+  // and the sunlit valley, down to EV 2 at night, so the moonlit valley reads deep blue and dark rather than black. A
+  // lit room meters above the floor (its fixtures are sized for it, shapes.md), so the floor holds only an unlit room
+  // dark. By day it keys the picture a stop and a quarter above the meter's average, as the basis does, so the
+  // glacier's snow and a lit level's white walls read white rather than the grey an averaging meter makes of a bright
+  // scene, and the tone curve's shoulder (render.tone) keeps them from clipping flat; the key eases back to the meter's
+  // own over dusk, so the night keeps its deep blue. The meter reads the picture as the basis's does (its band,
+  // percentiles and centre weight restated, since this section replaces the basis's whole).
+  //
+  // As the viewer climbs toward the sky seam (launch.puck's `altitude` clock), the camera meets what the moon's own
+  // camera meets past the seam (moon.puck): from 300 m the floor and the key leave the day's keys for the moon's EV 11
+  // and the meter's own key, whatever the hour, and the meter leaves the darkest seven tenths of the picture out, so a
+  // black sky never pulls the exposure down and the sunlit ship and the moon hold their tone up to the seam and across
+  // it. Each value is keyed on the height, its ground keys holding the day's keys.
+  exposure {
+    mode: Auto
+    minimum {
+      clock: altitude
+      keys [
+        { at: 0, value: hallDayFloor }
+        { at: 300, value: hallDayFloor }
+        { at: 2250, value: 11, ease: Step }
+      ]
+    }
+    compensation {
+      clock: altitude
+      keys [
+        { at: 0, value: hallDayKey }
+        { at: 300, value: hallDayKey }
+        { at: 2250, value: 0, ease: Step }
+      ]
+    }
+    maximum: 16
+    adaptation: 0.75
+    local: 0.5
+    band: 0.75
+    low {
+      clock: altitude
+      keys [
+        { at: 0, value: 0.1 }
+        { at: 300, value: 0.1 }
+        { at: 2250, value: 0.7, ease: Step }
+      ]
+    }
+    high: 0.9
+    center: 0.25
+    hold: "state.galleryFill.hold"
+  }
+  indirect {
+    sources {
+      screens: "state.galleryFill.screens"
+    }
+  }
+}

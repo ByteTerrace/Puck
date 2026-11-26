@@ -45,12 +45,13 @@ let stairFoot = 5.5
 let stairLanding = 2.3
 let stairTread = 0.4
 let stairRiser = 0.25
-// The lift: the car's centre, in a tower 3.6 m square that stands outside the south wall, its door in the wall.
+// The lift: the car's centre, in a tower 3.6 m wide that stands outside the south wall, its door in the wall. The
+// car's floor reaches to 0.1 m short of the wall's outer face.
 let liftX = 18.8
-let liftZ = -1.5
+let liftZ = -1.65
 let towerWest = 17
 let towerEast = 20.6
-let towerSouth = -3.3
+let towerSouth = -3.7
 let towerTop = 21
 let entranceWest = 24
 let entranceEast = 28
@@ -92,11 +93,11 @@ let westBays = [
 let eastBays = [[23.5], [4.4, 23.5], [4.4, 23.5], [4.4, 23.5]]
 
 // The painting wing: level 0's south aisle east of the entrance lobby, x 30 .. 59.7. Two fins stand out from the south
-// wall, at x 30 and x 44.3, each 4.2 m long; the fall's well is at (55.5, 6), under a hole in level 1's floor.
+// wall, at x 30 and x 44.3, each 4.2 m long; the fall's well is at (52.5, 6.2), under a hole in level 1's floor.
 let courtWest = 30
 let courtFin = 44.3
 let courtFinLength = 4.2
-let fallPlan = [55.5, 6]
+let fallPlan = [52.5, 6.2]
 let fallHole = 1
 // The same axis in the debug world, for the paintings' and the exhibits' documents.
 let fallX = (gallerySite[0] + fallPlan[0])
