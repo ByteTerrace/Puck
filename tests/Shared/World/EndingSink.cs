@@ -23,6 +23,7 @@ internal sealed class EndingSink(int endAfterDefinitions, int endAfterSnapshots)
     }
     public void DeliverComposition(WorldComposition composition) {
     }
+    public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) => Note();
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         Note();
 

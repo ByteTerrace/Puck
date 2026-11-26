@@ -909,9 +909,15 @@ camera latch, and Vulkan's capture copy and record fork.
      signature, channel table, generation and human occupancy) need one
      version moved at their setters, the selector rows the arena's row
      versions, and the owner's own epoch and producer an invalidation where
-     the runtime changes them. Under the checked hash every standing is
-     verified in full, so a missed door fails a reproduce leg. Check:
-     `world.tick.input-refreshes-standing` and
+     the runtime changes them (`RecordProgramStanding` and every
+     `standing.Valid = false`). Nothing verifies a skipped standing yet, and
+     a missed door would replay identically, so the gate lands with a mode
+     that walks in full beside it and refuses a disagreement. In the headless
+     debug world the walks cost no sample (`puck host samples --focus
+     WorldInputRuntime.RefreshPermissions` and `TrySynchronize`: 0 of
+     `WorldTick.StepCore`'s 255 over 12 s), about 80 refreshes and 40
+     synchronizations a tick, all but 6 standing; the city is where it pays.
+     Check: `world.tick.input-refreshes-standing` and
      `input-synchronizations-standing` a tick fall to zero in a still town.
    - **A producer's changed image still passes the whole admission.** About
      70 to 330 a tick in the city: the producer's batch is built, folded and
@@ -925,41 +931,29 @@ camera latch, and Vulkan's capture copy and record fork.
      anyway, so taking them before the restore point opens saves nothing
      else; the durable input's own writes of the submitted image need the
      same order first.
-   - **The host thread replays every delivery into every session mirror
-     whole.** The thread that also runs the frame spends about half of its
-     step taking the boot authority's deliveries into the mirrors that
-     observe it (`WorldOutputHub.Collect`): each state delivery makes a
-     mirror reload every row and bind the whole document again
-     (`WorldDocumentStateView.Adopt`) and compare every placement
-     (`WorldPlacementResponse.ComparePlacements`), and each snapshot fills
-     the mirror's published image with every body
-     (`WorldSessionMirror.ApplySnapshot`), which its readers then copy whole
-     (`WorldSessionMirror.CaptureBodyImage`). The debug world hands a
-     replica its whole document on every tick, so none of it is ever
-     skipped. The door is `WorldSessionSink.DeliverState`: a replica is owed
-     the document again when a delivery is not of values alone or its frame
-     moved (`WorldDeliveryCursor.FrameMoved`), and the frame is every
-     section but the state rows, digested with the rows its placements read
-     (`WorldStateDisclosed.PlacementReads`, kept only for a recipient some
-     row is withheld from). So a row a placement reads that a rule writes
-     every tick moves the frame every tick; which row is not yet named (the
-     card tables' dealt and zone rows are the candidates), and pausing the
-     rule that writes it while reading `WorldOutputHub.Collect`'s samples
-     names it. The structure is a replica that takes a moved frame as the
-     placement rows that moved, as a presentation observer already takes an
-     appearance (`IClientSink.DeliverPresentation`), and a mirror that
-     takes a snapshot by the bodies it names. A fifth of the step is the portal scan, every portal face
-     against every body slot (`WorldInstanceHost`'s `ScanInstancePortals`);
-     the seam scan beside it (`WorldAdjacencyOwnership.Sweep`) reads the
-     same way but costs little where few seams stand. A body at rest beyond
-     a face answers crossed on every scan, so a scan of the bodies that
-     moved must keep those it last found beyond one. Built: the seam scan's
-     selection makes no closure for a slot that crossed nothing, a
-     reference's document path is resolved once, and the site attention
-     reads its faces by index, which halved what that thread allocates an
-     iteration in the headless debug world. Check: `host.frames`' frame
-     thread allocation an iteration, and `puck host allocations` naming no
-     site beneath `WorldInstanceHost.TryStepInstances`.
+   - **Every session mirror applies every snapshot.** The thread that also
+     runs the frame spends about half of its step taking the boot
+     authority's snapshots into the mirrors that observe it
+     (`WorldOutputHub.Collect`, beneath it `WorldSessionMirror.ApplySnapshot`
+     and `WorldDocumentStateView.ApplyFieldCells`): each mirror admits every
+     entry it is handed, about 8,000 entries and 5,000 cells a tick across
+     the sessions (`world.boot.session-entries-delivered` and
+     `session-cells-delivered`), most of them the same bodies for every
+     mirror of one authority. The structure is one image per authority and
+     disclosure that its mirrors share, as a world is resident once however
+     many views show it, and a stream that sends a mirror the bodies that
+     changed. Built: a replica whose frame moved with values alone takes the
+     placement rows that moved through the presentation door
+     (`WorldDeliveryCursor.TryDeliverPlacements`), though the debug world's
+     frame does not move in steady state
+     (`world.disclosure.definition-compositions` flat); a mirror fills and
+     copies its body images by its changed-body journal
+     (`WorldSessionMirror.FillImage`, `CaptureBodyImage`); the portal and
+     seam scans visit the bodies whose answer can move
+     (`WorldBoundaryScan`). Check: `host.frames`' frame thread allocation an
+     iteration (19,056 bytes at the median after these, 35,344 before), and
+     `WorldOutputHub.Collect`'s share of `FixedStepPump.Step`'s samples in a
+     quiet window.
 
    Left, in the order the debug world spends them:
    - **An arm that would change nothing.** A Level rule that poses a body every

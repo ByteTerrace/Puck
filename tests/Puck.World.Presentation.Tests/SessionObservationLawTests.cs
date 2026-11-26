@@ -918,6 +918,7 @@ public sealed partial class SessionObservationLawTests {
     private sealed class FaultingSink : IClientSink {
         public void DeliverAnswer(in QueryAnswer answer) => throw new InvalidOperationException(message: "faulting observer");
         public void DeliverComposition(WorldComposition composition) => throw new InvalidOperationException(message: "faulting observer");
+        public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) { }
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => throw new InvalidOperationException(message: "faulting observer");
         public void DeliverSessionLever(WorldSessionLever lever) => throw new InvalidOperationException(message: "faulting observer");
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
@@ -938,6 +939,7 @@ public sealed partial class SessionObservationLawTests {
         }
         public void DeliverComposition(WorldComposition composition) {
         }
+        public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) { }
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         }
         public void DeliverSessionLever(WorldSessionLever lever) {
@@ -974,6 +976,7 @@ public sealed partial class SessionObservationLawTests {
         }
         public void DeliverComposition(WorldComposition composition) {
         }
+        public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) { }
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         }
         public void DeliverSessionLever(WorldSessionLever lever) {
@@ -996,6 +999,7 @@ public sealed partial class SessionObservationLawTests {
         }
         public void DeliverComposition(WorldComposition composition) {
         }
+        public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) { }
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
             if (++m_definitions > 1) {
                 throw new InvalidOperationException(message: "faulting observer");

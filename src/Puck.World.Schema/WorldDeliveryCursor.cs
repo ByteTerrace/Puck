@@ -52,6 +52,10 @@ public sealed class WorldDeliveryCursor {
     private int[] m_ordered = [];
     private Puck.Abstractions.Sha256Digest? m_definition;
     private ContentPin? m_frame;
+    // The frame's digest less its placements, and the placement rows, of the document the stream holds: what a moved
+    // frame is diffed against when the stream takes its placement rows alone (TryDeliverPlacements).
+    private ContentPin? m_rest;
+    private IReadOnlyList<WorldPlacement>? m_placements;
     // The field regions of the stream's last document, whether that document kept every field cell of the one before
     // it, and whether it was the stream's first, which its attach primer completes.
     private IReadOnlyList<WorldFieldsSection>? m_fields;
@@ -98,7 +102,9 @@ public sealed class WorldDeliveryCursor {
     public WorldDefinition? DeliverDefinition(WorldRecipientView view) {
         if (!view.Observes || view.Ceiling != WorldDisclosureTier.Replica) { return null; }
         var identity = view.Images.DefinitionIdentity(view);
-        m_frame = view.Images.FrameIdentity(view);
+        (m_frame, m_rest) = view.Images.FramePins(view);
+        // A stream that holds the identity holds its placements, whichever door brought them.
+        m_placements = view.Images.DisclosedPlacements(view);
         if (identity == m_definition) { if (m_operator != view.IsAuthority) { Seed(view); } return null; }
         m_definition = identity;
         Seed(view);
@@ -135,14 +141,38 @@ public sealed class WorldDeliveryCursor {
     public bool TryDeliverPresentation(WorldRecipientView view, WorldPresentationRows rows, out bool moved) {
         moved = false;
         if (rows.ChangesProjectionDependencies || !view.Observes || view.Ceiling != WorldDisclosureTier.Replica || m_cutOwed || m_definition is null ||
-            m_operator != view.IsAuthority || !view.Images.TryAdvanceAppearance(view, m_frame, m_definition, out var frame, out var identity)) {
+            m_operator != view.IsAuthority || !view.Images.TryAdvanceAppearance(view, m_frame, m_definition, out var frame, out var rest, out var identity)) {
             return false;
         }
         if (m_frame == frame) { return true; }
         m_frame = frame;
+        m_rest = rest;
         m_definition = identity;
         moved = true;
         Delivered();
+        return true;
+    }
+    /// <summary>Advances a primed replica over a value-only change that moved its frame (<see cref="FrameMoved"/>) in
+    /// its placements alone, handing back the placement rows that moved in place of the whole document: the rows its
+    /// audience's own composition holds now that differ from those the stream was last handed
+    /// (<see cref="WorldDisclosureImages.TryAdvancePlacements"/>). Every row and holding is read from the document the
+    /// whole-document door would deliver, so a recipient is handed nothing that document withholds; the state rows
+    /// stay with the snapshots' cell channel, as for any value-only change. A stream owed a cut, an authority transition,
+    /// a frame that moved in another section, or placements that changed shape takes the whole document instead.</summary>
+    /// <param name="view">The stream's view.</param>
+    /// <param name="rows">The rows owed, possibly none, when the method returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the rows bring the stream's reader to the disclosed document's frame.</returns>
+    public bool TryDeliverPlacements(WorldRecipientView view, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldPresentationRows? rows) {
+        rows = null;
+        if (!view.Observes || (view.Ceiling != WorldDisclosureTier.Replica) || m_cutOwed || (m_definition is null) || (m_rest is not { } rest) ||
+            (m_placements is not { } held) || (m_operator != view.IsAuthority) ||
+            !view.Images.TryAdvancePlacements(view, rest, held, out rows, out var placements, out var frame, out var identity)) {
+            return false;
+        }
+        m_frame = frame;
+        m_placements = placements;
+        m_definition = identity;
+        if (rows.Count != 0) { Delivered(); }
         return true;
     }
     /// <summary>Records the images a presentation delivery actually carried.</summary>
@@ -295,6 +325,6 @@ public sealed class WorldDeliveryCursor {
     /// sequence continues.</summary>
     public void Release() {
         if (m_seeded) { Cut(); }
-        m_rows.Clear(); m_metadataPrimers.Clear(); m_definition = null; m_fields = null; m_seeded = false;
+        m_rows.Clear(); m_metadataPrimers.Clear(); m_definition = null; m_fields = null; m_seeded = false; m_rest = null; m_placements = null;
     }
 }

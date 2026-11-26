@@ -18,8 +18,9 @@ public sealed class WorldPortalOccupancy {
     // The bodies a destination refused at a face, held from it until they stand clear. Host-side retry state: a
     // checkpoint carries none, so a restored body may ask once more.
     private readonly HashSet<(string PlacementId, string FaceName, int Seat)> m_refused = [];
-    // The inside rows each seat holds, indexed by seat; a seat past the end holds none.
+    // The inside rows and the refusals each seat holds, indexed by seat; a seat past the end holds none.
     private int[] m_seatRows = [];
+    private int[] m_seatRefusals = [];
 
     /// <summary>Captures every inside row in ordinal placement/face/seat order. Snapshot order depends on membership,
     /// never on the set's freed slots or whether the same membership was restored from a checkpoint.</summary>
@@ -76,6 +77,7 @@ public sealed class WorldPortalOccupancy {
         m_inside.Clear();
         m_refused.Clear();
         Array.Clear(array: m_seatRows);
+        Array.Clear(array: m_seatRefusals);
 
         foreach (var row in rows) {
             _ = Add(key: (row.PlacementId, row.FaceName, row.Seat));
@@ -95,7 +97,16 @@ public sealed class WorldPortalOccupancy {
     /// <param name="placementId">The face's owning placement id.</param>
     /// <param name="faceName">The declared face name.</param>
     /// <param name="seat">The body's index.</param>
-    public void Refuse(string placementId, string faceName, int seat) => _ = m_refused.Add(item: (placementId, faceName, seat));
+    public void Refuse(string placementId, string faceName, int seat) {
+        if (!m_refused.Add(item: (placementId, faceName, seat)) || (seat < 0)) { return; }
+        ArrayCapacity.EnsureLength(array: ref m_seatRefusals, required: (seat + 1));
+        m_seatRefusals[seat]++;
+    }
+    /// <summary>Reports whether a body is held from any face by a refusal, which a scan of the bodies that moved still
+    /// visits: a held body standing clear of its face is released by the next scan that sees it.</summary>
+    /// <param name="seat">The body's index.</param>
+    /// <returns><see langword="true"/> when the body is held from some face.</returns>
+    public bool HoldsRefusal(int seat) => (((uint)seat < (uint)m_seatRefusals.Length) && (m_seatRefusals[seat] != 0));
     /// <summary>Reports whether a body is held from a face by a refusal.</summary>
     /// <param name="placementId">The face's owning placement id.</param>
     /// <param name="faceName">The declared face name.</param>
@@ -107,7 +118,7 @@ public sealed class WorldPortalOccupancy {
     /// <param name="faceName">The declared face name.</param>
     /// <param name="seat">The body's index.</param>
     public void Release(string placementId, string faceName, int seat) {
-        if (m_refused.Count > 0) { _ = m_refused.Remove(item: (placementId, faceName, seat)); }
+        if ((m_refused.Count > 0) && m_refused.Remove(item: (placementId, faceName, seat)) && (seat >= 0)) { m_seatRefusals[seat]--; }
     }
 
     private bool Add((string PlacementId, string FaceName, int Seat) key) {
