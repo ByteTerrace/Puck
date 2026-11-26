@@ -1047,7 +1047,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         );
 
         if (!ReferenceEquals(objA: rig, objB: chase)) {
-            // The seat steers its camera application as it steers its chase: the live look reaches the program's orbit.
+            // The seat steers its camera application as it steers its chase: the live look turns the program's lens.
             rig.Look = view.ApplicationLook(
                 bodyOrientation: bodyOrientation,
                 interpolationAlpha: interpolationAlpha,

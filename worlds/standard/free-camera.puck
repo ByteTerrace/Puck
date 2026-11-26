@@ -37,17 +37,16 @@ template freeCamera(seats = 1, rest = [0, 40, 0], bead = "free-camera", kit = "f
       name: rig
       version: "puck.camera.program.v1"
       operations [
-        orbit(distance: 0.05, pitch: 0, yaw: 0)
-        lookAt(focusDistance: 1, subject: reference())
+        lookAt(focusDistance: 1)
         fieldOfView(fieldOfViewRadians: fieldOfView)
       ]
     }
   }
 
   // A camera has no volume to collide with and nothing to stand on: free flight, one hold cancelling gravity whole, so it
-  // hovers where it is left. The lens is the seat's look: the program above orbits the camera body at a hair's distance
-  // with the seat's live yaw and pitch folded in, and the `Aim` frame flies it along that view, so it climbs where it
-  // looks up and dives where it looks down. The rise channel climbs and sinks.
+  // hovers where it is left. The lens is the seat's look: the seat steers the program above, so its facing look turns
+  // with the seat's live yaw and pitch, and the `Aim` frame flies the body along that view, climbing where it looks up
+  // and diving where it looks down. The rise channel climbs and sinks.
   kits [
     {
       bodyMotionProgram: "walk"

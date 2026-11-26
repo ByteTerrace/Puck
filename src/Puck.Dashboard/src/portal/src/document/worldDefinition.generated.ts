@@ -2410,7 +2410,7 @@ export type LatticeTopologyTiling = {
 
 export type MemberRefKind = "Local" | "Verified";
 
-export type MotionMoveFrame = "Heading" | "World";
+export type MotionMoveFrame = "Heading" | "World" | "Aim";
 
 export type MotionScalarEnvelope = {
   /**
@@ -4338,7 +4338,7 @@ export type ShapeDomainOpRepeat = {
    */
   limit?: DocumentVector3;
   /**
-   * The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root — the lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.
+   * The point the lattice's cell walls are laid about, creation units (null = the creation origin): a wall at half a spacing either side of it and every spacing on. The fold centres on the cell of that lattice the shape's own position lies in (CentreOf), so the copies sit at whole spacings from the shape wherever the origin lies, in render as in contact.
    */
   origin?: DocumentVector3;
   /**
@@ -10375,11 +10375,11 @@ export type WorldMotion = {
    */
   shaping?: (WorldShaping | null)[] | null;
   /**
-   * Which frame MoveAdvance/MoveStrafe resolve in. Heading explicitly rotates the commanded planar target by the body's own integrated heading. World (the default) takes the two channels as axes already in world frame — the seat's client composes the camera yaw into the submitted intent before it ever reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation).
+   * Which frame MoveAdvance/MoveStrafe resolve in. Heading explicitly rotates the commanded planar target by the body's own integrated heading. World (the default) takes the two channels as axes already in world frame — the seat's client composes the camera yaw into the submitted intent before it ever reaches the wire, so the sim never reads a camera pose (determinism: no camera state enters simulation). Aim is World to the sim; while the body is held up by a free hold the seat composes its camera's pitch as well, so a flier travels along its view ray.
    */
   moveFrame?: MotionMoveFrame;
   /**
-   * Under World only: whether the body's drawn ATTITUDE snaps to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) — the body angles toward its travel, a strafe included — while its HEADING (the Turn role's integral, WorldBody.FixedYaw, the frame a Heading pair moves in) holds, and the attitude returns to the heading the tick movement stops. Only the Face roles turn the heading itself. Ignored under Heading, where attitude is the integrated heading by construction. true is the default.
+   * Under a frame that submits world axes only (SubmitsWorldAxes): whether the body's drawn ATTITUDE snaps to Atan2 of the commanded planar direction every tick that carries input (no turn-rate ramp, no skid) — the body angles toward its travel, a strafe included — while its HEADING (the Turn role's integral, WorldBody.FixedYaw, the frame a Heading pair moves in) holds, and the attitude returns to the heading the tick movement stops. Only the Face roles turn the heading itself. Ignored under Heading, where attitude is the integrated heading by construction. true is the default.
    */
   facingSnap?: boolean;
   /**

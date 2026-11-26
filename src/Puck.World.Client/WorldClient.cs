@@ -782,20 +782,14 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             // (FaceX, FaceZ) — the same vector, so the body faces its own travel exactly.
             var length = MathF.Sqrt(x: ((faceForward * faceForward) + (faceStrafe * faceStrafe)));
 
-            intent = roles.Write(
+            intent = WriteFacing(
+                facing: new Vector3(
+                    x: (faceStrafe / length),
+                    y: 0f,
+                    z: (-faceForward / length)
+                ),
                 intent: intent,
-                role: ChannelRole.FaceX,
-                value: FixedQ4816.FromDouble(value: (faceStrafe / length))
-            );
-            intent = roles.Write(
-                intent: intent,
-                role: ChannelRole.FaceY,
-                value: FixedQ4816.Zero
-            );
-            intent = roles.Write(
-                intent: intent,
-                role: ChannelRole.FaceZ,
-                value: FixedQ4816.FromDouble(value: (-faceForward / length))
+                roles: roles
             );
         }
 
@@ -843,25 +837,16 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             : 1f
         );
 
-        intent = roles.Write(
+        return WriteFacing(
+            facing: new Vector3(
+                x: (-MathF.Sin(x: yaw) * planar),
+                y: ((seat.PointerSteering && !seat.View.FirstPersonLook)
+                    ? -MathF.Sin(x: pitch)
+                    : 0f),
+                z: (-MathF.Cos(x: yaw) * planar)
+            ),
             intent: intent,
-            role: ChannelRole.FaceX,
-            value: FixedQ4816.FromDouble(value: (-MathF.Sin(x: yaw) * planar))
-        );
-        if (roles.FaceY >= 0) {
-            intent = roles.Write(
-                intent: intent,
-                role: ChannelRole.FaceY,
-                value: ((seat.PointerSteering && !seat.View.FirstPersonLook)
-                ? FixedQ4816.FromDouble(value: -MathF.Sin(x: pitch))
-                : FixedQ4816.Zero)
-            );
-        }
-
-        return roles.Write(
-            intent: intent,
-            role: ChannelRole.FaceZ,
-            value: FixedQ4816.FromDouble(value: (-MathF.Cos(x: yaw) * planar))
+            roles: roles
         );
     }
     // The Aim composition (MotionMoveFrame.Aim, while a free hold holds the body): the (forward, strafe) command
@@ -930,21 +915,33 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
 
         var (sinYaw, cosYaw) = MathF.SinCos(x: yaw);
 
+        return WriteFacing(
+            facing: new Vector3(
+                x: -sinYaw,
+                y: 0f,
+                z: -cosYaw
+            ),
+            intent: intent,
+            roles: roles
+        );
+    }
+    // Writes a commanded world facing to the Face roles the world claims; an unclaimed role is left out.
+    private static PlayerIntent WriteFacing(RoleChannelOrdinals roles, PlayerIntent intent, Vector3 facing) {
         intent = roles.Write(
             intent: intent,
             role: ChannelRole.FaceX,
-            value: FixedQ4816.FromDouble(value: -sinYaw)
+            value: FixedQ4816.FromDouble(value: facing.X)
         );
         intent = roles.Write(
             intent: intent,
             role: ChannelRole.FaceY,
-            value: FixedQ4816.Zero
+            value: FixedQ4816.FromDouble(value: facing.Y)
         );
 
         return roles.Write(
             intent: intent,
             role: ChannelRole.FaceZ,
-            value: FixedQ4816.FromDouble(value: -cosYaw)
+            value: FixedQ4816.FromDouble(value: facing.Z)
         );
     }
     // The inverse of WorldBody's world-frame read (planarTarget = (MoveStrafe, -MoveAdvance) in world X/Z): rotate a
