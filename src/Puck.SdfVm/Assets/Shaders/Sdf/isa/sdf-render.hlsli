@@ -113,27 +113,29 @@
 #define SDF_VISIBILITY_KIND_MESH       2u
 
 // The visibility record's identity fields and the record passes' workgroup edge (SdfVisibility).
-#define SDF_VISIBILITY_KIND_SHIFT     30u
-#define SDF_VISIBILITY_SOURCE_MASK    0x3FFFFFFFu
-#define SDF_VISIBILITY_GROUP_EDGE     8u
-#define SDF_SHADE_BINS                2u
-#define SDF_SHADE_TILE_HEADER_WORDS   6u
-#define SDF_SHADE_TILE_LIGHT_WORDS    8u
-#define SDF_VIEWS_FILTER_WORDS        3u
-#define SDF_VIEWS_REFLECTION_WORDS    2u
-#define SDF_EDGE_REACH                4u
-#define SDF_VIEWS_PROBE_RATE          4u
-#define SDF_VIEWS_PROBE_WORDS         73u
-#define SDF_VIEWS_PROBE_RECORD_WORDS  29u
-#define SDF_VIEWS_PROBE_POOL_WORDS    28u
-#define SDF_VIEWS_PROBE_SLOT_WORDS    28u
-#define SDF_VIEWS_PROBE_HISTORY_WORDS 17u
-#define SDF_SHADOW_BITS               8u
-#define SDF_SHADOW_MASK               0x000000FFu
-#define SDF_SHADOW_SLOTS              4u
-#define SDF_SHADOW_ROLES              2u
-#define SDF_MESH_SHADOW_ENTRIES       4u
-#define SDF_SHADOW_FADE_CAPACITY      2u
+#define SDF_VISIBILITY_KIND_SHIFT        30u
+#define SDF_VISIBILITY_SOURCE_MASK       0x3FFFFFFFu
+#define SDF_VISIBILITY_GROUP_EDGE        8u
+#define SDF_SHADE_BINS                   2u
+#define SDF_SHADE_TILE_HEADER_WORDS      6u
+#define SDF_SHADE_TILE_LIGHT_WORDS       8u
+#define SDF_VIEWS_FILTER_WORDS           3u
+#define SDF_VIEWS_REFLECTION_WORDS       4u
+#define SDF_REFLECTION_DEPTH_LEVELS      8u
+#define SDF_REFLECTION_DEPTH_GROUP_LEVEL 4u
+#define SDF_EDGE_REACH                   4u
+#define SDF_VIEWS_PROBE_RATE             4u
+#define SDF_VIEWS_PROBE_WORDS            73u
+#define SDF_VIEWS_PROBE_RECORD_WORDS     29u
+#define SDF_VIEWS_PROBE_POOL_WORDS       28u
+#define SDF_VIEWS_PROBE_SLOT_WORDS       28u
+#define SDF_VIEWS_PROBE_HISTORY_WORDS    17u
+#define SDF_SHADOW_BITS                  8u
+#define SDF_SHADOW_MASK                  0x000000FFu
+#define SDF_SHADOW_SLOTS                 4u
+#define SDF_SHADOW_ROLES                 2u
+#define SDF_MESH_SHADOW_ENTRIES          4u
+#define SDF_SHADOW_FADE_CAPACITY         2u
 
 // The visibility record's normal word (SdfVisibility): its SNORM16 scale and the word of a record with no normal.
 #define SDF_VISIBILITY_NORMAL_SCALE 32767.0

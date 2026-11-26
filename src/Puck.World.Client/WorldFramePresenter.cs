@@ -2143,9 +2143,10 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                         Camera: free,
                         Region: region
                     ) {
-                        // A new pose is a new record, so every operator move cuts the temporal history like a teleport.
-                        CutRevision = ViewCut(index: m_views.Count, source: pose, revision: 0),
-                        Source = pose,
+                        // The operator's shot is the view's source: a delta move continues it and keeps the temporal
+                        // history and exposure, while a pose, look or orbit is a new shot and cuts them like a teleport.
+                        CutRevision = ViewCut(index: m_views.Count, source: m_composition.OperatorShot!, revision: 0),
+                        Source = m_composition.OperatorShot,
                         Bloom = m_settings.ResolveBloom(m_client.Definition.Render),
                         BloomQuality = m_settings.BloomQuality,
                         Quality = quality,
@@ -2600,6 +2601,7 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                 // applies.
                 DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: m_settings.DistantShadows),
                 ViewsRate = m_settings.ViewsRate,
+                Reflections = m_settings.Reflections,
                 FarShadows = WorldRenderFarDistance.ResolveFarShadows(authored: m_settings.FarShadows),
                 ShadowTexels = WorldRenderSettings.ResolveShadowTexels(row: m_settings.ShadowTexels),
                 Toon = m_settings.ResolveToon(render: m_client.Definition.Render),

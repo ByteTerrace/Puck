@@ -64,6 +64,8 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.ViewsProbeHistoryWritten,
         SdfWorldPackage.ViewsReflections,
         SdfWorldPackage.ViewsReflectionsWritten,
+        SdfWorldPackage.ReflectionDepth,
+        SdfWorldPackage.ReflectionDepthWritten,
     ];
     // Each layer of the world's shared shadows (SdfWorldShadows) a compute pass samples: its entry, whether it is the exit
     // layer, and the binding.
@@ -101,9 +103,13 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     // Whether the part reads the preceding resolve's history surface (SdfWorldPackage.RateFragment's probe lookup, the
     // reflection pass), whose planes follow the output extent, which its pass block then carries in viewsRate.zw.
     private readonly bool m_readsRateHistory;
-    // Whether the part reads the reflection pass's records (SdfWorldPackage.WithReflections's views pass), which its pass
-    // block then tells the kernel to read (SdfWorldPackage.ScreenReflections).
-    private readonly bool m_readsReflections;
+    // The cell edge of the reflection records the part reads or writes (SdfWorldPackage.WithReflections's views and
+    // reflection passes), read from the records the graph allocated, which its pass block then carries
+    // (SdfWorldPackage.ScreenReflections); zero for a part that touches none.
+    private readonly uint m_reflectionCell;
+    // Whether the part is the pyramid pass of a fragment that reflects, which writes the reflection pyramid's levels above
+    // a group's by atomics into words it clears first.
+    private readonly bool m_writesReflectionDepth;
     // The history buffers the part reads or writes through members (SdfHistoryPorts).
     private readonly SdfHistoryPorts m_history;
     private readonly SdfWorldPasses m_owner;
@@ -221,7 +227,8 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         m_inputs = LocalNames(pass: context.Pass, part: m_part, ports: context.Inputs);
         m_outputs = LocalNames(pass: context.Pass, part: m_part, ports: context.Outputs);
         m_readsRateHistory = m_inputs.Contains(value: SdfWorldPackage.Parts.HistorySurface);
-        m_readsReflections = m_inputs.Contains(value: SdfWorldPackage.Parts.Reflections);
+        m_reflectionCell = ReflectionCellOf(names: m_inputs, ports: context.Inputs) ?? ReflectionCellOf(names: m_outputs, ports: context.Outputs) ?? 0u;
+        m_writesReflectionDepth = m_outputs.Contains(value: SdfWorldPackage.Parts.ReflectionDepth);
         m_history = new SdfHistoryPorts(inputs: m_inputs, outputs: m_outputs, slots: context.InFlightFrames);
 
         m_resolved = m_outputs.Contains(value: SdfWorldPackage.CurrentColor);
@@ -582,7 +589,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfFrameBlock.WriteScreenWindows(block: recording.PassBlock, windows: windows);
         SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
         SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
-        SdfFrameBlock.WriteScreenReflections(block: recording.PassBlock, reads: m_readsReflections);
+        SdfFrameBlock.WriteScreenReflections(block: recording.PassBlock, cell: m_reflectionCell, steps: (uint)(frame.Settings.Reflections?.Steps ?? 0));
 
         if (m_readsRateHistory) {
             // The history planes follow the output extent. The visibility and probe cells follow the render grid.
@@ -844,9 +851,26 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                         SdfWorldPackage.Parts.Pyramid => (recording.Width.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u), recording.Height.CeilingDivide(divisor: 2u).CeilingDivide(divisor: 8u)),
                         // One invocation a cell of the probe lookup, the extent over its rate rounded up.
                         SdfWorldPackage.Parts.ViewsProbes => (recording.Width.CeilingDivide(divisor: SdfWorldPackage.ViewsProbeRate).CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), recording.Height.CeilingDivide(divisor: SdfWorldPackage.ViewsProbeRate).CeilingDivide(divisor: SdfVisibility.GroupEdgePixels)),
+                        // One invocation a cell of the reflection records, one mirror ray each.
+                        SdfWorldPackage.Parts.ViewsReflections => (recording.Width.CeilingDivide(divisor: m_reflectionCell).CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), recording.Height.CeilingDivide(divisor: m_reflectionCell).CeilingDivide(divisor: SdfVisibility.GroupEdgePixels)),
                         _ => (recording.Width.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels), recording.Height.CeilingDivide(divisor: SdfVisibility.GroupEdgePixels)),
                     };
 
+                    if (m_writesReflectionDepth) {
+                        // The levels above a group's own start from zero, the nearest of nothing, before any group gathers
+                        // into them (sdf-mesh-pyramid.comp.hlsl).
+                        var depth = recording.Outputs[OutputIndexOf(member: SdfWorldPackage.ReflectionDepthWritten)].Buffer!;
+                        var first = SdfWorldPackage.ReflectionDepthWordsBelow(width: recording.Width, height: recording.Height, level: (SdfWorldPackage.ReflectionDepthGroupLevel + 1));
+                        var end = SdfWorldPackage.ReflectionDepthWordsBelow(width: recording.Width, height: recording.Height, level: (SdfWorldPackage.ReflectionDepthLevels + 1));
+
+                        recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: depth.BufferHandle,
+                            sourceAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
+                            destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+                        recorder.ClearStorageBuffer(commandBuffer, depth.BufferHandle, ((end - first) * sizeof(uint)), (first * sizeof(uint)));
+                        recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: depth.BufferHandle,
+                            sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+                            destinationAccessMask: GpuAccess.ShaderRead | GpuAccess.ShaderWrite, destinationStageMask: GpuStage.ComputeShader);
+                    }
                     if (m_part == SdfWorldPackage.Parts.ViewsProbes) {
                         // The pool's count of extra slots starts from zero before any group takes one; it follows the
                         // records' planes (sdfViewsProbePoolWord in sdf-views-probes.hlsli).
@@ -1140,9 +1164,17 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecords,
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecords,
         SdfWorldPackage.Parts.Reflections => SdfWorldPackage.ViewsReflections,
+        SdfWorldPackage.Parts.ReflectionDepth => SdfWorldPackage.ReflectionDepth,
         SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTiles,
         _ => null,
     };
+    // The cell edge of the reflection records among a pass's ports, read from the allocation the graph declares for them
+    // (SdfWorldPackage.ReflectionCellOf), or null where the ports hold none.
+    private static uint? ReflectionCellOf(string[] names, IReadOnlyList<ShaderPipelineResource> ports) {
+        var index = Array.IndexOf(array: names, value: SdfWorldPackage.Parts.Reflections);
+
+        return ((index >= 0) ? SdfWorldPackage.ReflectionCellOf(records: ports[index]) : null);
+    }
     // The member a pass writes a fragment buffer through, or null for one it writes through no member.
     private static string? WrittenMemberOf(string version) => version switch {
         SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecordsWritten,
@@ -1152,6 +1184,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecordsWritten,
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecordsWritten,
         SdfWorldPackage.Parts.Reflections => SdfWorldPackage.ViewsReflectionsWritten,
+        SdfWorldPackage.Parts.ReflectionDepth => SdfWorldPackage.ReflectionDepthWritten,
         SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTilesWritten,
         SdfWorldPackage.Parts.ShadeArguments => SdfWorldPackage.ShadeArgumentsWritten,
         _ => null,

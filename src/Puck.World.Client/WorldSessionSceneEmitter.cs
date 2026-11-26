@@ -506,8 +506,10 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
                 // session's lever too, as the rays are.
                 DistantShadows = WorldRenderFarDistance.ResolveDistantShadows(authored: ((Session is { } session) ? session.DistantShadows : m_mirror.Definition.Render.DistantShadows)),
                 FarShadows = WorldRenderFarDistance.ResolveFarShadows(authored: ((Session is { } presenting) ? presenting.FarShadows : m_mirror.Definition.Render.FarShadows)),
-                // What a cascade's layers hold is the presenting device's row, as the distant map's is.
+                // What a cascade's layers hold is the presenting device's row, as the distant map's is, and so are the
+                // screen-space reflections its temporal views trace.
                 ShadowTexels = WorldRenderSettings.ResolveShadowTexels(row: Session?.ShadowTexels),
+                Reflections = ((Session is { } reflecting) ? reflecting.Reflections : m_mirror.Definition.Render.Reflections),
                 IndirectSources = environment.Indirect.Gains.Sources,
                 IndirectGains = environment.Indirect.Gains,
                 IndirectBounces = environment.Indirect.Bounces,

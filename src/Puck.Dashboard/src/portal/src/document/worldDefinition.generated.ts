@@ -3695,6 +3695,20 @@ export type SdfPrismProfileNullable = {
 };
 
 /**
+ * A device's screen-space reflections: how finely a temporal view traces its glossy surfaces' mirror rays through its own picture and how far each may march. A view without them reflects the irradiance volume alone.
+ */
+export type SdfScreenReflections = {
+  /**
+   * The edge, in render pixels, of the square one mirror ray serves: 1 traces every glossy pixel, 2 one pixel of each 2 by 2 block a frame, the block's pixels taking turns and each pixel blending the rays of the blocks about it that stand on its surface.
+   */
+  cell?: number;
+  /**
+   * The most reads of the reflection's depth pyramid one ray's march takes, from 1 through MaxSteps: a ray past its budget answers with the irradiance volume.
+   */
+  steps?: number;
+};
+
+/**
  * The source-level expression graph serialized in a material. Admission always compiles it afresh.
  */
 export type SdfShadeDefinition = {
@@ -11059,7 +11073,7 @@ export type WorldPlacementResponse = {
    */
   when: WorldPlacementResponseConditionNonNullable;
   /**
-   * The creation the placement shows/collides as while When holds and no earlier entry does. Must resolve to a declared, non-animated creation row.
+   * The creation the placement shows/collides as while When holds and no earlier entry does. Must resolve to a declared creation row.
    */
   prototypeId: string;
 };
@@ -11653,6 +11667,10 @@ export type WorldQualityPreset = {
    * The texels along each side of a full-resolution shadow cascade (the near, far and secondary entries) on this device, a power of two from MinShadowTexels through MaxShadowTexels: a shadow tier below High and a nested view's row halve it as they halve the engine's. Each entry's depth, exit and glass layers are sized by its square, so it sets what every world's shadows hold on the device. Absent keeps the engine's 2048.
    */
   shadowTexels?: number | null;
+  /**
+   * The screen-space reflections the device traces in its temporal views (SdfScreenReflections): the square of pixels one mirror ray serves and the steps it may march. Absent, every view reflects the irradiance volume alone, where reflections do not pay on the device.
+   */
+  reflections?: SdfScreenReflections | null;
 };
 
 export type WorldReaction = WorldReactionDiffuse | WorldReactionDecay | WorldReactionTransform | WorldReactionEmit | WorldReactionExpose | WorldReactionFlow | null;
@@ -11983,6 +12001,10 @@ export type WorldRenderDefaults = {
    * What the world shows of itself to a far viewer (WorldFarProduct): the product a sky view asking for it draws. Declared, the boot world builds it from the start; absent, a product is built with the defaults only once a sky view asks for it, and a world nothing views from afar builds none.
    */
   farProduct?: WorldFarProduct | null;
+  /**
+   * The screen-space reflections the world boots tracing in its temporal views (SdfScreenReflections): the square of pixels one mirror ray serves and the steps it may march; a quality preset's row replaces it. Absent, every view reflects the irradiance volume alone.
+   */
+  reflections?: SdfScreenReflections | null;
 };
 
 export type WorldRenderEnvironment = {

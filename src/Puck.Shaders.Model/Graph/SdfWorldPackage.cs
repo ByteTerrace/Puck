@@ -388,6 +388,7 @@ public static partial class SdfWorldPackage {
         Value(name: DisableScreenLights, type: ShaderValueType.Uint),
         Value(name: GeometryOnly, type: ShaderValueType.Uint),
         Value(name: ScreenReflections, type: ShaderValueType.Uint),
+        Value(name: ReflectionSteps, type: ShaderValueType.Uint),
         Value(name: ScreenFidelity, type: ShaderValueType.Float),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, length: ScreenSourceCount, name: ScreenWindows, type: ShaderValueType.Float4),
         Value(name: StampFade, type: ShaderValueType.Float3),
@@ -519,9 +520,11 @@ public static partial class SdfWorldPackage {
         Read(element: ShaderValueType.Uint, name: HistorySurface),
         Read(element: ShaderValueType.Uint, name: ViewsProbeHistory),
         Written(element: ShaderValueType.Uint, name: ViewsProbeHistoryWritten),
-        Read(element: ShaderValueType.Uint2, name: ViewsReflections),
-        Written(element: ShaderValueType.Uint2, name: ViewsReflectionsWritten),
+        Read(element: ShaderValueType.Uint4, name: ViewsReflections),
+        Written(element: ShaderValueType.Uint4, name: ViewsReflectionsWritten),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: ReflectionHistory, type: ShaderValueType.Float4),
+        Read(element: ShaderValueType.Uint, name: ReflectionDepth),
+        Written(element: ShaderValueType.Uint, name: ReflectionDepthWritten),
         .. Tables,
     ];
     /// <summary>Gets the fragment a native view runs as: one view's dispatch set, its scratch retained and counted, its

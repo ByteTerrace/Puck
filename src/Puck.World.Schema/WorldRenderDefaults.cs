@@ -93,6 +93,9 @@ public static class WorldApplicationDefaults {
 /// <param name="FarShadows">How often the device refreshes the far shadow cascade and the light turn a held cascade
 /// tolerates (<see cref="WorldFarShadows"/>). Absent refreshes it every frame.</param>
 /// <param name="ViewsRate">The maximum shared shading footprint and classification tile size. Absent shades every pixel.</param>
+/// <param name="Reflections">The screen-space reflections the device traces in its temporal views
+/// (<see cref="SdfScreenReflections"/>): the square of pixels one mirror ray serves and the steps it may march. Absent,
+/// every view reflects the irradiance volume alone, where reflections do not pay on the device.</param>
 /// <param name="Nested">The nested-view table the preset runs (<see cref="WorldNestedViewQuality"/>), in place of the
 /// world's <c>render.nested</c>, so each device chooses what its windows, portals and filmed screens give up at each size.
 /// Absent runs the world's table.</param>
@@ -124,7 +127,8 @@ public readonly record struct WorldQualityPreset(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfViewsRate? ViewsRate = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNestedViewQuality>? Nested = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderIndirectBudget? IndirectBudget = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ShadowTexels = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? ShadowTexels = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfScreenReflections? Reflections = null
 ) {
     /// <summary>The fewest texels a side <see cref="ShadowTexels"/> takes.</summary>
     public const int MinShadowTexels = 256;
@@ -213,6 +217,9 @@ public readonly record struct WorldQualityPreset(
 /// <param name="FarShadows">How often the world boots refreshing the far shadow cascade (<see cref="WorldFarShadows"/>);
 /// a quality preset's row replaces it. Absent refreshes it every frame.</param>
 /// <param name="ViewsRate">The maximum shared shading footprint and classification tile size. Absent shades every pixel.</param>
+/// <param name="Reflections">The screen-space reflections the world boots tracing in its temporal views
+/// (<see cref="SdfScreenReflections"/>): the square of pixels one mirror ray serves and the steps it may march; a quality
+/// preset's row replaces it. Absent, every view reflects the irradiance volume alone.</param>
 /// <param name="FarProduct">What the world shows of itself to a far viewer (<see cref="WorldFarProduct"/>): the product a
 /// sky view asking for it draws. Declared, the boot world builds it from the start; absent, a product is built with the
 /// defaults only once a sky view asks for it, and a world nothing views from afar builds none.</param>
@@ -251,7 +258,8 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldDistantShadows? DistantShadows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarShadows? FarShadows = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfViewsRate? ViewsRate = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarProduct? FarProduct = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldFarProduct? FarProduct = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfScreenReflections? Reflections = null
 ) {
     /// <summary>The most world lanes <see cref="Lanes"/> holds (<c>SdfLanes.WorldCount</c>).</summary>
     public const int MaxLanes = SdfLanes.WorldCount;

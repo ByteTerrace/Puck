@@ -386,6 +386,8 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_SHADE_TILE_LIGHT_WORDS", value: SdfWorldPackage.ShadeTileLightWords);
         declarations.Count(name: "SDF_VIEWS_FILTER_WORDS", value: SdfWorldPackage.ViewsFilterWords);
         declarations.Count(name: "SDF_VIEWS_REFLECTION_WORDS", value: SdfWorldPackage.ViewsReflectionWords);
+        declarations.Count(name: "SDF_REFLECTION_DEPTH_LEVELS", value: SdfWorldPackage.ReflectionDepthLevels);
+        declarations.Count(name: "SDF_REFLECTION_DEPTH_GROUP_LEVEL", value: SdfWorldPackage.ReflectionDepthGroupLevel);
         declarations.Count(name: "SDF_EDGE_REACH", value: SdfShadeOps.EdgeReach);
         declarations.Count(name: "SDF_VIEWS_PROBE_RATE", value: SdfWorldPackage.ViewsProbeRate);
         declarations.Count(name: "SDF_VIEWS_PROBE_WORDS", value: SdfWorldPackage.ViewsProbeWords);

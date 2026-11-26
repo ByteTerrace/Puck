@@ -867,6 +867,11 @@
       "additionalProperties": false,
       "default": null,
       "title": "WorldFarProduct"
+    },
+    "reflections": {
+      "$ref": "./common.schema.json#/$defs/SdfScreenReflections",
+      "description": "The screen-space reflections the world boots tracing in its temporal views (SdfScreenReflections): the square of pixels one mirror ray serves and the steps it may march; a quality preset\u0027s row replaces it. Absent, every view reflects the irradiance volume alone.",
+      "default": null
     }
   },
   "additionalProperties": false,
