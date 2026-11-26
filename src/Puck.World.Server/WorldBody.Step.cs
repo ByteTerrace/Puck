@@ -655,6 +655,13 @@ public sealed partial class WorldBody {
             }
         }
 
+        // What the hold spends is settled by where the step left the body, before the seat below corrects it along the
+        // face normal.
+        SpendHold(
+            intent: in scratch.Intent,
+            stepTicks: stepTicks
+        );
+
         // The grip's inward standoff lands after the pose is committed, for the same reason the contact resolve
         // lands after integration: it is a correction to where the body ended up, not a term in how it got there.
         SeatToHold(stepTicks: stepTicks);

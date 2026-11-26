@@ -223,20 +223,33 @@ public sealed partial class WorldBody {
             (StateCounter(slot: slot) > FixedQ4816.Zero)
         );
     }
-    // Drains one step of what the current hold spends, at its moving rate while the body is commanded and its resting
-    // rate otherwise. The remainder carries in the hold's own accumulator, so a rate that does not divide the step
-    // evenly still drains exactly the authored amount over time.
-    private void SpendHold(in FixedBodyHold hold, in PlayerIntent intent, ulong stepTicks) {
+    // Drains one step of what the current hold spends, once the step has moved the body: at its moving rate while the
+    // body is commanded and the step carried it along the held face (anywhere at all, under a row with no face), at
+    // its resting rate while it hangs still or pushes against what stops it. The remainder carries in the hold's own
+    // accumulator, so a rate that does not divide the step evenly still drains exactly the authored amount over time.
+    private void SpendHold(in PlayerIntent intent, ulong stepTicks) {
+        if (!TryCurrentHold(hold: out var hold)) {
+            return;
+        }
+
         var slot = HoldSpendSlot(hold: in hold);
-        var rate = (TryCommandedDirection(direction: out _, intent: in intent)
+
+        if (slot < 0) {
+            return;
+        }
+
+        var travel = (m_position - m_previousPosition);
+
+        if (m_holdNormal != FixedVector3.Zero) {
+            travel = travel.RejectFrom(unitAxis: m_holdNormal);
+        }
+
+        var rate = (((travel != FixedVector3.Zero) && TryCommandedDirection(direction: out _, intent: in intent))
             ? hold.SpendPerSecond
             : hold.SpendRestingPerSecond
         );
 
-        if (
-            (slot < 0) ||
-            (rate <= FixedQ4816.Zero)
-        ) {
+        if (rate <= FixedQ4816.Zero) {
             return;
         }
 
@@ -696,11 +709,6 @@ public sealed partial class WorldBody {
             scratch.MoveSpeed = (held.Speed * m_scale);
         }
 
-        SpendHold(
-            hold: in held,
-            intent: in scratch.Intent,
-            stepTicks: scratch.StepTicks
-        );
         RestoreHold(
             index: chosen,
             intent: in scratch.Intent,

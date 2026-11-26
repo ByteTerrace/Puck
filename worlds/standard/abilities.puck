@@ -284,3 +284,48 @@ function staminaRestore(rate = 3) = {
   ratePerSecond: rate
   when: now(fact: Grounded)
 }
+
+// The stamina wheel on screen: a gauge low on the view that shows only while the wheel is not full, filled from the
+// `staminaShown` row a rule copies a player's `stamina` into whenever it changes. One row serves the world, so it
+// reads the last player written: a world with several seats keys a row by body and a panel a seat.
+template staminaGauge(staminaMax = 10, x = 0.44, y = 0.86, width = 0.12, height = 0.022) {
+  state {
+    world {
+      row {
+        name: "staminaShown"
+        kind: "Fixed"
+        value: $"{staminaMax}"
+        min: "0"
+        max: $"{staminaMax}"
+      }
+    }
+  }
+
+  rule "stamina-shown" {
+    when bodyState(each, stamina) != staminaShown
+    mode: Level
+    forEach: $players
+    staminaShown = bodyState(each, stamina)
+  }
+
+  hud {
+    panels [
+      {
+        id: "stamina"
+        rect { x: x, y: y, width: width, height: height }
+        layer: Over
+        style: Chip
+        visible { $type: "state", binding: "state.staminaShown", comparison: Less, value: staminaMax }
+        elements [
+          {
+            id: "wheel"
+            kind: Gauge
+            style: Positive
+            rect { x: 0.04, y: 0.2, width: 0.92, height: 0.6 }
+            binding: "state.staminaShown"
+          }
+        ]
+      }
+    ]
+  }
+}
