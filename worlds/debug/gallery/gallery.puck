@@ -1,10 +1,10 @@
 // The gallery: the building the shape gallery (shapes.puck) stands in, as one module. Four storeys round a nave that
 // runs the building's length under skylights, its plan in layout.puck and gallery.md:
 //
-//   the nave            a void from level 0's floor to the roof, three tall bays in its east wall; level 0's two
-//                       exhibit lines flank its centre aisle
+//   the nave            20 m wide, a void from level 0's floor to the roof, one tier of three wide bays in its east
+//                       wall; level 0's four display stations flank its centre aisle
 //   the aisles          north and south of the nave on level 0, behind arcades of branched piers, and the galleries
-//                       over them on levels 1 to 3, their balcony edges round the void
+//                       over them on levels 1 to 3, their balcony edges round the void and their displays along them
 //   the core            against the south wall: the stairs, the lift's glass tower outside the wall, the entrance
 //   the painting wing   level 0's south aisle east of the entrance (paintings.puck)
 //   the board game room level 2's south gallery and the wing that projects over the forecourt (chess.puck and the
@@ -12,7 +12,7 @@
 //   the terrace         the roof of the west wing's south aisle, off level 3
 //
 // Every row here stands under one root placement, `gallery`: the shell and its kit pieces (shell.puck), the lift, the
-// switches, the signs and the exhibits are placed in the building's frame with `parent`, the fixtures are anchored to
+// switches, the signs and the displays are placed in the building's frame with `parent`, the fixtures are anchored to
 // the root, the spawn points name it as their parent, and the lift's car is a body the car's own placement spawns,
 // which its platform, cab, doors and buttons ride by that placement's name. A world stands the building by placing
 // `gallery` (a position and a turn); the debug world's place is layout.puck's `gallerySite`. The building has no sun of
@@ -173,7 +173,7 @@ let hallLampLevels = concat(
 let hallDownlights = flatMap(range(0, 4), k => concat(
   map(((k == 3) ? [] : [4, 9]), x => { level: k, x: x, z: 4.6 }),
   map(((k == 0) ? [26] : [26, 34, 42, 50, 57]), x => { level: k, x: x, z: 4.6 }),
-  map([4, 12, 20, 28, 36, 44, 52, 58], x => { level: k, x: x, z: 23.4 }),
+  map([4, 12, 20, 28, 36, 44, 52, 58], x => { level: k, x: x, z: northAisleMid }),
   [{ level: k, x: 6, z: naveMid }, { level: k, x: liftX, z: 3.2 }],
   map(((k >= wingLevel) ? [26, 34, 42, 50, 57] : []), x => { level: k, x: x, z: -1.9 })
 ))
@@ -198,11 +198,10 @@ let courtWashes = concat(
   ]
 )
 
-// The tour: every exhibit in walking order, level by level and row by row. `galleryStop` is the exhibit the tour last
-// stood a body at (-1 before the first step); gallery.next and gallery.prev write `galleryStep`, a rule moves the stop
-// and the stop's own rule stands body 0 at the exhibit's spawn point, facing it.
-let galleryOrder = flatMap(galleryRows, row => row.names)
-let galleryLast = (length(galleryOrder) - 1)
+// The tour: every exhibit in walking order, level by level and display by display (shapes.puck's galleryCatalog).
+// `galleryStop` is the exhibit the tour last showed (-1 before the first step); gallery.next and gallery.prev write
+// `galleryStep`, a rule moves the stop, and the stop's own rule stands body 0 before the exhibit's display, facing it,
+// and shows the exhibit on its turntable.
 
 // A reach standing in the building's frame: a region a press acts in (reach.puck), under the root.
 template galleryReach(id, box) {
@@ -744,6 +743,10 @@ placements {
   for switch in switchReach {
     galleryReach(id: $"{switch.rule}-reach", box: switch)
   }
+
+  // The display stations (shapes.puck): each plinth, its screen, the buttons before its console and the exhibit on its
+  // turntable, worked by the displays' rules below.
+  displayPlacements()
 }
 
 // The building's lights, each anchored to the root: a fixture stands where the root puts it and, standing still there,
@@ -995,6 +998,8 @@ state {
       level2 = 0
       level3 = 0
     }
+    // Each display's selection and its screen's cells, and every exhibit's copy (shapes.puck).
+    displayState()
     slot galleryStop = -1 bounds(-1..galleryLast)
     slot galleryStep = 0 bounds(-1..1)
 
@@ -1403,12 +1408,64 @@ rule "gallery-prev-wrap" {
   galleryStep = 0
 }
 
-for (name, index) in galleryOrder {
-  rule $"gallery-stop-{index}" {
-    when galleryStop == index
+for entry in galleryCatalog {
+  rule $"gallery-stop-{entry.index}" {
+    when galleryStop == entry.index
     mode: Edge
-    pose(key: 0, spawnPoint: name)
+    pose(key: 0, spawnPoint: entry.name)
+    gallerySelect[$"{galleryDisplays[entry.display].id}"] = entry.index
   }
+}
+
+// The displays. A press of the context button in a display's step-on reach shows the next exhibit of its list, and one
+// in its step-back reach the one before, each wrapping round; the edge fires once a press. Its selection holds a catalog
+// index, so a step works in the list's own places (`first` the catalog index of its first exhibit, `count` how many it
+// holds) and lands back in the catalog.
+for (display, index) in galleryDisplays {
+  let first = galleryDisplayFirsts[index]
+  let count = length(display.names)
+  rule $"gallery-display-{display.id}-next" {
+    when pressing()
+    mode: Edge
+    forEach: region($"display-{display.id}-next")
+    gallerySelect[$"{display.id}"] = first + (gallerySelect[$"{display.id}"] - first + 1) % count
+  }
+  rule $"gallery-display-{display.id}-back" {
+    when pressing()
+    mode: Edge
+    forEach: region($"display-{display.id}-back")
+    gallerySelect[$"{display.id}"] = first + (gallerySelect[$"{display.id}"] - first + count - 1) % count
+  }
+  // The screen follows the selection, however it moved (a button, gallery.go, the tour, a console write): its place in
+  // the list, the exhibits either side of it, and each one's copy from the catalog by its index (a `$cell:` key reads
+  // the index a cell holds).
+  rule $"gallery-screen-{display.id}" {
+    when gallerySelect[$"{display.id}"] != galleryShownAt[$"{display.id}"]
+    mode: Level
+    galleryPlace[$"{display.id}"] = gallerySelect[$"{display.id}"] - first + 1
+    galleryBefore[$"{display.id}"] = first + (gallerySelect[$"{display.id}"] - first + count - 1) % count
+    galleryAfter[$"{display.id}"] = first + (gallerySelect[$"{display.id}"] - first + 1) % count
+    setState(state: galleryScreenTitle, key: $"{display.id}", fromState: galleryTitles, fromKey: $"$cell:gallerySelect:{display.id}")
+    setState(state: galleryScreenNote, key: $"{display.id}", fromState: galleryNotes, fromKey: $"$cell:gallerySelect:{display.id}")
+    setState(state: galleryScreenBefore, key: $"{display.id}", fromState: galleryTitles, fromKey: $"$cell:galleryBefore:{display.id}")
+    setState(state: galleryScreenAfter, key: $"{display.id}", fromState: galleryTitles, fromKey: $"$cell:galleryAfter:{display.id}")
+    galleryShownAt[$"{display.id}"] = gallerySelect[$"{display.id}"]
+  }
+}
+
+// gallery.go and gallery.show name an exhibit: its display shows it.
+for entry in galleryCatalog {
+  rule $"gallery-pick-{entry.index}" {
+    when galleryPick[$"{entry.name}"] == 1
+    mode: Level
+    gallerySelect[$"{galleryDisplays[entry.display].id}"] = entry.index
+    galleryPick[$"{entry.name}"] = 0
+  }
+}
+rule "gallery-pick-entrance" {
+  when galleryPick.gallery == 1
+  mode: Level
+  galleryPick.gallery = 0
 }
 
 commands [

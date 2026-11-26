@@ -16,7 +16,7 @@
 // read the same occupancy as `$region:place-<name>`. A box is a centre and half-extents. The gallery's rooms are given
 // in the building's frame and stand under its root placement (gallery/layout.puck, gallery.md): a level's rooms reach
 // from half a metre under its floor to the underside of the slab above. The valley's are world coordinates. Nested
-// places list smallest first: an exhibit's guide region (guide.puck) inside the nave, inside the gallery's level 0,
+// places list smallest first: a display's guide region (guide.puck) inside the nave, inside the gallery's level 0,
 // inside the hall, inside the valley.
 
 import "shapes"
@@ -39,7 +39,7 @@ function groundPlace(name, x0, x1, z0, z1) = {
 let galleryPlaces = concat(
   [
     // The building as one, its forecourt's doorway outside and in, and the lobby inside the entrance.
-    { id: "hall", at [(galleryWidth / 2), 9.2, 12], half [(galleryWidth / 2), 9.7, 16] }
+    { id: "hall", at [(galleryWidth / 2), 9.2, ((wingSouth + galleryDepth) / 2)], half [(galleryWidth / 2), 9.7, ((galleryDepth - wingSouth) / 2)] }
     { id: "hall-entrance", at [((entranceWest + entranceEast) / 2), 1.5, 0], half [3, 2, 2.5] }
     storeyPlace("lobby", 0, wingWest, courtWest, galleryWall, naveSouth)
     // Level 0: the nave between its arcades, the north aisle behind the north one, the west hall under the bridge
