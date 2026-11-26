@@ -27,17 +27,17 @@ import "walkers"
 navigation {
   domains: concat(
     [
-      // The spawn's ground, the hall's level 0 and Wonderland, x -40 .. 72, z -30 .. 44.
-      walkable("grounds", [-40, 0.05, -30], 0.5, 224, 148, 2.2, 2, 1024)
+      // The spawn's ground, the hall's level 0 and Wonderland, x -40 .. 72, z -30 .. 54.
+      walkable("grounds", [-40, 0.05, -30], 0.5, 224, 168, 2.2, 2, 1024)
       // The caldera's floor out to the walls' feet (valley.puck), x and z -210 .. 210, down to the pool's basin.
       walkable("valley", [-210, 0.05, -210], 2, 211, 211, 2.2, 3, 1024)
     ],
-    // Each storey of the gallery above level 0, x 10 .. 70, z 8 .. 40 with the projecting wing: its probe starts 1.9 m
+    // Each storey of the gallery above level 0, x 10 .. 70, z 8 .. 50 with the projecting wing: its probe starts 1.9 m
     // over the floor (under every doorway, over the next storey's flights) and reaches down to the half landing under
     // it.
     map(
       range(1, 3),
-      level => walkable($"hall-level-{level}", [10, galleryFloor[level], 8], 0.5, 120, 64, 1.9, 2.35, 1024)
+      level => walkable($"hall-level-{level}", [10, galleryFloor[level], 8], 0.5, 120, 84, 1.9, 2.35, 1024)
     ),
     // Flight A's side of the stairwell from each level to the next, x 22.25 .. 24.5, z 12 .. 18.25: its probe
     // starts 4.45 m over the lower floor, under the next storey's flight A (4.5 m), and reaches the lower floor.

@@ -6010,6 +6010,13 @@ screen and see the change hot reload.
   [decision 3a of the disclosure plan](disclosure.md#3a-a-declaration-is-judged-inside-a-scope-its-declarer-reads-whole)
   designs that as an `Operate` grant the world gives, in place of the console's
   principal kind.
+- The owner's direction for the gallery's display stations: a player molds
+  their own shape on a display with basic operations. A display's selection
+  names an exhibit by its catalog index; an operation is a cell beside it keyed
+  by the display (a scale, a second exhibit to blend or subtract and its
+  amount), read by a creation of the display's own that its turntable shows
+  through one more response entry, and the console gains a reach for each
+  operation ([the gallery's displays](../../worlds/debug/gallery.md#molding-a-shape-later)).
 
 ### Media and capture
 

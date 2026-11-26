@@ -119,10 +119,9 @@ never amplify it. One mechanism covers what authors ask for:
   subtraction) and masks the relief over the same region. The standard
   package's templates pair the two from one table, so the region is written
   once.
-- **Relief only in a region:** `inside: 1, outside: 0`. The gallery's noise
-  exhibit (`shape-noise-subject` in `worlds/debug/shapes.puck`) splits into two
-  prototypes today only so the plinth and label stay clean. With this mask it
-  could be a single prototype.
+- **Relief only in a region:** `inside: 1, outside: 0`. The gallery's
+  `shape-noise-mask` (`worlds/debug/shapes.puck`) keeps its relief on its slab
+  this way.
 
 The `.puck` form uses the same row syntax as the creation's shapes. A `mask`
 block is one entry of `noise.masks`, and the `shape` rows inside it are that

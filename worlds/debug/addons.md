@@ -10,7 +10,7 @@ are in [the addons reference](../../.claude/skills/puck-world/references/addons.
 | Addon | Module | Guest | What it does |
 |---|---|---|---|
 | Watchdog | [watchdog.puck](watchdog.puck) | [addons/watchdog.wat](addons/watchdog.wat) | Checks invariants every tick and records each violation with its tick |
-| Gallery guide | [guide.puck](guide.puck) | [addons/guide.wat](addons/guide.wat) | Names the exhibit the Moth stands at on a HUD panel |
+| Gallery guide | [guide.puck](guide.puck) | [addons/guide.wat](addons/guide.wat) | Names the display the Moth stands at on a HUD panel |
 | Companion | [companion.puck](companion.puck) | [addons/companion.wat](addons/companion.wat) | A stand-in body, body 52, that follows the Moth |
 | Fuzzer | [fuzzer.puck](fuzzer.puck) | [addons/fuzzer.wat](addons/fuzzer.wat) | Seeded bounded driving of body 54; off by default |
 | Traversal bot | [traversal.puck](traversal.puck) | [addons/traversal.wat](addons/traversal.wat) | Runs body 53 through authored waypoints and marks misses/falls; off by default |
@@ -201,7 +201,7 @@ watchdog records `below-floor` for body 0 on the next settled tick.
 
 ## The gallery guide
 
-With `addonHud` on, the guide speaks the exhibit note its panel shows, once
+With `addonHud` on, the guide speaks the display's note its panel shows, once
 per arrival or changed note. Hiding the panel stops the utterance. The map
 board also speaks its directions in a sampled voice while a joined seat is within
 2.5 m of the board and the same HUD toggle is on. Both voices are authored in
@@ -213,22 +213,23 @@ describe their provenance. The
 [audio reference](../../docs/reference/audio.md#text-speech) explains the
 profile and `audio.render`'s device-free WAV export.
 
-Every exhibit in the gallery hall has a region in [guide.puck](guide.puck): a
-sphere of 1.29 m radius on the level's floor, 1.7 m out from the plinth on its
-label's side, where the exhibit's spawn point stands. The guide observes every
-region; when the Moth enters one it writes the exhibit's name and a one-line
+Every display station in the gallery hall has a region in
+[guide.puck](guide.puck): a sphere of 1.29 m radius on the level's floor before
+its console, where the display's spawn point stands. The guide observes every
+region; when the Moth enters one it writes the display's name and a one-line
 note into the `guide` row (and its walking-order position into `guideAt`), and
 when she leaves it clears them and the panel hides. A region event names its
-region by its position in the guide's own requests, which list the exhibits in
-the gallery's walking order. The `guideCopy` table in [guide.puck](guide.puck)
-authors each title and note by exhibit name and lowers them, in walking order,
+region by its position in the guide's own requests, which list the displays in
+the gallery's walking order. [guide.puck](guide.puck) lowers each display's
+title and what it shows (shapes.puck's `galleryDisplays`), in walking order,
 into the Text row `guideExhibits`, with keys `<ordinal>-title` and
-`<ordinal>-note`. A new exhibit needs a row there under its name; moving one
-needs nothing. `gallery.go <exhibit>` stands her at one.
+`<ordinal>-note`. The exhibit on the display's turntable is named on its own
+screen ([shapes.md](shapes.md#the-displays)). A new display needs nothing here;
+`gallery.go <exhibit>` stands her at the exhibit's display.
 
 The guest asks for Observe over that row and uses `ReadStateText` to assemble
 each field, 16 UTF-8 bytes at a time, under a shared two-read budget. It has no
-exhibit strings: editing a title or note and reloading the world changes what
+display strings: editing a title or note and reloading the world changes what
 the next visit shows without changing the guest or its hash. Entering another
 region discards any unfinished read; an exit clears the panel. Quotes,
 backslashes, line breaks and multi-byte UTF-8 survive the JSON write.

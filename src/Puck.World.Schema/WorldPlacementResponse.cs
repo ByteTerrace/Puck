@@ -40,12 +40,14 @@ namespace Puck.World;
 /// can react to state. Refused together with <see cref="WorldPlacement.Inhabit"/> (a sibling concern owns body
 /// locomotion) and <see cref="WorldPlacement.FaceSources"/> (its per-instance overrides
 /// pin to the creation the row validated against, which a response is free to change). Every response entry's
-/// <see cref="PrototypeId"/>, and the row's authored one, must resolve to a declared, non-animated creation (no
-/// timeline frames) — a response never turns a static stamp into an animated one.</para>
+/// <see cref="PrototypeId"/>, and the row's authored one, must resolve to a declared creation. A creation that animates
+/// (drivers or timeline frames) is admitted: every reader draws the row as the creation it shows, so the row is a static
+/// stamp while it shows a static creation and a stamp-pool registration while it shows an animated one, and a row that
+/// can show an animated creation carries no distribution or mirror.</para>
 /// </remarks>
 /// <param name="When">The condition tested every sweep — a lattice-field read or a state-cell read.</param>
 /// <param name="PrototypeId">The creation the placement shows/collides as while <paramref name="When"/> holds and no
-/// earlier entry does. Must resolve to a declared, non-animated creation row.</param>
+/// earlier entry does. Must resolve to a declared creation row.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When, [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Names)] string PrototypeId) {
     /// <summary>Returns the index of the entry a row shows: the lowest bit of <see cref="WorldPlacement.Holding"/>
@@ -382,6 +384,7 @@ public abstract record WorldPlacementResponseCondition {
 }
 /// <summary>Capacity constants for <see cref="WorldPlacement.Respond"/>.</summary>
 public static class WorldResponseCapacity {
-    /// <summary>The most response entries a single placement may declare.</summary>
-    public const int MaxEntries = 8;
+    /// <summary>The most response entries a single placement may declare: one a bit of <see cref="WorldPlacement.Holding"/>'s
+    /// non-negative range, so entry <c>i</c>'s bit <c>1 &lt;&lt; i</c> stays positive.</summary>
+    public const int MaxEntries = 31;
 }

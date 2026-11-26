@@ -2014,7 +2014,8 @@ counts in `sdf.transforms`, never in `records.posed`.
   holds a template for every creation it can show (`WorldRigidAssets.ReconcileStatic`), so the sweep moves its copies'
   template range and pose alone (`WorldRigidAssets.PresentHoldings`, `PlaceStaticCopies`, `PackRiding`). The program
   composes again only through `HoldingComposeRevision` (a responding row the catalog refuses: glass, a pattern of
-  riding occurrences, a riding creation with volumes) or `StaticTemplateRevision` (a template set the latest emission did not write); a new path that
+  riding occurrences, a riding creation with volumes, or a row while it shows an animated creation, which the stamp
+  pool registers by the creation it shows, `WorldCreationInstances.PoolOwns`) or `StaticTemplateRevision` (a template set the latest emission did not write); a new path that
   presents a response goes through one of the two. A solid row's response still rebuilds the presentation query field
   whole (`WorldFramePresenter.RebuildStaticField`).
 - **A pack visits only what woke.** The stamp pool, its rigid bodies (`WorldRigidAssets.Pack`) and the catalog
