@@ -221,7 +221,8 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     public static WorkKind CompileContentReads { get; } = Registry.Declare("world.boot.compile-content-reads", "count", WorkClass.Pacing);
     /// <summary>Gets the kind counting creation and shade rows delivered to local or replica clients.</summary>
     public static WorkKind PresentationRowsDelivered { get; } = Registry.Declare("world.boot.presentation-rows-delivered", "count", WorkClass.Deterministic);
-    /// <summary>Gets the kind counting compact row payload bytes delivered to local or replica clients.</summary>
+    /// <summary>Gets the kind counting the compact row payload bytes a wire encoder wrote for a replica in another
+    /// process; a delivery in the process hands the rows themselves and carries none.</summary>
     public static WorkKind PresentationBytesDelivered { get; } = Registry.Declare("world.boot.presentation-bytes-delivered", "bytes", WorkClass.Deterministic);
     /// <summary>Gets the kind counting the whole-state primer snapshots session observers were handed after their
     /// admission's own: a cut's new generation, a resumed span or a replaced document whose delivery could not be
@@ -235,6 +236,9 @@ public sealed class WorldBootWork : WorkLedger<WorkCounterSet> {
     public static WorkKind SessionCellsDelivered { get; } = Registry.Declare("world.boot.session-cells-delivered", "count", WorkClass.Pacing);
     /// <summary>Gets the kind counting the body entries every snapshot handed a session observer carried.</summary>
     public static WorkKind SessionEntriesDelivered { get; } = Registry.Declare("world.boot.session-entries-delivered", "count", WorkClass.Pacing);
+    /// <summary>Gets the kind counting the snapshots a session stream delivered nothing for because its observer
+    /// presents the image of another stream disclosed alike (<c>WorldImageClasses</c>).</summary>
+    public static WorkKind SessionSnapshotsFollowed { get; } = Registry.Declare("world.boot.session-snapshots-followed", "count", WorkClass.Pacing);
     /// <summary>Gets the kind counting the hand-offs an authority's outbox recorded for its collect instead of making:
     /// deliveries to sinks that receive on the host loop, and the callbacks routed through it.</summary>
     public static WorkKind OutboxRecords { get; } = Registry.Declare("world.boot.outbox-records", "count", WorkClass.Pacing);

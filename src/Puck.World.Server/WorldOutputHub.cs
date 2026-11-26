@@ -197,10 +197,11 @@ public sealed partial class WorldOutputHub {
             payload: (Rows: rows, Version: version)
         );
     }
+    // Counts one recipient's presentation delivery and its rows. A delivery in the process hands the rows themselves,
+    // so it carries no bytes; a wire encoder counts the bytes it writes (PresentationBytesDelivered).
     internal static void CountPresentationRows(WorldPresentationRows rows) {
         WorldBootWork.Count(WorldBootWork.PresentationDeliveries);
         WorldBootWork.Count(WorldBootWork.PresentationRowsDelivered, rows.Count);
-        WorldBootWork.Count(WorldBootWork.PresentationBytesDelivered, rows.Payload.Length);
     }
     /// <summary>Fans the live world definition out to every typed subscriber after a value-only mutation (see
     /// <see cref="IClientSink.DeliverState"/>). A faulting sink is isolated and detached — see the class

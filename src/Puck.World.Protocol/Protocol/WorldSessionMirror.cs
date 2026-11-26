@@ -209,29 +209,47 @@ public sealed class WorldSessionMirror : IClientSink {
         StepSeconds: image.StepSeconds,
         Tick: image.Tick
     );
-    /// <summary>Gets what this mirror's deliveries have cost since it was constructed: each kind's count and the time
-    /// its delivering thread spent applying it. The count of a delivery moves after its time, so a reader sees a
-    /// count only with the time it cost.</summary>
+    /// <summary>Gets the deliveries this mirror has applied since it was constructed, each kind's count, each moved
+    /// once its delivery has applied.</summary>
     public WorldDeliveryWork DeliveryWork => new(
-        DefinitionTicks: Interlocked.Read(location: ref m_definitionApplyTicks),
         Definitions: Interlocked.Read(location: ref m_definitionsApplied),
-        SnapshotTicks: Interlocked.Read(location: ref m_snapshotApplyTicks),
         Snapshots: Interlocked.Read(location: ref m_snapshotsApplied),
-        StateTicks: Interlocked.Read(location: ref m_stateApplyTicks),
         States: Interlocked.Read(location: ref m_statesApplied)
     );
 
-    private long m_definitionApplyTicks;
     private long m_definitionsApplied;
-    private long m_snapshotApplyTicks;
     private long m_snapshotsApplied;
-    private long m_stateApplyTicks;
     private long m_statesApplied;
 
-    // Charges one delivery to its kind: the time since `started`, then the count.
-    private static void Charge(ref long ticks, ref long count, long started) {
-        _ = Interlocked.Add(location1: ref ticks, value: (Stopwatch.GetTimestamp() - started));
-        _ = Interlocked.Increment(location: ref count);
+    // Counts one applied delivery of a kind. A route seed applies a definition from its own thread, so the count is
+    // interlocked; no delivery reads a clock to be counted.
+    private static void Counted(ref long count) => _ = Interlocked.Increment(location: ref count);
+
+    /// <summary>Gets whether the mirror may present another session's image of its authority, and lead others in
+    /// presenting its own (<see cref="WorldImageClasses"/>).</summary>
+    public bool Shares { get; }
+    /// <summary>Gets the mirror a presentation of this session reads: the image of its class's leader while it
+    /// follows one (<see cref="WorldImageClasses"/>), and otherwise this mirror. Read again by every presentation that
+    /// builds from it, since a binding change hands it another mirror.</summary>
+    public WorldSessionMirror Presented => (Volatile.Read(location: ref m_presented) ?? this);
+
+    // The class whose leader this mirror presents, and that leader's mirror; written only where the authority's outbox
+    // replays (WorldImageRecord), read by Presented from any thread.
+    private WorldImageClass? m_followed;
+    private WorldSessionMirror? m_presented;
+
+    // Presents a class leader's image in place of this mirror's own.
+    internal void Follow(WorldImageClass image, WorldSessionMirror presented) {
+        if ((m_followed is { } held) && !ReferenceEquals(objA: held, objB: image)) { held.Drop(follower: this); }
+        m_followed = image;
+        Volatile.Write(location: ref m_presented, value: presented);
+    }
+    // Stops presenting another's image and drops what this mirror held, which its stream refills from a cut.
+    internal void Unfollow() {
+        m_followed?.Drop(follower: this);
+        m_followed = null;
+        Volatile.Write(location: ref m_presented, value: null);
+        Withdraw();
     }
 
     private readonly MarkedIndexSet m_pending = new();
@@ -460,8 +478,13 @@ public sealed class WorldSessionMirror : IClientSink {
     /// <param name="unread">Whether nothing will ever read the mirror's poses, field cells or inputs, as in a host
     /// that presents nothing: every snapshot is then dropped on arrival, and only definitions and state stamps are
     /// kept.</param>
-    public WorldSessionMirror(WorldDefinition placeholder, bool unread = false) {
+    /// <param name="shares">Whether the mirror may present the image of another session of its authority that is
+    /// disclosed alike, and lead others in presenting its own (<see cref="WorldImageClasses"/>): a mirror read only
+    /// through <see cref="Presented"/>, never one whose own state its holder reads.</param>
+    public WorldSessionMirror(WorldDefinition placeholder, bool unread = false, bool shares = false) {
         ArgumentNullException.ThrowIfNull(argument: placeholder);
+
+        Shares = shares;
 
         m_unread = unread;
         m_stateView = new WorldDocumentStateView(clock: () => (Tick, EngineTick), delivered: placeholder, gate: m_followGate);
@@ -972,22 +995,22 @@ public sealed class WorldSessionMirror : IClientSink {
     /// the composing revision to the scene that presents them, as a state delivery that moved them does.</remarks>
     public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (!m_ingress.Admit(stream: in stream)) { return; }
-        var started = Stopwatch.GetTimestamp();
         lock (m_snapshotWriteGate) {
             lock (m_followGate) {
-                var held = Document.Definition;
-                if (!rows.TryApply(held, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the mirror's creation roster and placement rows."); }
-                var adopted = Publish(changed, version, valuesFollow: true);
-                _ = WorldPlacementResponse.CompareRows(after: adopted, before: held, holdings: out var holdings, rows: rows, solid: out _);
+                var held = Document;
+                if (!rows.TryApply(held.Definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the mirror's creation roster and placement rows."); }
+                // The values follow in the snapshots, under the same state section, only within one activation, as for
+                // a state delivery.
+                var adopted = Publish(changed, version, valuesFollow: (version.Activation == held.Version.Activation));
+                _ = WorldPlacementResponse.CompareRows(after: adopted, before: held.Definition, holdings: out var holdings, rows: rows, solid: out _);
                 _ = Interlocked.Increment(ref m_definitionRevision);
                 if (!(holdings && rows.MovesHoldingsOnly)) { _ = Interlocked.Increment(location: ref m_composingRevision); }
             }
         }
         DocumentDelivered?.Invoke(Document);
-        Charge(count: ref m_definitionsApplied, started: started, ticks: ref m_definitionApplyTicks);
+        Counted(count: ref m_definitionsApplied);
     }
     private void ApplyDefinition(WorldDefinition definition, WorldDocumentVersion version) {
-        var started = Stopwatch.GetTimestamp();
 
         lock (m_stampGate) {
             m_stateTime = null;
@@ -1016,7 +1039,7 @@ public sealed class WorldSessionMirror : IClientSink {
             }
         }
         DocumentDelivered?.Invoke(obj: Document);
-        Charge(count: ref m_definitionsApplied, started: started, ticks: ref m_definitionApplyTicks);
+        Counted(count: ref m_definitionsApplied);
     }
     /// <inheritdoc/>
     public void DeliverSessionLever(WorldSessionLever lever) {
@@ -1037,8 +1060,14 @@ public sealed class WorldSessionMirror : IClientSink {
     // in place of its bodies, and no route seed or queued cue, applied through the ordinary delivery paths so every
     // reader follows it. The undisclosed document, never the construction placeholder, which can be a delivered
     // document (a route's, or the authority's last). The ingress runs it on every span move, after the old span ended
-    // and before the next opens (WorldStreamIngress).
+    // and before the next opens (WorldStreamIngress), and when the mirror stops presenting another's image (Unfollow).
+    // A span move also ends a binding: what the mirror presents is its own from then on.
     private void Withdraw() {
+        if (m_followed is { } followed) {
+            followed.Drop(follower: this);
+            m_followed = null;
+            Volatile.Write(location: ref m_presented, value: null);
+        }
         lock (m_snapshotWriteGate) { m_seededRouteEntity = null; }
         CueFrames.Clear();
         AudioCueFrames.Clear();
@@ -1072,13 +1101,11 @@ public sealed class WorldSessionMirror : IClientSink {
     public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
         if (!m_ingress.Admit(stream: in stream) || m_unread) { return; }
 
-        var started = Stopwatch.GetTimestamp();
-
         ApplySnapshot(snapshot: in snapshot);
         var cues = WorldPresentationCueFeed.Capture(snapshot);
         if (cues.Cues.Length != 0) { CueFrames.Publish(cues); }
         AudioCueFrames.Publish(cues);
-        Charge(count: ref m_snapshotsApplied, started: started, ticks: ref m_snapshotApplyTicks);
+        Counted(count: ref m_snapshotsApplied);
     }
     private void ApplySnapshot(in WorldSnapshot snapshot) {
         lock (m_snapshotWriteGate) {
@@ -1269,7 +1296,6 @@ public sealed class WorldSessionMirror : IClientSink {
 
         if (!m_ingress.Admit(stream: in stream)) { return; }
 
-        var started = Stopwatch.GetTimestamp();
 
         // A value-only mutation cannot have changed a kit's collider or body-contact mode: publish the fresh
         // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
@@ -1310,7 +1336,7 @@ public sealed class WorldSessionMirror : IClientSink {
         }
 
         if (!stamp.ArenaValues) { DocumentDelivered?.Invoke(obj: Document); }
-        Charge(count: ref m_statesApplied, started: started, ticks: ref m_stateApplyTicks);
+        Counted(count: ref m_statesApplied);
     }
 
     // Notes one moved row for the next FollowState to refresh, once however often it moves before then. Called under

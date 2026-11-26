@@ -694,8 +694,6 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         node["snapshots"] = work.Snapshots;
         node["definitions"] = work.Definitions;
         node["states"] = work.States;
-        node["applyMs"] = work.Milliseconds;
-        node["snapshotApplyMs"] = ((work.SnapshotTicks * 1000.0) / System.Diagnostics.Stopwatch.Frequency);
         if (count > 0) {
             var sum = 0.0;
             var max = 0.0;

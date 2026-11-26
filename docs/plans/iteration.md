@@ -472,7 +472,7 @@ rows, [the checks](#checks) below are owed.
 - **Local source boots start the watch.** `WorldSourceWatch` starts from the
   file facts read at boot and submits an ordinary reload on a save.
   `world.counters world.boot` reports pump calls, stamp queries, content
-  reads, and delivered presentation rows and bytes.
+  reads, delivered presentation rows, and the bytes a wire carried them in.
 - **As the edit it is.** `WorldDocument.ReloadInstallKindOf` classifies the
   candidate by which parts of the document (`WorldDocumentInputs.Changed`) are other objects than the live document's:
   nothing installs when none is; state values alone take the value install;

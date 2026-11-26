@@ -48,7 +48,7 @@ public sealed class WorldObservationSession {
         Owner = owner;
         Site = site;
         Source = source;
-        Mirror = new WorldSessionMirror(placeholder: WorldProjection.Undisclosed, unread: unread);
+        Mirror = new WorldSessionMirror(placeholder: WorldProjection.Undisclosed, unread: unread, shares: true);
     }
 
     /// <summary>Gets the destination instance's generation id, once resolved.</summary>

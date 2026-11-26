@@ -463,8 +463,12 @@ public sealed partial class WorldDisclosureImages {
         }
         return entry.Frame;
     }
-    /// <summary>Gets the placement rows of a replica audience's disclosed document.</summary>
-    internal IReadOnlyList<WorldPlacement> DisclosedPlacements(WorldRecipientView view) => Current(view).Composed.Placements;
+    /// <summary>Gets the placement rows of a replica audience's disclosed document and the digest of their section's
+    /// header (everything in the section but its rows, an absent row list told from an empty one).</summary>
+    internal (IReadOnlyList<WorldPlacement> Rows, byte[] Header) DisclosedPlacements(WorldRecipientView view) {
+        var composed = Current(view).Composed;
+        return (composed.Placements, PlacementHeader(composed.PlacementsRaw));
+    }
     /// <summary>Gets the frame of a replica audience's disclosed document (<see cref="FrameIdentity"/>) and its digest
     /// less the placements section.</summary>
     internal (ContentPin Frame, ContentPin Remainder) FramePins(WorldRecipientView view) {
@@ -481,20 +485,26 @@ public sealed partial class WorldDisclosureImages {
     /// <param name="view">The stream's view.</param>
     /// <param name="heldRest">The frame digest less placements the stream holds.</param>
     /// <param name="held">The placement rows the stream holds.</param>
+    /// <param name="heldHeader">The digest of the placements section header the stream holds
+    /// (<see cref="DisclosedPlacements"/>).</param>
     /// <param name="rows">The rows owed, possibly none, when the method returns <see langword="true"/>.</param>
     /// <param name="placements">The disclosed placement rows the stream holds once the rows apply.</param>
+    /// <param name="header">The digest of the disclosed placements section header.</param>
     /// <param name="frame">The frame the stream holds once the rows apply.</param>
     /// <param name="identity">The disclosed document's identity.</param>
-    /// <returns><see langword="false"/> when the frame moved in another section or the placements changed shape (a row
-    /// added, removed or moved to another ordinal), which only the whole document carries.</returns>
-    internal bool TryAdvancePlacements(WorldRecipientView view, ContentPin heldRest, IReadOnlyList<WorldPlacement> held,
-        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldPresentationRows? rows, out IReadOnlyList<WorldPlacement> placements, out ContentPin frame, out Sha256Digest identity) {
+    /// <returns><see langword="false"/> when the frame moved in another section, the placements section's header moved
+    /// (its policy, or its row list turning absent or present), or the placements changed shape (a row added, removed or
+    /// moved to another ordinal), which only the whole document carries.</returns>
+    internal bool TryAdvancePlacements(WorldRecipientView view, ContentPin heldRest, IReadOnlyList<WorldPlacement> held, byte[] heldHeader,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldPresentationRows? rows, out IReadOnlyList<WorldPlacement> placements,
+        out byte[] header, out ContentPin frame, out Sha256Digest identity) {
         var entry = Current(view);
         frame = FrameOf(entry);
         identity = entry.Identity;
         placements = entry.Composed.Placements;
+        header = PlacementHeader(entry.Composed.PlacementsRaw);
         rows = null;
-        if ((entry.Rest != heldRest) || (placements.Count != held.Count)) { return false; }
+        if ((entry.Rest != heldRest) || !header.AsSpan().SequenceEqual(heldHeader) || (placements.Count != held.Count)) { return false; }
         List<WorldPresentationHolding>? holdings = null;
         List<WorldPresentationPlacement>? replaced = null;
         for (var ordinal = 0; ordinal < placements.Count; ordinal++) {
@@ -524,6 +534,7 @@ public sealed partial class WorldDisclosureImages {
     private static readonly byte[] AbsentSection = SHA256.HashData(ReadOnlySpan<byte>.Empty);
     private readonly Puck.Abstractions.CodeDerivedTable<WorldPlacement, byte[]> m_placementDigests = new();
     private readonly Puck.Abstractions.CodeDerivedTable<WorldPlacementsSection, byte[]> m_placementSections = new();
+    private readonly Puck.Abstractions.CodeDerivedTable<WorldPlacementsSection, byte[]> m_placementHeaders = new();
     private readonly Puck.Abstractions.CodeDerivedTable<WorldStateSection, byte[]> m_stateSections = new();
     private readonly Puck.Abstractions.CodeDerivedTable<WorldPrototype, byte[]> m_creationDigests = new();
     private readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldPrototype>, byte[]> m_creationLists = new();
@@ -536,13 +547,24 @@ public sealed partial class WorldDisclosureImages {
         if (m_placementSections.TryGetValue(section, out var stored)) { return stored; }
         // The header and ordered, fixed-width leaves distinguish absent and empty row lists and preserve row order.
         // An immutable row reused across a holding patch or a disclosure never serializes its bytes again.
-        var header = section with { Rows = (section.Rows is null ? null : []) };
+        var header = PlacementHeader(section);
         m_frameLeaves.ResetWrittenCount();
-        m_frameLeaves.Write(DigestSection(header));
+        m_frameLeaves.Write(header);
         WriteRowDigests(section.Rows, m_placementDigests);
         stored = SHA256.HashData(m_frameLeaves.WrittenSpan);
         m_placementSections.AddOrUpdate(section, stored);
         return stored;
+    }
+
+    // The digest of a placements section less its rows, kept per section object: the section with an empty row list
+    // when it has one, so an absent list and an empty one digest apart.
+    private byte[] PlacementHeader(WorldPlacementsSection? section) {
+        if (section is null) { return AbsentSection; }
+        if (!m_placementHeaders.TryGetValue(section, out var header)) {
+            header = DigestSection(section with { Rows = (section.Rows is null ? null : []) });
+            m_placementHeaders.AddOrUpdate(section, header);
+        }
+        return header;
     }
 
     private byte[] RowsDigest<T>(IReadOnlyList<T>? rows, Puck.Abstractions.CodeDerivedTable<T, byte[]> digests,
