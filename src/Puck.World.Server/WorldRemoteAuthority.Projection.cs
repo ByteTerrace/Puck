@@ -68,9 +68,14 @@ public sealed partial class WorldRemoteAuthority {
             WorldFederationCodec.EncodeTravelerObservation(request: in request),
             ct
         ).ConfigureAwait(continueOnCapturedContext: false);
+        // An acknowledgement that meets the far connection as this segment ends is dropped: it names a record nothing
+        // more will be composed against, and the read below is what reports a connection that failed.
         using var acknowledging = session.Receive(acknowledge: async (_, bytes, token) => {
-            await stream.WriteAsync(bytes, token).ConfigureAwait(false);
-            await stream.FlushAsync(token).ConfigureAwait(false);
+            try {
+                await stream.WriteAsync(bytes, token).ConfigureAwait(false);
+                await stream.FlushAsync(token).ConfigureAwait(false);
+            } catch (Exception exception) when ((exception is IOException or ObjectDisposedException or System.Net.Sockets.SocketException)) {
+            }
         });
 
         while (true) {

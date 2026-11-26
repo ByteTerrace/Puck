@@ -127,6 +127,110 @@ public sealed class TravelerObservationHandoffLawTests {
         Assert.Equal(expected: -1, actual: TravelerSlot(server: source));
     }
 
+    // What a relaying authority wrote to its recipient's connection, read back record by record.
+    private sealed class Relayed {
+        private readonly Lock m_gate = new();
+        private readonly List<(WorldFederationResponse Kind, WorldStreamStamp Stamp, string? Authority)> m_records = [];
+
+        public Relayed(Stream input, CancellationToken ct) => Reading = Task.Run(function: async () => {
+            while (true) {
+                var frame = await WorldFederationCodec.ReadResponseAsync(ct: ct, stream: input);
+
+                if (!frame.Ok) { return; }
+                var kind = ((WorldFederationResponse)frame.Kind);
+                var stamp = default(WorldStreamStamp);
+                string? authority = null;
+
+                if (kind == WorldFederationResponse.Cut) {
+                    _ = WorldFederationCodec.TryDecodeCut(body: frame.Body.Span, stream: out stamp, terminal: out _);
+                } else if (
+                    WorldFederationCodec.TryReadStamped(record: frame.Body.Span, stream: out stamp, body: out var body, failure: out _) &&
+                    (kind == WorldFederationResponse.Snapshot) &&
+                    WorldFederationCodec.TryDecodeSnapshot(body: body, snapshot: out var snapshot, failure: out _)
+                ) {
+                    authority = snapshot.Authority;
+                }
+                lock (m_gate) { m_records.Add(item: (kind, stamp, authority)); }
+            }
+        }, cancellationToken: ct);
+
+        public Task Reading { get; }
+        public (WorldFederationResponse Kind, WorldStreamStamp Stamp, string? Authority)[] Records { get { lock (m_gate) { return [.. m_records]; } } }
+        public bool Shows(string authority) => Records.Any(predicate: record => (record.Authority == authority));
+    }
+
+    // THE LAW: an authority whose traveler stands in another process serves its recipient's stream from there without
+    // ending it. It lends the far authority the stream's counters with the request; the far authority stamps its
+    // records as the stream's next generation, behind a cut; the relaying authority's lineage follows each stamp; and
+    // when the traveler moves on, the far authority hands the stream back with a record the recipient never sees.
+    // Asked again, the same stream goes on, here from the authority the traveler walked on to, behind another cut.
+    [Fact]
+    public async Task ARelayedSegmentContinuesItsStreamAcrossASocketAndIsHandedBackWhenTheTravelerMovesOn() {
+        WorldRemoteAuthority? traveler = null;
+        using var hosts = FederatedHosts.Build(travelerRouteStarted: wrapper => traveler = wrapper);
+        var entry = hosts.DestinationRow.Server;
+        var onward = hosts.OnwardRow.Server;
+
+        hosts.JoinSeat(slot: 0, travelTurn: default);
+        _ = hosts.Source.EnqueueTransfer(
+            actingPrincipal: Principal.Console,
+            destination: hosts.RemoteDestination,
+            scope: WorldInstanceHost.TransferScope.Body,
+            sourceInstance: WorldInstanceHost.BootInstanceName,
+            sourceSlot: 0
+        );
+        hosts.DrainCrossing(slot: 0);
+        Assert.NotNull(@object: traveler);
+        Assert.True(condition: traveler.TryRouteCredential(bodyIndex: -1, credential: out var credential));
+
+        // The relaying authority's stream has stamped one record of its own, so the relayed segment owes a cut.
+        var lineage = new WorldStreamLineage();
+        var local = new object();
+
+        Assert.False(condition: lineage.Open(owner: local));
+        var own = lineage.Stamp(owner: local);
+        var pipe = new System.IO.Pipelines.Pipe(options: new System.IO.Pipelines.PipeOptions(pauseWriterThreshold: 0L));
+        var session = new WorldProjectionSession(lineage: lineage, output: pipe.Writer.AsStream());
+        var arm = new WorldRemoteForwardedAuthority(authority: traveler, credential: credential);
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(token: TestContext.Current.CancellationToken);
+        var relayed = new Relayed(ct: lifetime.Token, input: pipe.Reader.AsStream());
+        var first = arm.StreamProjectionAsync(ceiling: WorldDisclosureTier.Replica, ct: lifetime.Token, remainingHops: 8, session: session);
+
+        StepUntil(condition: () => relayed.Shows(authority: entry.AuthorityIdentity), hosts: hosts, what: "the far authority's world is relayed");
+        var opening = relayed.Records[0];
+
+        Assert.Equal(expected: WorldFederationResponse.Cut, actual: opening.Kind);
+        Assert.Equal(expected: new WorldStreamStamp(Generation: (own.Generation + 1L), Ordinal: (own.Ordinal + 1L), Stream: lineage.Stream), actual: opening.Stamp);
+
+        Walk(from: FederatedHosts.DestinationName, hosts: hosts, source: entry, target: onward, to: FederatedHosts.OnwardName);
+        StepUntil(condition: () => first.IsCompleted, hosts: hosts, what: "the far authority hands the stream back");
+        Assert.Equal(expected: WorldProjectionEnd.Moved, actual: (await first).End);
+        var handed = relayed.Records.Length;
+        var last = relayed.Records[^1].Stamp;
+
+        Assert.Equal(expected: last.Generation, actual: lineage.Generation);
+
+        // Asked again, as the door that keeps the stream does: the far authority relays the one the traveler walked on to.
+        var second = arm.StreamProjectionAsync(ceiling: WorldDisclosureTier.Replica, ct: lifetime.Token, remainingHops: 8, session: session);
+
+        StepUntil(condition: () => relayed.Shows(authority: onward.AuthorityIdentity), hosts: hosts, what: "the neighbour's world is relayed");
+        var records = relayed.Records;
+
+        Assert.Equal(expected: WorldFederationResponse.Cut, actual: records[handed].Kind);
+        Assert.True(condition: (records[handed].Stamp.Generation > last.Generation), userMessage: "the next segment opens a later generation");
+        Assert.DoesNotContain(collection: records, filter: static record => (record.Kind is WorldFederationResponse.ProjectionMoved or WorldFederationResponse.ProjectionInvalidated or WorldFederationResponse.Refusal));
+        for (var index = 0; (index < records.Length); index++) {
+            Assert.Equal(expected: lineage.Stream, actual: records[index].Stamp.Stream);
+            if (index > 0) {
+                Assert.True(condition: (records[index].Stamp.Ordinal > records[(index - 1)].Stamp.Ordinal), userMessage: $"record {index} is not ahead of the one before it");
+                Assert.True(condition: (records[index].Stamp.Generation >= records[(index - 1)].Stamp.Generation), userMessage: $"record {index} is of an earlier generation than the one before it");
+            }
+        }
+
+        await lifetime.CancelAsync();
+        try { _ = await second; } catch (Exception exception) when (exception is OperationCanceledException or IOException) { }
+        try { await relayed.Reading; } catch (OperationCanceledException) { }
+    }
     [Fact]
     public void ARemoteTravelerWalksToAnotherInstanceAndBackOnOneObservationAsOnePeer() {
         WorldRemoteAuthority? traveler = null;
