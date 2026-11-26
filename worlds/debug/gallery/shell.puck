@@ -614,7 +614,7 @@ let shellPlanters = concat(
     { x: (galleryEast - 2.8), y: 0, z: (naveSouth + 0.75), yaw: 0 }, { x: (galleryEast - 2.8), y: 0, z: (naveNorth - 0.75), yaw: 0 }
     { x: 42, y: 0, z: (naveSouth + 0.6), yaw: 0 }, { x: 42, y: 0, z: (naveNorth - 0.6), yaw: 0 }
     { x: 22.2, y: 0, z: (arcadeSouth - 0.35), yaw: 0 }, { x: 29, y: 0, z: (arcadeSouth - 0.35), yaw: 0 }
-    { x: 10.6, y: 0, z: 1.1, yaw: 0 }, { x: 1.2, y: 0, z: (galleryNorth - 1.1), yaw: 90 }, { x: 15.3, y: 0, z: 4.6, yaw: 90 }
+    { x: 10.6, y: 0, z: 1.1, yaw: 0 }, { x: (galleryWestIn + 0.9), y: 0, z: (galleryNorth - 1.1), yaw: 90 }, { x: 15.3, y: 0, z: 4.6, yaw: 90 }
     { x: 6, y: 1, z: 1.1, yaw: 0 }, { x: 10.5, y: 1, z: (naveMid - 0.1), yaw: 90 }, { x: 24.5, y: 1, z: (arcadeSouth + 0.15), yaw: 0 }, { x: (galleryEast - 1.3), y: 1, z: 1.4, yaw: 90 }
     { x: 6, y: 2, z: 1.1, yaw: 0 }, { x: 10.5, y: 2, z: (naveMid - 0.1), yaw: 90 }, { x: 22, y: 2, z: (arcadeSouth + 0.15), yaw: 0 }, { x: 40, y: 2, z: (arcadeSouth + 0.15), yaw: 0 }, { x: (galleryEast - 2.2), y: 2, z: (arcadeSouth + 0.15), yaw: 0 }
     { x: 2, y: 3, z: 1, yaw: 0 }, { x: 6, y: 3, z: 1, yaw: 0 }, { x: 10, y: 3, z: 1, yaw: 0 }, { x: 0.9, y: 3, z: 4.6, yaw: 90 }
@@ -622,14 +622,22 @@ let shellPlanters = concat(
   ]
 )
 // The benches stand in the floor's empty bays, each two tiles long and centred on a tile, so its ends lie on the
-// centres of the tiles either side (the placements snap each to its nearest tile centre). Level 0's south aisle has one
-// against the painting wing's south wall, in the middle of the arcade bay before the night and city paintings.
-let shellBenches = [
-  { x: (naveWest + (5.5 * arcadePitch)), y: 0, z: (galleryWall + (galleryTile / 2)), yaw: 0 }, { x: 50, y: 0, z: 3.2, yaw: 0 }, { x: 6, y: 0, z: 5, yaw: 0 }, { x: 31, y: 0, z: (northAisleMid - 1.8), yaw: 0 }
-  { x: 6, y: 1, z: 5, yaw: 0 }, { x: 6, y: 1, z: naveMid, yaw: 90 }, { x: 52, y: 1, z: 3, yaw: 0 }
-  { x: 6, y: 2, z: 5, yaw: 0 }, { x: 6, y: 2, z: naveMid, yaw: 90 }
-  { x: 4, y: 3, z: 5.4, yaw: 0 }, { x: 9, y: 3, z: 5.4, yaw: 0 }, { x: 6, y: 3, z: naveMid, yaw: 90 }, { x: 38, y: 3, z: (arcadeSouth - 1.35), yaw: 0 }
-]
+// centres of the tiles either side (the placements snap each to its nearest tile centre). On level 0 they keep the
+// displays' rhythm: the displays' pairs fill every other arcade bay, and in each bay between them a bench stands against
+// each long wall, in the first tile row. A south bay is left bare where its bench would stand across the lift's door or
+// a fin of the painting wing.
+let shellBenchBays = map(range(0, 7), i => (naveWest + (arcadePitch * ((2 * i) - 2.5))))
+let shellBenchBlocked = [[liftDoorway.a0, liftDoorway.a1], [courtWest, (courtWest + galleryWall)], [courtFin, (courtFin + galleryWall)]]
+function shellBenchClear(x) = (length(filter(shellBenchBlocked, span => (((x + galleryTile) > span[0]) and ((x - galleryTile) < span[1])))) == 0)
+let shellBenches = concat(
+  map(filter(shellBenchBays, x => shellBenchClear(x)), x => { x: x, y: 0, z: (galleryWall + (galleryTile / 2)), yaw: 0 }),
+  map(shellBenchBays, x => { x: x, y: 0, z: (galleryNorth - (galleryTile / 2)), yaw: 0 }),
+  [
+    { x: 6, y: 1, z: 5, yaw: 0 }, { x: 6, y: 1, z: naveMid, yaw: 90 }, { x: 52, y: 1, z: 3, yaw: 0 }
+    { x: 6, y: 2, z: 5, yaw: 0 }, { x: 6, y: 2, z: naveMid, yaw: 90 }
+    { x: 4, y: 3, z: 5.4, yaw: 0 }, { x: 9, y: 3, z: 5.4, yaw: 0 }, { x: 6, y: 3, z: naveMid, yaw: 90 }, { x: 38, y: 3, z: (arcadeSouth - 1.35), yaw: 0 }
+  ]
+)
 // A banner hangs on the nave's side of every other pier of level 0's arcades, and four large ones on the blank wall
 // behind the forecourt's arches.
 let shellBanners = concat(
