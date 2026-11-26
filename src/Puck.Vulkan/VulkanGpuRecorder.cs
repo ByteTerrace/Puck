@@ -69,6 +69,10 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             result |= VulkanAccessFlags.HostRead;
         }
 
+        if (0 != (access & GpuAccess.IndexRead)) {
+            result |= VulkanAccessFlags.IndexRead;
+        }
+
         return result;
     }
     private static uint ToVulkanLayout(GpuImageLayout layout) {
@@ -121,6 +125,10 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
 
         if (0 != (stage & GpuStage.Host)) {
             result |= VulkanPipelineStageFlags.Host;
+        }
+
+        if (0 != (stage & GpuStage.VertexInput)) {
+            result |= VulkanPipelineStageFlags.VertexInput;
         }
 
         return result;
@@ -369,11 +377,11 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
         );
     /// <summary>Gets whether the device enabled <c>VK_KHR_draw_indirect_count</c>, so <see cref="DrawIndirectCount"/>
     /// records one native counted call. Otherwise it issues fixed records from the same GPU-written argument buffer,
-    /// in one <c>vkCmdDrawIndirect</c> when <c>multiDrawIndirect</c> is enabled and one per record when not; rejected
-    /// records have zero vertex and instance counts.</summary>
-    public unsafe bool CanDrawIndirectCount => (Device.CmdDrawIndirectCountKhr is not null);
+    /// in one <c>vkCmdDrawIndexedIndirect</c> when <c>multiDrawIndirect</c> is enabled and one per record when not;
+    /// rejected records have zero index and instance counts.</summary>
+    public unsafe bool CanDrawIndirectCount => (Device.CmdDrawIndexedIndirectCountKhr is not null);
     /// <inheritdoc/>
-    /// <remarks>Vulkan reads each record from its vertex count on (<see cref="GpuDrawIndirectCommand.VertexCountWord"/>).
+    /// <remarks>Vulkan reads each record from its index count on (<see cref="GpuDrawIndirectCommand.IndexCountWord"/>).
     /// Vertex pulling reads its identity from the same buffer through the pushed record base plus DrawIndex.</remarks>
     public void DrawIndirectCount(nint commandBufferHandle, nint pipelineLayoutHandle, nint argumentBufferHandle, ulong argumentBufferOffset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount) {
         // DrawIndex starts at zero for each native call. The pushed base names the first argument record, so vertex
@@ -390,7 +398,7 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
                 bufferHandle: argumentBufferHandle, commandBufferHandle: commandBufferHandle,
                 countBufferHandle: countBufferHandle, countBufferOffset: countBufferOffset, device: Device,
                 maxDrawCount: batch ? maxDrawCount : 1u,
-                offset: offset + (GpuDrawIndirectCommand.VertexCountWord * sizeof(uint)), stride: GpuDrawIndirectCommand.StrideBytes);
+                offset: offset + (GpuDrawIndirectCommand.IndexCountWord * sizeof(uint)), stride: GpuDrawIndirectCommand.StrideBytes);
         }
     }
     /// <inheritdoc/>

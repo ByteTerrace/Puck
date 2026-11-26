@@ -1534,7 +1534,7 @@ public sealed unsafe class GpuRegion : IDisposable {
             m_recorder.TransitionBuffer(
                 bufferHandle: destination,
                 commandBufferHandle: commandBuffer,
-                destinationAccessMask: (copies ? GpuAccess.ShaderWrite : GpuAccess.ShaderRead),
+                destinationAccessMask: (copies ? GpuAccess.ShaderWrite : ReaderAccess(readers: readers)),
                 destinationStageMask: (copies ? GpuStage.ComputeShader : readers),
                 sourceAccessMask: GpuAccess.TransferWrite,
                 sourceStageMask: GpuStage.Transfer
@@ -1555,7 +1555,7 @@ public sealed unsafe class GpuRegion : IDisposable {
             commandBufferHandle: commandBuffer,
             destinationAccessMask: GpuAccess.TransferRead,
             destinationStageMask: GpuStage.Transfer,
-            sourceAccessMask: GpuAccess.ShaderRead,
+            sourceAccessMask: ReaderAccess(readers: readers),
             sourceStageMask: readers
         );
         m_recorder.CopyBuffer(
@@ -1567,13 +1567,20 @@ public sealed unsafe class GpuRegion : IDisposable {
         m_recorder.TransitionBuffer(
             bufferHandle: destination,
             commandBufferHandle: commandBuffer,
-            destinationAccessMask: (copies ? GpuAccess.ShaderWrite : GpuAccess.ShaderRead),
+            destinationAccessMask: (copies ? GpuAccess.ShaderWrite : ReaderAccess(readers: readers)),
             destinationStageMask: (copies ? GpuStage.ComputeShader : readers),
             sourceAccessMask: GpuAccess.CopyWrite,
             sourceStageMask: GpuStage.Transfer
         );
         m_carrySource = null;
     }
+    /// <summary>Returns what a region's readers at the given stages read its buffers as: a shader read, and an indexed
+    /// draw's index read where they include <see cref="GpuStage.VertexInput"/>, the stage only an index buffer's read
+    /// takes (a vertex stage pulls its vertices from storage).</summary>
+    /// <param name="readers">The stages that read the region's buffers.</param>
+    /// <returns>The readers' access.</returns>
+    public static GpuAccess ReaderAccess(GpuStage readers) =>
+        (((readers & GpuStage.VertexInput) != 0) ? (GpuAccess.ShaderRead | GpuAccess.IndexRead) : GpuAccess.ShaderRead);
     /// <summary>Keeps the host copy of the region's first <paramref name="shadowBytes"/> bytes alone and hands every word
     /// past them to <paramref name="source"/>, which a flush asks for the words it owes there (<see cref="OweSourced"/>),
     /// so the region holds no copy of words its owner already holds. A host copy that grows starts its new bytes unknown, so

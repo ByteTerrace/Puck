@@ -10,8 +10,9 @@
 #include "../field/sdf-program.hlsli"
 #include "../shade/sdf-material.hlsli"
 
-float PSMain(MeshRasterVertex input) : SV_Depth {
-    float density = sdfMaterialShadowDensity(sdfMeshRasterMaterial(input.draw, input.triangleIndex));
+float PSMain(MeshRasterVertex input, uint primitive : SV_PrimitiveID) : SV_Depth {
+    uint triangleIndex = sdfMeshRasterTriangle(input, primitive);
+    float density = sdfMaterialShadowDensity(sdfMeshRasterMaterial(input.draw, triangleIndex));
     if (!(density > 0.0)) { return 0.0; }
     ViewportData view = worldView();
     uint2 pixel = uint2(input.position.xy);
@@ -21,7 +22,7 @@ float PSMain(MeshRasterVertex input) : SV_Depth {
     float receiver = (1.0 - meshVisibility.Load(int3(pixel, 0)).x) * range;
     if (density > 0.0 && t < receiver && !IsHelperLane()) {
         uint record = sdfMeshRecord(input.draw);
-        uint first = 3u * input.triangleIndex;
+        uint first = 3u * triangleIndex;
         float3 a = sdfMeshWorldPosition(record, first);
         bool front = dot(cross(sdfMeshWorldPosition(record, first + 1u) - a, sdfMeshWorldPosition(record, first + 2u) - a), view.forward.xyz) < 0.0;
         uint width;

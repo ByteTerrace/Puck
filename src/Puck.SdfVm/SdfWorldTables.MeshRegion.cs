@@ -149,6 +149,10 @@ public sealed partial class SdfWorldTables {
     /// the old buffer. Read by the store under its gate.</summary>
     internal bool NamesReplacedStoreBuffer => (Interlocked.Read(location: ref m_meshStoreBuffers) != Volatile.Read(location: ref m_meshStoreBuffersBound));
 
+    /// <summary>Gets the store's region buffer, which every set of these tables binds at the region
+    /// (<see cref="WriteMeshTables"/>) and the raster passes draw their indices from
+    /// (<see cref="SdfMeshOcclusion.RecordDraws"/>).</summary>
+    internal IGpuBuffer MeshRegionBuffer => m_meshStore.Buffer;
     // Brings the sets to the store's buffer where it was replaced since they were last written. The revision moves before
     // the bound count, so the store never finds these tables bound to the new buffer while their sets still stand.
     private void BindMeshStore() {
@@ -443,7 +447,11 @@ public sealed partial class SdfWorldTables {
     private void StageMeshRegion(SdfFrame frame) {
         var draws = frame.DrawRows;
 
-        ServiceMemoryTrim();
+        // A pack runs on a worker of the residencies' fork (SdfWorldPasses.ReadsPrepared), so it serves nothing that polls
+        // a retirement: a poll queues a device checkpoint, which only the submission thread may (GpuRetirementQueue), and
+        // the frame thread's upkeep serves those once a frame before any residency prepares (SdfWorldResidency.Upkeep,
+        // ServiceMemoryTrim). The sets follow a store buffer replaced since then here, before the records are packed.
+        BindMeshStore();
         SdfMeshHistory.ProcessWork.Raise(kind: SdfMeshHistory.PeakRowsExtent, value: draws.Count);
         PrepareMeshTransformCuts(frame: frame);
         // The rows the draw region holds records for: the list, or its first rows when a growth was refused.

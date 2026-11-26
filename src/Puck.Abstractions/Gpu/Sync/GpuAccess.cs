@@ -32,4 +32,7 @@ public enum GpuAccess : uint {
     /// <summary>A buffer copy writes its destination range (Vulkan transfer write; Direct3D 12 copy destination).
     /// Pair with <see cref="GpuStage.Transfer"/>. A storage-buffer clear uses <see cref="TransferWrite"/> instead.</summary>
     CopyWrite = 0x400,
+    /// <summary>An indexed draw reads the buffer's 32-bit indices (Vulkan <c>INDEX_READ</c>; Direct3D 12
+    /// <c>INDEX_BUFFER</c>). Pair with <see cref="GpuStage.VertexInput"/>.</summary>
+    IndexRead = 0x800,
 }

@@ -109,15 +109,18 @@ public interface IGpuRecorder {
     /// <param name="argumentBufferOffset">The byte offset of the three group counts.</param>
     void DispatchIndirect(nint commandBufferHandle, nint argumentBufferHandle, ulong argumentBufferOffset);
 
-    /// <summary>Records a counted indirect draw: up to <paramref name="maxDrawCount"/> non-indexed draws whose arguments
-    /// the GPU reads from consecutive <see cref="GpuDrawIndirectCommand"/> records of an argument buffer, as many as the
-    /// <see langword="uint"/> at <paramref name="countBufferOffset"/> of a count buffer holds. Each record's identity
-    /// reaches the vertex stage through root constants on Direct3D 12. Vulkan pushes the first record's index, and the
-    /// vertex stage reads the argument buffer at that base plus <c>DrawIndex</c>. When native counting is unavailable,
-    /// Vulkan issues every initialized record up to <paramref name="maxDrawCount"/>, one native call per record;
-    /// rejected records must be empty. Arguments reach indirect-command and vertex-shader read access through the
-    /// caller's <see cref="TransitionBuffer"/>; counts reach indirect-command read access. No host selection or readback
-    /// is involved.</summary>
+    /// <summary>Records a counted indirect draw: up to <paramref name="maxDrawCount"/> indexed draws whose arguments the
+    /// GPU reads from consecutive <see cref="GpuDrawIndirectCommand"/> records of an argument buffer, as many as the
+    /// <see langword="uint"/> at <paramref name="countBufferOffset"/> of a count buffer holds, each reading 32-bit indices
+    /// from the index buffer bound last (<see cref="BindIndexBuffer"/>, <see cref="GpuIndexFormat.UInt32"/>) from its
+    /// record's first index on. A vertex stage receives each index as its vertex id. Each record's identity reaches the
+    /// vertex stage through root constants on Direct3D 12. Vulkan pushes the first record's index, and the vertex stage
+    /// reads the argument buffer at that base plus <c>DrawIndex</c>. When native counting is unavailable, Vulkan issues
+    /// every initialized record up to <paramref name="maxDrawCount"/>, one native call per record; rejected records must
+    /// be empty. Arguments reach indirect-command and vertex-shader read access through the caller's
+    /// <see cref="TransitionBuffer"/>; counts reach indirect-command read access; the indices reach
+    /// <see cref="GpuAccess.IndexRead"/> at <see cref="GpuStage.VertexInput"/> through the barrier of whatever wrote them.
+    /// No host selection or readback is involved.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded, inside a render pass.</param>
     /// <param name="pipelineLayoutHandle">The bound graphics pipeline's layout, whose pushed index the identity is
     /// written into.</param>

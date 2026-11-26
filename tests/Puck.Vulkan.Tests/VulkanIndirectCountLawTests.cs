@@ -47,7 +47,7 @@ public sealed unsafe class VulkanIndirectCountLawTests {
             );
             Assert.Equal(
                 actual: Draws,
-                expected: [(CommandBuffer, ArgumentBuffer, (64UL + (GpuDrawIndirectCommand.VertexCountWord * sizeof(uint))), CountBuffer, 4UL, 9U, ((uint)GpuDrawIndirectCommand.StrideBytes))]
+                expected: [(CommandBuffer, ArgumentBuffer, (64UL + (GpuDrawIndirectCommand.IndexCountWord * sizeof(uint))), CountBuffer, 4UL, 9U, ((uint)GpuDrawIndirectCommand.StrideBytes))]
             );
             Assert.Equal(expected: [16u], actual: Bases);
         } finally {
@@ -123,13 +123,13 @@ public sealed unsafe class VulkanIndirectCountLawTests {
             recordingApi: new VulkanNativeCommandBufferRecordingApi(allocator: new Puck.Abstractions.Memory.SystemAllocator())
         );
     }
-    // A vkGetDeviceProcAddr stand-in: vkCmdDrawIndirectCountKHR records, and every other entry point resolves to a trap
+    // A vkGetDeviceProcAddr stand-in: vkCmdDrawIndexedIndirectCountKHR records, and every other entry point resolves to a trap
     // nothing here reaches.
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static nint Resolve(nint handle, byte* name) =>
         Encoding.UTF8.GetString(bytes: MemoryMarshal.CreateReadOnlySpanFromNullTerminated(value: name)) switch {
-            "vkCmdDrawIndirectCountKHR" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, ulong, uint, uint, void>)&DrawIndirectCount)),
-            "vkCmdDrawIndirect" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, ulong, uint, uint, void>)&DrawIndirect)),
+            "vkCmdDrawIndexedIndirectCountKHR" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, ulong, uint, uint, void>)&DrawIndirectCount)),
+            "vkCmdDrawIndexedIndirect" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, ulong, uint, uint, void>)&DrawIndirect)),
             "vkCmdPushConstants" => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, uint, void*, void>)&Push)),
             _ => ((nint)((delegate* unmanaged[Cdecl]<nint, nint, nint, nint, nint>)&Trap)),
         };

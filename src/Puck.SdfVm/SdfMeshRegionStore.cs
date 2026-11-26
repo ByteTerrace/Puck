@@ -142,8 +142,9 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
                 slotCount: (LandingSlots + UploadSlots),
                 hostCopies: m_hostCopies,
                 staging: new GpuObjectName(owner: SdfResidencySelector.RegionStagingOwner, part: "mesh-region"),
-                // The probe scene's bottom levels read their triangles from the region in place (SdfMeshProbeGpuWork.Rays).
-                destinationUsage: ((device.Capabilities?.Has(required: GpuOptionalCapabilities.RayQuery) ?? false) ? GpuBufferUsage.AccelerationStructureInput : GpuBufferUsage.None),
+                // The raster passes' indexed draws read their indices from the region in place (SdfMeshOcclusion.RecordDraws),
+                // and the probe scene's bottom levels their triangles (SdfMeshProbeGpuWork.Rays).
+                destinationUsage: (GpuBufferUsage.Index | ((device.Capabilities?.Has(required: GpuOptionalCapabilities.RayQuery) ?? false) ? GpuBufferUsage.AccelerationStructureInput : GpuBufferUsage.None)),
                 // Grows and shrinks in place where the device can back a buffer a chunk at a time, so a growth never holds
                 // two regions at once (SdfResidencySelector leaves no replacement's room for it).
                 mapped: true,

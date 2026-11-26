@@ -396,6 +396,7 @@ public static unsafe class DirectXBarriers {
         if ((stages & GpuStage.VertexShader) != 0) { sync |= D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_VERTEX_SHADING; }
         if ((stages & GpuStage.FragmentShader) != 0) { sync |= D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_PIXEL_SHADING; }
         if ((stages & GpuStage.DrawIndirect) != 0) { sync |= D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_EXECUTE_INDIRECT; }
+        if ((stages & GpuStage.VertexInput) != 0) { sync |= D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_INDEX_INPUT; }
         if (!buffer) {
             if ((stages & GpuStage.ColorAttachmentOutput) != 0) { sync |= D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_RENDER_TARGET; }
             if ((stages & GpuStage.FragmentTests) != 0) { sync |= D3D12_BARRIER_SYNC.D3D12_BARRIER_SYNC_DEPTH_STENCIL; }
@@ -413,6 +414,7 @@ public static unsafe class DirectXBarriers {
         if ((access & GpuAccess.ShaderRead) != 0 && (!buffer || (access & GpuAccess.ShaderWrite) == 0)) { result |= D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_SHADER_RESOURCE; }
         if ((access & (GpuAccess.ShaderWrite | GpuAccess.TransferWrite)) != 0) { result |= D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_UNORDERED_ACCESS; }
         if ((access & GpuAccess.IndirectCommandRead) != 0) { result |= D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_INDIRECT_ARGUMENT; }
+        if ((access & GpuAccess.IndexRead) != 0) { result |= D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_INDEX_BUFFER; }
         if ((access & GpuAccess.TransferRead) != 0) { result |= D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COPY_SOURCE; }
         if ((access & GpuAccess.CopyWrite) != 0 || (!buffer && (access & GpuAccess.TransferWrite) != 0)) { result |= D3D12_BARRIER_ACCESS.D3D12_BARRIER_ACCESS_COPY_DEST; }
         if (!buffer) {
