@@ -203,6 +203,38 @@ public sealed partial class StateArena {
     // The key a stored slot answers to: a lattice cell's key (its ordinal's decimal spelling), a ring slot's
     // positional key, or the member key a keyed, ordered, or pool row holds there — the invalid default for a slot no
     // member holds.
+    /// <summary>Appends every key whose cell in any of <paramref name="rows"/> the open scopes touched: a cell whose
+    /// value, clock or presence was written, and a key that joined or left one of those rows. A key touched more
+    /// than once is appended more than once, in journal order. The keyed-row form of
+    /// <see cref="CollectOpenLaneOrdinals"/>.</summary>
+    /// <param name="rows">The keyed rows' catalog ordinals.</param>
+    /// <param name="keys">The list the touched keys are appended to.</param>
+    /// <returns><see langword="false"/> when the open scopes changed one of those rows in a way no key describes (its
+    /// order, a cursor, its reservation, a drawn mask), so every cell of them is taken as touched; what was appended
+    /// before the answer is then incomplete.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="keys"/> is <see langword="null"/>.</exception>
+    public bool TryCollectOpenKeys(ReadOnlySpan<int> rows, List<CellKey> keys) {
+        ArgumentNullException.ThrowIfNull(argument: keys);
+        if (rows.IsEmpty) { return true; }
+
+        for (var index = 0; (index < m_journal.Length); index++) {
+            var entry = m_journal[index];
+            var space = ArenaColumns.Space(column: entry.Column);
+
+            if (space is (ArenaIndexSpace.LaneSlot or ArenaIndexSpace.LaneRoster)) { continue; }
+            var owner = m_layout.RowOf(column: entry.Column, index: entry.Index);
+
+            if ((owner < 0) || !rows.Contains(value: owner)) { continue; }
+            // A member count moves with a member key, whose own entry names the key that joined or left.
+            if (entry.Column == ArenaColumn.MemberCount) { continue; }
+            if ((space != ArenaIndexSpace.Cell) || (m_layout[owner].Shape != RowShape.Keyed) ||
+                (entry.Column is (ArenaColumn.NextSlot or ArenaColumn.PreviousSlot))) { return false; }
+            // A slot whose key was replaced or cleared held the recorded key before the write.
+            if ((entry.Column == ArenaColumn.MemberKey) && (entry.Number >= 0L)) { keys.Add(item: m_keys.KeyAt(ordinal: ((int)entry.Number))); }
+            if (KeyAtSlot(layout: in m_layout[owner], slot: entry.Index) is { IsValid: true } held) { keys.Add(item: held); }
+        }
+        return true;
+    }
     private CellKey KeyAtSlot(in ArenaRowLayout layout, int slot) {
         var position = (slot - layout.CellStart);
 

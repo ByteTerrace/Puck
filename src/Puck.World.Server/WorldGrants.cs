@@ -125,6 +125,8 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // reach (unlike ownership, which only adds), so it must gate at the ingress, never inside Allows, or it would
     // corrupt every capability query.
     private readonly Dictionary<int, string> m_driveGates = new();
+    // The catalog ordinals of the rows declaring GatesDrive, in document order, as the last whole SyncState found them.
+    private int[] m_driveGateRows = [];
     // Moves whenever the drive gates, a session's liveness or a principal's application set may have changed: the three
     // answers of this table a reader may keep (TryGetDriveGate, IsLiveSession, Applications) stand while it does not
     // move. Every write of m_driveGates, m_sessions and m_applications passes NoteInputFactsMoved; the three are
@@ -1823,15 +1825,40 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         m_driveGates.Clear();
         NoteInputFactsMoved();
         var time = ArenaTime.Origin;
+        var gates = new List<int>();
 
         for (var ordinal = 0; (ordinal < arena.Rows.Count); ordinal++) {
             if (arena.Rows[ordinal] is not WorldStateRow { GatesDrive: true } row) { continue; }
             var cursor = 0;
 
+            gates.Add(item: ordinal);
+
             while (arena.TryNextLiveNumber(rowOrdinal: ordinal, cursor: ref cursor, time: in time, key: out var key, value: out var raw)) {
                 if ((raw != 0L) && arena.Keys.TryCandidateIndex(key: key, index: out var body)) { _ = m_driveGates.TryAdd(key: body, value: row.Name); }
             }
         }
+        m_driveGateRows = [.. gates];
+    }
+    /// <summary>Gets the catalog ordinals of the rows declaring <see cref="WorldStateRow.GatesDrive"/>, in document
+    /// order, as the last <see cref="SyncState"/> found them.</summary>
+    internal ReadOnlySpan<int> DriveGateRows => m_driveGateRows;
+    /// <summary>Resyncs the drive gate of one body from the gate rows' cells under the body's own key: what
+    /// <see cref="SyncState"/> derives for every body, for a state transaction that wrote only that body's gate
+    /// cells. The first gate row in document order holding a nonzero cell gates the body.</summary>
+    /// <param name="arena">The live arena, after the transaction committed.</param>
+    /// <param name="key">The gate cells' key, whose name spells the body's index.</param>
+    internal void SyncDriveGate(StateArena arena, CellKey key) {
+        if (!arena.Keys.TryCandidateIndex(key: key, index: out var body)) { return; }
+        var time = ArenaTime.Origin;
+
+        _ = m_driveGates.Remove(key: body);
+        foreach (var ordinal in m_driveGateRows) {
+            if (arena.TryReadLiveNumber(key: key, rowOrdinal: ordinal, time: in time, value: out var raw) && (raw != 0L)) {
+                m_driveGates.Add(key: body, value: arena.Rows[ordinal].Name);
+                break;
+            }
+        }
+        NoteInputFactsMoved();
     }
 
     /// <inheritdoc/>

@@ -144,7 +144,15 @@ many bindings have fired
 ([Bound how many bindings fire](rules.md#bound-how-many-bindings-fire)). A
 search judge's rules, a group's rules, an interaction, a decision, a sweep
 bounded by `maxFirings`, and a sweep over a set no version names (a pool, a
-zone table, input events) are judged in place.
+zone table) are judged in place.
+
+A sweep of **this tick's events** (`RuleIteration.BindsEvents`: in Puck.World
+`forEach: contacts(<surface>)` and `forEach: inputEvents(<owner>)`) binds
+nothing on a tick with no event and one binding per event. Its multiplier is
+still the events one tick can carry, which is its worst case, but the line is
+charged one binding's check and firing and one snapshot unit of setup: the one
+event the sheet's "one change" is. A `maxFirings` bound or a host that judges
+the line in place keeps the capacity price.
 
 ### Price by change
 
@@ -176,7 +184,22 @@ same judgement the due list's schedule is built from and charges the line
   written fails the comparison. `when state[$each] == 0` with
   `state[$each] = 1` is one, and so is
   `when at[$each] != goal[group[$each]]` with `at[$each] = goal[group[$each]]`.
-  Such a binding fires once and stays closed until another line writes.
+  Such a binding fires once and stays closed until another line writes. The
+  mirrored form, `cell != source` with `cell = source`, holds when both sides
+  are the same read of nothing the firing writes: one plain cell, or one local
+  of the rule (`local target = …`, `when cell != target`, `cell = target`).
+  A closure over a mirrored value that itself moves with time is priced as
+  firing again.
+- **The tested cell may be a host fact** an effect sets exactly
+  (`IFactSettingEffect`). In Puck.World that is a body's counter register read
+  and written for the body bound to `$each`
+  (`when bodyState(each, form) != target` with
+  `setBodyState(key: $each, state: "form", expression: target)`). The
+  read-back is exact only when the register keeps what was written, so a
+  register that declares an envelope needs every value the source can answer
+  to lie inside it, which the sheet proves from
+  [the source's bounds](#bound-what-a-program-can-answer). A source the proof
+  cannot bound is priced as firing every tick.
 - **One change** is one move of one thing at rest the line reads. When
   everything at rest is read under the binding's own key (`row[$each]`, a fact
   of the body bound to `$each`), one move reaches one binding: one check and
@@ -206,9 +229,12 @@ In Puck.World a firing's validation and commit otherwise scale with the rows
 it wrote, so the extra is only what a commit derives from a written register:
 a `setBodyState` of an input-selection register adds one routing owner's
 revalidation and resynchronization (two passes over the input families and the
-kit selection), one of a scale, kit or look register adds the population's
-capacity (every body's scale, kit and look resync), and a line that writes a
-drive-gate row adds every gate row's capacity and an owner resync per body.
+kit selection), one of a scale, kit or look register adds the written body's
+own resync (its size, and a walk of each selector's cases and row table;
+`WorldPopulation.SyncBodyCells` resyncs only the bodies whose registers were
+touched), and a line that writes a drive-gate row adds one read of each gate
+row under the written key and one owner's resync
+(`WorldGrants.SyncDriveGate`).
 
 A region interaction's carrier count is bounded by disc packing. Membership is
 by a body's centre, so at most `floor(((R + r)/r)^2)` carriers fit inside a
@@ -226,6 +252,44 @@ nothing else: a sweep binds every body inside the region, and
 `world.tick.region-sweep-overflow` in `world.counters world.tick` counts the
 bodies it bound past the priced number, so a capacity authored too small
 shows.
+
+### Bound what a program can answer
+
+`RuleBounds.Of` answers the values a compiled program, or a value source, can
+answer: a `ValueBounds`, which is every value exactly (a finite set), a closed
+range, or unbounded. It is the bounds lowering of the one expression program,
+and any analysis that needs to know where a written value can land reads it
+rather than inspecting a rule's shape.
+
+The inputs are declarations. `RuleCompileContext.ReadBounds` answers what one
+read can answer: a Bool cell is 0 or 1, a cell of a row declaring both `min`
+and `max` lies in that range (every whole number of it for a short Int range),
+and a derived context answers for its host's facts. In Puck.World a body's
+counter register answers its envelope's set or range, its initial value, and
+the zero a reference to no live body reads
+(`WorldBodyStateReads.TryCounterBounds`).
+
+There are two forms, tried in this order:
+
+- **Exact.** When every read's declared values are a finite set and their
+  product is at most `RuleBounds.MaxAssignments`, the program is evaluated once
+  per assignment by the one interpreter, with each read replaced by its value.
+  Two reads of the same thing (the same cell under the same key, the same
+  register of the same body) are one variable, and a local's program is
+  evaluated under the same assignment, so correlated terms stay correlated:
+  `craft * (4 + space) + (1 - craft) * (suit + 2 * noclip)` over four 0-or-1
+  registers answers exactly 0 to 5, where a range would answer 0 to 8.
+- **Range.** Otherwise one walk carries a closed interval through the program
+  over `FixedInterval` (`Puck.Maths`), whose outward-rounded arithmetic holds
+  every fixed-point result of the same steps. Addition, subtraction,
+  multiplication, fixed-point division, minimum, maximum, clamp, negation,
+  magnitude, a conditional choice and `??` have a rule; a comparison or a truth
+  answers 0 to 1.
+
+A bound describes the values a program answers when it answers. A program
+that faults or answers an absence for some assignment, one that folds a row,
+reads through a computed address, or holds an operation the range form has no
+rule for, is unbounded, and a proof that needs its bound does not hold.
 
 ### Prices read declarations
 
@@ -351,11 +415,11 @@ two can read in one tick.
 
 ### The ceiling
 
-`RuleCapacity.MaxWorkUnitsPerTick` is 4,500,000. A world whose sheet is
+`RuleCapacity.MaxWorkUnitsPerTick` is 4,200,000. A world whose sheet is
 unmodeled, overflowed, or above the ceiling is refused, and the refusal names
 the three costliest lines. The value was sized against a 30 Hz tick: it
-reserves roughly a fifth of a 33.3 ms tick for the rule sweep, at about
-1.7 ns a unit.
+reserves a fifth of a 33.3 ms tick for the rule sweep, at about
+1.6 ns a unit.
 
 The search jobs run in the same tick, right after the rules, and draw on the
 same ceiling: a job's allowance is what the ceiling leaves after the sheet and
@@ -678,10 +742,15 @@ ceiling and how they behave.
   nothing about how long a tick takes on a particular machine. A tick in which
   many things change at once costs more than the sheet's total, up to the
   worst tick it reports.
-- The sheet proves a firing closes its own gate only in the two shapes
-  `RuleResponse.ClosesItself` reads. A Level rule that closes its gate another
-  way is priced as firing every tick; write it as one of the two shapes, or as
-  an Edge where a crossing is what it means.
+- The sheet proves a firing closes its own gate only in the shapes
+  `RuleResponse.ClosesItself` reads: a literal the written literal fails, or a
+  mirrored read. A Level rule that closes its gate another way is priced as
+  firing every tick; write it as one of those shapes, or as an Edge where a
+  crossing is what it means.
+- A bound is read from declarations, so it holds for values written through
+  them. A body register an operator writes raw, past its envelope, can hold a
+  value the bound does not list; the rule still runs correctly, and only its
+  price assumed otherwise.
 - In Puck.World every firing is its own grant-checked state transaction, and its
   validation and commit revisit the document's rows and the input runtime's
   owners whatever the firing wrote. The sheet prices a firing's effects, not
@@ -706,6 +775,7 @@ ceiling and how they behave.
 | `RuleSchedule`, `RuleDeadline`, `RowReach` | `Puck.State.Rules` | A judgement's rows, how it reaches their cells, host facts, sweep set and deadline, and why it's volatile. |
 | `RuleDueList` | `Puck.State.Rules` | The rules, and the bindings of a keyed sweep, due this tick, and the index that pushes readers onto it. |
 | `RuleResponse` | `Puck.State.Rules` | How many bindings a line is charged for: a tick at rest plus one change. |
+| `RuleBounds`, `ValueBounds` | `Puck.State.Rules` | The values a program or a read can answer: an exact set, a range, or unbounded. |
 | `ArenaCellMove` | `Puck.State` | One committed change to a row's cells, as the arena hands it to a reader. |
 | `FactRead` | `Puck.State` | One versioned host fact a schedule names. |
 | `RuleLatch` | `Puck.State.Rules` | Edge memory plus the scheduler's caches. |

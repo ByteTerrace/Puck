@@ -2662,7 +2662,7 @@ sphere to the lattice, clamps every result to the field envelope, and caps its
 radius at eight cells, bounding one firing to at most 4,913 candidate visits.
 
 Rule execution admits at most 256 top-level effects per rule/interaction and
-4,500,000 statically derived heuristic work units per tick. There is no separate
+`RuleCapacity.MaxWorkUnitsPerTick` statically derived heuristic work units per tick. There is no separate
 ordinary-rule count ceiling. A line has three parts: setup, paid once per sweep;
 check, paid once per evaluation whether or not the gate holds; and firing, paid
 once per evaluation whose effects run. The cost includes gate/expression
@@ -2863,9 +2863,10 @@ under a ceiling therefore stays small and grows on once it walks clear, never
 pressed into its floor or thrown by the contact solve. Shrinking is always
 admitted, and a crossing's resync takes the pair's size whole.
 
-`WorldPopulation.SyncBodyScale` (through `SyncBodyCells`) resyncs every active
-body's `Scale` from the register once a tick after the world rules (the last
-writer of a register in a tick), at the same `Install`/admission choke points
+`WorldPopulation.SyncBodyCells` resyncs the `Scale` of each body whose
+register was touched, at every state transaction's commit and once a tick after
+the world rules (the last writer of a register in a tick), and every active
+body's at the same `Install`/admission choke points
 `WorldGrants.SyncState` resyncs its own drive gates at, after
 `RestoreCheckpoint` (which rebuilds every body at the constructed default), when
 a crossing lands a body, and right after an in-place crossing wrote it, so a
