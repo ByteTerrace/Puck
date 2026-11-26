@@ -1647,7 +1647,14 @@ laws exercise that boundary.
   (`Group.Stored`) that no stored rung answers starts nothing
   (`StartReplacement`): the run that stored the floor held that tier back or
   never asked it, so it waits as an owed finer tier, under the hold and the
-  budget. Live geometry (`Group.Live`): a group that reads
+  budget. A group still waiting to bake, with nothing to draw, takes the
+  nearest finer rung of its shape as soon as another group of its bake lands
+  one (`SdfMeshPathBake.TakeLandedRungs`, at each prepared frame, counted as
+  `sdf.mesh-cache.rungs-shared`): a cold boot plans every group at once with
+  nothing stored, so a far copy of a body would otherwise queue behind
+  everything near while the near copy's mesh stands. A change to where a
+  group's own product arrives goes through `Draw`, which queues the landed
+  rung, or such groups keep waiting. Live geometry (`Group.Live`): a group that reads
   an operand's pose, or one planned again because a sampled field it reads
   published another snapshot. The world makes that geometry as it runs, so no
   cache holds it; it bakes under every policy, has no ladder filled and is

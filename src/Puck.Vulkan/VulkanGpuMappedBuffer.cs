@@ -166,12 +166,11 @@ public sealed unsafe class VulkanGpuMappedBuffer : IGpuMappedBuffer {
     /// <inheritdoc/>
     public void Map(ulong offset, ulong bytes) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        RequireRange(bytes: bytes, offset: offset);
+        GpuMappedChunks.RequireRange(bytes: bytes, offset: offset, sizeBytes: SizeBytes);
         ReleaseCompleted();
         if (bytes == 0UL) { return; }
 
-        var first = ((int)(offset / MappingBytes));
-        var last = ((int)offset.LastUnitOf(bytes: bytes, unit: MappingBytes));
+        var (first, last) = GpuMappedChunks.Touched(bytes: bytes, chunkBytes: MappingBytes, offset: offset);
         var taken = new List<(int Chunk, VulkanPagePlacement Pages)>();
 
         // Every run is placed before any is bound, so a refusal gives back what it took and binds nothing.
@@ -210,13 +209,10 @@ public sealed unsafe class VulkanGpuMappedBuffer : IGpuMappedBuffer {
     /// <inheritdoc/>
     public GpuMappedRelease Unmap(ulong offset, ulong bytes) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        RequireRange(bytes: bytes, offset: offset);
+        GpuMappedChunks.RequireRange(bytes: bytes, offset: offset, sizeBytes: SizeBytes);
         ReleaseCompleted();
 
-        var end = (offset + bytes);
-        // A chunk lies wholly inside when the range covers it to its end, or to the buffer's end for the last one.
-        var first = ((int)offset.CeilingDivide(divisor: MappingBytes));
-        var stop = ((end == SizeBytes) ? m_chunks.Length : ((int)(end / MappingBytes)));
+        var (first, stop) = GpuMappedChunks.Inside(bytes: bytes, chunkBytes: MappingBytes, chunkCount: m_chunks.Length, offset: offset, sizeBytes: SizeBytes);
         List<(int Chunk, VulkanPagePlacement Pages)>? revoked = null;
         var released = 0UL;
 
@@ -268,11 +264,6 @@ public sealed unsafe class VulkanGpuMappedBuffer : IGpuMappedBuffer {
         ReleaseCompleted();
     }
 
-    private void RequireRange(ulong offset, ulong bytes) {
-        if ((offset > SizeBytes) || (bytes > (SizeBytes - offset))) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(bytes), message: $"The range of {bytes} bytes at {offset} passes the buffer's {SizeBytes}.");
-        }
-    }
     // Releases revoked chunks once their readers have finished: queues their unbinding, in order after every submission
     // already made, and retires their pages behind the timeline value the binding door answers. A chunk mapped again
     // since its revocation was bound to new pages by the bind that mapped it, which took its old ones out of the buffer,

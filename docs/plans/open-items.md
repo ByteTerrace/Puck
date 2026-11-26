@@ -2161,6 +2161,25 @@ check; this packet holds the defects beside it.
   feedback volume, the hit and meter caches of `SdfMeshProbeGpuWork`) is still
   fixed storage with no reservation; only a job's slot buffers reserve
   (`SdfGpuWorkHold`).
+- [high] A volume's words stand three times: the host's copy
+  (`SdfMeshIrradiance`'s volume words), the probe service's feedback table,
+  which the relights read and commit into (`SdfMeshProbeGpuWork`), and the
+  published table the views read, which each publication copies from the
+  feedback table on the device (`SdfWorldTables.PublishMeshIrradiance`). The
+  two device tables bind one layout at one binding
+  (`SdfWorldPackage.MeshIrradiance`), and every slot carries the cell it holds,
+  so a view can reject a slot mid-move. On the RTX 2060's route the two read
+  about 230 MB each at the device's peak. Have the views bind the feedback
+  table and make a publication a revision alone, with the barriers the views'
+  stages need on that table. It changes what the passes read, so it is the
+  frame lane's edit with this plan; check that a still view stands until a
+  publication and that the probe history's serials still gate its reuse.
+- [medium] The temporal resolve's window (`historyWindow`,
+  `SdfWorldPackage.HistoryWindowWords` words an output pixel, about 207 MB at
+  1920 by 1080) follows the display and not the device's table, so the RTX
+  2060 holds what the RTX 4070 holds a pixel. A shorter period or narrower
+  words on that card is a reconstruction choice for its table, which the frame
+  budget owns.
 - [low] A mesh region's staging is named for its own owner
   (`SdfResidencySelector.RegionStagingOwner`) and states no class, so a flush
   that stages more than the pool has room for is admitted past the limit and
@@ -5012,6 +5031,15 @@ proves itself with `puck compile` lowering to the same document.
 [Code size](code-size.md) holds the measured map, the generator families and
 their lane order; this packet keeps the single duplicates and leads.
 
+- Two mapped buffers keep one chunk table apiece: `DirectXGpuMappedBuffer`
+  and `VulkanGpuMappedBuffer` each hold a backing a chunk, place every missing
+  chunk of a range before binding any, and revoke the chunks wholly inside a
+  range into a release (`Map`, `Unmap`). Their chunk arithmetic is shared
+  (`GpuMappedChunks`); the table, the all-or-none placement and the revoke
+  loop are still written twice. Lift them into one generic chunk table in
+  `Puck.Abstractions` that a backend supplies with its place, bind, unbind and
+  return calls. Do it in the window that first boots the Vulkan path, since
+  the Direct3D 12 half is the one hardware has qualified.
 - Two A* searches over a navigation domain's baked edges: `NavigationRuntime.Domain.FindPath`
   (`SearchPath`, per-domain workspace arrays, step costs in thousandths of a cell, no clearance
   surcharge) for a non-shared domain's followers, and `NavigationRuntime.FindRoute` (`SearchRoute`,
