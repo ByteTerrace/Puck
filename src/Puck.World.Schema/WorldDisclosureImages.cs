@@ -523,10 +523,11 @@ public sealed partial class WorldDisclosureImages {
         };
         return true;
     }
-    // One row's canonical digest, kept per row object: a section's leaf, and what a row delivery compares.
-    private byte[] LeafDigest<T>(T row, Puck.Abstractions.CodeDerivedTable<T, byte[]> digests) where T : class {
+    // One row's or section's canonical digest, kept per object: a section's leaf, and what a row delivery compares. A
+    // shape digests a part of the object (a section less its rows) under the object's own key.
+    private byte[] LeafDigest<T>(T row, Puck.Abstractions.CodeDerivedTable<T, byte[]> digests, Func<T, T>? shape = null) where T : class {
         if (!digests.TryGetValue(row, out var digest)) {
-            digest = DigestSection(row);
+            digest = DigestSection((shape is null) ? row : shape(row));
             digests.AddOrUpdate(row, digest);
         }
         return digest;
@@ -558,14 +559,9 @@ public sealed partial class WorldDisclosureImages {
 
     // The digest of a placements section less its rows, kept per section object: the section with an empty row list
     // when it has one, so an absent list and an empty one digest apart.
-    private byte[] PlacementHeader(WorldPlacementsSection? section) {
-        if (section is null) { return AbsentSection; }
-        if (!m_placementHeaders.TryGetValue(section, out var header)) {
-            header = DigestSection(section with { Rows = (section.Rows is null ? null : []) });
-            m_placementHeaders.AddOrUpdate(section, header);
-        }
-        return header;
-    }
+    private byte[] PlacementHeader(WorldPlacementsSection? section) => (section is null)
+        ? AbsentSection
+        : LeafDigest(section, m_placementHeaders, static held => held with { Rows = (held.Rows is null ? null : []) });
 
     private byte[] RowsDigest<T>(IReadOnlyList<T>? rows, Puck.Abstractions.CodeDerivedTable<T, byte[]> digests,
         Puck.Abstractions.CodeDerivedTable<IReadOnlyList<T>, byte[]> lists) where T : class {
@@ -597,14 +593,7 @@ public sealed partial class WorldDisclosureImages {
         return digest;
     }
 
-    private byte[] StateDigest(WorldStateSection? section) {
-        if (section is null) { return AbsentSection; }
-        if (!m_stateSections.TryGetValue(section, out var digest)) {
-            digest = DigestSection(section);
-            m_stateSections.AddOrUpdate(section, digest);
-        }
-        return digest;
-    }
+    private byte[] StateDigest(WorldStateSection? section) => (section is null) ? AbsentSection : LeafDigest(section, m_stateSections);
     // An absent section digests no bytes, which no serialized section is.
     private byte[] DigestSection<T>(T? section) where T : class => (section is null)
         ? SHA256.HashData(ReadOnlySpan<byte>.Empty)
