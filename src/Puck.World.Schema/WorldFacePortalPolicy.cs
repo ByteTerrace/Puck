@@ -110,36 +110,6 @@ public static class WorldFacePortalPolicy {
 
         return ceiling;
     }
-    /// <summary>Returns the opening of every portal face a document declares, in document order, each with the placement
-    /// and face that declare it.</summary>
-    /// <param name="definition">The document to read.</param>
-    /// <returns>Each portal face's placement id, face name and box aperture.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
-    public static (string PlacementId, string Face, WorldFaceAperture.Box Box)[] PortalApertures(WorldDefinition definition) {
-        ArgumentNullException.ThrowIfNull(definition);
-
-        var catalog = WorldFaceCatalog.For(definition: definition);
-        var openings = new List<(string PlacementId, string Face, WorldFaceAperture.Box Box)>();
-
-        foreach (var placement in definition.Placements) {
-            foreach (var face in (placement?.FaceSources ?? [])) {
-                if (
-                    (face?.Portal is not null) &&
-                    catalog.TryFindAperture(
-                    aperture: out var aperture,
-                    definition: definition,
-                    faceName: face.Face,
-                    placementId: placement!.Id
-                ) &&
-                    (aperture is WorldFaceAperture.Box box)
-                ) {
-                    openings.Add(item: (placement.Id, face.Face, box));
-                }
-            }
-        }
-
-        return [.. openings];
-    }
     /// <summary>Builds the enterable region a portal face opens.</summary>
     /// <param name="row">The derived face row.</param>
     /// <param name="crossingFloor">The document's <see cref="CrossingFloor"/>.</param>

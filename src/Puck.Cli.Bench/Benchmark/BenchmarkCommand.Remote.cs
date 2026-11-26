@@ -267,6 +267,38 @@ public static partial class BenchmarkCommand {
         throw new InvalidOperationException($"the seat's body was not handed to the remote authority within {RemoteTimeout.TotalSeconds:0} s: the World's last topology was {last}{((listen is null) ? string.Empty : $"; the authority answers world.rate with {listen}")}");
     }
 
+    // The completed ticks the remote authority's boot instance reports through world.rate, or null with no authority
+    // this verb started (in process, or one already listening) or no readable answer.
+    private static ulong? AuthorityCompletedTicks(SweepWorld? authority) {
+        const string Field = "completed-ticks ";
+
+        if (authority?.Run("world.rate", 10) is not { Ok: true } answer) {
+            return null;
+        }
+        var start = answer.Output.IndexOf(value: Field, comparisonType: StringComparison.Ordinal);
+
+        if (start < 0) {
+            return null;
+        }
+        start += Field.Length;
+        var end = start;
+
+        while ((end < answer.Output.Length) && char.IsAsciiDigit(c: answer.Output[end])) {
+            end++;
+        }
+        return (ulong.TryParse(s: answer.Output.AsSpan(start: start, length: (end - start)), provider: CultureInfo.InvariantCulture, result: out var ticks) ? ticks : null);
+    }
+    // Prints the ticks the remote authority's boot instance completed over a route beside the chapters' charged budgets,
+    // and records them in the run's report.
+    private static void ReportAuthorityTicks(ulong? before, ulong? after, Outcome outcome, Action<string> print) {
+        if ((before is not { } from) || (after is not { } to) || (to < from)) {
+            return;
+        }
+        print(string.Create(provider: CultureInfo.InvariantCulture, handler: $"{Verb}: the remote authority's boot instance completed {(to - from)} ticks over {outcome.Name} (world.rate completed-ticks {from} to {to}); each chapter's charged ticks leave out the waits its budget pauses for\n"));
+        if (outcome.Run is { } run) {
+            run["authorityCompletedTicks"] = (to - from);
+        }
+    }
     // The first transfer refusal the client's standard error names, or null.
     private static string? RefusedTransfer(string log) {
         if (!File.Exists(path: log)) { return null; }

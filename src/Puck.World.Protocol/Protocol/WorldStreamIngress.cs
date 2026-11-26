@@ -39,8 +39,7 @@ public sealed class WorldStreamIngress(Action? withdraw = null) {
     private long m_refusals;
 
     /// <summary>Gets the stream the reader is bound to and the span it holds.</summary>
-    public WorldStreamSpan Span { get { lock (m_gate) { return m_span; } } }
-    /// <summary>Gets the delivery span of what the reader holds now: ended from the moment a cut, a generation step, a
+    public WorldStreamSpan Span { get { lock (m_gate) { return m_span; } } }    /// <summary>Gets the delivery span of what the reader holds now: ended from the moment a cut, a generation step, a
     /// first bind or a close is accepted until the reader's withdrawal has run, and ended for good once the span
     /// closes.</summary>
     public DeliverySpan DeliverySpan => m_deliverySpans.Span;
@@ -49,9 +48,17 @@ public sealed class WorldStreamIngress(Action? withdraw = null) {
 
     /// <summary>Decides whether a content record may move the reader, and takes it into the span when it may.</summary>
     /// <param name="stream">The record's stamp.</param>
+    /// <param name="opens">Whether the record may open a generation of the bound stream: a stream's whole document
+    /// may, since its record carries the cut that opened its generation. Any other record of a later generation than
+    /// the reader holds is refused when this is <see langword="false"/>, because the document of its generation never
+    /// reached the reader. A record that binds an unbound reader is judged by the bind alone.</param>
     /// <returns><see langword="true"/> when the record may move the reader.</returns>
-    public bool Admit(in WorldStreamStamp stream) {
+    public bool Admit(in WorldStreamStamp stream, bool opens = true) {
         lock (m_gate) {
+            if (!opens && stream.IsSpanned && (m_span.Stream == stream.Stream) && !m_span.Closed && (stream.Generation > m_span.Generation)) {
+                Refuse();
+                return false;
+            }
             return Take(stepped: out _, stream: in stream);
         }
     }

@@ -490,8 +490,10 @@ public static partial class BenchmarkCommand {
             var paused = (connect is null);
 
             foreach (var play in leg.Plays) {
+                var before = AuthorityCompletedTicks(authority: authority);
                 var outcome = PlayRoute(directory: Path.Combine(directory, BenchmarkMetrics.Slug(name: play.Name)), live: live, options: options, parse: parse, paused: paused, play: play, prefix: prefix, seats: leg.Seats, budget: budget, print: print);
 
+                ReportAuthorityTicks(after: AuthorityCompletedTicks(authority: authority), before: before, outcome: outcome, print: print);
                 outcomes.Add(item: outcome);
                 paused &= (outcome.Run is null);
             }

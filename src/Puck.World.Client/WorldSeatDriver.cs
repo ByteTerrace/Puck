@@ -76,7 +76,9 @@ public sealed class WorldSeatDriver {
     private ulong m_stepStart;
     private ulong m_stepAuthorityStart;
     private ulong m_deadline;
-    private ulong m_authorityTicks;
+    // The authority ticks charged against the chapter's budget, and every authority tick delivered for the seat's body.
+    private ulong m_chargedTicks;
+    private ulong m_authoritySpan;
     // The chapter's ticks steered from a predicted body, and this tick's delivered reading, which paths are planned from.
     private ulong m_predictedTicks;
     private WorldSeatSenses.Reading m_delivered;
@@ -204,9 +206,13 @@ public sealed class WorldSeatDriver {
     public int StepReached => m_step;
     /// <summary>Gets the times the chapter planned a path.</summary>
     public int Plans { get; private set; }
-    /// <summary>Gets the authority ticks the chapter has been delivered for the seat's body: its clock, which a slow delivery
-    /// spends none of.</summary>
-    public ulong AuthorityTicks => m_authorityTicks;
+    /// <summary>Gets the authority ticks charged against the chapter's budget: the ticks delivered for the seat's body,
+    /// less those spent awaiting a navigation bake, a tap's party or a yield. It is the chapter's clock, which a slow
+    /// delivery spends none of; <see cref="AuthoritySpan"/> counts every tick delivered.</summary>
+    public ulong ChargedTicks => m_chargedTicks;
+    /// <summary>Gets every authority tick delivered for the seat's body over the chapter, charged or not: the span the
+    /// authorities it stood at ticked while the chapter ran.</summary>
+    public ulong AuthoritySpan => m_authoritySpan;
     /// <summary>Gets the client ticks the chapter steered from a predicted body.</summary>
     public ulong PredictedTicks => m_predictedTicks;
     /// <summary>Gets the control lines the seat's ingress refused.</summary>
@@ -236,7 +242,8 @@ public sealed class WorldSeatDriver {
         m_leadInUntilTick = (tick + leadInTicks);
         m_chapterStart = tick;
         m_authorityBudget = (ulong)Math.Ceiling(a: (chapter.TimeoutSeconds * rateHz));
-        m_authorityTicks = 0UL;
+        m_chargedTicks = 0UL;
+        m_authoritySpan = 0UL;
         m_predictedTicks = 0UL;
         m_lastBodyAuthority = null;
         m_lastBodyTick = 0UL;
@@ -324,16 +331,18 @@ public sealed class WorldSeatDriver {
             m_lastBodyTick = read.Body.Tick;
         } else if (string.Equals(a: m_lastBodyAuthority, b: read.Endpoint.Authority, comparisonType: StringComparison.Ordinal)) {
             if (read.Body.Tick > m_lastBodyTick) {
+                m_authoritySpan += (read.Body.Tick - m_lastBodyTick);
                 if (!pausedBudget) {
-                    m_authorityTicks += (read.Body.Tick - m_lastBodyTick);
+                    m_chargedTicks += (read.Body.Tick - m_lastBodyTick);
                 }
                 m_lastBodyTick = read.Body.Tick;
             } else if (read.Body.Tick < m_lastBodyTick) {
                 m_lastBodyTick = read.Body.Tick;
             }
         } else {
+            m_authoritySpan += 1UL;
             if (!pausedBudget) {
-                m_authorityTicks += 1UL;
+                m_chargedTicks += 1UL;
             }
             m_lastBodyAuthority = read.Endpoint.Authority;
             m_lastBodyTick = read.Body.Tick;
@@ -374,7 +383,7 @@ public sealed class WorldSeatDriver {
             Fail(kind: "corridor", place: read.Place, reason: $"left the corridor ({string.Join(separator: ", ", values: m_corridor.Order(comparer: StringComparer.Ordinal))}) into {read.Place} on step {m_step} ({Describe(step: m_chapter.Steps[m_step])})", tick: tick);
             return;
         }
-        if ((m_authorityTicks >= m_authorityBudget) || (tick >= m_deadline)) {
+        if ((m_chargedTicks >= m_authorityBudget) || (tick >= m_deadline)) {
             Fail(kind: "timeout", place: read.Place, reason: string.Create(provider: CultureInfo.InvariantCulture, handler: $"ran past its {m_chapter.TimeoutSeconds:0.#} s on step {m_step} ({Describe(step: m_chapter.Steps[m_step])})"), tick: tick);
             return;
         }
@@ -530,7 +539,7 @@ public sealed class WorldSeatDriver {
         }
         m_step++;
         m_stepStart = tick;
-        m_stepAuthorityStart = m_authorityTicks;
+        m_stepAuthorityStart = m_chargedTicks;
         m_yielding = false;
         m_yieldLeaderIndex = -1;
         m_yieldStartBodyTick = 0UL;
@@ -569,7 +578,7 @@ public sealed class WorldSeatDriver {
         m_tapAnswered = false;
         m_tapAnsweredTick = 0UL;
         m_tapTick = 0UL;
-        m_lastTapAuthorityTick = m_authorityTicks;
+        m_lastTapAuthorityTick = m_chargedTicks;
         m_tapAuthority = null;
         m_poseSubmitted = false;
         m_poseAttemptTick = 0UL;
@@ -611,7 +620,7 @@ public sealed class WorldSeatDriver {
         m_tapAwaitingParty = false;
         m_tapAnswered = false;
         m_tapAnsweredTick = 0UL;
-        m_lastTapAuthorityTick = m_authorityTicks;
+        m_lastTapAuthorityTick = m_chargedTicks;
         if (read is { } current) {
             m_tapTick = current.Body.Tick;
             m_tapAuthority = current.Endpoint.Authority;
@@ -636,7 +645,7 @@ public sealed class WorldSeatDriver {
     private void SubmitPose(WorldRouteStep.PoseBody pose, ulong tick, bool countLine) {
         m_poseSubmitted = true;
         m_poseAttemptTick = tick;
-        m_poseAttemptAuthorityTick = m_authorityTicks;
+        m_poseAttemptAuthorityTick = m_chargedTicks;
         if (countLine && m_senses.TryRead(reading: out var preRead, slot: m_slot)) {
             m_poseHadPreRead = true;
             m_posePreAuthority = preRead.Endpoint.Authority;
@@ -656,13 +665,13 @@ public sealed class WorldSeatDriver {
         m_yielding = false;
         if (!m_poseSubmitted && (m_chapter!.Steps[m_step] is WorldRouteStep.PoseBody deferredPose)) {
             m_stepStart = tick;
-            m_stepAuthorityStart = m_authorityTicks;
+            m_stepAuthorityStart = m_chargedTicks;
             SubmitPose(pose: deferredPose, tick: tick, countLine: true);
             return new Steer(Moves: false, Dx: default, Dz: default, Stop: default, CornerDistance: default, CornerTurn: default, Faces: false, Facing: default, Pace: string.Empty);
         }
 
         var elapsed = (tick - m_stepStart);
-        var elapsedAuthority = (m_authorityTicks - m_stepAuthorityStart);
+        var elapsedAuthority = (m_chargedTicks - m_stepAuthorityStart);
         var step = m_chapter!.Steps[m_step];
         var still = new Steer(Moves: false, Dx: default, Dz: default, Stop: default, CornerDistance: default, CornerTurn: default, Faces: false, Facing: default, Pace: string.Empty);
 
@@ -700,7 +709,7 @@ public sealed class WorldSeatDriver {
                         if (
                             !read.Endpoint.ClockOwnedHere &&
                             (m_poseOutcome?.Invoke() == "ran") &&
-                            ((m_authorityTicks - m_poseAttemptAuthorityTick) >= ((ulong)(10 * rateHz)))
+                            ((m_chargedTicks - m_poseAttemptAuthorityTick) >= ((ulong)(10 * rateHz)))
                         ) {
                             SubmitPose(pose: pose, tick: tick, countLine: false);
                         }
@@ -741,16 +750,16 @@ public sealed class WorldSeatDriver {
                 if (m_tapAwaitingParty) {
                     if (m_canPressUntil?.Invoke(arg: m_step) == false) {
                         m_stepStart = tick;
-                        m_stepAuthorityStart = m_authorityTicks;
+                        m_stepAuthorityStart = m_chargedTicks;
                         return still;
                     }
                     m_stepStart = tick;
-                    m_stepAuthorityStart = m_authorityTicks;
+                    m_stepAuthorityStart = m_chargedTicks;
                     if (!m_settledBehindParty) {
                         ArmTap(action: press.Action, read: read);
                     } else {
                         m_tapAwaitingParty = false;
-                        m_lastTapAuthorityTick = m_authorityTicks;
+                        m_lastTapAuthorityTick = m_chargedTicks;
                     }
                     return still;
                 }
@@ -776,7 +785,7 @@ public sealed class WorldSeatDriver {
                     !m_settledBehindParty &&
                     (press.Until is not null) &&
                     !read.Endpoint.ClockOwnedHere &&
-                    ((m_authorityTicks - m_lastTapAuthorityTick) >= ((ulong)(8 * rateHz)))
+                    ((m_chargedTicks - m_lastTapAuthorityTick) >= ((ulong)(8 * rateHz)))
                 ) {
                     ArmTap(action: press.Action, read: read);
                 }
@@ -1078,7 +1087,7 @@ public sealed class WorldSeatDriver {
                     NextStep(tick: tick, rateHz: rateHz);
                     return still;
                 }
-                m_progressTick = m_authorityTicks;
+                m_progressTick = m_chargedTicks;
                 return still;
             }
         }
@@ -1137,7 +1146,7 @@ public sealed class WorldSeatDriver {
 
             m_corner++;
             m_best = FixedQ4816.MaxValue;
-            m_progressTick = m_authorityTicks;
+            m_progressTick = m_chargedTicks;
         }
         m_hasGoRead = true;
         m_lastGoPosition = read.Position;
@@ -1181,9 +1190,9 @@ public sealed class WorldSeatDriver {
         // path did not show.
         if (distance < (m_best - (FixedQ4816.FromDouble(value: 0.05) * scale))) {
             m_best = distance;
-            m_progressTick = m_authorityTicks;
+            m_progressTick = m_chargedTicks;
         } else if (!moveAnswered) {
-            m_progressTick = m_authorityTicks;
+            m_progressTick = m_chargedTicks;
         }
         var strayLimit = FixedQ4816.FromDouble(value: (read.SteersLocally ? StrayMetres : 1.6));
         var strayFrom = ((m_corner > 0) ? m_corners[(m_corner - 1)] : m_planStart);
@@ -1195,7 +1204,7 @@ public sealed class WorldSeatDriver {
         ) {
             return Plan(go: go, reading: in read, tick: tick) ? Go(go: go, planned: true, rateHz: rateHz, read: in read, still: still, tick: tick) : still;
         }
-        if (!planned && moveAnswered && ((m_authorityTicks - m_progressTick) > StuckTicks)) {
+        if (!planned && moveAnswered && ((m_chargedTicks - m_progressTick) > StuckTicks)) {
             if (++m_stuckPlans > MaxStuckPlans) {
                 Fail(kind: "stuck", place: read.Place, reason: $"made no progress toward {(go.Place ?? Vector(go.Point))} after {MaxStuckPlans} plans", tick: tick);
                 return still;
@@ -1414,7 +1423,7 @@ public sealed class WorldSeatDriver {
             }
 
             m_yielding = true;
-            m_progressTick = m_authorityTicks;
+            m_progressTick = m_chargedTicks;
             m_stallOrigin = read.Position;
             m_stallTick = read.Body.Tick;
             m_stallAuthority = read.Endpoint.Authority;
@@ -1481,7 +1490,7 @@ public sealed class WorldSeatDriver {
         m_corner = 0;
         m_firstReach = FixedQ4816.FromDouble(value: 0.4);
         m_best = FixedQ4816.MaxValue;
-        m_progressTick = m_authorityTicks;
+        m_progressTick = m_chargedTicks;
         m_corridor.Clear();
         m_settledBehindParty = false;
         if (!stuck) {
@@ -1693,7 +1702,7 @@ public sealed class WorldSeatDriver {
                 return ((steer.Moves && hold.Paces.Contains(value: steer.Pace) && (read.SteersLocally || Running(read: in read, steer: in steer))) ? "press" : "release");
             case WorldSeatProgramOp.Pulse pulse: {
                 var period = Math.Max(val1: 2UL, val2: (ulong)Math.Round(a: (pulse.PeriodSeconds * rateHz)));
-                var pulseElapsed = (read.Endpoint.ClockOwnedHere ? (tick - m_stepStart) : (m_authorityTicks - m_stepAuthorityStart));
+                var pulseElapsed = (read.Endpoint.ClockOwnedHere ? (tick - m_stepStart) : (m_chargedTicks - m_stepAuthorityStart));
 
                 return ((steer.Moves && pulse.Paces.Contains(value: steer.Pace) && CanDash(read: in read, steer: in steer) && ((pulseElapsed % period) == 0UL)) ? "press" : "release");
             }

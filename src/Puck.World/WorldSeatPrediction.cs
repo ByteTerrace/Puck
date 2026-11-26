@@ -52,7 +52,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         // The tip of each prediction by the authority tick it reached, and the distance by which the authority last missed one.
         public readonly (ulong Tick, FixedVector3 Position)[] Trail = new (ulong Tick, FixedVector3 Position)[64];
         public ulong ConfirmedAt = ulong.MaxValue;
-        public FixedQ4816 Error = FixedQ4816.MaxValue;
+        public FixedQ4816? Error;
         // The ticks from the authority tick a batch is sent at to the one that takes it, each answered batch's answer
         // tick less its send tick (WorldSeatSentInput.Sent.Tick): the least of the recent ones, since a batch held up in a
         // burst lands later than the link's own delay, and predicting that far ahead would carry the body past where the
@@ -65,9 +65,6 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         public string Reason = "no prediction asked";
         public string? PopulationRefusal;
         public WorldPredictedBody Body;
-        // The portal openings of the document the prediction steps in, and that document.
-        public (string PlacementId, string Face, WorldFaceAperture.Box Box)[] Doors = [];
-        public WorldDefinition? DoorsFrom;
     }
 
     private readonly Seat[] m_seats = [.. Enumerable.Range(start: 0, count: PlayerRoster.MaxSlots).Select(selector: static _ => new Seat())];
@@ -99,9 +96,14 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
     public string Describe(int slot) {
         var seat = m_seats[slot];
 
-        return (seat.Predicted
-            ? string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"predicted {seat.Body.Steps} tick(s) past tick {seat.Body.ContinuationTick}, last missed by {(double)seat.Error:0.###} m; lead {seat.Leads.Minimum} tick(s), the authority's clock moved {client.SeatSentInput(slot: slot).Clock.Moved} tick(s) against the seat's; {Predictions} prediction(s), {StepsTaken} step(s), {PopulationsBuilt} population(s)")
-            : $"off({seat.Reason})");
+        if (!seat.Predicted) {
+            return $"off({seat.Reason})";
+        }
+        var missed = ((seat.Error is { } error)
+            ? string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"last missed by {(double)error:0.###} m")
+            : "no prediction answered yet");
+
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"predicted {seat.Body.Steps} tick(s) past tick {seat.Body.ContinuationTick}, {missed}; lead {seat.Leads.Minimum} tick(s), the authority's clock moved {client.SeatSentInput(slot: slot).Clock.Moved} tick(s) against the seat's; {Predictions} prediction(s), {StepsTaken} step(s), {PopulationsBuilt} population(s)");
     }
     // Predicts one seat's body, answering null, or why it predicted nothing.
     private string? Predict(Seat seat, int slot, out WorldPredictedBody body) {
@@ -137,7 +139,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
             seat.Endpoint = endpoint;
             seat.Leads.Clear();
             seat.ConfirmedAt = ulong.MaxValue;
-            seat.Error = FixedQ4816.MaxValue;
+            seat.Error = null;
         }
         if (!ReferenceEquals(objA: sent.Endpoint, objB: endpoint) || !sent.Clock.IsAnchored) {
             return "no input is sent to the seat's authority yet";
@@ -177,10 +179,8 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         if (!TryDecode(own: in own, seat: seat)) {
             return "the continuation does not decode";
         }
-        if (!ReferenceEquals(objA: seat.DoorsFrom, objB: source)) {
-            seat.Doors = WorldFacePortalPolicy.PortalApertures(definition: source);
-            seat.DoorsFrom = source;
-        }
+        // The doors the authority's own portal scan tests, from the one derivation both read (built once per document).
+        var doors = WorldFaceCatalog.For(definition: source).PortalDoors(definition: source);
 
         // The authority's answer to an earlier prediction: what was predicted for the continuation's tick against where the
         // body stood after it. A prediction is relied on only while the authority keeps confirming it.
@@ -237,9 +237,11 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
             // A step through a door's glass is a crossing only the authority makes (it carries the body to the door's
             // counterpart, perhaps resized or into another world), so a prediction past one would steer the seat from a
             // body standing in the wall behind the glass: the seat steers from what was delivered until the crossing is.
-            foreach (var door in seat.Doors) {
-                if (WorldFaceRegion.Sweep(aperture: door.Box, from: position, to: predicted.FixedPosition).Crossed) {
-                    return $"the prediction reaches {door.PlacementId}/{door.Face}, whose crossing the authority makes";
+            for (var index = 0; (index < doors.Count); index++) {
+                var door = doors[index];
+
+                if (WorldFaceRegion.Sweep(aperture: door.Aperture, from: position, to: predicted.FixedPosition).Crossed) {
+                    return $"the prediction reaches {source.Placements[door.Row].Id}/{door.Face.Face}, whose crossing the authority makes";
                 }
             }
             previous = position;

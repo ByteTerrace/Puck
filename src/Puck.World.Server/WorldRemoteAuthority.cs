@@ -788,17 +788,25 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         var hold = new WorldProjectionHold(basis: () => Definition, content: upstream.FetchedContent, fetch: Fetch, seed: seedDefinition);
         WorldDefinition? replica = null;
         WorldDocumentVersion replicaVersion = default;
+        var bodies = new WorldSnapshotReceiver();
         // The session's one door: every record it reads, a route included, passes this ingress on its stamp before
         // anything the record carries is decoded into the hold or published by this authority, and a record out of
         // order (another stream, an earlier generation, an ordinal not ahead) ends the session, which closes the
-        // reader's span. The reader's own ingress orders the records again across sessions.
-        var ingress = new WorldStreamIngress();
-        var bodies = new WorldSnapshotReceiver();
+        // reader's span. A generation opens only with the stream's whole document, whose record carries the cut, or a
+        // cut record where no document follows; every move of the span drops the ended span's projection, which nothing
+        // of it can complete, before the record that opened the next is decoded. The reader's own ingress orders the
+        // records again across sessions.
+        var ingress = new WorldStreamIngress(withdraw: () => {
+            hold = new WorldProjectionHold(basis: () => Definition, content: upstream.FetchedContent, fetch: Fetch, seed: seedDefinition);
+            bodies = new WorldSnapshotReceiver();
+            replica = null;
+            replicaVersion = default;
+        });
 
         observed.Session = ingress;
-        bool Admits(ReadOnlySpan<byte> record, out WorldStreamStamp stamp, out ReadOnlySpan<byte> body, out WireFailure failure) {
+        bool Admits(ReadOnlySpan<byte> record, bool opens, out WorldStreamStamp stamp, out ReadOnlySpan<byte> body, out WireFailure failure) {
             if (!WorldFederationCodec.TryReadStamped(record: record, stream: out stamp, body: out body, failure: out failure)) { return false; }
-            if (ingress.Admit(stream: in stamp)) { return true; }
+            if (ingress.Admit(opens: opens, stream: in stamp)) { return true; }
             failure = new WireFailure(Detail: "an observation record is out of its stream's order", Refusal: WireRefusal.PayloadMalformed);
             return false;
         }
@@ -883,7 +891,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 case WorldFederationResponse.Route:
                     if (
                         !m_submissionCredential.HasValue ||
-                        !Admits(record: frame.Body.Span, stamp: out _, body: out var routeBody, failure: out _) ||
+                        !Admits(opens: false, record: frame.Body.Span, stamp: out _, body: out var routeBody, failure: out _) ||
                         !WorldFederationCodec.TryDecodeRoute(
                         routeBody,
                         Definition,
@@ -900,12 +908,6 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                             !ingress.Cut(stream: in cut, terminal: terminal)) {
                             return false;
                         }
-                        // The ended span's projection goes with it: the generation the cut opens starts from its whole
-                        // projection, which nothing of the ended span can complete.
-                        hold = new WorldProjectionHold(basis: () => Definition, content: upstream.FetchedContent, fetch: Fetch, seed: seedDefinition);
-                        bodies = new WorldSnapshotReceiver();
-                        replica = null;
-                        replicaVersion = default;
                         sink.DeliverCut(stream: cut, terminal: terminal);
                         if (terminal) {
                             return false;
@@ -914,7 +916,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                     }
                 case WorldFederationResponse.Definition: {
                         if (
-                            !Admits(record: frame.Body.Span, stamp: out var definitionStream, body: out var definitionBody, failure: out var definitionFailure) ||
+                            !Admits(opens: true, record: frame.Body.Span, stamp: out var definitionStream, body: out var definitionBody, failure: out var definitionFailure) ||
                             !WorldFederationCodec.TryDecodeDocument(
                             body: definitionBody,
                             content: upstream.FetchedContent,
@@ -963,7 +965,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                     }
                 case WorldFederationResponse.PresentationRows: {
                         if (replica is null ||
-                            !Admits(frame.Body.Span, out var rowStream, out var rowBody, out _) ||
+                            !Admits(frame.Body.Span, false, out var rowStream, out var rowBody, out _) ||
                             !WorldFederationCodec.TryDecodePresentationRows(rowBody, replica, out var rows, out var changed, out var rowVersion) ||
                             rowVersion.Activation != replicaVersion.Activation || rowVersion.Sequence <= replicaVersion.Sequence) { return false; }
                         replica = changed!;
@@ -973,7 +975,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         break;
                     }
                 case WorldFederationResponse.ProjectionDelta: {
-                        if (!Admits(record: frame.Body.Span, stamp: out var deltaStream, body: out var deltaBody, failure: out var deltaFailure) || !WorldFederationCodec.TryDecodeProjectionDelta(
+                        if (!Admits(opens: false, record: frame.Body.Span, stamp: out var deltaStream, body: out var deltaBody, failure: out var deltaFailure) || !WorldFederationCodec.TryDecodeProjectionDelta(
                             body: deltaBody,
                             definition: out var merged,
                             failure: out deltaFailure,
@@ -1016,7 +1018,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                     }
                 case WorldFederationResponse.Snapshot:
                 case WorldFederationResponse.SnapshotDelta: {
-                        if (!Admits(record: frame.Body.Span, stamp: out var snapshotStream, body: out var snapshotBody, failure: out var snapshotFailure) || !bodies.TryReceive(snapshotStream, (WorldFederationResponse)frame.Kind == WorldFederationResponse.SnapshotDelta, snapshotBody, out var snapshot)) {
+                        if (!Admits(opens: false, record: frame.Body.Span, stamp: out var snapshotStream, body: out var snapshotBody, failure: out var snapshotFailure) || !bodies.TryReceive(snapshotStream, (WorldFederationResponse)frame.Kind == WorldFederationResponse.SnapshotDelta, snapshotBody, out var snapshot)) {
                             if (m_narrationHub is { HasNarrationSink: true }) {
                                 m_narrationHub?.Narrate(
                                     channel: "world.projection",
