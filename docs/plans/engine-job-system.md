@@ -550,7 +550,7 @@ transaction. `WorldPopulation.Partitions.cs` holds the mechanism and its
 invariant; in short:
 
 - **Which bodies.** `WorldBody.StepIsLocal` and `WorldPopulation.ProducerIsLocal`,
-  read at the serial plan from the body as compiled now: no action binding, no
+  read at the plan from the body as compiled now: no action binding, no
   running or fact-reset timer and no fact-reset counter away from its initial
   value (`RegistersRestThisStep`), no hold that spends a register, no rigid,
   carry or tether facet, not carried or parked, no tape, press, staged durable
@@ -558,10 +558,13 @@ invariant; in short:
   contact field; and a producer with no flock affinity (an authority expression
   over the arena). Route searches, goal fields and sight tests partition. The
   standard walker kit's registers and its ground and fall holds pass.
-- **The phases.** A serial plan (sleep, field inputs, cadence, the goal fields
-  and perception neighbourhoods the partitions will read), a steer fork (each
-  due producer), a serial input pass, and a move fork (motion program, contacts,
-  settlement), then the join. The step is split
+- **The phases.** A plan fork (which bodies are local, their sleep, field
+  inputs and cadence, each partition planning its share of the tick's step
+  bodies), a serial settlement of the plan (the wakes it logged, the goal fields
+  and perception neighbourhoods the partitions will read, in partition order),
+  a steer fork (each due producer), a serial input pass, and a move fork (motion
+  program, contacts, settlement), then the join. A sleeper nothing wakes is
+  passed by before it is classed (`WorldBody.SleepsThrough`). The step is split
   (`WorldBody.AdmitProducerObservation`, `BeginStepCore`, `MoveStep`, `EndStep`)
   because every producer-driven body admits its observation through the one
   input runtime (`WorldInputRuntime.AdmitProgramSnapshot`) before it resolves its

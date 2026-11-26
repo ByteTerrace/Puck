@@ -43,7 +43,14 @@ refresh. The distance is one query over one image of where humans stand
 
 **Each instance's cost is counted.** `world.rate` reads back an instance's
 attention, its bar, the ticks it lapsed, and the body advances and producer
-runs its population has run.
+runs its population has run. A producer run is counted where a producer ran: a
+body whose producer stands down, or that names none, stages the inert intent
+and counts no run.
+
+**A body whose producer is at rest sleeps.** A citizen standing at the point
+its errand names costs a tick nothing once it has stood for the idle floor
+(`bodies.sleepAfterSeconds`), and wakes when its register is designated again
+([the server's account](../../src/Puck.World.Server/README.md)).
 
 The debug world authors these: its paintings and arrival frames carry
 `windowAttention` (`worlds/debug/painting-kit.puck`), the city, the garden and
@@ -94,18 +101,12 @@ Each step names the check that shows it worked.
    an authored member of the producer program, with standing still as the
    neutral default. Check: a scenario in which a curve follower's station
    after a lapse equals its station when stepped throughout.
-3. **Name the bodies behind the producer-run excess.** With the city watched
-   from outside, its producer runs read about eleven a tick above what the
-   authored cadences give, while its body advances match. The unconfirmed
-   reading is that a body whose producer stands down counts a run on every
-   tick it is planned. Check: a per-kit count of producer runs in `world.rate`
-   or `world.counters` that sums to the instance's.
-4. **A remote observer's attention arrives with its session.** An observer in
+3. **A remote observer's attention arrives with its session.** An observer in
    another process always counts as watching, because its distance cannot be
    measured here. Carry the observing surface's reading on the federation
    observation. Check: a remote observer far from its surface leaves the
    destination lapsing.
-5. **Rule evaluation skips what it can prove.** A lapse is exact for values
+4. **Rule evaluation skips what it can prove.** A lapse is exact for values
    that are a law of time and holds everything else. Each subsystem that can
    name its next event narrows what an author has to accept: the deadline
    tables can today, and a rule's gate can once it is bounded over an interval

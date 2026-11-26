@@ -351,9 +351,9 @@ public static class HostCommand {
         return command;
     }
 
-    private static async Task<int> Samples(TraceRequest request, int depth, int top, CancellationToken cancellationToken) {
+    private static async Task<int> Samples(TraceRequest request, int depth, int leaves, int top, CancellationToken cancellationToken) {
         var (report, path, exit) = await TakeTraceAsync(cancellationToken: cancellationToken, collectAsync: SampleTrace.CollectAsync, fileStem: "puck-samples", request: request, verb: SamplesVerb,
-            read: path => SampleTrace.Read(depth: depth, focus: request.Focus, fromMs: request.FromMs, path: path, thread: request.Thread, toMs: request.ToMs));
+            read: path => SampleTrace.Read(depth: depth, focus: request.Focus, fromMs: request.FromMs, leaves: leaves, path: path, thread: request.Thread, toMs: request.ToMs));
 
         if (report is null) { return exit; }
 
@@ -361,8 +361,8 @@ public static class HostCommand {
 
         Console.Out.WriteLine(value: FormattableString.Invariant($"[host samples: trace={Quote(path)} focus={Quote(request.Focus ?? "")} thread={request.ThreadText} samples={report.Samples} focused={report.Focused} seconds={report.Seconds:0.0}"));
         foreach (var (id, samples, root) in report.Threads.Take(count: top)) { Console.Out.WriteLine(value: FormattableString.Invariant($"thread {id} {samples} root={Quote(root)}")); }
-        foreach (var (callee, samples) in report.Callees.Take(count: top)) { Console.Out.WriteLine(value: FormattableString.Invariant($"callee {samples} {Share(samples, report.Focused)} {Quote(callee)}")); }
-        Console.Out.WriteLine(value: "The sample profiler records each managed thread's stack about every millisecond, running or waiting; a callee's share is of the samples beneath the focus frame.]");
+        foreach (var (callee, samples) in report.Callees.Take(count: top)) { Console.Out.WriteLine(value: FormattableString.Invariant($"{((leaves == 0) ? "callee" : "leaf")} {samples} {Share(samples, report.Focused)} {Quote(callee)}")); }
+        Console.Out.WriteLine(value: "The sample profiler records each managed thread's stack about every millisecond, running or waiting; a share is of the samples beneath the focus frame.]");
 
         return CliExit.Success;
     }
@@ -375,6 +375,7 @@ public static class HostCommand {
             traceKinds: "cpu-sampling or thread-time"
         );
         var depthOption = CliOptions.Count(defaultValue: 1, description: "How many callee frames beneath the focus name each path.", minimum: 1, name: "--depth");
+        var leavesOption = CliOptions.Count(defaultValue: 0, description: "Name each sample by this many of its innermost frames beneath the focus, innermost first, instead of by the callees beneath the focus: where the thread was and what called it.", minimum: 0, name: "--leaves");
         var topOption = CliOptions.Count(defaultValue: 25, description: "How many threads and callee paths to list.", minimum: 1, name: "--top");
         var command = new Command(
             description: "Attribute another .NET process's thread time beneath a frame to its callees by the runtime's sample profiler.",
@@ -383,6 +384,7 @@ public static class HostCommand {
 
         trace.AddTo(command: command);
         command.Options.Add(item: depthOption);
+        command.Options.Add(item: leavesOption);
         command.Options.Add(item: topOption);
 
         command.Detail(detail: """
@@ -391,14 +393,17 @@ public static class HostCommand {
             each managed thread's stack about every millisecond, running or waiting, so a thread's samples beneath a
             frame are its share of wall time there. The report lists each thread's samples (named by its outermost
             engine frame), then, of the samples whose stack holds a frame naming --focus (its outermost such frame),
-            the paths of --depth callees beneath it, with self for samples in the frame itself. Samples are counts: on
-            a machine others share, read them as attribution, not timing.
+            the paths of --depth callees beneath it, with self for samples in the frame itself. --leaves names each
+            such sample by its innermost frames instead, innermost first, so a copy or a clear is summed across every
+            path that reached it and reads with its callers. Samples are counts: on a machine others share, read them
+            as attribution, not timing.
 
             Exit codes: 0 done; 2 refused (no diagnostics port, or the trace could not be read).
             """);
         command.SetAction(action: (parseResult, cancellationToken) => Samples(
             cancellationToken: cancellationToken,
             depth: parseResult.GetValue(option: depthOption),
+            leaves: parseResult.GetValue(option: leavesOption),
             request: trace.Read(parseResult: parseResult),
             top: parseResult.GetValue(option: topOption)
         ));

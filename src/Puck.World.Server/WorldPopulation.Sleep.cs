@@ -227,7 +227,11 @@ public sealed partial class WorldPopulation {
     private ReadOnlySpan<int> PrepareBodyStep() {
         ObserveContactFieldChange();
         m_awakeBodies.CopyTo(array: m_stepBodies);
-        foreach (var index in m_awakeBodies) { m_eventBodies.Add(item: index); }
+        // An idle sleeper stands where its last event delivery left it, so it is no event body until a wake brings it
+        // back (BodyWoke): the tick's region and collision passes visit the bodies that can have moved.
+        foreach (var index in m_awakeBodies) {
+            if (m_entries[index].Body is not { Asleep: true }) { m_eventBodies.Add(item: index); }
+        }
         return m_stepBodies.AsSpan(start: 0, length: m_awakeBodies.Count);
     }
 
@@ -446,10 +450,10 @@ public sealed partial class WorldPopulation {
         return m_eventBodyImage.AsSpan(start: 0, length: m_eventBodies.Count);
     }
     internal void CompleteBodyEvents() {
-        // Keep awake entries between ticks. Only the final dirty delivery of a newly frozen/deactivated slot leaves
-        // the set; bodies that stay awake need no per-tick membership changes.
+        // Keep awake entries between ticks. Only the final dirty delivery of a newly frozen, deactivated or sleeping
+        // slot leaves the set; bodies that stay awake need no per-tick membership changes.
         foreach (var index in EventBodies()) {
-            if (!m_awakeBodies.Contains(item: index)) { m_eventBodies.Remove(item: index); }
+            if (!m_awakeBodies.Contains(item: index) || (m_entries[index].Body is { Asleep: true })) { m_eventBodies.Remove(item: index); }
         }
     }
     /// <summary>Lists the sleepers whose broadphase bounds meet a sphere's about a body: every one whose centre lies

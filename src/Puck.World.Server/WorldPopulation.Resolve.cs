@@ -761,6 +761,9 @@ public sealed partial class WorldPopulation {
             // Cadence periods and cached steering are compiled-kit products. A live kit/assignment rebuild must not
             // carry a partial interval or producer image authored under the previous row into the replacement.
             m_entries[bodyIndex].AutonomyState.Clear();
+            // A producer found at rest was found so under the kit, the producer and the domains this rebuild replaces:
+            // the body wakes, which withdraws the rest, and its next run decides again.
+            if (m_entries[bodyIndex].Body is { ProducerRests: true } rested) { rested.WakeUp(); }
             var prior = m_entries[bodyIndex].Designations;
             var current = NewDesignations();
 
