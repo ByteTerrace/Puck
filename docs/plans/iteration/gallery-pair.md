@@ -52,10 +52,10 @@ relit.
   settle; an edit is not. When a merged change needs a restart (engine code,
   shaders, or a reload that says `restart owed`), the lead restarts without
   asking (the owner's standing instruction for pair sessions): `world.pins save`
-  before it and `world.pins restore` after it bring back the held time, the
-  exposure pin, the camera and the seat's pose, `world.window` restores the
-  window, and the noclip toggle is pressed again by hand. The lead says what
-  changed.
+  before it and `world.pins restore` after it (or `pins: true` on
+  `puck_world_stop` and `puck_world_start`) bring back the window's size and
+  place, the held time, the exposure pin, the camera, the seat's registers
+  (noclip among them) and its pose. The lead says what changed.
 - **Owner input** on the same World: `ownerPlay` (`--devices all`) when the
   owner wants to walk it.
 - **Bookmarks.** Named camera poses that match each reference panel (the

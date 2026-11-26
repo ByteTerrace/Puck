@@ -2019,24 +2019,32 @@ public sealed partial class WorldDocument {
                 );
 
                 break;
-            case WorldCommand.LoadDurableState load:
-                if (load.Tick != Host.NextInputTick) {
-                    if (Host.Output.HasNarrationSink) {
-                        Host.Output.Narrate(channel: "body.state-load refused", text: $"[body.state-load refused: tick {load.Tick} is not next tick {Host.NextInputTick}]");
-                    }
-                } else if (!body.TryStageDurableState(
-                    tick: load.Tick,
-                    values: load.Values,
-                    requirePlayerWritable: true,
-                    writer: load.Principal.Describe(),
-                    reason: out var stateReason
-                )) {
-                    if (Host.Output.HasNarrationSink) {
-                        Host.Output.Narrate(channel: "body.state-load refused", text: $"[body.state-load refused: {stateReason}]");
-                    }
-                }
+            case WorldCommand.StageRegisters stage: {
+                    // The operator form is decided here from the stamped principal, never from the sender's flag alone.
+                    var refusal = (stage.Operator && !Host.GrantTable.IsOperator(principal: stage.Principal))
+                        ? $"{stage.Principal.Describe()} is not an operator"
+                        : ((stage.Tick != Host.NextInputTick)
+                            ? $"tick {stage.Tick} is not next tick {Host.NextInputTick}"
+                            : null);
 
-                break;
+                    if ((refusal is null) && !body.TryStageRegisters(
+                        tick: stage.Tick,
+                        values: stage.Values,
+                        operatorWrite: stage.Operator,
+                        requirePlayerWritable: !stage.Operator,
+                        writer: (stage.Operator ? WorldBody.OperatorWriter : stage.Principal.Describe()),
+                        reason: out var stageRefusal
+                    )) {
+                        refusal = stageRefusal;
+                    }
+                    if ((refusal is not null) && Host.Output.HasNarrationSink) {
+                        var verb = (stage.Operator ? "body.register" : "body.state-load");
+
+                        Host.Output.Narrate(channel: $"{verb} refused", text: $"[{verb} refused: {refusal}]");
+                    }
+
+                    break;
+                }
         }
     }
     /// <summary>Applies a live window-composition override synchronously (the <c>view.override layout</c>/<c>view.override camera</c>

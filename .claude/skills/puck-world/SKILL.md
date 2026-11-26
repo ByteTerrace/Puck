@@ -245,7 +245,11 @@ frame-bar [auto|<profile>]`, `world.window center`, `world.window move <x> <y>` 
 `world.window fullscreen [on|off]`, and a bare `world.window` reads the client size,
 its desktop position, the monitor and its work area
 ([host pacing](../../../docs/reference/hosting.md#host-pacing)). A resize there is a
-mutation of what the owner sees, as `view.override` is.
+mutation of what the owner sees, as `view.override` is. A restart that should keep the
+session (window, levers, camera, held cells, seat registers such as noclip, seat poses)
+passes `pins: true` to `puck_world_stop` (it runs `world.pins save` before `quit`) and
+to the next `puck_world_start` of the same document (it runs `world.pins restore` once
+attached); each answer is the result's `output`.
 Where advertised,
 `captureTool: "pix"` forwards `--capture-tool pix` before device creation (windowed
 Direct3D 12); `"renderdoc"` selects RenderDoc. Both enable existing GPU object names.
@@ -556,9 +560,15 @@ waits, then captures the revision, so the last save applies cut from the last ac
 revision; never capture a revision outside `Begin`'s queue. A refused reload asks its
 host's explanation off the pump (`explain`); the desktop's names a restart owed when an
 engine source in the checkout is newer than the running build (`WorldBuildCurrency`).
-What the operator holds for the session (levers, `view.override`, the state and row
-lines `WorldPinLedger` records, seat poses) survives a reload by living outside the
-source revision; `world.pins save` and `world.pins restore` carry it across a restart.
+What the operator holds for the session (the window's size and place, levers,
+`view.override`, the state and row lines `WorldPinLedger` records, seat registers
+that differ from their initial values or that an operator wrote, seat poses) survives
+a reload by living outside the source revision; `world.pins save` and `world.pins
+restore` carry it across a restart, and `pins: true` on `puck_world_stop` and
+`puck_world_start` runs them. A register line is `body.register <name> <value>
+[body]`, the operator's write of any declared register, ephemeral ones a rule keeps
+included (noclip): it enters the tick as the tape-recorded `WorldCommand.StageRegisters`
+that `body.state-load` also stages, and the authority refuses it from a non-operator.
 
 **The authority merges the delta over the live document.** Its preparation
 (`WorldRebuildPreparation`, on the thread pool when `WorldServer.PreparesRebuildsOffTick`, which the desktop's job pool and a silo row set) reconstructs the next
