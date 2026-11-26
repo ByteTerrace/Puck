@@ -386,7 +386,7 @@ public sealed partial class WorldServer {
                             : ((rule.Iteration is WorldPlayerIteration)
                                 ? $" forEach {WorldPlayerIteration.Spelling}"
                                 : ((rule.Iteration is WorldContactIteration contacts)
-                                    ? $" forEach $contacts:{contacts.ScreenIndex}"
+                                    ? $" forEach contacts({contacts.Surface})"
                                     : string.Empty))))
             ));
 

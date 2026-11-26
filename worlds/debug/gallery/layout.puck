@@ -98,13 +98,14 @@ let balconyInset = 0.08
 // footprint in the plan, which every upper floor leaves open over it; the stair's kit piece (the standard's
 // `switchbackStair` and `spiralStair`, architecture.puck) stands at the well's centre, one copy a storey, turned by
 // `yaw` so the piece's front (+Z: where a switchback's first flight starts and its second arrives, and where a spiral
-// starts and arrives) faces the nave. A switchback fills four tiles by five: two flights two tiles wide less a spine,
-// each a run of three tiles, and a half landing two tiles deep against the long wall. A spiral fills four tiles by
-// four, one turn round its newel to the storey.
+// starts and arrives) faces the nave. Both forms fill four tiles by four, so every stair arrives on the aisle's tile row
+// in front of the arcade's (`arcadeRowSouth` and its north twin) and the end pier standing in that row is clear of its
+// head: a switchback, two flights two tiles wide less a spine, each a run of three tiles, and a half landing a tile deep
+// against the long wall; a spiral, one turn round its newel to the storey.
 let stairRisers = 18
 let stairTiles = galleryBayTiles
-let switchbackTiles = (galleryAisleTiles - 1)
-let switchbackLanding = (2 * galleryTile)
+let switchbackTiles = stairTiles
+let switchbackLanding = galleryTile
 let spiralRadius = ((stairTiles * galleryTile) / 2)
 let spiralNewel = 0.5
 function stairWell(i, j, across, deep) = {
@@ -314,6 +315,10 @@ let rentalMachines = flatMap(rentalBodies, b => [$"rental-hgb-{b}", $"rental-agb
 // envelope (size.puck), and Alice's 0.15 is wider still. The panels stand on the balustrades' line (`balconyInset`).
 let toyLatticePitch = (galleryTile / 16)
 let toyLatticeBar = 0.025
+// The toybox's net: the lattice's bars and rails give way to a diamond net of rope strands over a clear pane that holds
+// every body (architecture.puck's `lattice` net): a diamond every 18 cm; the strands are off (`strand: 0`) until the bake
+// draws a rotated repeated strand along its whole length.
+let toyLatticeNet = { strand: 0, pitch: 0.18 }
 // The loose panels: one panel on each edge that a rule can open, move or swap (gallery.md, "The lattice"), each named
 // `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: a south and a north bay, and the bridge's middle
 // tile on the nave's axis.

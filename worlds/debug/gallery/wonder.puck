@@ -95,6 +95,9 @@ let wonderZones = concat(
       box: wonderBox((treeX - wonderTrunkReach), (treeX + wonderTrunkReach), galleryFloor[0], galleryRoof, (treeZ - wonderTrunkReach), (treeZ + wonderTrunkReach))
       start: "full"
     }
+    // Everywhere else in the building gives full size, so a body that leaves the toybox's zones by any way (a fall, a
+    // portal, noclip) grows back instead of keeping the last size a zone gave it.
+    { box: wonderBox(galleryWestOut, galleryWidth, (galleryFloor[0] - 1), galleryParapet, wingSouth, galleryDepth), start: "full" }
   ]
 )
 

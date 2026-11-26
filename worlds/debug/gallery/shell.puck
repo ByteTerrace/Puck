@@ -910,7 +910,7 @@ template shellPrototypes() {
         schema: "puck.creation.v1"
         palette: map(
           latticePalette(lookToyLattice(kind.n).frame, lookToyLattice(kind.n).bar, lookToyLattice(kind.n).rail),
-          entry => shellBrushed(entry, lookBrushStructure)
+          entry => ((entry.glass != null) ? entry : shellBrushed(entry, lookBrushStructure))
         )
         lattice(
           base: 0,
@@ -920,7 +920,8 @@ template shellPrototypes() {
           bar: toyLatticeBar,
           rails: shellLatticeRails(kind.height),
           upright: kind.upright,
-          sill: kind.upright
+          sill: kind.upright,
+          net: toyLatticeNet
         )
       }
     }
