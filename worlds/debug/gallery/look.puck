@@ -26,16 +26,13 @@ let lookTileTone = "#C86E48"
 let lookGrout = "#8A3F2C"
 let lookPad = "#EADBBE"
 let lookPadJoint = "#8A4A34"
-// A tile's side and its joint's width, in metres, and how smooth the glaze is.
-let lookTileSize = 1.2
+// A tile's joint's width, in metres (the tile's side is the plan's module, layout.puck's galleryTile), and how smooth
+// the glaze is.
 let lookTileJoint = 0.01
 let lookFloorRoughness = 0.16
 let lookFloorSpecular = 0.05
-// A pad's reach past its display's sides and back, its half depth (the rest of it lies before the console, where a
-// player stands) and its corner's radius, in metres.
-let lookPadReach = 0.9
-let lookPadHalfDepth = 2.55
-let lookPadCorner = 0.4
+// A pad's side, in floor tiles: a display stands on a square of this many tiles a side.
+let lookPadTiles = 3
 
 // The kit's paints, by the standard's slots (architecture.puck's kitPalette): the cream, ochre, teal and terracotta of
 // the pieces, their brass and glass, a fan shade's two oranges and its hub, then a planter's soil, three greens and pot.

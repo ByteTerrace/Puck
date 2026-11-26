@@ -111,7 +111,7 @@ let galleryLevels = [
 // The display stations in walking order, each showing one group of the gallery's exhibits: its id (the key of its state
 // cells and the stem of its placements' names), its sign's title and what the group shows, its level, where it stands
 // in the building's frame and the yaw its console faces (layout.puck's display lines), and its exhibits in order.
-let galleryDisplays = [
+let galleryDisplayRows = [
   {
     id: "primitives", title: "PRIMITIVES", level: 0, names: uniformRow, what: "each primitive at a uniform scale"
     x: displayNaveXs[0], z: displayNaveSouth, yaw: 180
@@ -171,6 +171,8 @@ let galleryDisplays = [
     x: 44, z: displaySouth, yaw: 180
   }
 ]
+// Every display stands on a floor tile's centre (layout.puck's module), so its pad lies square on the tiles.
+let galleryDisplays = map(galleryDisplayRows, display => (display with { x: galleryTileX(display.x), z: galleryTileZ(display.z) }))
 
 // Where each display's list starts in the catalog, and every exhibit in walking order, display by display: its name,
 // the display that shows it (its index in galleryDisplays), its place in that display's list (`slot`) and in the

@@ -38,9 +38,9 @@ let shellFloorNorth = 12
 // tile's tone varied between two clays. The ceiling is coffered on the same module: a paler square in each cell with a
 // small lamp at its centre. Both lattices stand in the world's frame, as a static creation's paints do, with a joint
 // down the nave's centre line.
-let shellTileHalf = (lookTileSize / 2)
-let shellTileCell = [lookTileSize, 0, lookTileSize]
-let shellTileCentre = galleryWorld((lookTileSize * 0.75), 0, (naveMid - shellTileHalf))
+let shellTileHalf = (galleryTile / 2)
+let shellTileCell = [galleryTile, 0, galleryTile]
+let shellTileCentre = galleryWorld(naveWest, 0, arcadeSouth)
 let shellTiles = {
   type: "Box"
   position: shellTileCentre
@@ -119,15 +119,13 @@ let shellKit = map(
 )
 let shellStructure = [shellBrushed((structurePalette[0] with { color: lookTeal }), lookBrushStructure), (structurePalette[1] with { color: lookBrass })]
 
-// A level's cream pads: one under each display on it, reaching `lookPadReach` past the plinth's sides and shifted
-// toward its console so the floor a player stands on to work it is the pad's too, as a rounded rectangle painted into
-// the floor over its tiles. A paint on a static creation is placed in the world's frame.
+// A level's cream pads: one under each display on it, a square of `lookPadTiles` by `lookPadTiles` floor tiles
+// centred on the display, which stands on a tile's centre, so the pad's edges run down the grout lines. A paint on a
+// static creation is placed in the world's frame.
 function shellPad(display) = {
-  type: "Prism"
-  profile { kind: "RoundedRectangle", cornerRadius: lookPadCorner }
-  position: displayWorld(display, [0, 0, ((lookPadHalfDepth - ((displayScale * plinthCapHalf[1]) + lookPadReach)) / displayScale)])
-  rotation [0.7071, 0, 0, 0.7071]
-  scale [((displayScale * plinthCapHalf[0]) + lookPadReach), lookPadHalfDepth, 0.2]
+  type: "Box"
+  position: galleryWorld(display.x, displayFloor(display), display.z)
+  scale [((lookPadTiles * galleryTile) / 2), 0.2, ((lookPadTiles * galleryTile) / 2)]
   color: lookPad
 }
 function shellPads(level) = map(filter(galleryDisplays, display => (display.level == level)), display => shellPad(display))
@@ -772,7 +770,7 @@ template shellPrototypes() {
       name: "gallery-pier"
       schema: "puck.creation.v1"
       palette: shellStructure
-      branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2))
+      branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2), foot: [(shellTileHalf - lookTileJoint), (shellTileHalf - lookTileJoint)])
     }
   }
   // The nave's end: a slim pier either side of each tall bay, whose branches arch over the bay's head.

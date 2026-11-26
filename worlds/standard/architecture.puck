@@ -141,12 +141,13 @@ let structureAcross = [0.7071, 0, 0, 0.7071]
 // the shaft curves out to a band along the ceiling, with three brass inlay strips on the shaft's face where it branches.
 // It stands from the floor (y 0) to `height`; each arch reaches `span` metres out from the shaft's centre, where the next
 // pier's arch meets it, so piers `2 × span` apart join into an arcade. The foot and the shaft are what a body meets: the
-// haunch, the arches and the inlays are `detail`, so a pier collides as its two boxes.
-template branchedPier(base, height, span, depth = 0.4, shaft = 0.42) {
+// haunch, the arches and the inlays are `detail`, so a pier collides as its two boxes. `foot` is the foot's half width and
+// half depth at the floor; by default it splays from the shaft.
+template branchedPier(base, height, span, depth = 0.4, shaft = 0.42, foot = null) {
   shape Prism "pier-foot" {
     material: (base + structureTeal)
     position [0, 0.6, 0]
-    scale [(shaft * 1.5), 0.6, (depth * 1.18)]
+    scale [(foot ?? [(shaft * 1.5), (depth * 1.18)])[0], 0.6, (foot ?? [(shaft * 1.5), (depth * 1.18)])[1]]
     taper: 0.7
     chamfer: 0.05
   }

@@ -27,16 +27,23 @@ let galleryNorth = (galleryDepth - galleryWall)
 
 // The nave runs east from x 12 to the east wall, 20 m wide: a void from level 0's floor to the roof between the two
 // balcony edges, a hall about as deep from its viewpoint as it is wide (the kit pack's level-zero hall). The aisles
-// either side of it, and the bridge west of it, are floors on every level. The arcades' piers stand 0.4 m behind each
-// balcony edge, one wide bay apart.
+// either side of it, and the bridge west of it, are floors on every level. The arcades' piers stand half a floor tile
+// behind each balcony edge, one wide bay apart, so every pier stands on a tile's centre.
 let naveSouth = 9
 let naveNorth = 29
 let naveWest = 12
 let naveMid = ((naveSouth + naveNorth) / 2)
-let arcadeSouth = (naveSouth - 0.4)
-let arcadeNorth = (naveNorth + 0.4)
+// The floor tile, the module the floor, the ceiling's coffers, the piers and the displays share: a pier's pitch is
+// four tiles and the nave's width sixteen, and a pier and a display each stand on a tile's centre.
+let galleryTile = 1.25
+let arcadeSouth = (naveSouth - (galleryTile / 2))
+let arcadeNorth = (naveNorth + (galleryTile / 2))
 let arcadePitch = 5
 let arcadeXs = map(range(0, 10), i => (naveWest + (arcadePitch * i)))
+// The centre of the tile nearest a plan position, along x or z: tile centres stand on the west arcade's line and the
+// south arcade's row, a tile apart.
+function galleryTileX(x) = (naveWest + (galleryTile * floor((((x - naveWest) / galleryTile) + 0.5))))
+function galleryTileZ(z) = (arcadeSouth + (galleryTile * floor((((z - arcadeSouth) / galleryTile) + 0.5))))
 // The north aisle's middle, where its ceiling strip, its downlights and its galleries' displays stand.
 let northAisleMid = ((naveNorth + galleryNorth) / 2)
 
