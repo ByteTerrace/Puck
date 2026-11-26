@@ -77,7 +77,17 @@ public sealed class WorldSessionLeverSink {
         }
 
         setter(obj: lever);
+        _ = m_applied.Remove(key: (name, lever.Seat, lever.View));
+        m_applied.Add(key: (name, lever.Seat, lever.View), value: lever);
 
         return true;
     }
+
+    // The latest lever applied for each knob, seat and view, in the order they were last applied.
+    private readonly OrderedDictionary<(string Name, int Seat, string? View), WorldSessionLever> m_applied = [];
+
+    /// <summary>Gets the latest lever applied for each knob, seat and view, oldest first: the session's presentation
+    /// pins, which resubmitted in order hold the same presentation again (<c>world.pins</c> carries them across a
+    /// restart).</summary>
+    public IReadOnlyList<WorldSessionLever> Applied => [.. m_applied.Values];
 }
