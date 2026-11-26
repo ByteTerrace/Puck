@@ -2580,17 +2580,24 @@ The volume's cost and convergence:
   as program material 0, albedo (1, 0.078, 0.005), and so an orange-red
   bounce. Turning `world.rays off` and resetting the layout (`world.indirect
   medium`, then `high`) gave a neutral hall where the same reset with rays on
-  gave the orange and olive tints again, but the second boot's hardware path
-  was neutral too, so the rays are not the cause alone. Both readers resolve a
-  hit as the draw's material base plus its traced geometry's triangle
-  materials (`SdfMeshIrradianceScene.Instance.MaterialOf`, `sdfProbeSurface`);
-  the trace geometry can be a group's floor or another tier
-  (`SdfMeshDraw.Trace`, `SdfMeshTraceJudge`), whose triangle materials need not
-  be numbered as the draw's base expects. Next: on a fresh boot whose probes
-  show the tint, compare the traced geometry's mesh with the draw's mesh for
-  the floor and the exhibit, and the material ids each reader resolves for one
-  hit, then make the trace geometry carry the materials its draw names, in
-  one place both readers read.
+  gave the orange and olive tints again. The tint is the device's: on a cold
+  D3D12 boot whose restores write the ids a mesh carries
+  (`SdfMesh.Restore.cs`), settled, the probe
+  at `(35.5, 1.5, 15.5)` published `(36.91, 10.65, 1.73)` against the CPU
+  reference's `(243.44, 216.28, 207.14)` (`reference-local-error=0.99994`,
+  `reference-visibility-errors=0`, the reference's face material 3058), and the
+  whole hall, grey exhibits included, read deep orange while `world.indirect
+  off` showed them grey on a peach floor. Unverified lead: a hardware-ray hit
+  takes its triangle from the bottom structure (`TryTakeStructures`, bottoms
+  keyed by geometry and shared through `TraceBottoms`), which keeps the
+  positions it was built from, while its material is read from the mesh
+  region at the instance's placement (`sdfProbeSurface`), so a trace mesh whose
+  region words were taken back or unmapped (a kept floor no list names,
+  `SdfMeshRegionStore.Cover`) still hits on the device and reads zero words,
+  program material 0. Next: on a cold boot, compare `world.rays off` against
+  on for that probe (published against reference), and check whether every
+  instance a published top level names still stands in the region
+  (`SdfMeshRegionStore.StandsUnderGate`) for as long as the top is used.
 - [medium] Faster probe convergence costs host time while the volume works.
   With several probe jobs in flight, one commit a batch and placement trials
   sharing rounds (`SdfMeshProbeGpuWork.Run`, `SdfMeshIrradiance.PlaceBatch`),
