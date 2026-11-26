@@ -75,4 +75,9 @@ ScreenMappingData worldScreenMapping(uint screenIndex) {
     data.treatmentShape = screenMappings[(row + 8u)];
     return data;
 }
+// Whether a slot holds an emitter face (SdfScreenFace.Emitter in the state row's face, SdfWorldTables.WriteEmitterState):
+// no source binds it, and its state row's y holds the material its light is reduced from.
+bool sdfScreenIsEmitter(ScreenMappingData mapping) {
+    return (mapping.state.w == 2.0);
+}
 #endif

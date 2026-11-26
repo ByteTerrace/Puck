@@ -804,6 +804,8 @@ template arcadeCabinet(base, title, em = 0.13, players = 1) {
     material: (base + cabinetGlow)
     position [0, 2.66, 0.35]
     scale [w, 0.12, 0.02]
+    // The glowing panel, its lettering included, lights what stands before the cabinet.
+    lightsAs: Face
   }
   for (c, p) in panels {
     shape Cylinder $"cabinet-stick-base-{p}" {

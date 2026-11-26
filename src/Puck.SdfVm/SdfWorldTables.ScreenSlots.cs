@@ -30,10 +30,17 @@ public sealed partial class SdfWorldTables {
     private long[] m_screenWanted = new long[InitialScreenMapIdentities];
     private long m_screenSettles;
     private UInt128 m_screenResident;
+    // The slots emitter faces hold, a bit a slot, and the identity the program's first emitter face takes: emitter face k
+    // is screen identity m_emitterBase + k (SettleScreenSlots).
+    private UInt128 m_screenEmitters;
+    private int m_emitterBase = int.MaxValue;
 
     /// <summary>Gets the slots resident screens hold, a bit a slot (<see cref="BitWords"/>): every per-frame walk over
     /// screens visits these members.</summary>
     public UInt128 ResidentScreens => m_screenResident;
+    /// <summary>Gets the slots emitter faces hold (<see cref="SdfScreenSurface.IsEmitter"/>), a bit a slot: each lights
+    /// from its material, reduced on the GPU, and samples no source.</summary>
+    public UInt128 EmitterScreens => m_screenEmitters;
     /// <summary>Gets the screens wanted resident at the last settle that held no slot, because more were wanted than the
     /// slots hold: each shades as a screen with no source until a nearer one leaves.</summary>
     public int DegradedScreens { get; private set; }
@@ -79,12 +86,26 @@ public sealed partial class SdfWorldTables {
     /// past the slots holds none and shades as a screen with no source (<see cref="DegradedScreens"/>): no screen is ever
     /// refused for capacity.</summary>
     /// <param name="wanted">The resident screens' identities, most wanted first, each once.</param>
+    /// <param name="emitterBase">The identity the live program's first emitter face
+    /// (<see cref="SdfAppearance.EmitterFaces"/>) takes, past every screen the residency binds: an identity from it up is
+    /// emitter face (identity - <paramref name="emitterBase"/>), whose slot lights from its material. A base that moves
+    /// releases every slot an identity past either base holds first, so no slot keeps a surface its new holder does not
+    /// declare.</param>
     /// <exception cref="ArgumentOutOfRangeException">An identity is negative or past
     /// <see cref="SdfProgramBuilder.MaxScreenIdentities"/>.</exception>
-    public void SettleScreenSlots(ReadOnlySpan<int> wanted) {
+    public void SettleScreenSlots(ReadOnlySpan<int> wanted, int emitterBase = int.MaxValue) {
         var held = wanted[..Math.Min(val1: wanted.Length, val2: MaxScreenSurfaces)];
         var stamp = ++m_screenSettles;
         var highest = -1;
+
+        if (emitterBase != m_emitterBase) {
+            var moved = Math.Min(val1: emitterBase, val2: m_emitterBase);
+
+            foreach (var slot in BitWords.Members(mask: m_screenResident)) {
+                if (m_screenOfSlot[slot] >= moved) { ReleaseScreenSlot(slot: slot); }
+            }
+            m_emitterBase = emitterBase;
+        }
 
         foreach (var screen in held) {
             ArgumentOutOfRangeException.ThrowIfNegative(value: screen, paramName: nameof(wanted));
@@ -124,6 +145,8 @@ public sealed partial class SdfWorldTables {
             m_decalRuns[slot] = default;
         }
         SetScreenBound(bound: false, screenIndex: screen);
+        if (BitWords.Contains(mask: m_screenEmitters, index: slot)) { WriteEmitterState(slot: slot, material: 0, emissive: 0f, face: SdfScreenFace.Opening); }
+        m_screenEmitters &= ~BitWords.Bit(index: slot);
         m_screenMappings[slot] = null;
         m_screenFaces[slot] = default;
         m_screenTreatments[slot] = default;
@@ -134,11 +157,32 @@ public sealed partial class SdfWorldTables {
         SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.ScreenSlotReleases);
     }
     // Writes a slot's surface row from the live program's declaration of its screen; a screen the program does not
-    // declare leaves the row as it stands, and a surface transform patches it each frame it moves (SetScreenSurface).
+    // declare leaves the row as it stands, and a surface transform patches it each frame it moves (SetScreenSurface). An
+    // emitter face's identity (from m_emitterBase) writes its face and the state its reduction reads.
     private void WriteDeclaredSurface(int slot, int screen) {
-        if ((m_liveProgram is not null) && m_liveProgram.Appearance.TryGetScreenSurface(screenIndex: screen, surface: out var surface)) {
+        if (m_liveProgram is null) {
+            return;
+        }
+        var appearance = m_liveProgram.Appearance;
+
+        if ((screen >= m_emitterBase) && ((screen - m_emitterBase) < appearance.EmitterFaces.Count)) {
+            var face = appearance.EmitterFaces[(screen - m_emitterBase)];
+
+            WriteSurfaceRow(halfHeight: face.HalfHeight, halfWidth: face.HalfWidth, origin: face.Origin, right: face.Right, slot: slot, up: face.Up);
+            WriteEmitterState(slot: slot, material: face.EmitterMaterial, emissive: appearance.Materials[face.EmitterMaterial].Emissive, face: SdfScreenFace.Emitter);
+            m_screenEmitters |= BitWords.Bit(index: slot);
+        } else if (appearance.TryGetScreenSurface(screenIndex: screen, surface: out var surface)) {
             WriteSurfaceRow(halfHeight: surface.HalfHeight, halfWidth: surface.HalfWidth, origin: surface.Origin, right: surface.Right, slot: slot, up: surface.Up);
         }
+    }
+    // Writes an emitter slot's state row: no bound source, its material where a source's sampler stands, its peak
+    // luminance (the material's emissive, which its range is sized from, PackScreenReaches) and its face. KEEP IN SYNC
+    // with ScreenMappingData.state in frame/sdf-screen-mapping.hlsli and sdf-screen-emission.comp.hlsl's emitter branch.
+    private void WriteEmitterState(int slot, int material, float emissive, SdfScreenFace face) {
+        Span<float> state = [0f, material, emissive, (float)face];
+
+        _ = m_screenMappingRegion.Write(bytes: System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: state), offset: ((slot * ScreenMappingStride) + ScreenBoundOffset));
+        m_screenFaces[slot] = face;
     }
     // Rewrites every resident slot's surface row from a newly uploaded program.
     private void WriteResidentSurfaces() {
