@@ -45,7 +45,7 @@ public sealed partial class SdfWorldTables {
             WriteProgramWords(program: program);
         }
         m_liveInstanceMaskWordCount = program.InstanceMaskWordCount;
-        m_liveProgram = program;
+        SdfProgram.Exchange(held: ref m_liveProgram, next: program);
         // Each resident slot's row takes the new program's declaration of its screen, keeping the range its last frame
         // sized (PackScreenReaches); a SetScreenSurface made before the next produced frame patches the row again.
         WriteResidentSurfaces();

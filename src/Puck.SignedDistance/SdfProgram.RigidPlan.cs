@@ -53,9 +53,9 @@ public sealed partial class SdfProgram {
             var segmentPlan = plan.Segments[segment];
             var entryBase = ((rigidPlanOffsetVectors + segment) * WordsPerVector);
 
-            m_words[entryBase] = ((uint)(leafTableOffsetVectors + (3 * segmentPlan.FirstLeaf)));
-            m_words[(entryBase + 1)] = ((uint)segmentPlan.LeafCount);
-            m_words[(entryBase + 2)] = PackTransformSlot(slot: segmentPlan.DynamicSlot);
+            PackedWords[entryBase] = ((uint)(leafTableOffsetVectors + (3 * segmentPlan.FirstLeaf)));
+            PackedWords[(entryBase + 1)] = ((uint)segmentPlan.LeafCount);
+            PackedWords[(entryBase + 2)] = PackTransformSlot(slot: segmentPlan.DynamicSlot);
         }
 
         for (var index = 0; (index < plan.Leaves.Count); index++) {
@@ -64,38 +64,38 @@ public sealed partial class SdfProgram {
 
             if (leaf.IsFoldExtension) {
                 WriteVector4(
-                    words: m_words,
+                    words: PackedWords,
                     baseIndex: entryBase,
                     x: leaf.PrefixPosition.X,
                     y: leaf.PrefixPosition.Y,
                     z: leaf.PrefixPosition.Z,
                     w: 0f
                 );
-                m_words[(entryBase + 3)] = ((uint)leaf.FoldFirst) | (leaf.PrefixRotation.IsIdentity
+                PackedWords[(entryBase + 3)] = ((uint)leaf.FoldFirst) | (leaf.PrefixRotation.IsIdentity
                     ? RigidLeafIdentityRotationFlag
                     : 0u
                 );
                 WriteVector4(
-                    words: m_words,
+                    words: PackedWords,
                     baseIndex: (entryBase + WordsPerVector),
                     x: leaf.PrefixRotation.X,
                     y: leaf.PrefixRotation.Y,
                     z: leaf.PrefixRotation.Z,
                     w: leaf.PrefixRotation.W
                 );
-                m_words[(entryBase + (2 * WordsPerVector))] = ((uint)leaf.FoldCount);
+                PackedWords[(entryBase + (2 * WordsPerVector))] = ((uint)leaf.FoldCount);
                 continue;
             }
 
             WriteVector4(
-                words: m_words,
+                words: PackedWords,
                 baseIndex: entryBase,
                 x: leaf.Position.X,
                 y: leaf.Position.Y,
                 z: leaf.Position.Z,
                 w: 0f
             );
-            m_words[(entryBase + 3)] = ((uint)leaf.ShapeInstruction) | (leaf.Rotation.IsIdentity
+            PackedWords[(entryBase + 3)] = ((uint)leaf.ShapeInstruction) | (leaf.Rotation.IsIdentity
                 ? RigidLeafIdentityRotationFlag
                 : 0u
             ) | ((leaf.FoldCount > 0)
@@ -103,7 +103,7 @@ public sealed partial class SdfProgram {
                 : 0u
             );
             WriteVector4(
-                words: m_words,
+                words: PackedWords,
                 baseIndex: (entryBase + WordsPerVector),
                 x: leaf.Rotation.X,
                 y: leaf.Rotation.Y,
@@ -111,7 +111,7 @@ public sealed partial class SdfProgram {
                 w: leaf.Rotation.W
             );
             WriteVector4(
-                words: m_words,
+                words: PackedWords,
                 baseIndex: (entryBase + (2 * WordsPerVector)),
                 x: leaf.BoundCenter.X,
                 y: leaf.BoundCenter.Y,
@@ -124,8 +124,8 @@ public sealed partial class SdfProgram {
         // AnalyzeBounds may split at an instance boundary even without a ResetPoint. Such a boundary deliberately
         // preserves point-state carry into the following segment, while the direct plan is state-free; keep it generic.
         if (
-            (segment.End < m_instructions.Length) &&
-            (m_instructions[segment.End].Op != SdfOp.ResetPoint)
+            (segment.End < InstructionRows.Length) &&
+            (InstructionRows[segment.End].Op != SdfOp.ResetPoint)
         ) {
             dynamicSlot = NoDynamicTransformSlot;
 
@@ -147,7 +147,7 @@ public sealed partial class SdfProgram {
         var prefixRotation = Quaternion.Identity;
 
         for (var index = segment.Instruction; (index < segment.End); index++) {
-            var instruction = m_instructions[index];
+            var instruction = InstructionRows[index];
 
             switch (SdfFieldOps.RigidPlanOf(value: instruction.Op)) {
                 case SdfRigidPlanAction.ResetPoint: {

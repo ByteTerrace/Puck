@@ -1,6 +1,7 @@
 using System.IO.Hashing;
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Memory;
 
 namespace Puck.SignedDistance;
 
@@ -36,14 +37,14 @@ public sealed partial class SdfProgram {
     /// baked mesh, a bake plan, a slot layout) keeps that product across such a program.</summary>
     /// <param name="other">The other program, or <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when <paramref name="other"/> is this program or shares its field.</returns>
-    public bool SharesField(SdfProgram? other) => ((other is not null) && ReferenceEquals(objA: m_instructions, objB: other.m_instructions));
+    public bool SharesField(SdfProgram? other) => ((other is not null) && ReferenceEquals(objA: m_storage, objB: other.m_storage));
 
     // Whether the field constructor, handed these inputs, would read exactly what this program's derivation read; the
     // instructions are compared by their key (InstructionsKey), which the caller has read.
     private bool FieldInputsMatch(IReadOnlyList<SdfInstruction> instructions, UInt128 instructionsKey, SdfAppearanceOutline appearance, IReadOnlyList<SdfInstanceRange>? instances, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles, IReadOnlyList<SdfSweepCurve>? sweepCurves, IReadOnlyList<SdfCompiledPath>? paths, int reservedPathWords, IReadOnlyList<SdfSampledBinding>? sampledBindings, ulong glyphAtlas, float glyphStroke) {
         if (
             (m_appearance is null) ||
-            (instructions.Count != m_instructions.Length) ||
+            (instructions.Count != InstructionRows.Length) ||
             (reservedPathWords != m_reservedPathWords) ||
             (glyphAtlas != GlyphAtlas) ||
             (BitConverter.SingleToUInt32Bits(value: glyphStroke) != BitConverter.SingleToUInt32Bits(value: GlyphStroke)) ||
@@ -106,15 +107,23 @@ public sealed partial class SdfProgram {
     }
 
     // Returns a program sharing this one's field derivation and field words with another appearance of the same outline,
-    // packed into a section of its own as Of packs a fresh program's.
+    // packed into a section of its own as Of packs a fresh program's. The copy holds its first claim and a claim of its own
+    // on the field's storage; the caller holds a claim on this program throughout.
     private SdfProgram WithAppearance(SdfAppearance appearance) {
         var program = (SdfProgram)MemberwiseClone();
-        var section = new uint[m_appearanceWordCount];
 
-        appearance.Pack(materialVector: ((int)m_words[ProgramMaterialOffsetLane]), section: section);
-        program.m_appearanceWords = section;
+        program.m_claims = new ClaimCount(claims: 1);
+        program.m_appearanceWords = null;
+        program.m_ownedAppearance = null;
+        m_storage.Acquire();
+        try {
+            appearance.Pack(materialVector: ((int)PackedWords[ProgramMaterialOffsetLane]), section: program.NewAppearanceSection());
+        } catch {
+            program.Release();
+            throw;
+        }
         program.m_appearance = appearance;
-        program.m_hasGlassShadows = null;
+        program.MeasureAppearance();
 
         return program;
     }

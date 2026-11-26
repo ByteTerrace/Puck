@@ -282,7 +282,8 @@ public sealed partial class WorldScreenBinder {
             FitSkyViews = (views, sky, width, height) => FilmInfinity(entry: entry, height: height, sky: sky, views: views, width: width),
         };
 
-        entry.Source = new SdfCompositionFrameSource(dresser: scene, emitters: ((far is not null) ? [new WorldFarProductEmitter(product: far)] : [emitter]));
+        entry.Source = new SdfCompositionFrameSource(dresser: scene, emitters: ((far is not null) ? [new WorldFarProductEmitter(product: far)] : [emitter]), storage: SdfCompositionFrameSource.ProcessStorage);
+        entry.Scene = scene;
         if ((far is null) && (planned.Spec.Kind == InfinityViewKind.World)) {
             var screens = new WorldNestedScreens<SessionFeed>(definition: () => mirror.Definition,
                 depth: (root.Depth + planned.Depth), head: name, shares: SharesProducer, world: instance);
@@ -338,6 +339,9 @@ public sealed partial class WorldScreenBinder {
             UnregisterViewWork(name: entry.Name);
             residency.Dispose();
         }
+        // The composition's and the scene's claims on the programs they hold; the residency's frames keep their own.
+        entry.Source?.Dispose();
+        entry.Scene?.Release();
         m_feedsMoved = true;
         m_infinityEntriesMoved = true;
     }
@@ -428,6 +432,8 @@ public sealed partial class WorldScreenBinder {
         public ContentAccess Content { get; } = new(level: LayerAccessOf(hosted: hosted), mirror: mirror);
         public WorldNestedScreens<SessionFeed>? Screens { get; set; }
         public SdfCompositionFrameSource? Source { get; set; }
+        // The dresser Source composes through, whose frames claim their programs until the entry is released.
+        public WorldInfinityViewScene? Scene { get; set; }
 
         public QualityTier Tier { get; set; } = QualityTier.High;
     }

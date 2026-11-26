@@ -745,7 +745,9 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         SdfProgramBuilder? builder = null;
 
         if (held is null) {
-            builder = new SdfProgramBuilder();
+            // One build runs at a time (m_staticFieldBuild), so the builders the last one used are free again.
+            builder = m_staticFieldBuilder;
+            builder.Clear();
             try {
                 m_adjacencies.EmitCurrent(builder: builder, queryOnly: true);
             } catch (ArgumentException exception) {
@@ -757,21 +759,27 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
         }
 
         // The build records what it reads of the document on its own thread, which the next delivery is judged by.
+        var respondingBuilder = m_respondingFieldBuilder;
+
         m_staticFieldBuild = Task.Run(function: () => WorldDocumentReads.Record(build: () => BuildStaticField(
             builder: builder,
             definition: definition,
             faces: faces,
             fixedPart: held,
-            palettes: palettes
+            palettes: palettes,
+            respondingBuilder: respondingBuilder
         ), inputs: out var read) with { Document = definition, Faces = faces, Inputs = read, KeptFixed = (held is not null) });
         AdoptStaticField();
     }
+    // The presentation field's emission storage, reused by each build (RebuildStaticField runs one at a time).
+    private readonly SdfProgramBuilder m_staticFieldBuilder = new();
+    private readonly SdfProgramBuilder m_respondingFieldBuilder = new();
     // The presentation field's pool half: the fixed part, unless one is held (the delivered definition's solid placements
     // that do not respond and its screens, over the neighbours' strips the builder already holds), then the responding
     // part, each a program and its evaluator. The query reads no material, so the placements bake the document's own
     // colors rather than the live state mirror's, which the frame thread moves. A refusal is returned for the frame thread
     // to report, with the placements the field excluded.
-    private static StaticFieldBuild BuildStaticField(SdfProgramBuilder? builder, SdfFieldEvaluator? fixedPart, WorldDefinition definition, IReadOnlyList<WorldScreen> faces, WorldStaticPalettes palettes) {
+    private static StaticFieldBuild BuildStaticField(SdfProgramBuilder? builder, SdfFieldEvaluator? fixedPart, WorldDefinition definition, IReadOnlyList<WorldScreen> faces, WorldStaticPalettes palettes, SdfProgramBuilder respondingBuilder) {
         var excluded = new List<(WorldPlacement Placement, string Reason)>();
 
         try {
@@ -800,17 +808,16 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
                     screens: definition.Screens
                 );
                 // Regional: a probe or a sweep walks the chains near its samples, not the whole static world.
-                fixedPart = new SdfFieldEvaluator(program: builder!.Build(), reading: SdfFieldReading.Contact, regional: true);
+                fixedPart = WorldQueryField.PartOf(builder: builder!);
             }
 
             var responding = queryable.Where(predicate: static placement => Responds(placement: placement)).ToArray();
             SdfFieldEvaluator? respondingPart = null;
 
             if (responding.Length > 0) {
-                var respondingBuilder = new SdfProgramBuilder();
-
+                respondingBuilder.Clear();
                 WorldPlacementStamper.EmitStatic(builder: respondingBuilder, definition: definition, creations: definition.Creations, placements: responding, palettes: palettes);
-                respondingPart = new SdfFieldEvaluator(program: respondingBuilder.Build(), reading: SdfFieldReading.Contact, regional: true);
+                respondingPart = WorldQueryField.PartOf(builder: respondingBuilder);
             }
 
             return new StaticFieldBuild(Excluded: excluded, Field: new WorldQueryField(fixedPart: fixedPart, responding: respondingPart), Refusal: null);
@@ -2764,7 +2771,8 @@ public sealed partial class WorldFramePresenter : ISdfFrameSource, ISdfFrameDres
             // rather than carrying its own copy of the value.
             m_composed = new SdfCompositionFrameSource(
                 dresser: this,
-                emitters: [m_emitter, m_sdfDocuments, m_adjacencies, m_fields]
+                emitters: [m_emitter, m_sdfDocuments, m_adjacencies, m_fields],
+                storage: SdfCompositionFrameSource.ProcessStorage
             ) { BuildsInBackground = true };
         } catch (SdfProgramCapacityException capacity) {
             // The probe is the only place the WHOLE composed worst case exists, so it is the only place that can name
