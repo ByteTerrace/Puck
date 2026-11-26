@@ -4,7 +4,7 @@
 // a branch learns the branches lead to the other floors. The gallery module imports this, so the gallery booted alone
 // (gallery-root.puck) and the debug world both grow it.
 //
-// It is two creations on one spot. `gallery-tree` is the wood, solid: the trunk with its flare and buttress roots, the
+// It is two creations on one spot and the foliage placed about them. `gallery-tree` is the wood, solid: the trunk with its flare and buttress roots, the
 // shelves grown out of its bark, and the branches, which taper from collars at the trunk, fork and carry knots. It sets
 // `contact: Shapes`, so a body collides with the hard union of the masses it stands on and climbs (a stack of cylinders
 // inside the drawn cone, the shelves, the branch masses, the roots): analytic primitives, inside the solid the smooth
