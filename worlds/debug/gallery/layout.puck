@@ -85,6 +85,8 @@ function galleryTileX(x) = tileX(floor(((x - gridX0) / galleryTile)))
 function galleryTileZ(z) = tileZ(floor(((z - gridZ0) / galleryTile)))
 // The north aisle's middle, where its ceiling strip, its downlights and its galleries' displays stand.
 let northAisleMid = ((naveNorth + galleryNorth) / 2)
+// How far inside a balcony's edge its balustrade (or level 1's lattice) stands, in metres.
+let balconyInset = 0.08
 
 // The stairs: one in each corner of the aisles, in the end rest bays (0 and 12) between the end wall and the first
 // arcade bay, inside the aisle's first five tile rows, every dimension a count of tiles. Switchbacks stand in the
@@ -222,3 +224,16 @@ let displayExhibitLift = 0.3
 let toyboxLevel = 1
 let toyboxBays = [showcaseBays[2], showcaseBays[3], showcaseBays[4]]
 let toyboxRows = [{ row: (wallRowSouth + 2), yaw: 180, facing: 1 }, { row: (wallRowNorth - 2), yaw: 0, facing: -1 }]
+
+// Level 1's lattice (shell.puck): a toy construction panel along every edge level 1 shares with the nave's void, and
+// either side of the stairs' head, standing on the floor and reaching into the fascia (or the slab) above, so no body
+// flies or jumps into the toybox from the void, walks into it off the stairs, or drops out of it. Its uprights stand a
+// sixteenth of a tile apart, so a four-tile bay holds 63 of them, one fold's worth, and the gap between two is narrower
+// than the smallest body the world sizes: the Moth's capsule is 0.7 m across, a tenth of that at the bottom of the size
+// envelope (size.puck), and Alice's 0.15 is wider still. The panels stand on the balustrades' line (`balconyInset`).
+let toyLatticePitch = (galleryTile / 16)
+let toyLatticeBar = 0.025
+// The loose panels: one panel on each edge that a rule can open, move or swap (gallery.md, "The lattice"), each named
+// `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: a south and a north bay, and the bridge's middle
+// tile on the nave's axis.
+let toyLatticeLooseBay = 8
