@@ -7,6 +7,17 @@ documentId: "gallery-kit"
 
 import "../standard/architecture"
 
+// The fan shade's easing, and the cell its preview follows.
+dynamics [
+  { name: "kit-shade", f: 0.5, r: 0, zeta: 1 }
+]
+
+state {
+  world {
+    slot kitShade = 1
+  }
+}
+
 prototypes {
   prototype "kit-pier" {
     document {
@@ -29,15 +40,69 @@ prototypes {
       }
     }
   }
+  prototype "kit-bay" {
+    document {
+      name: "kit-bay"
+      schema: "puck.creation.v1"
+      palette: kitPalette
+      windowBay(base: 0)
+    }
+  }
+  prototype "kit-fan" {
+    document {
+      name: "kit-fan"
+      schema: "puck.creation.v1"
+      palette: kitPalette
+      fanShade(base: 0, signal: "state.kitShade", dynamics: "kit-shade")
+    }
+  }
+  prototype "kit-rail" {
+    document {
+      name: "kit-rail"
+      schema: "puck.creation.v1"
+      palette: kitPalette
+      balustrade(base: 0)
+    }
+  }
+  prototype "kit-planter" {
+    document {
+      name: "kit-planter"
+      schema: "puck.creation.v1"
+      palette: kitPalette
+      planter(base: 0)
+    }
+  }
+  prototype "kit-bench" {
+    document {
+      name: "kit-bench"
+      schema: "puck.creation.v1"
+      palette: kitPalette
+      bench(base: 0)
+    }
+  }
+  prototype "kit-banner" {
+    document {
+      name: "kit-banner"
+      schema: "puck.creation.v1"
+      palette: kitPalette
+      banner(base: 0)
+    }
+  }
 }
 
 placements {
-  placement "kit-pier" {
-    prototype: "kit-pier"
-    position [6, 0, 4]
+  for (id, index) in ["kit-plinth", "kit-pier", "kit-bay", "kit-rail", "kit-planter", "kit-bench"] {
+    placement $"{id}" {
+      prototype: id
+      position [(index * 6), 0, 4]
+    }
   }
-  placement "kit-plinth" {
-    prototype: "kit-plinth"
-    position [0, 0, 4]
+  placement "kit-fan" {
+    prototype: "kit-fan"
+    position [12, 1.74, 3.6]
+  }
+  placement "kit-banner" {
+    prototype: "kit-banner"
+    position [36, 3.4, 4]
   }
 }

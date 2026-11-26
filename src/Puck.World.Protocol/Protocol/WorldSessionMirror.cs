@@ -47,7 +47,7 @@ namespace Puck.World.Client;
 /// publishes when it finishes, through a <see cref="PublishBuffer{T}"/>, so it never waits on a delivery in
 /// progress.</para>
 /// </remarks>
-public sealed class WorldSessionMirror : IClientSink {
+public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
     // The entity extras the pose table does not keep, at one length. Grown with the pose table by Extend before a writer
     // touches a slot, and replaced whole, so a lock-free reader reads one complete generation and bounds its index
     // against it (At): a slot past it reads as never delivered.

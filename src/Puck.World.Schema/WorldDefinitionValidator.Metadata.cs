@@ -1500,6 +1500,25 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"simulation.rateHz {rate} does not divide {FixedTickConversion.TicksPerSecond} engine ticks per second exactly; nearest valid rates are {nearest} Hz.");
         }
     }
+    // A spawn point's parent is a placement with one static frame to compose over, as a placement's own parent is.
+    private static void ValidateSpawnParents(WorldDefinition definition, List<string> errors) {
+        if (definition.SpawnPointsRaw is not { } authored) {
+            return;
+        }
+
+        for (var index = 0; (index < authored.Count); index++) {
+            if (authored[index].Parent is not { } parentId) {
+                continue;
+            }
+            if (
+                (WorldDefinitionRows.FindPlacement(placements: definition.Placements, id: parentId) is not { } parent) ||
+                ((parent.Distribution is not null) && (parent.Deal is null)) || (parent.Mirror is not null) ||
+                (parent.Attach is not null) || (parent.Inhabit is not null)
+            ) {
+                errors.Add(item: $"spawnPoints[{index}].parent '{parentId}' must name a declared placement with a static single frame (no distribution, mirror, attach or inhabit facet).");
+            }
+        }
+    }
     // Named spawn poses: id presence/uniqueness and finite coordinates.
     private static HashSet<string> ValidateSpawnPoints(IReadOnlyList<WorldSpawnPoint> spawnPoints, List<string> errors) {
         var ids = new HashSet<string>(comparer: StringComparer.Ordinal);

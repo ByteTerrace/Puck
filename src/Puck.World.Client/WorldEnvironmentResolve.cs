@@ -144,6 +144,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         sky.CopyFrom(source: m_resolvedSky);
         sky.Quality = (skyQuality ?? WorldSkyLayers.TierOf(tier: definition.Render.SkyQuality));
         ApplyAnchors(
+            definition: definition,
             lighting: m_lighting,
             output: lights,
             resolveLightAnchor: resolveLightAnchor
@@ -208,8 +209,11 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
     }
 
     // A point light's anchor rides the live dynamic-transform slot every call, never the cached resolution: an anchored
-    // placement's pool slot can differ from frame to frame independently of the definition.
-    private static void ApplyAnchors(SdfLights output, WorldRenderLighting? lighting, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor) {
+    // placement's pool slot can differ from frame to frame independently of the definition. A light anchored to the
+    // root of a row no body carries stands where the document puts that row, so it is static as an unanchored light is
+    // (SdfLight.IsTraced): a group of fixtures placed under one root placement is traced and occluded wherever the
+    // root stands.
+    private static void ApplyAnchors(WorldDefinition definition, SdfLights output, WorldRenderLighting? lighting, Func<WorldAnchor, SdfAnchor?>? resolveLightAnchor) {
         if (lighting?.Lights is not { } lights) {
             return;
         }
@@ -233,6 +237,11 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
             var pose = resolveLightAnchor?.Invoke(anchor);
             var light = output[index];
+            var standing = (
+                (anchor is WorldAnchor.Placement { ShapeId: null } placed) &&
+                (light.Kind == SdfLightKind.Point) &&
+                (WorldDefinitionRows.FindPlacement(placements: definition.Placements, id: placed.PlacementId) is { Attach: null, Inhabit: null, Deal: null })
+            );
 
             // An anchored spot's aim turns with its anchor, as its position does.
             output.Set(
@@ -244,6 +253,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                             light.Direction,
                             frame.Orientation
                         )),
+                        Shadows = (standing ? 1u : light.Shadows),
                         SpotAxis = Vector3.Transform(light.SpotAxis, frame.Orientation),
                     }
                     : light with { DynamicSlot = SdfProgram.NoDynamicTransformSlot, Weight = 0f })

@@ -57,7 +57,7 @@ internal enum PopulationKind {
 /// guards this state.
 /// </para>
 /// </remarks>
-public sealed partial class WorldPopulation {
+public sealed partial class WorldPopulation : IWorldInhabitants {
     /// <summary>The 0-based entity index for a 1-based display number — the body-axis peer of
     /// <c>Client.PlayerRoster.SlotFromDisplay</c>, for a console verb that addresses an instance-targeted body by its
     /// 1-based token.</summary>
@@ -189,6 +189,9 @@ public sealed partial class WorldPopulation {
     // placement, the same convention an inactive body already reads as. Derived, never checkpointed — see its own
     // rebuild site.
     private int[] m_placementOrdinalToBody = [];
+    // The same table by placement id, its lowest inhabiting body: what an attach facet naming a placement resolves
+    // through (TryInhabitantBody). Rebuilt with m_placementOrdinalToBody.
+    private readonly Dictionary<string, int> m_placementToBody = new(comparer: StringComparer.Ordinal);
 
     // Reused broadphase scratch, sized to the authored census so a tick allocates nothing. The contact sweep's
     // travel is indexed by population slot: the grid's spheres carry only slot, centre and radius.

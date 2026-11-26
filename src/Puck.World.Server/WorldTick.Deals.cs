@@ -221,7 +221,7 @@ public sealed partial class WorldTick {
         }
 
         if (placement.Attach is { } attach) {
-            facets += $" attach=body:{attach.BodyIndex}";
+            facets += ((attach.BodyIndex is { } carrier) ? $" attach=body:{carrier}" : $" attach=placement:{attach.Placement}");
         }
 
         if (placement.Respond is { Count: > 0 } respond) {

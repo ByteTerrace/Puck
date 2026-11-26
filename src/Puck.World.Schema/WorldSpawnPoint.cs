@@ -7,9 +7,81 @@ namespace Puck.World;
 
 /// <summary>One named spawn pose available to seats and population policies.</summary>
 /// <param name="Id">The stable spawn name, unique within the definition.</param>
-/// <param name="Position">The seat's spawn position.</param>
-/// <param name="YawDegrees">The spawn yaw about +Y, in degrees.</param>
-public readonly record struct WorldSpawnPoint([property: DocumentName(WorldNameKind.SpawnPoint, WorldNameRole.Declares)] string Id, DocumentVector3 Position, float YawDegrees = 0f);
+/// <param name="Position">The seat's spawn position: in the world, or in <paramref name="Parent"/>'s frame.</param>
+/// <param name="YawDegrees">The spawn yaw about +Y, in degrees, added to <paramref name="Parent"/>'s yaw when it has
+/// one.</param>
+/// <param name="Parent">The placement whose composed frame the pose is authored in, or <see langword="null"/> for a
+/// world-space pose. <see cref="WorldDefinition.SpawnPoints"/> hands every reader the pose resolved into the world
+/// with this member cleared, so a group of rows placed under one root placement keeps its spawn points when the root
+/// moves or turns.</param>
+public readonly record struct WorldSpawnPoint(
+    [property: DocumentName(WorldNameKind.SpawnPoint, WorldNameRole.Declares)] string Id,
+    DocumentVector3 Position,
+    float YawDegrees = 0f,
+    [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)]
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] string? Parent = null
+);
+/// <summary>Resolves spawn points authored in a placement's frame (<see cref="WorldSpawnPoint.Parent"/>) into the
+/// world, for <see cref="WorldDefinition.SpawnPoints"/>.</summary>
+internal static class WorldSpawnPointFrames {
+    private sealed record Held(WorldPlacementsSection? Section, IReadOnlyList<WorldSpawnPoint> Resolved);
+
+    // Keyed by the authored list and held against the placements section it was resolved over: both are immutable,
+    // so a held list stands until either is replaced. A section with state-bound frames is never held.
+    private static readonly Puck.Abstractions.CodeDerivedTable<IReadOnlyList<WorldSpawnPoint>, Held> Cache = new();
+
+    /// <summary>Returns <paramref name="points"/> with every parented point composed over its parent's frame and its
+    /// parent cleared; the authored list itself when none is parented.</summary>
+    /// <param name="definition">The document whose placements the parents name.</param>
+    /// <param name="section">The document's placements section.</param>
+    /// <param name="points">The authored spawn points.</param>
+    /// <returns>The world-space spawn points. A point naming no declared placement is returned as authored, which
+    /// validation refuses by name.</returns>
+    public static IReadOnlyList<WorldSpawnPoint> Resolve(WorldDefinition definition, WorldPlacementsSection? section, IReadOnlyList<WorldSpawnPoint> points) {
+        var parented = false;
+
+        for (var index = 0; (index < points.Count); index++) {
+            if (points[index].Parent is not null) {
+                parented = true;
+
+                break;
+            }
+        }
+        if (!parented) {
+            return points;
+        }
+
+        var holds = ((section is null) || !WorldPlacementFrameCompilation.HasLiveInputs(section: section));
+
+        if (holds && Cache.TryGetValue(key: points, value: out var held) && ReferenceEquals(objA: held.Section, objB: section)) {
+            return held.Resolved;
+        }
+
+        var resolved = new WorldSpawnPoint[points.Count];
+
+        for (var index = 0; (index < resolved.Length); index++) {
+            var point = points[index];
+
+            if ((point.Parent is { } parentId) && (WorldDefinitionRows.FindPlacement(placements: definition.Placements, id: parentId) is { } parent)) {
+                var frame = WorldDefinitionRows.ResolvedFrame(definition: definition, placement: parent);
+                var local = (FixedVector3.FromVector3(value: point.Position) * frame.FixedScale);
+
+                point = new WorldSpawnPoint(
+                    Id: point.Id,
+                    Position: (frame.FixedPosition + frame.FixedRotation.Rotate(vector: local)).ToVector3(),
+                    YawDegrees: (point.YawDegrees + frame.YawDegrees)
+                );
+            }
+
+            resolved[index] = point;
+        }
+        if (holds) {
+            Cache.AddOrUpdate(key: points, value: new Held(Resolved: resolved, Section: section));
+        }
+
+        return resolved;
+    }
+}
 /// <summary>The implicit spawn point every world with no authored <c>spawnPoints</c> section resolves against.</summary>
 public static class WorldSpawnPointDefaults {
     /// <summary>The spawn-point id an absent <c>population.seatSpawns</c> derives for every seat.</summary>

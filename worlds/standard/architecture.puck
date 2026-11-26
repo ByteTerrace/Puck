@@ -2,6 +2,7 @@
 // ochre shells with rounded corners over darker teal recesses, brass trim and small functional lights. A module library:
 // it hands its importers palettes and templates and emits no document. Each template takes `base`, the palette slot of
 // its palette's first entry, so a creation appends the palette after its own slots and passes where it starts.
+import "rig"
 
 // The display plinth's materials, in slot order from `base`: cream shell, ochre body, teal recess, dark screen glass,
 // brass, and the warm light of the turntable ring.
@@ -133,11 +134,20 @@ let structurePalette = [
 ]
 let structureAcross = [0.7071, 0, 0, 0.7071]
 
-// A teal branched pier that faces +Z: a chamfered square shaft that splits into two arches springing toward ±X, cut by
-// two circles so the haunch above the shaft curves out to a band along the ceiling, with two brass inlay strips up the
-// shaft's face. It stands from the floor (y 0) to `height`; each arch reaches `span` metres out from the shaft's centre,
-// where the next pier's arch meets it, so piers `2 × span` apart join into an arcade.
-template branchedPier(base, height, span, depth = 0.34, shaft = 0.34) {
+// A teal branched pier that faces +Z (docs/game/art/gallery-kit-pack/branched-pier-and-arcade.png): a splayed foot that
+// narrows to a chamfered shaft, which splits into two arches springing toward ±X, cut by two circles so the haunch above
+// the shaft curves out to a band along the ceiling, with three brass inlay strips on the shaft's face where it branches.
+// It stands from the floor (y 0) to `height`; each arch reaches `span` metres out from the shaft's centre, where the next
+// pier's arch meets it, so piers `2 × span` apart join into an arcade. The foot and the shaft are what a body meets: the
+// haunch, the arches and the inlays are `detail`, so a pier collides as its two boxes.
+template branchedPier(base, height, span, depth = 0.4, shaft = 0.42) {
+  shape Prism "pier-foot" {
+    material: (base + structureTeal)
+    position [0, 0.6, 0]
+    scale [(shaft * 1.5), 0.6, (depth * 1.18)]
+    taper: 0.7
+    chamfer: 0.05
+  }
   shape Box "pier-shaft" {
     material: (base + structureTeal)
     position [0, (height / 2), 0]
@@ -146,25 +156,342 @@ template branchedPier(base, height, span, depth = 0.34, shaft = 0.34) {
   }
   shape Box "pier-haunch" {
     material: (base + structureTeal)
-    position [0, (height - ((span - shaft) + 0.25) / 2), 0]
-    scale [span, (((span - shaft) + 0.25) / 2), (depth * 0.8)]
+    position [0, (height - ((span - shaft) + 0.3) / 2), 0]
+    scale [span, (((span - shaft) + 0.3) / 2), (depth * 0.82)]
     chamfer: 0.04
+    detail: true
   }
   for side in [-1, 1] {
     shape Cylinder $"pier-arch-{side}" {
       blend: SmoothSubtraction
       smooth: 0.05
       material: (base + structureTeal)
-      position [(side * span), ((height - 0.25) - (span - shaft)), 0]
+      position [(side * span), ((height - 0.3) - (span - shaft)), 0]
       rotation: structureAcross
       scale [(span - shaft), depth, (span - shaft)]
+      detail: true
+    }
+  }
+  for strip in [{ x: 0, half: 0.46 }, { x: -0.13, half: 0.3 }, { x: 0.13, half: 0.3 }] {
+    shape Box $"pier-inlay-{strip.x}" {
+      material: (base + structureBrass)
+      position [strip.x, ((height * 0.6) + (0.46 - strip.half)), (depth + 0.006)]
+      scale [0.03, strip.half, 0.014]
+      detail: true
+    }
+  }
+}
+
+// The building kit's materials, in slot order from `base`: the cream shell, the ochre cladding, the deep teal frames,
+// terracotta, brass, window glass, the fan shades' two oranges and their dark hub, a planter's soil and its three
+// greens, and the warm timber of a seat.
+let kitCream = 0
+let kitOchre = 1
+let kitTeal = 2
+let kitTerracotta = 3
+let kitBrass = 4
+let kitGlass = 5
+let kitShade = 6
+let kitShadeDeep = 7
+let kitHub = 8
+let kitSoil = 9
+let kitLeaf = 10
+let kitLeafPale = 11
+let kitLeafDeep = 12
+let kitTimber = 13
+let kitPalette = [
+  { color: "#EFE3C8", roughness: 0.55, specular: 0.2 }
+  { color: "#E0A13A", roughness: 0.5, specular: 0.25 }
+  { color: "#2C5A63", roughness: 0.55, specular: 0.3 }
+  { color: "#B85A3C", roughness: 0.45, specular: 0.25 }
+  { color: "#C8902E", roughness: 0.3, metal: 1 }
+  { color: "#BFE6E0", roughness: 0.03, glass { depth: 0.012, ior: 1.5 } }
+  { color: "#EE7F2D", roughness: 0.7, specular: 0.08 }
+  { color: "#D9661F", roughness: 0.7, specular: 0.08 }
+  { color: "#1F3A42", roughness: 0.4, specular: 0.4 }
+  { color: "#4A3426", roughness: 0.95, specular: 0.02 }
+  { color: "#3F7A3A", roughness: 0.7, specular: 0.1 }
+  { color: "#8FB03E", roughness: 0.7, specular: 0.1 }
+  { color: "#2F5E38", roughness: 0.7, specular: 0.1 }
+  { color: "#B8623A", roughness: 0.5, specular: 0.2 }
+]
+// A quarter turn that lays a shape's +Y along +X, for a bar or a rail that runs across a piece.
+let kitAlong = [0, 0, -0.7071, 0.7071]
+
+// A window bay that faces +Z, the outside (docs/game/art/gallery-kit-pack/window-bay.png): a thick cream head and sill
+// with rounded edges and ochre jambs between them, standing proud of a wall `wall` thick whose centre plane is z 0; a
+// teal frame set in the opening with a centre mullion, two transoms and two short lower mullions; one pane of glass;
+// and the short bracket a fan shade's hub stands on, at the low transom's crossing. The opening is `width` by `height`
+// and starts `sill` above the bay's origin on the floor. Every shape is a box joined by union, so the bay collides as
+// drawn and glass holds a body in.
+function windowHubHeight(height, sill) = (sill + (height * 0.36))
+template windowBay(base, width = 3.2, height = 3.3, sill = 0.55, wall = 0.3) {
+  shape Box "bay-head" {
+    material: (base + kitCream)
+    position [0, ((sill + height) + 0.3), 0.03]
+    scale [((width / 2) + 0.48), 0.3, ((wall / 2) + 0.13)]
+    rounding: 0.09
+  }
+  shape Box "bay-sill" {
+    material: (base + kitCream)
+    position [0, (sill - 0.24), 0.05]
+    scale [((width / 2) + 0.48), 0.24, ((wall / 2) + 0.19)]
+    rounding: 0.07
+  }
+  for side in [-1, 1] {
+    shape Box $"bay-jamb-{side}" {
+      material: (base + kitOchre)
+      position [(side * ((width / 2) + 0.22)), (sill + (height / 2)), 0.01]
+      scale [0.22, (height / 2), ((wall / 2) + 0.06)]
+      chamfer: 0.03
+    }
+    shape Box $"bay-frame-{side}" {
+      material: (base + kitTeal)
+      position [(side * ((width / 2) - 0.05)), (sill + (height / 2)), 0]
+      scale [0.05, (height / 2), 0.055]
+    }
+    shape Box $"bay-mullion-{side}" {
+      material: (base + kitTeal)
+      position [(side * (width / 4)), (sill + (height * 0.18)), 0]
+      scale [0.028, (height * 0.18), 0.045]
+    }
+  }
+  for bar in [{ y: 0.05, half: 0.05 }, { y: (height - 0.05), half: 0.05 }, { y: (height * 0.36), half: 0.04 }, { y: (height * 0.87), half: 0.028 }] {
+    shape Box $"bay-bar-{bar.y}" {
+      material: (base + kitTeal)
+      position [0, (sill + bar.y), 0]
+      scale [(width / 2), bar.half, 0.05]
+    }
+  }
+  shape Box "bay-mullion" {
+    material: (base + kitTeal)
+    position [0, (sill + (height / 2)), 0]
+    scale [0.06, (height / 2), 0.058]
+  }
+  shape Box "bay-glass" {
+    material: (base + kitGlass)
+    position [0, (sill + (height / 2)), 0]
+    scale [((width / 2) - 0.02), ((height / 2) - 0.02), 0.012]
+  }
+  shape Box "bay-bracket" {
+    material: (base + kitTeal)
+    position [0, windowHubHeight(height, sill), 0.14]
+    scale [0.06, 0.06, 0.1]
+  }
+}
+
+// A fan shade (the sheet's orange leaves on a dark hub), facing +Z with its hub at the origin: `leaves` thin tapered
+// leaves that stack upright over the hub while `signal` reads 0 and spread into a fan of `spread` degrees as it rises to
+// 1, each a little proud of the last so the stack's edges show. The leaves ride one driver, named for the state cell the
+// shade follows (`state.<row>.<key>`), through the `dynamics` row the importing world declares under the name it
+// passes, so a shade eases open and settles. A creation that holds it is animated.
+template fanShade(base, signal, dynamics, radius = 1.9, leaves = 6, spread = 150) {
+  drivers [
+    { name: "spread", signal: signal, cadence: 1, dynamics: dynamics }
+  ]
+  shape Cylinder "shade-hub" {
+    material: (base + kitHub)
+    position [0, 0, 0.03]
+    rotation: structureAcross
+    scale [0.3, 0.045, 0.3]
+    rounding: 0.02
+  }
+  shape Cylinder "shade-rim" {
+    material: (base + kitBrass)
+    position [0, 0, 0.05]
+    rotation: structureAcross
+    scale [0.33, 0.018, 0.33]
+  }
+  shape Cylinder "shade-boss" {
+    material: (base + kitBrass)
+    position [0, 0, 0.1]
+    rotation: structureAcross
+    scale [0.09, 0.03, 0.09]
+    rounding: 0.015
+  }
+  for i in range(0, leaves) {
+    shape Prism $"shade-leaf-{i}" {
+      material: (base + (((i % 2) == 0) ? kitShade : kitShadeDeep))
+      position [0, ((radius / 2) + 0.16), (0.1 + (0.02 * i))]
+      rotation [0, 0, 1, 0]
+      scale [(radius * 0.21), (radius / 2), 0.008]
+      taper: 0.16
+      swings [
+        swing("spread", [0, 0, 1], (((i - ((leaves - 1) / 2)) * (spread / leaves)) * 0.017453293), [0, 0, 0]) with { wave: "linear" }
+      ]
+    }
+  }
+}
+
+// A length of balcony edge that runs along X with the drop on its +Z side (the sheet's balcony-and-stair-rail.png):
+// teal posts on foot brackets, one pane of glass between the slab and the rail, and a brass handrail `height` above the
+// slab the piece stands on. `posts` posts stand evenly inside the length, half a bay in from each end, so lengths laid
+// end to end keep one rhythm. Boxes joined by union, so it collides as drawn.
+template balustrade(base, length = 4, posts = 3, height = 1.1) {
+  for i in range(0, posts) {
+    shape Box $"rail-post-{i}" {
+      material: (base + kitTeal)
+      position [((((i + 0.5) / posts) - 0.5) * length), ((height - 0.06) / 2), 0]
+      scale [0.03, ((height - 0.06) / 2), 0.045]
+    }
+    shape Box $"rail-foot-{i}" {
+      material: (base + kitTeal)
+      position [((((i + 0.5) / posts) - 0.5) * length), 0.05, 0]
+      scale [0.07, 0.05, 0.075]
+      chamfer: 0.012
+    }
+  }
+  shape Box "rail-glass" {
+    material: (base + kitGlass)
+    position [0, ((height / 2) + 0.02), 0]
+    scale [(length / 2), ((height / 2) - 0.1), 0.012]
+  }
+  shape Box "rail-hand" {
+    material: (base + kitBrass)
+    position [0, height, 0]
+    scale [(length / 2), 0.04, 0.05]
+    rounding: 0.035
+  }
+}
+
+// A planter that faces +Z (the sheet's furniture-and-planting.png): a terracotta trough under a thick cream lip, its
+// soil just below the lip, and three groups of planting: a spiky crown of upright blades, broad leaves on stems, and a
+// low mound of pale growth. `length` runs along X; the trough is 0.7 m deep and its lip stands 0.62 m up.
+template planter(base, length = 1.7) {
+  shape Box "planter-trough" {
+    material: (base + kitTerracotta)
+    position [0, 0.2, 0]
+    scale [((length / 2) - 0.05), 0.2, 0.3]
+    chamfer: 0.02
+  }
+  shape Box "planter-lip" {
+    material: (base + kitCream)
+    position [0, 0.5, 0]
+    scale [(length / 2), 0.12, 0.36]
+    rounding: 0.05
+  }
+  shape Box "planter-soil" {
+    material: (base + kitSoil)
+    position [0, 0.61, 0]
+    scale [((length / 2) - 0.07), 0.02, 0.29]
+    detail: true
+  }
+  for (blade, i) in [
+    { x: -0.5, lean: -22, tall: 0.5 }, { x: -0.42, lean: -9, tall: 0.62 }, { x: -0.34, lean: 3, tall: 0.7 }
+    { x: -0.26, lean: 14, tall: 0.58 }, { x: -0.18, lean: 26, tall: 0.46 }
+  ] {
+    shape Prism $"planter-blade-{i}" {
+      material: (base + (((i % 2) == 0) ? kitLeafDeep : kitLeaf))
+      position [((length / 3.4) * (blade.x / 0.34) * 0.5 - (length * 0.08)), (0.62 + (blade.tall / 2)), (0.03 * (i - 2))]
+      rotation: turnAbout([0, 0, 1], blade.lean)
+      scale [0.075, (blade.tall / 2), 0.016]
+      taper: 0.08
+      detail: true
+    }
+  }
+  for (leaf, i) in [
+    { x: 0.02, y: 0.98, tilt: -35, size: 0.2 }, { x: 0.2, y: 1.08, tilt: 30, size: 0.22 }, { x: 0.1, y: 0.86, tilt: 55, size: 0.18 }
+    { x: -0.04, y: 1.16, tilt: -8, size: 0.19 }
+  ] {
+    shape Ellipsoid $"planter-leaf-{i}" {
+      material: (base + (((i % 2) == 0) ? kitLeaf : kitLeafDeep))
+      position [(leaf.x + (length * 0.04)), leaf.y, (0.04 - (0.05 * (i % 2)))]
+      rotation: turnAbout([0, 0, 1], leaf.tilt)
+      scale [leaf.size, (leaf.size * 0.62), 0.03]
+      detail: true
+    }
+    shape Box $"planter-stem-{i}" {
+      material: (base + kitLeafDeep)
+      position [(leaf.x * 0.5 + (length * 0.04)), (0.62 + ((leaf.y - 0.62) / 2)), 0]
+      rotation: turnAbout([0, 0, 1], (0 - (leaf.x * 40)))
+      scale [0.012, ((leaf.y - 0.62) / 2), 0.012]
+      detail: true
+    }
+  }
+  for (tuft, i) in [[0.42, 0.7, 0.1], [0.55, 0.74, -0.08], [0.66, 0.69, 0.06], [0.5, 0.78, 0.02], [0.36, 0.69, -0.1], [0.61, 0.8, -0.02]] {
+    shape Sphere $"planter-tuft-{i}" {
+      material: (base + kitLeafPale)
+      position [((tuft[0] / 0.85) * ((length / 2) - 0.12)), tuft[1], tuft[2]]
+      scale [0.1, 0.1, 0.1]
+      detail: true
+    }
+  }
+}
+
+// A bench that runs along X (the same sheet): three warm timber slats on two teal trestles, its seat 0.48 m up.
+template bench(base, length = 2) {
+  for (z, i) in [-0.16, 0, 0.16] {
+    shape Box $"bench-slat-{i}" {
+      material: (base + kitTimber)
+      position [0, 0.44, z]
+      scale [(length / 2), 0.04, 0.072]
+      rounding: 0.02
     }
   }
   for side in [-1, 1] {
-    shape Box $"pier-inlay-{side}" {
-      material: (base + structureBrass)
-      position [(side * (shaft * 0.45)), (height * 0.42), (depth + 0.004)]
-      scale [0.025, (height * 0.3), 0.012]
+    shape Box $"bench-trestle-{side}" {
+      material: (base + kitTeal)
+      position [(side * ((length / 2) - 0.28)), 0.3, 0]
+      scale [0.1, 0.1, 0.22]
+      chamfer: 0.03
     }
+    for foot in [-1, 1] {
+      shape Box $"bench-foot-{side}-{foot}" {
+        material: (base + kitTeal)
+        position [(side * ((length / 2) - 0.28)), 0.11, (foot * 0.16)]
+        scale [0.1, 0.11, 0.06]
+        chamfer: 0.025
+      }
+    }
+  }
+}
+
+// A wall banner that faces +Z, hung from the origin at its rod (the same sheet): a brass rod on two teal brackets,
+// three loops and an orange cloth `drop` long carrying a pale diamond over an upward arrow. The motif is geometry a few
+// millimetres proud of the cloth: a static placement's paints are drawn in the world's frame, so a paint cannot follow
+// each copy of a piece stamped many times.
+template banner(base, width = 0.9, drop = 2.3) {
+  shape Box "banner-rod" {
+    material: (base + kitBrass)
+    position [0, 0, 0.12]
+    scale [((width / 2) + 0.14), 0.022, 0.022]
+    rounding: 0.02
+  }
+  for side in [-1, 1] {
+    shape Box $"banner-bracket-{side}" {
+      material: (base + kitTeal)
+      position [(side * ((width / 2) + 0.05)), 0, 0.06]
+      scale [0.035, 0.07, 0.07]
+      chamfer: 0.015
+    }
+  }
+  for x in [-0.32, 0, 0.32] {
+    shape Box $"banner-loop-{x}" {
+      material: (base + kitShadeDeep)
+      position [(x * (width / 0.9)), -0.07, 0.12]
+      scale [0.045, 0.09, 0.03]
+    }
+  }
+  shape Box "banner-cloth" {
+    material: (base + kitShade)
+    position [0, (-0.14 - (drop / 2)), 0.12]
+    scale [(width / 2), (drop / 2), 0.008]
+  }
+  shape Prism "banner-diamond" {
+    material: (base + kitCream)
+    position [0, (-0.14 - (drop * 0.34)), 0.12]
+    scale [(width * 0.2), (width * 0.3), 0.013]
+    profile { kind: "Polygon", sides: 4 }
+  }
+  shape Prism "banner-arrow" {
+    material: (base + kitCream)
+    position [0, (-0.14 - (drop * 0.68)), 0.12]
+    scale [(width * 0.3), (width * 0.22), 0.013]
+    taper: 0
+  }
+  shape Box "banner-stem" {
+    material: (base + kitCream)
+    position [0, (-0.14 - (drop * 0.84)), 0.12]
+    scale [(width * 0.07), (drop * 0.09), 0.013]
   }
 }

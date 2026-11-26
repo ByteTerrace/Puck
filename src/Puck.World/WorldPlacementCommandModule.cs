@@ -202,6 +202,10 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
 
             any = true;
 
+            var carrier = (attach.TryCarrier(inhabitants: pop, index: out var carrierIndex)
+                ? $"body={carrierIndex}"
+                : $"placement={attach.Placement}");
+
             if (WorldPlacementAttachment.TryResolve(
                 attach: attach,
                 population: pop,
@@ -212,9 +216,9 @@ internal sealed partial class WorldPlacementCommandModule(WorldServer server, Wo
                 var worldPosition = position.ToVector3();
                 var yawDegrees = float.RadiansToDegrees(radians: ((float)yaw));
 
-                _ = builder.Append(value: $" {placement.Id}[body={attach.BodyIndex} pos=({worldPosition.X:0.00}, {worldPosition.Y:0.00}, {worldPosition.Z:0.00}) yaw={yawDegrees:0}°]");
+                _ = builder.Append(value: $" {placement.Id}[{carrier} pos=({worldPosition.X:0.00}, {worldPosition.Y:0.00}, {worldPosition.Z:0.00}) yaw={yawDegrees:0}°]");
             } else {
-                _ = builder.Append(value: $" {placement.Id}[body={attach.BodyIndex} absent — {reason}]");
+                _ = builder.Append(value: $" {placement.Id}[{carrier} absent — {reason}]");
             }
         }
 

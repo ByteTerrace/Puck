@@ -28,8 +28,8 @@ public static class WorldPlacementAttachment {
     /// <param name="yawRadians">The resolved world yaw — the body's yaw plus <see cref="WorldPlacementAttach.LocalYawDegrees"/>,
     /// fixed-point radians. Set only on success.</param>
     /// <param name="reason">A human-readable reason the row contributes nothing this tick. Set only on failure.</param>
-    /// <returns><see langword="true"/> when <see cref="WorldPlacementAttach.BodyIndex"/> names an ACTIVE population
-    /// entry this tick; <see langword="false"/> for an out-of-range index (author-time refuses this — reachable only
+    /// <returns><see langword="true"/> when the facet's carrier (<see cref="WorldPlacementAttach.TryCarrier"/>) is an
+    /// ACTIVE population entry this tick; <see langword="false"/> for an out-of-range index (author-time refuses this — reachable only
     /// if the caller bypassed validation) or an inactive/despawned body (an ordinary RUNTIME condition, not a
     /// refusal) — either way the placement contributes nothing rather than rendering a stale pose.</returns>
     public static bool TryResolve(WorldPlacementAttach attach, WorldPopulation population, out FixedVector3 position, out FixedQ4816 yawRadians, out string reason) {
@@ -39,17 +39,22 @@ public static class WorldPlacementAttachment {
         position = default;
         yawRadians = default;
 
-        if (((uint)attach.BodyIndex) >= ((uint)population.Capacity)) {
-            reason = $"body:{attach.BodyIndex} is outside the {population.Capacity}-slot entity table";
+        if (!attach.TryCarrier(inhabitants: population, index: out var carrier)) {
+            reason = $"placement '{attach.Placement}' holds no active body";
+
+            return false;
+        }
+        if (((uint)carrier) >= ((uint)population.Capacity)) {
+            reason = $"body:{carrier} is outside the {population.Capacity}-slot entity table";
 
             return false;
         }
 
         if (
-            !population.IsActive(index: attach.BodyIndex) ||
-            (population.EntryBody(index: attach.BodyIndex) is not { } body)
+            !population.IsActive(index: carrier) ||
+            (population.EntryBody(index: carrier) is not { } body)
         ) {
-            reason = $"body:{attach.BodyIndex} is not an active population entry";
+            reason = $"body:{carrier} is not an active population entry";
 
             return false;
         }

@@ -1111,6 +1111,8 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        ValidateSpawnParents(definition: definition, errors: errors);
+
         ValidateSeatSpawns(
             seatSpawns: definition.Population.SeatSpawns,
             spawnPointIds: spawnPointIds,

@@ -748,8 +748,10 @@ public abstract record WorldRenderLight {
     /// its light would show below <c>SdfPhotometry.RangeThreshold</c> of display white at the world's brightest
     /// exposure. An unanchored light is static, so the irradiance volume traces it: its light bounces off the static
     /// meshes, and each probe records whether it sees the light, so a surface the volume covers takes the light only
-    /// where the probes about it see it, and a fixture lights nothing through the wall or slab between them. An
-    /// anchored light moves with its anchor, lights through every wall and bounces nothing.</summary>
+    /// where the probes about it see it, and a fixture lights nothing through the wall or slab between them. A light
+    /// anchored to the root of a placement no body carries (no shape, and a row without an attach, inhabit or deal
+    /// facet) stands where the document puts that row and is static too. Any other anchored light moves with its
+    /// anchor, lights through every wall and bounces nothing.</summary>
     /// <param name="Position">The world-space position for a static (unanchored) light. Absent is the world origin.
     /// An offset in the anchor frame when an anchor is authored.</param>
     /// <param name="Anchor">An entity, entity part, or placement frame. A missing live target disables the light.</param>

@@ -576,11 +576,51 @@ public sealed record WorldPlacementGrip(bool Holdable);
 /// <see cref="WorldAnchor.Entity"/> and the console's <c>body:&lt;n&gt;</c> grant subject use, not the 1-based
 /// <c>player.*</c> seat number (<c>body:1</c> is "player 2"). Validated within <c>0..</c>the world's authored
 /// population capacity; the target need not be active at author time (see remarks — an inactive body at runtime
-/// makes the row contribute nothing, it does not refuse).</param>
+/// makes the row contribute nothing, it does not refuse). Absent when <paramref name="Placement"/> names the
+/// carrier; a row authors exactly one of the two.</param>
 /// <param name="LocalOffset">The stamp's position offset in the body's own local frame, world units.</param>
 /// <param name="LocalYawDegrees">The stamp's yaw offset from the body's own heading, degrees. Zero rides the
 /// body's exact facing.</param>
-public sealed record WorldPlacementAttach(int BodyIndex, DocumentVector3 LocalOffset, float LocalYawDegrees = 0f);
+/// <param name="Placement">The inhabited placement whose body the row rides, named by its
+/// <see cref="WorldPlacement.Id"/>: the lowest active entity that placement's inhabit facet spawned. The population
+/// assigns a body its index when it admits it, so a module that names its carrier this way rides it in whatever world
+/// composes the module and in whatever order. While no body inhabits the placement the row contributes nothing.</param>
+public sealed record WorldPlacementAttach(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? BodyIndex,
+    DocumentVector3 LocalOffset,
+    float LocalYawDegrees = 0f,
+    [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Placement = null
+) {
+    /// <summary>Resolves the body the row rides: the authored index, or the body inhabiting the named placement.
+    /// Every reader of an attached row's carrier resolves it here, so the two spellings cannot drift apart.</summary>
+    /// <typeparam name="TInhabitants">The table that knows which body inhabits a placement.</typeparam>
+    /// <param name="inhabitants">The population, or a client's mirror of it.</param>
+    /// <param name="index">The 0-based entity index, or -1 when the row names a placement no active body inhabits.</param>
+    /// <returns><see langword="true"/> when the row resolves a body; one named by index may still be inactive.</returns>
+    public bool TryCarrier<TInhabitants>(TInhabitants inhabitants, out int index) where TInhabitants : IWorldInhabitants {
+        if (BodyIndex is { } authored) {
+            index = authored;
+
+            return true;
+        }
+        if ((Placement is { } placementId) && inhabitants.TryInhabitantBody(placementId: placementId, index: out index)) {
+            return true;
+        }
+
+        index = -1;
+
+        return false;
+    }
+}
+/// <summary>Answers which body inhabits a placement: the population on the authority, a pose mirror on a client.</summary>
+public interface IWorldInhabitants {
+    /// <summary>Resolves the lowest active entity that inhabits a placement.</summary>
+    /// <param name="placementId">The placement row id.</param>
+    /// <param name="index">The 0-based entity index, or -1 when no active entity inhabits it.</param>
+    /// <returns><see langword="true"/> when an active entity inhabits the placement.</returns>
+    bool TryInhabitantBody(string placementId, out int index);
+}
 /// <summary>
 /// One placement instance row — a creation asset stamped into the world by reference: transform + facets as
 /// data, addressed by its stable <paramref name="Id"/>. A placement whose creation carries timeline frames is

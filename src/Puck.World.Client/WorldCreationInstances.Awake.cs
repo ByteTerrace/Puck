@@ -400,14 +400,18 @@ public sealed partial class WorldCreationInstances {
                 m_bodyBound.Add(item: index);
             } else if (live.Row?.Attach is { } attach) {
                 m_bodyBound.Add(item: index);
-                if (!m_attachedByBody.TryGetValue(key: attach.BodyIndex, value: out var attached)) {
-                    m_attachedByBody.Add(key: attach.BodyIndex, value: attached = []);
-                }
+                if (attach.BodyIndex is { } carrier) {
+                    if (!m_attachedByBody.TryGetValue(key: carrier, value: out var attached)) {
+                        m_attachedByBody.Add(key: carrier, value: attached = []);
+                    }
 
-                attached.Add(item: index);
+                    attached.Add(item: index);
+                }
             }
-            // A solid's sampled scale is interpolated each frame beside the bodies, in no journal.
-            if (live.ReadsBodies || ((live.Creation.EngineDocument.SizeBy is not null) && (live.Row is { Solid: not null }))) {
+            // A solid's sampled scale is interpolated each frame beside the bodies, in no journal. A row riding the
+            // body of a placement has no index a body's change could wake it by until that body is admitted, so every
+            // pack visits it.
+            if (live.ReadsBodies || (live.Row is { Attach.Placement: not null }) || ((live.Creation.EngineDocument.SizeBy is not null) && (live.Row is { Solid: not null }))) {
                 m_everyPack.Add(item: index);
             }
         }

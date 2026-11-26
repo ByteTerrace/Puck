@@ -17,6 +17,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 |---|---|---|---|---|
 | `spawnPoints[].id` | SpawnPoint | Declares |  | `WorldSpawnPoint.Id` |
 | `spawnPoints[].position` | State | Binding | Binding | `WorldSpawnPoint.Position` |
+| `spawnPoints[].parent` | Placement | Names | Read | `WorldSpawnPoint.Parent` |
 | `render.lighting.lights[].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
 | `render.lighting.lights[].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -1278,6 +1279,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
@@ -1323,6 +1325,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
+| `kits.rows[].actions{*}.onPress.effects[][poseCell].frame` | Placement | Names | Read | `WorldEffect.PoseCell.Frame` |
 | `kits.rows[].actions{*}.onPress.effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `kits.rows[].actions{*}.onPress.effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
@@ -1692,6 +1695,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
@@ -1737,6 +1741,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
+| `kits.rows[].actions{*}.onRelease.effects[][poseCell].frame` | Placement | Names | Read | `WorldEffect.PoseCell.Frame` |
 | `kits.rows[].actions{*}.onRelease.effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `kits.rows[].actions{*}.onRelease.effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
@@ -2106,6 +2111,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
@@ -2151,6 +2157,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
+| `kits.rows[].actions{*}.onFact[].effects[][poseCell].frame` | Placement | Names | Read | `WorldEffect.PoseCell.Frame` |
 | `kits.rows[].actions{*}.onFact[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `kits.rows[].actions{*}.onFact[].effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
@@ -2285,6 +2292,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `placements.rows[].faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `placements.rows[].attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
+| `placements.rows[].attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `placements.rows[].contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
 | `placements.rows[].respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `placements.rows[].respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
@@ -3083,6 +3091,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `rules[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `rules[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
+| `rules[].effects[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `rules[].effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
 | `rules[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `rules[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
@@ -3128,6 +3137,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
+| `rules[].effects[][poseCell].frame` | Placement | Names | Read | `WorldEffect.PoseCell.Frame` |
 | `rules[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `rules[].effects[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `rules[].effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
@@ -3515,6 +3525,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
@@ -3560,6 +3571,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.options[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.options[].effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
+| `rules[].decision.options[].effects[][poseCell].frame` | Placement | Names | Read | `WorldEffect.PoseCell.Frame` |
 | `rules[].decision.options[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `rules[].decision.options[].effects[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `rules[].decision.options[].effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
@@ -3970,6 +3982,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
@@ -4015,6 +4028,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `rules[].decision.onNoChoice[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `rules[].decision.onNoChoice[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
+| `rules[].decision.onNoChoice[][poseCell].frame` | Placement | Names | Read | `WorldEffect.PoseCell.Frame` |
 | `rules[].decision.onNoChoice[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `rules[].decision.onNoChoice[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `rules[].decision.onNoChoice[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |
@@ -4367,6 +4381,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].portal.gate.state` | State | Names | Read | `WorldPortalGate.State` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.faceSources[].material` | ScreenMaterial | Names | Binding | `WorldPlacementFace.Material` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.attach.localOffset` | State | Binding | Binding | `WorldPlacementAttach.LocalOffset` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.attach.placement` | Placement | Names | Read | `WorldPlacementAttach.Placement` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.contribution.slotCreationId` | Prototype | Names | Read | `WorldPlacementContribution.SlotCreationId` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[field].field` | Field | Names | Read | `WorldPlacementResponseCondition.FieldCondition.Field` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.respond[].when[field].value{row}` | State | Names | Read | `WorldLatticeScalar.Row` |
@@ -4412,6 +4427,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
 | `interactions.interactions[].effects[][poseCell].expression{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
 | `interactions.interactions[].effects[][poseCell].offset` | State | Binding | Binding | `WorldEffect.PoseCell.Offset` |
+| `interactions.interactions[].effects[][poseCell].frame` | Placement | Names | Read | `WorldEffect.PoseCell.Frame` |
 | `interactions.interactions[].effects[][pose].key` | State | Key | Read | `WorldEffect.Pose.Key` |
 | `interactions.interactions[].effects[][pose].spawnPoint` | SpawnPoint | Names | Read | `WorldEffect.Pose.SpawnPoint` |
 | `interactions.interactions[].effects[][pose].position` | State | Binding | Binding | `WorldEffect.Pose.Position` |

@@ -7888,6 +7888,10 @@ export type WorldEffectPoseCell = {
    * The pitch a teleport stands the body at, about its right axis: a creation authored standing on its edge (a playing card, whose face looks along its forward axis) is laid flat at 90 or -90. A glide keeps the body's attitude and ignores it.
    */
   pitchDegrees?: number;
+  /**
+   * The placement whose composed frame the topology's cells and Offset are read in, or null for the world: the cell centre plus the offset is turned by the frame's yaw, scaled by its scale and added to its position, so a topology authored beside a group of rows under one root placement moves and turns with that root.
+   */
+  frame?: string | null;
 };
 
 /**
@@ -10660,9 +10664,9 @@ export type WorldPlacement = {
  */
 export type WorldPlacementAttach = {
   /**
-   * The 0-based population entity index the placement rides — the same indexing Entity and the console's body:<n> grant subject use, not the 1-based player.* seat number (body:1 is "player 2"). Validated within 0..the world's authored population capacity; the target need not be active at author time (see remarks — an inactive body at runtime makes the row contribute nothing, it does not refuse).
+   * The 0-based population entity index the placement rides — the same indexing Entity and the console's body:<n> grant subject use, not the 1-based player.* seat number (body:1 is "player 2"). Validated within 0..the world's authored population capacity; the target need not be active at author time (see remarks — an inactive body at runtime makes the row contribute nothing, it does not refuse). Absent when Placement names the carrier; a row authors exactly one of the two.
    */
-  bodyIndex: number;
+  bodyIndex: number | null;
   /**
    * The stamp's position offset in the body's own local frame, world units.
    */
@@ -10671,6 +10675,10 @@ export type WorldPlacementAttach = {
    * The stamp's yaw offset from the body's own heading, degrees. Zero rides the body's exact facing.
    */
   localYawDegrees?: number;
+  /**
+   * The inhabited placement whose body the row rides, named by its Id: the lowest active entity that placement's inhabit facet spawned. The population assigns a body its index when it admits it, so a module that names its carrier this way rides it in whatever world composes the module and in whatever order. While no body inhabits the placement the row contributes nothing.
+   */
+  placement?: string | null;
 };
 
 /**
@@ -12207,7 +12215,7 @@ export type WorldRenderLightOccluder = {
 };
 
 /**
- * A point light, such as a bulb: its luminous intensity alike in every direction, falling off as the inverse square of the distance under a window that ends it smoothly and exactly at its range, the distance past which its light would show below SdfPhotometry.RangeThreshold of display white at the world's brightest exposure. An unanchored light is static, so the irradiance volume traces it: its light bounces off the static meshes, and each probe records whether it sees the light, so a surface the volume covers takes the light only where the probes about it see it, and a fixture lights nothing through the wall or slab between them. An anchored light moves with its anchor, lights through every wall and bounces nothing.
+ * A point light, such as a bulb: its luminous intensity alike in every direction, falling off as the inverse square of the distance under a window that ends it smoothly and exactly at its range, the distance past which its light would show below SdfPhotometry.RangeThreshold of display white at the world's brightest exposure. An unanchored light is static, so the irradiance volume traces it: its light bounces off the static meshes, and each probe records whether it sees the light, so a surface the volume covers takes the light only where the probes about it see it, and a fixture lights nothing through the wall or slab between them. A light anchored to the root of a placement no body carries (no shape, and a row without an attach, inhabit or deal facet) stands where the document puts that row and is static too. Any other anchored light moves with its anchor, lights through every wall and bounces nothing.
  */
 export type WorldRenderLightPoint = {
   $type?: "point";
@@ -14751,13 +14759,17 @@ export type WorldSpawnPoint = {
    */
   id?: string;
   /**
-   * The seat's spawn position.
+   * The seat's spawn position: in the world, or in Parent's frame.
    */
   position?: DocumentVector3;
   /**
-   * The spawn yaw about +Y, in degrees.
+   * The spawn yaw about +Y, in degrees, added to Parent's yaw when it has one.
    */
   yawDegrees?: number;
+  /**
+   * The placement whose composed frame the pose is authored in, or null for a world-space pose. SpawnPoints hands every reader the pose resolved into the world with this member cleared, so a group of rows placed under one root placement keeps its spawn points when the root moves or turns.
+   */
+  parent?: string | null;
 };
 
 export type WorldSpeaker = WorldSpeakerFixed | WorldSpeakerAnchored | WorldSpeakerBed | null;
