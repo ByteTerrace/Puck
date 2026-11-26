@@ -1870,6 +1870,7 @@ public static partial class WorldModelShape {
                 M("toonSelect", typeof(global::Puck.World.Authoring.PaletteToonSelectDocument), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "ToonSelect", Read | Write, static value => ((global::Puck.World.Authoring.PaletteEntryDocument)value).ToonSelect),
                 M("flow", typeof(global::Puck.World.Authoring.PaletteFlowDocument), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "Flow", Read | Write, static value => ((global::Puck.World.Authoring.PaletteEntryDocument)value).Flow),
                 M("shade", typeof(global::Puck.World.Authoring.ShadeReference), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "Shade", Read | Write, static value => ((global::Puck.World.Authoring.PaletteEntryDocument)value).Shade),
+                M("castsShadow", typeof(global::System.Nullable<global::System.Boolean>), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "CastsShadow", Read | Write, static value => ((global::Puck.World.Authoring.PaletteEntryDocument)value).CastsShadow),
                 M("paints", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.Authoring.PalettePaintDocument>), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "Paints", Read | Write, static value => ((global::Puck.World.Authoring.PaletteEntryDocument)value).Paints),
                 M("isGlass", typeof(global::System.Boolean), typeof(global::Puck.World.Authoring.PaletteEntryDocument), "IsGlass", None),
             ],
