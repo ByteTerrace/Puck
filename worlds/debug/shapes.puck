@@ -114,7 +114,7 @@ let galleryLevels = [
 let galleryDisplayRows = [
   {
     id: "primitives", title: "PRIMITIVES", level: 0, names: uniformRow, what: "each primitive at a uniform scale"
-    x: displayNaveXs[0], z: displayNaveSouth, yaw: 180
+    x: (displayNaveXs[0] - galleryTile), z: displayNaveSouth, yaw: 180
   }
   {
     id: "stretched", title: "STRETCHED", level: 0, names: stretchedRow, what: "each primitive scaled unevenly"
