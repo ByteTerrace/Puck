@@ -29,4 +29,7 @@ public enum GpuStage : uint {
     /// <summary>The host: a CPU read of mapped memory once the submission has completed, the destination stage that
     /// makes a copy into a readback buffer visible to it (Vulkan <c>HOST</c>).</summary>
     Host = 0x100,
+    /// <summary>The vertex input stage, where an indexed draw reads its index buffer (Vulkan <c>VERTEX_INPUT</c>;
+    /// Direct3D 12 <c>INDEX_INPUT</c>). Pair with <see cref="GpuAccess.IndexRead"/>.</summary>
+    VertexInput = 0x200,
 }

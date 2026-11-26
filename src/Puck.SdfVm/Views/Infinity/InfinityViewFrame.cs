@@ -22,8 +22,9 @@ public readonly record struct InfinityViewFrame(bool Visible, CameraSnapshot Cam
 /// (<see cref="InfinityViewMask"/>); seen from the viewer's camera, a cone wholly in front of the camera projects onto the
 /// camera plane as an ellipse, and the instance renders exactly the ellipse's bounding rectangle, clipped to the viewer's
 /// frustum, through an off-axis frustum of the viewer's own (<see cref="CameraSnapshot.FrustumOffset"/> carries the
-/// rectangle's centre), so every pixel of the instance casts the ray of the viewer pixel it covers. A cone wholly behind the camera plane renders nothing, and one that reaches the
-/// viewer's horizon plane has no bound on that plane and renders the viewer's whole frustum.
+/// rectangle's centre), so every pixel of the instance casts the ray of the viewer pixel it covers. A cone wholly behind the
+/// camera plane or wholly outside one of the frustum's side planes renders nothing, and any other that reaches the viewer's
+/// horizon plane has no bound on that plane and renders the viewer's whole frustum.
 /// <para>With the cone's axis <c>a</c> at components <c>(aᵣ, aᵤ, a_f)</c> on the camera's right, up and forward, half-angle
 /// α, <c>s = sin α</c> and <c>d = a_f² − s²</c> (positive exactly when the cone is wholly in front), the ellipse's centre
 /// is <c>(a_f·aᵣ, a_f·aᵤ) / d</c> and its bounding half-extents are <c>s·√(d + aᵣ²) / d</c> and
@@ -69,8 +70,11 @@ public static class InfinityViewFit {
             var sine = Math.Sin(a: mask.HalfAngle);
             var reach = ((forward * forward) - (sine * sine));
 
-            // A cone every direction of which lies at or behind the camera plane has nothing in the frustum.
-            if (forward <= -sine) {
+            // A cone every direction of which lies at or behind the camera plane, or past one of the frustum's side planes,
+            // has nothing in the frustum. The side planes decide a cone that reaches the horizon plane, which has no ellipse
+            // to clip and would otherwise render the whole frustum.
+            if ((forward <= -sine) || Separated(sine: sine, forward: forward, across: right, low: minX, high: maxX)
+                || Separated(sine: sine, forward: forward, across: up, low: minY, high: maxY)) {
                 return default;
             }
             if ((forward > 0.0) && (reach > 1e-9)) {
@@ -122,6 +126,14 @@ public static class InfinityViewFit {
             WholeFrustum: whole
         );
     }
+    // Whether a cone lies wholly outside one of the two side planes of the frustum along one camera axis. The planes pass
+    // through the eye at the tangents `low` and `high` along that axis; the outward normal of the high plane is
+    // (1, −high) over the axis and forward, normalized, and of the low plane (−1, low). A cone whose axis lies at least
+    // its half-angle beyond a plane, its axis's component along the normal at least the half-angle's sine, has no
+    // direction inside it.
+    private static bool Separated(double sine, double forward, double across, double low, double high) =>
+        ((((across - (high * forward)) / Math.Sqrt(d: (1.0 + (high * high)))) >= sine) ||
+            (((((-across) + (low * forward))) / Math.Sqrt(d: (1.0 + (low * low)))) >= sine));
     // The cone a view's bound subtends from its camera, in the viewer's world frame, or null when the view states no
     // bound or the camera stands inside it or so near that the cone has no bound on the camera plane.
     private static InfinityViewMask? BoundMask(InfinityViewSpec spec, Vector3 position) {

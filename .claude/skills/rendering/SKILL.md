@@ -186,7 +186,8 @@ reads the installed graph's named allocations and actual bytes. Read it beside
 `world.residency` and `host.memory`; those broader reports alone do not identify
 an optical buffer. A document reload clears the exposure pin, so pin the same
 EV again before comparing density-only reload stills.
-The glass vertex variant clips zero-density triangles before rasterization;
+The glass fragment rejects a zero-density triangle before any optical write (an
+indexed draw's vertex belongs to no one triangle, so no vertex stage can);
 opaque vertices export only position and clip distance. Density has its own
 cadence signature, shared by cascades and surface, including palette-only uploads.
 The cascade's optical-depth buffer integrates to its first opaque depth with
@@ -906,7 +907,7 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   argument buffer through its pushed word base plus `DrawIndex`
   (`sdfMeshRasterIdentity`); first instance stays zero. When
   `VulkanGpuRecorder.CanDrawIndirectCount` is false, the recorder issues those same initialized
-  slots in one fixed `vkCmdDrawIndirect` when multi-draw is available; otherwise
+  slots in one fixed `vkCmdDrawIndexedIndirect` when multi-draw is available; otherwise
   it advances the word base for each individual slot, including empty rejected slots;
   no raster CPU cull or level path remains. Keep command-to-vertex read barriers and
   preserve level state when buffers grow. Compute binds the read-only command
@@ -1749,11 +1750,21 @@ wrong. The contracts that bite most often:
   materials after the merged ones', so its triangles are numbered after them. A
   draw pushes its level above its index (`SdfKernelInterfaces.MeshLevelShift`,
   in a counted indirect draw's identity too), its record points at the mesh's
-  shared level table (`SdfMeshRecord.LevelTableWord`), and both raster vertex
-  stages add it to the vertex id (`sdfMeshLevelIndex`). Never pass the level as
-  a first vertex: Direct3D 12's `SV_VertexID` counts from zero whatever the
-  draw's first vertex, so the draw fetches the merged mesh's first triangles and
-  objects go missing. The surface pass reads the triangle the pixel names with
+  shared level table (`SdfMeshRecord.LevelTableWord`). Every raster draw is
+  indexed, the mesh region its index buffer (`SdfMeshOcclusion.RecordDraws`):
+  the selection writes the level's indices' place in the region as the draw's
+  first index (`sdfOcclusionEmit`, the draw's index word plus `sdfMeshLevelIndex`)
+  with a zero vertex offset, so a vertex stage's vertex id is the vertex the
+  mesh's index names (`sdfMeshWorldPositionOf`) on both backends, and a vertex
+  several triangles share runs once where the hardware reuses it. Keep the draws'
+  vertex offset zero: the vertex stage takes its vertex id as the mesh's own
+  index, and the region's indices are each mesh's, counted from its first
+  vertex. A fragment names its triangle as the level's first, which the
+  vertex stage hands on flat, plus its `SV_PrimitiveID` (`sdfMeshRasterTriangle`),
+  which on Vulkan needs the required `geometryShader` feature. A region copy hands
+  the region to the draws' index reads (`SdfMeshRegionStore.Readers` holds
+  `GpuStage.VertexInput`, `GpuRegion.ReaderAccess`), so a new writer of the
+  region hands it on the same way. The surface pass reads the triangle the pixel names with
   no level of its own. The audit reads the merged mesh, level zero. The
   irradiance trace reads each static mesh's coarsest level within
   `SdfMeshIrradiance.TraceError` (`SdfMeshIrradianceScene.GeometryKey.Of`): its

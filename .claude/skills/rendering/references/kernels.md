@@ -286,10 +286,10 @@ also exercises the return to drawing after all frame slots forwarded inputs.
 
 Vulkan's [DrawIndex](https://docs.vulkan.org/refpages/latest/refpages/source/DrawIndex.html)
 starts at zero per native call. Its vertex stage reads each command's identity
-at the pushed word base plus five times that index, through the
+at the pushed word base plus six times that index (`GpuDrawIndirectCommand.Words`), through the
 [`vk::builtin` mapping](https://github.com/microsoft/DirectXShaderCompiler/blob/main/docs/SPIR-V.rst)
 in DXC. These sources agree on the mapping. Without native counted drawing,
-[`vkCmdDrawIndirect`](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdDrawIndirect.html)
+[`vkCmdDrawIndexedIndirect`](https://docs.vulkan.org/refpages/latest/refpages/source/vkCmdDrawIndexedIndirect.html)
 issues the initialized slots in one call when multi-draw is enabled; without
 multi-draw it issues one slot per call and advances the base with it. Empty
 rejected slots preserve order. `VulkanIndirectCountLawTests` exercises native,

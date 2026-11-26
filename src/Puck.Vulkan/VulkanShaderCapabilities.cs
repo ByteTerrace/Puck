@@ -15,6 +15,10 @@ namespace Puck.Vulkan;
 public static class VulkanShaderCapabilities {
     /// <summary>The SPIR-V <c>Shader</c> capability, which every graphics and compute module declares.</summary>
     public const uint Shader = 1u;
+    /// <summary>The SPIR-V <c>Geometry</c> capability, which a fragment stage's <c>PrimitiveId</c> declares: the mesh and
+    /// glass passes name the triangle a fragment of an indexed draw covers by it. Requires the device's
+    /// <c>geometryShader</c> feature.</summary>
+    public const uint Geometry = 2u;
     /// <summary>The SPIR-V <c>ClipDistance</c> capability, with which the mesh and shadow passes clip a body at a portal's
     /// glass. Requires the device's <c>shaderClipDistance</c> feature.</summary>
     public const uint ClipDistance = 32u;
@@ -61,6 +65,7 @@ public static class VulkanShaderCapabilities {
     /// creates.</summary>
     public static IReadOnlyList<(uint Capability, string Name, string EnabledBy)> Enabled { get; } = [
         (Shader, "Shader", "Vulkan core"),
+        (Geometry, "Geometry", "the geometryShader feature every device is created with"),
         (ClipDistance, "ClipDistance", "the shaderClipDistance feature every device is created with"),
         (StorageImageExtendedFormats, "StorageImageExtendedFormats", "the shaderStorageImageExtendedFormats feature every device is created with"),
         (StorageBufferArrayDynamicIndexing, "StorageBufferArrayDynamicIndexing", "the shaderStorageBufferArrayDynamicIndexing feature every device is created with"),

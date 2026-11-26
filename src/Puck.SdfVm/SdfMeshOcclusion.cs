@@ -52,6 +52,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     private readonly GpuFittedBuffer[] m_candidates;
     private readonly List<IGpuBuffer>[] m_retired;
     private readonly byte[] m_pushed = new byte[GpuPipelineLayoutDescription.PushIndexBytes];
+    // The most bytes one index buffer view spans on Direct3D 12 (D3D12_INDEX_BUFFER_VIEW's 32-bit size), whole indices.
+    private const ulong MaxIndexViewBytes = (uint.MaxValue & ~3U);
+    // The mesh region buffer the staged frame's sets bind, which the raster phases read as their index buffer.
+    private IGpuBuffer? m_indices;
 
     // The device buffers the selection writes, its own or shared with the other selections of one shadow entry (Storage),
     // and whether it disposes them.
@@ -236,6 +240,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         m_storage.Slot = slot;
         m_count = count;
         m_tag = tag;
+        // The draws' indices are the mesh region's own words, read from the buffer the pass's sets bind at the region
+        // (SdfWorldTables.WriteMeshTables reads the same store buffer, which only staging replaces).
+        m_indices = tables.MeshRegionBuffer;
         m_width = Math.Max(val1: width, val2: 1u);
         m_height = Math.Max(val1: height, val2: 1u);
         m_levels = LevelsOf(height: m_height, width: m_width);
@@ -368,12 +375,21 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         m_readbacks.Record(slot: m_slot, result: slot);
     }
     // Records one phase's counted indirect draw inside the mesh pass's render pass, its graphics pipeline and set bound.
-    // The pushed index is zero, so the record's identity alone names the draw (sdfMeshRasterDraw).
+    // The pushed index is zero, so the record's identity alone names the draw (sdfMeshRasterDraw). Each record draws its
+    // level's indices where the mesh region holds them (sdfOcclusionEmit), so the region is the index buffer, bound from
+    // its first word.
     public void RecordDraws(IGpuRecorder recorder, nint commandBuffer, IGpuPipeline pipeline, int phase) {
-        if (m_count == 0u) {
+        if ((m_count == 0u) || (m_indices is not { } indices)) {
             return;
         }
 
+        recorder.BindIndexBuffer(
+            bufferHandle: indices.BufferHandle,
+            commandBufferHandle: commandBuffer,
+            format: GpuIndexFormat.UInt32,
+            offsetBytes: 0UL,
+            sizeBytes: Math.Min(val1: indices.SizeBytes, val2: MaxIndexViewBytes)
+        );
         BinaryPrimitives.WriteUInt32LittleEndian(destination: m_pushed, value: 0u);
         recorder.PushConstants(
             bindPoint: GpuBindPoint.Graphics,
