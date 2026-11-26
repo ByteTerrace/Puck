@@ -1124,7 +1124,7 @@ public sealed partial class WorldPopulation {
         if (HasFarCadence()) { ReadOccupied(); }
         // The kit advance split (WorldPopulation.Partitions.cs): the bodies whose step is local advance first, in fixed
         // partitions of slots over the frozen image, and every other body then advances here, serially, in index order.
-        PlanKitStep(contactFieldVersion: contactFieldVersion, stepBodies: stepBodies, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks);
+        PlanKitStep(contactFieldVersion: contactFieldVersion, jobs: jobs, stepBodies: stepBodies, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks);
         RunKitPartitions(contactFieldVersion: contactFieldVersion, jobs: jobs, tick: tick);
         foreach (var index in m_serialKitBodies) {
             AdvanceSerialBody(contactFieldVersion: contactFieldVersion, index: index, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks, tick: tick);
@@ -1141,7 +1141,7 @@ public sealed partial class WorldPopulation {
             !entry.Active ||
             (entry.Kind == PopulationKind.LocalSeat) ||
             (entry.Body is not { } player) ||
-            !TryPlanAutonomy(contactFieldVersion: contactFieldVersion, entry: entry, index: index, player: player, step: out var step, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks)
+            !TryPlanAutonomy(contactFieldVersion: contactFieldVersion, entry: entry, index: index, player: player, step: out var step, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks, work: m_serialWork)
         ) {
             return;
         }
@@ -1192,8 +1192,9 @@ public sealed partial class WorldPopulation {
 
     // Settles a non-seat body's sleep, field inputs and cadence for the tick, the same for a serial body and a kit
     // partition's: false for a sleeper that nothing wakes. A body whose motion is not due is marked deferred, and one
-    // whose ordinary advance is not admitted restarts its motion cadence and does not move.
-    private bool TryPlanAutonomy(Entry entry, WorldBody player, int index, ulong stepTicks, ulong stepStartEngineTick, ulong contactFieldVersion, out AutonomyStep step) {
+    // whose ordinary advance is not admitted restarts its motion cadence and does not move. It writes the body, its
+    // entry and the caller's work alone, so a partition's plan may call it for its own bodies.
+    private bool TryPlanAutonomy(Entry entry, WorldBody player, int index, ulong stepTicks, ulong stepStartEngineTick, ulong contactFieldVersion, ProducerWork work, out AutonomyStep step) {
         step = default;
         // An asleep body that wakes for nothing this tick costs nothing beyond this check — no staging, no cadence
         // bookkeeping, no Advance. See WorldBody.Sleep.cs.
@@ -1242,7 +1243,7 @@ public sealed partial class WorldPopulation {
                     CadenceComesDue(period: autonomy.SteeringPeriodTicks, remaining: autonomy.SteeringRemainingTicks, stepTicks: stepTicks)
                 ) {
                     // With nobody in the world, every body is far.
-                    isFar = (NearestOccupiedSquared(point: player.FixedPosition, reach: far.Beyond) is null);
+                    isFar = (NearestOccupiedWith(candidates: (work.Partitioned ? work.Occupied : m_occupiedCandidates), point: player.FixedPosition, reach: far.Beyond) is null);
                 }
                 if (isFar) {
                     motionPeriod = farMotion;
@@ -1290,11 +1291,11 @@ public sealed partial class WorldPopulation {
         if (!moves) {
             player.DeferOrdinaryAdvance();
             if (motionPeriod != 0UL) {
-                m_serialWork.Autonomy = m_serialWork.Autonomy with { MotionDeferred = (m_serialWork.Autonomy.MotionDeferred + 1) };
+                work.Autonomy = work.Autonomy with { MotionDeferred = (work.Autonomy.MotionDeferred + 1) };
             }
         } else {
             if (motionPeriod != 0UL) {
-                m_serialWork.Autonomy = m_serialWork.Autonomy with { MotionUpdates = (m_serialWork.Autonomy.MotionUpdates + 1) };
+                work.Autonomy = work.Autonomy with { MotionUpdates = (work.Autonomy.MotionUpdates + 1) };
             }
             if (!player.TryBeginOrdinaryAdvance(stepStartEngineTick: checked(((stepStartEngineTick + stepTicks) - motionTicks)))) {
                 autonomy.MotionElapsedTicks = 0UL;

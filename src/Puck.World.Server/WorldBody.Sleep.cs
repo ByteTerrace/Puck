@@ -123,6 +123,16 @@ public sealed partial class WorldBody {
     /// <param name="contactFieldVersion">The population's <see cref="WorldPopulation.ContactFieldVersion"/> the
     /// settlement observed.</param>
     internal void ObserveContactField(ulong contactFieldVersion) => m_lastContactFieldVersion = contactFieldVersion;
+    /// <summary>Gets whether this body is asleep and nothing this tick wakes it: what
+    /// <see cref="TryDeferSleepingAdvance"/> answers, read without waking a body that is due to wake or moving its
+    /// observation, which already equals <paramref name="contactFieldVersion"/> whenever this answers
+    /// <see langword="true"/>. A caller may pass such a body by before it decides how the body's step would run.</summary>
+    /// <param name="contactFieldVersion">The population's current <see cref="WorldPopulation.ContactFieldVersion"/>.</param>
+    /// <returns><see langword="true"/> when the body sleeps through the tick.</returns>
+    internal bool SleepsThrough(ulong contactFieldVersion) => (
+        (m_asleepSinceTick != 0UL) && (contactFieldVersion == m_lastContactFieldVersion) &&
+        (m_tapeCount == 0) && !InputImages.HasSubmitted && !InputImages.HasProducer
+    );
     /// <summary>Returns <see langword="true"/> when this body is asleep and nothing this tick wakes it, so the
     /// caller may skip <see cref="Advance"/> outright. Wakes (and returns <see langword="false"/>) on a
     /// <paramref name="contactFieldVersion"/> this body never observed or a tape/submitted/producer intent staged for
