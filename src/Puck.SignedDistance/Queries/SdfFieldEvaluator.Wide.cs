@@ -291,7 +291,7 @@ public sealed partial class SdfFieldEvaluator {
 
             foreach (var region in mask.Regions) {
                 var primitive = region.Primitive;
-                var u = (q - new Wide3(X: ((double)region.Origin.X), Y: ((double)region.Origin.Y), Z: ((double)region.Origin.Z)));
+                var u = (q - Uniform(value: region.Origin));
 
                 if (!region.Identity) {
                     u = new WideRotation(W: ((double)region.Rotation.W), X: ((double)region.Rotation.X), Y: ((double)region.Rotation.Y), Z: ((double)region.Rotation.Z)).RotateInverse(vector: u);

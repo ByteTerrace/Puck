@@ -114,3 +114,12 @@ SdfDual sdfSuperellipsoid(SdfDual3 p, float3 radii, float3 inverseRadii, float e
     if (((2.0 < exponent) && (exponent <= 3.0))) { return sdfdSubtract(sdfClampSuperellipsoidNorm(norm, sdfdLength(q), exponent), minRadius); }
     return sdfdSubtract(norm, minRadius);
 }
+
+SdfDual sdfSweepTubeGap(SdfDual3 p, float3 a, float3 b, float3 c, float radiusStart, float radiusEnd, float t) {
+    return sdfdSubtract(sdfdLength(sdfdSubtract(p, sdfBezierPoint(a, b, c, t))), lerp(radiusStart, radiusEnd, t));
+}
+
+SdfDual sdfSweep(SdfDual3 p, float3 a, float3 b, float3 c, float radiusStart, float radiusEnd, float bulge, float strands, float twist, float strandOffset) {
+    if (((bulge == 0.0) && (strandOffset == 0.0))) { return sdfSweepTubeGap(p, a, b, c, radiusStart, radiusEnd, sdfSweepParameter(p.v, a, b, c, radiusStart, radiusEnd)); }
+    return sdfSweepSearch(p, a, b, c, radiusStart, radiusEnd, bulge, strands, twist, strandOffset);
+}

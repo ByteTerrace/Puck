@@ -114,3 +114,71 @@ precise float sdfSuperellipsoid(float3 p, float3 radii, float3 inverseRadii, flo
     if (((2.0 < exponent) && (exponent <= 3.0))) { return (sdfClampSuperellipsoidNorm(norm, length(q), exponent) - minRadius); }
     return (norm - minRadius);
 }
+
+precise float3 sdfBezierPoint(float3 a, float3 b, float3 c, float t) {
+    return lerp(lerp(a, b, t), lerp(b, c, t), t);
+}
+
+precise float sdfSweepTubeGap(float3 p, float3 a, float3 b, float3 c, float radiusStart, float radiusEnd, float t) {
+    return (length((p - sdfBezierPoint(a, b, c, t))) - lerp(radiusStart, radiusEnd, t));
+}
+
+precise float3 sdfSweepNewton(float3 e, float3 u, float3 w, float k, float3 state) {
+    precise float t = state.x;
+    precise float3 d = (e + (((u * 2.0) + (w * t)) * t));
+    precise float3 v = ((u + (w * t)) * 2.0);
+    precise float l = max(length(d), 1.52587890625E-05);
+    precise float dv = dot(d, v);
+    precise float h = (dv - (k * l));
+    precise float slope = ((dot(v, v) + (2.0 * dot(d, w))) - (k * (dv / l)));
+    precise float low = ((h < 0.0) ? t : state.y);
+    precise float high = ((h < 0.0) ? state.z : t);
+    precise float newton = (t - (h / max(slope, 1.52587890625E-05)));
+    return float3(((((slope > 0.0) && (newton >= low)) && (newton <= high)) ? newton : (0.5 * (low + high))), low, high);
+}
+
+precise float sdfSweepParameter(float3 p, float3 a, float3 b, float3 c, float radiusStart, float radiusEnd) {
+    precise float3 e = (a - p);
+    precise float3 u = (b - a);
+    precise float3 w = ((a - (b * 2.0)) + c);
+    precise float k = (radiusEnd - radiusStart);
+    precise float ww = dot(w, w);
+    precise float uw = dot(u, w);
+    precise float discriminant = ((uw * uw) - ((ww * ((2.0 * dot(u, u)) + dot(e, w))) / 3.0));
+    bool curved = (ww > 1.52587890625E-05);
+    precise float inflection = (curved ? clamp(((-uw) / ww), 0.0, 1.0) : 0.5);
+    precise float root = sqrt(max(discriminant, 0.0));
+    bool split = (curved && (discriminant > 0.0));
+    precise float first = (split ? clamp((((-uw) - root) / ww), 0.0, 1.0) : inflection);
+    precise float second = (split ? clamp(((root - uw) / ww), 0.0, 1.0) : inflection);
+    precise float3 below0 = float3((0.5 * first), 0.0, first);
+    precise float3 above0 = float3((0.5 * (second + 1.0)), second, 1.0);
+    precise float3 below1 = sdfSweepNewton(e, u, w, k, below0);
+    precise float3 above1 = sdfSweepNewton(e, u, w, k, above0);
+    precise float3 below2 = sdfSweepNewton(e, u, w, k, below1);
+    precise float3 above2 = sdfSweepNewton(e, u, w, k, above1);
+    precise float3 below3 = sdfSweepNewton(e, u, w, k, below2);
+    precise float3 above3 = sdfSweepNewton(e, u, w, k, above2);
+    precise float3 below4 = sdfSweepNewton(e, u, w, k, below3);
+    precise float3 above4 = sdfSweepNewton(e, u, w, k, above3);
+    precise float3 below5 = sdfSweepNewton(e, u, w, k, below4);
+    precise float3 above5 = sdfSweepNewton(e, u, w, k, above4);
+    precise float3 below6 = sdfSweepNewton(e, u, w, k, below5);
+    precise float3 above6 = sdfSweepNewton(e, u, w, k, above5);
+    precise float belowT = below6.x;
+    precise float aboveT = above6.x;
+    precise float startGap = sdfSweepTubeGap(p, a, b, c, radiusStart, radiusEnd, 0.0);
+    precise float endGap = sdfSweepTubeGap(p, a, b, c, radiusStart, radiusEnd, 1.0);
+    precise float belowGap = sdfSweepTubeGap(p, a, b, c, radiusStart, radiusEnd, belowT);
+    precise float aboveGap = sdfSweepTubeGap(p, a, b, c, radiusStart, radiusEnd, aboveT);
+    precise float endsT = ((endGap < startGap) ? 1.0 : 0.0);
+    precise float endsGap = min(startGap, endGap);
+    precise float nearT = ((belowGap < endsGap) ? belowT : endsT);
+    precise float nearGap = min(endsGap, belowGap);
+    return ((aboveGap < nearGap) ? aboveT : nearT);
+}
+
+precise float sdfSweep(float3 p, float3 a, float3 b, float3 c, float radiusStart, float radiusEnd, float bulge, float strands, float twist, float strandOffset) {
+    if (((bulge == 0.0) && (strandOffset == 0.0))) { return sdfSweepTubeGap(p, a, b, c, radiusStart, radiusEnd, sdfSweepParameter(p, a, b, c, radiusStart, radiusEnd)); }
+    return sdfSweepSearch(p, a, b, c, radiusStart, radiusEnd, bulge, strands, twist, strandOffset);
+}

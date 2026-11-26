@@ -148,9 +148,13 @@ itself and lowers each formula to a fixed-point method of `SdfFieldEvaluator` (`
 its HLSL swizzle, so renaming or dropping it changes both readers. A shape whose `Formula` is null is a target
 escape: its `Shader` and `ShapePoint` facets name hand-written readers, and PUCKFIELD003 refuses an entry whose
 `ShapePoint` says `Formula` without one, or names an escape beside one. The escapes are the side-table and
-texture shapes (`ConvexPolygon`, `Path`, `Sweep`, `Glyph`, `SampledRegion`), the GPU-only star polygon
-(`RegularPolygon`, `Star`), and one per-target primitive inside a formula: the ellipse's bisected projection root
-(`SdfEllipse2D`, `sdfEllipse2D` in `field/sdf-ellipse.hlsli`), which needs a loop. Interval enclosures stay
+texture shapes (`ConvexPolygon`, `Path`, `Glyph`, `SampledRegion`), the GPU-only star polygon
+(`RegularPolygon`, `Star`), and two per-target primitives inside a formula, each needing a loop: the ellipse's
+bisected projection root (`SdfEllipse2D`, `sdfEllipse2D` in `field/sdf-ellipse.hlsli`) and a bulging or orbiting
+sweep's search (`SdfSweepSearch`, `sdfSweepSearch` in `field/sdf-shapes.hlsli`). The sweep itself is a formula
+(`SdfFieldFormulas.Sweep`) whose operands read its side table (`SweepA(instruction)`, `sdfSweepA(data0)`); its
+tapering tube's parameter is detached (`SdfFormulaOp.Detach`), so the dual readers take the gap's gradient at it
+by the envelope theorem rather than differentiating its Newton steps. Interval enclosures stay
 hand-written facets. What generation cannot show is whether float and Q48.16 agree near a rounding tie, or
 whether a formula's Lipschitz claim or enclosure is sound; `SdfFieldDeviceLawTests`' shape-formula leg reads
 every formula on both backends.
