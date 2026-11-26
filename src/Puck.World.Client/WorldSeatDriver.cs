@@ -215,6 +215,9 @@ public sealed class WorldSeatDriver {
     public ulong AuthoritySpan => m_authoritySpan;
     /// <summary>Gets the client ticks the chapter steered from a predicted body.</summary>
     public ulong PredictedTicks => m_predictedTicks;
+    /// <summary>Gets the client ticks the chapter met portal glass its step did not aim at on the body's way and braked or
+    /// turned for it.</summary>
+    public int DoorsAvoided { get; private set; }
     /// <summary>Gets the control lines the seat's ingress refused.</summary>
     public int Refused => m_lines.Count(predicate: static outcome => outcome() is "refused" or "faulted");
     /// <summary>Gets the control lines submitted.</summary>
@@ -245,6 +248,7 @@ public sealed class WorldSeatDriver {
         m_chargedTicks = 0UL;
         m_authoritySpan = 0UL;
         m_predictedTicks = 0UL;
+        DoorsAvoided = 0;
         m_lastBodyAuthority = null;
         m_lastBodyTick = 0UL;
         m_noBody = false;
@@ -390,7 +394,10 @@ public sealed class WorldSeatDriver {
 
         // A remote seat steers from where it predicts its body, as a player steers the body they see; walls, the corridor
         // and the chapter's clock were judged above from what the authority delivered.
-        var steered = m_senses.Predict(reading: in read, slot: m_slot);
+        // A crossing walks straight on its heading and judges its arrival by the metres the body has walked, a judgement
+        // like the wall and the clock: it reads the delivered body, which a prediction running ahead of a slow delivery
+        // would count metres for before the authority walked them.
+        var steered = ((m_chapter.Steps[m_step] is WorldRouteStep.Cross) ? read : m_senses.Predict(reading: in read, slot: m_slot));
 
         m_delivered = read;
         if (steered.Predicted) {
@@ -933,10 +940,11 @@ public sealed class WorldSeatDriver {
         m_crossBodyTick = read.Body.Tick;
         m_lastPosition = read.Position;
 
-        var crossLagTicks = Math.Clamp(value: Math.Max(val1: 10UL, val2: m_senses.MoveLagTicks(slot: m_slot, bodyTick: read.Body.Tick)), min: 10UL, max: 20UL);
+        // The metres a remote body walks before a control sent now reaches it: its speed over the longest lag met lately
+        // (ControlLag), never less than a third of a second's.
         var inFlight = (read.SteersLocally
             ? FixedQ4816.Zero
-            : (read.PlanarSpeed * FixedQ4816.FromDouble(value: ((double)crossLagTicks / rateHz))));
+            : (read.PlanarSpeed * FixedQ4816.Max(x: ControlLag(read: in read).Peak, y: FixedQ4816.FromDouble(value: (10.0 / rateHz)))));
         var targetMetres = FixedQ4816.FromDouble(value: cross.Metres);
 
         if (cross.Until is null) {
@@ -1257,18 +1265,22 @@ public sealed class WorldSeatDriver {
             stop = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 1.5), y: remaining);
         }
 
-        return still with {
-            Moves = true,
-            Dx = moveDx,
-            Dz = moveDz,
-            Stop = stop,
-            CornerDistance = (final ? FixedQ4816.MaxValue : distance),
-            CornerTurn = turn,
-            Faces = true,
-            Facing = facing,
-            Pace = go.Pace,
-            HoldWalk = ((m_corner == 0) && (m_firstReach < reach)),
-        };
+        return AvoidUnaimedDoors(
+            read: in read,
+            steer: still with {
+                Moves = true,
+                Dx = moveDx,
+                Dz = moveDz,
+                Stop = stop,
+                CornerDistance = (final ? FixedQ4816.MaxValue : distance),
+                CornerTurn = turn,
+                Faces = true,
+                Facing = facing,
+                Pace = go.Pace,
+                HoldWalk = ((m_corner == 0) && (m_firstReach < reach)),
+            },
+            target: distance
+        );
     }
 
     private (bool HoldsPartySync, bool HoldsChapterEnd) HoldsAfterGo() {
@@ -1543,6 +1555,13 @@ public sealed class WorldSeatDriver {
             walker: m_senses.Walker(reading: in read)
         );
 
+        if (!plan.Found && !read.Endpoint.Mirror.Facts(index: read.Index).HasFlag(flag: Puck.Physics.Motion.BodyFacts.Grounded)) {
+            // A body in the air (thrown up by a contact, falling off a ledge) stands on no cell a path starts from; a
+            // player waits for it to land, so the step plans again from the next delivery, within the chapter's time.
+            m_plannedIn = null;
+            m_checkCorridor = false;
+            return false;
+        }
         if (!plan.Found) {
             Fail(kind: "route", place: read.Place, reason: $"no route from ({Metres(read.Position.X)}, {Metres(read.Position.Y)}, {Metres(read.Position.Z)}) to {(go.Place ?? Vector(go.Point))} over the document {read.World} delivered: {plan.Refusal}", tick: tick);
             return false;
@@ -1840,6 +1859,83 @@ public sealed class WorldSeatDriver {
         }
 
         return allowed;
+    }
+
+    // Keeps a walk off portal glass its step does not aim at, as a player who sees a painting ahead does not walk into
+    // it: a path never routes through a door (navigation bakes the wall behind it), so glass met on a walk is an
+    // overshoot the lag carried the body into. The body's way is swept from where the seat steers from, along the way it
+    // is moving, as far as it travels before a control sent now has stopped it: the round trip (twice the longest lag met
+    // lately, since a burst may double it) at its speed, its braking distance at the program's brake, and a margin. Glass
+    // met on that way is a point to stop short of, so the speed the step allows brakes for it; glass nearer than the
+    // corner steered at also turns the stick off it (its part into the glass taken out, a push back out of the face added
+    // as the glass nears), since the body would reach the glass before it turns. Every value is fixed point over the
+    // reading, so the same reading steers the same way.
+    private Steer AvoidUnaimedDoors(in WorldSeatSenses.Reading read, Steer steer, FixedQ4816 target) {
+        var doors = m_senses.PortalDoors(endpoint: read.Endpoint);
+
+        if (doors.Count == 0) {
+            return steer;
+        }
+
+        var scale = FixedQ4816.Max(x: FixedQ4816.FromDouble(value: 0.05), y: m_senses.BodyScale(reading: in read));
+        var body = read.Body;
+        var velocity = ((read.Predicted && (body.StepSeconds > 0f)) ? ((body.Position - body.PreviousPosition) / body.StepSeconds) : body.Velocity);
+        var vx = FixedQ4816.FromDouble(value: velocity.X);
+        var vz = FixedQ4816.FromDouble(value: velocity.Z);
+        var speed = FixedQ4816.Sqrt(value: ((vx * vx) + (vz * vz)));
+        var (ux, uz) = ((speed > (FixedQ4816.FromDouble(value: 0.05) * scale)) ? ((vx / speed), (vz / speed)) : (steer.Dx, steer.Dz));
+        var brake = FixedQ4816.FromInteger(value: 30);
+
+        foreach (var operation in m_program.Operations) {
+            if (operation is WorldSeatProgramOp.Move move) {
+                brake = FixedQ4816.FromDouble(value: Math.Max(val1: move.Brake, val2: 0.1));
+                break;
+            }
+        }
+
+        var lag = (read.SteersLocally ? FixedQ4816.Zero : ControlLag(read: in read).Peak);
+        var margin = (FixedQ4816.FromDouble(value: 0.35) * scale);
+        var reach = ((speed * (lag * FixedQ4816.FromInteger(value: 2))) + ((speed * speed) / (FixedQ4816.FromInteger(value: 2) * brake)) + margin);
+        var from = read.Position;
+        var to = new FixedVector3(X: (from.X + (ux * reach)), Y: (from.Y - (FixedQ4816.FromDouble(value: 0.25) * scale)), Z: (from.Z + (uz * reach)));
+        var nearest = FixedQ4816.MaxValue;
+        var normal = default(FixedVector3);
+
+        foreach (var door in doors) {
+            var crossing = WorldFaceRegion.Sweep(aperture: door.Aperture, from: from, to: to);
+
+            if (crossing.Crossed && ((reach * crossing.Parameter) < nearest) && (door.Aperture is WorldFaceAperture.Box box)) {
+                nearest = (reach * crossing.Parameter);
+                normal = box.Frame.Normal;
+            }
+        }
+        if (nearest == FixedQ4816.MaxValue) {
+            return steer;
+        }
+
+        DoorsAvoided++;
+
+        // A corner short of the glass (a crossing's start point stands just before its door) is still reached: the
+        // glass only keeps the body from braking later than it can stop before it.
+        if (target < nearest) {
+            return steer with { Stop = FixedQ4816.Min(x: steer.Stop, y: FixedQ4816.Max(x: target, y: (nearest - margin))) };
+        }
+
+        var stop = FixedQ4816.Min(x: steer.Stop, y: FixedQ4816.Max(x: FixedQ4816.Zero, y: (nearest - margin)));
+
+        var planarNormal = FixedQ4816.Sqrt(value: ((normal.X * normal.X) + (normal.Z * normal.Z)));
+        var (nx, nz) = ((planarNormal > FixedQ4816.FromDouble(value: 0.001)) ? ((normal.X / planarNormal), (normal.Z / planarNormal)) : (-ux, -uz));
+        var into = ((steer.Dx * nx) + (steer.Dz * nz));
+        var push = FixedQ4816.Clamp(value: (FixedQ4816.One - (nearest / reach)), minimum: FixedQ4816.Zero, maximum: FixedQ4816.One);
+        var dx = (steer.Dx - (nx * FixedQ4816.Min(x: into, y: FixedQ4816.Zero)) + (nx * push));
+        var dz = (steer.Dz - (nz * FixedQ4816.Min(x: into, y: FixedQ4816.Zero)) + (nz * push));
+        var length = FixedQ4816.Sqrt(value: ((dx * dx) + (dz * dz)));
+
+        return steer with {
+            Dx = ((length > FixedQ4816.FromDouble(value: 0.001)) ? (dx / length) : nx),
+            Dz = ((length > FixedQ4816.FromDouble(value: 0.001)) ? (dz / length) : nz),
+            Stop = stop,
+        };
     }
 
     private Func<string> Submit(string text) {

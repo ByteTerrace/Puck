@@ -884,6 +884,7 @@ structural answer comes before tuning.
 | A network thread never reads a tick in flight | `WorldServer.Definition` throws outside its boundary; a connection reads `WorldServer.AdmissionPolicy` and `DeclaredEndpoint`, which every install publishes | Throws, and the connection narrates the fault |
 | A remote event is applied or its stream restarts | The federated door's refusal branch | Has no path past the reset |
 | A span closed for a loss is shown at most its lease | One caller closes for a loss | Is not asked |
+| A presentation stream's projection is the one a whole composition makes, however it is delivered | `WorldProjectionFeed`'s value composition is the only incremental path: it runs while the frame identity, the audience key, the arena, the row layout and every row a document value references (with the rows its policies read) stand, reads every row the journal names as moved, and asks the hidden-clock and binding refusals again on a policy move; `WorldProjectionFeed.Verify` composes whole and compares | Composes whole, once |
 
 Three hold by review only, and the build names each in the code it touches. A
 new member of the machine host whose recorder half forwards without recording
