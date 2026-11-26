@@ -121,13 +121,17 @@ public sealed class LeasedAdmissionLawTests : IDisposable {
     [InlineData("WindowedWorld.cold", HostStartKind.WindowedWorld, null, StoreWarmth.Cold)]
     [InlineData("WindowedWorld.directx.cold", HostStartKind.WindowedWorld, "directx", StoreWarmth.Cold)]
     [InlineData("HeavySuite", HostStartKind.HeavySuite, null, StoreWarmth.Warm)]
+    [InlineData("WindowedWorld@debug", HostStartKind.WindowedWorld, null, StoreWarmth.Warm, "debug")]
+    [InlineData("WindowedWorld.vulkan.cold@games-klondike", HostStartKind.WindowedWorld, "vulkan", StoreWarmth.Cold, "games-klondike")]
     [Theory]
-    public void AProfileNameRoundTripsAndOnlyAWindowedWorldKeepsItsDeviceAndStore(string name, HostStartKind kind, string? device, StoreWarmth store) {
+    public void AProfileNameRoundTripsAndOnlyAWindowedWorldKeepsItsDeviceStoreAndDocument(string name, HostStartKind kind, string? device, StoreWarmth store, string? document = null) {
         Assert.True(HostStartProfile.TryParse(name, out var parsed));
-        Assert.Equal(new HostStartProfile(kind, device, store), parsed);
+        Assert.Equal(new HostStartProfile(kind, device, store, document), parsed);
         Assert.Equal(name, parsed.Name);
-        // The other kinds measure neither dimension, so a start that names them is the same profile.
-        Assert.Equal(new HostStartProfile(HostStartKind.HeavySuite).Name, new HostStartProfile(HostStartKind.HeavySuite, "vulkan", StoreWarmth.Cold).Name);
+        // The other kinds measure none of these dimensions, so a start that names them is the same profile.
+        Assert.Equal(new HostStartProfile(HostStartKind.HeavySuite).Name, new HostStartProfile(HostStartKind.HeavySuite, "vulkan", StoreWarmth.Cold, "debug").Name);
+        // A document name keeps to one file name: lower case, and a directory or any other character written as a dash.
+        Assert.Equal("WindowedWorld@games-klondike", new HostStartProfile(HostStartKind.WindowedWorld, Document: "Games/Klondike").Name);
     }
     [InlineData("")]
     [InlineData("Nonsense")]
@@ -135,6 +139,10 @@ public sealed class LeasedAdmissionLawTests : IDisposable {
     [InlineData("WindowedWorld.cold.vulkan")]
     [InlineData("WindowedWorld.a.b")]
     [InlineData("WindowedWorld.VULKAN")]
+    [InlineData("WindowedWorld@")]
+    [InlineData("WindowedWorld@Debug")]
+    [InlineData("WindowedWorld@a.b")]
+    [InlineData("HeavySuite@debug")]
     [Theory]
     public void AnUnrecognizedProfileNameIsRefused(string name) => Assert.False(HostStartProfile.TryParse(name, out _));
 

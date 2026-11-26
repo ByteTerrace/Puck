@@ -457,6 +457,8 @@ public static partial class BenchmarkCommand {
                 StateDirectory = Path.Combine(directory, "state"),
                 Timing = true,
                 World = (pair?.Document ?? world),
+                // The staged pair is a delta over the world, named for this run alone; its peak is the world's.
+                AdmissionWorld = world,
             };
 
             if (!SweepWorld.TryBoot(request, directory, BootTimeout, budget, out var session, out var bootError)) {
