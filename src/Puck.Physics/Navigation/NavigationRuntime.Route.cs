@@ -52,6 +52,9 @@ public sealed partial class NavigationRuntime {
     private readonly int[] m_offsets;
     private readonly bool[] m_joined;
     private readonly Dictionary<int, List<int>> m_junctions = [];
+    // Counts the writes of the junction table, each of which Link makes, so a reader that keeps a snapshot of it
+    // (FrozenJunctions) knows when the table has moved.
+    private long m_junctionRevision;
 
     // One A* search's working arrays over a node space: the cross-domain route search's (one per runtime) and a domain's
     // own path search's (rented per search, so searches on several threads each hold their own). A search's answer
@@ -400,6 +403,7 @@ public sealed partial class NavigationRuntime {
         var at = list.BinarySearch(item: to);
 
         list.Insert(index: ((at < 0) ? ~at : at), item: to);
+        m_junctionRevision++;
     }
     // A non-negative fixed-point length in whole millimetres, rounded down.
     private static int Millimetres(FixedQ4816 value) => checked((int)((value.Value * 1000L) >> 16));

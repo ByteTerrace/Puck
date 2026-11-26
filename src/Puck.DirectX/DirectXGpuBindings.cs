@@ -26,6 +26,10 @@ namespace Puck.DirectX;
 public sealed unsafe class DirectXGpuBindings(DirectXDeviceContext deviceContext) : IGpuBindings {
     /// <inheritdoc/>
     public ulong MaxConstantBufferBytes => GpuDeviceCapabilities.DirectXConstantBufferBytes;
+    /// <inheritdoc/>
+    /// <remarks>A raw or structured view counts its elements in a <c>UINT</c>, so Direct3D 12 states no limit narrower
+    /// than the most a region's uint words address.</remarks>
+    public ulong MaxStorageBufferBytes => uint.MaxValue;
 
     private const nint LinearSampler = 1;
     private const nint NearestSampler = 2;

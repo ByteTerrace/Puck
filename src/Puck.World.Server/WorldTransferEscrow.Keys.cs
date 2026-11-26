@@ -98,6 +98,7 @@ public sealed partial class WorldTransferEscrow {
                 committed: false,
                 key: key
             );
+            ReclaimGuest(sourceAuthority: key.SourceAuthority);
         }
     }
     // Answers Missing for a key that holds nothing live, first making its death durable: a key below its source's floor
@@ -191,12 +192,14 @@ public sealed partial class WorldTransferEscrow {
             m_server.Population.BurnGeneration(index: slot);
         }
     }
-    // A durable death, live or redone: admitted when its record was sent, so it enters without the bounds.
+    // A durable death, live or redone: admitted when its record was sent, so it enters without the bounds. A guest's
+    // session that holds nothing live keeps no row, a dead key's included.
     private void ApplyDurableDeath(WorldTransferKey key) {
         EnterRow(key: key);
         m_spent[key] = new SpentKey(
             Committed: false,
             Durable: true
         );
+        ReclaimGuest(sourceAuthority: key.SourceAuthority);
     }
 }

@@ -5,10 +5,11 @@ namespace Puck.World.Server;
 /// <summary>The world's live orbits (<see cref="WorldGravityOrbit"/>): each tick it places every orbit at its closed
 /// form for the end of the step and moves the body that rides it there.</summary>
 /// <remarks>
-/// <para>The invariant is that an orbit's position is a function of the engine tick, its compiled elements and its
-/// focus alone. This type holds no state a checkpoint would need: a position is computed from the tick each step, and
-/// whether a body rides is read from its state row each step, so a restored world, a replayed one and one that
-/// skipped ticks all place an orbit where the closed form stands.</para>
+/// <para>The invariant is that an orbit's position is a function of its clock, its compiled elements and its focus
+/// alone, where the clock is the engine tick or, for an orbit that names one, a state row's value at that tick
+/// (<see cref="WorldGravityOrbit.PhaseBy"/>). This type holds no state a checkpoint would need: a position is
+/// computed from the clock each step, and whether a body rides is read from its state row each step, so a restored
+/// world, a replayed one and one that skipped ticks all place an orbit where the closed form stands.</para>
 /// <para>Orbits are placed in authored order. A focus attached to a body reads that body's pose as it stands, so an
 /// orbit about a body riding another orbit is authored after it.</para>
 /// <para>A riding body is moved as continuous motion (<see cref="WorldBody.Glide"/>), so solids, gravity areas and
@@ -34,6 +35,28 @@ public sealed class WorldOrbitField {
         ) ||
         (raw is not { } value) ||
         (value != 0L)
+    );
+
+    // Where an orbit stands, relative to its focus, as of an engine tick: at its clock row's value then, or at the
+    // tick's own phase for an orbit that names no row or whose row does not read.
+    private static FixedVector3 OffsetOf(in FixedWorldGravityOrbit orbit, WorldDefinition definition, ulong tick, ulong engineTick) => (
+        (
+            (orbit.PhaseRow is { } row) &&
+            WorldStateReader.TryRead(
+                definition: definition,
+                engineTick: engineTick,
+                key: null,
+                rawValue: out var raw,
+                row: out var read,
+                rowName: row,
+                text: out _,
+                tick: tick
+            ) &&
+            (read.Kind == Puck.State.CellKind.Fixed) &&
+            (raw is { } value)
+        )
+        ? orbit.OffsetAt(clock: FixedQ4816.FromRawBits(value: value))
+        : orbit.OffsetAt(engineTick: engineTick)
     );
 
     /// <summary>Places every orbit for the step that ends at <paramref name="engineTick"/> plus
@@ -65,7 +88,7 @@ public sealed class WorldOrbitField {
                 continue;
             }
 
-            var offset = orbit.OffsetAt(engineTick: (engineTick + stepTicks));
+            var offset = OffsetOf(definition: definition, engineTick: (engineTick + stepTicks), orbit: in orbit, tick: tick);
             var target = (center + offset);
 
             evaluations++;
@@ -85,7 +108,7 @@ public sealed class WorldOrbitField {
             if (orbit.JoinSpeed > FixedQ4816.Zero) {
                 // What is left once the orbit's own motion over this step is taken out is how far the body stands
                 // off the rails; it closes that by at most one step of the join speed.
-                var carried = (body.FixedPosition + (offset - orbit.OffsetAt(engineTick: engineTick)));
+                var carried = (body.FixedPosition + (offset - OffsetOf(definition: definition, engineTick: engineTick, orbit: in orbit, tick: tick)));
                 var gap = (target - carried);
                 var reach = FixedTickConversion.ShareOfStep(perSecond: orbit.JoinSpeed, stepTicks: stepTicks);
 

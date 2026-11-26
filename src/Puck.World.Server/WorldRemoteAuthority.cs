@@ -185,6 +185,10 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     private readonly WorldFederatedServerLink m_link;
     private readonly string m_observerAuthority;
     private readonly Action<WorldAuthorityRouteDescription>? m_routeChanged;
+    // Told once, from whichever thread reads the refusal, when the destination answers that this route's traveler
+    // ended there for good (WorldFederationRefusal.SessionEnded). The route stops observing from then on.
+    private readonly Action? m_routeEnded;
+    private int m_ended;
     private readonly IAuthenticator m_security;
     private readonly WorldPeerNetwork m_network;
     private readonly WorldRemoteAuthority? m_submissionAuthority;
@@ -216,8 +220,9 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     private readonly WorldOutputHub m_outbox;
     private readonly Action<byte>? m_deliverObservedRoute;
 
-    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, string expectedAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default, WorldPeerNetwork? network = null, WorldOutputHub? narrationHub = null, WorldLinkBoundary? boundary = null) {
+    public WorldRemoteAuthority(string endpoint, WorldDefinition placeholder, IAuthenticator security, string observerAuthority, string expectedAuthority, WorldRemoteAuthority? submissionAuthority = null, WorldRemoteRouteCredential? submissionCredential = null, WorldAuthorityRouteDescription? initialRoute = null, Action<WorldAuthorityRouteDescription>? routeChanged = null, CancellationToken applicationStopping = default, WorldPeerNetwork? network = null, WorldOutputHub? narrationHub = null, WorldLinkBoundary? boundary = null, Action? routeEnded = null) {
         if (string.IsNullOrWhiteSpace(value: expectedAuthority)) { throw new ArgumentException(message: "an outbound authority requires its intended namespace", paramName: nameof(expectedAuthority)); }
+        m_routeEnded = routeEnded;
         m_narrationHub = (narrationHub ?? submissionAuthority?.m_narrationHub);
         m_outbox = new WorldOutputHub { Boundary = (boundary ?? submissionAuthority?.m_outbox.Boundary) };
         if (!PeerEndpoint.TryParse(
@@ -746,6 +751,10 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                             );
                         }
                     }
+                    // A refusal frame's text opens with its refusal's name. This one is terminal for the traveler.
+                    if (m_submissionCredential.HasValue && frame.Body.Span.StartsWith(value: SessionEndedPrefix) && (Interlocked.Exchange(location1: ref m_ended, value: 1) == 0)) {
+                        m_routeEnded?.Invoke();
+                    }
                     return false;
                 case WorldFederationResponse.Route:
                     if (
@@ -923,10 +932,12 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     // Reconnect the same held lease until its owner releases it. Each session is a stream of its own: when one ends,
     // by a lost connection, an invalidation or the lease's release, the span it held closes, so the reader shows
     // nothing of it while disconnected, and the authored unavailable policy remains the crossing-side safety net.
+    private static ReadOnlySpan<byte> SessionEndedPrefix => "SessionEnded:"u8;
+
     private async Task ObserveUntilCancelledAsync(WorldSinkRoute sink, CancellationToken ct) {
         var observed = new ObservedStream();
 
-        while (!ct.IsCancellationRequested) {
+        while (!ct.IsCancellationRequested && (Volatile.Read(location: ref m_ended) == 0)) {
             // The same gate every lane applies: an observer session authenticates too, and a run holding no signing
             // identity would otherwise reconnect and be refused four times a second for the rest of the run. Tested
             // per session, not once, because an authenticator that verifies but cannot prove is only discovered by

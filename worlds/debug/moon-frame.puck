@@ -1,10 +1,13 @@
-// Where the moon stands against the debug world, shared by both worlds' documents: the moon's own (moon.puck) and
-// everything in the debug world that shows it or leads to it (sky.puck's view of it, the seam the ship crosses). A
-// library: it emits no document.
+// The debug world's small system, shared by its worlds' documents: where the moon stands against the debug world
+// (moon.puck, and everything in the debug world that shows it or leads to it), and the sun all of them see, which is
+// a place of its own (sun.puck). A library: it emits no document.
 //
 // The two worlds' axes are the same and their origins differ by `moonCentre`: a point at `p` in the moon's world is the
 // point `p + moonCentre` of the debug world. One relation places the moon's image in the valley's sky, the valley's
 // image in the moon's, and both sides of the seam, so what a traveller sees ahead is where the crossing puts it.
+
+import "../standard/skies"
+import "../standard/stars"
 
 // The moon's centre in the debug world's coordinates: about 5 km from the valley floor, 55 degrees up toward the
 // north-east, over the lowest of the caldera's walls.
@@ -38,39 +41,54 @@ let moonHold = (centresApart / (1 + squareRoot(planetMass / moonMass)))
 let skySeamAltitude = (moonCentre[1] - ((moonHold * (moonCentre[1] + planetRadius)) / centresApart))
 let skySeamSpan = 20000
 
-// The sun: where it stands in the frame the two worlds share, its mass as a pull at a radius, and how fast its light and
-// its pull cross the system. Each world reads the sun's rows that long after the sun wrote them (sun.puck, a followed
-// row's `delaySeconds`), so the moon, the nearer of the two, meets a change first.
-let sunCentre = [-9000, 12000, 0]
-let sunGravity = 30
-let sunRadius = 1500
+// One sun lights every world of the system, since they share a frame: the day all of them run, so the moon's lit side
+// in the valley's sky is the side the valley's sun is on, its phase tells the hour, and a ship crossing the seam keeps
+// its light. The debug world owns the day; the moon's and the sun's `day` rows follow it (moon.puck, sun.puck), from
+// the same start at the same rate.
+let sharedDaySeconds = 1440
+let sharedDayStart = 10
+let sharedNoonElevation = 46
+let sharedSunHeading = 37
+
+// The sun: a small star that circles the double planet once a day, `sunStar.distance` metres from the valley floor.
+// The day is that orbit: every world of the system places the star where the shared `day` clock puts it on `sunTurn`,
+// about the valley floor's place in its own coordinates, and lights itself from there (day.puck, moon.puck). The
+// star's own world (sun.puck) rides a body on the same turn, so the sun in the valley's sky is the place a traveller
+// stands beside.
+let sunStar = star(radius: 140, distance: 15000, pull: 30)
+let sunTurn = dayTurn(clock: "day", distance: sunStar.distance, heading: sharedSunHeading, noonElevation: sharedNoonElevation)
+
+// How fast the sun's light and its pull cross the system. Each world reads the sun's rows that long after the sun
+// wrote them (sun.puck, a followed row's `delaySeconds`), from where the sun stands at the day's start, so the moon,
+// then the nearer of the two, meets a change first.
 let influenceSpeed = 2500
-let sunToPlanet = squareRoot(
-  ((sunCentre[0] * sunCentre[0]) + (sunCentre[1] * sunCentre[1])) + (sunCentre[2] * sunCentre[2])
-)
+let sunAtStart = map(sunDirection(sharedDayStart, sharedSunHeading, sharedNoonElevation), axis => axis * sunStar.distance)
+let sunToPlanet = sunStar.distance
 let sunToMoon = squareRoot(
-  (((sunCentre[0] - moonCentre[0]) * (sunCentre[0] - moonCentre[0])) +
-    ((sunCentre[1] - moonCentre[1]) * (sunCentre[1] - moonCentre[1]))) +
-    ((sunCentre[2] - moonCentre[2]) * (sunCentre[2] - moonCentre[2]))
+  (((sunAtStart[0] - moonCentre[0]) * (sunAtStart[0] - moonCentre[0])) +
+    ((sunAtStart[1] - moonCentre[1]) * (sunAtStart[1] - moonCentre[1]))) +
+    ((sunAtStart[2] - moonCentre[2]) * (sunAtStart[2] - moonCentre[2]))
 )
 // The delays, rounded to a thirtieth of a second so each is a whole number of both worlds' ticks.
 let sunDelayPlanet = (round((sunToPlanet / influenceSpeed) * 30) / 30)
 let sunDelayMoon = (round((sunToMoon / influenceSpeed) * 30) / 30)
+
+// The sun's own world (sun.puck) is centred on an outpost the star passes once a day: a rock `sunPassGap` metres
+// inside the star's path, where the star stands at `sunPassHour`. `sunOutpost` is that rock in the debug world's
+// coordinates, and `sunSystemCentre` the valley floor in the sun's.
+let sunPassHour = 15
+let sunPassGap = 520
+let sunOutpost = map(
+  sunDirection(sunPassHour, sharedSunHeading, sharedNoonElevation),
+  axis => axis * (sunStar.distance - sunPassGap)
+)
+let sunSystemCentre = map(sunOutpost, axis => 0 - axis)
 
 // The launch field's pad on the valley floor (launch.puck), where the trip starts and ends: its centre over the ground,
 // the height of its top, and the heading the ship on it faces.
 let launchPad = [84, 86]
 let launchPadTop = 0.35
 let launchHeading = 220
-
-// One sun lights both worlds, since they share a frame: the day both run (day.puck's cycle and the moon's own light),
-// so the moon's lit side in the valley's sky is the side the valley's sun is on, its phase tells the hour, and a ship
-// crossing the seam keeps its light. The debug world owns the day; the moon's `day` row follows it (moon.puck), from the
-// same start at the same rate.
-let sharedDaySeconds = 1440
-let sharedDayStart = 10
-let sharedNoonElevation = 46
-let sharedSunHeading = 37
 
 // Space as both worlds draw it, so the sky is the same on either side of the seam: a near-black void and its stars.
 let spaceColor = "#02030A"

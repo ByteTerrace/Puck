@@ -594,7 +594,8 @@ held, promised and room.
 | The probe cache's blocks and the volume's slot words | Play | Native storage freed through the volume's reader epochs; the blocks a cached owner in bytes (`sdf.mesh-gi.probe-blocks`), trimmed first, read again on the frame thread (`MemoryAccount.ServiceSampledOwners`), the words an elastic owner (`sdf.mesh-gi.volume`) | 9 |
 | The composed-document store | Play | Released after boot where nothing reads it | 6 |
 | Speculative work: bakes, loads and decodes for a predicted demand | As the work it speculates | A share of the workspace class, cancelled when the demand leaves or pressure asks | 3, 10 |
-| Rented arrays the shared pool keeps | Play | `RentedArrays` limits shared buckets by payload size. All element types share one retention limit for larger reference-free arrays. The cache admits each returned array against host room and releases its charge on reuse or trim. | 2, 11 |
+| Rented arrays the shared pool keeps | Play | `RentedArrays` limits shared buckets by payload size. All element types share one retention limit for larger reference-free arrays. The cache admits each returned array against host room and releases its charge on reuse or trim. Owned buffers, lists and maps no longer rent from it: they are native (`OwnedBuffer<T>`), and its large pool goes once its last renters hold their scratch that way | 2, 11 |
+| A world's far product (`far-product` while it is derived; a library mesh once kept) | Authoring for the derivation, play for the product | The derivation's tables are native under one workspace owner, and a refusal waits and asks again; the product is a mesh the library published from its store, whose planes are let go while nothing draws it | 6, 11 |
 | Native allocator slack | Beyond the owners | Named. The allocator's owner thread decommits freed ranges whose purge delay has passed every `MimallocAllocator.PurgePeriod`, and pages past a slice commit as their blocks are used; `host.memory collect` and a reclaim force the rest (`IAllocatorStatistics.Collect`) | 2 |
 | The managed heap's other tenants | Beyond the owners | Named by a heap walk; each one past a stated size becomes an owner with a capacity. No hard limit on the heap: it would turn pressure into an exception where everything else turns it into a coarser picture | 2, then per tenant |
 | Runtime code and loader heaps | Beyond the owners | Named; not controllable at run time | 2 |
@@ -2892,7 +2893,7 @@ the device's one retirement for released residencies (`GpuDeviceRetirement`,
 on `GpuRetirementQueue`). Direct3D 12 has a mapped destination
 (`IGpuMappedBuffer`, `DirectXGpuMappedBuffer`, created through
 `IGpuBufferFactory.TryCreateMapped` at reserved resources tier 2 or above): one
-reserved buffer of `GpuRegion.MaxByteCount` whose 1 MiB chunks map to tile runs
+reserved buffer of the region's `GpuRegion.MostBytes` whose 1 MiB chunks map to tile runs
 of the heap arena's tile-only heaps (`DirectXHeapArena.PlaceTiles`), each run
 admitted and counted like any heap range. A `GpuRegion` created `mapped` grows
 by mapping chunks and shrinks by unmapping them, with no carry and no
@@ -2905,13 +2906,17 @@ pages. On Vulkan a device with a sparse-capable queue enables both sparse
 buffer features (`VulkanLogicalDeviceFactory.FeatureIndicesOf`), and its
 mapped destination is a sparse buffer (`VulkanGpuMappedBuffer`) whose 1 MiB
 chunks bind page runs of the arena's page blocks
-(`VulkanMemoryArena.PlacePages`) through `VulkanLogicalDevice.BindSparse`; a
-chunk's pages and the buffer itself are released only through the arena's
-sparse retirement (`VulkanMemoryArena.RetireSparse`), behind the device
-timeline's value for the bind that let them go. It is built from the
-specification and the design below and has not run on hardware: its first
-windowed boot is the lead's, and `--withhold-gpu mapped-buffers` runs the
-contiguous path on the same device for the comparison. The 4070 readings
+(`VulkanMemoryArena.PlacePages`) through `VulkanLogicalDevice.QueueSparse`,
+which the queue's door issues before anything it hands over; a chunk's pages and
+the buffer itself are released only through the arena's sparse retirement
+(`VulkanMemoryArena.RetireSparse`), behind the device timeline's value for the
+bind that let them go. Every region is held to the storage view a kernel can
+size (`GpuRegion.MostBytes`, from `IGpuBindings.MaxStorageBufferBytes`): on the
+RTX 4070 NVIDIA's Vulkan driver reports a `maxStorageBufferRange` of 2^32 - 1
+but answers `GetDimensions` with zero past 2 GiB, so the first windowed boot,
+whose region reserved just under 4 GiB, drew nothing; held under 2 GiB it
+draws. `--withhold-gpu mapped-buffers` runs the contiguous path on the same
+device for the comparison. The 4070 readings
 support this direction; the Deck column is driver-source evidence, and the
 2060's is owed from the player build. Absence of
 pageable device-local memory does not disqualify sparse buffers: Puck must
@@ -3277,8 +3282,8 @@ slice and `MeshStands` check carries, so a stale proof restages rather than
 publishes. `GpuMemoryPool.Trim` frees empty blocks under pressure and marks
 live ones for release at their last return, reached through
 `IGpuMemoryOwners.TrimRequested`. Vulkan enables sparse buffers only with a
-binding queue, and `VulkanLogicalDevice.BindSparse` orders a bind between two
-signals of the device timeline. Direct3D 12's reserved destination
+binding queue, and the queue's door issues each bind `VulkanLogicalDevice.QueueSparse`
+queued between two signals of the device timeline. Direct3D 12's reserved destination
 (`DirectXGpuMappedBuffer`) maps and unmaps chunks through the queue door and
 returns a chunk's tiles only after its own fence passes the unmapping; the
 mesh region and the probe scene use it. The laws behind these use modeled
@@ -3286,24 +3291,23 @@ buffers and native-call recording: they prove call ordering, not driver
 execution or physical-page lifetime, which the hardware windows below
 qualify.
 
-**Vulkan's sparse destination is built and unqualified.**
+**Vulkan's sparse destination draws on the RTX 4070 and is otherwise unqualified.**
 `VulkanGpuMappedBuffer` owns the sparse resource behind `IGpuMappedBuffer`.
-Its invariant: a chunk is writable only once its bind is ordered ahead of
+Its invariant: a chunk is writable only once its bind is queued ahead of
 every later submission, and no page returns to its block, and the buffer is
 not destroyed, before the device timeline passes the value of the bind (or of
-a checkpoint taken at disposal) that let it go. The one enforcing place is
+a checkpoint queued at disposal) that let it go. The one enforcing place is
 the arena's sparse retirement (`VulkanMemoryArena.RetireSparse`,
 `VulkanMemoryArena.ReleaseSparse`); where it stops is a bind or checkpoint
 whose call threw, after which the timeline certifies nothing and what the
 call covered is held until the device is torn down. The buffer reserves its
 address range out of the device's one sparse allowance
 (`VulkanLogicalDevice.TryReserveSparseAddress`), is refused where a storage
-view cannot span it (`GpuDeviceCapabilities.MaxStorageBufferBytes`) or where
-the device's sparse page does not divide a chunk, and in each case the region
-keeps a contiguous destination. Still owed on hardware: the first windowed
-Vulkan boot, the 2060's page size and address space, a budget drop that shows
-blocks freed, and ray-query bottom builds reading a sparse mesh region by
-device address.
+view a kernel can size cannot span it (`VulkanLogicalDevice.MaxStorageBufferBytes`)
+or where the device's sparse page does not divide a chunk, and in each case the
+region keeps a contiguous destination. Still owed on hardware: the 2060's page
+size and address space, a budget drop that shows blocks freed, and ray-query
+bottom builds reading a sparse mesh region by device address.
 
 **Still to build, in dependency order.** Page-only residency admission with
 pool-owned slack (M2), the sparse arena placement policy (M5) and physical
@@ -3743,6 +3747,21 @@ kilobytes, too little for the collection counts the RTX 2060 machine showed
 during a cold bake, which points at the bake's workers (an inference). The
 2060 never bakes cold now, but a player's build still derives a mesh it misses,
 so the bake's garbage reaches players on a miss.
+
+**The player's large object heap.** The 2060's player build, with no bake
+running, still ended its route with a large object heap ten times its live
+large objects: the heap is gaps. Its largest source was not a bake. Every
+process derived its boot world's far product at boot, clustering and levelling
+the whole static scene in managed arrays; the product is now kept in the mesh
+store and read from it
+([decision](../decisions/rendering.md#a-far-viewer-draws-a-worlds-far-product)).
+The rule the rest follows is that scratch and tables of reference-free
+elements are native storage, which leaves the collector nothing: an
+`OwnedBuffer<T>` has no managed mode, a `RentedScope`'s buffers and lists are
+native whatever allocator it was given, and the simplifier, the lighting
+batch's answers and the probe service's part answers hold theirs that way.
+[The open item](open-items.md#residency-and-streaming) lists what still
+allocates large arrays, programs and the trace scene's hierarchy first.
 
 **Check.** Collections, the duration of each pause and the allocated bytes in
 the arrival window, set against the presented frames of the same window: a

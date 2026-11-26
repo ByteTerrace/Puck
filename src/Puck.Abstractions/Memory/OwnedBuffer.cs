@@ -71,38 +71,38 @@ public interface IAllocatorStatistics {
     void Collect();
 }
 /// <summary>
-/// One owner's growable run of reference-free elements: a build's workspace list or table, or a product's storage. An
-/// injected allocator selects native backing, which the collector never sees, so background work that keeps its scratch
-/// here cannot start a collection that pauses every managed thread. Without an allocator (offline callers) the storage is
-/// rented from <see cref="RentedArrays"/>, so a later build reuses it. Spans, references and memory slices are borrows:
-/// all end at the next growth or at disposal. Growth allocates, copies and publishes before releasing the old storage.
-/// There is no finalizer recovery.
+/// One owner's growable run of reference-free elements: a build's workspace list or table, or a product's storage. The
+/// storage is native, which the collector never sees, so work that keeps its scratch here cannot start a collection that
+/// pauses every managed thread, and a list that grows leaves no dead array on the large object heap: growth reallocates
+/// the block, which the allocator may extend in place. An owner that names no allocator takes the process's
+/// (<see cref="ProcessAllocator.Current"/>). Spans, references and memory slices are borrows: all end at the next growth
+/// or at disposal. There is no finalizer recovery.
 /// </summary>
 /// <typeparam name="T">The unmanaged element.</typeparam>
 public sealed unsafe class OwnedBuffer<T> : MemoryManager<T> where T : unmanaged {
-    private readonly IAllocator? m_allocator;
+    private readonly IAllocator m_allocator;
     private readonly IAllocationObserver? m_observer;
     private T* m_pointer;
-    private T[] m_managed = [];
     private int m_capacity;
     private int m_length;
     private bool m_disposed;
 
     /// <summary>Initializes a new instance of the <see cref="OwnedBuffer{T}"/> class, empty unless a capacity is
     /// reserved.</summary>
-    /// <param name="allocator">The native allocator, or null for storage rented from <see cref="RentedArrays"/>.</param>
+    /// <param name="allocator">The native allocator, or null for the process's (<see cref="ProcessAllocator.Current"/>,
+    /// read here once: the buffer frees through the allocator it was made with).</param>
     /// <param name="observer">The owning lifecycle's byte observer, or null for unmetered storage.</param>
     /// <param name="capacity">The elements to reserve room for at once, so a list that knows its size does not grow from
     /// empty.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is negative.</exception>
     public OwnedBuffer(IAllocator? allocator, IAllocationObserver? observer = null, int capacity = 0) {
-        m_allocator = allocator;
+        m_allocator = (allocator ?? ProcessAllocator.Current);
         m_observer = observer;
         Reserve(capacity: capacity);
     }
 
     /// <summary>Creates a buffer of exactly <paramref name="length"/> elements, allocated once at that size.</summary>
-    /// <param name="allocator">The native allocator, or null for storage rented from <see cref="RentedArrays"/>.</param>
+    /// <param name="allocator">The native allocator, or null for the process's.</param>
     /// <param name="length">The buffer's length.</param>
     /// <param name="clear">Whether the elements are zeroed; otherwise they are unspecified.</param>
     /// <param name="observer">The owning lifecycle's byte observer, or null for unmetered storage.</param>
@@ -116,7 +116,7 @@ public sealed unsafe class OwnedBuffer<T> : MemoryManager<T> where T : unmanaged
         return buffer;
     }
 
-    // The row this buffer's native charges name; rented storage is charged by RentedArrays, which names its own.
+    // The row this buffer's charges name.
     private const MemoryBacking NativeBacking = MemoryBacking.NativeAllocator;
 
     /// <summary>Gets the logical element count.</summary>
@@ -131,8 +131,7 @@ public sealed unsafe class OwnedBuffer<T> : MemoryManager<T> where T : unmanaged
     public ref T this[int index] {
         get {
             if (((uint)index) >= ((uint)m_length)) { throw new ArgumentOutOfRangeException(paramName: nameof(index)); }
-            if (m_pointer is not null) { return ref m_pointer[index]; }
-            return ref m_managed[index];
+            return ref m_pointer[index];
         }
     }
 
@@ -141,7 +140,7 @@ public sealed unsafe class OwnedBuffer<T> : MemoryManager<T> where T : unmanaged
     /// <inheritdoc/>
     public override Span<T> GetSpan() {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        return ((m_allocator is null) ? m_managed.AsSpan(length: m_length, start: 0) : new Span<T>(length: m_length, pointer: m_pointer));
+        return new Span<T>(length: m_length, pointer: m_pointer);
     }
     /// <summary>Makes room for at least <paramref name="capacity"/> elements, preserving the contents and the length.</summary>
     /// <param name="capacity">The fewest elements the storage holds afterward.</param>
@@ -173,7 +172,7 @@ public sealed unsafe class OwnedBuffer<T> : MemoryManager<T> where T : unmanaged
     public void Add(T item) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
         if (m_length == m_capacity) { Grow(capacity: Doubled(required: (m_length + 1)), preserve: true); }
-        if (m_pointer is not null) { m_pointer[m_length] = item; } else { m_managed[m_length] = item; }
+        m_pointer[m_length] = item;
         m_length++;
     }
     /// <summary>Appends elements after the logical contents, growing geometrically when they do not fit.</summary>
@@ -221,7 +220,6 @@ public sealed unsafe class OwnedBuffer<T> : MemoryManager<T> where T : unmanaged
     public override MemoryHandle Pin(int elementIndex = 0) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(((uint)elementIndex), ((uint)m_length));
-        if (m_allocator is null) { return m_managed.AsMemory(length: (m_length - elementIndex), start: elementIndex).Pin(); }
         return new MemoryHandle((m_pointer + elementIndex));
     }
     /// <inheritdoc/>
@@ -245,18 +243,10 @@ public sealed unsafe class OwnedBuffer<T> : MemoryManager<T> where T : unmanaged
         return capacity;
     }
     // Elements of the storage past the logical length are part of it; only the length bounds what callers borrow.
-    private Span<T> Storage(int start, int length) =>
-        ((m_allocator is null) ? m_managed.AsSpan(start: start, length: length) : new Span<T>(length: length, pointer: (m_pointer + start)));
+    private Span<T> Storage(int start, int length) => new(length: length, pointer: (m_pointer + start));
     // Replaces the storage with room for at least `capacity` elements, carrying the logical contents when `preserve`.
     private void Grow(int capacity, bool preserve) {
         var kept = (preserve ? m_length : 0);
-
-        if (m_allocator is null) {
-            m_managed = RentedArrays.Grow(array: m_managed, keep: kept, minimumLength: capacity, owner: m_observer);
-            m_capacity = m_managed.Length;
-            return;
-        }
-
         var bytes = checked((((long)capacity) * sizeof(T)));
         var oldBytes = (((long)m_capacity) * sizeof(T));
 
@@ -283,14 +273,9 @@ public sealed unsafe class OwnedBuffer<T> : MemoryManager<T> where T : unmanaged
         m_observer?.Change(backing: NativeBacking, bytes: -oldBytes);
     }
     private void FreeStorage() {
-        if (m_allocator is null) {
-            RentedArrays.Return(array: m_managed, owner: m_observer);
-            m_managed = [];
-        } else {
-            m_allocator.Free(ptr: m_pointer);
-            m_observer?.Change(backing: NativeBacking, bytes: -checked((((long)m_capacity) * sizeof(T))));
-            m_pointer = null;
-        }
+        m_allocator.Free(ptr: m_pointer);
+        m_observer?.Change(backing: NativeBacking, bytes: -checked((((long)m_capacity) * sizeof(T))));
+        m_pointer = null;
         m_capacity = m_length = 0;
     }
 }

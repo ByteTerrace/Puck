@@ -51,6 +51,7 @@ public sealed class GpuCreationFaultsLawTests {
         "IGpuBindings.DestroySampler",
         "IGpuBindings.HeapReleaseRevision",
         "IGpuBindings.MaxConstantBufferBytes",
+        "IGpuBindings.MaxStorageBufferBytes",
         "IGpuBindings.WriteBuffer",
         "IGpuBindings.WriteConstantBuffer",
         "IGpuBindings.WriteSampledImage",
@@ -328,6 +329,7 @@ public sealed class GpuCreationFaultsLawTests {
         bindings.WriteSampler(arrayElement: 0, binding: 2, descriptorSetHandle: 1, samplerHandle: 1);
         _ = bindings.HeapReleaseRevision;
         _ = bindings.MaxConstantBufferBytes;
+        _ = bindings.MaxStorageBufferBytes;
 
         foreach (var key in PassThroughs) {
             Assert.Equal(

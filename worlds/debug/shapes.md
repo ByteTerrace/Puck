@@ -363,6 +363,7 @@ The inventory comes from the code: `SdfSolidPrimitive`, `SdfBlendOp`,
 | `inset` (refracted radial paint) | `motion-inset` |
 | `glass` (`depth`, `ior`; the slot's `color` as tint, its `roughness` as frost) | `shape-glass`: an orange acrylic box holding an opaque sphere (absorption over the distance through the box, deepest through its middle), an 8 mm pane and a 6 cm block of one window glass (the same depth tints one faintly and the other deeply), a frosted pane (the rod behind it blurs), and the rods behind the panes shifted by the refraction. Every glass slot's shapes bake and draw apart from the opaque ones (`SdfMeshBakeGroup.Glass`), in the glass passes after views |
 | `paints`: unparented, in world space on a static placement | `shape-paint-world` |
+| `paints` with `repeat`: one box paint on a world-space lattice over the slot's joint colour, each tile's tone hashed | `shape-paint-tiles`, fourth on the STYLES row: 30 cm terracotta tiles with 1 cm joints, tones between #B4553A and #C86E48 |
 | `paints`: parented stroked plane, stroked ellipse prism, filled polygon prism, sweep | `motion-paint` |
 | Text runs: emboss | every label |
 | Text runs: engrave; riding a shape with `maxWidth`, `tracking`, `lineSpacing` | `shape-text-engrave`, `shape-text-ride` |

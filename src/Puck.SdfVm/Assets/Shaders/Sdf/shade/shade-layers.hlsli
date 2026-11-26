@@ -35,6 +35,21 @@ void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, uint 
         }
 
         float3 local = rotatePointByInverseQuaternion((p - frame.xyz), asfloat(sdfWords[base + 1u]));
+        // A repeated paint folds the hit into its lattice cell (SdfPaintRepeat), so its shape is drawn about each cell's
+        // centre, and moves its colour toward the tone by a hash of the cell, a variation that fades to its mean where a
+        // cell grows under a few pixels.
+        float4 cellSeed = asfloat(sdfWords[base + 9u]);
+        float3 color = colorStroke.rgb;
+        if (any(cellSeed.xyz > 0.0)) {
+            float3 period = max(cellSeed.xyz, 1.0e-6);
+            float3 cell = select((cellSeed.xyz > 0.0), round(local / period), float3(0.0, 0.0, 0.0));
+            local -= (cell * cellSeed.xyz);
+            int3 index = int3(cell);
+            uint3 hash = sdfPcg3d(uint3(asuint(index.x), asuint(index.y), (asuint(index.z) ^ asuint(cellSeed.w))));
+            float smallest = min(min(((cellSeed.x > 0.0) ? cellSeed.x : 3.4e38), ((cellSeed.y > 0.0) ? cellSeed.y : 3.4e38)), ((cellSeed.z > 0.0) ? cellSeed.z : 3.4e38));
+            float variation = (((float)hash.x * SDF_INV_2POW32) - 0.5) * (1.0 - smoothstep(0.125, 0.5, (footprint / smallest)));
+            color = lerp(colorStroke.rgb, asfloat(sdfWords[base + 10u]).rgb, (0.5 + variation));
+        }
         float4 bound = asfloat(sdfWords[base + 7u]);
         if (any(abs(local - slotCenter.yzw) > (bound.xyz + (colorStroke.w + footprint)))) continue;
         float4 scale = asfloat(sdfWords[base + 2u]);
@@ -42,7 +57,6 @@ void sdfApplyPaints(float3 worldPoint, float3 layerPoint, float footprint, uint 
         float d = (evaluateShape(asuint(frame.w), primitivePoint, asfloat(sdfWords[base + 3u]), asfloat(sdfWords[base + 4u])) * scale.w);
         if (colorStroke.w > 0.0) d = (abs(d) - colorStroke.w);
         float reveal = 1.0 - smoothstep(-edge, edge, d);
-        float3 color = colorStroke.rgb;
         uint text = asuint(bound.w);
         if (text != 0u) {
 #if defined(SDF_GLYPH_ATLAS)

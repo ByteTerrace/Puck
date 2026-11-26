@@ -120,8 +120,9 @@ public sealed partial class WorldScreenBinder {
         }
     }
     // One screen's own window or monitor capture: it pulls on the capture's cadence when published and is disposed with
-    // the slot. It is an imported source on either route: the CPU tier a Vulkan host takes is the import's staged-copy
-    // fallback, as the camera's CPU tier is, so its descriptor agrees with the producer's registered shape.
+    // the slot. It is an imported source on either route: the CPU tier (a Vulkan host's HDR display, or a render device
+    // that refused the shared targets) is the import's staged-copy fallback, as the camera's CPU tier is, so its
+    // descriptor agrees with the producer's registered shape.
     private sealed class CaptureSlotFeed : IWorldImportFeed {
         private readonly WorldScreenBinder m_binder;
 

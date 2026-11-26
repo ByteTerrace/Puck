@@ -210,7 +210,12 @@ public sealed partial class WorldInstanceHost {
                     index++;
                     continue;
                 }
-                if (status == WorldTransferStatus.Missing) {
+                // The destination holds nothing of this source's session and never will under what it sent: terminal for
+                // the cohort, a confirmed commit included, since it is the destination's own word that no traveler of
+                // the session remains there. The cohort comes home as a refused one does.
+                var ended = (status == WorldTransferStatus.Ended);
+
+                if ((status == WorldTransferStatus.Missing) || ended) {
                     if (!m_instances.TryGetValue(
                         key: pending.Transfer.SourceInstance,
                         value: out var source
@@ -220,7 +225,7 @@ public sealed partial class WorldInstanceHost {
                     }
 
                     // Once any member can return, never retry the cohort commit—even after a checkpoint.
-                    pending = pending with { RollbackOnly = true };
+                    pending = pending with { RollbackOnly = true, CommitConfirmed = (pending.CommitConfirmed && !ended) };
                     m_inDoubtTransfers[index] = pending;
 
                     var retired = InstallRetired(commits: pending.CommitMembers, landed: [], source: source);
@@ -235,16 +240,29 @@ public sealed partial class WorldInstanceHost {
                     m_inDoubtTransfers.RemoveAt(index: index);
                     if (!RestoreOrRetain(
                         commits: [.. kept.Select(selector: ordinal => rollingBack.CommitMembers[ordinal])],
-                        members: [.. kept.Select(selector: ordinal => rollingBack.Landed[ordinal])],
+                        // A traveler an ended entry held comes back two ownership epochs on: past the handoff the
+                        // destination may have consumed and the return it never made, so its next entry is never taken
+                        // for the traveler that entry held.
+                        members: [.. kept.Select(selector: ordinal => (ended
+                            ? rollingBack.Landed[ordinal] with { Mobility = rollingBack.Landed[ordinal].Mobility.Advance().Advance() }
+                            : rollingBack.Landed[ordinal]))],
                         pending: pending,
                         source: source
                     )) {
                         continue;
                     }
+                    if (ended) {
+                        // A publication that settled nothing may already have pointed a seat at the destination.
+                        foreach (var member in rollingBack.Landed) {
+                            for (var followed = 0; (followed < m_seats.SeatCount); followed++) {
+                                if ((member.FollowedSeatMask & (1 << followed)) != 0) { ReturnSeatHome(seat: false, slot: followed); }
+                            }
+                        }
+                    }
                     if (m_narration.HasNarrationSink) {
                         m_narration.Narrate(
                             channel: "world.transfer",
-                            text: $"[world.transfer: transfer={pending.Transfer.TransferId} RESOLVED absent at '{pending.TargetName}'{((refused.Length > 0) ? $" ({refused})" : string.Empty)} — every member restored to '{pending.Transfer.SourceInstance}' from retained recovery state]"
+                            text: $"[world.transfer: transfer={pending.Transfer.TransferId} RESOLVED {(ended ? "ended" : "absent")} at '{pending.TargetName}'{((refused.Length > 0) ? $" ({refused})" : string.Empty)} — every member restored to '{pending.Transfer.SourceInstance}' from retained recovery state]"
                         );
                     }
                     if (pending.Spawned) { ReapIfEmpty(name: pending.TargetName); }
@@ -252,7 +270,7 @@ public sealed partial class WorldInstanceHost {
                         transfer: in transfer,
                         sourceName: pending.Transfer.SourceInstance,
                         target: pending.TargetAuthority,
-                        outcome: "aborted:in-doubt-resolved-missing"
+                        outcome: (ended ? "aborted:in-doubt-resolved-ended" : "aborted:in-doubt-resolved-missing")
                     );
                     CloseAdjacencyAfterRefusal(
                         transfer: in transfer,
@@ -1181,7 +1199,9 @@ public sealed partial class WorldInstanceHost {
     // substitutes every interface member below for a row SetPeerCallFault named — see that method's own remarks;
     // Local/Remote/Definition/IsRemote stay pointed at the real destination either way, since narration and
     // post-commit address resolution must still read the row a fault decorates, not the decorator.
-    private readonly record struct WorldPeerCall(WorldInstance? Local, WorldRemoteAuthority? Remote, IWorldPeerCall? Fault = null) {
+    private readonly record struct WorldPeerCall(WorldInstance? Local, WorldRemoteAuthority? Remote, IWorldPeerCall? Fault = null, Func<string, WorldTransferCaller?>? Colocated = null) {
+        // Who a call into a row of this process is made as: the colocated row that holds the source authority.
+        private WorldTransferCaller? Caller(string sourceAuthority) => Colocated?.Invoke(arg: sourceAuthority);
         public WorldDefinition Definition => (Local?.Server.Definition ?? Remote!.Definition);
         public bool IsRemote => (Remote is not null);
 
@@ -1193,6 +1213,7 @@ public sealed partial class WorldInstanceHost {
                 );
             } else if (Local is not null) {
                 Local.Server.AbortTransfer(
+                    caller: Caller(sourceAuthority: sourceAuthority),
                     sourceAuthority: sourceAuthority,
                     transferId: transferId
                 );
@@ -1211,6 +1232,7 @@ public sealed partial class WorldInstanceHost {
                 );
             } else if (Local is not null) {
                 Local.Server.AcknowledgeTransfer(
+                    caller: Caller(sourceAuthority: sourceAuthority),
                     sourceAuthority: sourceAuthority,
                     transferId: transferId
                 );
@@ -1228,14 +1250,14 @@ public sealed partial class WorldInstanceHost {
                 return (step, status, reason);
             }
             if (Local is not null) {
-                var (status, reason) = await Local.Server.CommitTransferAsync(sourceAuthority, transferId, members).ConfigureAwait(false);
+                var (status, reason) = await Local.Server.CommitTransferAsync(sourceAuthority, transferId, members, caller: Caller(sourceAuthority: sourceAuthority)).ConfigureAwait(false);
                 return (WorldTransferStep.Answered, status, reason);
             }
             return await Remote!.CommitAsync(sourceAuthority, transferId, members).ConfigureAwait(false);
         }
         public Task<WorldTransferReservationReply> ReserveAsync(WorldTransferReservationRequest request) {
             if (Fault is not null) { return Task.FromResult(Fault.Reserve(request)); }
-            return Local is not null ? Local.Server.ReserveTransferAsync(request) :
+            return Local is not null ? Local.Server.ReserveTransferAsync(request, caller: Caller(sourceAuthority: request.SourceAuthority)) :
                 Remote!.ReserveAsync(request with { PeerAdmission = true });
         }
         public bool TryLanded(string sourceAuthority, ulong transferId, out IReadOnlyList<int>? landed) {
@@ -1269,6 +1291,7 @@ public sealed partial class WorldInstanceHost {
             }
             if (Local is not null) {
                 status = Local.Server.TransferStatus(
+                    caller: Caller(sourceAuthority: sourceAuthority),
                     sourceAuthority: sourceAuthority,
                     transferId: transferId
                 );

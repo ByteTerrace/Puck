@@ -320,7 +320,8 @@ so no crossing commits against a document edit recovery cannot reproduce.
 An `Uncertain` arrival record lands nothing and is neither a refusal nor a
 commit. The commit door (`WorldServer.CommitTransferAsync`, `IWorldPeerCall.Commit`,
 the federation commit reply) answers a `WorldTransferStatus`: `Committed`,
-`Missing` for a refusal, or `Uncertain`. The escrow keeps the uncertain arrival
+`Missing` for a refusal, `Uncertain`, or `Ended` from a closed rewind group that
+holds nothing of the source's session. The escrow keeps the uncertain arrival
 (`WorldTransferEscrow.Uncertain.cs`), answers `Uncertain` to the status query
 and to a retried commit, and refuses any reservation for its travelers; the
 destination narrates `UNCERTAIN` on `world.transfer`. The source keeps an
@@ -334,6 +335,45 @@ reconcile) to `Uncertain`, which also blocks the activation; a store throw is a
 refusal, since the store reconciles its own commit point. Laws:
 `CrossingUncertaintyLawTests` (each crash point, with red legs replaying the
 refusal) and `WorldSiloCrossingRecoveryLawTests`.
+
+### Guests of a closed rewind group
+
+A silo row whose host sets `ClosedGroupRewind` carries a `WorldTransferBoundary`
+(`WorldServer.ConstrainTransferAuthorities`): the group's authority namespaces and
+the issuer root whose players it admits
+([decision](../../../../docs/decisions/worlds-and-federation.md#a-closed-rewind-group-admits-players-as-guests)).
+
+| Caller | Proof | Verdict |
+|---|---|---|
+| Member | `WorldTransferCaller.Colocated` under a name the group holds | everything |
+| Guest | `WorldTransferCaller.Authenticated` whose `VerifiedSession` is vouched under the boundary's issuer | seats in the guest shape; its own keys |
+| Outside | anything else, a caller passing no `WorldTransferCaller` included | refused, nothing written |
+
+- The door is `WorldTransferEscrow.Admit`. Reserve, commit, abort, acknowledge
+  and status take a `caller`; a new ingress passes one or is refused in a closed
+  group. `TryReland`, `RedoLease` and `RedoTombstone` redo recorded decisions
+  (`WorldTransferAdmission.Recorded`) and are the only paths that skip it.
+- Guest shape: `WorldTransferBoundary.GuestReservationRefusal` (human seats, no
+  companion, an untitled incarnation minted in the guest's own session) and
+  `GuestCommitRefusal` (a `Spawn` arrival carrying no registers, continuum,
+  companion or drive reference). A new carried field on a reservation or commit
+  member is added to the matching check.
+- A guest's session holds rows only while it holds a lease or a landed
+  traveler (`WorldTransferEscrow.ReclaimGuest`). A world that holds nothing of a
+  session answers `WorldTransferStatus.Ended` to status and commit and
+  `WorldFederationRefusal.SessionEnded` to a traveler observation, and writes
+  nothing.
+- A recovery point is captured as a baseline
+  (`WorldReleaseRewindBoundary.Baseline`). Restoring one ends every traveler
+  minted outside the group inside `WorldPersistence.EndRewoundGuests`, so a
+  restore of a baseline never equals the capture it came from when a guest was
+  present.
+- Client side: `Ended` in `ReconcileInDoubtTransfers` returns the cohort, a
+  confirmed commit included, two ownership epochs on; `SessionEnded` on a
+  route returns the seat (`WorldInstanceHost.ReturnSeatHome`).
+
+Law: `WorldReleaseCutoverLawTests.AClosedGroupAdmitsAPlayerAsAGuestAndARestoreEndsIt`
+(a silo, its issuer and a client host in one process).
 
 ### Companion custody records
 
@@ -423,7 +463,9 @@ final checkpoint), a failed activation, or a crashed authority a restart replace
 it drops the departures that activation queued. Laws: `CompanionStopLawTests`. A rollback retains only members it has
 not restored, in a restore-only row; a later durable home release ends that
 obligation before any image is restored. Once commit was confirmed, a contradictory
-Missing answer cannot authorize restoration. A partial settlement must persist
+Missing answer cannot authorize restoration; `Ended` can, since it is the destination's
+own word that it holds nothing of the source's session
+([guests of a closed rewind group](#guests-of-a-closed-rewind-group)). A partial settlement must persist
 the landed members' forwarding routes before the destination is acknowledged. The federation lane carries
 `HopQuery`/`HopQueryReply`, `HopRequest`/`HopAnswer`,
 `CustodyQuery`/`CustodyReply` and `HopSettled`/`HopSettledAck`, each answered

@@ -6,17 +6,18 @@ public sealed partial class WorldScreenBinder {
     // Captures a live verb opened to prove its target, each waiting for the source instance that shows it to adopt it.
     private readonly List<ParkedCapture> m_parkedCaptures = [];
 
-    // The render adapter LUID a capture feed opens its platform capture on when the D3D12 GPU transport is active, or
-    // null on the Vulkan/CPU path (and until the render device is first seen at publish; declared GPU-route captures
-    // defer their open to the first pull, where this has resolved).
-    private long? AdapterLuidForOpen() => (m_hostsOnDirectX
+    // The render adapter LUID a capture feed opens its platform capture on when the GPU transport is active (a Direct3D 12
+    // host's shared textures, or the shared textures a Vulkan host imports), or null on a host with no shared surfaces
+    // (and until the render device is first seen at publish; declared GPU-route captures defer their open to the first
+    // pull, where this has resolved).
+    private long? AdapterLuidForOpen() => (m_exportsSurfaces
         ? m_renderAdapterLuid
         : null
     );
     // The one open ladder behind a capture producer source, shared by a screen row (CaptureProducer) and the
     // frame-source registry (DeclareFrameSource, WorldScreenBinder.FrameSources.cs — a HUD/overlay capture with
-    // no screen row at all): the D3D12 GPU transport always defers to the pending path (the render adapter LUID is
-    // not resolvable yet); otherwise an immediate CPU/GPU open is tried, then a pending feed on a platform that
+    // no screen row at all): the GPU transport always defers to the pending path (the render adapter LUID is
+    // not resolvable yet); otherwise an immediate CPU open is tried, then a pending feed on a platform that
     // cannot open the target. A declared external source needs a feed even on an unsupported platform so the
     // capture gate can serve its fill. Invalid target settings still refuse; live open verbs use TryOpen directly.
     private CaptureFeed? TryCreateCaptureFeed(WorldCaptureSettings capture, out string? fault) {
@@ -24,7 +25,7 @@ public sealed partial class WorldScreenBinder {
 
         if (capture.MonitorIndex is { } monitorIndex) {
             if (
-                m_hostsOnDirectX &&
+                m_exportsSurfaces &&
                 m_windowCapture.IsSupported &&
                 (monitorIndex >= 0)
             ) {
@@ -67,7 +68,7 @@ public sealed partial class WorldScreenBinder {
         }
 
         if (
-            m_hostsOnDirectX &&
+            m_exportsSurfaces &&
             m_windowCapture.IsSupported &&
             !string.IsNullOrWhiteSpace(value: windowTitle)
         ) {
@@ -106,8 +107,9 @@ public sealed partial class WorldScreenBinder {
 
         return null;
     }
-    // Constructs a capture feed carrying this binder's transport choice (GPU on the D3D12 host, CPU on Vulkan). The one
-    // place window/monitor CaptureFeeds are built, so the route flag can never diverge across the open/pending sites.
+    // Constructs a capture feed carrying this binder's transport choice (GPU where the host exports shared surfaces, CPU
+    // elsewhere). The one place window/monitor CaptureFeeds are built, so the route flag can never diverge across the
+    // open/pending sites.
     private CaptureFeed NewCaptureFeed(string title, WorldFeedProfile profile, INativeImageCaptureFeed? source, int? monitorIndex = null, string? fault = null) =>
         new(
             title: title,
@@ -115,7 +117,8 @@ public sealed partial class WorldScreenBinder {
             profile: profile,
             source: source,
             pixels: new WorldCapturePixels(name: $"capture:{((monitorIndex is { } monitor) ? $"monitor {monitor}" : title)}"),
-            gpuRoute: m_hostsOnDirectX,
+            gpuRoute: m_exportsSurfaces,
+            hdrOnGpu: m_hostsOnDirectX,
             monitorIndex: monitorIndex
         ) {
             Fault = fault,
@@ -330,6 +333,7 @@ public sealed partial class WorldScreenBinder {
         INativeImageCaptureFeed? source,
         WorldCapturePixels pixels,
         bool gpuRoute = false,
+        bool hdrOnGpu = false,
         int? monitorIndex = null
     ) : IDisposable {
         public string? Fault { get; set; }
@@ -344,9 +348,15 @@ public sealed partial class WorldScreenBinder {
         // The captured frames a frame samples once converted: the CPU route's pixels, or an HDR display's GPU copies.
         public WorldCapturePixels Pixels { get; } = pixels;
         public string Title { get; } = title;
-        // Whether this feed may ride the D3D12 GPU transport (the platform copies GPU-side into GpuTargets and a frame
-        // acquires their latest slot), rather than the converted CPU Pixels. Fixed at construction by the host backend.
+        // Whether this feed may ride the GPU transport (the platform copies GPU-side into GpuTargets and a frame acquires
+        // their latest slot), rather than the converted CPU Pixels. Fixed at construction by the host's shared surfaces.
         public bool GpuRoute { get; } = gpuRoute;
+        // Whether an HDR display's half-float copies convert on the render device from the shared targets: the Direct3D 12
+        // host's own textures, whereas a Vulkan host reads an HDR display through the CPU route.
+        public bool HdrOnGpu { get; } = hdrOnGpu;
+        // Whether the render device refused the shared targets (a Vulkan device that cannot import them): the feed then
+        // keeps to the CPU route until its source is reacquired.
+        public bool GpuRefused { get; set; }
 
         private INativeImageCaptureService Service { get; } = service;
 

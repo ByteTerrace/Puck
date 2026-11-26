@@ -17,7 +17,6 @@
         <Compile Include="../Shared/FakeGpuDevice.cs" Link="FakeGpuDevice.cs" />
         <Compile Include="../Shared/VirtualClock.cs" Link="VirtualClock.cs" />
         <Compile Include="../Shared/FaultingDevice.cs" Link="FaultingDevice.cs" />
-        <Compile Include="../Shared/HeapAllocator.cs" Link="HeapAllocator.cs" />
         <Compile Include="../Shared/RecordingGpuObjectNaming.cs" Link="RecordingGpuObjectNaming.cs" />
         <Compile Include="../Shared/SdfTestPipelines.cs" Link="SdfTestPipelines.cs" />
         <Compile Include="../Shared/SpirvEdits.cs" Link="SpirvEdits.cs" />

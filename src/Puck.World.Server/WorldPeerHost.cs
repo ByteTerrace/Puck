@@ -1076,7 +1076,7 @@ public sealed class WorldPeerHost : IDisposable {
         }
 
         var commit = await ExecuteAuthenticatedAsync(credential, () => m_server.CommitTransferAsync(sourceAuthority,
-            transferId, members, credential.RequireValid, ct)).ConfigureAwait(false);
+            transferId, members, credential.RequireValid, ct, credential.Caller)).ConfigureAwait(false);
         var (status, commitReason) = await commit.ConfigureAwait(false);
 
         await WorldFederationCodec.WriteResponseAsync(
@@ -1150,33 +1150,25 @@ public sealed class WorldPeerHost : IDisposable {
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
             case WorldFederationRequest.HopQuery:
-                return await ServeHopQueryAsync(
-                    body: body,
-                    credential: credential,
-                    ct: ct,
-                    sourceAuthority: sourceAuthority,
-                    stream: stream
-                ).ConfigureAwait(continueOnCapturedContext: false);
-
             case WorldFederationRequest.CustodyQuery:
             case WorldFederationRequest.HopSettled:
-                return await ServeCompanionHopAsync(
-                    body: body,
-                    credential: credential,
-                    ct: ct,
-                    kind: kind,
-                    sourceAuthority: sourceAuthority,
-                    stream: stream
-                ).ConfigureAwait(continueOnCapturedContext: false);
-
             case WorldFederationRequest.HopRequest:
-                return await ServeHopRequestAsync(
-                    body: body,
-                    credential: credential,
-                    ct: ct,
-                    sourceAuthority: sourceAuthority,
-                    stream: stream
-                ).ConfigureAwait(continueOnCapturedContext: false);
+                // The custody door of a closed rewind group: nothing is decoded, read or written for a network caller.
+                if (m_server.CustodyRefusal() is { } custodyRefusal) {
+                    await WriteFederationRefusal(
+                        ct: ct,
+                        detail: custodyRefusal,
+                        refusal: WorldFederationRefusal.RequestUnsupported,
+                        stream: stream
+                    ).ConfigureAwait(continueOnCapturedContext: false);
+
+                    return true;
+                }
+                return await (kind switch {
+                    WorldFederationRequest.HopQuery => ServeHopQueryAsync(body: body, credential: credential, ct: ct, sourceAuthority: sourceAuthority, stream: stream),
+                    WorldFederationRequest.HopRequest => ServeHopRequestAsync(body: body, credential: credential, ct: ct, sourceAuthority: sourceAuthority, stream: stream),
+                    _ => ServeCompanionHopAsync(body: body, credential: credential, ct: ct, kind: kind, sourceAuthority: sourceAuthority, stream: stream),
+                }).ConfigureAwait(continueOnCapturedContext: false);
 
             case WorldFederationRequest.Abort:
             case WorldFederationRequest.AcknowledgeTransfer:
@@ -1272,10 +1264,14 @@ public sealed class WorldPeerHost : IDisposable {
                         credential.IsValid
                     ).ConfigureAwait(continueOnCapturedContext: false);
                     if (refusal is not null) {
+                        // A guest of a closed rewind group whose traveler this authority no longer holds is told so in
+                        // a refusal it can act on, where any other observer is told only that the route is unknown.
+                        var ended = m_server.TravelerEnded(caller: credential.Caller, mobility: observation.Mobility, sourceAuthority: sourceAuthority);
+
                         await WriteFederationRefusal(
                             ct: ct,
                             detail: refusal,
-                            refusal: WorldFederationRefusal.RouteUnknown,
+                            refusal: (ended ? WorldFederationRefusal.SessionEnded : WorldFederationRefusal.RouteUnknown),
                             stream: stream
                         ).ConfigureAwait(continueOnCapturedContext: false);
                     }
@@ -1364,7 +1360,7 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        var reserve = await ExecuteAuthenticatedAsync(credential, () => m_server.ReserveTransferAsync(request, credential.RequireValid, ct)).ConfigureAwait(false);
+        var reserve = await ExecuteAuthenticatedAsync(credential, () => m_server.ReserveTransferAsync(request, credential.RequireValid, ct, credential.Caller)).ConfigureAwait(false);
         var reply = await reserve.ConfigureAwait(false);
 
         await WorldFederationCodec.WriteResponseAsync(
@@ -1619,6 +1615,7 @@ public sealed class WorldPeerHost : IDisposable {
         if (kind == WorldFederationRequest.Status) {
             var (status, landed) = await ExecuteAuthenticatedAsync(credential: credential, operation: () => {
                 var answered = m_server.TransferStatus(
+                    caller: credential.Caller,
                     sourceAuthority: sourceAuthority,
                     transferId: transferId
                 );
@@ -1647,11 +1644,13 @@ public sealed class WorldPeerHost : IDisposable {
         _ = await ExecuteAuthenticatedAsync(credential: credential, operation: () => {
             if (kind == WorldFederationRequest.Abort) {
                 m_server.AbortTransfer(
+                    caller: credential.Caller,
                     sourceAuthority: sourceAuthority,
                     transferId: transferId
                 );
             } else {
                 m_server.AcknowledgeTransfer(
+                    caller: credential.Caller,
                     sourceAuthority: sourceAuthority,
                     transferId: transferId
                 );
@@ -2207,10 +2206,14 @@ public sealed class WorldPeerHost : IDisposable {
             m_verify = verify;
             m_lifetime = CancellationTokenSource.CreateLinkedTokenSource(ct);
             Authority = proof.Authority;
+            Caller = WorldTransferCaller.Authenticated(identity: proof);
             Token = m_lifetime.Token;
             m_verdict = new(policy, proof, host.m_timeProvider.GetUtcNow().ToUnixTimeSeconds());
         }
         public string Authority { get; }
+        // Who this connection is to a crossing door: its namespace and the session its handshake's proof signed for. A
+        // reverification keeps both or ends the connection, so the handshake's proof stands for its whole life.
+        public WorldTransferCaller Caller { get; }
         public CancellationToken Token { get; }
         public void RequireValid() {
             if (!IsValid()) { throw new OperationCanceledException("the authenticated session credential is no longer valid"); }

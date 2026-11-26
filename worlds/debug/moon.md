@@ -112,7 +112,10 @@ Past the seam the seat sees the moon's own scene.
 ## The planet, the sun and the seam
 
 The moon, the planet under the valley and the sun are three bodies of one small
-system ([moon-frame.puck](moon-frame.puck)), each a world of its own.
+system ([moon-frame.puck](moon-frame.puck)), each a world of its own. The sun
+is a star that circles the valley floor once a day, 15 km out: the moon lights
+itself from where the shared `day` puts that star, as the valley does, and
+[sun.md](sun.md) says how to stand beside it.
 
 The seam between the valley and the moon is derived from the two masses, never
 placed: each world's mass is its gravity at its radius, and the seam is level
@@ -128,9 +131,9 @@ The sun ([sun.puck](sun.puck)) owns its light and its mass. The moon and the
 valley each follow them, as long after the sun wrote them as light takes to
 cross the distance, so the moon, the nearer, meets a change first. `sun.switch 0`
 in the valley puts the sun out: the switch reaches the sun six seconds later,
-the moon goes dark about five and a half seconds after that (its key light is
+the moon goes dark a little under five seconds after that (its key light is
 the light it has received), and the valley's own rows read the dark a little
-over half a second after the moon's. `world.state sunLight` and `world.state
+over a second after the moon's. `world.state sunLight` and `world.state
 moonSunLight` read the two arrivals; `sun.switch 1` lights it again.
 `puck test worlds/debug/gravity-worlds-tests.puck` plays it.
 

@@ -57,6 +57,10 @@ public sealed partial class WorldSiloHost {
     private bool ContainsRewindAuthority(string authority) {
         lock (m_rewindAuthoritiesGate) { return m_rewindAuthorities.Contains(item: authority); }
     }
+    // The group's authority namespaces as every activated row declared them, which a recovery point records.
+    private string[] RewindAuthorities() {
+        lock (m_rewindAuthoritiesGate) { return [.. m_rewindAuthorities]; }
+    }
     private async Task RequireRewindActivationAsync(WorldAuthorityIdentity identity, CancellationToken token) {
         var root = await m_store.LoadRootAsync(
             cancellationToken: token,
