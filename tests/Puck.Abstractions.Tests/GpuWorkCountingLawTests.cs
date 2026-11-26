@@ -161,6 +161,10 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuRecorder.BeginBarriers"] = (rig => rig.Services.Recorder.BeginBarriers(commandBufferHandle: 2), none),
             ["IGpuRecorder.EndBarriers"] = (rig => rig.Services.Recorder.EndBarriers(commandBufferHandle: 2), none),
             ["IGpuRecorder.TransitionBuffer"] = (rig => rig.Services.Recorder.TransitionBuffer(bufferHandle: 3, commandBufferHandle: 2, destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader, sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader), [(GpuWork.BufferBarriers, 1L)]),
+            // An acceleration structure's build, compacted-size write and compaction pass through uncounted.
+            ["IGpuRecorder.BuildAccelerationStructure"] = (rig => rig.Services.Recorder.BuildAccelerationStructure(commandBufferHandle: 2, destination: null!, inputs: default, scratch: null!), none),
+            ["IGpuRecorder.WriteCompactedSize"] = (rig => rig.Services.Recorder.WriteCompactedSize(commandBufferHandle: 2, destination: null!, destinationOffsetBytes: 0UL, source: null!), none),
+            ["IGpuRecorder.CompactAccelerationStructure"] = (rig => rig.Services.Recorder.CompactAccelerationStructure(commandBufferHandle: 2, destination: null!, source: null!), none),
             ["IGpuPipelineFactory.Create(compute)"] = (rig => rig.Services.PipelineFactory.Create(computeShaderModule: null!, description: null!, name: default).Dispose(), [(GpuWork.PipelinesCreated, 1L)]),
             ["IGpuBindings.AllocateSet"] = (rig => rig.Services.Bindings.AllocateSet(descriptorSetLayoutHandle: 3, name: default, poolHandle: 2), [(GpuWork.DescriptorSetsCreated, 1L)]),
             ["IGpuBindings.CanAdmit"] = (rig => _ = rig.Services.Bindings.CanAdmit(owner: "candidate", pools: [], refusal: out _), none),
@@ -193,11 +197,16 @@ public sealed class GpuWorkCountingLawTests {
             ["IGpuBufferFactory.CreateHostVisible(data)"] = (rig => rig.Services.BufferFactory.CreateHostVisible(data: [1, 2, 3, 4], name: default, usage: GpuBufferUsage.Vertex), [(GpuWork.BuffersCreated, 1L), (GpuWork.HostVisibleUploadBytes, 4L)]),
             ["IGpuBufferFactory.CreateDeviceLocal"] = (rig => rig.Services.BufferFactory.CreateDeviceLocal(name: default, sizeBytes: 64UL, usage: GpuBufferUsage.Storage), [(GpuWork.BuffersCreated, 1L)]),
             ["IGpuBufferFactory.CreateReadback"] = (rig => rig.Services.BufferFactory.CreateReadback(name: default, sizeBytes: 64UL), [(GpuWork.BuffersCreated, 1L)]),
+            // A device that backs no mapped buffer creates none, so nothing is counted.
+            ["IGpuBufferFactory.TryCreateMapped"] = (rig => _ = rig.Services.BufferFactory.TryCreateMapped(name: default, reservedBytes: 64UL, usage: GpuBufferUsage.Storage), none),
+            ["IGpuBufferFactory.MappedChunkBytes"] = (rig => _ = rig.Services.BufferFactory.MappedChunkBytes, none),
             ["IGpuTimestampFactory.Create"] = (rig => rig.Services.TimestampFactory!.Create(count: 2, name: default)!.Dispose(), [(GpuWork.TimestampPoolsCreated, 1L)]),
             ["IGpuImageFactory.Create"] = (rig => rig.Services.ImageFactory.Create(format: GpuPixelFormat.R8G8B8A8Unorm, height: 4, name: default, usage: GpuImageUsage.Storage, width: 4), [(GpuWork.ImagesCreated, 1L)]),
             ["IGpuImageFactory.CreateDepth"] = (rig => rig.Services.ImageFactory.CreateDepth(attachment: new GpuDepthAttachment(ClearDepth: 0f, Format: GpuPixelFormat.D32Float, Load: GpuAttachmentLoad.Clear, Store: GpuAttachmentStore.Discard), height: 4, sampled: false, name: default, width: 4), [(GpuWork.ImagesCreated, 1L)]),
             ["IGpuSubmissionFence.Dispose"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence().Dispose(), none),
             ["IGpuSubmissionFence.IsSignaled"] = (rig => _ = rig.Services.QueueSubmitter.CreateSubmissionFence().IsSignaled, none),
+            ["IGpuSubmissionFence.ReachedQueue"] = (rig => _ = rig.Services.QueueSubmitter.CreateSubmissionFence().ReachedQueue, none),
+            ["IGpuSubmissionFence.HandOff"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence().HandOff(), none),
             ["IGpuSubmissionFence.Wait"] = (rig => rig.Services.QueueSubmitter.CreateSubmissionFence().Wait(), none),
             ["IGpuSubmissionFence.SignalOnCompletion"] = (rig => {
                 using var signal = new AutoResetEvent(initialState: false);

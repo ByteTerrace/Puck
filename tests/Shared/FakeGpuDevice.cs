@@ -353,6 +353,9 @@ internal sealed class FakeGpuDevice :
         ImageTransitions?.Add(item: (imageHandle, oldLayout, newLayout));
         Hit(key: "IGpuRecorder.TransitionImageLayout");
     }
+    void IGpuRecorder.BuildAccelerationStructure(nint commandBufferHandle, in GpuAccelerationStructureInputs inputs, IGpuAccelerationStructure destination, IGpuBuffer scratch) => Hit(key: "IGpuRecorder.BuildAccelerationStructure");
+    void IGpuRecorder.WriteCompactedSize(nint commandBufferHandle, IGpuAccelerationStructure source, IGpuBuffer destination, ulong destinationOffsetBytes) => Hit(key: "IGpuRecorder.WriteCompactedSize");
+    void IGpuRecorder.CompactAccelerationStructure(nint commandBufferHandle, IGpuAccelerationStructure source, IGpuAccelerationStructure destination) => Hit(key: "IGpuRecorder.CompactAccelerationStructure");
     void IGpuRecorder.MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) => Hit(key: "IGpuRecorder.MemoryBarrier");
     void IGpuRecorder.BeginBarriers(nint commandBufferHandle) => Hit(key: "IGpuRecorder.BeginBarriers");
     void IGpuRecorder.EndBarriers(nint commandBufferHandle) => Hit(key: "IGpuRecorder.EndBarriers");
@@ -705,6 +708,19 @@ internal sealed class FakeGpuDevice :
             )
         );
     }
+    // The fake backs no buffer a chunk at a time, so every region it serves takes an ordinary destination.
+    IGpuMappedBuffer? IGpuBufferFactory.TryCreateMapped(ulong reservedBytes, GpuBufferUsage usage, in GpuObjectName name) {
+        Hit(key: "IGpuBufferFactory.TryCreateMapped");
+
+        return null;
+    }
+    ulong IGpuBufferFactory.MappedChunkBytes {
+        get {
+            Hit(key: "IGpuBufferFactory.MappedChunkBytes");
+
+            return 0UL;
+        }
+    }
     IGpuBuffer IGpuBufferFactory.CreateDeviceLocal(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) {
         Hit(key: "IGpuBufferFactory.CreateDeviceLocal");
 
@@ -855,7 +871,13 @@ internal sealed class FakeGpuDevice :
         public bool Pinned { get; set; }
         /// <summary>Gets the signal the outstanding submission asked to be set on its completion, or null.</summary>
         public EventWaitHandle? CompletionSignal => m_signal;
-        public bool ReachedQueue => (!Abandoned && !Deferred);
+        public bool ReachedQueue {
+            get {
+                gpu.Hit(key: "IGpuSubmissionFence.ReachedQueue");
+
+                return (!Abandoned && !Deferred);
+            }
+        }
         public bool IsSignaled {
             get {
                 gpu.Hit(key: "IGpuSubmissionFence.IsSignaled");
