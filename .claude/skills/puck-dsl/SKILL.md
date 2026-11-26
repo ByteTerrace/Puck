@@ -116,6 +116,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   `compose(outer, inner, ...)` multiplies them (the last turns a point first), `rotatePoint(rotation, point)`,
   `polarPoint(radius, degrees, y)` and `fraction(x)`. Angles read in degrees (`DocumentDimensions.DegreesArgument`), so a
   radians value is `a * 1rad`. `+ - * /` on numeric arrays are element-wise, and a number scales an array.
+- **A clock's name is bare**, as its `state:` reference is (`clocks [{ name: fiber, state: fiber }]`); a quoted one
+  is PUCK110 (`WorldCallArguments.FormOf`, `Declares` of kind Clock or State). Write the state row it follows bare too
+  (`name: fiber`), which the state section admits.
 - **Aliases lower to one name.** `sqrt`, `abs`, `sin`, `cos`, `ceil` and `pow` are `ExpressionVocabulary.Aliases`,
   read as their canonical names by both languages; `fract`/`frac` are the document's (`DocumentBuiltins.Canonical`).
   `min`/`max` stay the rule language's reductions.

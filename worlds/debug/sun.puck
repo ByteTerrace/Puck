@@ -182,7 +182,7 @@ state {
     // The pair's turn, which this world owns and the valley and the moon follow: one turn of the companion about the
     // star every `pairSeconds`.
     {
-      name: "pair"
+      name: pair
       kind: "Fixed"
       value: "0"
       advance { perSecondNumerator: 1, perSecondDenominator: pairSeconds }
