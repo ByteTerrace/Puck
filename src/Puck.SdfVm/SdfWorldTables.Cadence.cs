@@ -112,6 +112,7 @@ public sealed partial class SdfWorldTables {
         public long Epoch = -1;
         public SdfFrame? LightMaskFrame;
         public long LightMaskEpoch = -1;
+        public float LightMaskExposure = float.NaN;
         public UInt128 LightMask;
         public bool Built;
         public SdfPassValues Values;
@@ -132,8 +133,9 @@ public sealed partial class SdfWorldTables {
     // the residency calls it at each frame's start and capture, where the frames these tables render are written.
     internal void ForgetViewInputs() => m_viewInputsEpoch++;
 
-    /// <summary>Returns the mask of the lights a view shades (<see cref="SdfLightSelection.Select"/>), computed once a
-    /// frame for each view and shared by every pass block and signature that reads it.</summary>
+    /// <summary>Returns the mask of the lights a view shades (<see cref="SdfLightSelection.Select"/>) at the exposure its
+    /// pass block carries, computed once a frame for each view and exposure and shared by every pass block and signature
+    /// that reads it; the mask and the exposure both sit in the lighting signature's members.</summary>
     /// <param name="frame">The frame the tables hold.</param>
     /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>, clamped to the frame's views.</param>
     /// <returns>The view's light mask.</returns>
@@ -151,14 +153,18 @@ public sealed partial class SdfWorldTables {
 
         var index = Math.Clamp(value: view, min: 0, max: (frame.Views.Count - 1));
         var inputs = ViewInputsOf(index: index);
+        // The exposure the view's pass block carries (SdfFrameBlock.Write), which the mask holds point lights to.
+        var exposure = (PassValues.Exposures?.MultiplierOf(view: index) ?? 1f);
 
-        if (!ReferenceEquals(objA: inputs.LightMaskFrame, objB: frame) || (inputs.LightMaskEpoch != m_viewInputsEpoch)) {
+        if (!ReferenceEquals(objA: inputs.LightMaskFrame, objB: frame) || (inputs.LightMaskEpoch != m_viewInputsEpoch)
+            || (BitConverter.SingleToUInt32Bits(value: inputs.LightMaskExposure) != BitConverter.SingleToUInt32Bits(value: exposure))) {
             SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.LightSelections);
             var camera = frame.Views[index].Camera;
 
-            inputs.LightMask = SdfLightSelection.Select(camera: in camera, far: frame.FarDistance, lights: frame.Lights);
+            inputs.LightMask = SdfLightSelection.Select(camera: in camera, exposure: exposure, far: frame.FarDistance, lights: frame.Lights);
             inputs.LightMaskFrame = frame;
             inputs.LightMaskEpoch = m_viewInputsEpoch;
+            inputs.LightMaskExposure = exposure;
         }
 
         return inputs.LightMask;

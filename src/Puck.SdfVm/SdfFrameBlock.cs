@@ -261,7 +261,7 @@ public static partial class SdfFrameBlock {
             mask = selected;
         } else {
             SdfCadenceWork.ProcessWork.Count(kind: SdfCadenceWork.LightSelections);
-            mask = SdfLightSelection.Select(camera: in camera, far: frame.FarDistance, lights: lights);
+            mask = SdfLightSelection.Select(camera: in camera, exposure: (tables.Exposures?.MultiplierOf(view: view) ?? 1f), far: frame.FarDistance, lights: lights);
         }
 
         for (var word = 0; (word < 4); word++) {

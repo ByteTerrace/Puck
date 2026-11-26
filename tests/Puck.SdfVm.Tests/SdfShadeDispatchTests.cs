@@ -120,15 +120,15 @@ public sealed class SdfShadeDispatchTests {
         };
 
         var camNear = views[0].Camera;
-        var maskNear = SdfLightSelection.Select(camera: in camNear, far: frame.FarDistance, lights: lights);
+        var maskNear = SdfLightSelection.Select(camera: in camNear, exposure: 0f, far: frame.FarDistance, lights: lights);
 
         views[0] = ViewAt(z: 50f);
         var camMid = views[0].Camera;
-        var maskMid = SdfLightSelection.Select(camera: in camMid, far: frame.FarDistance, lights: lights);
+        var maskMid = SdfLightSelection.Select(camera: in camMid, exposure: 0f, far: frame.FarDistance, lights: lights);
 
         views[0] = ViewAt(z: 180f);
         var camFar = views[0].Camera;
-        var maskFar = SdfLightSelection.Select(camera: in camFar, far: frame.FarDistance, lights: lights);
+        var maskFar = SdfLightSelection.Select(camera: in camFar, exposure: 0f, far: frame.FarDistance, lights: lights);
 
         // Prove the test actually crosses light ranges with distinct visible counts.
         Assert.NotEqual(expected: UInt128.PopCount(value: maskNear), actual: UInt128.PopCount(value: maskMid));
@@ -232,7 +232,7 @@ public sealed class SdfShadeDispatchTests {
 
         for (var view = 0; (view < SplitViews); view++) {
             var camera = views[view].Camera;
-            var expected = SdfLightSelection.Select(camera: in camera, far: frame.FarDistance, lights: lights);
+            var expected = SdfLightSelection.Select(camera: in camera, exposure: 1f, far: frame.FarDistance, lights: lights);
 
             for (var pass = 0; (pass < PassesPerView); pass++) {
                 SdfFrameBlock.Write(
