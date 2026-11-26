@@ -6,47 +6,13 @@ using Puck.Maths;
 namespace Puck.Abstractions.Memory;
 
 /// <summary>
-/// Workspace arrays for builds that grow scratch storage and copy out what they keep. Arrays up to 1 MiB of payload
-/// come from the shared pool's buckets. Larger arrays of reference-free elements come from a bounded pool of their own
-/// (<see cref="LargePool{T}"/>) in size classes a quarter of a doubling apart, so a build that rents the same large
-/// scratch again (a bake group's contour lists, a merge's outputs) reuses an array a finished build returned instead of
-/// leaving each one for the collector on the large object heap. The pool holds at most
-/// <see cref="MaxRetainedBytes"/> and gives everything back to the collector on <see cref="TrimLarge"/>.
+/// Workspace arrays for a caller that needs an array: an element that holds references, or an interface that takes an
+/// array. Arrays up to 1 MiB of payload come from the shared pool's buckets; a larger one is allocated for the rental and
+/// left to the collector when it is returned. Large scratch of reference-free elements belongs in native storage
+/// (<see cref="OwnedBuffer{T}"/>, <see cref="RentedScope.Buffer{T}"/>), which never reaches the large object heap.
 /// </summary>
 public static class RentedArrays {
     private const int MaxPooledBytes = (1 << 20);
-    // The most bytes of large arrays the pool keeps for reuse, over every element type.
-    private const long MaxRetainedBytes = (512L << 20);
-    // The largest single array the pool keeps; a bigger one is a one-off the collector reclaims once it is returned.
-    private const long MaxRetainedArrayBytes = (128L << 20);
-    // The arrays of one element type the pool keeps.
-    private const int MaxRetainedArrays = 64;
-
-    // The seconds a returned large array stays for reuse with no rental taking it (TrimIdleLarge): long enough to carry
-    // one build's scratch to the next build of a burst, short enough that a process done building gives it all back.
-    private const double IdleLargeSeconds = 10.0;
-
-    private static readonly Lock TrimGate = new();
-    // Each element type's trim, given the timestamp before which an idle array goes (long.MaxValue for every one).
-    private static readonly List<Action<long>> Trimmers = [];
-    private static long RetainedBytes;
-    // The bytes of large rentals a fresh allocation answered and the pool answered, since the process began.
-    private static long FreshLargeBytes;
-    private static long ReusedLargeBytes;
-    private static IAllocationObserver? LargeCache;
-
-    /// <summary>Connects the process account to the large cache. Every element type shares its admission lock.</summary>
-    /// <param name="owner">The process-lifetime owner of idle large arrays.</param>
-    public static void ObserveLargeCache(IAllocationObserver owner) {
-        ArgumentNullException.ThrowIfNull(owner);
-        lock (TrimGate) {
-            if (LargeCache is not null) { throw new InvalidOperationException("The large array cache already has an owner."); }
-            if (RetainedBytes != 0L && !owner.TryAcquire(RetainedBytes, MemoryBacking.Managed)) {
-                foreach (var trim in Trimmers) { trim(obj: long.MaxValue); }
-            }
-            LargeCache = owner;
-        }
-    }
 
     private static int PooledLengthLimit<T>() {
         // The shared pool rounds requests to a power-of-two bucket with at least 16 elements. Count the bucket's
@@ -54,14 +20,6 @@ public static class RentedArrays {
         var maxLength = (MaxPooledBytes / Unsafe.SizeOf<T>());
 
         return ((maxLength < 16) ? 0 : (1 << BitOperations.Log2(value: (uint)maxLength)));
-    }
-    // The length a large rental of at least minimumLength rounds up to: a multiple of a quarter of the power of two below
-    // it, so no array is more than a quarter longer than asked for and the same request always finds the same class.
-    private static int ClassLengthOf(int minimumLength) {
-        var step = (1 << Math.Max(val1: 0, val2: (BitOperations.Log2(value: ((uint)(minimumLength - 1))) - 2)));
-        var length = ((((long)minimumLength + step) - 1) & -((long)step));
-
-        return ((int)Math.Min(val1: length, val2: Math.Max(val1: minimumLength, val2: Array.MaxLength)));
     }
 
     /// <summary>Rents an array of at least <paramref name="minimumLength"/> elements; an empty request gets the shared
@@ -82,21 +40,11 @@ public static class RentedArrays {
 
         if (minimumLength == 0) { return []; }
         var shared = minimumLength <= PooledLengthLimit<T>();
-        var references = RuntimeHelpers.IsReferenceOrContainsReferences<T>();
-        var capacity = shared ? (int)((uint)Math.Max(16, minimumLength)).NextPowerOfTwo()
-            : references ? minimumLength : ClassLengthOf(minimumLength);
-        // An idle array already occupies this memory. Drop its cache charge before the borrower takes it. It may be longer
-        // than asked for, and the borrower is charged for the length it holds.
-        var cached = !shared && !references ? LargePool<T>.Take(capacity) : null;
-        if (cached is not null) { capacity = cached.Length; }
+        var capacity = shared ? (int)((uint)Math.Max(16, minimumLength)).NextPowerOfTwo() : minimumLength;
         var bytes = (long)capacity * Unsafe.SizeOf<T>();
         owner?.Acquire(bytes, MemoryBacking.Managed);
         try {
-            var array = shared ? ArrayPool<T>.Shared.Rent(minimumLength)
-                : cached ?? GC.AllocateUninitializedArray<T>(capacity);
-            if (!shared) {
-                if (cached is null) { _ = Interlocked.Add(location1: ref FreshLargeBytes, value: bytes); } else { _ = Interlocked.Add(location1: ref ReusedLargeBytes, value: bytes); }
-            }
+            var array = shared ? ArrayPool<T>.Shared.Rent(minimumLength) : GC.AllocateUninitializedArray<T>(capacity);
             if (owner is not null && array.Length != capacity) {
                 // The shared pool promises a minimum length. Account the actual bucket if its policy changes.
                 var extra = ((long)array.Length - capacity) * Unsafe.SizeOf<T>();
@@ -112,6 +60,7 @@ public static class RentedArrays {
             throw;
         }
     }
+
     /// <summary>Rents an array for the scope of a <see langword="using"/> declaration: disposing the lease returns it
     /// and releases the workspace charge the rent took. The lease holds the owner, so a charge cannot outlive its array
     /// by a caller returning without it.</summary>
@@ -135,9 +84,8 @@ public static class RentedArrays {
         /// <summary>Releases the rented array.</summary>
         public void Dispose() => Return(array: array, owner: owner);
     }
-    /// <summary>Returns an array to the shared pool, clearing it first when its elements hold references, or a large
-    /// array of reference-free elements to the large pool while it has room. Any other large array is eligible for
-    /// collection once its caller releases it.</summary>
+    /// <summary>Returns an array to the shared pool, clearing it first when its elements hold references. A larger array
+    /// is eligible for collection once its caller releases it.</summary>
     /// <typeparam name="T">The element.</typeparam>
     /// <param name="array">The array <see cref="Rent{T}(int)"/> or <see cref="Grow{T}"/> gave; the caller holds no reference to
     /// it afterward. An empty array is accepted and kept.</param>
@@ -153,10 +101,7 @@ public static class RentedArrays {
 
         if (array.Length == 0) { return; }
         owner?.Change(-(array.LongLength * Unsafe.SizeOf<T>()), MemoryBacking.Managed);
-        if (array.Length > PooledLengthLimit<T>()) {
-            if (!RuntimeHelpers.IsReferenceOrContainsReferences<T>()) { LargePool<T>.Return(array: array); }
-            return;
-        }
+        if (array.Length > PooledLengthLimit<T>()) { return; }
         ArrayPool<T>.Shared.Return(array: array, clearArray: RuntimeHelpers.IsReferenceOrContainsReferences<T>());
     }
     /// <summary>Rents an array of at least <paramref name="minimumLength"/> elements, copies the first
@@ -181,93 +126,5 @@ public static class RentedArrays {
         array.AsSpan(start: 0, length: keep).CopyTo(destination: grown);
         Return(array: array, owner: owner);
         return grown;
-    }
-    /// <summary>Gives every array the large pool holds back to the collector. Arrays callers still hold are
-    /// unaffected, and each returns to the pool, or to the collector, when its caller returns it.</summary>
-    public static void TrimLarge() => TrimLargeBefore(cutoff: long.MaxValue);
-    /// <summary>Gives back to the collector every array the large pool has held for reuse for more than
-    /// <see cref="IdleLargeSeconds"/> with no rental taking it, so a process that has finished building holds no
-    /// scratch. A frame's host calls it as it serves memory; cheap when the pool holds nothing.</summary>
-    public static void TrimIdleLarge() {
-        if (Interlocked.Read(location: ref RetainedBytes) == 0L) { return; }
-        TrimLargeBefore(cutoff: (System.Diagnostics.Stopwatch.GetTimestamp() - ((long)(IdleLargeSeconds * System.Diagnostics.Stopwatch.Frequency))));
-    }
-    private static void TrimLargeBefore(long cutoff) {
-        Action<long>[] trimmers;
-
-        lock (TrimGate) { trimmers = [.. Trimmers]; }
-        foreach (var trim in trimmers) { trim(obj: cutoff); }
-    }
-    /// <summary>Gets the bytes of arrays the large pool holds for reuse, over every element type.</summary>
-    public static long LargeRetainedBytes => Interlocked.Read(location: ref RetainedBytes);
-    /// <summary>Gets the bytes of large rentals (past the shared pool's limit) answered by a new allocation, which the
-    /// collector reclaims once it is returned past the pool's room, since the process began.</summary>
-    public static long LargeFreshBytes => Interlocked.Read(location: ref FreshLargeBytes);
-    /// <summary>Gets the bytes of large rentals answered by an array a finished build returned, since the process began.</summary>
-    public static long LargeReusedBytes => Interlocked.Read(location: ref ReusedLargeBytes);
-
-    // The arrays of one reference-free element type past the shared pool's limit that finished builds returned. Every
-    // array it holds has exactly a size class's length (ClassLengthOf), which is what finds one a later rental can use.
-    private static class LargePool<T> {
-        // Each idle array with the timestamp it was returned at, oldest first.
-        private static readonly List<(T[] Array, long Returned)> Arrays = new(capacity: MaxRetainedArrays);
-
-        static LargePool() {
-            lock (TrimGate) { Trimmers.Add(item: Trim); }
-        }
-
-        // The shortest idle array holding at least `length` elements and no more than a half again as many: bakes of
-        // different sizes rent scratch in neighbouring classes, which an exact match would leave for the collector.
-        public static T[]? Take(int length) {
-            var most = (length + (length / 2L));
-
-            lock (TrimGate) {
-                var found = -1;
-
-                for (var index = (Arrays.Count - 1); (index >= 0); index--) {
-                    var candidate = Arrays[index].Array.Length;
-
-                    if ((candidate < length) || (candidate > most)) { continue; }
-                    if ((found < 0) || (candidate < Arrays[found].Array.Length)) { found = index; }
-                }
-                if (found < 0) { return null; }
-
-                var array = Arrays[found].Array;
-
-                Arrays.RemoveAt(index: found);
-                Release(bytes: Bytes(array));
-                return array;
-            }
-        }
-        public static void Return(T[] array) {
-            var bytes = Bytes(array: array);
-
-            if ((array.Length != ClassLengthOf(minimumLength: array.Length)) || (bytes > MaxRetainedArrayBytes)) { return; }
-            lock (TrimGate) {
-                if ((Arrays.Count >= MaxRetainedArrays) || ((RetainedBytes + bytes) > MaxRetainedBytes)) { return; }
-                if (LargeCache is not null && !LargeCache.TryAcquire(bytes, MemoryBacking.Managed)) { return; }
-                Arrays.Add(item: (array, System.Diagnostics.Stopwatch.GetTimestamp()));
-                _ = Interlocked.Add(location1: ref RetainedBytes, value: bytes);
-            }
-        }
-        // Drops the arrays returned before the cutoff, which are the list's leading run.
-        private static void Trim(long cutoff) {
-            lock (TrimGate) {
-                var dropped = 0;
-
-                while ((dropped < Arrays.Count) && (Arrays[dropped].Returned < cutoff)) {
-                    Release(bytes: Bytes(Arrays[dropped].Array));
-                    dropped++;
-                }
-                Arrays.RemoveRange(index: 0, count: dropped);
-            }
-        }
-        private static long Bytes(T[] array) => (((long)array.Length) * Unsafe.SizeOf<T>());
-    }
-
-    // Under TrimGate at removal, whether a borrower took the array or a trim dropped it.
-    private static void Release(long bytes) {
-        LargeCache?.Change(-bytes, MemoryBacking.Managed);
-        _ = Interlocked.Add(ref RetainedBytes, -bytes);
     }
 }

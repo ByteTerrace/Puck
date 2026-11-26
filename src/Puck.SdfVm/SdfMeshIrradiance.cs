@@ -2223,9 +2223,9 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
 
             var cells = m_refillCells.Count;
-            // Rented for this round alone: a window that jumps far composes every slot, and the words are written before
+            // Native, for this round alone: a window that jumps far composes every slot, and the words are written before
             // the round ends, so none of a volume's size stays held between refills.
-            using var lease = RentedArrays.Rent<uint>(array: out var words, minimumLength: (cells * SdfMeshIrradianceProbe.ProbeWords));
+            using var words = OwnedBuffer<uint>.OfLength(allocator: m_allocator, clear: false, length: (cells * SdfMeshIrradianceProbe.ProbeWords));
             var composed = ComposeCells(cells: m_refillCells, words: words);
 
             lock (m_gate) {
@@ -2250,7 +2250,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // Composes each listed cell's slot words from the cache, outside the gate, into consecutive rows of the words, and
     // keeps the cells that composed at the front of the list in the same order: the count of them. A refill and a landed
     // batch's store both write those rows under the gate once a window has not moved meanwhile.
-    private int ComposeCells(List<(int Level, (int X, int Y, int Z) Cell)> cells, uint[] words) {
+    private int ComposeCells(List<(int Level, (int X, int Y, int Z) Cell)> cells, OwnedBuffer<uint> words) {
         var composed = 0;
         using var hold = m_blocks.Enter();
 
@@ -2898,8 +2898,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             }
 
             var cells = m_restoreCells.Count;
-            // Rented for this round alone, as the refill's words are.
-            using var lease = RentedArrays.Rent<uint>(array: out var words, minimumLength: (cells * SdfMeshIrradianceProbe.ProbeWords));
+            // Native, for this round alone, as the refill's words are.
+            using var words = OwnedBuffer<uint>.OfLength(allocator: m_allocator, clear: false, length: (cells * SdfMeshIrradianceProbe.ProbeWords));
             var composed = ComposeCells(cells: m_restoreCells, words: words);
 
             lock (m_gate) {

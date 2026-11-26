@@ -32,8 +32,8 @@ public static class SpanDistinct {
     public static int InOrder<T>(Span<T> items) where T : unmanaged, IComparable<T> {
         if (items.Length < 2) { return items.Length; }
 
-        using var orderLease = RentedArrays.Rent<(T Item, int Index)>(array: out var order, minimumLength: items.Length);
-        using var firstLease = RentedArrays.Rent<bool>(array: out var first, minimumLength: items.Length);
+        using var order = OwnedBuffer<(T Item, int Index)>.OfLength(allocator: null, clear: false, length: items.Length);
+        using var first = OwnedBuffer<bool>.OfLength(allocator: null, clear: false, length: items.Length);
         var sorted = order.AsSpan(start: 0, length: items.Length);
 
         for (var index = 0; (index < items.Length); index++) { sorted[index] = (items[index], index); }

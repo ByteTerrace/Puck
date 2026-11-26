@@ -30,23 +30,27 @@ public sealed partial class SdfMeshIrradiance {
         public static ChangeTree Of(List<Box> boxes) {
             if (boxes.Count == 0) { return new ChangeTree(nodes: [], depth: 0, boxes: 0); }
 
-            var lows = new Vector3[boxes.Count];
-            var highs = new Vector3[boxes.Count];
+            // The build's workspace, native and freed on return: the tree keeps only its emitted nodes.
+            using var lows = OwnedBuffer<Vector3>.OfLength(allocator: null, clear: false, length: boxes.Count);
+            using var highs = OwnedBuffer<Vector3>.OfLength(allocator: null, clear: false, length: boxes.Count);
+            using var built = new OwnedBuffer<SdfMeshIrradianceScene.Node>(allocator: null);
+            var lowAt = lows.GetSpan();
+            var highAt = highs.GetSpan();
 
-            for (var index = 0; (index < boxes.Count); index++) { (lows[index], highs[index]) = (boxes[index].Low, boxes[index].High); }
+            for (var index = 0; (index < boxes.Count); index++) { (lowAt[index], highAt[index]) = (boxes[index].Low, boxes[index].High); }
 
-            var (built, count, order, _, _, _) = SdfMeshIrradianceScene.Hierarchy.Build(braid: 0, count: boxes.Count, highs: highs, leaf: 1, lows: lows, name: "sdf.mesh-gi change", rent: false);
+            var (count, order, _, _) = SdfMeshIrradianceScene.Hierarchy.Build(braid: 0, count: boxes.Count, highs: highs, leaf: 1, lows: lows, name: "sdf.mesh-gi change", nodes: built);
 
-            RentedArrays.Return(array: order);
+            order.Dispose();
 
             var nodes = new List<ChangeNode>(capacity: count);
-            var depth = Emit(built: built, depth: 0, index: 0, nodes: nodes);
+            var depth = Emit(built: built.GetSpan(), depth: 0, index: 0, nodes: nodes);
 
             return new ChangeTree(nodes: [.. nodes], depth: depth, boxes: boxes.Count);
         }
         // Emits a node and its subtree in depth-first order, an inner node at CutDepth as a leaf of its bounds, and
         // returns the subtree's deepest leaf.
-        private static int Emit(SdfMeshIrradianceScene.Node[] built, int index, int depth, List<ChangeNode> nodes) {
+        private static int Emit(ReadOnlySpan<SdfMeshIrradianceScene.Node> built, int index, int depth, List<ChangeNode> nodes) {
             var node = built[index];
             var at = nodes.Count;
             var leaf = ((node.Count > 0) || (depth >= CutDepth));

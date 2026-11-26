@@ -14,7 +14,9 @@ namespace Puck.World;
 // name of what it is derived from, so a product is derived (clustered and levelled) only where the store holds none, and
 // the log line of each says which: a shipped cache or an earlier run on the machine makes it a read. A world with no
 // residency here has no product until a view of it draws the world whole once, which is that product's source (the derive
-// on a miss); the boot world's own residency is its source from the start, so a view of it never draws it whole.
+// on a miss); the boot world's own residency is its source, from the start when its document offers a product
+// (render.farProduct) and otherwise once a view asks for it, so a view of it never draws it whole. A world nothing views
+// from afar and whose document offers none builds no product.
 //
 // Invariant: a far entry draws only a product built from the document version its source residency's world holds now.
 // Enforced at the one door that hands a product to the plan, FarProductOf, which answers only a product whose version is
@@ -38,6 +40,16 @@ public sealed partial class WorldScreenBinder {
     private long m_farBuilds;
     private long m_farDerived;
     private long m_farStored;
+    // The worlds some planned view has asked to draw from their far product (NoteFarWanted). The boot world builds its
+    // product only when it declares render.farProduct or is in this set: a world nothing views from afar builds none.
+    private readonly HashSet<string> m_farWanted = new(comparer: StringComparer.Ordinal);
+
+    // Records that a planned view draws a world from its far product, so the boot world's residency builds it.
+    private void NoteFarWanted(string instance) => _ = m_farWanted.Add(item: instance);
+    // Whether the boot world's residency builds the boot world's product: its document offers one (render.farProduct),
+    // or a planned view asks for it, taking the product's defaults.
+    private bool BootOffersFarProduct(WorldSessionMirror mirror) =>
+        ((mirror.Definition.Render?.FarProduct is not null) || m_farWanted.Contains(item: WorldDefinitionLoader.BootInstanceName));
 
     // The product of a world's current version, or null while none is built.
     private SdfFarProduct? FarProductOf(string instance) =>
@@ -56,7 +68,7 @@ public sealed partial class WorldScreenBinder {
     private void PublishFarProducts() {
         if ((m_renderProbe is { } probe) && (probe.FarProducts is null)) { probe.FarProducts = DescribeFarProducts; }
         ReleaseRetiredFarProducts();
-        if ((ViewHost is { } host) && (Observations.BootEndpoint is { } boot)) {
+        if ((ViewHost is { } host) && (Observations.BootEndpoint is { } boot) && BootOffersFarProduct(mirror: boot.Mirror)) {
             PublishFarProduct(instance: WorldDefinitionLoader.BootInstanceName, mirror: boot.Mirror, residency: host);
         }
         foreach (var entry in InfinityEntries()) {

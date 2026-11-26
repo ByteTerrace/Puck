@@ -137,6 +137,24 @@ public sealed unsafe class OwnedBuffer<T> : MemoryManager<T> where T : unmanaged
 
     /// <summary>Enumerates a borrow of the logical contents.</summary>
     public Span<T>.Enumerator GetEnumerator() => GetSpan().GetEnumerator();
+    /// <summary>Returns a borrow of the logical contents from an element on, as an array's span is taken.</summary>
+    /// <param name="start">The first element, at most <see cref="Length"/>.</param>
+    /// <returns>The borrow, which ends at the next growth or at disposal.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="start"/> lies outside the logical contents.</exception>
+    public Span<T> AsSpan(int start) => GetSpan()[start..];
+    /// <summary>Returns a borrow of a run of the logical contents, as an array's span is taken.</summary>
+    /// <param name="start">The run's first element.</param>
+    /// <param name="length">The run's element count.</param>
+    /// <returns>The borrow, which ends at the next growth or at disposal.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The run lies outside the logical contents.</exception>
+    public Span<T> AsSpan(int start, int length) => GetSpan().Slice(start: start, length: length);
+    /// <summary>Borrows the logical contents as a span, so a buffer stands where a method takes an array's span.</summary>
+    /// <param name="buffer">The buffer, not disposed.</param>
+    public static implicit operator Span<T>(OwnedBuffer<T> buffer) => buffer.GetSpan();
+    /// <summary>Borrows the logical contents as a read-only span, so a buffer stands where a method reads an array's
+    /// span.</summary>
+    /// <param name="buffer">The buffer, not disposed.</param>
+    public static implicit operator ReadOnlySpan<T>(OwnedBuffer<T> buffer) => buffer.GetSpan();
     /// <inheritdoc/>
     public override Span<T> GetSpan() {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
