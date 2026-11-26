@@ -794,15 +794,27 @@ own tick boundary and writes nothing.
 - **One stream identity, stamped by whoever serves.** The stream's identity,
   generation and ordinal live in one lineage (`WorldStreamLineage`) that every
   segment's cursor stamps from. A segment opens the lineage, which moves the
-  generation, so its first record is a cut record, then the route, the whole
-  document and a primer, under ordinals that go on from the last segment's. The
-  client's ingress (`WorldStreamIngress`) needs no new rule: a handoff is a cut
-  of the stream it is bound to, and a record of the segment before it carries an
-  earlier generation or an ordinal not ahead, which the ingress already drops.
-- **A cut, never a close.** The client drops what it held of the world the
-  traveler left when it reads the cut, and the document of the world the
-  traveler stands in follows in the same burst of records. The span is never
-  closed, so the client never reconnects.
+  generation, so its first record is the whole document of the world the
+  traveler stands in, then the route and a primer, under ordinals that go on
+  from the last segment's. A record of the segment before it carries an earlier
+  generation or an ordinal not ahead, which the client's ingress
+  (`WorldStreamIngress`) drops.
+- **The document carries the cut.** A generation's first record is its whole
+  document, and that record is the cut: the client drops what it held of the
+  world the traveler left and takes the next world's document in one record
+  (`WorldFederationProjectionSink`'s one stamping door), so it never holds no
+  document between the two, however its link paces or jitters the records. A
+  separate cut record followed by the document would leave the client holding
+  nothing for up to one delivery's jitter, and coalescing paced writes would
+  only narrow that gap. The slow observer's catch-up (`WorldDeliveryCursor.Lapse`)
+  opens its generation the same way. A cut record of its own remains only for a
+  generation no document can carry: a stream whose view withholds, a
+  frames-tier stream, or the end of a stream. The reader enforces it: a
+  generation opens only with a document or a cut record, and any other record
+  of a later generation than the client holds is refused
+  (`WorldStreamIngress.Admit`).
+- **A cut, never a close.** The span is never closed, so the client never
+  reconnects.
 - **Across a socket.** An authority in another process serves a segment of a
   stream it was handed (`WorldTravelerObservation.Continuation`): it takes the
   lineage up from the counters the asking authority lends it
@@ -1142,7 +1154,7 @@ Searched and read before proposing a mechanism. Each is cited by symbol.
   `IClientSink.CloseSpan`, `WorldRecipientView`.
 - **A stream across authorities.** The cut a slow observer catches up by
   (`WorldDeliveryCursor.Lapse`, `WorldDeliveryCursor.TakeCut`, and the sink's
-  cut record, route, document and primer behind it) is the handoff's whole
+  document carrying the cut, then the route and primer) is the handoff's whole
   wire form, so no record kind was added for the client. The forwarding
   routes (`IWorldTransferForwarder.HasOnwardRoute`,
   `IWorldForwardedAuthority.StreamProjectionAsync`, the host's route table)

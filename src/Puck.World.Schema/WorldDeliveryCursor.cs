@@ -76,7 +76,7 @@ public sealed class WorldDeliveryCursor {
     /// <paramref name="lineage"/> from now on.</summary>
     /// <param name="lineage">The stream this cursor delivers a segment of, or <see langword="null"/> for a stream of
     /// its own. A stream another segment has stamped opens a new generation here, so the cursor owes its reader the
-    /// cut record and the whole disclosed document first (<see cref="CutOwed"/>).</param>
+    /// cut and the whole disclosed document first (<see cref="CutOwed"/>).</param>
     public WorldDeliveryCursor(WorldStreamLineage? lineage = null) {
         m_lineage = (lineage ?? new WorldStreamLineage());
         m_cutOwed = m_lineage.Open(owner: this);
@@ -202,9 +202,11 @@ public sealed class WorldDeliveryCursor {
         m_bodyRadius = radius;
     }
     /// <summary>Takes the cut this cursor decided since the last take, once: when it returns <see langword="true"/>, the
-    /// stream owes its reader a cut record under the new generation and then the whole disclosed document and a primer
-    /// snapshot, before anything newer (<see cref="ForgetDocument"/> makes the next <see cref="DeliverDefinition"/>
-    /// compose it whole).</summary>
+    /// stream owes its reader the cut, the whole disclosed document under the new generation and a primer snapshot,
+    /// before anything newer (<see cref="ForgetDocument"/> makes the next <see cref="DeliverDefinition"/> compose it
+    /// whole). A stream on the wire announces the cut with the document's own record, so its reader replaces the
+    /// document it held in one record; only a generation with no document to carry it is announced by a cut record of
+    /// its own.</summary>
     /// <returns><see langword="true"/> when a cut happened since the last take.</returns>
     public bool TakeCut() {
         var cut = m_cutOwed;
@@ -216,15 +218,15 @@ public sealed class WorldDeliveryCursor {
     /// holds.</summary>
     public bool OwesRows => (m_metadataPrimers.Count != 0);
     /// <summary>Gets whether a cut was decided that <see cref="TakeCut"/> has not yet taken: the stream owes its reader
-    /// the cut record and the new generation's primer now, whatever its cadence.</summary>
+    /// the cut and the new generation's primer now, whatever its cadence.</summary>
     public bool CutOwed => m_cutOwed;
     /// <summary>Forgets the document identity this stream last delivered, so the next <see cref="DeliverDefinition"/>
     /// delivers the whole disclosed document even when its content did not move: a new generation is primed
     /// alone.</summary>
     public void ForgetDocument() => m_definition = null;
     /// <summary>Decides a cut because the stream's reader missed records: a transport that could not keep up dropped
-    /// them, so nothing the reader holds is known to be whole. The stream owes the cut record, the whole disclosed
-    /// document and a primer under the new generation, as after any cut (<see cref="TakeCut"/>).</summary>
+    /// them, so nothing the reader holds is known to be whole. The stream owes the cut, the whole disclosed document and
+    /// a primer under the new generation, as after any cut and by the same path (<see cref="TakeCut"/>).</summary>
     public void Lapse() => Cut();
     // A cursor whose stream another segment has opened decides nothing for it: the next segment's cut already ended
     // everything this one delivered.

@@ -65,8 +65,8 @@ public sealed class WorldStreamLineage {
     /// <summary>Gets the stream's current span.</summary>
     public long Generation { get { lock (m_gate) { return m_generation; } } }
     /// <summary>Makes <paramref name="owner"/> the one segment that stamps the stream. A stream that has stamped a
-    /// record opens a new generation for the segment, which owes its reader a cut record and the whole of what it
-    /// discloses before anything else.</summary>
+    /// record opens a new generation for the segment, which owes its reader the cut and the whole of what it discloses
+    /// before anything else.</summary>
     /// <param name="owner">The segment's identity.</param>
     /// <returns><see langword="true"/> when the segment owes a cut: the stream had stamped a record.</returns>
     public bool Open(object owner) {

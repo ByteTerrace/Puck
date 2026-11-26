@@ -45,13 +45,13 @@ when a world is restaged into an existing directory; no other world's files or
 
 `WorldOutputHub` delivers borrowed snapshots synchronously. The federation projection sink retains at most
 `WorldFederationProjectionSink.PendingDeliveryLimit` encoded records per subscriber. A subscriber that overflows
-is sent nothing while its wire drains, then catches up behind a cut (a new generation, the whole document and a
+is sent nothing while its wire drains, then catches up on a new generation (its whole document, whose record carries the cut, and a
 primer) once the queue is at `ResumeDeliveryLimit`, because definition and route records cannot be recovered from
 the latest snapshot alone. One that has not drained within `StalledDeliveryLimit` deliveries detaches with
 `world.observation.backpressure` and reopens. A traveler's stream is one stream across the authorities it walks
 through: `WorldTravelerProjection` is the one door that opens its segments, each stamps from the stream's
 `WorldStreamLineage`, and a segment whose traveler moved on ends with `world.observation.moved` while the
-authority holding the connection opens the next one behind a cut
+authority holding the connection opens the next one with its whole document, whose record carries the cut
 ([decision 7](../../../../docs/plans/remote-content.md#decision-7-one-stream-across-a-travelers-authorities));
 test it with `TravelerObservationHandoffLawTests`. Session queries use `WorldSessionSink.AllowsQuery`, the
 same tier and observer-disclosure decision as deliveries: Frames reads nothing, Presentation reads only

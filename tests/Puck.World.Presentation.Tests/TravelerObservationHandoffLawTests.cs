@@ -9,9 +9,10 @@ namespace Puck.World.Presentation.Tests;
 /// CONTRACT UNDER TEST: a remote player's observation of its traveler is one stream for as long as the authority it
 /// entered through holds its connection. The player's host hands the traveler to a destination behind its door and
 /// observes it there; the traveler then walks to a second authority of the destination's host and back. The entry
-/// authority keeps the stream open across both crossings: each reaches the reader as a cut of the stream it already
-/// holds, followed by the whole document of the world the traveler now stands in, served by the entry authority
-/// itself or relayed from the other one. The reader's one ingress takes every record, the stream's identity never
+/// authority keeps the stream open across both crossings: each reaches the reader as one record of the stream it
+/// already holds, the whole document of the world the traveler now stands in, which carries the cut, served by the
+/// entry authority itself or relayed from the other one, so the reader never holds no document between the two
+/// worlds. The reader's one ingress takes every record, the stream's identity never
 /// changes, its span is never closed, and the traveler is back at the entry authority as the peer principal it left
 /// as, with the grants its admission gives an arrival.
 /// </summary>
@@ -19,7 +20,7 @@ public sealed class TravelerObservationHandoffLawTests {
     private static readonly TimeSpan Deadline = TimeSpan.FromSeconds(seconds: 60);
 
     // A reader as a mirror is one: every record passes its one ingress, a cut or a generation step withdraws what it
-    // held, and a close of the span ends it.
+    // held, a generation opens only with its whole document, and a close of the span ends it.
     private sealed class Reader : IClientSink {
         private readonly Lock m_gate = new();
         private readonly WorldStreamIngress m_ingress;
@@ -30,6 +31,8 @@ public sealed class TravelerObservationHandoffLawTests {
         private int m_cuts;
         private int m_terminalCuts;
         private int m_withdrawals;
+        private int m_openings;
+        private int m_bare;
 
         public Reader() => m_ingress = new WorldStreamIngress(withdraw: () => {
             m_document = null;
@@ -40,41 +43,57 @@ public sealed class TravelerObservationHandoffLawTests {
         public WorldStreamSpan Span => m_ingress.Span;
         public long Refusals => m_ingress.Refusals;
         public int Closes { get { lock (m_gate) { return m_closes; } } }
+        // The cut records taken: a generation opened with no document to carry its cut.
         public int Cuts { get { lock (m_gate) { return m_cuts; } } }
         public int TerminalCuts { get { lock (m_gate) { return m_terminalCuts; } } }
         public int Withdrawals { get { lock (m_gate) { return m_withdrawals; } } }
+        // The documents that opened a later generation of the stream the reader was bound to: each carried its cut.
+        public int Openings { get { lock (m_gate) { return m_openings; } } }
+        // The deliveries after which a reader that had held a document held none: the gap a separate cut record leaves
+        // until the new generation's document arrives.
+        public int Bare { get { lock (m_gate) { return m_bare; } } }
         // Each authority a snapshot named after the one before it named another: the worlds the reader was shown, in order.
         public string[] Authorities { get { lock (m_gate) { return [.. m_authorities]; } } }
         // The authority whose document and bodies the reader holds now, or null while it holds either of neither.
         public string? Shown { get { lock (m_gate) { return ((m_document is null) ? null : m_authority); } } }
 
+        // Notes, after a delivery, a reader left without the document it had held.
+        private void Settle() {
+            if ((m_withdrawals > 1) && (m_document is null)) { m_bare++; }
+        }
         public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
             lock (m_gate) {
-                if (!m_ingress.Admit(stream: in stream)) { return; }
+                if (!m_ingress.Admit(opens: false, stream: in stream)) { return; }
                 m_authority = snapshot.Authority;
                 if ((m_authorities.Count == 0) || (m_authorities[^1] != snapshot.Authority)) {
                     m_authorities.Add(item: snapshot.Authority);
                 }
+                Settle();
             }
         }
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
             lock (m_gate) {
-                if (m_ingress.Admit(stream: in stream)) { m_document = definition; }
+                var held = m_ingress.Span;
+
+                if (!m_ingress.Admit(stream: in stream)) { return; }
+                m_document = definition;
+                if ((held.Stream != 0UL) && (stream.Generation > held.Generation)) { m_openings++; }
             }
         }
         public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
             lock (m_gate) {
-                if (m_ingress.Admit(stream: in stream)) { m_document = definition; }
+                if (m_ingress.Admit(opens: false, stream: in stream)) { m_document = definition; }
             }
         }
         public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
-            lock (m_gate) { _ = m_ingress.Admit(stream: in stream); }
+            lock (m_gate) { _ = m_ingress.Admit(opens: false, stream: in stream); }
         }
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) {
             lock (m_gate) {
                 if (!m_ingress.Cut(stream: in stream, terminal: terminal)) { return; }
                 m_cuts++;
                 if (terminal) { m_terminalCuts++; }
+                Settle();
             }
         }
         public void CloseSpan(ulong stream) {
@@ -208,9 +227,10 @@ public sealed class TravelerObservationHandoffLawTests {
 
     // THE LAW: an authority whose traveler stands in another process serves its recipient's stream from there without
     // ending it. It lends the far authority the stream's counters with the request; the far authority stamps its
-    // records as the stream's next generation, behind a cut; the relaying authority's lineage follows each stamp; and
-    // when the traveler moves on, the far authority hands the stream back with a record the recipient never sees.
-    // Asked again, the same stream goes on, here from the authority the traveler walked on to, behind another cut.
+    // records as the stream's next generation, opening with its whole document, which carries the cut; the relaying
+    // authority's lineage follows each stamp; and when the traveler moves on, the far authority hands the stream back
+    // with a record the recipient never sees. Asked again, the same stream goes on, here from the authority the
+    // traveler walked on to, opening with that world's document.
     [Fact]
     public async Task ARelayedSegmentContinuesItsStreamAcrossASocketAndIsHandedBackWhenTheTravelerMovesOn() {
         WorldRemoteAuthority? traveler = null;
@@ -238,7 +258,7 @@ public sealed class TravelerObservationHandoffLawTests {
         StepUntil(condition: () => relayed.Shows(authority: entry.AuthorityIdentity), hosts: hosts, what: "the far authority's world is relayed");
         var opening = relayed.Records[0];
 
-        Assert.Equal(expected: WorldFederationResponse.Cut, actual: opening.Kind);
+        Assert.Equal(expected: WorldFederationResponse.Definition, actual: opening.Kind);
         Assert.Equal(expected: new WorldStreamStamp(Generation: (own.Generation + 1L), Ordinal: (own.Ordinal + 1L), Stream: lineage.Stream), actual: opening.Stamp);
 
         Walk(from: FederatedHosts.DestinationName, hosts: hosts, source: entry, target: onward, to: FederatedHosts.OnwardName);
@@ -255,7 +275,7 @@ public sealed class TravelerObservationHandoffLawTests {
         StepUntil(condition: () => relayed.Shows(authority: onward.AuthorityIdentity), hosts: hosts, what: "the neighbour's world is relayed");
         var records = relayed.Records;
 
-        Assert.Equal(expected: WorldFederationResponse.Cut, actual: records[handed].Kind);
+        Assert.Equal(expected: WorldFederationResponse.Definition, actual: records[handed].Kind);
         Assert.True(condition: (records[handed].Stamp.Generation > last.Generation), userMessage: "the next segment opens a later generation");
         Assert.DoesNotContain(collection: records, filter: static record => (record.Kind is WorldFederationResponse.ProjectionMoved or WorldFederationResponse.ProjectionInvalidated or WorldFederationResponse.Refusal));
         for (var index = 0; (index < records.Length); index++) {
@@ -320,7 +340,11 @@ public sealed class TravelerObservationHandoffLawTests {
         Assert.Equal(expected: 0, actual: reader.Closes);
         Assert.Equal(expected: 0, actual: reader.TerminalCuts);
         Assert.Equal(expected: 0L, actual: reader.Refusals);
-        Assert.Equal(expected: 2, actual: reader.Cuts);
+        // Each handoff is one record: the new world's document, which carries the cut, so the reader never held no
+        // document between losing one world and being shown the next.
+        Assert.Equal(expected: 0, actual: reader.Cuts);
+        Assert.Equal(expected: 2, actual: reader.Openings);
+        Assert.Equal(expected: 0, actual: reader.Bare);
         Assert.Equal(
             expected: [entry.AuthorityIdentity, onward.AuthorityIdentity, entry.AuthorityIdentity],
             actual: reader.Authorities
