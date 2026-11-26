@@ -42,16 +42,20 @@ The building has no sun of its own: the world that stands it lights it
 ([`day.puck`](day.puck) in the debug world). Its own light is in real units,
 and almost all of it is the flaw ([`gallery/flaw.puck`](gallery/flaw.puck)):
 one continuous glowing tube, a neon core in a frosted sleeve whose tint drifts
-along its length, that weaves through every floor. It runs east along the
-north arcade as a wave from under the roof to level 0 and back, its flanks
-passing behind the piers and through the north gallery's slabs, crosses the
-void under the roof at the east end, weaves back west along the south arcade,
-and climbs from level 0 through the bridge's three floors to where it began.
-Its path is a list of control points (`flawControls` in
-[`gallery/layout.puck`](gallery/layout.puck)); its look and its light per metre
-are `lookFlaw` and `lookFlawTint` in [`gallery/look.puck`](gallery/look.puck).
+along its length, that runs through every floor like a finely made neon
+conduit. Every run is level or plumb, on the building's lines: along each
+gallery it keeps one tile behind the arcade, just under the storey's ceiling,
+and steps down a storey a bay from under the roof to level 0 and back up, each
+step a riser standing plumb behind a pier and passing straight through the slab
+through a brass collar. It crosses the void only under the roof, under the
+arches of bays 3 and 11, and the two galleries mirror each other. Its route is
+an editable list of steps (`flawProfile` in
+[`gallery/layout.puck`](gallery/layout.puck)), which gives the corners
+(`flawRoute`) and the slabs' openings (`flawCrossings`); its look, corner
+radius, collar and light per metre are `lookFlaw`, `lookFlawTint` and
+`lookFlawCollar` in [`gallery/look.puck`](gallery/look.puck).
 It lights like a fluorescent tube: a chain of tube lights along the same
-curve, cut at each slab so every one lies in one storey, anchored to the
+route, cut at each slab so every one lies in one storey, anchored to the
 building's root and standing still, so the irradiance volume traces each: its
 light bounces about its storey and stops at the slabs. Beside it a pendant
 lights the south-west stair's well, which the flaw never enters, and the lift's car has a
