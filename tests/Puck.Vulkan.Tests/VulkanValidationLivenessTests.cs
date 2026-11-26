@@ -43,7 +43,7 @@ public sealed class VulkanValidationLivenessTests {
 
             try {
                 instance = new VulkanInstanceFactory(instanceApi: new VulkanNativeInstanceApi(
-                    allocator: new HeapAllocator(),
+                    allocator: new Puck.Abstractions.Memory.SystemAllocator(),
                     procedures: procedures
                 )).Create(
                     applicationName: nameof(VulkanValidationLivenessTests),
@@ -102,7 +102,7 @@ public sealed class VulkanValidationLivenessTests {
         Console.SetError(newError: captured);
 
         try {
-            var allocator = new HeapAllocator();
+            var allocator = new Puck.Abstractions.Memory.SystemAllocator();
             var procedures = new VulkanProcResolver();
             VulkanInstance instance;
 

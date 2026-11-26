@@ -121,7 +121,7 @@ public sealed unsafe class VulkanIndirectCountLawTests {
 
         return new VulkanGpuRecorder(
             deviceContext: context,
-            recordingApi: new VulkanNativeCommandBufferRecordingApi(allocator: new HeapAllocator())
+            recordingApi: new VulkanNativeCommandBufferRecordingApi(allocator: new Puck.Abstractions.Memory.SystemAllocator())
         );
     }
     // A vkGetDeviceProcAddr stand-in: vkCmdDrawIndirectCountKHR records, and every other entry point resolves to a trap

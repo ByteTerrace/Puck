@@ -3,9 +3,8 @@ using Puck.Maths;
 namespace Puck.Abstractions.Memory;
 
 /// <summary>
-/// One owner's map from a 64-bit key to a reference-free value, held in <see cref="OwnedBuffer{T}"/> storage: native when
-/// an allocator is given, so a background build's lookup table never reaches the collector, and rented otherwise.
-/// Open addressing with linear probing over a power-of-two table kept at most half full; a key's home slot is its
+/// One owner's map from a 64-bit key to a reference-free value, held in <see cref="OwnedBuffer{T}"/> storage, which is
+/// native, so a build's lookup table never reaches the collector. Open addressing with linear probing over a power-of-two table kept at most half full; a key's home slot is its
 /// SplitMix64 mix (<see cref="InvertibleBitMix.Mix64"/>), so keys that differ in their high bits only (a lattice
 /// coordinate packed into a word) spread over the table. Growth rehashes into a table twice the size. There is no
 /// removal. Not thread-safe.
@@ -21,8 +20,8 @@ public sealed class OwnedLongMap<TValue> : IDisposable where TValue : unmanaged 
 
     /// <summary>Initializes a new instance of the <see cref="OwnedLongMap{TValue}"/> class with room for
     /// <paramref name="capacity"/> keys before it grows.</summary>
-    /// <param name="allocator">The native allocator, or <see langword="null"/> for storage rented from
-    /// <see cref="RentedArrays"/>.</param>
+    /// <param name="allocator">The native allocator, or <see langword="null"/> for the process's
+    /// (<see cref="ProcessAllocator.Current"/>).</param>
     /// <param name="observer">The owning lifecycle's byte observer, or <see langword="null"/> for unmetered storage.</param>
     /// <param name="capacity">The keys to make room for at once; not negative.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="capacity"/> is negative.</exception>

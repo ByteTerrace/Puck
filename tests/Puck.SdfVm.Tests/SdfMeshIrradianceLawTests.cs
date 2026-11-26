@@ -30,7 +30,7 @@ public sealed partial class SdfMeshIrradianceLawTests : IDisposable {
     // are the frames the law drives, never the wall time they take.
     // Native storage as the World gives it, behind the guard that ends the run at a double free, an overrun or a write
     // into freed storage, so the laws drive the volume's native lifetimes (its words, blocks and geometry copies).
-    private static readonly Puck.Abstractions.Memory.GuardedAllocator Native = new(inner: new Puck.Testing.HeapAllocator(), quarantineBytes: (64L << 20));
+    private static readonly Puck.Abstractions.Memory.GuardedAllocator Native = new(inner: new Puck.Abstractions.Memory.SystemAllocator(), quarantineBytes: (64L << 20));
 
     private SdfMeshIrradiance Volume() {
         var volume = new SdfMeshIrradiance(allocator: Native) { Time = VirtualClock.ForDevice() };

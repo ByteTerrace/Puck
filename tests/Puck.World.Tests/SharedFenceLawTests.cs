@@ -108,7 +108,7 @@ public sealed unsafe class SharedFenceLawTests {
             warp: false
         );
         using var fence = new DirectXGpuSurfaceExportFactory(deviceContext: context).CreateExportableFence();
-        var allocator = new HeapAllocator();
+        var allocator = new Puck.Abstractions.Memory.SystemAllocator();
         var procedures = new VulkanProcResolver();
         VulkanInstance instance;
 

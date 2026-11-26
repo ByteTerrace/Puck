@@ -19,6 +19,5 @@
         <Compile Include="../Shared/GpuGroupLayoutTables.cs" Link="GpuGroupLayoutTables.cs" />
     </ItemGroup>
     <ItemGroup>
-        <Compile Include="../Shared/HeapAllocator.cs" Link="HeapAllocator.cs" />
     </ItemGroup>
 </Project>

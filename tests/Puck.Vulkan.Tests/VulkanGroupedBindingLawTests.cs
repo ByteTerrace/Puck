@@ -199,7 +199,7 @@ public sealed unsafe class VulkanGroupedBindingLawTests {
             );
             Recorder = new VulkanGpuRecorder(
                 deviceContext: context,
-                recordingApi: new VulkanNativeCommandBufferRecordingApi(allocator: new HeapAllocator())
+                recordingApi: new VulkanNativeCommandBufferRecordingApi(allocator: new Puck.Abstractions.Memory.SystemAllocator())
             );
         }
 
