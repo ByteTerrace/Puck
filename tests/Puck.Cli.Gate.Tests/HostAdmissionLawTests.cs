@@ -7,11 +7,12 @@ namespace Puck.Cli.Gate.Tests;
 public sealed class HostAdmissionLawTests {
     // The 16 GB, six-thread developer machine's thresholds without a commit reserve, so the laws about a start's own need
     // read the commit headroom against that need alone: pressure below 2 GB free, disk pressure below 10 GB. Its installed
-    // memory reads 24 GB, whose account budget (18 GB) holds every kind's full default peak, so these laws read the kinds'
-    // own figures; the 16 GB machine's own peaks are AWindowedWorldOnASixteenGigabyteMachineExpectsItsAccountBudget's.
-    private static readonly HostLoadThresholds Thresholds = (HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6) with { CommitReservePercent = 0, InstalledRamGb = 24 });
+    // memory reads 40 GB, whose account budget less its authoring margin (25 GB) holds every kind's full default peak, so
+    // these laws read the kinds' own figures; the 16 GB machine's own peaks are
+    // AWindowedWorldOnASixteenGigabyteMachineExpectsItsAccountBudgetLessItsAuthoringMargin's.
+    private static readonly HostLoadThresholds Thresholds = (HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6) with { CommitReservePercent = 0, InstalledRamGb = 40 });
     // The same thresholds with their default commit reserve (10% of the limit).
-    private static readonly HostLoadThresholds Reserved = (HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6) with { InstalledRamGb = 24 });
+    private static readonly HostLoadThresholds Reserved = (HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6) with { InstalledRamGb = 40 });
     // The 32 GB, 16-thread machine with its defaults: pressure below 4 GB free, a tenth of the commit limit in reserve.
     private static readonly HostLoadThresholds Desk = HostLoadThresholds.For(installedRamGb: 32, logicalProcessors: 16);
 
@@ -369,14 +370,18 @@ public sealed class HostAdmissionLawTests {
 
         Assert.Equal(expected: (11.0, 16.0), actual: (tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld).ResidentGb, tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld).PrivateGb));
     }
-    // A kind the idle machine could not hold is refused by name at once, however long the bound: its commit plus the reserve
-    // exceed the commit limit.
+    // A kind the idle machine could not hold is refused by name at once, however long the bound: the least commit it is
+    // admitted at alone (for an unmeasured windowed World, its expected 12.6 GB private working set, 0.7 of 18 GB) plus the
+    // reserve exceed the commit limit. A limit that holds that least figure (19 GB) is not refused, though it cannot hold
+    // the whole 18 GB guess with its reserve.
     [Fact]
     public void AStartThatCanNeverFitTheMachineIsRefusedByNameAtOnce() {
         var smallCommit = HostLoadThresholds.For(installedRamGb: 32, logicalProcessors: 16);
         var cases = new (HostLoadThresholds Thresholds, HostSample Reading, string Expected)[] {
-            (smallCommit, Sample(commit: 10, limit: 19), "a windowed World can never be admitted on this machine, it expects 18.0GB of commit and the commit reserve is 1.9GB, over the machine's 19.0GB commit limit"),
+            (smallCommit, Sample(commit: 10, limit: 13), "a windowed World can never be admitted on this machine, it needs at least 12.6GB of commit and the commit reserve is 1.3GB, over the machine's 13.0GB commit limit"),
         };
+
+        Assert.True(condition: HostAdmission.Wait("start", false, false, () => Sample(commit: 10, limit: 19), new GateClock(), _ => Assert.Fail(message: "a lone unmeasured start that fits its least commit is admitted at once"), TextWriter.Null, CancellationToken.None, smallCommit, TimeSpan.FromMinutes(minutes: 30), null, HostStartKind.WindowedWorld, new HostStartTracker()));
 
         foreach (var (thresholds, reading, expected) in cases) {
             var clock = new GateClock();
@@ -387,44 +392,119 @@ public sealed class HostAdmissionLawTests {
             Assert.Equal(expected: TimeSpan.Zero, actual: clock.GetElapsedTime(startingTimestamp: 0));
         }
     }
-    // An unmeasured windowed World on a 16 GB machine is expected at its account budget there (12 GB, three quarters of the
-    // machine), not at a large machine's 18 GB, so an idle 16 GB machine with a 19 GB commit limit admits it.
+    // An unmeasured windowed World on a 16 GB machine is expected at its account budget less its authoring margin there
+    // (12 - 2 = 10 GB, the top of the 8 to 10 GB a World read on such a machine), not at a large machine's 18 GB, so an idle
+    // 16 GB machine with a 19 GB commit limit admits it.
     [Fact]
-    public void AWindowedWorldOnASixteenGigabyteMachineExpectsItsAccountBudget() {
+    public void AWindowedWorldOnASixteenGigabyteMachineExpectsItsAccountBudgetLessItsAuthoringMargin() {
         var machine = HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6);
         var clock = new GateClock();
         using var error = new StringWriter();
 
-        Assert.Equal(expected: 12.0, actual: HostLoadThresholds.DefaultPeakGb(installedRamGb: 16, kind: HostStartKind.WindowedWorld));
-        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb, actual: HostLoadThresholds.DefaultPeakGb(installedRamGb: 64, kind: HostStartKind.WindowedWorld));
-        Assert.Equal(expected: 12.0, actual: new HostStartTracker().ExpectedPeaks(kind: HostStartKind.WindowedWorld, thresholds: machine).PrivateGb);
+        Assert.Equal(expected: 10.0, actual: HostLoadThresholds.DefaultPeakGb(installedRamGb: 16, kind: HostStartKind.WindowedWorld));
+        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb, actual: HostLoadThresholds.DefaultPeakGb(installedRamGb: 32, kind: HostStartKind.WindowedWorld));
+        Assert.Equal(expected: HostLoadThresholds.ColdWindowedWorldPeakGb, actual: HostLoadThresholds.DefaultPeakGb(installedRamGb: 64, kind: new HostStartProfile(HostStartKind.WindowedWorld).Cold));
+        Assert.Equal(expected: 10.0, actual: new HostStartTracker().ExpectedPeaks(kind: HostStartKind.WindowedWorld, thresholds: machine).PrivateGb);
         Assert.True(condition: HostAdmission.Wait("start", false, false, () => Sample(commit: 10, limit: 19, ram: 13), clock, _ => Assert.Fail(message: "an idle machine admits at once"), error, CancellationToken.None, machine, TimeSpan.FromMinutes(minutes: 30), null, HostStartKind.WindowedWorld, new HostStartTracker()));
     }
-    // On an idle 16 GB machine 9.6 GB of memory is free and the pressure floor is 2 GB, so an unmeasured windowed World's
-    // fallback working set (0.7 of its 12 GB budget, 8.4 GB) does not fit and nothing else is running to wait for. The guess
-    // is held to the 7.6 GB the idle machine can give, so the World runs and teaches the window its real peak; the same guess
-    // beside a running start still waits, commit still judges the start by the whole guess, and a profile this machine has
-    // measured is never clamped, so a measured need that does not fit is refused.
+    // On an idle 16 GB machine 8.6 GB of memory is free and the pressure floor is 2 GB, so an unmeasured windowed World's
+    // fallback working set (0.7 of its 10 GB, 7 GB) does not fit and nothing else is running to wait for. The guess is held
+    // to the 6.6 GB the idle machine can give, so the World runs and teaches the window its real peak; the same guess beside
+    // a running start still waits, and a profile this machine has measured is never clamped, so a measured need that does
+    // not fit is refused.
     [Fact]
     public void AnUnmeasuredProfileIsHeldToWhatTheIdleMachineCanGiveSoItCanRunAndBeMeasured() {
         var machine = HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 6);
-        var idle = Sample(commit: 10, limit: 19, ram: 9.6);
-        var beside = Sample(commit: 10, limit: 19, ram: 9.6, starts: [new(Id: 900, Kind: HostStartKind.HeavySuite, PrivateGb: 2, PrivateResidentGb: 1, Ready: true, StartTicks: 900)]);
+        var idle = Sample(commit: 10, limit: 19, ram: 8.6);
+        var beside = Sample(commit: 10, limit: 19, ram: 8.6, starts: [new(Id: 900, Kind: HostStartKind.HeavySuite, PrivateGb: 2, PrivateResidentGb: 1, Ready: true, StartTicks: 900)]);
         using var directory = new Puck.Testing.TemporaryDirectory();
 
         var lone = new HostStartTracker().Judge(reading: idle, kind: HostStartKind.WindowedWorld, thresholds: machine, clock: new GateClock(), reserve: false);
 
-        Assert.Equal(expected: (true, true, 12.0, 7.6), actual: (lone.CommitCovered, lone.PhysicalCovered, lone.OwnGb, Math.Round(value: lone.ResidentOwnGb, digits: 6)));
+        Assert.Equal(expected: (true, true, 10.0, 6.6, false), actual: (lone.CommitCovered, lone.PhysicalCovered, lone.OwnGb, Math.Round(value: lone.ResidentOwnGb, digits: 6), lone.Measured));
         Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: idle, tracker: new HostStartTracker(), clock: new GateClock(), on: machine));
         Assert.False(condition: Admits(kind: HostStartKind.WindowedWorld, reading: beside, tracker: new HostStartTracker(), clock: new GateClock(), on: machine));
 
-        // Once measured, the profile is no longer clamped: a learned 10 GB resident does not fit 9.6 GB free, and is judged by
-        // the lesser of it and the 8.4 GB fallback, which does not fit either.
+        // Once measured, the profile is no longer clamped: a learned 10 GB resident does not fit 8.6 GB free, and is judged by
+        // the lesser of it and the 7 GB fallback, which does not fit either.
         Observed(directory.RootPath, new GateClock(), HostStartKind.WindowedWorld, id: 1, privateGb: 11, workingSetGb: 12, privateResidentGb: 10);
 
         var measured = new HostStartTracker(directory.RootPath).Judge(reading: idle, kind: HostStartKind.WindowedWorld, thresholds: machine, clock: new GateClock(), reserve: false);
 
-        Assert.Equal(expected: (false, 8.4), actual: (measured.PhysicalCovered, Math.Round(value: measured.ResidentOwnGb, digits: 6)));
+        Assert.Equal(expected: (false, 7.0, true), actual: (measured.PhysicalCovered, Math.Round(value: measured.ResidentOwnGb, digits: 6), measured.Measured));
+    }
+    // The RTX 2060 machine's reading (16 GB installed, a 22.7 GB commit limit and 9 GB committed with no Puck process
+    // running): 13.7 GB of commit headroom holds the 10 GB fallback and the 2.3 GB reserve, so a first benchmark is
+    // admitted. With 11 GB of headroom left by other programs it does not hold the whole guess; alone, the start is judged by
+    // the least commit it can need (its 7 GB expected private working set) and admitted to be measured, and it reserves its
+    // whole guess, so a second start asked at once waits. Beside another Puck start the whole guess still judges it, and a
+    // commit limit that could not hold even the least figure refuses it by name.
+    [Fact]
+    public void ALoneUnmeasuredStartIsAdmittedAtItsLeastCommitSoTheMachineLearnsOnItsFirstBoot() {
+        var machine = HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 12);
+        var reserve = (22.7 * HostLoadThresholds.DefaultCommitReservePercent / 100.0);
+        HostSample Reading(double headroomGb, HostRunningStart[]? starts = null) => Sample(commit: (100.0 * (22.7 - headroomGb) / 22.7), limit: 22.7, ram: 9, starts: starts);
+        var vulkan = new HostStartProfile(HostStartKind.WindowedWorld, Device: "vulkan", Document: "debug");
+
+        var roomy = new HostStartTracker().Judge(reading: Reading(13.7), kind: vulkan, thresholds: machine, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (true, 10.0, 12.3), actual: (roomy.CommitCovered, roomy.OwnGb, Math.Round(roomy.NeedGb + reserve, 1)));
+
+        var tight = new HostStartTracker().Judge(reading: Reading(11), kind: vulkan, thresholds: machine, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (true, 7.0, 7.0), actual: (tight.CommitCovered, Math.Round(tight.OwnGb, 6), Math.Round(tight.LoneOwnGb, 6)));
+
+        // Admitted alone, it reserves its whole 10 GB guess: the second start of this process is not alone and waits.
+        var asked = new HostStartTracker();
+
+        Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: Reading(11), tracker: asked, clock: new GateClock(), on: machine));
+        Assert.False(condition: Admits(kind: HostStartKind.WindowedWorld, reading: Reading(11), tracker: asked, clock: new GateClock(), on: machine));
+
+        // Beside a ready headless World (another Puck process holding commit) the whole guess judges it.
+        var beside = new HostStartTracker().Judge(reading: Reading(11, [new(Id: 900, Kind: HostStartKind.HeadlessWorld, PrivateGb: 1, PrivateResidentGb: 1, Ready: true, StartTicks: 900)]), kind: vulkan, thresholds: machine, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (false, 10.0), actual: (beside.CommitCovered, beside.OwnGb));
+
+        // A 7.5 GB commit limit cannot hold the least figure and its 0.75 GB reserve: refused by name, at once.
+        using var error = new StringWriter();
+        var clock = new GateClock();
+
+        Assert.False(condition: HostAdmission.Wait("benchmark", true, false, () => Sample(commit: 10, limit: 7.5, ram: 9), clock, _ => Assert.Fail(message: "an impossible start does not wait"), error, CancellationToken.None, machine, TimeSpan.FromMinutes(minutes: 120), null, vulkan, new HostStartTracker()));
+        Assert.Contains(expectedSubstring: "a windowed World of debug on vulkan can never be admitted on this machine, it needs at least 7.0GB of commit", actualString: error.ToString());
+    }
+    // A windowed World is learned and judged per document: a small root world measured at 4 GB is admitted beside a running
+    // debug World where the debug world's own 13.8 GB is not, and a document this machine has not measured is judged by what
+    // any World of its kind, backend and store reached here (every document's observation is also one of those), falling to
+    // the fallback only when nothing of the kind has been measured.
+    [Fact]
+    public void AWindowedWorldIsLearnedAndJudgedByTheDocumentItBoots() {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        var clock = new GateClock();
+        var debug = new HostStartProfile(HostStartKind.WindowedWorld, Device: "directx", Document: "debug");
+        var gallery = debug with { Document = "gallery" };
+        var lead = HostLoadThresholds.For(installedRamGb: 64, logicalProcessors: 24);
+
+        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb, actual: new HostStartTracker(directory.RootPath).ExpectedPeaks(kind: gallery, thresholds: lead).PrivateGb);
+
+        Observed(directory.RootPath, clock, HostStartKind.WindowedWorld, id: 1, privateGb: 13.8, workingSetGb: 11, privateResidentGb: 10, marked: debug);
+
+        // Unmeasured, the gallery borrows the debug world's figure through its kind, backend and store.
+        Assert.Equal(expected: (13.8, 13.8), actual: (new HostStartTracker(directory.RootPath).ExpectedPeaks(kind: gallery).PrivateGb, new HostStartTracker(directory.RootPath).ExpectedPeaks(kind: debug.AnyDocument).PrivateGb));
+
+        new HostStartTracker(directory.RootPath).Finish(profile: gallery, process: (2, 2), peaks: new HostPeaks(PrivateGb: 4, ResidentGb: 3, WorkingSetGb: 3.5));
+
+        var next = new HostStartTracker(directory.RootPath);
+
+        Assert.Equal(expected: (13.8, 4.0), actual: (next.ExpectedPeaks(kind: debug).PrivateGb, next.ExpectedPeaks(kind: gallery).PrivateGb));
+        Assert.Equal(expected: ["WindowedWorld.directx", "WindowedWorld.directx@debug", "WindowedWorld.directx@gallery"], actual: [.. next.MeasuredProfiles().Select(static profile => profile.Name)]);
+
+        // Beside a running debug World, 16.4 GB of commit headroom (6.4 GB of it the reserve) and 20 GB free admit the gallery
+        // and not a second debug World.
+        HostRunningStart[] running = [new(Id: 1, Kind: HostStartKind.WindowedWorld, PrivateGb: 13.8, PrivateResidentGb: 10, Ready: true, StartTicks: 1, Marked: debug)];
+        var reading = Sample(commit: (100.0 * (64 - 16.4) / 64), limit: 64, ram: 20, starts: running);
+
+        Assert.True(condition: next.Judge(reading: reading, kind: gallery, thresholds: lead, clock: clock, reserve: false).Covered);
+        Assert.False(condition: next.Judge(reading: reading, kind: debug, thresholds: lead, clock: clock, reserve: false).Covered);
     }
     // A World that is stopped records what it reached as one settled observation of its profile, though nothing sampled it
     // while it ran and it never lasted a plateau, and the profile's window then judges the next start of it.
@@ -717,7 +797,8 @@ public sealed class HostAdmissionLawTests {
             WorldLaunch.Admit(cancellationToken: TestContext.Current.CancellationToken, request: worker).Dispose();
             Assert.Equal(expected: 4, actual: readings);
             Assert.Equal(expected: TimeSpan.FromSeconds(seconds: 20), actual: clock.GetElapsedTime(startingTimestamp: 0));
-            Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit headroom 1.3GB (admission needs at least 9.0GB");
+            // Alone and unmeasured, the replica waits only for its lone need, its expected private working set.
+            Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit headroom 1.3GB (admission needs at least 6.3GB (6.3GB lone need (9.0GB expected) of a test-batch replica");
             Assert.Contains(actualString: error.ToString(), expectedSubstring: "capacity returned for test worker");
 
             // The next replica is admitted on its own reading: 60% starts at once, as does a World booted in process.
@@ -881,13 +962,16 @@ public sealed class HostAdmissionLawTests {
     public void AWorldOpensADeviceUnlessItBootsHeadlessOrRunsATestBatch(string[] arguments, bool opens) =>
         Assert.Equal(expected: opens, actual: WorldDevices.OpensDevice(arguments: arguments));
     // A windowed World is expected to peak at 18 GB. At 60% of a 40 GB limit the charge is 24 GB, under the 75% share, but
-    // the 16 GB of headroom cannot hold it: the start waits, names the peak, and goes ahead once 20 GB are free.
+    // the 16 GB of headroom cannot hold it beside another Puck process: the start waits, names the peak, and goes ahead once
+    // 20 GB are free. Alone, the same reading admits it at the least commit it can need (its 12.6 GB expected private
+    // working set), since it has not been measured here.
     [Fact]
     public void AWindowedStartWaitsWhenTheHeadroomIsBelowItsPeakEvenAtSixtyPercentCommit() {
         var clock = new GateClock();
         using var error = new StringWriter();
 
-        Assert.False(condition: HostAdmission.Wait("puck_world_start", true, false, () => Sample(commit: 60), clock, clock.Advance, error, CancellationToken.None, Thresholds, TimeSpan.FromSeconds(seconds: 25), null, HostStartKind.WindowedWorld, new HostStartTracker()));
+        Assert.False(condition: HostAdmission.Wait("puck_world_start", true, false, () => Sample(commit: 60, starts: [Company]), clock, clock.Advance, error, CancellationToken.None, Thresholds, TimeSpan.FromSeconds(seconds: 25), null, HostStartKind.WindowedWorld, new HostStartTracker()));
+        Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: Sample(commit: 60), tracker: new HostStartTracker(), clock: new GateClock()));
         Assert.Contains(actualString: error.ToString(), expectedSubstring: "no memory headroom: commit headroom 16.0GB (admission needs at least 18.0GB (18.0GB expected peak of a windowed World plus 0.0GB still to grow in 0 admitted start(s) plus the 0.0GB commit reserve))");
         Assert.DoesNotContain(expectedSubstring: "% of limit", actualString: error.ToString());
         Assert.True(condition: Admits(kind: HostStartKind.WindowedWorld, reading: Sample(commit: 50), tracker: new HostStartTracker(), clock: new GateClock()));
@@ -1126,7 +1210,9 @@ public sealed class HostAdmissionLawTests {
         var cold = new HostStartTracker(directory.RootPath).Judge(reading: reading, kind: new HostStartProfile(HostStartKind.WindowedWorld).Cold, thresholds: Desk, clock: new GateClock(), reserve: false);
 
         Assert.Equal(expected: (true, true, 8.0, "WindowedWorld"), actual: (warm.CommitCovered, warm.PhysicalCovered, warm.ResidentOwnGb, warm.Profile!.Value.Name));
-        Assert.Equal(expected: (true, false, 15.0, "WindowedWorld.cold"), actual: (cold.CommitCovered, cold.PhysicalCovered, cold.ResidentOwnGb, cold.Profile!.Value.Name));
+        // The cold 15 GB does not fit the 10 GB free memory leaves above the floor even with nothing else running, so it is
+        // judged by the lesser of it and the desk's cold fallback (0.7 of 20 GB), which does not fit either.
+        Assert.Equal(expected: (true, false, 14.0, "WindowedWorld.cold"), actual: (cold.CommitCovered, cold.PhysicalCovered, Math.Round(cold.ResidentOwnGb, 6), cold.Profile!.Value.Name));
     }
     // Before a profile has an observation, a cold windowed World is expected to peak at the cold bake's figure, and a running
     // start still growing is expected to reach the peak of the profile its launch marked.
@@ -1135,12 +1221,13 @@ public sealed class HostAdmissionLawTests {
         var tracker = new HostStartTracker();
         var cold = new HostStartProfile(HostStartKind.WindowedWorld).Cold;
         var growing = new HostRunningStart(Id: 11, Kind: HostStartKind.WindowedWorld, PrivateGb: 2, StartTicks: 1);
+        var large = HostLoadThresholds.For(installedRamGb: 64, logicalProcessors: 16);
 
-        Assert.Equal(expected: HostLoadThresholds.ColdWindowedWorldPeakGb, actual: tracker.ExpectedPeaks(kind: cold, thresholds: Desk).PrivateGb);
-        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb, actual: tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld, thresholds: Desk).PrivateGb);
+        Assert.Equal(expected: HostLoadThresholds.ColdWindowedWorldPeakGb, actual: tracker.ExpectedPeaks(kind: cold, thresholds: large).PrivateGb);
+        Assert.Equal(expected: HostLoadThresholds.WindowedWorldPeakGb, actual: tracker.ExpectedPeaks(kind: HostStartKind.WindowedWorld, thresholds: large).PrivateGb);
 
-        var unmarked = new HostStartTracker().Judge(reading: Sample(starts: [growing]), kind: HostStartKind.Step, thresholds: Desk, clock: new GateClock(), reserve: false);
-        var marked = new HostStartTracker().Judge(reading: Sample(starts: [growing with { Marked = cold }]), kind: HostStartKind.Step, thresholds: Desk, clock: new GateClock(), reserve: false);
+        var unmarked = new HostStartTracker().Judge(reading: Sample(starts: [growing]), kind: HostStartKind.Step, thresholds: large, clock: new GateClock(), reserve: false);
+        var marked = new HostStartTracker().Judge(reading: Sample(starts: [growing with { Marked = cold }]), kind: HostStartKind.Step, thresholds: large, clock: new GateClock(), reserve: false);
 
         Assert.Equal(expected: (HostLoadThresholds.WindowedWorldPeakGb - 2, HostLoadThresholds.ColdWindowedWorldPeakGb - 2), actual: (unmarked.GrowthGb, marked.GrowthGb));
     }
@@ -1214,6 +1301,16 @@ public sealed class HostAdmissionLawTests {
         Assert.Equal(new HostStartProfile(HostStartKind.WindowedWorld, "vulkan"), request.Profile);
         Assert.Equal(new HostStartProfile(HostStartKind.WindowedWorld), (request with { Backend = null }).Profile);
         Assert.Equal(new HostStartProfile(HostStartKind.HeadlessWorld), (request with { Shape = WorldShape.Headless }).Profile);
+
+        // The document is the world path's last name up to its first dot, wherever the world lies; a staged copy is measured
+        // as the world it stands for, and a headless World measures no document.
+        foreach (var world in (string[])["worlds/debug", "C:/install/versions/1/worlds/debug/debug.world.json", "worlds/debug/debug.puck", "worlds/debug/"]) {
+            Assert.Equal(new HostStartProfile(HostStartKind.WindowedWorld, "vulkan", Document: "debug"), (request with { World = world }).Profile.Class);
+        }
+        Assert.Equal("gallery", (request with { World = "worlds/debug/Gallery.puck" }).Profile.Class.Document);
+        Assert.Null((request with { World = "worlds/debug/.benchmark-pair-0f.puck" }).Profile.Document);
+        Assert.Equal("debug", (request with { World = "worlds/debug/.benchmark-pair-0f.puck", AdmissionWorld = "worlds/debug" }).Profile.Document);
+        Assert.Null((request with { World = "worlds/debug", Shape = WorldShape.Headless }).Profile.Document);
     }
     [Fact]
     public void PersistentPressureStopsAtTheBoundAndCancellationStartsNothing() {

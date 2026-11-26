@@ -5458,29 +5458,45 @@ again removes the mark, and a heavy suite no longer waits for the idle run to ex
 machine's one heavy slot, since the memory it holds is already in the headroom a start is admitted by. Admission
 never stops or times out the process; its owner decides that. `puck lease list` and `puck host load` name it
 (`idle since`). A World
-that reports ready also releases its reserve: the launch reads the World's output and marks it ready (`WorldReadiness`, a mark beside the leases) once a headless World answers on its console or publishes its attachment, or a device World's renderer is ready or its bakes settle, and from then on its actual usage is what counts. Each start names its profile (`HostStartProfile`): its kind (a windowed World, a headless World, or a `--test-batch` replica) and, for a windowed World, the backend it boots on and whether its mesh store is warm or cold. The launch predicts the store (`WorldLaunchRequest.Profile`: a `--cache-dir` whose `meshes` folder, or the per-user store, holds nothing bakes every mesh) and records the profile for every observer (`StartProfiles`, a file named by process id and start ticks under `start-profile` in the lease root); the World's own `[sdf.mesh-bake] start ... baking=N` report makes its store cold whatever was predicted, so the cold bake's far larger peak is learned apart from a warm session's.
+that reports ready also releases its reserve: the launch reads the World's output and marks it ready (`WorldReadiness`, a mark beside the leases) once a headless World answers on its console or publishes its attachment, or a device World's renderer is ready or its bakes settle, and from then on its actual usage is what counts. Each start names its profile (`HostStartProfile`): its kind (a windowed World, a headless World, or a `--test-batch` replica) and, for a windowed World, the backend it boots on, whether its mesh store is warm or cold, and the world document it boots (`HostStartProfile.DocumentOfWorld`: the `--world` path's last name up to its first dot, so a checkout's `worlds/debug`, its `debug.puck` and a player install's compiled document of it are all `debug`, and a gallery-only root world beside it is measured apart; a run that boots a staged copy names the world it stands for, `WorldLaunchRequest.AdmissionWorld`). The launch predicts the store (`WorldLaunchRequest.Profile`: a `--cache-dir` whose `meshes` folder, or the per-user store, holds nothing bakes every mesh) and records the profile for every observer (`StartProfiles`, a file named by process id and start ticks under `start-profile` in the lease root); the World's own `[sdf.mesh-bake] start ... baking=N` report makes its store cold whatever was predicted, so the cold bake's far larger peak is learned apart from a warm session's.
 `HostStartTracker` keeps, per profile, the private-byte, private working-set and working-set peaks of its last ten observed
 processes (plateaued, or finished after a full plateau window; a shorter run counts only to raise a profile that has
 observations) and expects the high percentile of them (the fourth fifth), so one unusual session raises the
 estimate only until five observations exist and leaves the window after ten newer starts, a rise to a new level
 is learned once three of ten starts reach it, and a fall is learned as readily. A live process above the
 estimate is still counted at its own usage, without clipping real peaks. The windows persist per machine in the
-shared lease root, one file per profile name (`WindowedWorld`, `WindowedWorld.vulkan`, `WindowedWorld.directx.cold`, `HeavySuite`) under `HostStartTracker.ObservationDirectory` (a line per process:
+shared lease root, one file per profile name (`WindowedWorld`, `WindowedWorld.vulkan`, `WindowedWorld.directx.cold`, `WindowedWorld.vulkan@debug`, `HeavySuite`) under `HostStartTracker.ObservationDirectory` (a line per process:
 start ticks, process id, private GB, private working-set GB, working-set GB). Every CLI copy on the machine
 rewrites these files, so a change to their lines or names takes a new directory name and raises `CliLease.Protocol`. An exclusive sibling guard merges each process's own new
 observations into the file, which decides the estimate: a long-lived CLI or MCP session holds nothing the file does not.
+A process reads only the files of the profiles it judges. An observation of a document's start is also one of its kind,
+backend and store with no document (`HostStartProfile.AnyDocument`), so a document this machine has not measured, and a
+start that names none (a `puck lease gpu` hold), is judged by what any World of that kind reached here, and by the fallback
+(below) only when nothing of the kind has been measured. `puck host load` prints a demand line for every measured profile.
 An estimate the machine could not hold even with every admitted start gone (its private bytes against the commit headroom
 plus the live starts' private bytes and the reserve, its private working set against free memory plus theirs and the pressure
 floor) is not waited on: the start is judged by the lesser of the estimate and the profile's fallback (below). No wait for an
 admitted start would admit it, and a profile whose estimate refused every start would run nothing that could lower it, so one
 pathological session would lock its profile out for good. The start still has to hold the commit reserve and the pressure floor
 beside the live starts' remaining growth, and the demand reports the figure judged.
-A start whose own expected peak (judged as just described) plus the commit reserve exceeds the commit limit, or whose expected private working set plus the
+A profile this machine has not measured itself (its document included) is a guess, and a guess refused with nothing else
+running would never run, so never be measured. Its private working set is held to the free memory the idle machine leaves
+above the pressure floor. A start of it alone (no live Puck start, no other process's hold, no reservation of this
+process's own) is judged in commit by its lone need, its expected private working set: every privately resident page is
+committed, so no start can need less. It reserves its whole guess for the starts this process asks next, runs, and records
+what it reached as it stops (`HostStartTracker.Finish`), so a machine learns a profile on its first boot. Beside other Puck
+work the whole guess judges it, so admitted work never grows into a start that guessed low. A step is never tracked once it
+runs, so its whole guess judges it alone too. The admission line names the lone need beside the expected figure
+(`6.3GB lone need (9.0GB expected) of a test-batch replica`).
+A start whose least figure on an idle machine (its lone need for an unmeasured profile; for a measured one the lesser of its
+estimate and the fallback) plus the commit reserve exceeds the commit limit, or whose private working set at that figure plus the
 pressure floor exceeds the installed memory, is refused by name at once (`gate: refused <step>: a windowed World can
-never be admitted on this machine, ...`) instead of waiting out the bound. Before the first observation, `HostLoadThresholds.DefaultPeakGb`
-provides the private-byte fallback: the profile's figure from a large machine (a windowed World with a cold mesh store 22 GB, with a warm one 18 GB), held to the host budget a Puck process's
-account derives on this machine's installed memory (`MemoryAccount.DefaultBudgetOf`, three quarters of it), since a
-World sizes its pools from that budget; and `HostLoadThresholds.ResidentFraction` (0.7) of the profile's expected
+never be admitted on this machine, it needs at least ...`) instead of waiting out the bound. Before the first observation, `HostLoadThresholds.DefaultPeakGb`
+provides the private-byte fallback: the profile's figure from a large machine (a windowed World with a cold mesh store 22 GB, with a warm one 18 GB), held to what a Puck process's
+account lets it reach on this machine's installed memory: the host budget it plans its storage to (`MemoryAccount.DefaultBudgetOf`,
+three quarters of it) less the free memory its authoring work leaves the machine (`MemoryAccount.AuthoringMarginOf`, an eighth),
+the bake being what sets a session's peak. That is five eighths of the machine: 10 GB on a 16 GB machine, the top of the 8 to
+10 GB private a windowed World read there, and above every profile's figure from 32 GB up. `HostLoadThresholds.ResidentFraction` (0.7) of the profile's expected
 private-byte peak is the private working-set fallback until the profile's private working set is measured. The ordinary host samplers feed this same tracker,
 including during a benchmark; no separate admission or sampling service runs.
 Pre-process reservations remain local and expire when a matching process appears

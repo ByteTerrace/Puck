@@ -161,10 +161,13 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Pres
     public const double StepPeakGb = 2;
 
     /// <summary>Returns the fallback peak before this machine has measured a plateaued or finished start of the profile: the
-    /// profile's reading on a large machine, held to the host budget a Puck process's account derives on a machine of
-    /// <paramref name="installedRamGb"/> (<see cref="Puck.Hosting.Jobs.MemoryAccount.DefaultBudgetOf"/>). A World sizes its
-    /// caches and pools from that budget, so on a 16 GB machine it plans for 12 GB and ran at 8 to 10 GB private where a
-    /// 64 GB machine reads 12 to 18 GB; judging the small machine by the large one's figure refuses a start that fits.</summary>
+    /// profile's reading on a large machine, held to what a Puck process's account lets it reach on a machine of
+    /// <paramref name="installedRamGb"/>: the host budget it plans its storage to
+    /// (<see cref="Puck.Hosting.Jobs.MemoryAccount.DefaultBudgetOf"/>) less the free memory its authoring work leaves the
+    /// machine (<see cref="Puck.Hosting.Jobs.MemoryAccount.AuthoringMarginOf"/>), the bake being the work that sets a
+    /// session's peak. That is five eighths of the machine, 10 GB of a 16 GB machine, where a World read 8 to 10 GB private,
+    /// and above every profile's own figure from 32 GB up, where a 64 GB machine reads 12 to 18 GB; judging the small
+    /// machine by the large one's figure refuses a start that fits.</summary>
     /// <param name="kind">The start's profile: its kind, and for a windowed World whether its mesh store is cold.</param>
     /// <param name="installedRamGb">The machine's installed memory, in gigabytes, or <see langword="null"/> to judge by the
     /// profile's figure alone.</param>
@@ -179,9 +182,11 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Pres
             _ => StepPeakGb,
         };
 
-        return ((installedRamGb is { } installed && double.IsFinite(d: installed) && (installed > 0))
-            ? Math.Min(val1: peak, val2: (Puck.Hosting.Jobs.MemoryAccount.DefaultBudgetOf(installedPhysicalBytes: (long)(installed * 1073741824.0)) / 1073741824.0))
-            : peak);
+        if (!((installedRamGb is { } installed) && double.IsFinite(d: installed) && (installed > 0))) { return peak; }
+
+        var bytes = (long)(installed * 1073741824.0);
+
+        return Math.Min(val1: peak, val2: ((Puck.Hosting.Jobs.MemoryAccount.DefaultBudgetOf(installedPhysicalBytes: bytes) - Puck.Hosting.Jobs.MemoryAccount.AuthoringMarginOf(installedPhysicalBytes: bytes)) / 1073741824.0));
     }
     /// <summary>Gets whether a reading's commit headroom (the limit less the charge) covers <paramref name="needGb"/> and
     /// still holds the commit reserve afterwards. A threshold left out, or a platform that reports no commit limit, never
@@ -212,20 +217,22 @@ public sealed record HostLoadThresholds(double? CapacityCpuPercent, double? Pres
     /// <param name="reading">The reading.</param>
     /// <returns>The room, never negative.</returns>
     public double PhysicalRoomGb(HostSample reading) => (((PressureRamGb is { } floor) && double.IsFinite(d: reading.FreeRamGb)) ? Math.Max(val1: 0, val2: (reading.FreeRamGb - floor)) : double.PositiveInfinity);
-    /// <summary>Names what keeps a start from ever being admitted on this machine however idle it is: its own expected
-    /// private bytes plus the commit reserve exceed the commit limit, or its own expected private working set plus the
-    /// pressure floor exceed the installed memory. Waiting cannot help such a start.</summary>
+    /// <summary>Names what keeps a start from ever being admitted on this machine however idle it is: the least private
+    /// bytes it is admitted at alone (<see cref="HostStartDemand.LoneOwnGb"/>) plus the commit reserve exceed the commit
+    /// limit, or the least private working set it is admitted at alone plus the pressure floor exceed the installed memory.
+    /// Waiting cannot help such a start.</summary>
     /// <param name="reading">The reading, whose commit limit is the machine's.</param>
-    /// <param name="ownGb">The start's own expected commit peak, in gigabytes.</param>
-    /// <param name="residentOwnGb">The start's own expected private working-set peak, in gigabytes.</param>
+    /// <param name="ownGb">The least commit, in gigabytes, the start is admitted at on an idle machine.</param>
+    /// <param name="residentOwnGb">The least private working set, in gigabytes, the start is admitted at on an idle
+    /// machine.</param>
     /// <returns>The shortfall as a phrase, or <see langword="null"/> when the machine could hold the start alone or does
     /// not report its totals.</returns>
     public string? NeverFits(HostSample reading, double ownGb, double residentOwnGb) {
         if ((CommitReservePercent is not null) && double.IsFinite(d: reading.CommitLimitGb) && ((ownGb + CommitReserveGb(reading: reading)) > reading.CommitLimitGb)) {
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"it expects {ownGb:0.0}GB of commit and the commit reserve is {CommitReserveGb(reading: reading):0.0}GB, over the machine's {reading.CommitLimitGb:0.0}GB commit limit");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"it needs at least {ownGb:0.0}GB of commit and the commit reserve is {CommitReserveGb(reading: reading):0.0}GB, over the machine's {reading.CommitLimitGb:0.0}GB commit limit");
         }
         if ((PressureRamGb is { } floor) && (InstalledRamGb is { } installed) && ((residentOwnGb + floor) > installed)) {
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"it expects {residentOwnGb:0.0}GB of private working set and the pressure floor is {floor:0.0}GB, over the machine's {installed:0.0}GB of memory");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"it needs at least {residentOwnGb:0.0}GB of private working set and the pressure floor is {floor:0.0}GB, over the machine's {installed:0.0}GB of memory");
         }
 
         return null;
