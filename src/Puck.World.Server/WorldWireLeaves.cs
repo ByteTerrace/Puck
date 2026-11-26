@@ -134,7 +134,7 @@ public static class WorldWireLeaves {
     public static WorldFederatedIntentCheckpoint ReadFederatedInput(ref WireReader reader) => new(
         reader.ReadInt32(), WorldWireCodec.ReadPrincipal(ref reader),
         reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(reader: ref r)),
-        reader.ReadArray("pending federated input", static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(reader: ref r), 1024));
+        reader.ReadArray("pending federated input", static (ref WireReader r) => WorldWireCodec.ReadIntentSubmission(reader: ref r), WorldFederatedIntentState.MaximumPending));
     /// <summary>Writes a crossing member's request-local id and its optional companion leaf.</summary>
     /// <param name="writer">The writer.</param>
     /// <param name="memberId">The request-local id, negative for the member's ordinal.</param>
