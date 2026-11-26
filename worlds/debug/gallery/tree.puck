@@ -84,7 +84,9 @@ let treeCrownLimbEvery = 4
 
 // A bough's control point `mid` swung `treeBoughSwing` metres to `side` (1 or -1) across the bough's bearing toward
 // `into`, so boughs curve sideways as well as up.
-let treeBoughSwing = 1.6
+let treeBoughSwing = 0.9
+// One bough or twig to every this many clumps of a tier or a fork, so the canopy carries a few boughs, not a spoke a clump.
+let treeTierLimbEvery = 3
 function treeBough(mid, into, side) = (mid + (vectorUnit([(0 - into[2]), 0, into[0]]) * (treeBoughSwing * side)))
 // Materials.
 let treeBark = 0
@@ -305,17 +307,18 @@ prototypes {
           smooth: 0.3
           curve {
             a: leanLocal([0, (treeTrunk.top - 1.6), 0], 0)
-            b: leanLocal(treeBough([(into[0] * 0.65), (into[1] - 2.4), (into[2] * 0.65)], into, (((n % 2) * 2) - 1)), 0)
+            b: leanLocal(treeBough([(into[0] * 0.6), (into[1] - 1.8), (into[2] * 0.6)], into, (((n % 2) * 2) - 1)), 0)
             c: leanLocal([(into[0] * 0.8), (into[1] - 0.25), (into[2] * 0.8)], 0)
             radiusStart: 0.36
             radiusEnd: 0.08
           }
         }
       }
-      // Limbs from the trunk out into every clump of each lower tier, each leaving the trunk below its clump and rising
-      // to it, so no clump floats.
+      // Limbs from the trunk out into every `treeTierLimbEvery`-th clump of each lower tier, each leaving the trunk below
+      // its clump and rising to it: a few boughs a tier, as a tree carries, with the clumps between them massed on them.
       for (tier, k) in treeCrownTiers {
-        for n in range(0, tier.count) {
+        for m in range(0, floor((tier.count / treeTierLimbEvery))) {
+          let n = (m * treeTierLimbEvery)
           let into = leafClusterAt(tier.centre, tier.radius, tier.height, tier.count, n, tier.turn)
           shape Sweep $"tier-limb-{k}-{n}" {
             material: treeTwig
@@ -323,7 +326,7 @@ prototypes {
             smooth: 0.2
             curve {
               a: leanLocal([(into[0] * 0.08), (into[1] - 2.2), (into[2] * 0.08)], 0)
-              b: leanLocal(treeBough([(into[0] * 0.7), (into[1] - 2.6), (into[2] * 0.7)], into, (((n % 2) * 2) - 1)), 0)
+              b: leanLocal(treeBough([(into[0] * 0.62), (into[1] - 1.9), (into[2] * 0.62)], into, (((n % 2) * 2) - 1)), 0)
               c: leanLocal([(into[0] * 0.84), (into[1] - 0.3), (into[2] * 0.84)], 0)
               radiusStart: 0.2
               radiusEnd: 0.05
@@ -331,9 +334,10 @@ prototypes {
           }
         }
       }
-      // A twig from each fork's tip into each of its clumps, so none floats.
+      // A few twigs from each fork's tip into its clumps.
       for (b, i) in treeLimbs {
-        for n in range(0, treeForkFoliage.count) {
+        for m in range(0, floor((treeForkFoliage.count / treeTierLimbEvery))) {
+          let n = (m * treeTierLimbEvery)
           let into = leafClusterAt((treeForkTip(b, i) + [0, 0.3, 0]), treeForkFoliage.radius, treeForkFoliage.height, treeForkFoliage.count, n, (31 * i))
           shape Sweep $"fork-twig-{i}-{n}" {
             material: treeTwig
