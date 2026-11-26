@@ -286,6 +286,7 @@ public static class WorldSessionCapture {
             return (cell with {
                 Value = RawCellValue(kind: row.Kind, raw: advance.ComputeCurrentValue(
                 baseValue: cell.Value.Raw,
+                cells: (advance.IsNested ? new StateRowClockCells(rows: definition.State) : null),
                 currentEngineTick: engineTick,
                 epochEngineTick: (clock?.EpochEngineTick ?? 0L),
                 row: row

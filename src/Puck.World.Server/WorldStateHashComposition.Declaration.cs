@@ -146,9 +146,22 @@ public static partial class WorldStateHashComposition {
             ? 0
             : 1)));
 
-        if (advance is not null) {
-            hash.Add(value: advance.PerSecondNumerator);
-            hash.Add(value: advance.PerSecondDenominator);
+        if (advance is null) {
+            return;
+        }
+
+        hash.Add(value: advance.PerSecondNumerator);
+        hash.Add(value: advance.PerSecondDenominator);
+        AppendString(hash: ref hash, value: advance.By);
+        hash.Add(value: ((uint)((advance.Rate?.Count ?? -1) + 1)));
+
+        foreach (var piece in (advance.Rate ?? [])) {
+            AppendString(hash: ref hash, value: piece.From);
+            hash.Add(value: ((uint)(piece.Coefficients?.Count ?? 0)));
+
+            foreach (var coefficient in (piece.Coefficients ?? [])) {
+                AppendString(hash: ref hash, value: coefficient);
+            }
         }
     }
     private static void AppendCycle(ref Fnv1aHash hash, StateCycle? cycle) {

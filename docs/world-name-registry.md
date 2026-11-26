@@ -2637,9 +2637,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].field.paint[][draw].source` | Generator | Names | Read | `WorldLatticeFill.Draw.Source` |
 | `state.world[].witness` | State | Names | Read | `WorldStateRow.Witness` |
 | `state.world[].draw.source` | Generator | Names | Read | `Draw.Source` |
+| `state.world[].cells[].advance.by` | State | Names | Read | `StateAdvance.By` |
 | `state.world[].cells[].dynamics.row` | Dynamics | Names | Read | `StateDynamics.Row` |
 | `state.world[].cells[].visibility.readersFrom` | State | Names | Read | `StateVisibility.ReadersFrom` |
 | `state.world[].name` | State | Declares |  | `StateRowShape.Name` |
+| `state.world[].advance.by` | State | Names | Read | `StateAdvance.By` |
 | `state.world[].dynamics.row` | Dynamics | Names | Read | `StateDynamics.Row` |
 | `state.world[].domain[keysOf].row` | State | Names | Read | `StateDomain.KeysOf.Row` |
 | `state.world[].domain[cellsOf].topology` | Topology | Names | Read | `StateDomain.CellsOf.Topology` |
@@ -2690,6 +2692,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.lattices[][field].origin` | State | Binding | Binding | `LatticeTopology.Origin` |
 | `state.families[].members` | State | Names | Read | `StateFamily.Members` |
 | `state.records[].name` | Record | Declares |  | `StateRecord.Name` |
+| `state.records[].fields[].advance.by` | State | Names | Read | `StateAdvance.By` |
 | `state.pools[].name` | Pool | Declares |  | `StatePool.Name` |
 | `state.pools[].record` | Record | Names | Read | `StatePool.Record` |
 | `state.pairPools[].name` | Pool | Declares |  | `StatePairPool.Name` |
@@ -5956,7 +5959,11 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].draw.generator.contexts[].alternatives[].token` | `GeneratorAlternative.Token` | literal text |
 | `state.world[].draw.generator.contexts[].alternatives[].next` | `GeneratorAlternative.Next` | a context key is local to its generator |
 | `state.world[].cells[].key` | `StateCell.Key` | a cell key is local to its row |
+| `state.world[].cells[].advance.rate[].from` | `StateRatePiece.From` | an exact rational share of a turn |
+| `state.world[].cells[].advance.rate[].coefficients` | `StateRatePiece.Coefficients` | exact rational coefficients |
 | `state.world[].cells[].visibility.readers` | `StateVisibility.Readers` | a principal identifier |
+| `state.world[].advance.rate[].from` | `StateRatePiece.From` | an exact rational share of a turn |
+| `state.world[].advance.rate[].coefficients` | `StateRatePiece.Coefficients` | exact rational coefficients |
 | `state.world[].visibility.readers` | `StateVisibility.Readers` | a principal identifier |
 | `state.world[].space` | `StateRowShape.Space` | an embedding space |
 | `state.world[].enum` | `StateRowShape.Enum` | an enum name is local to the document |
@@ -5990,6 +5997,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.records[].fields[].name` | `StatePoolField.Name` | a field local to its record |
 | `state.records[].fields[].enum` | `StatePoolField.Enum` | an enum name is local to the document |
 | `state.records[].fields[].space` | `StatePoolField.Space` | a vector-space identifier, not a module declaration |
+| `state.records[].fields[].advance.rate[].from` | `StateRatePiece.From` | an exact rational share of a turn |
+| `state.records[].fields[].advance.rate[].coefficients` | `StateRatePiece.Coefficients` | exact rational coefficients |
 | `state.pools[].snapshot.live[].values[].field` | `StatePoolValue.Field` | a field local to its record |
 | `state.pools[].initial[].values[].field` | `StatePoolValue.Field` | a field local to its record |
 | `state.pairPools[].snapshot.live[].values[].field` | `StatePoolValue.Field` | a field local to its record |
@@ -7358,6 +7367,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `editor.bar.visible[state].text` | `OverlayPredicate.State.Text` | literal text |
 | `editor.bar.visible[reading].name` | `OverlayPredicate.Reading.Name` | a presentation reading's source name, in the readings vocabulary |
 | `editor.readOnlyLabel` | `WorldEditorDefaults.ReadOnlyLabel` | literal text |
+| `timeline.clocks[].anchor.curve` | `WorldClockAnchor.Curve` | exact rational coefficients |
 | `commands[].name` | `WorldConsoleCommand.Name` | a console verb name, in the command registry's namespace |
 | `commands[].help` | `WorldConsoleCommand.Help` | literal text |
 | `commands[].parameters[].name` | `WorldConsoleCommandParameter.Name` | a placeholder local to its command's lines |

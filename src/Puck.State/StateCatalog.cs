@@ -110,6 +110,7 @@ public sealed class StateCatalog {
     private readonly int[] m_poolSlotsByKeyOrdinal;
     private readonly int[][] m_containingZones;
     private readonly int[][] m_dependentRows;
+    private readonly int[][] m_nestedClocks;
     private readonly EffectiveBehavior[] m_defaultBehaviors;
     private readonly Dictionary<CellName, EffectiveBehavior>?[] m_cellBehaviors;
 
@@ -180,6 +181,21 @@ public sealed class StateCatalog {
         m_containingZones = rows.Select(row => frozenZones.GetValueOrDefault(
             key: row.EffectiveDomain is StateDomain.KeysOf keysOf ? keysOf.Row : row.Name) ?? []).ToArray();
         m_dependentRows = rows.Select(row => frozenDependents.GetValueOrDefault(key: row.Name) ?? []).ToArray();
+        var nestedByParent = new Dictionary<int, List<int>>();
+        for (var ordinal = 0; ordinal < rows.Length; ordinal++) {
+            if ((m_defaultBehaviors[ordinal].Advance?.By is not { } parent) ||
+                !TryResolve(lane: StateLane.Document, name: parent, handle: out var parentHandle) ||
+                (parentHandle.Ordinal == ordinal)) { continue; }
+            if (!nestedByParent.TryGetValue(key: parentHandle.Ordinal, value: out var children)) {
+                children = [];
+                nestedByParent.Add(key: parentHandle.Ordinal, value: children);
+            }
+            children.Add(item: ordinal);
+        }
+        m_nestedClocks = new int[rows.Length][];
+        for (var ordinal = 0; ordinal < rows.Length; ordinal++) {
+            m_nestedClocks[ordinal] = (nestedByParent.TryGetValue(key: ordinal, value: out var children) ? children.ToArray() : []);
+        }
         m_pools = Array.AsReadOnly(array: pools);
         m_poolsByName = pools.ToDictionary(keySelector: static pool => pool.Name.Value, comparer: StringComparer.Ordinal);
         m_poolRows = ((pools.Length == 0) ? [] : new bool[rows.Length]);
@@ -265,6 +281,13 @@ public sealed class StateCatalog {
     /// <param name="rowOrdinal">The domain row's catalog ordinal.</param>
     /// <returns>The dependent rows in declaration order, or an empty list.</returns>
     public ReadOnlySpan<int> DependentRows(int rowOrdinal) => (uint)rowOrdinal < (uint)m_dependentRows.Length ? m_dependentRows[rowOrdinal] : [];
+    /// <summary>Gets the ordinals of every row whose slot's advance runs on the supplied row (<see cref="StateAdvance.By"/>):
+    /// the rows a write that moves the supplied row's line settles first, so each keeps reading its parent's line from
+    /// its own epoch (<see cref="StateArena.TryWriteLive(int, CellKey, long, StateWriteKind, in ArenaTime, out string)"/>).
+    /// Declarations alone decide.</summary>
+    /// <param name="rowOrdinal">The parent row's catalog ordinal.</param>
+    /// <returns>The nested rows in declaration order, or an empty list.</returns>
+    public ReadOnlySpan<int> NestedClocks(int rowOrdinal) => (uint)rowOrdinal < (uint)m_nestedClocks.Length ? m_nestedClocks[rowOrdinal] : [];
     /// <summary>Gets the compiled pools in declaration order.</summary>
     public IReadOnlyList<StatePoolDescriptor> Pools => m_pools;
     /// <summary>Gets the compiled key symbols. Runtime names are owned by <see cref="StateArena.Keys"/>.</summary>

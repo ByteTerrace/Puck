@@ -12820,17 +12820,59 @@
         }
       ]
     },
+    "StateRatePiece": {
+      "description": "One piece of a nested advance\u0027s rate shape (Rate): a polynomial in the parent\u0027s phase that holds from From to the next piece\u0027s start, or to the end of the turn.",
+      "type": "object",
+      "properties": {
+        "from": {
+          "description": "Where the piece starts, as an exact share of the parent\u0027s turn: digits with an optional decimal fraction, or a quotient such as 5/8. The first piece starts at zero, and each later one after the one before and below one.",
+          "type": "string"
+        },
+        "coefficients": {
+          "description": "The polynomial\u0027s exact coefficients in the parent\u0027s phase, constant term first, each spelled as From is.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "from",
+        "coefficients"
+      ],
+      "additionalProperties": false,
+      "title": "StateRatePiece"
+    },
     "StateAdvance": {
       "description": "A StateRow\u0027s continuous accumulation trait: the row\u0027s stored cell is a base value, and the read value advances with elapsed engine ticks at an exact per-second rational rate from the engine tick it was last explicitly set (EpochEngineTick). Used for regen, fractional accumulation, a day/night clock \u2014 anything that should move on its own between observations.",
       "type": "object",
       "properties": {
         "perSecondNumerator": {
-          "description": "The per-second rate\u0027s signed numerator, in the row\u0027s own displayed unit (see this type\u0027s remarks). Negative accumulates downward (decay); zero is declared but inert.",
+          "description": "The rate\u0027s signed numerator, in the row\u0027s own displayed unit per second, or per unit of the parent for a nested advance (see this type\u0027s remarks). Negative accumulates downward (decay); zero is declared but inert, which holds a clock still.",
           "type": "integer"
         },
         "perSecondDenominator": {
-          "description": "The per-second rate\u0027s denominator. Refused at zero or below.",
+          "description": "The rate\u0027s denominator. Refused at zero or below.",
           "type": "integer"
+        },
+        "by": {
+          "description": "The parent row a nested advance runs on: a document row whose slot advances. Absent, the advance runs on the engine\u0027s seconds.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "rate": {
+          "description": "The shape of a nested advance\u0027s rate over its parent\u0027s phase: pieces of a polynomial, each starting at a share of the parent\u0027s turn. Absent, the shape is one everywhere. Refused without By.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/StateRatePiece"
+          },
+          "default": null
         }
       },
       "required": [

@@ -808,7 +808,7 @@ public static class WorldProjection {
             }
 
             if (clock.Anchor is { IsWellFormed: false }) {
-                return $"projection anchors clock '{clock.Name}' with rate {clock.Anchor.Rate} over {clock.Anchor.Step} engine ticks; a rate names the ticks it is per, and only a rate does.";
+                return $"projection anchors clock '{clock.Name}' with a curve of {clock.Anchor.Curve?.Count ?? 0} coefficients that does not read its own phase; a curve holds from one to {WorldClockAnchor.MaxCurveCoefficients} exact rationals, and its value at the anchor's tick is the anchor's phase.";
             }
         }
 

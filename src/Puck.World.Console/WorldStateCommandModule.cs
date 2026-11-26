@@ -89,7 +89,7 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
     // a generator's cursor. `clock` is absent for a row-level default line.
     private static string DescribeCellAdvance(StateAdvance? advance, StateCellClock? clock) =>
         ((advance is { } a)
-            ? $" advance={a.PerSecondNumerator}/{a.PerSecondDenominator}/s{((clock is { } ck)
+            ? $" advance={a.PerSecondNumerator}/{a.PerSecondDenominator}{((a.By is { } parent) ? $"/{parent}{((a.Rate is { Count: > 0 } rate) ? $"~{rate.Count}pieces" : string.Empty)}" : "/s")}{((clock is { } ck)
                 ? $"@engineEpoch{ck.EpochEngineTick}"
                 : string.Empty)}"
             : string.Empty
