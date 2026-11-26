@@ -1078,28 +1078,23 @@ check missed is baked by that boot and listed under the record's
   pace, several times slower than a paused, tick-locked bake. Let the fill
   end when its ladders are whole. Under the ladder policy `world.wait ready`
   also times out.
-- [high · unconfirmed] The RTX 2060's player build drew the glacier's ice
-  edges and the rim slope as large flat facets up close: a floor, the
-  coarsest tier, drawn where a finer one was asked. Two causes fit, and the
-  code alone cannot tell them apart. A group that arrives in view draws its
-  stored floor at once and then owes its first detail; if the store holds
-  that tier it loads outside the budget, and if the store lacks it and holds
-  no tier between, nothing starts (`SdfMeshPathBake.StartReplacement`): the
-  tier waits its hold as an ordinary owed tier and bakes only when the detail
-  budget has room, so on a card whose budget is full the floor keeps drawing.
-  Or every tier is stored and the budget's bias has coarsened the demand to
-  the floor. Read, on the 2060 at the glacier: the log's `[sdf.mesh-bake]
-  rung-missed` lines (each names its group, the tier asked, the tier drawn
-  and the ladder), `world.counters sdf.mesh-cache` (`rungs-missed` less
-  `rungs-missed-live`, `groups-baked`, `dispatches`) and `world.residency`'s
-  tier line (`tiers-held-back`, `detail-bias`, `region-budget`,
-  `region-named`). Missed tiers with `tiers-held-back` above zero is a cache
-  gap the budget then holds: complete the fill (the item on a tick-locked
-  fill above; a ladder fills coarsest first, so a fill cut short lacks its
-  finest tiers), and decide whether a player's missed first detail is the
-  arrival's own bake again. No missed tier with a bias above zero is the
-  device budget: the card's fixed storage leaves detail too little room,
-  which is the device-memory items' work.
+- [high] The rim slope by the glacier draws as large flat facets up close on
+  every build, not only the RTX 2060's player build: a developer build under
+  the demand policy (Vulkan at 1920 by 1080, `debug.go glacier`, bakes
+  settled, `rungs-missed` 0, `tiers-owed` 0) shows them as plainly. It is no
+  cache gap. The slope is the north-west sector, one static union group whose
+  final lattice is capped (`SdfMeshPathBake.UnionFinal`): `puck mesh audit
+  --prototype valley-north-west --eye -341.99,362.9,377.34` on that boot's
+  store read its mesh at a 3.68 m cell, 183,208 triangles over the whole
+  sector, so no tier the demand asks brings it finer near the eye. The terrain
+  tiles lift it ([the terrain pass](terrain-pass.md#what-the-bake-needs),
+  step 2, on the streaming plan's step 10). Still to read: whether the
+  glacier's own ice edges are the same limit (its creation is one group whose
+  relief bakes over its whole box), with the same audit on `--prototype
+  glacier`. The 2060's three `rung-missed` lines were a water height field's
+  reference at boot (only a height field reads a sampled field in the debug
+  world, and only a sampled reader's misses turn live), drawn a stored tier
+  for the seconds until its first resample made it live.
 - [medium] A residency no authored spawn point shows gets no ladder, so a
   player who opens one counts `rungs-missed`. Give such a place a spawn
   point, or give the fill a door that draws every residency a world can open.

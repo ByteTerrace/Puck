@@ -442,16 +442,17 @@ internal static class SdfMeshBakeReport {
     public static void Refused(int selector, string refusal) => Say(line: $"[sdf.mesh-bake] group {selector} refused: {refusal}");
     /// <summary>Names a rest skin that fell back to rigid owner contours.</summary>
     public static void SkinSplit(int selector, SdfMeshGeometry geometry, string? reason) => Say(line: $"[sdf.mesh-bake] group {selector} geometry={geometry.Hash:x32} bakes as a crease: {reason}");
-    /// <summary>Writes the line for a tier a bake that draws stored tiers alone asked and the store lacked
+    /// <summary>Writes the line for a tier a bake that starts from stored tiers asked and the store lacked
     /// (<see cref="SdfMeshCache.RungsMissed"/>), naming the group so the cache's producer can be asked why.</summary>
     /// <param name="residency">The residency's name.</param>
     /// <param name="group">The group as planned at the tier asked: its selector, shape (which every tier of it shares),
-    /// geometry, the frame inputs that geometry reads, and whether the tier is the first detail of a floor planned on
-    /// arrival or a plan's own tier.</param>
+    /// geometry and the frame inputs that geometry reads.</param>
     /// <param name="drawn">The tier drawn in its place.</param>
-    /// <param name="first">Whether the tier asked is a floor's first detail.</param>
+    /// <param name="why">Why the tier was asked: <c>plan</c> (a plan's own tier, which a stored tier stands in for),
+    /// <c>first-detail</c> (a floor's first detail), or <c>finer</c> or <c>coarser</c> than the tier drawn (a tier
+    /// decision).</param>
     /// <exception cref="ArgumentNullException"><paramref name="group"/> is <see langword="null"/>.</exception>
-    public static void RungMissed(string residency, SdfMeshBakeGroup group, int drawn, bool first) {
+    public static void RungMissed(string residency, SdfMeshBakeGroup group, int drawn, string why) {
         ArgumentNullException.ThrowIfNull(argument: group);
 
         var geometry = group.Geometry;
@@ -461,7 +462,7 @@ internal static class SdfMeshBakeReport {
             (geometry.ReadsSampled ? "sampled" : null),
         }.Where(predicate: static read => (read is not null)));
 
-        Say(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] rung-missed residency={residency} group={group.Selector} {(group.Dynamic ? "dynamic" : "static")} shape={group.Shape:x32} geometry={group.Sealed.Hash:x32} reads={((reads.Length == 0) ? "none" : reads)} {(first ? "first-detail" : "plan")} asked={group.Tier} drawn={drawn} tiers={group.FinestTier}-{group.CoarsestTier}"));
+        Say(line: string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-bake] rung-missed residency={residency} group={group.Selector} {(group.Dynamic ? "dynamic" : "static")} shape={group.Shape:x32} geometry={group.Sealed.Hash:x32} reads={((reads.Length == 0) ? "none" : reads)} {why} asked={group.Tier} drawn={drawn} tiers={group.FinestTier}-{group.CoarsestTier}"));
     }
     /// <summary>Writes the line for a group that began baking because neither the library nor its store held its
     /// geometry (<see cref="SdfMeshCache.GroupsBaked"/>), naming why the bake asked for that tier, so a boot over a warm

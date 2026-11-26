@@ -503,10 +503,21 @@ public sealed partial class SdfMeshPathBake {
                 return;
             }
             group.SpareFrames = 0;
+            // A group whose product at its tier has not landed draws nothing at that tier: it waits as an arrival (a hole,
+            // which the floor line counts), not as a tier owed, so its hold starts once it lands. The debt is a mesh a
+            // frame draws coarser than its demand: a group that meshed nothing owes its finer rung but adds no error.
+            var drawing = (group.Replaces ?? group);
+
+            if (!drawing.Done) {
+                group.OwedFrames = 0;
+                return;
+            }
             group.OwedFrames += elapsed;
             owed++;
-            error = MathF.Max(x: error, y: (SdfMeshTier.Cell(tier: resident) / pixel));
-            frames = Math.Max(val1: frames, val2: group.OwedFrames);
+            if (drawing is { DrawsOwn: true, Shown: not null }) {
+                error = MathF.Max(x: error, y: (SdfMeshTier.Cell(tier: resident) / pixel));
+                frames = Math.Max(val1: frames, val2: group.OwedFrames);
+            }
             // A group that meshed nothing owes its finer tier like any other: a finer lattice may find the surface its
             // cells stepped over, and one that finds none takes its place and owes nothing more.
             if (!group.Done || group.Failed || (group.Replaces is not null) || group.RetierRefused || group.Ahead) { return; }
@@ -852,7 +863,7 @@ public sealed partial class SdfMeshPathBake {
         // A bake that starts from a shipped cache counts each rung asked that the cache did not carry, before the stored
         // rung below or a bake answers it.
         if ((Library.Policy == SdfMeshCachePolicy.Stored) && !group.Live && !Stores(group: group, identity: Identity.Value)) {
-            CountRungMissed(asked: group, drawn: old.Tier, first: group.FirstDetail);
+            CountRungMissed(asked: group, drawn: old.Tier, why: (group.FirstDetail ? "first-detail" : ((group.Tier < old.Tier) ? "finer" : "coarser")));
         }
         // A bake takes a stored rung that answers the tier asked before it bakes one the store lacks.
         if (DemandRung(drawn: old.Tier, identity: Identity.Value, planned: group) is { } rung) {

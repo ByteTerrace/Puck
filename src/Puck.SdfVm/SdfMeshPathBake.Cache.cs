@@ -239,7 +239,7 @@ public sealed partial class SdfMeshPathBake {
                     rung.Retired = true;
                     continue;
                 }
-                CountRungMissed(asked: planned, drawn: rung.Tier, first: false);
+                CountRungMissed(asked: planned, drawn: rung.Tier, why: "plan");
                 rung.FirstDetailOwed = planned.FirstDetailOwed;
                 rung.DemandPixel = planned.DemandPixel;
                 return rung;
@@ -309,9 +309,9 @@ public sealed partial class SdfMeshPathBake {
     // Counts and reports a rung a stored-only bake asked that the store lacked, which the drawn tier stands in for: the one
     // place RungsMissed is counted, so every miss of a sampled field's reader is on the record its field's move reads.
     // Under the gate.
-    private void CountRungMissed(Group asked, int drawn, bool first) {
+    private void CountRungMissed(Group asked, int drawn, string why) {
         Library.Cache.Count(kind: SdfMeshCache.RungsMissed);
-        SdfMeshBakeReport.RungMissed(drawn: drawn, first: first, group: asked, residency: Residency);
+        SdfMeshBakeReport.RungMissed(drawn: drawn, group: asked, residency: Residency, why: why);
         if (!asked.Geometry.ReadsSampled) { return; }
         m_readerMisses[asked.Sealed] = (asked.Geometry, (m_readerMisses.TryGetValue(key: asked.Sealed, value: out var held) ? (held.Misses + 1) : 1));
     }
