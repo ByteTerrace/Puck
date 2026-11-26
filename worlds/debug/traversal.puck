@@ -20,6 +20,8 @@ let traversalStudioGoals = [
   { x: 48.0, y: 0.31, z: -48.0 } // round studio dais
   { x: 48.0, y: 0.01, z: -30.0 }
 ]
+// A goal at the lift on a level's floor, in the building's frame (gallery/layout.puck's `galleryWorld`).
+function traversalLiftGoal(x, z, level) = { x: galleryWorld(x, 0, 0)[0], y: galleryFloor[level], z: galleryWorld(0, 0, z)[2] }
 // The host places the idle stand-in at this pass's first goal before selecting start=15, count=26. The stairs are the
 // south-west switchback (gallery/layout.puck): its first flight climbs the east half, its second the west half.
 let traversalGalleryGoals = [
@@ -30,10 +32,10 @@ let traversalGalleryGoals = [
   { x: 14.5, y: 4.55, z: 21.175 } // north of the first arcade pier
   { x: 14.5, y: 4.55, z: 18.575 } // into the south gallery between the first two piers
   { x: 19.325, y: 4.55, z: 18.575 } // east along the gallery, clear of the bench
-  { x: 29.8, y: 4.55, z: 13 } // call lift on level 1
-  { x: 28.8, y: 4.55, z: 10.35 } // enter car, then request ground
-  { x: 28.8, y: 0.05, z: 10.35 } // ride down
-  { x: 28.8, y: 0.05, z: 14.5 } // leave car
+  traversalLiftGoal((liftX + 1), 1, 1) // call lift on level 1, before its plate
+  traversalLiftGoal(liftX, liftZ, 1) // enter car, then request ground
+  traversalLiftGoal(liftX, liftZ, 0) // ride down
+  traversalLiftGoal(liftX, 2.5, 0) // leave car
 ]
 let traversalGoals = concat(traversalStudioGoals, traversalGalleryGoals)
 
