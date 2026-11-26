@@ -109,7 +109,18 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
     }
+    // Publishes a committed cohort once. The drain returns to a committed transfer on every pass until its settlement
+    // record is durable; a second publication would replace the forwarding arm, which releases the traveler's held
+    // input, and narrate the arrival again. A publication an I/O failure interrupts is not marked and runs again,
+    // which the seat route claims tolerate.
     private void PublishCommittedTransfer(InDoubtTransfer pending, WorldPeerCall targetAuthority, string targetName, List<LandedMember> landed, List<WorldTransferCommitMember> commits) {
+        if (pending.Published) {
+            return;
+        }
+        PublishCommittedCohort(commits: commits, landed: landed, pending: pending, targetAuthority: targetAuthority, targetName: targetName);
+        pending.Published = true;
+    }
+    private void PublishCommittedCohort(InDoubtTransfer pending, WorldPeerCall targetAuthority, string targetName, List<LandedMember> landed, List<WorldTransferCommitMember> commits) {
         // Copied for the same reason ApplyTransfer copies it — an `in` parameter cannot be captured into Narrate's
         // deferred formatter.
         var transfer = pending.Transfer;
