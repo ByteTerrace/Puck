@@ -173,12 +173,42 @@ template mossyRock(id, colors = limestoneRock) {
   }
 }
 
-// One grouped-shape tree: a trunk, roots and branches in bark, and a handful of overlapping rounded crown masses in
-// flat leaf values. Rows are authored upright; `lean` (radians about the author Z axis, through the trunk's foot) tips
-// the trunk, branches and crowns, never the roots.
-// trunk { radius, center, half }; roots [{ position, r, yaw }]; branches [{ position, yaw, tilt, r, h }], each a
-// Capsule rising from its position; crowns [{ position, r }], material cycling through the leaves.
-template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches, crowns, lean = 0, smooth = 0.25, barkUnder = [
+// The canopy colours a whole crown as one mass, never one value per lobe: the lit middle value darkens toward `low` on
+// faces turned down and in the creases where lobes meet, and lightens toward `high` on faces turned up, broken by soft
+// world-space patches about 1 / `scale` metres across so neighbouring trees never band alike.
+shade template canopy(low, high, seed, scale, turn, crease, drift) {
+  surface {
+    let p = rotate(surface.layerPosition * scale, turn)
+    let patch = lattice(p, seed) * shadeFade(surface.footprint * scale)
+    let t = saturate(0.5 + 0.42 * surface.normal.y + drift * patch)
+    let lit = mix(mix(low, material.albedo, saturate(t * 2)), high, saturate(t * 2 - 1))
+    albedo: mix(lit, low, saturate(max(0 - surface.curvature, 0) * crease))
+  }
+}
+function canopySurface(leaves, seed) = {
+  color: leaves[1]
+  roughness: 0.97
+  specular: 0.012
+  wrap: 0.4
+  shade: canopy(leaves[0], leaves[2], seed, 0.9, landscapeTurn, 0.35, 0.22)
+}
+
+// An author-frame point tipped by `lean` (radians about author Z, through the foot) and carried into a sweep's local
+// frame, which rides the shape's converted pose: author +X and +Z are local -X and -Z.
+function leanLocal(p, lean) = [
+  0 - (p[0] * cosine(lean) - p[1] * sine(lean)),
+  p[0] * sine(lean) + p[1] * cosine(lean),
+  0 - p[2],
+]
+
+// One grouped-shape tree: a tapered, gently bowed trunk flaring into a few buttress roots, tapering limbs whose ends are
+// buried inside the canopy, and overlapping crown masses blended wide into one canopy and coloured as one mass. Rows
+// are authored upright; `lean` tips the trunk, limbs and crowns, never the roots.
+// trunk { base, top, height, bow }: radii at the foot and the top, the height of its buried top, and its sideways bow
+// in author X. roots [{ yaw, reach, r }]: each a sweep from inside the trunk out and down into the ground. branches
+// [{ a, c, r }]: each a sweep from a inside the trunk to c inside a crown, tapering from r. crowns [{ position, r }].
+// `clump` is the leaf-mass relief in metres and `clumpFrequency` its features per metre, `smooth` the crowns' blend radius.
+template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches, crowns, lean = 0, smooth = 0.42, clump = 0.16, clumpFrequency = 1.1, barkUnder = [
   "#4E3D2B", "#735537"
 ]) {
   prototype $"{id}" {
@@ -199,57 +229,60 @@ template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches,
           threshold: 0.65,
           softness: 0.25
         )),
-        map(leaves, (color, i) => landscapeSurface(
-          { color: color, roughness: 0.97, specular: 0.012, wrap: 0.4 },
-          under: i == 0 ? "#2F4C37" : leaves[i - 1],
-          deposit: "#859653",
-          seed: 1731 + i,
-          scale: 2.4,
-          settle: 0.3,
-          noise: 0.72,
-          threshold: 0.6,
-          softness: 0.4
-        ))
+        [canopySurface(leaves, 1731)]
       )
-      shape Cylinder "trunk" {
-        position [-trunk.center * sine(lean), trunk.center * cosine(lean), 0]
-        scale [trunk.radius, trunk.half, trunk.radius]
-        rotation [0, 0, sine(lean / 2), cosine(lean / 2)]
+      // The leaf-mass breakup is one relief over the composed tree, so the crowns stay one bake group and blend as one
+      // mass; a per-crown relief opens a scope per crown, and each scope bakes as its own group with a crease between.
+      noise {
+        frequency: clumpFrequency
+        amplitude: clump
+        octaves: 1
+        gain: 0.4
+        seed: 1731
+      }
+      shape Sweep "trunk" {
+        position [0, 0, 0]
         material: 0
+        curve {
+          a: leanLocal([0, -0.15, 0], lean)
+          b: leanLocal([trunk.bow, trunk.height * 0.45, 0.4 * trunk.bow], lean)
+          c: leanLocal([0.3 * trunk.bow, trunk.height, 0], lean)
+          radiusStart: trunk.base
+          radiusEnd: trunk.top
+        }
       }
       for (root, i) in roots {
-        shape Superellipsoid $"root-{i}" {
-          exponent: landscapeExponent
-          position: root.position
-          scale: root.r
-          rotation [0, sine(-root.yaw / 2), 0, cosine(-root.yaw / 2)]
+        shape Sweep $"root-{i}" {
+          position [0, 0, 0]
           material: 0
           blend: SmoothUnion
-          smooth: 0.16
+          smooth: 0.3
+          curve {
+            a [0, root.reach * 0.5, 0]
+            b [0 - 0.55 * root.reach * cosine(root.yaw), 0.12, 0 - 0.55 * root.reach * sine(root.yaw)]
+            c [0 - root.reach * cosine(root.yaw), -0.24, 0 - root.reach * sine(root.yaw)]
+            radiusStart: root.r
+            radiusEnd: root.r * 0.5
+          }
         }
       }
       for (branch, i) in branches {
-        shape Capsule $"branch-{i}" {
-          position [
-            branch.position[0] * cosine(lean) - branch.position[1] * sine(lean),
-            branch.position[0] * sine(lean) + branch.position[1] * cosine(lean),
-            branch.position[2],
-          ]
-          scale [branch.r, branch.h, branch.r]
-          rotation [
-            cosine(lean / 2) * sine(branch.yaw / 2) * sine(branch.tilt / 2) -
-              sine(lean / 2) * sine(branch.yaw / 2) * cosine(branch.tilt / 2),
-            cosine(lean / 2) * sine(branch.yaw / 2) * cosine(branch.tilt / 2) +
-              sine(lean / 2) * sine(branch.yaw / 2) * sine(branch.tilt / 2),
-            cosine(lean / 2) * cosine(branch.yaw / 2) * sine(branch.tilt / 2) +
-              sine(lean / 2) * cosine(branch.yaw / 2) * cosine(branch.tilt / 2),
-            cosine(lean / 2) * cosine(branch.yaw / 2) * cosine(branch.tilt / 2) - sine(lean / 2) * cosine(
-              branch.yaw / 2
-            ) * sine(branch.tilt / 2),
-          ]
+        shape Sweep $"branch-{i}" {
+          position [0, 0, 0]
           material: 1
           blend: SmoothUnion
-          smooth: 0.18
+          smooth: 0.2
+          curve {
+            a: leanLocal(branch.a, lean)
+            b: leanLocal([
+                (branch.a[0] + branch.c[0]) / 2,
+                (branch.a[1] + branch.c[1]) / 2 + 0.25 * (branch.c[1] - branch.a[1]),
+                (branch.a[2] + branch.c[2]) / 2,
+              ], lean)
+            c: leanLocal(branch.c, lean)
+            radiusStart: branch.r
+            radiusEnd: branch.r * 0.45
+          }
         }
       }
       for (crown, i) in crowns {
@@ -261,7 +294,7 @@ template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches,
             crown.position[2],
           ]
           scale: crown.r
-          material: 2 + i % length(leaves)
+          material: 2
           blend: SmoothUnion
           smooth: smooth
         }
@@ -271,13 +304,30 @@ template groupedTree(id, name, bark, branchBark, leaves, trunk, roots, branches,
 }
 
 // The tree families. Each scales its rows by `height` (vertical) and `spread` (crown and branch reach), so one family
-// placed with a few arguments never reads as one tree cloned; `leaves` takes three flat values.
-let broadleafLeaves = ["#365C37", "#537640", "#73904A"]
-let flatCrownLeaves = ["#55702E", "#6E8A36", "#8CA546"]
-let columnLeaves = ["#2C4A35", "#3B5F41", "#4F784B"]
-let weepingLeaves = ["#5D7A3F", "#7A984D", "#9CB465"]
+// placed with a few arguments never reads as one tree cloned; `leaves` takes three values, dark, middle and light,
+// which the canopy spreads over one crown from its underside to its top.
+let broadleafLeaves = ["#2E5034", "#4F7340", "#7E9A4C"]
+let flatCrownLeaves = ["#47622A", "#6E8A36", "#97AE4E"]
+let columnLeaves = ["#253F2E", "#3B5F41", "#5A8350"]
+let weepingLeaves = ["#4E6B36", "#7A984D", "#A6BD6C"]
 
-// A rounded courtyard oak: a stout trunk, five roots, a three-way fork and seven crown masses.
+// Scale an upright row's points by `height` (vertical) and `spread` (reach).
+function treeBranches(rows, height, spread) = map(rows, b => {
+  a [b.a[0] * spread, b.a[1] * height, b.a[2] * spread]
+  c [b.c[0] * spread, b.c[1] * height, b.c[2] * spread]
+  r: b.r
+})
+function treeCrowns(rows, height, spread) = map(rows, c => {
+  position [c.position[0] * spread, c.position[1] * height, c.position[2] * spread]
+  r [c.r[0] * spread, c.r[1] * height, c.r[2] * spread]
+})
+function treeRoots(count, reach, r, turn = 0) = map(range(0, count), i => {
+  yaw: i * 6.2831853 / count + turn
+  reach: reach
+  r: r
+})
+
+// A rounded courtyard oak: a stout flared trunk, four buttresses, a three-way fork and seven crown masses.
 template broadleafTree(id, height = 1, spread = 1, lean = 0, leaves = broadleafLeaves) {
   groupedTree(
     id: id,
@@ -289,28 +339,19 @@ template broadleafTree(id, height = 1, spread = 1, lean = 0, leaves = broadleafL
       roughness: 0.96,
       specular: 0.025,
     },
-    branchBark: { color: "#826344", roughness: 0.94, specular: 0.03 },
-    trunk: { radius: 0.36, center: 1.45 * height, half: 1.5 * height },
-    roots: map(range(0, 5), i => {
-      position [0.48 * cosine(i * 1.2566370614), 0.14, 0.48 * sine(i * 1.2566370614)]
-      r [0.75, 0.24, 0.2]
-      yaw: i * 1.2566370614
-    }),
-    branches: map(
+    branchBark: { color: "#735738", roughness: 0.94, specular: 0.03 },
+    trunk: { base: 0.5, top: 0.3, height: 3.9 * height, bow: 0.18 * spread },
+    roots: treeRoots(4, 1.15, 0.34, 0.4),
+    branches: treeBranches(
       [
-        { position [0.62, 2.75, 0], tilt: -0.65, r: 0.23, h: 1.8 }
-        { position [-0.62, 2.9, 0.25], tilt: 0.75, r: 0.2, h: 1.7 }
-        { position [0.18, 3.2, -0.55], tilt: -0.25, r: 0.18, h: 1.6 }
+        { a [0.1, 2.3, 0], c [1.3, 4.1, 0.1], r: 0.2 }
+        { a [-0.1, 2.45, 0.08], c [-1.25, 4.3, 0.35], r: 0.18 }
+        { a [0.05, 2.6, -0.1], c [0.25, 4.15, -1.05], r: 0.16 }
       ],
-      b => {
-        position [b.position[0] * spread, b.position[1] * height, b.position[2] * spread]
-        yaw: 0
-        tilt: b.tilt
-        r: b.r
-        h: b.h * height
-      }
+      height,
+      spread
     ),
-    crowns: map(
+    crowns: treeCrowns(
       [
         { position [0, 4.5, 0], r [1.8, 1.2, 1.55] }
         { position [1.4, 4.05, 0.15], r [1.25, 0.95, 1.15] }
@@ -320,82 +361,71 @@ template broadleafTree(id, height = 1, spread = 1, lean = 0, leaves = broadleafL
         { position [0.4, 5.2, 0.25], r [1.3, 0.85, 1.2] }
         { position [-1, 5, -0.65], r [1.15, 0.9, 1] }
       ],
-      c => {
-        position [c.position[0] * spread, c.position[1] * height, c.position[2] * spread]
-        r [c.r[0] * spread, c.r[1] * height, c.r[2] * spread]
-      }
+      height,
+      spread
     )
   )
 }
 
-// A flat spreading crown on a slender forked trunk: two tiers of wide, thin masses, wider than tall.
+// A flat spreading crown on a slender trunk: wide, thin masses, wider than tall, held up by three limbs.
 template flatCrownTree(id, height = 1, spread = 1, lean = 0, leaves = flatCrownLeaves) {
   groupedTree(
     id: id,
     name: "flat-crown",
     lean: lean,
     leaves: leaves,
-    smooth: 0.3,
+    smooth: 0.5,
+    clump: 0.08,
     barkUnder: ["#534131", "#654F3B"],
     bark: { color: "#5A4634", roughness: 0.96, specular: 0.025 },
-    branchBark: { color: "#6E5640", roughness: 0.95, specular: 0.025 },
-    trunk: { radius: 0.2, center: 1.5 * height, half: 1.55 * height },
-    roots: map(range(0, 3), i => {
-      position [0.3 * cosine(i * 2.0943951), 0.1, 0.3 * sine(i * 2.0943951)]
-      r [0.45, 0.16, 0.14]
-      yaw: i * 2.0943951
-    }),
+    branchBark: { color: "#634D39", roughness: 0.95, specular: 0.025 },
+    trunk: { base: 0.24, top: 0.13, height: 3.6 * height, bow: 0.12 * spread },
+    roots: treeRoots(3, 0.65, 0.17),
     branches: map(range(0, 3), i => {
-      position [0, 2.3 * height, 0]
-      yaw: i * 2.0943951 + 0.4
-      tilt: 0.72 + 0.08 * (i % 2)
-      r: 0.13 - 0.01 * (i % 2)
-      h: 2.1 * spread
+      a [0, 2.3 * height, 0]
+      c [1.45 * spread * cosine(i * 2.0943951 + 0.4), 3.72 * height, 1.45 * spread * sine(i * 2.0943951 + 0.4)]
+      r: 0.12
     }),
-    crowns: map(
+    crowns: treeCrowns(
       [
         { position [0, 3.9, 0], r [2.3, 0.55, 2.1] }
-        { position [1.6, 3.6, 0.5], r [1.5, 0.45, 1.3] }
-        { position [-1.5, 3.7, -0.4], r [1.6, 0.5, 1.4] }
-        { position [0.3, 3.65, -1.6], r [1.4, 0.42, 1.2] }
-        { position [-0.4, 3.75, 1.5], r [1.4, 0.45, 1.25] }
-        { position [0.5, 4.35, 0.2], r [1.3, 0.38, 1.2] }
+        { position [1.6, 3.65, 0.5], r [1.5, 0.48, 1.3] }
+        { position [-1.5, 3.72, -0.4], r [1.6, 0.5, 1.4] }
+        { position [0.3, 3.68, -1.6], r [1.4, 0.45, 1.2] }
+        { position [-0.4, 3.75, 1.5], r [1.4, 0.47, 1.25] }
+        { position [0.5, 4.3, 0.2], r [1.4, 0.45, 1.25] }
       ],
-      c => {
-        position [c.position[0] * spread, c.position[1] * height, c.position[2] * spread]
-        r [c.r[0] * spread, c.r[1] * height, c.r[2] * spread]
-      }
+      height,
+      spread
     )
   )
 }
 
-// A tall narrow column of stacked masses on a short trunk, poplar-like: a vertical accent among rounded crowns.
+// A tall narrow column, poplar-like: one tall tapering mass with a few swelling lobes on a short trunk, a vertical
+// accent among rounded crowns. The lobes overlap deeply so the silhouette runs clean to its tip.
 template columnTree(id, height = 1, spread = 1, lean = 0, leaves = columnLeaves) {
   groupedTree(
     id: id,
     name: "column-tree",
     lean: lean,
     leaves: leaves,
-    smooth: 0.35,
+    smooth: 0.7,
+    clump: 0.1,
     barkUnder: ["#49392C", "#49392C"],
     bark: { color: "#4E3D2E", roughness: 0.96, specular: 0.025 },
     branchBark: { color: "#4E3D2E", roughness: 0.96, specular: 0.025 },
-    trunk: { radius: 0.17, center: 0.8 * height, half: 0.85 * height },
-    roots: [],
+    trunk: { base: 0.2, top: 0.11, height: 2.6 * height, bow: 0.06 * spread },
+    roots: treeRoots(3, 0.45, 0.13, 0.7),
     branches: [],
-    crowns: map(
+    crowns: treeCrowns(
       [
-        { position [0, 2.4, 0], r [0.95, 1.5, 0.95] }
-        { position [0.15, 4.1, -0.1], r [0.8, 1.5, 0.8] }
-        { position [0.45, 3.1, 0.35], r [0.6, 1, 0.55] }
-        { position [-0.1, 5.6, 0.1], r [0.6, 1.2, 0.6] }
-        { position [-0.35, 3.6, -0.3], r [0.55, 1.1, 0.5] }
-        { position [0.05, 6.7, 0], r [0.35, 0.7, 0.35] }
+        { position [0, 3.2, 0], r [0.95, 2.2, 0.95] }
+        { position [0.08, 5.1, -0.05], r [0.72, 1.9, 0.72] }
+        { position [0.35, 3.0, 0.3], r [0.62, 1.2, 0.58] }
+        { position [-0.3, 3.9, -0.28], r [0.58, 1.3, 0.55] }
       ],
-      c => {
-        position [c.position[0] * spread, c.position[1] * height, c.position[2] * spread]
-        r [c.r[0] * spread, c.r[1] * height, c.r[2] * spread]
-      }
+      height,
+      spread
     )
   )
 }
@@ -407,22 +437,17 @@ template weepingTree(id, height = 1, spread = 1, lean = 0, leaves = weepingLeave
     name: "weeping-tree",
     lean: lean,
     leaves: leaves,
-    smooth: 0.3,
+    smooth: 0.5,
+    clump: 0.1,
     barkUnder: ["#625440", "#71614C"],
     bark: { color: "#6A5A46", roughness: 0.96, specular: 0.025 },
-    branchBark: { color: "#7A6852", roughness: 0.95, specular: 0.025 },
-    trunk: { radius: 0.28, center: 1.4 * height, half: 1.45 * height },
-    roots: map(range(0, 3), i => {
-      position [0.4 * cosine(i * 2.0943951 + 0.5), 0.12, 0.4 * sine(i * 2.0943951 + 0.5)]
-      r [0.6, 0.2, 0.18]
-      yaw: i * 2.0943951 + 0.5
-    }),
+    branchBark: { color: "#746350", roughness: 0.95, specular: 0.025 },
+    trunk: { base: 0.32, top: 0.18, height: 3.7 * height, bow: 0.15 * spread },
+    roots: treeRoots(3, 0.85, 0.24, 0.5),
     branches: map(range(0, 3), i => {
-      position [0, 2.5 * height, 0]
-      yaw: i * 2.0943951
-      tilt: 0.6
+      a [0, 2.5 * height, 0]
+      c [1.15 * spread * cosine(i * 2.0943951), 3.9 * height, 1.15 * spread * sine(i * 2.0943951)]
       r: 0.14
-      h: 1.6 * spread
     }),
     crowns: concat(
       [{ position [0, 4 * height, 0], r [1.75 * spread, 1 * height, 1.75 * spread] }],
