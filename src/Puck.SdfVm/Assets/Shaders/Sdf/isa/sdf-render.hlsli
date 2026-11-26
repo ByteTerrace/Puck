@@ -120,6 +120,7 @@
 #define SDF_SHADE_TILE_HEADER_WORDS   6u
 #define SDF_SHADE_TILE_LIGHT_WORDS    8u
 #define SDF_VIEWS_FILTER_WORDS        3u
+#define SDF_VIEWS_REFLECTION_WORDS    2u
 #define SDF_EDGE_REACH                4u
 #define SDF_VIEWS_PROBE_RATE          4u
 #define SDF_VIEWS_PROBE_WORDS         73u

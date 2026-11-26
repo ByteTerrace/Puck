@@ -187,6 +187,10 @@ public sealed partial class WorldServer {
     public void RetireTransferredMobility(in WorldMobilityIdentity mobility) => m_tick.RetireTransferredMobility(mobility: in mobility);
     /// <inheritdoc cref="WorldTick.RetireTransferredIncarnation"/>
     public void RetireTransferredIncarnation(WorldEntityAddress incarnation) => m_tick.RetireTransferredIncarnation(incarnation: incarnation);
+    /// <inheritdoc cref="WorldTick.TryRetireHandedOnTraveler"/>
+    public bool TryRetireHandedOnTraveler(string sourceAuthority, in WorldMobilityIdentity mobility) => m_tick.TryRetireHandedOnTraveler(mobility: in mobility, sourceAuthority: sourceAuthority);
+    /// <inheritdoc cref="WorldTick.HoldsTransferredTraveler"/>
+    public bool HoldsTransferredTraveler(string sourceAuthority, WorldEntityAddress incarnation) => m_tick.HoldsTransferredTraveler(incarnation: incarnation, sourceAuthority: sourceAuthority);
     /// <inheritdoc cref="WorldTick.Step"/>
     [Replaces(root: typeof(StateArena))]
     public void Step(in FixedStepContext context) => m_tick.Step(context: in context);

@@ -109,7 +109,18 @@ public sealed partial class WorldInstanceHost {
             return false;
         }
     }
+    // Publishes a committed cohort once. The drain returns to a committed transfer on every pass until its settlement
+    // record is durable; a second publication would replace the forwarding arm, which releases the traveler's held
+    // input, and narrate the arrival again. A publication an I/O failure interrupts is not marked and runs again,
+    // which the seat route claims tolerate.
     private void PublishCommittedTransfer(InDoubtTransfer pending, WorldPeerCall targetAuthority, string targetName, List<LandedMember> landed, List<WorldTransferCommitMember> commits) {
+        if (pending.Published) {
+            return;
+        }
+        PublishCommittedCohort(commits: commits, landed: landed, pending: pending, targetAuthority: targetAuthority, targetName: targetName);
+        pending.Published = true;
+    }
+    private void PublishCommittedCohort(InDoubtTransfer pending, WorldPeerCall targetAuthority, string targetName, List<LandedMember> landed, List<WorldTransferCommitMember> commits) {
         // Copied for the same reason ApplyTransfer copies it — an `in` parameter cannot be captured into Narrate's
         // deferred formatter.
         var transfer = pending.Transfer;
@@ -148,9 +159,10 @@ public sealed partial class WorldInstanceHost {
                         Mobility: member.Mobility.Advance()
                     );
 
-                    onward = new WorldRemoteForwardedAuthority(
+                    onward = RemoteArm(
                         authority: forwardedAuthority,
-                        credential: credential
+                        credential: credential,
+                        source: sourceInstance.Server
                     );
                     onwardSlot = credential.BodyIndex;
                 } else if (targetAuthority.Local is { } localTarget) {
@@ -163,22 +175,20 @@ public sealed partial class WorldInstanceHost {
                 }
 
                 if (onward is not null) {
-                    var key = (sourceInstance.Server, member.Mobility.Incarnation);
-
-                    if (m_forwardedBodies.TryGetValue(
-                        key: key,
-                        value: out var superseded
+                    if (m_forwardedBodies.Set(
+                        left: sourceInstance.Server,
+                        replaced: out var superseded,
+                        right: member.Mobility.Incarnation,
+                        value: new ForwardedBody(
+                            Authority: new WorldDeferredForwardedAuthority(
+                                destination: onward.DescribeForCheckpoint(),
+                                initial: onward
+                            ),
+                            BodyIndex: onwardSlot
+                        )
                     )) {
                         (superseded.Authority as IDisposable)?.Dispose();
                     }
-
-                    m_forwardedBodies[key] = new ForwardedBody(
-                        Authority: new WorldDeferredForwardedAuthority(
-                            destination: onward.DescribeForCheckpoint(),
-                            initial: onward
-                        ),
-                        BodyIndex: onwardSlot
-                    );
                 }
             }
 
@@ -253,13 +263,15 @@ public sealed partial class WorldInstanceHost {
                     // the committed onward route recursively, so replacing the wrapper here would tear down a live
                     // intent stream between ownership epochs and manufacture an unavailable/release window. Keying
                     // this cache by transfer id leaked one route, pump and observer for every A↔B seam crossing.
-                    var routeName = $"$traveler/{m_machineId:N}/{trackedSlot}";
+                    var routeName = TravelerRouteName(slot: trackedSlot);
 
                     if (!m_remoteAuthorities.TryGetValue(
                         key: routeName,
                         value: out var routeAuthority
                     )) {
                         WorldAuthorityEndpoint? publishedEndpoint = null;
+                        // Set once the route below exists. Its observer starts when a sink attaches, which is later.
+                        WorldRemoteAuthority? started = null;
 
                         routeAuthority = new WorldRemoteAuthority(
                             expectedAuthority: remoteTarget.PeerAuthority,
@@ -273,7 +285,9 @@ public sealed partial class WorldInstanceHost {
                             applicationStopping: m_applicationStopping,
                             narrationHub: m_narration,
                             boundary: m_linkBoundary,
-                            routeEnded: () => m_endedSeatRoutes.Enqueue(item: trackedSlot),
+                            routeEnded: () => {
+                                if (started is { } heard) { m_endedSeatRoutes.Enqueue(item: (trackedSlot, heard)); }
+                            },
                             routeChanged: route => {
                                 if (
                                     (publishedEndpoint is not null) &&
@@ -310,6 +324,7 @@ public sealed partial class WorldInstanceHost {
                                 }
                             }
                         );
+                        started = routeAuthority;
                         m_remoteAuthorities[routeName] = routeAuthority;
                         RegisterRemoteCustodyPeer(remote: routeAuthority);
                         publishedEndpoint = EndpointFor(

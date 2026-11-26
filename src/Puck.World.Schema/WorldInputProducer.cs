@@ -285,9 +285,17 @@ public sealed class WorldInputProducer {
     }
 
     /// <summary>Installs the authority's kept baseline and source decisions; never invents a mode or carries an old event.</summary>
-    public void Reconcile(uint revision, ulong epoch, WorldInputMapping mapping, PlayerIntent image, ReadOnlySpan<WorldInputSourceState> sources) {
-        if (m_reconciled && (revision == Revision) && (epoch == Epoch)) { return; }
-        if ((revision < Revision) || ((revision == Revision) && (epoch < Epoch)) || (sources.Length != m_sources.Length)) {
+    /// <param name="revision">The publication's mapping revision.</param>
+    /// <param name="epoch">The publication's input epoch.</param>
+    /// <param name="mapping">The published mapping.</param>
+    /// <param name="image">The published baseline image.</param>
+    /// <param name="sources">The published source decisions, in this producer's registry order.</param>
+    /// <param name="restart">Whether the publication is a new owner's at its authority (another principal, body or
+    /// body generation than the last one reconciled), whose revisions and epochs count afresh from one: the order this
+    /// producer refuses a publication by holds only within one owner's stream.</param>
+    public void Reconcile(uint revision, ulong epoch, WorldInputMapping mapping, PlayerIntent image, ReadOnlySpan<WorldInputSourceState> sources, bool restart = false) {
+        if (!restart && m_reconciled && (revision == Revision) && (epoch == Epoch)) { return; }
+        if ((!restart && ((revision < Revision) || ((revision == Revision) && (epoch < Epoch)))) || (sources.Length != m_sources.Length)) {
             throw new ArgumentException(message: "input publication is stale or belongs to another profile");
         }
         for (var index = 0; (index < sources.Length); index++) {

@@ -1,7 +1,7 @@
 using Puck.Abstractions.Waiting;
 using Puck.Commands;
-using System.Collections.Concurrent;
 using Puck.Abstractions;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Machines;
 using Puck.Hosting;
 using Puck.Maths;
@@ -133,9 +133,11 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private readonly Dictionary<string, WorldAuthorityEndpoint> m_authorityEndpoints = new(comparer: StringComparer.Ordinal);
     // The tick's scratch list of the remote authorities seats are routed to; a process seats a handful.
     private readonly List<WorldAuthorityEndpoint> m_remoteSeatEndpoints = [];
-    // Socket ingress reads onward routes while the tick thread publishes a just-committed handoff. The table itself
-    // must therefore be concurrent even though every mutation still comes from the host's ordinary commit path.
-    private readonly ConcurrentDictionary<(WorldServer Server, WorldEntityAddress Incarnation), ForwardedBody> m_forwardedBodies = [];
+    // The onward routes, keyed by the authority that forwards and the traveler it forwards. Socket ingress reads a
+    // route by its whole key, without a lock, while the host publishes a just-committed handoff; a retirement reads
+    // every route for one traveler and a row's removal every route from one authority, each from the table's own
+    // index and never by walking it.
+    private readonly PairKeyedTable<WorldServer, WorldEntityAddress, ForwardedBody> m_forwardedBodies = new();
     private readonly Queue<PendingTransfer> m_pendingTransfers = new();
     private readonly System.Collections.Concurrent.ConcurrentQueue<(WorldMobilityIdentity Mobility, WorldCommand.PoseSpawn Pose, Guid OperationId, Action<WorldSubmissionResult> Completion)> m_pendingPoseHomes = new();
     private readonly List<InDoubtTransfer> m_inDoubtTransfers = [];
@@ -490,8 +492,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             }
         }
         foreach (var owner in m_screenSessions.Keys.ToList()) { CloseScreenSessions(owner: owner); }
-        foreach (var forwarded in m_forwardedBodies.Values) { (forwarded.Authority as IDisposable)?.Dispose(); }
-        m_forwardedBodies.Clear();
+        foreach (var forwarded in m_forwardedBodies.Clear()) { (forwarded.Authority as IDisposable)?.Dispose(); }
         foreach (var endpoint in m_authorityEndpoints.Values) {
             endpoint.Dispose();
         }
@@ -1450,7 +1451,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             }
         }
         RemoveSourceForwarding(source: instance.Server);
-        foreach (var forwarded in m_forwardedBodies.Values) {
+        foreach (var (_, forwarded) in m_forwardedBodies.Entries) {
             if (
                 (forwarded.Authority is WorldDeferredForwardedAuthority deferred) &&
                 (deferred.DescribeForCheckpoint().DestinationAuthority == instance.Server.AuthorityIdentity)
@@ -1751,18 +1752,13 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         // Unbound destinations remain in this table as data, so admission order cannot erase a durable route.
         var forwarded = new List<WorldForwardedBodyCheckpoint>();
 
-        foreach (var pair in m_forwardedBodies) {
-            if (!ReferenceEquals(
-                objA: pair.Key.Server,
-                objB: row.Server
-            )) {
-                continue;
+        foreach (var incarnation in m_forwardedBodies.RightsOf(left: row.Server)) {
+            if (m_forwardedBodies.TryGetValue(left: row.Server, right: incarnation, value: out var body)) {
+                forwarded.Add(item: CaptureForwarded(
+                    body: body,
+                    incarnation: incarnation
+                ));
             }
-
-            forwarded.Add(item: CaptureForwarded(
-                body: pair.Value,
-                incarnation: pair.Key.Incarnation
-            ));
         }
 
         return new WorldAuthorityHostRowCheckpoint(
@@ -1851,7 +1847,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         }
 
         RemoveSourceForwarding(source: row.Server);
-        foreach (var forwarded in restoredForwarding) { m_forwardedBodies[(row.Server, forwarded.Incarnation)] = forwarded.Body; }
+        foreach (var forwarded in restoredForwarding) { _ = m_forwardedBodies.Set(left: row.Server, right: forwarded.Incarnation, value: forwarded.Body, replaced: out _); }
 
         m_inDoubtTransfers.RemoveAll(match: pending => string.Equals(
             a: pending.Transfer.SourceInstance,

@@ -217,6 +217,21 @@ public sealed partial class WorldInputOwner {
     public bool HoldsSteady(in PlayerIntent image) => (m_steadyImageVerified && (Image == image));
     /// <summary>Gets how many events' capture times this owner moved to the tick that admitted them.</summary>
     public long RetimedEvents { get; private set; }
+    /// <summary>Gets the most events one batch can carry: the per-step bound of <c>inputHistory</c>, which is also within
+    /// its retained capacity. A batch over it is refused by <see cref="TryAdmit"/> however long it waits.</summary>
+    public int StepCapacity => m_policy.MaximumEventsPerStep;
+
+    /// <summary>Returns how many events a batch admitted in the interval of <paramref name="tick"/> may still carry
+    /// beside those that step and the retained history already hold: <see cref="TryAdmit"/> refuses a batch with more,
+    /// counting before any crossing it derives, and resets the owner. The room grows as the step ends and as retained
+    /// events expire.</summary>
+    /// <param name="tick">The simulation tick whose interval would admit the batch.</param>
+    /// <returns>The events, never negative.</returns>
+    public int Room(ulong tick) {
+        var stepEvents = ((m_step == tick) ? m_stepEvents : 0);
+
+        return Math.Max(val1: 0, val2: Math.Min(val1: (m_policy.MaximumEventsPerStep - stepEvents), val2: (m_policy.EventCapacity - m_count)));
+    }
 
     /// <summary>Preflights every source, timestamp and transition before atomically installing levels and history.</summary>
     /// <param name="batch">The batch to admit.</param>
@@ -249,7 +264,7 @@ public sealed partial class WorldInputOwner {
         }
         var stepEvents = ((m_step == admission.Tick) ? m_stepEvents : 0);
 
-        if ((batch.Events.Length > (m_policy.MaximumEventsPerStep - stepEvents)) || (batch.Events.Length > Math.Max(val1: 0, val2: (m_policy.EventCapacity - m_count)))) {
+        if (batch.Events.Length > Room(tick: admission.Tick)) {
             RefusedBatches++;
             Array.Clear(array: m_history);
             m_head = 0;

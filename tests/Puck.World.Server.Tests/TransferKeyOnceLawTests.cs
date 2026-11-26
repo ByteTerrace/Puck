@@ -220,6 +220,37 @@ public sealed partial class TransferKeyOnceLawTests {
         CommitAfterTheLeaseExpired,
     }
 
+    // A colocated caller hands a reservation over as a value, so a member whose principal no crossing record or
+    // checkpoint can carry reaches the door, where a federated one is stopped by the codec. It is refused by name before
+    // anything is leased: the ledger is as it was, no body landed, and the key is not spent, so the same key with a
+    // principal a record can carry reserves and commits.
+    [Fact]
+    public void AMemberWhosePrincipalNoRecordCanCarryIsRefusedBeforeAnythingIsLeased() {
+        using var world = CrossingWorld.Build();
+        var destination = world.Destination.Server;
+        var request = Reservation(transferId: 5);
+        var before = destination.ExecuteAuthorityOperation(operation: () => destination.TransferEscrow.Counts);
+        var refused = destination.ReserveTransfer(request: (request with { Members = [(request.Members[0] with { Principal = default })] }));
+
+        Assert.False(condition: refused.Accepted, userMessage: "a member no record can carry was leased");
+        Assert.Contains(expectedSubstring: $"carries a principal of kind {PrincipalKind.Unspecified}", actualString: refused.Reason);
+        Assert.Equal(expected: before, actual: destination.ExecuteAuthorityOperation(operation: () => destination.TransferEscrow.Counts));
+        Assert.False(condition: destination.Population.IsActive(index: 0));
+
+        var reserved = destination.ReserveTransfer(request: request);
+
+        Assert.True(condition: reserved.Accepted, userMessage: reserved.Reason);
+        Assert.Equal(
+            expected: WorldTransferStatus.Committed,
+            actual: destination.CommitTransfer(
+                members: [Member],
+                reason: out _,
+                sourceAuthority: request.SourceAuthority,
+                transferId: request.TransferId
+            )
+        );
+    }
+
     // THE LAW (Missing is final, at the escrow): however the destination came to answer Missing for a key — a status
     // query or a commit for a key it never leased, or a commit whose lease expired — a later reservation and commit under
     // that key land nothing, beside a control key that reserves and commits. Red at the tip: none of the three answers

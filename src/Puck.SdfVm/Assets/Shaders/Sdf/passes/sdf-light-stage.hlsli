@@ -17,6 +17,7 @@
 #include "../shade/sdf-grid.hlsli"
 #ifdef SDF_VIEWS_PASS
 #include "sdf-views-probes.hlsli"
+#include "sdf-views-reflections.hlsli"
 
 // An unbound screen's face: dark glass with nothing behind it, tinted faintly by the sun.
 static const float3 ScreenGlassColor = float3(0.02, 0.025, 0.03);
@@ -260,13 +261,16 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             // sky about the mirror direction, blurred toward its irradiance as the lobe widens with roughness, under the
             // lobe's directional albedo (sdfMaterialEnvironmentBrdf, which a rough dielectric keeps near its f0 at
             // every angle, so matte paint reflects little of the sky even at grazing) and local occlusion; only as far as
-            // the irradiance volume sees the sky open that way, and the surroundings' light where not.
+            // the irradiance volume sees the sky open that way, and the surroundings' light where not. Where the
+            // reflection pass's mirror ray reached something on screen, or the open sky, that answers instead
+            // (sdfViewsScreenReflection).
             float3 environmentTerm = 0.0;
             float3 reflectionTerm = 0.0;
 #if !defined(SDF_VIEWS_OMIT_REFLECTION)
             if ((shadeMaterial.specular > 0.0) || (shadeMaterial.metal > 0.0)) {
                 float3 reflectDirection = reflect(p.rayDirection, normal);
-                float3 environment = sdfViewsReflectionSeen(probes, reflectDirection, worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness));
+                float3 sky = worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness);
+                float3 environment = sdfViewsScreenReflection(p, sky, sdfViewsReflectionSeen(probes, reflectDirection, sky));
 
                 reflectionTerm = environment;
                 environmentTerm = ((environment * specularAlbedo) * ambientOcclusion);

@@ -106,4 +106,30 @@ public sealed class CrossingInFlightLawTests {
         AssertDense(log: world.SourceLog);
         AssertDense(log: world.DestinationLog);
     }
+
+    // THE LAW: a committed crossing is published once. The source's settlement record stays unanswered across several
+    // drains, each of which returns to the committed transfer to settle it, and the arrival is narrated once. The red
+    // leg is a source that publishes the cohort again on every such drain, which narrates the arrival once a tick.
+    [Fact]
+    public void ACrossingWhoseSettlementIsInFlightIsPublishedOnce() {
+        using var world = CrossingWorld.Build();
+        var narrated = new Puck.World.Testing.RecordingNarrationSink();
+        using var attached = world.Host.AttachNarrationSink(sink: narrated);
+        var held = false;
+
+        world.SourceLog.Defer = true;
+        world.DestinationLog.Defer = true;
+        _ = world.Cross();
+        Drive(world: world, answer: log => {
+            if (!held && (log.DeferredRecord is WorldCrossingRecord.Settlement)) {
+                held = true;
+                world.Step(ticks: 6);
+                Assert.IsType<WorldCrossingRecord.Settlement>(@object: log.DeferredRecord);
+            }
+            return WorldCrossingDurability.Durable;
+        });
+
+        Assert.True(condition: held, userMessage: "the source never sent its settlement record");
+        Assert.Single(collection: narrated.Narrations, predicate: static line => line.Text.Contains(value: " departed -> ", comparisonType: StringComparison.Ordinal));
+    }
 }

@@ -51,10 +51,14 @@ public interface IWorldForwardedAuthority {
     /// <returns>A refusal before streaming, or null after the stream ends.</returns>
     Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct);
     /// <summary>Tells the traveler's next authority whether its source still attends to it: the body parks there when
-    /// the source went away and resumes when it returned. A hop reached over a socket does nothing, since the authority
-    /// at its far end parks a traveler when the streams this hop holds to it end.</summary>
+    /// the source went away and resumes when it returned. Returns without waiting for the next authority.</summary>
     /// <param name="present">Whether the source attends to the traveler.</param>
     void SetPresence(bool present);
+    /// <summary>Tells the traveler's next authority that the traveler is gone for good, as the host that owns this
+    /// route retires it. An authority in another process drops its credential and every onward route it keeps for the
+    /// traveler, and tells its own next hops. A colocated authority is told nothing: the host that retires this route
+    /// retires every route its own authorities keep for the traveler in the same pass. Returns without waiting.</summary>
+    void TellRetired();
 }
 /// <summary>The data needed to rebind one forwarding hop. Endpoint and Definition are both null for a local hop;
 /// otherwise they seed a new remote connection whose handshake must prove DestinationAuthority.</summary>
@@ -180,6 +184,8 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
             m_server.GrantTable.ParkTransferredPeer(mobility: in m_mobility, sourceAuthority: m_sourceAuthority);
         }
     }
+    /// <inheritdoc/>
+    public void TellRetired() { }
     /// <summary>Describes one live body's complete observable authority epoch. MUST be called inside
     /// <see cref="WorldServer.ExecuteAuthorityOperation{T}"/>.</summary>
     /// <param name="server">The authority holding the body.</param>

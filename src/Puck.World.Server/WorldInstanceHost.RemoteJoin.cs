@@ -29,12 +29,12 @@ public sealed partial class WorldInstanceHost {
     // monotonic without advancing the idle boot server's own simulation state.
     private ulong m_idleClientTicks;
     private ulong m_lastBootInputTick;
-    // Local seats whose traveler a remote authority answered had ended there, queued by the route's observer thread and
-    // returned home on the host loop.
-    private readonly System.Collections.Concurrent.ConcurrentQueue<int> m_endedSeatRoutes = new();
+    // Local seats whose traveler a remote authority answered had ended there, each with the route that heard the
+    // answer, queued by that route's observer thread and returned home on the host loop.
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(int Slot, WorldRemoteAuthority Route)> m_endedSeatRoutes = new();
     // Local seats whose traveler ended at a remote authority while a departure in doubt still covers them: the
     // departure's own resolution restores the body they left with, so the seat waits for it.
-    private readonly List<int> m_deferredEndedSeats = [];
+    private readonly List<(int Slot, WorldRemoteAuthority Route)> m_deferredEndedSeats = [];
     // Travelers whose body an authority of this host retired where it stood, queued under that authority's gate and
     // retired at every authority that forwards to them on the host loop (RetireEndedTravelers).
     private readonly System.Collections.Concurrent.ConcurrentQueue<Protocol.WorldEntityAddress> m_endedTravelers = new();
@@ -158,14 +158,20 @@ public sealed partial class WorldInstanceHost {
     // One owner returns a seat: while a departure in doubt still covers it, that departure's resolution restores the
     // body the seat left with (the authority answers it Ended too) and points the seat home, so seating the player
     // here as a new body would take the slot that restoration needs. The seat waits, and is seated as a new body only
-    // if the departure settles without bringing it home.
+    // if the departure settles without bringing it home. An answer is acted on only while the route that heard it is
+    // the one the seat follows: the observer thread can queue it after the seat came home another way, and by the
+    // time it is read here the seat may follow a new traveler, which that answer says nothing about.
     private void ReturnEndedSeats() {
-        while (m_endedSeatRoutes.TryDequeue(result: out var slot)) {
-            if (!m_deferredEndedSeats.Contains(item: slot)) { m_deferredEndedSeats.Add(item: slot); }
+        while (m_endedSeatRoutes.TryDequeue(result: out var ended)) {
+            if (!m_deferredEndedSeats.Contains(item: ended)) { m_deferredEndedSeats.Add(item: ended); }
         }
         for (var index = (m_deferredEndedSeats.Count - 1); (index >= 0); index--) {
-            var slot = m_deferredEndedSeats[index];
+            var (slot, route) = m_deferredEndedSeats[index];
 
+            if (!(m_remoteAuthorities.TryGetValue(key: TravelerRouteName(slot: slot), value: out var followed) && ReferenceEquals(objA: followed, objB: route))) {
+                m_deferredEndedSeats.RemoveAt(index: index);
+                continue;
+            }
             if (DepartureCovers(slot: slot)) {
                 continue;
             }
@@ -173,6 +179,8 @@ public sealed partial class WorldInstanceHost {
             ReturnSeatHome(seat: true, slot: slot);
         }
     }
+    // The name of the one route a local seat follows its traveler through at remote authorities.
+    private string TravelerRouteName(int slot) => $"$traveler/{m_machineId:N}/{slot}";
     // Whether a departure this host has not settled still holds the body a local seat left with.
     private bool DepartureCovers(int slot) {
         foreach (var inDoubt in m_inDoubtTransfers) {
@@ -195,7 +203,7 @@ public sealed partial class WorldInstanceHost {
     /// left with.</param>
     public void ReturnSeatHome(int slot, bool seat) {
         // Whoever returns the seat settles a return that was waiting on a departure.
-        _ = m_deferredEndedSeats.Remove(item: slot);
+        _ = m_deferredEndedSeats.RemoveAll(match: ended => (ended.Slot == slot));
         if (
             (Boot is not { } boot) ||
             (((uint)slot) >= ((uint)Math.Min(val1: m_seats.SeatCount, val2: m_routedSeatIdentities.Length))) ||

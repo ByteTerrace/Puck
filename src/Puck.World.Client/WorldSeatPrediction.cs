@@ -58,18 +58,24 @@ public sealed class WorldSeatSentInput {
 
     /// <summary>Gets the authority the held batches were sent to.</summary>
     public WorldAuthorityEndpoint? Endpoint { get; private set; }
+    // The owner incarnation (WorldSeatInput.OwnerIncarnation) the held batches were sent under.
+    private long m_incarnation;
 
-    /// <summary>Records a batch as it is sent. A batch sent to another authority than the held ones forgets them, since
-    /// every authority numbers its input epochs and ticks itself.</summary>
+    /// <summary>Records a batch as it is sent. A batch sent to another authority, or under another owner incarnation at
+    /// the same one, than the held ones forgets them, since every authority numbers its ticks itself and every owner its
+    /// input epochs and event sequences.</summary>
     /// <param name="clientTick">The seat clock, in ticks of the authority's rate, it is sent at.</param>
     /// <param name="submission">The batch.</param>
     /// <param name="endpoint">The authority it is sent to.</param>
-    public void Record(ulong clientTick, in IntentSubmission submission, WorldAuthorityEndpoint endpoint) {
+    /// <param name="incarnation">The seat input's <see cref="WorldSeatInput.OwnerIncarnation"/> the batch was produced
+    /// under.</param>
+    public void Record(ulong clientTick, in IntentSubmission submission, WorldAuthorityEndpoint endpoint, long incarnation) {
         var sequence = 0U;
 
-        if (!ReferenceEquals(objA: Endpoint, objB: endpoint)) {
+        if (!ReferenceEquals(objA: Endpoint, objB: endpoint) || (m_incarnation != incarnation)) {
             Clear();
             Endpoint = endpoint;
+            m_incarnation = incarnation;
         }
 
         foreach (ref readonly var input in submission.Input.Events.Span) {
