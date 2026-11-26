@@ -23,25 +23,6 @@ import "../shapes"
 import "layout"
 import "look"
 
-// A plan point as the creation's author-frame point.
-function treeAuthor(p) = [(treeX - p[0]), (p[1] - galleryFloor[0]), (treeZ - p[2])]
-let treeAuthorTurn = 180
-
-// A branch's walking line: from just inside the bark over its shelf, bending round to its landing, arching a little as
-// it goes. Its control point lies halfway between a point out along its shelf's bearing (so it leaves the trunk as a
-// limb does) and a point straight back from its landing across the edge (so it meets the balcony nearly square and
-// walks through level 1's gate rather than across it).
-function treeBranchA(b) = treeAuthor(treeBranchFrom(b))
-function treeBranchC(b) = treeAuthor(treeBranchTo(b))
-function treeBranchReach(b) = vectorLength((treeBranchC(b) - treeBranchA(b)) * [1, 0, 1])
-function treeBranchOut(b) = (treeBranchA(b) + polarPoint(
-  (0.45 * treeBranchReach(b)),
-  (treeTreadAngle(b.tread) + treeAuthorTurn),
-  (((treeBranchC(b)[1] - treeBranchA(b)[1]) / 2) + 0.35)
-))
-// A branch that meets a doorway (levels 2 and 3) puts its control point straight back from the landing, so its last run
-// crosses the doorway square, through the middle of the opening.
-function treeBranchB(b) = ((b.level >= 2) ? [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)] : ((treeBranchOut(b) + [treeBranchC(b)[0], treeBranchOut(b)[1], ((treeBranchA(b)[2] + treeBranchC(b)[2]) / 2)]) / 2))
 // Branch widths and depths, full, metres, at the trunk and at the balcony: broad enough at the tip to walk, narrow enough
 // to pass level 1's gate and level 2's balustrade gap, swelled by `treeBranchCollar` where each leaves the trunk.
 let treeBranchWidth = [1.9, 1.3]
