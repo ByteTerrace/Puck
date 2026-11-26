@@ -44,6 +44,10 @@ let lookLevels = [lookLevelHall, lookLevelToybox, lookLevelHall, lookLevelHall]
 // along the arcade from the west wall and repeating, the same at each north and south pair so the nave stays balanced:
 // mint, lilac, peach, butter, sky, rose.
 let lookToyPiers = ["#9FE3C6", "#C6B3EA", "#FFC9A8", "#FFE98F", "#9ED4F5", "#FFA9C8"]
+// The toybox's lattice (shell.puck), by the pastel `n` of the panel's place: its frame wears the pastel of the pier at
+// its west end, its uprights the pastel three steps on, and its crossbars the toybox's sunflower, so the panels step
+// along each edge with the piers. The members are glossy toy plastic, brushed as the structure is.
+function lookToyLattice(n) = { frame: lookToyPiers[(n % 6)], bar: lookToyPiers[((n + 3) % 6)], rail: lookLevelToybox.tileTone }
 // The toybox's arcade cabinets (toybox.puck), by colourway (layout.puck's toyboxPlan `look`; a cabinet and its twin
 // across the nave wear one): glossy toy plastic, its body, its cheeks and marquee housing, its control shelf and the
 // players' marks, the stick's ball and the first button, the second button, and the marquee's glow. Tomato with

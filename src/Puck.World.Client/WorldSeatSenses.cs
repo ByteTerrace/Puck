@@ -231,6 +231,16 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
     /// <returns>The carrying placements' ids.</returns>
     public IReadOnlyList<string> PlacesAt(WorldAuthorityEndpoint endpoint, FixedVector3 point) =>
         PlacesOf(endpoint: endpoint).Holding(holds: (row, _) => (TryShape(endpoint: endpoint, row: in row, shape: out var shape) && shape.Contains(point: point)));
+    /// <summary>Gets every portal door the endpoint's delivered document declares
+    /// (<see cref="WorldFaceCatalog.PortalDoors"/>, cached per document by the catalog): the glass a body crossing carries
+    /// it through, which only the authority decides.</summary>
+    /// <param name="endpoint">The authority.</param>
+    /// <returns>Each portal door's face row and opening.</returns>
+    public IReadOnlyList<WorldPortalDoor> PortalDoors(WorldAuthorityEndpoint endpoint) {
+        var definition = endpoint.Definition;
+
+        return WorldFaceCatalog.For(definition: definition).PortalDoors(definition: definition);
+    }
     /// <summary>Reads a seat's body from its route.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="reading">The reading, when this returns <see langword="true"/>.</param>

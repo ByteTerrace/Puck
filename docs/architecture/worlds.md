@@ -945,9 +945,13 @@ session screen shows therefore authors an admission row that grants `observe all
 
 Below the replica tier, each recipient, a session screen or a federation observer, is fed by its own
 `WorldProjectionFeed`. Its first delivery is the whole projection; after that it is sent only the
-members of its projection that changed, as a delta (`WorldDocumentBasis.Diff`, the document delta a
-basis uses) that `WorldProjectionHold` merges over the projection the recipient holds, and nothing when
-nothing changed. A delta of values alone (the timeline, the observations, the provenance) reaches the
+members of its projection that changed, as a delta that `WorldProjectionHold` merges over the projection
+the recipient holds, and nothing when nothing changed. While the document's frame, the recipient's
+audience and every row a document value references stand, a delivery is composed from the rows the
+arena's journal names as moved and nothing else: each is read as the shared image its audience is
+disclosed of it (`WorldDisclosureImages`), and the rows and cells that changed are written into the
+delta directly, each replacing its row or cell by name. Any other change composes the projection whole
+once and sends the document delta (`WorldDocumentBasis.Diff`, the delta a basis uses). A delta of values alone (the timeline, the observations, the provenance) reaches the
 recipient as a state delivery rather than a new definition, and a session's state mirror reads it at the
 tick it was stamped with, even when no body snapshot was sampled there; on the federation wire it travels
 as a `ProjectionDelta` frame. A delta that changes which rows are observed, their order, or their cells'

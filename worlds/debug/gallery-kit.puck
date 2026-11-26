@@ -64,6 +64,14 @@ prototypes {
       balustrade(base: 0)
     }
   }
+  prototype "kit-lattice" {
+    document {
+      name: "kit-lattice"
+      schema: "puck.creation.v1"
+      palette: latticePalette("#9FE3C6", "#FFE98F", "#F2B52C")
+      lattice(base: 0, cells: 64, pitch: 0.078125, height: 3.9)
+    }
+  }
   prototype "kit-planter" {
     document {
       name: "kit-planter"
@@ -104,5 +112,9 @@ placements {
   placement "kit-banner" {
     prototype: "kit-banner"
     position [36, 3.4, 4]
+  }
+  placement "kit-lattice" {
+    prototype: "kit-lattice"
+    position [42, 0, 4]
   }
 }
