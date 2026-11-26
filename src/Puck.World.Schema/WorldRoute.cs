@@ -68,7 +68,9 @@ public abstract record WorldRouteStep {
     });
 
     /// <summary>Sets the seat's body down at a spawn point, or at a point facing a heading (the seat's grant to pose is
-    /// the world author's).</summary>
+    /// the world author's), at the size the body spawns at: once the pose has landed the body's size register
+    /// (<c>bodies.scale</c>) returns to its authored initial value, so a chapter never starts at a size an earlier one
+    /// left.</summary>
     /// <param name="Spawn">The spawn point's id, or <see langword="null"/> for <paramref name="Point"/>.</param>
     /// <param name="Point">The point, or <see langword="null"/> for <paramref name="Spawn"/>.</param>
     /// <param name="YawDegrees">The heading a point pose faces.</param>

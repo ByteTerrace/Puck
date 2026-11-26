@@ -47,7 +47,7 @@
                 ],
                 "anyOf": [
                   {
-                    "description": "Sets the seat\u0027s body down at a spawn point, or at a point facing a heading (the seat\u0027s grant to pose is the world author\u0027s).",
+                    "description": "Sets the seat\u0027s body down at a spawn point, or at a point facing a heading (the seat\u0027s grant to pose is the world author\u0027s), at the size the body spawns at: once the pose has landed the body\u0027s size register (bodies.scale) returns to its authored initial value, so a chapter never starts at a size an earlier one left.",
                     "properties": {
                       "$type": {
                         "const": "pose"

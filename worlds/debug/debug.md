@@ -332,8 +332,8 @@ commands the Tour page adds.
 | Night field, `arrival` at (0, 0, -6), facing -Z | The frame you came out of | Walk +Z into it: you come back out of the night painting. |
 | Debug world, `painting-city` at (60, 0.05, 12.6), facing +Z on the wing's south wall | The ornate painting, glass showing the city | Walk -Z into it: you arrive in the city at its `arrival` frame, walking -Z onto the avenue. |
 | City, `arrival` at (0, 0, -6), facing -Z | The teal frame you came out of | Turn round and walk +Z into it: you come back out of the city painting, walking +Z into the wing. |
-| Debug world, `painting-link-west` and `painting-link-east` at z = 34.5 | Two brass-framed paintings facing each other | Walk into either: you come out of the other, in place, walking on across the room. |
-| Debug world, `painting-fall-floor` and `painting-fall-ceiling` at (66, 22.6) | A painting in the floor and one in the ceiling | Step onto the floor glass: you fall forever ([paintings.md](paintings.md#the-endless-fall)). |
+| Debug world, `painting-link-west` at (54.425, 0.05, 14.975) and `painting-link-east` at (67.325, 0.05, 14.975) | Two brass-framed paintings facing each other | Walk into either: you come out of the other, in place, walking on across the room. |
+| Debug world, `painting-fall-floor` and `painting-fall-ceiling` at (62.325, 18.775) | A painting in the floor and one in the ceiling | Step onto the floor glass: you fall forever ([paintings.md](paintings.md#the-endless-fall)). |
 | Garden, `obelisk` at (9, 0, -30) | The landmark | |
 
 The far frame stands on the line the garden painting's window looks along, so

@@ -39,7 +39,28 @@ stands farther from it than a distance. The tier a body is bound to stands
 until one of its cadences comes due, so a far body reads the distance once a
 refresh. The distance is one query over one image of where humans stand
 (`WorldPopulation.NearestOccupiedSquared` over `ReadOccupied`, through
-`FixedSweepGrid`), which a surface's attention reads too.
+`FixedSweepGrid`), which a surface's attention and a machine's read too. The
+image holds the bodies humans occupy and the bodies a participant possesses (a
+free camera a seat flies, a vehicle it drives), since a human sees through a
+possessed body while its own stands elsewhere.
+
+**A machine nobody attends is suspended.** A hosted machine's `attention`
+(`WorldMachineAttention`) names a distance from the screens that show it, and
+optionally how far behind a screen's face a body still attends it. The tick
+advances the machine only while a body a human occupies stands within that
+distance of one of them, on the side it faces where `behind` is authored
+(`WorldScreen.FixedFacing`), or a participant holds a control application on one
+(someone is engaged with it or playing it); on every other tick its clock stops
+and it keeps its state. The tick decides it once, in `WorldTick`'s
+`GateMachines` (its `MachineAttended`), from the same occupied image and query
+the far cadence reads, the screens' places and the grant table. Nothing stores
+the verdict, so a replay or a restored checkpoint derives the same ticks, and a
+world with no presentation suspends its machines exactly as one with a window
+does. A machine that authors none runs on every tick. `machine.state` reads
+`attention=none`, `attended` or `unattended` for each machine, beside the
+`segments` it has completed, which stand still while it is suspended.
+[The decision](../decisions/worlds-and-federation.md#simulation-follows-attention)
+holds why a suspended machine does not catch up.
 
 **Each instance's cost is counted.** `world.rate` reads back an instance's
 attention, its bar, the ticks it lapsed, and the body advances and producer
@@ -54,8 +75,12 @@ its errand names costs a tick nothing once it has stood for the idle floor
 
 The debug world authors these: its paintings and arrival frames carry
 `windowAttention` (`worlds/debug/painting-kit.puck`), the city, the garden and
-the night field step from `Glimpsed`, the hearth from `Watched`, and the
-standard citizen and vehicle kits carry a far tier.
+the night field step from `Glimpsed`, the hearth from `Watched`, the
+standard citizen and vehicle kits carry a far tier, and the toybox's twelve
+decks and the range's three televisions carry an attention
+(`worlds/debug/gallery/toybox.puck`, `worlds/debug/range.puck`). The device
+row's three machines author none: the machine debugger drives them from bodies
+no human occupies.
 
 ## The invariant
 
@@ -112,6 +137,19 @@ Each step names the check that shows it worked.
    tables can today, and a rule's gate can once it is bounded over an interval
    of ticks. Check: a world whose only activity is deadlines takes steps only
    at those ticks and matches one stepped throughout.
+5. **An observer in another world attends a machine.** A machine's attention
+   reads only its own world's bodies and applications, so a player looking into
+   the hall through a painting from the garden sees its decks stand still. The
+   observing surface's reading (`WorldObservationSession.Attention`) is a fact
+   of the observing world, so it reaches the observed world's tick as input:
+   the host notes each change of it on the observed row's tape, as it notes a
+   lapse, and the tick counts a watched session's arrival frame as a place
+   someone stands. Check: a scenario of two worlds in which a machine beside
+   an arrival frame runs while the seat stands by the window onto it in the
+   other world, stands suspended while the seat stands far from that window,
+   and reproduces. A pair of doors within one world (the linked paintings, the
+   Wonderland door) has the same gap and needs no tape: a body within reach of
+   one door counts as standing at its counterpart, with the reach it has left.
 
 ## Readings owed
 
@@ -124,3 +162,8 @@ Timing is taken only in the lead's quiet window; none is reported here.
   report's `frameThread.worlds`.
 - **The standalone city's tick**, with a player in it, against the same
   report's city section.
+- **The authority's tick rate on the debug route against a remote authority**,
+  on the RTX 2060, before and after the toybox's decks follow attention. What
+  decides it: the ticks the authority completes a second through the "city
+  painting" chapter, and each toybox deck's `segments` and `busyMs` over it
+  (`machine.state`).

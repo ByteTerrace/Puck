@@ -601,7 +601,16 @@ public sealed record WorldScreen(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenCarry? Carry = null,
     [property: DocumentName(WorldNameKind.ScreenMaterial, WorldNameRole.Names, WorldExportFacet.Binding)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Material = null
-);
+) {
+    /// <summary>Returns the unit normal of the screen's face in fixed point, pointing to the side the picture faces:
+    /// <see cref="Right"/> crossed with <see cref="Up"/>, the side the drawn slab's front stands toward. A simulation
+    /// decision that asks which side of the screen a body stands on reads this, so every machine answers alike.</summary>
+    /// <returns>The normal.</returns>
+    public Puck.Maths.FixedVector3 FixedFacing() => Puck.Maths.FixedVector3.Cross(
+        left: Puck.Maths.FixedVector3.FromVector3(value: Right),
+        right: Puck.Maths.FixedVector3.FromVector3(value: Up)
+    ).Normalize();
+}
 /// <summary>
 /// An authored screen material: how a display's face draws its picture through the screen shading's display treatment,
 /// a row of the document's <c>screenMaterials</c> that screens and creation faces name by <see cref="Id"/>. The

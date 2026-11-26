@@ -10174,6 +10174,21 @@ export type WorldMachine = {
    * The state cell that selects which title of the machine's library it runs, or null for a machine whose content only its configuration, a folder default and operations decide. The library is the files of ContentFolders the engine can mount, in their listing order (TryTitle): the cell holding 0 runs the machine's own content, and n runs the library's n-th title. The tick reads the cell after the rule frame folds, beside RunsWhen (Server.WorldTick.GateMachines), and the host mounts a new selection on the tick it lands, so a rule that inserts a cartridge swaps the machine's content, a replay derives the same swaps from the same state, and no document mutation or provider operation is involved. The document always names the authored content (CaptureInstances reports it), so a title's name never enters the document, a capture or a tape. A selection naming no mountable title runs the machine's own content. Omitted from the wire when null.
    */
   contentBy?: WorldMachineContentSelector | null;
+  /**
+   * How far the machine's attention reaches, or null for a machine the host advances on every tick Running and RunsWhen allow, attended or not. A machine that authors one is advanced only on the ticks it is attended (WorldMachineAttention) and is suspended on every other: its clock stops, it keeps its hardware state, and it resumes from that state on the tick it is attended again. The tick decides it beside RunsWhen (Server.WorldTick.GateMachines), from authority state alone, so a replay or a restored checkpoint derives the same ticks: the verdict is never stored. Omitted from the wire when null.
+   */
+  attention?: WorldMachineAttention | null;
+};
+
+export type WorldMachineAttention = {
+  /**
+   * The distance in metres, finite and positive.
+   */
+  within: number;
+  /**
+   * How far behind a screen's face a body still attends it, in metres, finite and at least zero, or null for a machine attended from every side. A screen's face looks along its Right crossed with its Up (FixedFacing), and a body stands behind it by the distance from its position to the face's plane, so an allowance of about a body's height keeps a body beside or just behind the screen attending it. A screen a placement carries is attended by its holder whichever way it faces. Omitted from the wire when null.
+   */
+  behind?: number | null;
 };
 
 export type WorldMachineCable = {

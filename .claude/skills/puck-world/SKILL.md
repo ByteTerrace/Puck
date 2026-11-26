@@ -140,7 +140,18 @@ added to the debug world is added to that fragment. A machine that runs only
 while some state holds (a rented handheld) authors `runsWhen`, a state condition
 the tick decides before the machines step (`WorldTick.GateMachines`), rather than
 a rule toggling `running` through a document edit; `rentals-tests.puck` reads one
-start and stop.
+start and stop. A machine that should run only while someone can see or play it
+authors `attention { within: <metres>, behind: <metres> }`: the same door
+suspends it on every tick no body a human occupies stands within that distance of
+a screen that shows it (on the side the screen faces, where `behind` is authored)
+and no participant is engaged on one, and resumes it from the state it held
+(`WorldTick`'s `MachineAttended`;
+[machine hosting](../../../docs/emulation/shared/machine-hosting.md#queued-screen-machine-hosting)).
+`machine.state` reads `attention=attended|unattended|none`, and a suspended
+machine's `segments` stand still; `machine-attention-tests.puck` reads a walk out
+of and back into one's reach. The toybox's decks and the range's televisions
+author it, so a check that reads one of them stands a seat's body before its
+screen first.
 
 The arena is the live gameplay store. `WorldServer.Definition` holds declarations
 and seeds; use `ExportDefinition()` only at an explicit snapshot/edit boundary.
@@ -959,7 +970,9 @@ check the flag: the owner may be holding the pad.
 - **The benchmark route plays as a player.** `world.benchmark run debug` (or `seams`) plays a `routes` row of the
   document (`worlds/debug/benchmark-route.puck`): each chapter a list of places and how to reach them, played by the
   standard's `walker` seat program through seat 1's own controls (`WorldSeatDriver`), which reads only what the seat's
-  authority delivered, so the same driver plays against a remote authority. A chapter fails, naming the kind,
+  authority delivered, so the same driver plays against a remote authority. A chapter's `pose` step sets the body down
+  at the size it spawns at (once the pose lands the driver sends `body.pose size <seat>`, which returns the register
+  `bodies.scale` names to its initial value), so a chapter that ended small does not start the next one small. A chapter fails, naming the kind,
   the tick and the place, on a stick held while the body goes nowhere or a step out of its path's places; `puck benchmark --headless --route
   debug --loops 2` is the headless proof ([the plan](../../../docs/plans/benchmark.md#the-route-is-places-played-by-an-authored-seat-program-stage-4)).
 - **A device profile is data, selected by adapter.** A world's `render.devices` rows (the standard's, in

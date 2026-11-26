@@ -1,7 +1,9 @@
 // Level 1's toybox: twelve Humble Gaming Deck stations on both galleries, facing the nave across its void, each screen
 // a hosted deck running one of the world's shipped deck programs, so a player on any other level looks across into
-// live game screens even when the floor is empty. The gallery module imports this, so the gallery booted alone
-// (gallery-root.puck) and the debug world both host the decks.
+// live game screens. A deck runs while someone stands within `toyboxAttention` of its screen, on the side it faces, or
+// plays it, and stands suspended otherwise (its machine's `attention`), so the floor costs no emulation while nobody is
+// near enough to see its pictures move. The gallery module imports this, so the gallery booted alone (gallery-root.puck) and the debug
+// world both host the decks.
 //
 // Two kinds of station alternate along each gallery (layout.puck's toyboxPlan), and every connection is an object in
 // the world:
@@ -101,9 +103,18 @@ state {
 // A deck for each station, booting its shipped program until a cartridge is inserted (`contentBy`); it can also swap to
 // any title of the library by hand (`machine.content toybox-cabinet-south-3`, `machine.swap …`, gallery.md's "The
 // toybox").
+//
+// How far a deck's attention reaches, in metres from its screen: across the nave to the facing gallery and its aisle
+// and well along its own side, so every picture a player can make out is running, and a deck at the far end of the
+// hall resumes, from the frame it stood on, as the player walks toward it. A body more than `toyboxBehind` behind a
+// screen's face does not attend it: the stations stand with their backs to the outer walls, so that is a body outside
+// the building, which sees no picture of that gallery.
+let toyboxAttention = 40
+let toyboxBehind = 2
 machines: map(toyboxStations, s => (deckMachine(s.machine, $"../cartridges/deck/{s.cartridge}.deck") with {
   contentFolders: toyboxLibrary
   contentBy { state: toyboxTitle, key: s.id }
+  attention { within: toyboxAttention, behind: toyboxBehind }
 }))
 
 // Each station's picture stands upright in its frame (a cabinet's bezel, a television's), its glass exactly the deck's
