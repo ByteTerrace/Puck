@@ -798,15 +798,17 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             forms: WorldStateCellSetForms,
             handler: (context, args) => {
                 if (args.Count < 3) { return WorldStateCellSetForms.Refuse(args: in args); }
-                if (!authority.TryResolveLink(context, "world.state.cell.set", out var link, out var error)) { return error; }
-                var submitted = link.Submit(mutation: new WorldMutation.UpsertStateCell(
-                    Principal: context.Principal, Row: args[0].ToString(), Key: args[1].ToString(),
+                if (!authority.TryResolveInstance(context: context, error: out var error, instance: out var instance, verb: "world.state.cell.set")) { return error; }
+
+                var row = args[0].ToString();
+                var submitted = instance.SubmissionLink.Submit(mutation: new WorldMutation.UpsertStateCell(
+                    Principal: context.Principal, Row: row, Key: args[1].ToString(),
                     Value: 0L, Kind: WorldDocumentWriteKind.Set,
                     CommandTail: WorldCommandArguments.RawAfter(context, in args, tokens: 3, preserveQuotes: true)
                 ), echoes: echoes, verb: "world.state.cell.set");
 
-                // The row and key name what the line holds.
-                return (pins?.Track(args: in args, context: in context, result: submitted, subjectTokens: 2, verb: "world.state.cell.set") ?? submitted);
+                // The row is what the line holds: its pin is the whole row as it stands when the pins are read.
+                return (pins?.Track(context: in context, live: WorldStateRowPin.Line(row: row, server: instance.Server), result: submitted, subject: WorldStateRowPin.Subject(row: row)) ?? submitted);
             },
             routing: CommandRouting.Simulation
         );

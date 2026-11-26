@@ -108,6 +108,18 @@ public readonly record struct FixedBodyMantle(
     /// <summary>Gets whether the row authors a mantle at all.</summary>
     public bool Exists => (Height > FixedQ4816.Zero);
 }
+/// <summary>The compiled corner wrap of a <see cref="BodyHoldKind.Pull"/> row: how a body traversing to the side end of
+/// its face gets round an outside corner onto the face past it. Zeroed, and inert, on a row that authors none.</summary>
+/// <param name="Depth">How far past the corner, along the new face, the body's middle arrives, world units at unit
+/// scale.</param>
+/// <param name="DurationTicks">How long the wrap takes, in engine ticks; zero for a row with no corner wrap.</param>
+public readonly record struct FixedBodyCorner(
+    FixedQ4816 Depth,
+    ulong DurationTicks
+) {
+    /// <summary>Gets whether the row authors a corner wrap at all.</summary>
+    public bool Exists => (DurationTicks != 0UL);
+}
 /// <summary>
 /// One compiled hold: the fixed-point form of an authored hold row, in the ordered list a kit's motion row
 /// declares. <see cref="BodyMotionOp.ResolveHold"/> walks the list in order and takes the first hold the world
@@ -148,6 +160,8 @@ public readonly record struct FixedBodyMantle(
 /// <param name="RestorePerSecond">The rate that slot refills at, per second.</param>
 /// <param name="Mantle">How a body climbing off the end of this row's face gets onto what lies past it. A row
 /// carrying one also keeps the body on its face where nothing lies past the edge.</param>
+/// <param name="Corner">How a body traversing off the side of this row's face gets round an outside corner onto the
+/// face past it.</param>
 /// <param name="Medium">The displacement law of a <see cref="BodyHoldBond.Medium"/> bond; zeroed on every
 /// other.</param>
 /// <param name="Gravity">The vertical arc a <see cref="BodyHoldKind.Gravity"/> or <see cref="BodyHoldKind.Lift"/>
@@ -183,6 +197,7 @@ public readonly record struct FixedBodyHold(
     string? RestoreState,
     FixedQ4816 RestorePerSecond,
     FixedBodyMantle Mantle,
+    FixedBodyCorner Corner,
     FixedBodyMedium Medium,
     FixedBodyHoldGravity Gravity,
     FixedVerticalEnvelope Envelope,

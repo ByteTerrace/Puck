@@ -314,7 +314,7 @@ template shellSlab(label, x0, x1, y0, y1, z0, z1, top = shellFloor) {
 // endless fall's ceiling painting, and by a small square wherever the flaw passes through (layout.puck's
 // `flawCrossings`), which the flaw's collar (flaw.puck) fills and rounds.
 let fallWell = { x0: (fallPlan[0] - fallHole), x1: (fallPlan[0] + fallHole), z0: (fallPlan[1] - fallHole), z1: (fallPlan[1] + fallHole) }
-function flawOpenings(level) = map(filter(flawCrossings, c => ((c.height + 1) == level)), c => {
+function flawOpenings(level) = map(filter(flawCrossings, c => (flawEnabled and ((c.height + 1) == level))), c => {
   x0: (c.point[0] - lookFlawCollarCut)
   x1: (c.point[0] + lookFlawCollarCut)
   z0: (c.point[2] - lookFlawCollarCut)
