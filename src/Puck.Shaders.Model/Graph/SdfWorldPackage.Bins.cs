@@ -11,8 +11,9 @@ public static partial class SdfWorldPackage {
     public const string ViewsFilterRecordsWritten = "sdfViewsFilterRecordsRW";
     /// <summary>The shade bins as the binned views pass reads them: per view a header of <see cref="ShadeTileHeaderWords"/>
     /// words (each bin's tile count, its first entry in the tile list and the scatter's cursor), each tile's bin, the
-    /// tile list sorted by bin, then each tile's light masks, <see cref="ShadeTileLightWords"/> words a tile
-    /// (<c>sdf-views-filter.hlsli</c> owns the layout).</summary>
+    /// tile list sorted by bin, then each tile's light masks, <see cref="ShadeTileLightWords"/> words a tile, then each
+    /// tile's traced-light shares, <see cref="ShadeTileShareWords"/> words a tile (<c>sdf-views-filter.hlsli</c> owns the
+    /// layout).</summary>
     public const string ShadeTiles = "sdfShadeTiles";
     /// <summary>The shade bins as the filter pass (tile bins and counts) and the bins pass (offsets and the tile list)
     /// write them.</summary>
@@ -38,6 +39,16 @@ public static partial class SdfWorldPackage {
     /// views kernels walk by them (<c>sdf-views-lights.hlsli</c>). <c>SdfIsaHlsl</c> generates it as
     /// <c>SDF_SHADE_TILE_LIGHT_WORDS</c>.</summary>
     public const uint ShadeTileLightWords = 8;
+    /// <summary>The words of one tile's traced-light shares in the shade bins, after every tile's light masks: a light mask
+    /// of the traced lights the shares resolve, then for each cell of the four by four the tile's pixels blend, two
+    /// UNORM16 shares a word for each of those lights in mask order. The filter pass writes them and the binned views
+    /// kernels read a traced light's share of a pixel's slots there (<c>sdf-views-lights.hlsli</c> owns the layout).
+    /// <c>SdfIsaHlsl</c> generates it as <c>SDF_SHADE_TILE_SHARE_WORDS</c>.</summary>
+    public const uint ShadeTileShareWords = (4 + (16 * (ShadeTileSharedLights / 2)));
+    /// <summary>The most traced lights a tile's shares resolve (<see cref="ShadeTileShareWords"/>); a tile's walk reads any
+    /// other traced light's share from its pixels' slots. <c>SdfIsaHlsl</c> generates it as
+    /// <c>SDF_SHADE_TILE_SHARED_LIGHTS</c>.</summary>
+    public const uint ShadeTileSharedLights = 8;
     /// <summary>The words of one pixel's views filter record. <c>SdfIsaHlsl</c> generates it as
     /// <c>SDF_VIEWS_FILTER_WORDS</c>.</summary>
     public const uint ViewsFilterWords = 3;
@@ -67,8 +78,8 @@ public static partial class SdfWorldPackage {
         // Every storage follows the visibility record's extent basis, the render extent's in a reduced or temporal view.
         var visibility = fragment.Resources.Single(predicate: static resource => (resource.Name == Parts.Visibility));
         var pixels = visibility.Count!;
-        // Each tile's bin, its entry in the tile list and its light masks.
-        var tiles = PerTile(pixels: pixels, elements: (2 + ShadeTileLightWords));
+        // Each tile's bin, its entry in the tile list, its light masks and its traced-light shares.
+        var tiles = PerTile(pixels: pixels, elements: ((2 + ShadeTileLightWords) + ShadeTileShareWords));
         var passes = new List<RenderGraphFragmentPass>(capacity: (fragment.Passes.Count + 2));
 
         foreach (var pass in fragment.Passes) {

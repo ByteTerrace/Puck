@@ -1040,10 +1040,24 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `sdfViewsLightsSeen` in the same change. The unsplit kernels decide a tile in
   their own group; a binned view's filter pass decides it and writes the masks
   into the shade bins (`sdfShadeTileLightsWord`), which the binned kernels read,
-  so they hold no barrier and shade a pixel from its records alone. The filter
+  so they hold no barrier and shade a pixel from its records alone. Beside the
+  masks it writes the tile's traced-light shares (`sdfShadeTileSharesWord`,
+  `sdfViewsStoreTileShares`): for the first `SDF_SHADE_TILE_SHARED_LIGHTS`
+  traced lights the tile keeps, each cell's representative's share of the four
+  by four cells the tile's pixels blend, which a binned pixel's walk reads in
+  place of its slots' agreement and list (`sdfViewsLightVisibility`, through the
+  slots' cells `sdfViewsProbesAt` records); a pixel that reads an extra, and a
+  light past those, read the slots. A change to a slot's light words or to
+  which cells a pixel blends changes the tile's shares with it. The filter
   pass tests no screen's binding, since a source binds without moving the
   lighting it stands on; the walk asks. `SDF_VIEWS_OMIT_LIGHT_TILES` reads the
-  tiles' saving. The walks count their visits (`gpu.lights.visited` on
+  tiles' saving. A slot reader issues all four slots' loads with no branch
+  between them (`sdfViewsProbesAt` repeats an answering slot in a slot of no
+  share): a branch on each slot's share ran the slots one after another wherever
+  a wave's lanes blend different cells. The walk's cost is its visits', not its
+  registers: a pass of its own at 128 registers walked as slowly as views does at
+  168 ([frame budget](../../../docs/plans/frame-budget.md#where-the-time-goes)).
+  The walks count their visits (`gpu.lights.visited` on
   `world.counters gpu pass sdf.world$views` and `$glass-shade`, through
   `puckCountLights`). Glass, which has no tiles, walks the view's lights that
   reach the box about its wave's active lanes' points (`sdfWaveLightMasks`,

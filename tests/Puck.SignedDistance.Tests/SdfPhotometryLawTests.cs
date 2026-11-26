@@ -116,9 +116,13 @@ public sealed class SdfPhotometryLawTests {
         // Ahead, wrapping the eye, a directional, a light riding a transform and an occluder whose reach covers the eye
         // are shaded; one behind past its range, a dark directional, an occluder far behind and a light of no range are
         // not.
-        Assert.Equal(expected: ((UInt128)0b0_1010_1101), actual: SdfLightSelection.Select(camera: in camera, far: 100f, lights: lights));
+        Assert.Equal(expected: ((UInt128)0b0_1010_1101), actual: SdfLightSelection.Select(camera: in camera, exposure: 1f, far: 100f, lights: lights));
         // A far plane before a light's sphere leaves it out.
-        Assert.False(condition: SdfLightSelection.Reaches(camera: in camera, far: 5f, light: lights[0]));
+        Assert.False(condition: SdfLightSelection.Reaches(camera: in camera, exposure: 1f, far: 5f, light: lights[0]));
+        // A view exposed so dimly that the light wrapping the eye gives a white surface past 1.6 m less than the cutoff
+        // leaves it out: its reach there no longer holds the eye, and it lies behind the view.
+        Assert.Equal(expected: ((UInt128)0b0_1010_1001), actual: SdfLightSelection.Select(camera: in camera, exposure: 0.01f, far: 100f, lights: lights));
+        Assert.Equal(expected: (SdfPhotometry.RangeOf(exposure: 0.01f, weight: 1f) * (1f + SdfLightSelection.CutoffMargin)), actual: SdfLightSelection.ReachAt(exposure: 0.01f, light: lights[2]));
 
         void Point(int index, Vector3 position, float range) =>
             lights.Set(index: index, light: new SdfLight(Color: Vector3.One, Direction: position, Kind: SdfLightKind.Point, Param: range, Shadows: false, Weight: 1f));
