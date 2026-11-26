@@ -1086,11 +1086,14 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   jump and launch operations release grounding. The gallery
   lift moves its car body with a rule that `poseCell`s it along a box topology
   of 1/16 m layers each tick, so its speed and floor stops are exact.
-  Its numeric attachment index must track population capacity and import order:
-  the gallery shares `galleryPopulation` between its capacity and lift body,
-  which is immediately below the companion imported ahead of it.
-  A stale index can attach the platform to a different inhabitant while the
-  placement-keyed car still moves; inspect `body.where` before changing physics.
+  The car's platform, cab, doors and buttons attach to the car by its
+  placement's name (`attach { placement: "lift-car" }`), which resolves to the
+  body that placement spawned (`WorldPlacementAttach.TryCarrier`), so no row
+  holds a body's index and an import ahead of the gallery moves nothing. An
+  attachment by `bodyIndex` still names a slot, which tracks population
+  capacity and import order: prefer the placement's name wherever the carrier
+  is an inhabited placement. The rule's `poseCell` names the building's root as
+  its `frame`, so the topology's cells are read in the building's own frame.
 - An attached placement can also `respond` to state: the shown prototype and
   its colliders swap while its attachment stays intact. The lift's car doors
   and indicator use this; `inhabit` and `faceSources` still refuse `respond`.

@@ -769,6 +769,29 @@ and the influence reads: `worlds/debug/granaries.md` ("Reading the board").
 A volume whose extents bind a state row is compiled into the index again when
 the row changes (`WorldSpatialQueryCompilation.Resolve`).
 
+**A module under one root placement.** A building, a ship or any place meant to
+be stood by one row places everything relative to a root placement, and four
+mechanisms carry that frame past plain placements
+([the debug world's gallery](../../../../worlds/debug/gallery.md#the-module)
+uses all four):
+
+- A placement's `parent` names the root, and an `inhabit` row may name one
+  too: the body spawns at the row's pose in the parent's frame.
+- A row attaches to a carrier by the carrier's placement
+  (`attach { placement: "<id>" }`, `WorldPlacementAttach.TryCarrier`), never
+  by a body index a neighbouring import can shift. The placement must be
+  inhabited; `sizeBy`'s `$body` still needs `bodyIndex`.
+- A spawn point's `parent` names a placement, and every reader is handed the
+  pose in the world (`WorldSpawnPointFrames.Resolve`).
+- A rule's `poseCell` takes a `frame` placement, so a topology's cells are
+  read in that placement's frame (`WorldRuleHost`'s `FirePoseCell`).
+
+A light anchored to a placement no body carries (no `attach`, `inhabit` or
+`deal`) stands still, so the irradiance volume traces it as it does an
+unanchored light (`WorldEnvironmentResolve.ApplyAnchors`). A static creation's
+paints, a state lattice's origin and a board are still placed in the world's
+frame: a module places those from its site when the document compiles.
+
 `WorldNavigation.cs` owns named finite domains, proved against the static part
 of the contact provider the bodies collide with and baked off the tick
 ([server README](../../../../src/Puck.World.Server/README.md#navigation)).
