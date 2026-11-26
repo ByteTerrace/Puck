@@ -202,7 +202,8 @@ per-pixel noise cancels to one smooth estimate with or without temporal
 reconstruction. A neighbor joins the average only while its surface point lies
 within two pixel footprints of the pixel's tangent plane, so neither crosses a
 depth edge or a silhouette. `world.debug-view ao` shows the filtered occlusion
-and `world.debug-view shadow` the key light's filtered visibility. A
+and `world.debug-view shadow` the key light's visibility as its light walk
+answers it ([lighting and shading](lighting-and-shading.md) reads its colours). A
 view whose quality (`SdfViewSnapshot.Quality`) turns ambient occlusion or soft
 shadows off reads none of the record's occlusion or K; quality is each view's,
 so views of one frame render at different cost.

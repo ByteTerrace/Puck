@@ -753,10 +753,39 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public bool Settling {
         get {
             lock (m_gate) {
-                // A faulted worker, camera sample or scene build settles nothing: the next Stage reports it.
-                return ((m_gpuCameraSampleTask is { IsCompleted: false } or { IsFaulted: true }) || (m_worker is { IsCompleted: false } or { IsFaulted: true }) || (m_build is { IsCompleted: false } or { IsFaulted: true }) || ((m_scene is not null) && m_owed) || m_refillOwed || Dirty || m_wrote);
+                return SettlingTerms(names: null);
             }
         }
+    }
+    // Whether the volume is settling, naming each term that holds into `names` when given; under the gate. A faulted
+    // worker, camera sample or scene build settles nothing: the next Stage reports it.
+    private bool SettlingTerms(List<string>? names) {
+        var settling = false;
+
+        void Term(bool holds, string name) {
+            if (!holds) { return; }
+            settling = true;
+            names?.Add(item: name);
+        }
+        Term(holds: (m_gpuCameraSampleTask is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_gpuCameraSampleTask, name: "camera-sample"));
+        Term(holds: (m_worker is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_worker, name: "worker"));
+        Term(holds: (m_build is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_build, name: "build"));
+        Term(holds: ((m_scene is not null) && m_owed), name: "owed");
+        Term(holds: m_refillOwed, name: "refill");
+        Term(holds: Dirty, name: (m_republishOwed ? "unpublished-republish-owed" : "unpublished"));
+        Term(holds: m_wrote, name: "wrote");
+        return settling;
+
+        // A task's term, naming its fault where it faulted; only a description asks.
+        string Named(Task? task, string name) => (((names is not null) && (task is { IsFaulted: true } faulted))
+            ? $"{name}-faulted:{faulted.Exception?.GetBaseException().GetType().Name}:{faulted.Exception?.GetBaseException().Message}"
+            : name);
+    }
+    // The settling terms that hold, by name, or none; under the gate.
+    private string DescribeSettling() {
+        var names = new List<string>();
+
+        return (SettlingTerms(names: names) ? string.Join(separator: ',', values: names) : "none");
     }
 
     /// <summary>Gets whether the volume's background work is computing on the host: a scene build runs, or the worker runs
@@ -1624,7 +1653,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             foreach (var level in m_levels) { cached += level.Cache.Count; }
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} measured-from={m_layout.Finest} first-light-owed={(OwesFirstLight ? "yes" : "no")} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={m_volume.Bytes} table-device-bytes={buffers.DeviceLocal}");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} measured-from={m_layout.Finest} first-light-owed={(OwesFirstLight ? "yes" : "no")} settling={DescribeSettling()} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={m_volume.Bytes} table-device-bytes={buffers.DeviceLocal}");
         }
     }
 

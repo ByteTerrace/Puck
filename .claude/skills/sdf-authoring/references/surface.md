@@ -237,6 +237,23 @@ identity, one), `stroke` (finite ≥ 0), `parent`, and the shape fields
 `Sweep` requires a curve, and only a `Sweep` carries one). The primitive takes a
 shape's own admission.
 
+**Repetition.** `repeat { cell [x, y, z], tone, seed }` draws the paint once a
+lattice cell of its frame (`SdfPaintRepeat`): the views pass folds the hit into
+its cell before it evaluates the primitive, so the primitive is authored about
+one cell's centre. `cell` is the period along each axis, zero for an axis the
+paint does not repeat along; `tone` (absent: the paint's `color`) is the colour
+each cell moves toward from `color` by a hash of the cell and `seed`, a variation
+that fades to its mean where a cell grows under a few pixels. Tiles are a box a
+joint smaller than its cell over the slot's joint colour:
+
+```puck
+{ color: "#8A3F2C", paints [{ type: "Box", scale [0.595, 1, 0.595], color: "#B4553A",
+  repeat { cell [1.2, 0, 1.2], tone: "#C86E48", seed: 7 } }] }   // 1.2 m tiles, 1 cm joints
+```
+
+A text paint cannot repeat. `shape-paint-tiles` on the gallery's STYLES row is
+the exhibit.
+
 **Frames.** A paint with a `parent` is authored in that shape's local frame, the
 frame a shape-riding volume uses (curve points and text runs ride it the same
 way), and rides the shape's own dynamic slot, so it moves with the part whatever

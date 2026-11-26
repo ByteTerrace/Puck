@@ -49,6 +49,47 @@ float3 sdfRateTint(SdfPixel p, SdfSurfaceSample s, float3 color) {
     return lerp(color, tinted, ((p.viewMode == SDF_DEBUG_VIEW_RATE_FLASH) ? 1.0 : 0.75));
 }
 
+// The key light's visibility as its light walk answers it (sdfLightVisibility, over the record and the filtered K row the
+// light stage reads): the primary role's cascades where they hold the point, the probes' share times the occlusion where
+// none does, and the two blended by the cascades' coverage across the band at their edge. Grey is the answer on a side
+// facing the light, and the share the probes answered is tinted amber, so a receiver no cascade holds reads apart from
+// one the cascades judged. A side turned from the light that the surface pass queried (a material whose response wraps
+// past the terminator) reads violet: its cascades read the exit layer, where a wall's own room face is where the light
+// leaves it and so reads visible, though only a wrapped response takes any light there. A side the key light does not
+// reach, whose lanes the surface pass left unqueried, reads dark blue: its answer is zero whatever the cascades hold
+// (sdfShadowRoleAnswer), where the record's decoded lane alone would read fully lit. With shadows off every receiver
+// takes the probes' share.
+float3 sdfDebugKeyShadow(SdfPixel p, SdfSurfaceSample s) {
+    int key = worldShadowRoleLight(0u);
+
+    if ((key < 0) || ((uint)key >= worldLightCount())) {
+        return float3(0.0, 0.0, 0.0);
+    }
+
+    SdfShadeSurface surface = (SdfShadeSurface)0;
+
+    surface.ambientOcclusion = s.ambient;
+    surface.shadowVisibility = s.shadows;
+    surface.cascaded = ((passGroup.meshShadowCount > 0u) && !worldSoftShadowsDisabled());
+    surface.shadowMeasured = (surface.cascaded
+        ? sdfShadowQueried(sdfVisibilityRecordBuffer[worldVisibilityRecord(p.pixel, p.viewIndex) + SdfVisibilityShadowWord])
+        : float4(1.0, 1.0, 1.0, 1.0));
+    surface.probes = sdfViewsProbesAt(p);
+    surface.probed = sdfMeshAnswers(surface.probes);
+    if (surface.cascaded && (surface.shadowMeasured.x == 0.0)) {
+        return float3(0.0, 0.0, 0.25);
+    }
+
+    bool traced = (surface.probed && (sdfLights[(uint)key].Shadows != 0u));
+    float visibility = sdfLightVisibility(surface, key, traced, -1.0);
+    float cascadeShare = (surface.cascaded ? saturate(s.shadows.z) : 0.0);
+
+    if (dot(s.normal, sdfLights[(uint)key].Direction) <= 0.0) {
+        return (visibility * float3(0.55, 0.35, 1.0));
+    }
+    return (visibility * lerp(float3(1.0, 0.7, 0.25), float3(1.0, 1.0, 1.0), cascadeShare));
+}
+
 float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
     float3 viewColor = color;
 
@@ -98,8 +139,8 @@ float3 sdfDebugView(SdfPixel p, SdfSurfaceSample s, float3 color) {
             viewColor = (s.hit ? s.ambient.xxx : float3(0.0, 0.0, 0.0));
             break;
         }
-        case SDF_DEBUG_VIEW_SHADOW: { // the filtered key-light shadow visibility views shades with
-            viewColor = (s.hit ? s.shadows.xxx : float3(0.0, 0.0, 0.0));
+        case SDF_DEBUG_VIEW_SHADOW: { // the key light's visibility as its walk answers it (sdfDebugKeyShadow)
+            viewColor = (s.hit ? sdfDebugKeyShadow(p, s) : float3(0.0, 0.0, 0.0));
             break;
         }
         case SDF_DEBUG_VIEW_INDIRECT: { // the irradiance volume's light on a white surface, exposed: a probe artefact

@@ -789,13 +789,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   An unmeasured slot averaged in lights a one-pixel line along every
   terminator and rounded edge the cascades shadow (indoors, a cosine just
   above zero under the 100 klx sun), and no debug view shows it, since
-  `shadow` shows the average without its cosine. The average also leaves out neighbours whose normal
+  `shadow` shows the visibility without its cosine. The average also leaves out neighbours whose normal
   turns away, so a crease's two lit faces keep their own shadows. A sunlit spot on a wall's top under a slab is the
   filter's (`sdfMeshShadowGap`): a tap counts the light hidden only inside the
   light's cone over the point, and the penumbra is the nearest in-cone
-  blocker's. `world.debug-view ao`
-  and `world.debug-view shadow` show the filtered values, and `world.ao` toggles
-  the occlusion live.
+  blocker's. `world.debug-view ao` shows the filtered occlusion and `world.debug-view shadow` the key light's
+  answer as its walk reads it (`sdfDebugKeyShadow`: grey facing the light, amber where the probes answer, violet on a
+  queried side past the terminator, dark blue unqueried), and `world.ao` toggles the occlusion live. The shadow view
+  runs the probe lookup (`sdfViewsProbesWanted`) and the occlusion filter, since the probes' answer it shows reads
+  both; a view mode that reads the probes without asking for the lookup reads another frame's slots. Judge a lit wall
+  only by grey: a wall's own room face reads visible through the exit layer whenever the sun is behind it.
 - **A cascade has two layers.** Each cascade pass draws its depth (every face,
   `SdfMeshRasterPass.ShadowDescription`) and its exit layer (faces toward the
   light culled, `SdfMeshRasterPass.ShadowExitKey`) into its two outputs. A triangle the
