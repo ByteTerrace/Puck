@@ -20,11 +20,20 @@ public interface ISigningOracle {
 }
 /// <summary>The one claim layout every federation-identity oracle signs: the challenge, optionally followed by a
 /// 16-byte run session, as an opaque payload directed at <see cref="WorldAttestedAuthenticator.Audience"/>.</summary>
-internal static class FederationClaims {
-    /// <summary>How far each claim backdates its <c>notBefore</c>, so a verifier whose clock trails the signer's by up
-    /// to this many seconds still finds the claim valid; the attestation profile carries no verifier-side skew grace
-    /// and puts slack in the signed window instead.</summary>
-    internal const long ClockSkewSeconds = 60;
+public static class FederationClaims {
+    /// <summary>How far each claim backdates its <c>notBefore</c>, in seconds, so a verifier whose clock trails the
+    /// signer's by up to this many seconds still finds the claim valid; the attestation profile carries no verifier-side
+    /// skew grace and puts slack in the signed window instead. A claim's window starts this far before it is signed, so
+    /// a validity of no more than this is a claim already expired when signed, which every oracle refuses.</summary>
+    public const long ClockSkewSeconds = 60;
+
+    // Refuses a validity whose window, backdated by the skew, would end before the claim is signed.
+    internal static void ThrowIfExpiredWhenSigned(TimeSpan validity) {
+        if (validity.TotalSeconds <= ClockSkewSeconds) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(validity), actualValue: validity,
+                message: $"a claim's window starts {ClockSkewSeconds} seconds before it is signed, so a validity of {validity.TotalSeconds} seconds ends before it is signed");
+        }
+    }
 
     internal static byte[] Sign(ECDsa key, string domain, string subject, ReadOnlySpan<byte> challenge, byte[]? session, long notBefore, long notAfter, IReadOnlyList<byte[]> chain) {
         var codec = WorldAttestedAuthenticator.Codec;
@@ -87,9 +96,12 @@ public sealed class LocalKeySigningOracle : ISigningOracle, IDisposable {
     /// identity <see cref="AuthorityIdentity"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException"><paramref name="subject"/> is null or whitespace.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="validity"/> is no longer than
+    /// <see cref="FederationClaims.ClockSkewSeconds"/>, so every claim would be expired when signed.</exception>
     public LocalKeySigningOracle(ECDsa key, string subject, TimeSpan validity, Func<DateTimeOffset>? now = null, Guid? session = null) {
         ArgumentNullException.ThrowIfNull(argument: key);
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: subject);
+        FederationClaims.ThrowIfExpiredWhenSigned(validity: validity);
 
         m_key = key;
         m_domain = KeyId.ComputeKeyHash(subjectPublicKeyInfo: key.ExportSubjectPublicKeyInfo());
@@ -167,8 +179,11 @@ public sealed class IssuedKeySigningOracle : ISigningOracle, IDisposable {
     /// <param name="session">The per-run session bound into every claim's payload.</param>
     /// <param name="now">The wall-clock read, overridable for tests; defaults to <see cref="DateTimeOffset.UtcNow"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="issue"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="validity"/> is no longer than
+    /// <see cref="FederationClaims.ClockSkewSeconds"/>, so every claim would be expired when signed.</exception>
     public IssuedKeySigningOracle(Func<ECDsa, CancellationToken, WorldIssuedIdentity> issue, TimeSpan validity, Guid session, Func<DateTimeOffset>? now = null) {
         ArgumentNullException.ThrowIfNull(argument: issue);
+        FederationClaims.ThrowIfExpiredWhenSigned(validity: validity);
 
         m_issue = issue;
         m_validity = validity;
