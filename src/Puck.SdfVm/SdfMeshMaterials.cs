@@ -6,6 +6,10 @@ internal static class SdfMeshMaterials {
     // or null when the ids are held as stored: they are the same, or `to` names two places by one id and could not be
     // renumbered back by place.
     internal static Remap? RemapOf(int[] from, int[]? to) => (((to is null) || from.AsSpan().SequenceEqual(other: to) || (to.Distinct().Count() != to.Length)) ? null : new Remap(from, to, detectCollision: true));
+    // The renumbering a restore applies, from the entry's canonical ids to the ids the restored mesh already carries
+    // (SdfMeshStorage.WritesMaterialsIn), or null when it carries the canonical ids: unconditional, since the mesh holds
+    // those ids whether or not they could be renumbered back by place.
+    internal static Remap? ForwardOf(int[] from, int[]? to) => (((to is null) || from.AsSpan().SequenceEqual(other: to)) ? null : new Remap(from, to, detectCollision: true));
 
     // Writes ids renumbered by place as Renumber does, and notes whether a mesh can be held in `to`'s ids and renumbered
     // from them again: it cannot when an id outside `from` (one no shape of the group owns, which renumbering keeps) is one

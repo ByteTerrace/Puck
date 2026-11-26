@@ -456,6 +456,39 @@ public sealed class SdfMeshLibraryLawTests {
         stored.Release();
     }
 
+    // The entry numbers materials by place, so a mesh whose group's ids are not its places (a decode for a taking group,
+    // a bake's published copy) carries ids the entry does not: a restore writes its triangle materials, its levels'
+    // included, in the ids it carries, never the entry's.
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void APublishedMeshRestoresItsTriangleMaterialsInTheIdsItCarries(bool stored) {
+        // A published mesh's store leases its set until the process ends (SdfMeshStore.Hold), so the scratch store is
+        // deleted as far as the lease allows.
+        using var scratch = new Puck.Testing.TemporaryDirectory(bestEffortDelete: true, prefix: "puck-mesh-library-restore-ids-");
+        var store = new SdfMeshStore(directory: scratch.PathOf(name: "meshes"));
+        var geometry = new SdfMeshGeometry(Dynamic: false, Hash: 0x5EED_0004ul);
+        UInt128 identity = 6;
+        var source = Piece(offset: 0f, skinned: false);
+
+        using var library = new SdfMeshLibrary(allocator: new HeapAllocator(), store: store);
+        SdfMesh? mesh;
+
+        if (stored) {
+            mesh = library.Store(geometry: geometry, identity: identity, materials: [10, 20], mesh: source);
+        } else {
+            Assert.True(condition: store.Write(geometry: geometry, identity: identity, materials: [10, 20], mesh: source));
+            Assert.True(condition: library.TryLoad(geometry: geometry, identity: identity, materials: [30, 40], mesh: out mesh, refusal: out _, declined: out _));
+        }
+        Assert.NotNull(@object: mesh);
+        AssertARestoreWritesTheSameWords(native: mesh);
+        SdfMesh.ReleaseIdle(all: true);
+        Assert.Equal(expected: (stored ? [10u, 20u] : [30u, 40u]), actual: mesh.TriangleMaterials.ToArray());
+        SdfMesh.ReleaseIdle(all: true);
+        Assert.Equal(expected: (stored ? [20u] : [40u]), actual: mesh.LevelMaterials(level: 1).ToArray());
+        mesh.Release();
+    }
+
     private static void AssertSamePlanes(SdfMesh expected, SdfMesh actual) {
         Assert.Equal(expected: expected.Chunks.Count, actual: actual.Chunks.Count);
         Assert.Equal(expected: expected.Positions.ToArray(), actual: actual.Positions.ToArray());
@@ -503,6 +536,8 @@ public sealed class SdfMeshLibraryLawTests {
         var again = new uint[words];
 
         SdfMeshRegion.WriteMeshes(destination: first, layout: default, meshes: meshes);
+        // Every unneeded mesh lets its planes go, so the second write restores them from the entry.
+        SdfMesh.ReleaseIdle(all: true);
         SdfMeshRegion.WriteMeshes(destination: again, layout: default, meshes: meshes);
         Assert.Equal(actual: again, expected: first);
         Assert.Contains(expectedSubstring: "mesh-restore-misses=0", actualString: SdfMesh.DescribeRestores());

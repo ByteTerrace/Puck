@@ -1337,7 +1337,11 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   beside each client's prefix, whose first two words are its root words. A traced dispatch pushes the published
   export's root word base, and the kernels read the root through `sdfProbeRootWord`, never `sdfProbeScene[0]`. Chunks
   ride whichever residency's upload opens next (`SdfWorldTables.OpenUpload`, after the mesh region's owed copies), and a
-  client publishes only once the upload carrying its root words has completed (`SdfMeshProbeScenes.Upload.Rooted`). The
+  client publishes only once the upload carrying its root words has completed (`SdfMeshProbeScenes.Upload.Rooted`).
+  Nothing a view's signature reads moves while those copies wait, so a frame whose views all stand opens an upload for
+  them anyway (`SdfWorldPasses.StageOwedCopies`, counted in `sdf.captures.copies-staged`); without it a still view left
+  the volume `settling=worker` for good. A volume's `settling=worker-device:<why>` names why its head query was last
+  refused (`SdfMeshProbeGpuWork.DescribeWait`). The
   region unmaps every chunk no live allocation touches (`SdfMeshProbeScenes.Cover`). `world.residency`'s mesh-store line
   ends with the `probe-scenes` reading (`live-bytes`, `geometries-shared`, `unmapped-bytes`).
 - **Mesh words go through one door.** `frame/sdf-mesh-words.hlsli` reads a draw's record through
@@ -1627,7 +1631,9 @@ paired arithmetic. Carry author-facing parameters through
   library published from its store lets every plane go once it has stood unneeded for
   `SdfMesh.IdleSeconds` (`SdfMesh.ReleaseIdle`, run by each residency's store service, every unneeded one
   at a trim) and brings them back from the store when next held (`SdfMesh.Restore.cs`); the members,
-  vertex members and influences stay. So read the planes under a hold and keep no view past it: a long-lived
+  vertex members and influences stay. The entry numbers triangle materials by place, so a restore writes them in the
+  ids the mesh carries (the `Restorable`'s materials, from `SdfMeshStorage.WritesMaterialsIn`), never the entry's: a
+  restore in the entry's ids gave a released floor program material 0 in the irradiance trace, an orange gallery. So read the planes under a hold and keep no view past it: a long-lived
   reader copies what it keeps, as the irradiance scene copies each traced level's triangles over the
   vertices they reach and each draw mesh's traced materials (`SdfMeshIrradianceScene.Geometry`), and a
   count comes from the mesh (`VertexCount`, `IndexCount`, `HasNormals`, `HasTriangleMaterials`), never a
