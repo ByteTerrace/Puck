@@ -81,6 +81,7 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
         public WorldDefinition? NavigationDefinition;
         public long NavigationRevision;
         public readonly WorldDocumentProduct<WorldPlaces> Places = new();
+        public readonly WorldDocumentProduct<(string PlacementId, string Face, WorldFaceAperture.Box Box)[]> Doors = new();
         public WorldStateLease? Scales;
     }
 
@@ -231,6 +232,19 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
     /// <returns>The carrying placements' ids.</returns>
     public IReadOnlyList<string> PlacesAt(WorldAuthorityEndpoint endpoint, FixedVector3 point) =>
         PlacesOf(endpoint: endpoint).Holding(holds: (row, _) => (TryShape(endpoint: endpoint, row: in row, shape: out var shape) && shape.Contains(point: point)));
+    /// <summary>Gets the opening of every portal face the endpoint's delivered document declares
+    /// (<see cref="WorldFacePortalPolicy.PortalApertures"/>), derived again only when a part of the document its build
+    /// read changed: the glass a body crossing carries it through, which only the authority decides.</summary>
+    /// <param name="endpoint">The authority.</param>
+    /// <returns>Each portal face's placement id, face name and opening.</returns>
+    public IReadOnlyList<(string PlacementId, string Face, WorldFaceAperture.Box Box)> PortalDoors(WorldAuthorityEndpoint endpoint) {
+        var definition = endpoint.Definition;
+
+        return EndpointOf(endpoint: endpoint).Doors.Of(
+            document: definition,
+            build: () => WorldFacePortalPolicy.PortalApertures(definition: definition)
+        );
+    }
     /// <summary>Reads a seat's body from its route.</summary>
     /// <param name="slot">The 0-based seat slot.</param>
     /// <param name="reading">The reading, when this returns <see langword="true"/>.</param>
