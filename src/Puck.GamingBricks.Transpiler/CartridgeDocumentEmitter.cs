@@ -611,6 +611,11 @@ public static class CartridgeDocumentEmitter {
 
                 break;
 
+            case ConditionalStatementNode branch:
+                DocumentLowering.ExpandConditional(branch: branch, scope: scope, sink: ProcessStatement, target: target);
+
+                break;
+
             // A statement no case above admits would otherwise be dropped without a trace — a misspelled row keyword
             // silently losing the whole row and everything nested in it.
             default:

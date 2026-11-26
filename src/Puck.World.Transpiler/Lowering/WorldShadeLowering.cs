@@ -277,7 +277,7 @@ internal sealed class WorldShadeLowering {
                 m_outputs[(phase, property.Name)] = Expression(property.Value, scope, SdfShadeProgram.OutputType(phase, property.Name)); break;
             case ForStatementNode loop:
                 loop = loop with { Sequence = RequireStructural(expression: loop.Sequence, scope: scope) };
-                foreach (var (item, iteration) in DocumentLowering.ExpandForStatements(loop: loop, scope: scope)) { Statement(phase: phase, scope: iteration, statement: item); }
+                foreach (var (item, iteration) in DocumentLowering.ExpandForStatements(bindLets: false, loop: loop, scope: scope)) { Statement(phase: phase, scope: iteration, statement: item); }
                 break;
             case ExpressionStatementNode { Expression: CallExpressionNode call }:
                 DocumentLowering.ExpandFunction(call.Name, call.Span, scope, () => {

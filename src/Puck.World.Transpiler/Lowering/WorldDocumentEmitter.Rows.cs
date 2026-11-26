@@ -236,9 +236,17 @@ public static partial class WorldDocumentEmitter {
             case TemplateNode:
                 yield break;
 
+            case ConditionalStatementNode branch:
+                foreach (var (produced, active) in DocumentLowering.ExpandConditionalStatements(branch: branch, scope: scope)) {
+                    foreach (var nested in ExpandOne(depth: (depth + 1), scope: active, statement: produced)) {
+                        yield return nested;
+                    }
+                }
+
+                break;
+
             case ForStatementNode loop:
                 foreach (var (produced, iteration) in DocumentLowering.ExpandForStatements(
-                    bindLets: true,
                     loop: loop,
                     scope: scope
                 )) {

@@ -128,6 +128,10 @@ public static class WorldCallArguments {
     private static WorldArgumentForm FormOf(WorldModelMember member) {
         if (member.NameField is { } field) {
             return (field.Role switch {
+                // A clock's or a state row's own name is written bare, as every reference to it is (a clock's
+                // `state: fiber`, a rule's `fiber`), so a declaration and its readers spell the name one way. A
+                // `state.world` row lowers through the state section, which does not reach this classification yet.
+                WorldNameRole.Declares when (field.Kind is WorldNameKind.State or WorldNameKind.Clock) => WorldArgumentForm.Name,
                 WorldNameRole.Names => WorldArgumentForm.Name,
                 WorldNameRole.Key => WorldArgumentForm.Key,
                 WorldNameRole.BodyReference => WorldArgumentForm.Text,

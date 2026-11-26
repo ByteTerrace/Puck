@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Gpu;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.SignedDistance;
@@ -29,7 +30,8 @@ public sealed partial class SdfWorldTables {
     /// atlas).</param>
     /// <param name="glyphWords">The packed glyphs, <see cref="SdfSurfaceTextLayout.WordsPerGlyph"/> words each
     /// (<see cref="SdfSurfaceTextLayout"/> states the packing), at most <see cref="SdfSurfaceTextLayout.MaxGlyphs"/>
-    /// glyphs; none clears the slot.</param>
+    /// glyphs; none clears the slot. A text the surface texts' shared pool has no room for clears the slot and counts
+    /// in <see cref="DegradedSurfaceTexts"/>.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is out of range, or more than
     /// <see cref="SdfSurfaceTextLayout.MaxGlyphs"/> glyphs are supplied.</exception>
     /// <exception cref="ArgumentException"><paramref name="glyphWords"/> is not a whole number of glyphs.</exception>
@@ -46,45 +48,89 @@ public sealed partial class SdfWorldTables {
             throw new ArgumentOutOfRangeException(paramName: nameof(glyphWords), message: $"A surface text of {glyphs} glyphs exceeds the per-slot budget {SdfSurfaceTextLayout.MaxGlyphs}.");
         }
         if (glyphs == 0) {
-            ClearDecal(descriptor: (MaxScreenSurfaces + slot));
+            ClearSurfaceText(slot: slot);
 
             return;
         }
 
-        var first = (SurfaceTextBase + ((slot * SdfSurfaceTextLayout.MaxGlyphs) * SdfSurfaceTextLayout.EntriesPerGlyph));
+        var descriptor = (MaxScreenSurfaces + slot);
+        var stored = DecalWords;
+        ref var held = ref m_textRuns[slot];
+
+        // A host supplies every slot every frame, mostly unchanged: the glyphs the slot already holds index nothing again.
+        if (
+            (held.Length > 0) &&
+            (stored[(descriptor * DecalWordsPerCell)] == ((uint)glyphs)) &&
+            (stored[((descriptor * DecalWordsPerCell) + 2)] == BitConverter.SingleToUInt32Bits(value: distanceRange)) &&
+            glyphWords.SequenceEqual(other: stored.Slice(length: glyphWords.Length, start: ((SurfaceTextBase + held.Start) * DecalWordsPerCell)))
+        ) {
+            return;
+        }
+
+        var run = SdfSurfaceTextLayout.IndexedEntries(glyphWords: glyphWords, grid: out var grid);
+
+        if (!TryRunOf(cells: (run.Length / DecalWordsPerCell), pool: m_textPool, run: ref held, start: out var start)) {
+            ClearDecal(descriptor: descriptor);
+            DegradedSurfaceTexts++;
+
+            return;
+        }
+
+        var first = (SurfaceTextBase + start);
 
         WriteDecal(
-            descriptor: (MaxScreenSurfaces + slot),
-            descriptorWords: [((uint)glyphs), ((uint)first), BitConverter.SingleToUInt32Bits(value: distanceRange), 0u],
+            descriptor: descriptor,
+            descriptorWords: [((uint)glyphs), ((uint)first), BitConverter.SingleToUInt32Bits(value: distanceRange), grid],
             first: first,
-            run: glyphWords
+            run: run
         );
     }
-    /// <summary>Clears surface text slot <paramref name="slot"/>: a paint naming it draws nothing. A no-op if the slot
-    /// held no glyphs.</summary>
+    /// <summary>Clears surface text slot <paramref name="slot"/>: a paint naming it draws nothing, and the slot's run
+    /// returns to the surface texts' pool. A no-op if the slot held no glyphs.</summary>
     /// <param name="slot">The surface text slot (0..<see cref="SdfSurfaceTextLayout.MaxTexts"/>-1).</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is out of range.</exception>
     public void ClearSurfaceText(int slot) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: slot);
         ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(other: SdfSurfaceTextLayout.MaxTexts, value: slot);
         ClearDecal(descriptor: (MaxScreenSurfaces + slot));
+        if (m_textRuns[slot].Length > 0) {
+            _ = m_textPool.Free(start: (ulong)m_textRuns[slot].Start);
+            m_textRuns[slot] = default;
+        }
     }
+    /// <summary>Gets how many surface texts found no room in the surface texts' shared pool
+    /// (<see cref="SdfSurfaceTextLayout.PoolEntries"/>) over the tables' lifetime, each drawing nothing for the frame it
+    /// was supplied.</summary>
+    public long DegradedSurfaceTexts { get; private set; }
 
-    // The first cell of the pool run a screen's grid of `cells` cells writes into: the run it holds when that fits,
-    // otherwise a new run claimed from the pool after its old one is returned. The pool is the one door that hands out
-    // runs, so no two screens' grids share a cell.
+    // The first cell of the pool run a screen's grid of `cells` cells writes into (TryRunOf).
     private int DecalRunOf(int slot, int cells) {
-        ref var run = ref m_decalRuns[slot];
-
-        if (run.Length >= cells) { return run.Start; }
-        if (run.Length > 0) { _ = m_decalPool.Free(start: (ulong)run.Start); }
-        run = default;
-        if (!m_decalPool.TryAllocate(count: (ulong)cells, start: out var start)) {
+        if (!TryRunOf(cells: cells, pool: m_decalPool, run: ref m_decalRuns[slot], start: out var start)) {
             throw new InvalidOperationException(message: $"A decal grid of {cells} cells on screen slot {slot} finds no free run in the screens' cell pool of {ScreenDecalPoolCells} (largest free {m_decalPool.LargestFree}).");
         }
-        run = ((int)start, cells);
 
-        return run.Start;
+        return start;
+    }
+    // The first cell of the run of `cells` cells a holder writes into: the run it holds when that fits, otherwise a new run
+    // claimed from the pool after its old one is returned, false (holding none) when the pool has no room. The pool is the
+    // one door that hands out runs, so no two holders' runs share a cell.
+    private static bool TryRunOf(GpuRangeAllocator pool, ref (int Start, int Length) run, int cells, out int start) {
+        if (run.Length >= cells) {
+            start = run.Start;
+
+            return true;
+        }
+        if (run.Length > 0) { _ = pool.Free(start: (ulong)run.Start); }
+        run = default;
+        if (!pool.TryAllocate(count: (ulong)cells, start: out var claimed)) {
+            start = 0;
+
+            return false;
+        }
+        run = ((int)claimed, cells);
+        start = run.Start;
+
+        return true;
     }
     // Zeroes one descriptor of the decal buffer, whose first word (a screen's grid columns, a surface text's glyph count)
     // is what the kernels gate on. A descriptor that is already clear is no change: a caller clears every frame, and the

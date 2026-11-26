@@ -1268,30 +1268,19 @@ function courtRowRotation(isLower, row) = length(row) > 13 ? (row[13] == 1 ? cou
 function courtRowRound(row) = minimum(courtFraction(row) * (courtRelief + row[5] * courtStep), row[8])
 
 // The layers of one half, in order. `turned` is 0 where the lower half reflects the upper across Y = 0 and 1 where it
-// turns half way about Z. A `for` over zero or one rows is how a row is written or left out: a rounding of 0 omits the
-// member, since a zero `rounding` written on a row composes through an import as an explicit zero.
+// turns half way about Z. A rounding of 0 omits the member, since a zero `rounding` written on a row composes through an
+// import as an explicit zero.
 template courtLayers(half, isLower, turned, rows) {
   for row in rows {
-    for plain in range(0, row[8] == 0 ? 1 : 0) {
-      shape Prism $"{half}-{row[0]}" {
-        position: signed(isLower, [row[1], row[2], courtZ], turned ? [-1, -1, 1] : [1, -1, 1])
-        rotation: courtRowRotation(isLower, row)
-        scale [row[3], row[4], courtRelief + row[5] * courtStep]
-        material: row[6]
-        blend: courtBlend(row)
-        smooth: courtSmooth(row)
-        profile: row[7]
-      }
-    }
-    for rounded in range(0, row[8] == 0 ? 0 : 1) {
-      shape Prism $"{half}-{row[0]}" {
-        position: signed(isLower, [row[1], row[2], courtZ], turned ? [-1, -1, 1] : [1, -1, 1])
-        rotation: courtRowRotation(isLower, row)
-        scale [row[3], row[4], courtRelief + row[5] * courtStep]
-        material: row[6]
-        blend: courtBlend(row)
-        smooth: courtSmooth(row)
-        profile: row[7]
+    shape Prism $"{half}-{row[0]}" {
+      position: signed(isLower, [row[1], row[2], courtZ], turned ? [-1, -1, 1] : [1, -1, 1])
+      rotation: courtRowRotation(isLower, row)
+      scale [row[3], row[4], courtRelief + row[5] * courtStep]
+      material: row[6]
+      blend: courtBlend(row)
+      smooth: courtSmooth(row)
+      profile: row[7]
+      if row[8] != 0 {
         rounding: courtRowRound(row)
       }
     }

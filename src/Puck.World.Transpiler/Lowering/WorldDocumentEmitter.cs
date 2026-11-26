@@ -402,12 +402,16 @@ public static partial class WorldDocumentEmitter {
 
             case ForStatementNode loop:
                 DocumentLowering.ExpandFor(
-                    bindLets: true,
                     loop: loop,
                     scope: scope,
                     sink: ProcessStatement,
                     target: target
                 );
+
+                break;
+
+            case ConditionalStatementNode branch:
+                DocumentLowering.ExpandConditional(branch: branch, scope: scope, sink: ProcessStatement, target: target);
 
                 break;
 
@@ -1295,6 +1299,11 @@ public static partial class WorldDocumentEmitter {
                 sink: ProcessViewsStatement,
                 target: viewsObj
             );
+
+            return;
+        }
+        if (stmt is ConditionalStatementNode branch) {
+            DocumentLowering.ExpandConditional(branch: branch, scope: scope, sink: ProcessViewsStatement, target: viewsObj);
 
             return;
         }

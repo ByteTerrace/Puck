@@ -54,7 +54,7 @@ exports {
 }
 
 timeline {
-  clocks [{ name: "altitude", view { to: skySeamAltitude, axis [0, 1, 0] } }]
+  clocks [{ name: altitude, view { to: skySeamAltitude, axis [0, 1, 0] } }]
 }
 
 spawnPoints [
