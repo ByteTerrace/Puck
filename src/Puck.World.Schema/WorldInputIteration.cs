@@ -41,4 +41,6 @@ public sealed record WorldInputIteration(WorldInputOwnerReference Owner, int Ste
     public override void Collect(IEffectHost host, List<CellKey> into) => ((IWorldInputEvents)host).CollectInputEvents(Owner, into);
     /// <inheritdoc/>
     public override long Generation(IEffectHost host, CellKey key) => ((IWorldInputEvents)host).InputEventGeneration(Owner, key);
+    /// <inheritdoc/>
+    public override bool BindsEvents => true;
 }

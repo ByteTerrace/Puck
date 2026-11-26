@@ -54,6 +54,8 @@ public sealed record WorldContactIteration(string Surface, GrantSubject Subject,
     public override void Collect(IEffectHost host, List<CellKey> into) => ((IWorldSurfaceContacts)host).CollectContacts(sweep: this, into: into);
     /// <inheritdoc/>
     public override long Generation(IEffectHost host, CellKey key) => ((IWorldSurfaceContacts)host).ContactGeneration(key: key);
+    /// <inheritdoc/>
+    public override bool BindsEvents => true;
 }
 /// <summary>What <c>contact(each, …)</c> reads of the contact event a <see cref="WorldContactIteration"/> bound.</summary>
 public enum ContactFacet : byte {

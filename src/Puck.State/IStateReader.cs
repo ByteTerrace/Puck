@@ -57,10 +57,12 @@ public interface IStateReader {
     /// and the host's own versioned sources it reads. A fact the host cannot name keeps every schedule that reads
     /// it volatile, which is the default.</summary>
     /// <param name="fact">The compiled fact a rule's judgement reads.</param>
-    /// <param name="rows">The arena row ordinals the read depends on, appended.</param>
+    /// <param name="rows">The arena rows the read depends on, appended: <see cref="CellReach.Each"/> with no key for a
+    /// read of the cell the binding's own <c>$each</c> key names, so a move of another key's cell reaches another
+    /// binding; any other access for a read of any cell of the row.</param>
     /// <param name="facts">The host sources the read depends on, appended.</param>
     /// <returns><see langword="true"/> when the host names every dependency the read can have.</returns>
-    bool TryScheduleFact(ICompiledFact fact, List<int> rows, List<FactRead> facts) => false;
+    bool TryScheduleFact(ICompiledFact fact, List<CellAccess> rows, List<FactRead> facts) => false;
     /// <summary>Names the versioned host source a host-owned row's storage answers from, when the host versions that
     /// storage. A host-owned row the host cannot version keeps every schedule that reads it volatile, which is the
     /// default.</summary>

@@ -241,7 +241,7 @@ public sealed partial class WorldRuleHost {
     /// (position, orientation, up) and its facts are versioned per body by <see cref="RefreshFacts"/>. Each is named
     /// for a body reference that is a literal index or the body bound to <c>$each</c>, and a pose also for a placement
     /// reference; any other reference resolves through state and stays volatile, as does every other world fact.</remarks>
-    public bool TryScheduleFact(ICompiledFact fact, List<int> rows, List<FactRead> facts) {
+    public bool TryScheduleFact(ICompiledFact fact, List<CellAccess> rows, List<FactRead> facts) {
         ArgumentNullException.ThrowIfNull(argument: fact);
         ArgumentNullException.ThrowIfNull(argument: rows);
         ArgumentNullException.ThrowIfNull(argument: facts);
@@ -252,7 +252,7 @@ public sealed partial class WorldRuleHost {
             ? throw new InvalidOperationException(message: $"The work sheet prices '{fact}' as a fact at rest, and the rule host names no version for it.")
             : false));
     }
-    private bool ScheduleFact(ICompiledFact fact, List<int> rows, List<FactRead> facts) {
+    private bool ScheduleFact(ICompiledFact fact, List<CellAccess> rows, List<FactRead> facts) {
         if (fact is WorldClockOperand clock) {
             WatchClock(facet: clock.Reading);
             facts.Add(item: new FactRead(Body: (int)clock.Reading, Source: ClockSource));
@@ -295,7 +295,7 @@ public sealed partial class WorldRuleHost {
                 var tagRow = OrdinalOf(handle: nearest.StateHandle);
 
                 if (tagRow >= 0) {
-                    rows.Add(item: tagRow);
+                    rows.Add(item: new CellAccess(Key: default, RowOrdinal: tagRow));
                 }
                 facts.Add(item: new FactRead(Body: WatchValue(fact: bodyOperand, readsArena: true, readsInput: false, spelling: bodyOperand.Describe), Source: ValueSource));
 
@@ -309,12 +309,13 @@ public sealed partial class WorldRuleHost {
                 facts.Add(item: new FactRead(Body: clockScope, Source: InputSource));
 
                 return true;
-            case BodyStateOperand state when TryBodyScope(body: state.Body, scope: out _):
+            case BodyStateOperand state when TryBodyScope(body: state.Body, scope: out var stateScope):
                 var row = Host.Population.ActionStateLane.RowOrdinal(slot: state.Slot);
 
-                // A slot the bound catalog does not store reads zero whatever moves.
+                // A slot the bound catalog does not store reads zero whatever moves. The lane is keyed by entity
+                // index, so a read for the body bound to $each reads the cell under that binding's own key.
                 if (row >= 0) {
-                    rows.Add(item: row);
+                    rows.Add(item: new CellAccess(Key: default, Reach: ((stateScope == FactRead.EachBody) ? CellReach.Each : CellReach.Key), RowOrdinal: row));
                 }
 
                 return true;
