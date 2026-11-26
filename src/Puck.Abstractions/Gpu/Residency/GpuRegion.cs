@@ -927,6 +927,13 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <summary>Gets how many flushes of a staged region staged nothing because the account or the device refused their
     /// staging (<see cref="GpuMemoryRefusedException"/>): each left its words owed for the next flush.</summary>
     public long StagingRefusals { get; private set; }
+    /// <summary>Gets the bytes of region words the latest <see cref="Flush"/> wrote into host-visible memory: a slot's
+    /// ring or in-place buffer, or the staging block a staged copy reads (with any restaging its
+    /// <see cref="RecordCopy"/> needed), its run table excluded. A flush that owed nothing wrote zero.</summary>
+    public long LastFlushedBytes { get; private set; }
+    /// <summary>Gets the bytes of region words every <see cref="Flush"/> of the region has written into host-visible
+    /// memory, as <see cref="LastFlushedBytes"/> counts them.</summary>
+    public long FlushedBytes { get; private set; }
     /// <summary>Gets where the buffers the region's readers bind directly live: its ring's or in-place buffer's memory,
     /// and <see cref="GpuHostVisibleMemory.Host"/> for a staged region, whose staging buffers are host memory.</summary>
     public GpuHostVisibleMemory Memory { get; private set; }
@@ -1784,6 +1791,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
     public void Flush(int slot) {
         RequireSlot(slot: slot);
+        LastFlushedBytes = 0L;
 
         switch (Policy) {
             case GpuResidencyPolicy.Ring:
@@ -2014,8 +2022,11 @@ public sealed unsafe class GpuRegion : IDisposable {
             min: offset,
             value: (((long)m_knownWords) * sizeof(uint))
         );
+        var known = ((int)(knownEnd - offset));
+        // The host copy takes only the runs that differ, which OweDifferences copies as it finds them, so a write that
+        // changes nothing moves no byte, and the words the destination is not known to hold, which it owes whole.
         var owed = OweDifferences(
-            bytes: bytes[..((int)(knownEnd - offset))],
+            bytes: bytes[..known],
             offset: offset
         );
 
@@ -2024,13 +2035,12 @@ public sealed unsafe class GpuRegion : IDisposable {
                 endWord: endWord,
                 startWord: ((int)(knownEnd / sizeof(uint)))
             );
+            bytes[known..].CopyTo(destination: HostSpan(
+                length: (bytes.Length - known),
+                offset: knownEnd
+            ));
             owed = true;
         }
-
-        bytes.CopyTo(destination: HostSpan(
-            length: bytes.Length,
-            offset: offset
-        ));
 
         if ((offset / sizeof(uint)) <= m_knownWords) {
             m_knownWords = Math.Max(
@@ -2170,7 +2180,8 @@ public sealed unsafe class GpuRegion : IDisposable {
         return m_owed[slot];
     }
     // Owes each run of words in which bytes differ from the contents at offset, a word at a time past the first
-    // differing byte, and returns whether any did.
+    // differing byte, copies that run into the contents, and returns whether any did. Bytes outside the runs are equal,
+    // so the contents then hold bytes.
     private bool OweDifferences(ReadOnlySpan<byte> bytes, long offset) {
         var contents = HostSpan(
             length: bytes.Length,
@@ -2213,6 +2224,7 @@ public sealed unsafe class GpuRegion : IDisposable {
                 endWord: ((int)(offset + index).CeilingDivide(divisor: sizeof(uint))),
                 startWord: ((int)((offset + start) / sizeof(uint)))
             );
+            bytes[start..index].CopyTo(destination: contents[start..index]);
             owed = true;
         }
 
@@ -2255,6 +2267,8 @@ public sealed unsafe class GpuRegion : IDisposable {
         );
         var sourced = ((((long)length) * sizeof(uint)) - remaining);
 
+        LastFlushedBytes += (((long)length) * sizeof(uint));
+        FlushedBytes += (((long)length) * sizeof(uint));
         if (sourced > 0) {
             m_source!.WriteWords(
                 buffer: buffer,
