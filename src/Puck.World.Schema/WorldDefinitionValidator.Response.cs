@@ -29,17 +29,20 @@ public static partial class WorldDefinitionValidator {
             fieldNames.Add(item: field.Name);
         }
 
-        RequireStaticCreation(
+        // A response may show an animated creation: every reader draws the row as the creation it shows
+        // (WorldPlacement.ShownPrototypeId), so the static stamps and the stamp pool trade the row as its holding moves.
+        // What only a static stamp carries stays refused on a row that can show an animated one.
+        RefuseStaticOnlyFacets(
             creations: definition.Creations,
             errors: errors,
-            path: $"{placementPath}.prototypeId",
-            prototypeId: placement.PrototypeId,
-            prototypeIds: prototypeIds
+            path: placementPath,
+            placement: placement,
+            prototypeId: placement.PrototypeId
         );
 
         if (
             (placement.Holding < 0) ||
-            (placement.Holding >= (1 << Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries)))
+            (placement.Holding >= (1L << Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries)))
         ) {
             errors.Add(item: $"{placementPath}.holding {placement.Holding} marks an entry past the {responses.Count} response entries — bit i marks entry i.");
         }
@@ -63,12 +66,12 @@ public static partial class WorldDefinitionValidator {
                 errors: errors
             );
 
-            RequireStaticCreation(
+            RefuseStaticOnlyFacets(
                 creations: definition.Creations,
                 errors: errors,
-                path: $"{entryPath}.prototypeId",
-                prototypeId: response.PrototypeId,
-                prototypeIds: prototypeIds
+                path: entryPath,
+                placement: placement,
+                prototypeId: response.PrototypeId
             );
 
             switch (response.When) {
@@ -225,9 +228,19 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"{entryPath}.when '{condition.State}' is kind={primaryKind} but comparand '{condition.ComparandState}' is kind={otherKind} — mixed-kind comparisons are refused; author both sides the same kind.");
         }
     }
-    // A prototype a response facet could show at runtime (the row's authored id, or a response entry's target) must
-    // resolve to a declared creation carrying no timeline frames or drivers — a response only ever swaps between STATIC
-    // creations, never animates a row that validated as a static stamp.
+    // A creation a responding row can show (its authored prototype or an entry's) that animates replays through the stamp
+    // pool while it shows, so the row carries the animated-row constraints whatever it shows now: a distribution or a
+    // mirror is a static stamp's alone (ValidatePlacements' animated-row check reads the authored prototype only).
+    private static void RefuseStaticOnlyFacets(string prototypeId, WorldPlacement placement, IReadOnlyList<WorldPrototype> creations, string path, List<string> errors) {
+        if (
+            ((placement.Distribution is not null) || (placement.Mirror is not null)) &&
+            (WorldDefinitionRows.FindCreation(creations: creations, id: prototypeId) is { Document.Frames.Count: > 0 } or { Document.Drivers.Count: > 0 })
+        ) {
+            errors.Add(item: $"{path} can show '{prototypeId}', which carries timeline frames or drivers — a row that can show an animated creation carries no distribution or mirror, which are static-stamp-only.");
+        }
+    }
+    // A prototype a dealt template stamps must resolve to a declared creation carrying no timeline frames or drivers: its
+    // children are plain static stamps.
     private static void RequireStaticCreation(string prototypeId, HashSet<string> prototypeIds, IReadOnlyList<WorldPrototype> creations, string path, List<string> errors) {
         if (!prototypeIds.Contains(item: prototypeId)) {
             return;
