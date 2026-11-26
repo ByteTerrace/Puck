@@ -55,6 +55,13 @@ public sealed class VulkanGpuBufferFactory(IVulkanDeviceContext deviceContext, I
             usage: usage
         );
     /// <inheritdoc/>
+    /// <remarks>A sparse buffer (<see cref="VulkanGpuMappedBuffer"/>), on a device that enabled sparse buffers with a
+    /// binding queue; <see langword="null"/> elsewhere, where a region keeps a contiguous destination.</remarks>
+    public IGpuMappedBuffer? TryCreateMapped(ulong reservedBytes, GpuBufferUsage usage, in GpuObjectName name) =>
+        VulkanGpuMappedBuffer.TryCreate(device: deviceContext, name: in name, naming: naming, sizeBytes: reservedBytes, usage: usage);
+    /// <inheritdoc/>
+    public ulong MappedChunkBytes => VulkanGpuMappedBuffer.ChunkBytesOn(device: deviceContext.LogicalDevice);
+    /// <inheritdoc/>
     public IGpuStorageBuffer CreateHostVisible(ulong sizeBytes, GpuBufferUsage usage, in GpuObjectName name) =>
         Create(
             memory: VulkanBufferMemory.HostCoherent,

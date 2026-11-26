@@ -16,6 +16,12 @@ public enum GpuOptionalCapabilities : uint {
     /// <c>VK_KHR_acceleration_structure</c>, <c>VK_KHR_ray_query</c> and <c>VK_KHR_deferred_host_operations</c> with the
     /// <c>accelerationStructure</c>, <c>rayQuery</c> and <c>bufferDeviceAddress</c> features.</summary>
     RayQuery = (1U << 0),
+    /// <summary>A buffer reserves its whole address range and is backed a chunk at a time
+    /// (<see cref="IGpuMappedBuffer"/>, through <see cref="IGpuBufferFactory.TryCreateMapped"/>), so it grows, shrinks
+    /// and gives back its interior with no second buffer: Direct3D 12's reserved resources at tiled resources tier 2 or
+    /// above; Vulkan's <c>sparseBinding</c> and <c>sparseResidencyBuffer</c> features with a queue family that binds
+    /// sparse memory. A device created without it keeps contiguous buffers, which grow and shrink by replacement.</summary>
+    MappedBuffers = (1U << 1),
 }
 
 /// <summary>The one spelling of each <see cref="GpuOptionalCapabilities"/> flag, shared by the capabilities readout and
@@ -24,6 +30,7 @@ public static class GpuOptionalCapabilitiesSpelling {
     // Each flag's one spelling, in declaration order.
     private static readonly (GpuOptionalCapabilities Flag, string Name)[] Names = [
         (GpuOptionalCapabilities.RayQuery, "ray-query"),
+        (GpuOptionalCapabilities.MappedBuffers, "mapped-buffers"),
     ];
 
     /// <summary>Gets every spelling, in declaration order.</summary>

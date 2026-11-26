@@ -2118,7 +2118,7 @@ in the landing commit.
 | [3. One reservation](#step-3-one-reservation) | Admission before allocation; growth that stops at the limit; background work serviced on completion. Built; its windowed readings are owed | 1, 2 |
 | [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device. The selection counters and the coarsest-rung floor for a group arriving in view are built; the coverage check, floors out of view, eviction by priority, the rungs and relocation remain | 3; 7 before it claims relief |
 | [4. Staged by demand](#step-4-staged-by-demand) | Arrival without a render | 3, built |
-| [7. The backing](#step-7-the-backing) | Memory given back without a replacement. Direct3D 12's mapped regions are built; Vulkan's sparse ownership, page-only credit, placement policy and physical compaction remain | 3, built; qualification readings need a GPU grant |
+| [7. The backing](#step-7-the-backing) | Memory given back without a replacement. The mapped regions are built on both backends, Vulkan's unseen on hardware; page-only credit, placement policy and physical compaction remain | 3, built; qualification readings need a GPU grant |
 | [6. CPU copies](#step-6-cpu-copies) | The library, the documents and the widened restore; the static rows after 9 | 2; 5 and 9 for the static rows |
 | [8. Observed use](#step-8-observed-use) | Speculative detail apart from observed | 5 |
 | [9. Lighting on the same demand](#step-9-lighting-on-the-same-demand) | One demand, a lighting floor, placement on the GPU trace | 3; 5 for the floor it traces |
@@ -2900,9 +2900,16 @@ wherever it lay, and the probe scene grows in place. The page authority has one
 page a chunk. Reservation credit still counts the whole tile heap a new run
 opens (M2's page-only credit is not built), and nothing compacts physical
 pages. On Vulkan a device with a sparse-capable queue enables both sparse
-buffer features (`VulkanLogicalDeviceFactory.FeatureIndicesOf`) and binds
-through `VulkanLogicalDevice.BindSparse`, but no region owns a sparse
-resource yet, so Vulkan mesh regions stay contiguous. The 4070 readings
+buffer features (`VulkanLogicalDeviceFactory.FeatureIndicesOf`), and its
+mapped destination is a sparse buffer (`VulkanGpuMappedBuffer`) whose 1 MiB
+chunks bind page runs of the arena's page blocks
+(`VulkanMemoryArena.PlacePages`) through `VulkanLogicalDevice.BindSparse`; a
+chunk's pages and the buffer itself are released only through the arena's
+sparse retirement (`VulkanMemoryArena.RetireSparse`), behind the device
+timeline's value for the bind that let them go. It is built from the
+specification and the design below and has not run on hardware: its first
+windowed boot is the lead's, and `--withhold-gpu mapped-buffers` runs the
+contiguous path on the same device for the comparison. The 4070 readings
 support this direction; the Deck column is driver-source evidence, and the
 2060's is owed from the player build. Absence of
 pageable device-local memory does not disqualify sparse buffers: Puck must
@@ -3237,10 +3244,10 @@ across worlds; those remain explicit costs of the chosen shader path.
 
 ##### Invariants and their enforcement
 
-The page leases, the device timeline's release proof, the pool's trim and the
-binding door are built (pieces 1 to 3 below); page-only reservation, physical
-compaction and Vulkan's sparse destination are still **proposed**, and no
-row is qualified on hardware yet. The reviewer checks the state machine
+The page leases, the device timeline's release proof, the pool's trim, the
+binding door and both backends' mapped destinations are built; page-only
+reservation and physical compaction are still **proposed**, and no row is
+qualified on hardware yet. The reviewer checks the state machine
 before each remaining piece, and the implementation gets the GPU-lifetime review
 that [the hazards](../development/hazards.md#silent-invariants) requires.
 
@@ -3277,12 +3284,29 @@ buffers and native-call recording: they prove call ordering, not driver
 execution or physical-page lifetime, which the hardware windows below
 qualify.
 
-**Still to build, in dependency order.** Vulkan sparse resource ownership
-behind `IGpuMappedBuffer` through its binding door, page-only residency
-admission with pool-owned slack (M2), the sparse arena placement policy (M5)
-and physical compaction (M6). The initial Vulkan join waits on all commands;
-waiting at the first accessing stage (L3) and its measurement come with the
-native resource. Both backends stay bootable at each piece, and the hardware
+**Vulkan's sparse destination is built and unqualified.**
+`VulkanGpuMappedBuffer` owns the sparse resource behind `IGpuMappedBuffer`.
+Its invariant: a chunk is writable only once its bind is ordered ahead of
+every later submission, and no page returns to its block, and the buffer is
+not destroyed, before the device timeline passes the value of the bind (or of
+a checkpoint taken at disposal) that let it go. The one enforcing place is
+the arena's sparse retirement (`VulkanMemoryArena.RetireSparse`,
+`VulkanMemoryArena.ReleaseSparse`); where it stops is a bind or checkpoint
+whose call threw, after which the timeline certifies nothing and what the
+call covered is held until the device is torn down. The buffer reserves its
+address range out of the device's one sparse allowance
+(`VulkanLogicalDevice.TryReserveSparseAddress`), is refused where a storage
+view cannot span it (`GpuDeviceCapabilities.MaxStorageBufferBytes`) or where
+the device's sparse page does not divide a chunk, and in each case the region
+keeps a contiguous destination. Still owed on hardware: the first windowed
+Vulkan boot, the 2060's page size and address space, a budget drop that shows
+blocks freed, and ray-query bottom builds reading a sparse mesh region by
+device address.
+
+**Still to build, in dependency order.** Page-only residency admission with
+pool-owned slack (M2), the sparse arena placement policy (M5) and physical
+compaction (M6). The Vulkan join waits on all commands; waiting at the first
+accessing stage (L3) and its measurement follow the hardware reading. Both backends stay bootable at each piece, and the hardware
 check below gates any claim that relief from a budget drop works. Two
 integration items sit in [the packet](open-items.md#residency-and-streaming):
 exact coverage for an external region's disjoint writes before sparse

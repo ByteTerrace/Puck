@@ -88,14 +88,15 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     private const ulong MappingBytes = (ChunkTiles * TileBytes);
 
     /// <summary>Returns whether a device creates reserved buffers (<see cref="TryCreate"/>): reserved resources at tier
-    /// 2 or above, since tier 1 leaves an unmapped tile's reads undefined.</summary>
+    /// 2 or above, since tier 1 leaves an unmapped tile's reads undefined, on a device created with
+    /// <see cref="GpuOptionalCapabilities.MappedBuffers"/>, which the host may withhold.</summary>
     /// <param name="context">The device context.</param>
     /// <returns><see langword="true"/> when <see cref="TryCreate"/> creates a buffer on the device.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
     public static bool IsSupported(DirectXDeviceContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
-        return ((context.Capabilities?.ReservedResourcesTier ?? 0U) >= 2U);
+        return (((context.Capabilities?.ReservedResourcesTier ?? 0U) >= 2U) && (context.Capabilities?.Has(required: GpuOptionalCapabilities.MappedBuffers) ?? false));
     }
     /// <summary>Returns the bytes one mapping of a reserved buffer on a device covers (<see cref="ChunkBytes"/>), or
     /// zero where the device creates none (<see cref="IsSupported"/>).</summary>

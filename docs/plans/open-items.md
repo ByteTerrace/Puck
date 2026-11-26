@@ -2059,10 +2059,11 @@ Owner: rendering lane (rendering, verification) · high · Next:
 step 5, the floor and eviction, an engine gap that goes first
 ([rendering research](rendering-research.md#engine-gaps-filled-first)); then
 what is left of [step 7, the backing](streaming-and-memory.md#step-7-the-backing):
-Direct3D 12's mesh region and probe scene grow in chunks of one reserved
-buffer (`IGpuMappedBuffer`), and Vulkan's still use contiguous storage, so
-Vulkan's sparse ownership behind the same interface, page-only reservation
-credit and physical compaction remain. Steps 0 to 3 are built and owe their
+the mesh region and the probe scene grow in chunks of one reserved buffer
+on both backends (`IGpuMappedBuffer`: Direct3D 12's reserved resource,
+Vulkan's sparse buffer), so page-only reservation credit and physical
+compaction remain, and Vulkan's sparse destination owes its first windowed
+boot and the hardware qualification the plan lists. Steps 0 to 3 are built and owe their
 windowed readings, and the indexed-read prototype owes one more window on the
 build its [design for review](streaming-and-memory.md#sparse-backing-design-for-review)
 was frozen at. The plan owns the decisions, the build order and each step's

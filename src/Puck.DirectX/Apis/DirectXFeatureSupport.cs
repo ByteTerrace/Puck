@@ -154,6 +154,9 @@ public static unsafe class DirectXFeatureReads {
             ? GpuOptionalCapabilities.RayQuery
             : GpuOptionalCapabilities.None);
 
+        // Tier 1 leaves an unmapped tile's reads undefined, so a reserved buffer is mapped only from tier 2.
+        if (options.TiledResourcesTier >= D3D12_TILED_RESOURCES_TIER.D3D12_TILED_RESOURCES_TIER_2) { reported |= GpuOptionalCapabilities.MappedBuffers; }
+
         if (!TryCheck(
             data: ref options21,
             feature: D3D12_FEATURE.D3D12_FEATURE_D3D12_OPTIONS21,
