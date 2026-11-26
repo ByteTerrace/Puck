@@ -1542,6 +1542,13 @@ public sealed class WorldSeatDriver {
             walker: m_senses.Walker(reading: in read)
         );
 
+        if (!plan.Found && !read.Endpoint.Mirror.Facts(index: read.Index).HasFlag(flag: Puck.Physics.Motion.BodyFacts.Grounded)) {
+            // A body in the air (thrown up by a contact, falling off a ledge) stands on no cell a path starts from; a
+            // player waits for it to land, so the step plans again from the next delivery, within the chapter's time.
+            m_plannedIn = null;
+            m_checkCorridor = false;
+            return false;
+        }
         if (!plan.Found) {
             Fail(kind: "route", place: read.Place, reason: $"no route from ({Metres(read.Position.X)}, {Metres(read.Position.Y)}, {Metres(read.Position.Z)}) to {(go.Place ?? Vector(go.Point))} over the document {read.World} delivered: {plan.Refusal}", tick: tick);
             return false;
@@ -1894,11 +1901,14 @@ public sealed class WorldSeatDriver {
         }
 
         DoorsAvoided++;
-        var stop = FixedQ4816.Min(x: steer.Stop, y: FixedQ4816.Max(x: FixedQ4816.Zero, y: (nearest - margin)));
 
-        if (target <= (nearest - margin)) {
-            return steer with { Stop = stop };
+        // A corner short of the glass (a crossing's start point stands just before its door) is still reached: the
+        // glass only keeps the body from braking later than it can stop before it.
+        if (target < nearest) {
+            return steer with { Stop = FixedQ4816.Min(x: steer.Stop, y: FixedQ4816.Max(x: target, y: (nearest - margin))) };
         }
+
+        var stop = FixedQ4816.Min(x: steer.Stop, y: FixedQ4816.Max(x: FixedQ4816.Zero, y: (nearest - margin)));
 
         var planarNormal = FixedQ4816.Sqrt(value: ((normal.X * normal.X) + (normal.Z * normal.Z)));
         var (nx, nz) = ((planarNormal > FixedQ4816.FromDouble(value: 0.001)) ? ((normal.X / planarNormal), (normal.Z / planarNormal)) : (-ux, -uz));

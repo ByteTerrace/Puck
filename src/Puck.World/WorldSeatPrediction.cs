@@ -156,9 +156,13 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
             seat.Leads.Clear();
             (seat.LeadSequence, seat.LeadEpoch) = (answered ? (answer.Sequence, answer.Epoch) : (0U, 0UL));
         }
-        if (answered && ((answer.Sequence != seat.LeadSequence) || (answer.Epoch != seat.LeadEpoch)) &&
-            sent.TryFindSent(answeredAt: answer.Tick, epoch: answer.Epoch, sequence: answer.Sequence, tick: out var sentAt)) {
-            seat.Leads.Add(value: ((long)answer.Tick - sentAt));
+        var answeredBatch = -1;
+
+        if (answered && sent.TryFindSent(answeredAt: answer.Tick, epoch: answer.Epoch, sequence: answer.Sequence, position: out var answeredPosition)) {
+            answeredBatch = answeredPosition;
+        }
+        if ((answeredBatch >= 0) && ((answer.Sequence != seat.LeadSequence) || (answer.Epoch != seat.LeadEpoch))) {
+            seat.Leads.Add(value: ((long)answer.Tick - sent.At(position: answeredBatch).Tick));
             seat.LeadSequence = answer.Sequence;
             seat.LeadEpoch = answer.Epoch;
         }
@@ -219,15 +223,24 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         var previous = position;
         var orientation = predicted.FixedOrientation;
         // The last batch the body has taken, by its position in the sent history: the authority takes a held batch again
-        // on every tick no newer one arrives, its relative movement spent, so the prediction does too.
+        // on every tick no newer one arrives, its relative movement spent, so the prediction does too. The authority's
+        // answer names the batch it last took and the tick it took it in, so a continuation at or after that tick holds
+        // that batch and none sent after it that carries events: a batch a stalled link still holds is replayed from the
+        // continuation (on the first step, where its sent tick and the lead are already past, as the burst that delivers
+        // it is taken at once) rather than counted as taken because the least lead has passed. Without an answer for the
+        // continuation's tick, the lead decides.
         var applied = -1;
         var taken = 0L;
 
-        for (var held = 0; (held < sent.Count); held++) {
-            if ((sent.At(position: held).Tick + lead) > ((long)own.Tick)) {
-                break;
+        if ((answeredBatch >= 0) && (answer.Tick <= own.Tick)) {
+            applied = answeredBatch;
+        } else {
+            for (var held = 0; (held < sent.Count); held++) {
+                if ((sent.At(position: held).Tick + lead) > ((long)own.Tick)) {
+                    break;
+                }
+                applied = held;
             }
-            applied = held;
         }
         for (var step = 1L; (step <= steps); step++) {
             var tick = (own.Tick + ((ulong)step));
