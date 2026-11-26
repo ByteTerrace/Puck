@@ -57,9 +57,13 @@ answers.
   ball lights what it stands over. A view stores its light at a scale near its
   exposure (`SdfPhotometry.StoredLightScale`), so a star's surface and the pad
   beside it fit the frame's half-float images, and an exposure reaches EV 30.
+  A clock that runs on another clock: an advance's `by` names a parent row and
+  its `rate` shapes the pace as a piecewise polynomial in the parent's phase,
+  read in closed form at any tick and carried to a remote viewer as the
+  polynomial its anchor predicts ([traits](../reference/state/traits.md#run-a-clock-on-another-clock)).
 - **Standard.** `worlds/standard/stars.puck`: `sunlight`, `star`, `dayTurn`,
   `pairTurn`, `starLight`, `starDisc`, `starRail`, `starTide`, `starPull`,
-  `starSurface`, `starHeat`. `dayCycle` is built on it.
+  `starSurface`, `starHeat`, `starWellTime`. `dayCycle` is built on it.
 - **The debug system.** A binary (`moon-frame.puck`'s `sunStar` and
   `companionStar`, the companion on `companionTurn` about the sun, in the day's
   plane) lights the valley (`day.puck`), the moon (`moon.puck`) and its own
@@ -67,6 +71,9 @@ answers.
   (`sun-watch.puck`) and the moon follow. The gallery hall authors no sun. The
   worlds that stand alone (garden, hearth, night, galaxy, the Moth basis) take
   `sunlight`; the city's sun is its own day cycle's.
+- **The outpost's time.** Perihelion keeps its own seconds (`perihelionTime`),
+  a clock run on the day whose pace dips to half as the star passes
+  (`starWellTime`), and the pad's beacon flashes on it.
 - **The proving place.** Perihelion, a rock in `sun.puck` the star passes once
   a day, reached through the `PERIHELION` painting in the painting wing, or by
   the launch field's ship through the seam over the moon (`sunSeamHeight`);

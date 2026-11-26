@@ -923,7 +923,8 @@ public sealed partial class WorldTick {
     /// tick ordinal by that count and the engine tick by the same count of the world's step width, with the music clock
     /// beside them. Nothing else runs: no rule, body, machine, field, deadline sweep or delivery. This is the one
     /// place an authority's time moves without a step, and it moves both clocks in the ratio a step does, so every
-    /// value that is a law of time (a <see cref="Puck.State.StateAdvance"/> over engine ticks, a cycle or an eased
+    /// value that is a law of time (a <see cref="Puck.State.StateAdvance"/> over engine ticks or nested on other clocks,
+    /// read in closed form however long the lapse, a cycle or an eased
     /// follower over ticks, the music clock, a tick-stamped deadline's comparison) reads after a lapse exactly what it
     /// would have read had the world stepped that long. Everything else stands where the last step left it, which is
     /// what a world's document accepts when it authors <see cref="WorldSimulationDefaults.StepsAt"/>.</summary>

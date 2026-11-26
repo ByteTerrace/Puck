@@ -145,7 +145,7 @@ public sealed partial class ProjectionAnchorLawTests {
 
             foreach (var k in new ulong[] { 0UL, 1UL, 2UL, 255UL, 65_537UL }) {
                 Assert.Equal(
-                    expected: WorldClockAnchor.PhaseOf(kind: CellKind.Fixed, raw: ((long)(Base + curve.Evaluate(x: k).Truncate()))),
+                    expected: WorldClockAnchor.PhaseOf(kind: CellKind.Fixed, raw: ((long)(Base + curve.Evaluate(x: new Rational(Numerator: k, Denominator: 1)).Truncate()))),
                     actual: anchor.Predict(engineTick: (anchor.Tick + k))
                 );
             }

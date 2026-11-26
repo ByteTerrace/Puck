@@ -714,9 +714,18 @@ public static class WorldProjection {
         }
 
         var rows = new HashSet<string>(comparer: StringComparer.Ordinal);
+        var grew = true;
 
-        foreach (var row in definition.State) {
-            if ((row.Field is null) && read.Contains(item: row.Name.Value)) { _ = rows.Add(item: row.Name.Value); }
+        // A nested advance reads its parent's slot, so a recipient that evaluates a presented nested row is presented
+        // its chain of parents too; each pass adds one more link, and the validator bounds a chain's depth.
+        for (var pass = 0; (grew && (pass <= StateAdvance.MaxNestingDepth)); pass++) {
+            grew = false;
+
+            foreach (var row in definition.State) {
+                if ((row.Field is null) && read.Contains(item: row.Name.Value) && rows.Add(item: row.Name.Value) && (row.Advance?.By is { } parent)) {
+                    grew |= read.Add(item: parent);
+                }
+            }
         }
 
         return rows;

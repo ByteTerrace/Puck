@@ -972,14 +972,19 @@ Only the projection's disclosed body crosses; owned identity documents stay at h
 
 A projection carries a timeline's tick clocks as authored, and each state clock a carried value keys on
 as an anchored clock: an anchor of its phase (`WorldClockAnchor`: the engine tick, the phase as a `u64`
-share of a turn, which for a Fixed row is its fractional bits exactly, and the phase one authoritative
-tick adds), never the row it reads. The recipient predicts the phase from the anchor at the tick it
-presents, through the same `WorldClockAnchor.Predict` the authority uses, and `WorldClockAnchorLedger`
-sends a new anchor at exactly the authoritative ticks that prediction misses the authority's own phase.
-An anchor carries a rate only over a span the authority proves affine: a Fixed slot whose one trait is
-an advance adding whole raw units every tick, which the next tick confirms. Every other movement, a rate
-change, a quantized advance, a cycle's staircase, an eased row or a seek, carries rate zero and
-re-anchors wherever the phase moves, so a sky held still or moving along a proved span sends nothing.
+share of a turn, which for a Fixed row is its fractional bits exactly, and the row's base with the
+polynomial its accumulation follows from there, in raw units over the engine ticks elapsed), never the
+row it reads. The recipient predicts the phase from the anchor at the tick it presents, through the same
+`WorldClockAnchor.Predict` the authority uses (the base plus the curve truncated toward zero, the
+authority's own read), and `WorldClockAnchorLedger` sends a new anchor at exactly the authoritative ticks
+that prediction misses the authority's own phase. An anchor carries a curve only over a span the
+authority proves: a Fixed slot whose one trait is an advance, affine or nested on parent clocks
+(`StateAdvance.By`), whose composed polynomial (`StateArena.TryReadClockCurve`) reads this tick and the
+next exactly. An affine advance's curve has degree one; a nested one's is its rate's integral composed
+with its parents' curves, and lasts until a parent crosses a piece of its rate's shape, where the
+prediction misses and the next anchor carries the next piece. Every other movement, a cycle's staircase,
+an eased row, a clamped row or a seek, carries no curve and re-anchors wherever the phase moves, so a sky
+held still or moving along a proved span sends nothing.
 A state clock is a reading of its row's slot, and a bindable bound to a state cell a reading of that
 cell (of every cell of its row when it reads per body), so a recipient that may not read one refuses the
 composition by name before any derived value is emitted, rather than presenting the value at its

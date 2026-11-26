@@ -448,7 +448,7 @@ state {
       name: "pair"
       kind: "Fixed"
       value: "0"
-      advance: pairAdvance
+      advance { perSecondNumerator: 1, perSecondDenominator: pairSeconds }
       follows { destination: "sun" }
     }
     // The sun's light and mass as they reach the moon (sun.puck): each read `sunDelayMoon` seconds after the sun wrote

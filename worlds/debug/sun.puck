@@ -187,19 +187,20 @@ state {
       follows { destination: "debug", delaySeconds: sunDelayPlanet }
     }
     // The pair's turn, which this world owns and the valley and the moon follow: one turn of the companion about the
-    // star every `pairSeconds` of the day, run on the day (moon-frame.puck's `pairAdvance`), so holding the day in the
-    // valley holds the binary with the star.
+    // star every `pairSeconds`.
     {
       name: "pair"
       kind: "Fixed"
       value: "0"
-      advance: pairAdvance
+      advance { perSecondNumerator: 1, perSecondDenominator: pairSeconds }
     }
-    // The outpost's own time, in seconds. It keeps the day's pace, and runs slow as the star passes (stars.puck's
-    // `starWellTime`): `dilationDepth` slower at the pass, over `dilationHours` either side. Its rate follows the day's
-    // phase, so it reads in closed form at any tick however long the world stood unwatched, and the beacon on the pad,
-    // which pulses on it, slows as the star nears and quickens as it leaves. `world.state perihelionTime` beside
-    // `world.state day` shows the outpost falling behind the valley across the pass.
+    // The outpost's own time, in seconds, a clock run on the day above. It keeps the day's pace, and runs slow as the
+    // star passes (stars.puck's `starWellTime`): `dilationDepth` slower at the pass, over `dilationHours` either side.
+    // Its rate follows the day's phase, so it reads in closed form at any tick however long the world stood unwatched,
+    // and the beacon on the pad, which pulses on it, slows as the star nears and quickens as it leaves.
+    // `world.state perihelionTime` beside `world.state day` shows the outpost falling behind the valley across the
+    // pass. It follows the day's motion, never its jumps: a day written or adopted from the valley moves the outpost's
+    // time no further than the day had run here.
     {
       name: "perihelionTime"
       kind: "Fixed"

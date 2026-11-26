@@ -67,12 +67,6 @@ let companionStar = star(radius: 60, distance: 15000, illuminance: 12000, color:
 let pairSeparation = 2000
 let pairSeconds = 600
 let companionTurn = pairTurn(clock: "pair", separation: pairSeparation, inclination: sharedNoonElevation, node: (0 - sharedSunHeading))
-// The pair's turn runs on the system's day rather than on the engine's seconds: `sharedDaySeconds / pairSeconds` turns
-// of the companion for every day, so it keeps its period while the day runs and stands still with the day when the day
-// is held, and every world of the system reads it from its own `day` in closed form. Each world declares its `pair` row
-// with this advance.
-let pairAdvance = { perSecondNumerator: sharedDaySeconds, perSecondDenominator: pairSeconds, by: "day" }
-
 // How fast the sun's light and its pull cross the system. Each world reads the sun's rows that long after the sun
 // wrote them (sun.puck, a followed row's `delaySeconds`), from where the sun stands at the day's start, so the moon,
 // then the nearer of the two, meets a change first.
