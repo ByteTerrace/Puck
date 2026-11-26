@@ -139,6 +139,9 @@ public sealed partial class WorldTransferEscrow {
         var durability = m_server.RecordCrossingHeld(
             continuation: step => {
                 if (step.Outcome == WorldCrossingDurability.Durable) {
+                    // The session may have been forgotten while the record was in flight: the death lands as a
+                    // guest's, as its record says, so it goes again with a session that holds nothing live.
+                    if (guest) { MarkGuest(sourceAuthority: key.SourceAuthority); }
                     ApplyDurableDeath(key: key);
                 }
             },
