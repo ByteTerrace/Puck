@@ -427,6 +427,12 @@ let shellTileRails = concat(
   flatMap(range(1, 3), k => [
     { id: $"nave-south-end-{k}", x: tileX((gridTilesX - 2)), y: galleryFloor[k], z: (naveSouth - 0.08), yaw: 180 }
     { id: $"nave-north-end-{k}", x: tileX((gridTilesX - 2)), y: galleryFloor[k], z: (naveNorth + 0.08), yaw: 0 }
+  ]),
+  // Level 2's length where the tree's branches land (layout.puck's treeRailGap) keeps a tile at each end, and the
+  // branch walks onto the balcony through the gap between them.
+  flatMap([{ name: "west", sign: -1 }, { name: "east", sign: 1 }], side => [
+    { id: $"tree-south-{side.name}", x: (treeRailGap + (side.sign * (2 - (galleryTile / 2)))), y: galleryFloor[2], z: (naveSouth - balconyInset), yaw: 180 }
+    { id: $"tree-north-{side.name}", x: (treeRailGap + (side.sign * (2 - (galleryTile / 2)))), y: galleryFloor[2], z: (naveNorth + balconyInset), yaw: 0 }
   ])
 )
 
@@ -553,7 +559,7 @@ let shellPiers = flatMap(range(0, 4), k => flatMap(range(0, length(arcadeXs)), b
 // 2's balcony edges take them; level 1's are its lattice (below).
 let shellRails = concat(
   flatMap([2], k => concat(
-    flatMap(range(0, floor(((galleryEast - naveWest) / 4))), i => [
+    flatMap(filter(range(0, floor(((galleryEast - naveWest) / 4))), i => ((14 + (4 * i)) != treeRailGap)), i => [
       { id: $"rail-south-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveSouth - balconyInset), yaw: 180, short: 0 }
       { id: $"rail-north-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveNorth + balconyInset), yaw: 0, short: 0 }
     ]),
@@ -583,8 +589,20 @@ function shellBridgeZ(tile, tiles) = (tileEdgeZ((galleryAisleTiles + tile)) + ((
 function shellLatticeBay(b, edge, z) = ((b == toyLatticeLooseBay) ? {
   id: $"loose-{edge}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: edge, open: $"gallery-lattice-open-{(b % 6)}"
 } : { id: $"{edge}-{b}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: "", open: "" })
+// The tree's bay (layout.puck's treeBay) stands as a gate instead: a side panel either side of an opening the tree's
+// level-1 branch passes through, and a head over it from `treeGateHeight` up to the fascia, each rising in its own
+// `shellLatticeRails` crossbars so the bars keep one spacing.
+let shellGateSideCells = ((shellLatticeBayCells - treeGateCells) / 2)
+let shellGateHeadHeight = (shellLatticeHeight - treeGateHeight)
+function shellLatticeRails(height) = (2 * maximum(1, round((height / (shellLatticeHeight / 3)))))
+let shellGateSide = (((treeGateCells + shellGateSideCells) / 2) * toyLatticePitch)
+let shellLatticeGates = flatMap([{ edge: "south", z: (naveSouth - balconyInset) }, { edge: "north", z: (naveNorth + balconyInset) }], e => [
+  { id: $"gate-{e.edge}-west", x: (bayX(treeBay) - shellGateSide), y: 0, z: e.z, prototype: "gallery-lattice-gate-side" }
+  { id: $"gate-{e.edge}-east", x: (bayX(treeBay) + shellGateSide), y: 0, z: e.z, prototype: "gallery-lattice-gate-side" }
+  { id: $"gate-{e.edge}-head", x: bayX(treeBay), y: treeGateHeight, z: e.z, prototype: "gallery-lattice-gate-head" }
+])
 let shellLattices = concat(
-  flatMap(shellLatticeBays, b => [shellLatticeBay(b, "south", (naveSouth - balconyInset)), shellLatticeBay(b, "north", (naveNorth + balconyInset))]),
+  flatMap(filter(shellLatticeBays, b => (b != treeBay)), b => [shellLatticeBay(b, "south", (naveSouth - balconyInset)), shellLatticeBay(b, "north", (naveNorth + balconyInset))]),
   [
     { id: "east-south", x: ((pierX(galleryBays) + galleryEast) / 2), z: (naveSouth - balconyInset), yaw: 0, prototype: "gallery-lattice-half", slat: "", open: "" }
     { id: "east-north", x: ((pierX(galleryBays) + galleryEast) / 2), z: (naveNorth + balconyInset), yaw: 0, prototype: "gallery-lattice-half", slat: "", open: "" }
@@ -909,6 +927,8 @@ template shellPrototypes() {
       { id: "gallery-lattice-half", n: galleryBays, cells: (shellLatticeTileCells / 2), pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
       { id: "gallery-lattice-tile", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
       { id: "gallery-lattice-tile-open", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0 }
+      { id: "gallery-lattice-gate-side", n: (treeBay % 6), cells: shellGateSideCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
+      { id: "gallery-lattice-gate-head", n: (treeBay % 6), cells: treeGateCells, pitch: toyLatticePitch, height: shellGateHeadHeight, upright: 1 }
     ]
   )
   for kind in latticeKinds {
@@ -920,7 +940,16 @@ template shellPrototypes() {
           latticePalette(lookToyLattice(kind.n).frame, lookToyLattice(kind.n).bar, lookToyLattice(kind.n).rail),
           entry => shellBrushed(entry, lookBrushStructure)
         )
-        lattice(base: 0, cells: kind.cells, pitch: kind.pitch, height: kind.height, bar: toyLatticeBar, upright: kind.upright, sill: kind.upright)
+        lattice(
+          base: 0,
+          cells: kind.cells,
+          pitch: kind.pitch,
+          height: kind.height,
+          bar: toyLatticeBar,
+          rails: shellLatticeRails(kind.height),
+          upright: kind.upright,
+          sill: kind.upright
+        )
       }
     }
   }
@@ -1127,6 +1156,14 @@ template shellPlacements() {
       parent: "gallery"
       position [panel.x, galleryFloor[1], panel.z]
       yawDegrees: panel.yaw
+      solid
+    }
+  }
+  for panel in shellLatticeGates {
+    placement $"gallery-lattice-{panel.id}" {
+      prototype: panel.prototype
+      parent: "gallery"
+      position [panel.x, (galleryFloor[1] + panel.y), panel.z]
       solid
     }
   }

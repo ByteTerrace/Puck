@@ -1,0 +1,80 @@
+// Limbs: the parts of a tree a body walks and climbs, a library. A sweep draws a tapering limb beautifully but contact
+// omits it, so every piece here is built from shapes contact admits (superellipsoids, which bake their own radii): a
+// limb is a chain of flattened masses along a curve, broad and flat enough on top to walk, and a trunk's treads are
+// shelves round its taper that climb at a riser a body steps up. Detail a body never touches (twigs, leaves) stays a
+// sweep or a crown in a separate, non-solid creation (foliage.puck's groupedTree and canopySurface).
+//
+// Every point is in the creation's author frame (sdf-authoring: +Z the front, +X the subject's left), the frame shape
+// rows are written in.
+
+import "rig"
+
+// The point a share `t` along the quadratic Bezier `a`, `b`, `c`.
+function bezierAt(a, b, c, t) = ((a * ((1 - t) * (1 - t))) + (b * ((2 * t) * (1 - t)))) + (c * (t * t))
+function vectorLength(v) = squareRoot((((v[0] * v[0]) + (v[1] * v[1])) + (v[2] * v[2])))
+
+// The turn that lays a shape's local +X along the direction `d` and keeps its local +Z level: a yaw about +Y, then a
+// pitch about the yawed +Z. `d` must not be vertical.
+function turnAlong(d) = turnAfterLevel(d, squareRoot(((d[0] * d[0]) + (d[2] * d[2]))))
+function turnAfterLevel(d, level) = compose(
+  turnByCosine([0, 1, 0], clamp((d[0] / level), -1, 1), ((d[2] > 0) ? -1 : 1)),
+  turnByCosine([0, 0, 1], clamp((level / vectorLength(d)), -1, 1), ((d[1] < 0) ? -1 : 1))
+)
+
+// A walkable limb: `segments` flattened superellipsoids whose tops follow the quadratic Bezier `a`, `b`, `c` (the line a
+// foot walks), tapering from `width[0]` and `thickness[0]` (full widths, metres) at `a` to `width[1]` and `thickness[1]`
+// at `c`. Each mass reaches `overlap` times its share of the curve, so neighbours merge with only a shallow dip between
+// them, and joins its neighbours by a `smooth` blend. `exponent` squares the cross-section: 2 is an ellipse, and above it
+// the top flattens to walk on.
+template limb(label, a, b, c, width, thickness, material, segments = 7, exponent = 2.6, overlap = 1.6, smooth = 0.25) {
+  for i in range(0, segments) {
+    let p0 = bezierAt(a, b, c, (i / segments))
+    let p1 = bezierAt(a, b, c, ((i + 1) / segments))
+    let s = ((i + 0.5) / segments)
+    let w = (width[0] + ((width[1] - width[0]) * s))
+    let th = (thickness[0] + ((thickness[1] - thickness[0]) * s))
+    let turn = turnAlong((p1 - p0))
+    shape Superellipsoid $"{label}-{i}" {
+      exponent: exponent
+      position: (((p0 + p1) / 2) - rotatePoint(turn, [0, (th / 2), 0]))
+      rotation: turn
+      scale [((overlap * vectorLength((p1 - p0))) / 2), (th / 2), (w / 2)]
+      material: material
+      blend: SmoothUnion
+      smooth: smooth
+    }
+  }
+}
+
+// The radius of a conical trunk `base` wide at the foot whose taper would close at `apex` metres up, at height `y`.
+function trunkRadius(base, apex, y) = (base * (1 - (y / apex)))
+
+// Treads climbing round a conical trunk (`base`, `apex`, as trunkRadius): tread k stands at `start + k * step` degrees
+// round the trunk (polarPoint's sense, from author +X toward +Z) with its top `rise * (k + 1)` metres up, a shelf
+// `depth` metres out from the bark and `across` metres wide that reaches `inset` metres into the trunk so it grows out
+// of it. A step of 18 degrees and a rise of 0.225 m climb one 4.5 m storey a turn in twenty risers, under a 0.3 m step.
+template spiralTreads(label, count, start, step, rise, base, apex, material, depth = 1.3, across = 0.96, thickness = 0.6, inset = 0.3, exponent = 3, smooth = 0.15) {
+  for k in range(0, count) {
+    let top = (rise * (k + 1))
+    let r = trunkRadius(base, apex, top)
+    let angle = (start + (step * k))
+    shape Superellipsoid $"{label}-{k}" {
+      exponent: exponent
+      position: polarPoint((r + ((depth - inset) / 2)), angle, (top - (thickness / 2)))
+      rotation: rotate([0, 1, 0], (0 - angle))
+      scale [((depth + inset) / 2), (thickness / 2), (across / 2)]
+      material: material
+      blend: SmoothUnion
+      smooth: smooth
+    }
+  }
+}
+
+// The top of spiralTreads' tread `k`, and the point on its middle line `out` metres from the bark, where a limb that
+// leaves the trunk from that tread starts its walking line.
+function treadTop(rise, k) = (rise * (k + 1))
+function treadPoint(start, step, rise, base, apex, k, out) = polarPoint(
+  (trunkRadius(base, apex, treadTop(rise, k)) + out),
+  (start + (step * k)),
+  treadTop(rise, k)
+)

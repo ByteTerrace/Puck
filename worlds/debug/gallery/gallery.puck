@@ -39,6 +39,7 @@ import "layout"
 import "shell"
 import "look"
 import "toybox"
+import "tree"
 // The companion hears the lift's authored door edge through its read-only sensory projection, and the world that stands
 // the building binds its camera to the inspection lever's cells (the debug world's exposure.puck).
 exports {
