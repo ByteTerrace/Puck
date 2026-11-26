@@ -40,6 +40,7 @@ import "shell"
 import "look"
 import "flaw"
 import "toybox"
+import "rentals"
 // The companion hears the lift's authored door edge through its read-only sensory projection, and the world that stands
 // the building binds its camera to the inspection lever's cells (the debug world's exposure.puck).
 exports {

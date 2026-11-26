@@ -171,6 +171,16 @@ the cost of an unseen cabinet is reduced by making idle emulation cheap, never
 by skipping or deferring it. Which frame a display shows, and whether any
 display reads the machine at all, likewise never reaches it.
 
+Whether a machine runs is simulation state too. A declaration's `running`
+stops it outright, and its `runsWhen` (a state condition, the one placement
+responses and portals read) advances it only on the ticks the condition holds:
+`WorldTick.GateMachines` decides it from the arena after the rules fold and
+before the machines step, and a replay or a restored checkpoint derives the
+same verdict, so nothing stores it. A gated-off machine keeps its hardware state
+and costs no emulation; its runtime stays allocated. The gallery's handheld
+rentals (`worlds/debug/gallery/rentals.puck`) gate a pool of one brick and one
+advanced brick for each seat's body on whether that body holds a rented device.
+
 ### Segments run in parts
 
 `MachineSegment.Run` is the one way a host executes an accepted segment, shared

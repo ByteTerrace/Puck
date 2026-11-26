@@ -163,6 +163,14 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="links">The declared cable groups, derived from the live definition's machine sources
     /// (<c>WorldDefinition.MachineCableGroups()</c>).</param>
     void ReconcileLinks(IReadOnlyList<WorldMachineCableGroup> links);
+    /// <summary>Sets whether a machine's <see cref="WorldMachine.RunsWhen"/> holds this tick. The tick calls it for every
+    /// machine that authors one, after the rule frame folds and before <see cref="TryAdvance"/>
+    /// (<c>WorldTick.GateMachines</c>), so the gate is always derived from the arena and never carried across a
+    /// checkpoint. A gated-off instance keeps its hardware state and is not advanced; one with no condition is never
+    /// gated.</summary>
+    /// <param name="instance">The authored machine instance name; an undeclared name is ignored.</param>
+    /// <param name="runs">The condition's verdict: <see langword="true"/> to advance the instance on this tick.</param>
+    void GateRunning(string instance, bool runs);
     /// <summary>Prepares the machine-runtime delta between <paramref name="current"/> and <paramref name="candidate"/>.</summary>
     /// <param name="current">The current live definition, or <see langword="null"/> at boot.</param>
     /// <param name="candidate">The candidate definition to prepare against. A machine's relative content path
