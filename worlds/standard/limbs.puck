@@ -154,3 +154,32 @@ function treadPoint(start, step, rise, base, apex, k, out) = polarPoint(
 function barkAlong(d) = turnAlong((d * [-1, 1, -1]))
 let barkUpright = rotate([0, 0, 1], 90)
 
+
+// A braided trunk: `count` stems twisting up round a core, each a chain of `segments` sweeps, so a trunk reads as
+// strands grown together rather than one turned cone. Stem k starts at bearing k / count of a turn and winds `turn`
+// degrees from `foot` (its height at the base) to `top`, its axis `out[0]` metres off the core at the foot and `out[1]`
+// at the top, tapering from `radius[0]` to `radius[1]`; each sweep bows `bow` metres outward at its middle so the
+// strands swell between their crossings. Drawn only: whatever the trunk collides as is the author's own core.
+function braidPoint(k, count, t, foot, top, out, turn) = polarPoint(((out[0] * (1 - t)) + (out[1] * t)), (((360 * k) / count) + (turn * t)), ((foot * (1 - t)) + (top * t)))
+template braidedTrunk(label, count, foot, top, out, radius, material, turn = 150, segments = 3, bow = 0.25, smooth = 0.35) {
+  for k in range(0, count) {
+    for s in range(0, segments) {
+      let t0 = (s / segments)
+      let t1 = ((s + 1) / segments)
+      let mid = braidPoint(k, count, ((t0 + t1) / 2), foot, top, out, turn)
+      shape Sweep $"{label}-{k}-{s}" {
+        detail: true
+        material: material
+        blend: SmoothUnion
+        smooth: smooth
+        curve {
+          a: braidPoint(k, count, t0, foot, top, out, turn)
+          b: (mid + (vectorUnit((mid * [1, 0, 1])) * bow))
+          c: braidPoint(k, count, t1, foot, top, out, turn)
+          radiusStart: ((radius[0] * (1 - t0)) + (radius[1] * t0))
+          radiusEnd: ((radius[0] * (1 - t1)) + (radius[1] * t1))
+        }
+      }
+    }
+  }
+}
