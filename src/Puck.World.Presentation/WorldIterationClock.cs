@@ -32,8 +32,9 @@ namespace Puck.World;
 /// </summary>
 /// <remarks>A loop begun while the latest one has not yet reached its frame and was begun by name adopts the edit rather
 /// than starting another loop, so a script's <c>begin</c> line names the reload or kernel reload that follows it. Any
-/// other new loop supersedes the latest one, whose stages stop there, since the next edit's frames can no longer tell the
-/// two apart. The boot loop runs beside them.</remarks>
+/// other new loop supersedes the latest one, whose stages stop there once the new loop's edit installs, since the next
+/// edit's frames can no longer tell the two apart. A new loop that ends with no edit (its reload refused, or its source
+/// unchanged) is withdrawn and the loop it superseded resumes (<see cref="End"/>). The boot loop runs beside them.</remarks>
 /// <param name="feed">The published values whose document version, the one the boot authority installed at the last
 /// collect, a loop's edit must move past.</param>
 public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIterationReadiness {
@@ -60,7 +61,7 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
     private Func<SdfWorldResidency?>? m_presented;
 
     /// <inheritdoc/>
-    public long Loops => m_count;
+    public long Loops => ((Latest ?? m_boot)?.Number ?? m_count);
 
     // One loop: when it began, what its edit must move past, and the timestamp each stage first held.
     private sealed class Loop(long number, string name, long started, WorldDocumentVersion after, long shaderInstalls, bool named) {
@@ -105,6 +106,11 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
         // Why the loop stopped before it settled, or null while it runs or once it settled.
         public string? Ended { get; set; }
         public bool Open => ((Lit is null) && (Ended is null));
+        // The loop this one superseded when it began, which resumes if this one ends with no edit.
+        public Loop? Supersedes { get; set; }
+        // Whether this loop ended with no edit (refused, or its source unchanged) and gave the latest back to the loop it
+        // superseded: it stays in the report but is never the latest.
+        public bool Withdrawn { get; set; }
     }
 
     /// <summary>Attaches the renderer whose frames the loops are timed against, and begins the boot loop from the
@@ -146,9 +152,11 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
             if (shaderRequest > 0L) { joined.ShaderRequest = shaderRequest; }
             return joined.Number;
         }
-        if (Latest is { Open: true } superseded) {
-            superseded.Ended = $"superseded by #{m_count + 1} {name}";
-        }
+        var superseded = (Latest is { Open: true } open) ? open : null;
+
+        if (superseded is not null) { superseded.Ended = $"superseded by #{m_count + 1} {name}"; }
+        // With no renderer no loop reaches a frame, so none could resume with stages to report.
+        if (m_probe is null) { superseded = null; }
 
         var presented = Presented();
         var loop = new Loop(
@@ -160,10 +168,17 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
             number: ++m_count,
             shaderInstalls: (presented?.ShaderBatchesInstalled ?? 0L),
             started: started
-        ) { Code = code, LiveTick = (live ? feed.Tick.Tick : null), ShaderRequest = shaderRequest, PresentedAtStart = (m_probe?.Root?.FramesProduced ?? -1L), BuildsAtStart = (m_probe?.Composition?.ProgramBuilds ?? -1L), AppearancesAtStart = (m_probe?.Composition?.AppearanceBuilds ?? -1L), WorkAtStart = ReadWork() };
+        ) { Supersedes = superseded, Code = code, LiveTick = (live ? feed.Tick.Tick : null), ShaderRequest = shaderRequest, PresentedAtStart = (m_probe?.Root?.FramesProduced ?? -1L), BuildsAtStart = (m_probe?.Composition?.ProgramBuilds ?? -1L), AppearancesAtStart = (m_probe?.Composition?.AppearanceBuilds ?? -1L), WorkAtStart = ReadWork() };
 
         m_loops.Add(item: loop);
-        if (m_loops.Count > Kept) { m_loops.RemoveAt(index: 0); }
+        if (m_loops.Count > Kept) {
+            var dropped = m_loops[0];
+
+            m_loops.RemoveAt(index: 0);
+            foreach (var kept in m_loops) {
+                if (ReferenceEquals(objA: kept.Supersedes, objB: dropped)) { kept.Supersedes = null; }
+            }
+        }
         return loop.Number;
     }
 
@@ -177,13 +192,51 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
     /// the host pump.</summary>
     /// <param name="number">The loop's number, as <see cref="Begin"/> returned it.</param>
     /// <param name="reason">Why the loop ended.</param>
+    /// <remarks>A loop that ends this way made no edit, so it supersedes nothing. It stays in the report as withdrawn,
+    /// and the loop it superseded when it began takes its place: as the latest, resuming with the stages it reached
+    /// meanwhile (its frames were followed while this loop could still be withdrawn), or, when a later loop had already
+    /// superseded this one, as the loop that later one would resume.</remarks>
     public void End(long number, string reason) {
-        if ((Latest is { Number: var latest, Frame: null, Ended: null } loop) && (latest == number)) {
-            loop.Ended = reason;
+        var index = m_loops.FindIndex(match: loop => (loop.Number == number));
+
+        if ((index < 0) || (m_loops[index] is not { Frame: null, Withdrawn: false } ended)) { return; }
+
+        var later = Successor(index: index);
+        var resumed = ended.Supersedes;
+
+        // The latest ends only while it runs; a superseded loop only while the loop after it may still resume it.
+        if ((later is null) ? (ended.Ended is not null) : !ReferenceEquals(objA: later.Supersedes, objB: ended)) { return; }
+        ended.Ended = reason;
+        if (later is not null) {
+            ended.Withdrawn = true;
+            ended.Supersedes = null;
+            later.Supersedes = resumed;
+            return;
         }
+        if (resumed is null) { return; }
+        ended.Withdrawn = true;
+        ended.Supersedes = null;
+        resumed.Ended = null;
+        if ((resumed.Lit is not null) && (m_probe is { } probe)) { Console.Error.WriteLine(value: $"[world.iteration] {Line(loop: resumed, probe: probe)}"); }
     }
 
-    private Loop? Latest => ((m_loops.Count > 0) ? m_loops[^1] : null);
+    // The loop after the one at an index that is not withdrawn, or null when it is the latest.
+    private Loop? Successor(int index) {
+        for (var next = (index + 1); (next < m_loops.Count); next++) {
+            if (!m_loops[next].Withdrawn) { return m_loops[next]; }
+        }
+        return null;
+    }
+
+    // The latest loop that made an edit or may yet: the last begun, past any withdrawn after it.
+    private Loop? Latest {
+        get {
+            for (var index = (m_loops.Count - 1); (index >= 0); index--) {
+                if (!m_loops[index].Withdrawn) { return m_loops[index]; }
+            }
+            return null;
+        }
+    }
     // The residency the first seat's view renders through, the world's own when no other answers.
     private SdfWorldResidency? Presented() => (m_presented?.Invoke() ?? m_probe?.Residency);
     // The composition a residency films: a routed scene's own, or the world's for the world's residency.
@@ -204,7 +257,20 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
             _ = BeginAt(code: code, live: false, name: "hot-reload", named: false, shaderRequest: 0L, started: Puck.Abstractions.CodeRevision.AppliedAt);
         }
         if (m_boot is { Open: true } boot) { Advance(bakes: bakes, loop: boot, now: now, previous: previous, probe: probe); }
-        if (Latest is { Open: true } latest) { Advance(bakes: bakes, loop: latest, now: now, previous: previous, probe: probe); }
+        if (Latest is { Open: true } latest) {
+            Advance(bakes: bakes, loop: latest, now: now, previous: previous, probe: probe);
+            // Until the latest reaches its frame it may still end with no edit and give the latest back, so each loop it
+            // would resume keeps following frames. A loop is withdrawn only when its edit never installed, so whatever a
+            // resumed loop recorded meanwhile came from its own edit; a latest whose edit installed is never withdrawn,
+            // and what the loops behind it recorded is dropped with them.
+            if (latest.Frame is not null) {
+                latest.Supersedes = null;
+            } else {
+                for (var behind = latest.Supersedes; (behind is not null); behind = behind.Supersedes) {
+                    if (behind.Lit is null) { Advance(bakes: bakes, loop: behind, now: now, previous: previous, probe: probe, report: false); }
+                }
+            }
+        }
     }
 
     // When the latest produced frame was observed, zero before the first.
@@ -212,7 +278,8 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
     // The code revision the latest hot-reload loop began at, or the process's own before any.
     private int m_code = Puck.Abstractions.CodeRevision.Current;
 
-    private void Advance(Loop loop, long now, long previous, WorldRenderProbe probe, IWorldBakeReadiness bakes) {
+    // Advances one loop's stages over the frame just produced; report prints its line once it settles.
+    private void Advance(Loop loop, long now, long previous, WorldRenderProbe probe, IWorldBakeReadiness bakes, bool report = true) {
         loop.First ??= now;
         // With no frame before this one, the wait is the first stage's (the boot's, from process start), never a held
         // frame.
@@ -251,7 +318,7 @@ public sealed class WorldIterationClock(WorldPresentationFeed feed) : IWorldIter
         if (!Lit(loop: loop, volume: residency.MeshIrradiance)) { return; }
         loop.Lit = now;
         loop.WorkAtLit = ReadWork();
-        Console.Error.WriteLine(value: $"[world.iteration] {Line(loop: loop, probe: probe)}");
+        if (report) { Console.Error.WriteLine(value: $"[world.iteration] {Line(loop: loop, probe: probe)}"); }
     }
 
     // The lighting captures after the frame stage that mark a lighting changing every frame (a day clock): then the volume

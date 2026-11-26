@@ -168,6 +168,11 @@ let lookBrushStructure = 0.1
 let lookFan = { radius: 1.75, leaves: 6, spread: 150, leaf: 0.42 }
 let lookFanTall = { radius: 2.5, leaves: 5, spread: 58, leaf: 0.26 }
 
+// Alice's size: what level 1, the toybox, makes a body that comes in without the full-size pass (wonder.puck), as a
+// multiplier of the body's authored size. Chosen for how tall the cabinets and the lattice loom beside her and how far
+// out of her reach their controls stand, never derived; retune it live with `gallery.wonder small <size>`.
+let lookWonderSize = 0.15
+
 // The times of day the look is judged at, as the `day` cell's fraction: noon, and a warmer afternoon.
 let lookNoon = 0.5
 let lookAfternoon = 0.62

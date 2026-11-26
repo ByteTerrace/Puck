@@ -100,11 +100,13 @@ mutation and undo authority.
 
 Screens and speakers reference an instance and a provider output name. Removing a
 consumer does not remove or restart its machine. An engaged display's input
-reaches the input port its route names (`route.port`); a route that names none
-reaches the machine's sole port, so an engageable display of a machine with
-several ports (the Humble Gaming Deck's `controls` and `controls-2`) is refused
-by name until its route names one. A port no engaged display routes to holds
-neutral input, and a passive display routes none. A screen owns no machine:
+reaches the input port its seat holds among the ports its route names
+(`route.ports`, one seat a port, given at engage by `WorldEngagement.Compose` and
+carried on each pad as `ScreenPadSnapshot.Port`); a route that names none reaches
+the machine's sole port, so an engageable display of a machine with several ports
+(the Humble Gaming Deck's `controls` and `controls-2`) is refused by name until
+its route names them. A port no engaged seat holds has neutral input, and a
+passive display routes none. A screen owns no machine:
 every machine is a declared row, and content mounts only into one.
 Named screen inspection, output selection, symbol lookup, and memory access
 resolve directly against the named runtime instance. An aliased screen or speaker

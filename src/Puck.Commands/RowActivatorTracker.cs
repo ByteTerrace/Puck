@@ -1,3 +1,5 @@
+using Puck.Abstractions.Collections;
+
 namespace Puck.Commands;
 
 /// <summary>The transition a <see cref="RowActivatorTracker"/> reports for one applied signal.</summary>
@@ -191,19 +193,11 @@ public sealed class RowActivatorTracker {
 
         return failure;
     }
-    private int IndexOf(string source) {
-        for (var index = 0; (index < m_sequence.Count); index++) {
-            if (string.Equals(
-                a: m_sequence[index],
-                b: source,
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            )) {
-                return index;
-            }
-        }
-
-        return -1;
-    }
+    private int IndexOf(string source) => StringLists.IndexOf(
+        comparison: StringComparison.OrdinalIgnoreCase,
+        items: m_sequence,
+        value: source
+    );
     // The gate is open exactly when every sequence member is held, in the SEQUENCE'S OWN declared order — held
     // indices are assigned 0..N-1 in that same order, so "held order equals [0, 1, ..., N-1]" is exactly "every
     // member joined, in order, and none has left".

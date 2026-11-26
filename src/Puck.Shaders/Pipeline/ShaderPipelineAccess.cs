@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Documents;
 using Puck.Abstractions.Gpu;
 using Puck.Hosting;
@@ -215,13 +216,8 @@ public sealed record ShaderPipelineAccess(
     /// <summary>Returns whether this access includes the named version.</summary>
     /// <param name="version">The input or output version.</param>
     /// <returns>Whether the version participates in this access.</returns>
-    public bool ReferencesVersion(string version) {
-        if (string.Equals(a: Version, b: version, comparisonType: StringComparison.Ordinal)) { return true; }
-        for (var index = 0; (index < OtherVersions.Count); index++) {
-            if (string.Equals(a: OtherVersions[index], b: version, comparisonType: StringComparison.Ordinal)) { return true; }
-        }
-        return false;
-    }
+    public bool ReferencesVersion(string version) =>
+        (string.Equals(a: Version, b: version, comparisonType: StringComparison.Ordinal) || StringLists.Holds(items: OtherVersions, value: version));
 }
 /// <summary>Which instances of a storage the node clears when a graph installs or resets.</summary>
 [JsonConverter(typeof(StrictEnumConverter<ShaderPipelineClear>))]

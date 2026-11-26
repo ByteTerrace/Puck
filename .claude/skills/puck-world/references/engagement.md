@@ -222,8 +222,10 @@ advances (so it reads PRE-MOVE positions), over every active local seat that has
 COMPOSED NOTHING beyond its own body (`HasComposedApplication`): the first
 (document order) screen that is `Engageable`, carrying a live machine
 (`IWorldMachineHost.HasMachine`, the actually booted signal rather than the
-document-declared `WorldScreenSource.Machine`), carrying no live occupant
-(`PlayersOn(screenIndex)` empty), naming an `EngageChannel` this world's channel
+document-declared `WorldScreenSource.Machine`), with a seat free
+(`WorldEngagement.TryFreeSeat`: a port of the route's `ports` no live
+occupant is seated on, or no live occupant at all for a route naming no
+ports), naming an `EngageChannel` this world's channel
 table resolves, within radius, and that would pass `CheckEngage`. The resolved
 `(screenIndex, channelOrdinal)` feeds `WorldBody.Advance`'s `engageProbeOrdinal`
 parameter: it tests the SAME rising-edge condition `ProcessLaneActions` tests,
@@ -628,8 +630,8 @@ and addon read pump and before machine stepping, visits EVERY live body once:
    enabled); a screen member masks `body.EngagedIntent` by the screen's LIVE
    reach, translates through its live kit's compiled pad map, aims the pad's
    light gun through the screen's live mapping (`Aim`, above), and merges into
-   the screen's pad (`MachinePadState.Merge`: buttons OR, sticks sum+clamp, the
-   first on-screen pointer wins); a body member masks by its application's
+   the pad of the port it is seated on (`MachinePadState.Merge`: buttons OR,
+   sticks sum+clamp, the first on-screen pointer wins); a body member masks by its application's
    `Reach` and appends a `BodyRouteContribution(TargetBody, Principal, Intent)`.
 
 A screen's policy (reach, pad kit, light-gun mapping) and a kit's pad map are
@@ -640,6 +642,21 @@ a `world.row.set` of the screen or kit, or a reload that moves the channels,
 reaches the next fold with no re-compose (`EngagementPolicyLiveEditLawTests`).
 The `Kit`/`Reach` a screen application records are the policy at compose, for
 the echoes; the fold does not read them.
+
+**One screen, one seat a port.** A route's `ports` (`WorldScreenRoute.Ports`,
+`ports ["controls", "controls-2"]`) seats one engaged player on each named
+machine port. `Compose` gives a screen application its port
+(`ControlApplication.Port`): the port it already held there, else the first
+of the route's ports no other live occupant holds (`TryFreeSeat`), else, on a
+full screen engaged by name, the first port, which then merges as a cabinet
+does. The port lives in the grant table's application set, so checkpoints carry
+it and a replay re-derives it from the same composes; leaving dissolves the
+application, which frees the port. The fold keys each pad by screen and port
+(`ScreenPadSnapshot.Port`) and reads the held port under the live route (the
+route's first port when an edit dropped it), and
+`WorldMachineHost.MachineInput` hands each machine port the pads seated on it.
+A route naming no ports drives a machine's sole port: the context button seats
+one player there and every engage by name merges onto it.
 
 `body.EngagedIntent` is captured on EVERY `WorldBody.Advance` call, so it is
 available whether or not the avatar is idle. The server passes
@@ -809,16 +826,18 @@ refusal.
 
 `screen.state`/`world.screens` tag a mirrored participant `p<n>(mirror)` (both
 read `WorldEngagement.PlayersOn(screenIndex)`,
-`IReadOnlyList<(int Display, bool Capture)>` — `Capture` is derived from own-body
-membership). `body.channels` prints an
+`IReadOnlyList<(int Display, bool Capture, string? Port)>` — `Capture` is derived
+from own-body membership; a route naming ports prints each player's as
+`p<n>@<port>`). `body.channels` prints an
 `applications=<target>[/<kit>](mask=0x…),…` segment ahead of the per-channel fold
 breakdown; the own-body member is listed like any other, so its ABSENCE (capture)
 is legible rather than inferred. `screen.state` ends its engagement segment with
 `gun=off` or `gun=(<x>, <y>)`, the tick's merged aim as source fractions
 (`WorldEngagement.PointerOn`), the same numbers `body.channels` prints for the
 hit, then `pad=off` (no application reaches the screen) or
-`pad=<buttons>/stick(<x>, <y>)` (`WorldEngagement.PadOn`): the merged pad the
-machine receives this tick, its buttons as `MachineButtons` names joined by `+`
+`pad=<buttons>/stick(<x>, <y>)` (`WorldEngagement.PadOn`), one per port for a
+route naming ports (`pad=controls:<pad>;controls-2:<pad>`): the merged pad the
+machine receives on that port this tick, its buttons as `MachineButtons` names joined by `+`
 (`none` for none) and its left stick with +X right and +Y up, which every
 host (`BrickPad`, `AdvancedPad`, `HgdPad`) reads as the d-pad. It is the
 engine-neutral way to see what a device is pressed with; `screen.peek <screen>
@@ -849,9 +868,9 @@ control pair: an actor holding `Control` over the target succeeds, a revoked
 actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing. The debug
 world's device row declares engageable machine screens 0 to 2, and the
-gallery's toybox screens 20 to 43 (`worlds/debug/gallery/toybox.puck`: two
-screens a deck, one route per controller port from `deckPortRoutes`, so a
-second seat engaging a station while the first plays takes the second port),
+gallery's toybox screens 20 to 31 (`worlds/debug/gallery/toybox.puck`: one
+screen a deck, its route `deckRoute` naming both controller ports, so a second
+seat engaging a station while the first plays takes the second port),
 all through the standard's `deviceRoute` (`worlds/standard/machines.puck`: kit
 `devicePad`, engage radius 3, engage channel `interact`, the Moth's context
 button on E and the pad's RB; `devices.md` has the stand-there `body.pose`

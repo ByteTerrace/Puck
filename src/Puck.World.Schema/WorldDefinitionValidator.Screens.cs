@@ -869,12 +869,22 @@ public static partial class WorldDefinitionValidator {
         ) {
             errors.Add(item: $"{path}.input {((int)input)} is not a destination.");
         }
-        // The port's name is the provider's; the machine host checks it against the bound runtime's ports.
-        if (route.Port is { } port) {
-            if (string.IsNullOrWhiteSpace(value: port)) {
-                errors.Add(item: $"{path}.port must name a machine input port; omit it for a machine with a sole port.");
+        // The ports' names are the provider's; the machine host checks them against the bound runtime's ports.
+        if (route.Ports is { } ports) {
+            if (ports.Count == 0) {
+                errors.Add(item: $"{path}.ports is empty: name the machine input ports its seats drive, or omit it for a machine with a sole port.");
             } else if (!route.Engageable) {
-                errors.Add(item: $"{path}.port '{port}' is named but engageable is false: a passive display drives no input port.");
+                errors.Add(item: $"{path}.ports are named but engageable is false: a passive display drives no input port.");
+            }
+
+            var seen = new HashSet<string>(comparer: StringComparer.Ordinal);
+
+            for (var index = 0; (index < ports.Count); index++) {
+                if (string.IsNullOrWhiteSpace(value: ports[index])) {
+                    errors.Add(item: $"{path}.ports[{index}] must name a machine input port.");
+                } else if (!seen.Add(item: ports[index])) {
+                    errors.Add(item: $"{path}.ports[{index}] '{ports[index]}' is named twice: each port seats one player.");
+                }
             }
         }
         if (route.Display is { } display) {

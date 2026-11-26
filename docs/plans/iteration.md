@@ -443,6 +443,28 @@ rows, [the checks](#checks) below are owed.
   ordinary keyed overlay visits the rows it changes, preserving the instances of
   unchanged live rows. The source wins whenever both sides changed the same row
   differently. The verdict names those rows and the members the reload changed.
+- **One reload at a time per world.** A reload begun while another of the same
+  world is still reading or awaiting its verdict waits for that verdict, then
+  captures the revision and reads the source (`WorldReloadDoor.Begin`), so the
+  last save always applies, cut from the last revision the authority accepted.
+  A queued reload says so on stderr. A reload that ends unchanged or refused
+  made no edit, so its `world.iteration` loop withdraws and the loop it
+  superseded resumes with the stages it reached meanwhile
+  (`WorldIterationClock.End`).
+- **A refusal names a restart the build owes.** When a reload is refused and an
+  engine source in the checkout was written after the running build compiled
+  its assembly, the refusal carries a second line, `restart owed: ...`, naming
+  the newest such source (`WorldBuildCurrency`). A document using a rule
+  function or vocabulary member a later build added is refused as a document
+  fault by the older build; the line says what to do about it.
+- **Pins outlive the edit.** What the operator holds for the session (a
+  presentation lever such as `world.exposure pin`, a `view.override`, a held
+  clock or a scrubbed cell, a seat's pose) lives outside the source revision, so
+  a reload keeps it. `world.pins` writes those pins as console lines;
+  `world.pins save` before a restart and `world.pins restore` after it carry
+  them into the new process (`WorldPinsCommandModule`). A seat's ephemeral body
+  registers (the debug world's noclip, which a rule keeps) have no operator write
+  and are not carried.
 - **Undo follows the accepted edit.** A local file reload appends the overlay
   that actually installed to the same journal as console mutations
   (`WorldJournalEntry.TryCompose`). An unchanged reload advances the source
