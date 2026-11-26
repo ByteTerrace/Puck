@@ -216,7 +216,9 @@ dynamics [
 
 prototypes {
   shellPrototypes()
-  flawPrototype()
+  for on in (flawEnabled ? [1] : []) {
+    flawPrototype()
+  }
 
   // A floor's light switch, its plate facing +Z in its own frame. A warm indicator is on; a green locator glow
   // (findable in the dark) is off.
@@ -543,7 +545,9 @@ placements {
     position: gallerySite
   }
   shellPlacements()
-  flawPlacement()
+  for on in (flawEnabled ? [1] : []) {
+    flawPlacement()
+  }
 
   for k in range(0, 4) {
     placement $"hall-switch-{k}" {
@@ -807,7 +811,7 @@ render {
           power: glowSpotPower(lookCarLamp.luminance, ((4 * carLampHalf[0]) * carLampHalf[1]))
         )
       ],
-      flawLights(placement(placementId: gallery))
+      (flawEnabled ? flawLights(placement(placementId: gallery)) : [])
     )
   }
 }

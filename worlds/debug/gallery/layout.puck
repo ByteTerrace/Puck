@@ -224,6 +224,10 @@ let fallZ = (gallerySite[2] + fallPlan[1])
 //
 // It keeps clear of the corner stair bays (0 and 12), the fall's well (bay 11) and the bridge. Every slab it passes
 // through in a gallery is opened and collared (`flawCrossings`); the nave has no slabs.
+// Whether the gallery builds the flaw at all: tabled by the owner while simpler work comes first, so its route, look and
+// lights stay authored here and in flaw.puck, and turning this on restores the tube, its collars, its slab openings and
+// its lights together.
+let flawEnabled = false
 let flawDrop = 0.6
 function flawRun(level) = (galleryCeiling[level] - flawDrop)
 let flawFrom = 2

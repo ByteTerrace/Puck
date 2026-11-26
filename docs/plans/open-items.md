@@ -6104,6 +6104,15 @@ Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: the agent harness and embeddings as features, then new
 content on the owner's call.
 
+- **The gallery's flaw is tabled** (the owner's call, while simpler work comes
+  first). `flawEnabled` in `worlds/debug/gallery/layout.puck` is off, so the
+  tube, its collars, its slab openings and its lights are not built; the route
+  (`flawRoute`: source at the tree's foot, a floor line down the nave, a
+  switchback snaking up the south gallery's ceilings, a weave through the
+  canopy, out at level 3's north doorway and back down the tree's walkway) and
+  its look stay authored. Picking it up: turn it on, judge it at night, and
+  take the owner's direction on the route.
+
 - [medium] **`debug.go overlook` frames a featureless slab.** The overlook
   spawn (`valley.puck`, id `overlook`) sets the body 6 m in from the sector's
   inner face (`overlookFace - deckReach + 4`) with `yawDegrees` equal to the
