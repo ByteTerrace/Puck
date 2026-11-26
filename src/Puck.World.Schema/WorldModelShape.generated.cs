@@ -4720,6 +4720,7 @@ public static partial class WorldModelShape {
                 M("cable", typeof(global::Puck.World.WorldMachineCable), typeof(global::Puck.World.WorldMachine), "Cable", Read | Write, static value => ((global::Puck.World.WorldMachine)value).Cable),
                 M("contentFolders", typeof(global::System.Collections.Generic.IReadOnlyList<global::System.String>), typeof(global::Puck.World.WorldMachine), "ContentFolders", Read | Write, static value => ((global::Puck.World.WorldMachine)value).ContentFolders, text: "a path or document locator"),
                 M("preferFolderDefault", typeof(global::System.Boolean), typeof(global::Puck.World.WorldMachine), "PreferFolderDefault", Read | Write, static value => ((global::Puck.World.WorldMachine)value).PreferFolderDefault),
+                M("runsWhen", typeof(global::Puck.World.WorldPlacementResponseCondition.StateCondition), typeof(global::Puck.World.WorldMachine), "RunsWhen", Read | Write, static value => ((global::Puck.World.WorldMachine)value).RunsWhen),
             ],
             []),
         T(typeof(global::Puck.World.WorldMachineCable), true, JsonTypeInfoKind.Object, null,

@@ -368,6 +368,20 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
     }
 
     private readonly HashSet<string> m_linkedInstances = new(comparer: StringComparer.Ordinal);
+    // The instances whose RunsWhen did not hold at the tick's last evaluation (GateRunning); every advance decision reads
+    // it through Runs.
+    private readonly HashSet<string> m_gatedOff = new(comparer: StringComparer.Ordinal);
+
+    /// <inheritdoc/>
+    public void GateRunning(string instance, bool runs) {
+        if (runs) {
+            _ = m_gatedOff.Remove(item: instance);
+        } else {
+            _ = m_gatedOff.Add(item: instance);
+        }
+    }
+    // Whether the host advances an instance this tick: authored running, and its RunsWhen, if any, held.
+    private bool Runs(MachineInstance instance) => (instance.Declaration.Running && !m_gatedOff.Contains(item: instance.Declaration.Name));
 
     private HashSet<string> LinkedInstances() {
         var result = m_linkedInstances;
@@ -430,7 +444,7 @@ public sealed partial class WorldMachineHost : IWorldMachineHost {
                 key: source.Instance,
                 value: out var instance
             ) &&
-                !instance.Declaration.Running
+                !Runs(instance: instance)
             ) {
                 return false;
             }
