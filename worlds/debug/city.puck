@@ -31,7 +31,7 @@ import "set-controls"
 import "suit"
 import "size"
 import "painting-kit"
-import "place-kit"
+import "../standard/place"
 import "walkers"
 import "city-day"
 import "../standard/bounds"
@@ -383,7 +383,7 @@ placements {
     previewDeadlineFrames: 1
   }
 
-  // The city's places (place-kit.puck): the whole town, each district, the market inside the square, the ground before
+  // The city's places (../standard/place.puck): the whole town, each district, the market inside the square, the ground before
   // the arrival frame a crossing walks out onto, and the bridge. A district's box is also its navigation domain
   // (`navigation` above), whose ground is searched over the box's height: 1.5 m below the street to 4.5 m above it,
   // under every roof.

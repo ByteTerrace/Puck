@@ -16,7 +16,7 @@ documentId: "globe"
 import "set-controls"
 import "size"
 import "painting-kit"
-import "place-kit"
+import "../standard/place"
 import "../standard/visitors"
 import "../standard/kits"
 

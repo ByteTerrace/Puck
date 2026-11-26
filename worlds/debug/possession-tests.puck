@@ -9,7 +9,7 @@
 schema: "puck.world.definition.v1"
 documentId: "possession-tests"
 
-import "place-kit"
+import "../standard/place"
 import "../standard/walker"
 import "../standard/kits"
 import "../standard/domains"

@@ -9,6 +9,7 @@
 // control means which pointer act; the engine acts on a local pad's own press alone and refuses a document that tries
 // more.
 import "../standard/bounds"
+import "../standard/contexts/terminal"
 import "gallery/layout"
 
 // The capture's output extent and cadence, the pane's and the monitor's alike: the primary display at its own size and
@@ -431,16 +432,12 @@ screens [
     // A desktop monitor's 250 nits.
     luminance: 250nit
     filter: Linear
-    // Engaged on the Moth's context button like a device: the camera frames its picture as large as the World's window
-    // holds, on the fill, and a click on the picture lands on the desktop where the picture shows it (desktop.md).
-    route {
-      engageable: true
-      engageRadius: 3
-      engageChannel: "interact"
-      display { fill: "#000000" }
-      // A pad's sticks over the framed desktop (the desktop page below): at full tilt the pointer crosses half the
-      // display's height a second, a squared response for fine placement, tripling over 0.6 s of held tilt; the right
-      // stick scrolls up to 12 notches a second.
+    // A terminal with a full view, engaged on the context button like a device: the camera frames its picture as large
+    // as the World's window holds, on the fill, and a click on the picture lands on the desktop where the picture
+    // shows it (desktop.md). A pad's sticks move over the framed desktop (the desktop page below): at full tilt the
+    // pointer crosses half the display's height a second, a squared response for fine placement, tripling over 0.6 s
+    // of held tilt; the right stick scrolls up to 12 notches a second.
+    route: terminalRoute() with {
       padPointer {
         speed: 0.5
         curve: 2

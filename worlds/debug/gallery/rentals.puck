@@ -22,14 +22,14 @@
 // are a pool, one brick and one advanced brick for each seat's body (`rental-hgb-<body>`, `rental-agb-<body>`), each
 // advanced only while its body holds a device of its model (the machine's `runsWhen`), so at most one handheld runs per
 // player however many devices the stalls hold, and a pool machine whose body holds nothing costs no emulation. The
-// renting interaction is one rule per device over the bodies standing in its reach (reach.puck), so its cost is the
+// renting interaction is one rule per device over the bodies standing in its reach (../../standard/reach.puck), so its cost is the
 // bodies at the counter.
 //
 // The engage hook: every rent and return gate is `rentalCanRent(each)` and `pressing()`; a size or pass condition
 // (another body state a rule can read) is added to `rentalCanRent` once and gates every stall.
 
 import "../../standard/machines"
-import "../reach"
+import "../../standard/reach"
 import "layout"
 import "look"
 

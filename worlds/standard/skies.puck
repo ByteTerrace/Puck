@@ -159,9 +159,9 @@ function sunDirection(h, heading, noonElevation) = [
 // The time of day as one clock: a sun that circles the world once a day, and the sky about it (`clearDay`'s gradient,
 // disc and clouds, and stars that come out at night behind them), all on a state clock whose row of the same name holds
 // the day's phase, advancing one day every `daySeconds`. The template authors the sun itself, the directional light
-// named `key` (the Moth basis's sun, which it restyles): a star (`stars.puck`'s `star`, or the caller's own as `daystar`)
-// on a day's turn (`dayTurn`), so the light comes from where the star stands and the disc is as wide as the star
-// looks. The sun rises due east of `heading` at six, culminates at `noonElevation` degrees at noon and sets at
+// named `key` (the standard's name for a world's sun, which it restyles where a basis authors one): a star
+// (`stars.puck`'s `star`, or the caller's own as `daystar`) on a day's turn (`dayTurn`), so the light comes from where
+// the star stands and the disc is as wide as the star looks. The sun rises due east of `heading` at six, culminates at `noonElevation` degrees at noon and sets at
 // eighteen, `sunDistance` metres away; it gives `peak` lux times the cosine of its hour angle, and none below the
 // horizon, at that distance, and more nearer the star (a viewer who climbs toward it). It is `horizonColor` until
 // seven and from seventeen, and `noonColor` between; its shadows' edge is `softness` radians soft. The day starts at

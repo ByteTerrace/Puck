@@ -5600,9 +5600,6 @@ The standard's own surface:
 - Overlay text is spread too wide: each character advances a padded atlas
   cell, not the font's advance. Decide whether overlay mono text renders at
   its nominal size (a 12 px run's em is 10.4 px today).
-- The standard's binding bar slot set (`worlds/standard/controls.puck`, the
-  `bare` overlay) still lists keys only the Moth binds; they show as unbound
-  plates in a world without her controls.
 - In `worlds/minimal` at 1280×900 the standard's editor bar (`editor.bar`)
   runs past the window's right edge with no icons, and the resting page draws
   no bar; look at both on the GPU.

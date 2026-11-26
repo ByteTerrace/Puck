@@ -20,7 +20,7 @@ import "set-controls"
 import "suit"
 import "size"
 import "painting-kit"
-import "place-kit"
+import "../standard/place"
 import "../standard/visitors"
 import "../standard/stars"
 
@@ -98,7 +98,7 @@ placements {
     previewDeadlineFrames: 1
   }
 
-  // The night field's places (place-kit.puck): the field along the lanterns to the crystal, and the ground before the
+  // The night field's places (../standard/place.puck): the field along the lanterns to the crystal, and the ground before the
   // arrival frame a crossing walks out onto.
   placement "place-night-field" {
     prototype: "place"

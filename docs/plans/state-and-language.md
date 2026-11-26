@@ -458,7 +458,7 @@ seat-input rules is effects and locals as well as gates. The fold landed, and
 later moved into one home, the rule compiler: a choice evaluates both arms, so
 a constant one keeps its unselected arm (and any refusal in it) unless that arm
 is a number, and a compile-time choice between two gates is spelled with `and`
-and `or`, which short-circuit (`worlds/standard/seat.puck`'s `seatPast`). The
+and `or`, which short-circuit (`worlds/standard/contexts/tabletop.puck`'s `seatPast`). The
 `gate-choice-fold` and `constant-fold` pairs hold. The rule template
 landed as `rule template name(p, q = d) { … }`, its body parsed as rule-body
 statements and spliced by `DocumentLowering.ExpandBody` where a rule body calls
@@ -466,7 +466,7 @@ it, under its bound arguments, as a rule-body `for` splices; a document template
 called in a rule body, or a rule template outside one, is refused by name. A
 binding a key or member is read through that holds a name (`seat` holding
 `"goSeat"`) names that row, in a read and as a write target alike. The standard's
-`seat.puck` holds the seat buttons (`seatButtons`, `seatSteps`), `seatHeld` and
+`contexts/tabletop.puck` holds the seat buttons (`seatButtons`, `seatSteps`), `seatHeld` and
 `seatPress`; Go, Alchemy, Reversi, the card table and the granaries call
 `seatPress` in a `for`, chess its `seatHeld`, and every document is unchanged.
 The hand-made edge cells stay. The corpus holds `rule-template`.

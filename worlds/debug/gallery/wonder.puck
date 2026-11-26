@@ -27,7 +27,7 @@
 // The toybox's devices keep out of a small body's reach by the engine's own rule: a screen's and a tabletop's engage
 // reach is its radius times the body's size, measured on the ground plane and within that reach of the screen's height
 // (WorldTick.CheckScreenEngagePolicy), so at Alice's size a cabinet's picture, 1.62 m up, stands far above her 0.45 m
-// reach. A station (standard/station.puck) names the size it needs in its `needs`.
+// reach. A terminal (standard/contexts/terminal.puck) names the size it needs in its `needs`.
 //
 // The author's shortcuts are `gallery.wonder` and `gallery.go toybox` (gallery.md, "The size of level 1").
 import "../../standard/size-field"

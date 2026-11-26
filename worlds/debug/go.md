@@ -54,7 +54,7 @@ frames the tabletop from it; the same button stands her up.
 | Pad | Left stick or d-pad | South (A) | East (B) |
 
 The blue outline marks the cursor. Up is away from the chair and right is the
-player's right (the standard seat library's step, `worlds/standard/seat.puck`). A play drops a stone 6 cm above its point and waits for
+player's right (the standard seat library's step, `worlds/standard/contexts/tabletop.puck`). A play drops a stone 6 cm above its point and waits for
 physics. Seat 1 plays every side the computer does not own.
 
 Point ordinal = 19 × row + column, along +Z and +X respectively. Point 0 is

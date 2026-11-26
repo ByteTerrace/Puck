@@ -20,7 +20,7 @@
 // inside the hall, inside the valley.
 
 import "shapes"
-import "place-kit"
+import "../standard/place"
 
 // One storey's room box: x and z spans and a level index, from 0.5 m under the level's floor to the slab above.
 function storeyPlace(name, level, x0, x1, z0, z1) = {

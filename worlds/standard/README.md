@@ -27,18 +27,69 @@ its own lease, and its refusal row). A door onto another world, a trade or any
 handshake across worlds imports it under a name of its own; the debug world's
 moon doors are two (`../debug/moon-door.puck`, `../debug/moon.puck`).
 
-[station.puck](station.puck) is engagement with a thing a player walks up to and
-uses in place: `stationPlay(stations)` authors the context button's engage and
-step back, the `station` binding group, the framing that eases the seat's camera
-to each station's camera and the reach cells a lamp can read, and
-`stationFamily()` is the input family a world lists to suspend its movement while
-a seat is engaged. Its `pointerCapture` row makes a press that lands on a pointer
-surface the surface's alone until release; `stationPlay` lists it, and a world
-with surfaces but no stations lists it itself. The debug world's gallery displays
-are the worked use ([`../debug/gallery.md`](../debug/gallery.md#display-consoles)).
-
 The standard is an optional authored design package. The engine supplies input,
 layout, camera and motion mechanisms; these documents supply their design.
+
+## Contexts
+
+The standard is organized by context, not by the world or character a piece was
+first built for. A context is where a seat is and what it is doing, and each one
+has its own controls, and where it needs them its own camera and rules. The
+documents under [`contexts/`](contexts/) hold them:
+
+| Context | Document | What it authors | How a seat enters it |
+|---|---|---|---|
+| On foot: walking, running, jumping, dashing, jetpack flight | [`contexts/on-foot.puck`](contexts/on-foot.puck) | `onFootControls()`: the resting page (`base`) of the default group (`play`) | It is the default |
+| Piloting a craft | [`contexts/piloting.puck`](contexts/piloting.puck) | `pilotControls()`: the `pilot` group, whose page inherits the resting page and relabels climb, sink, boost and step out | The seat drives a body other than its own: the engine's `engagement` context family reads `body` |
+| Swimming | [`contexts/swimming.puck`](contexts/swimming.puck) | `swimPlay()`: the `swimming` row and its rule, and the `swim` group (surface and dive) | The seat's body is in a world's medium: `swimming[<body>]` is 1 |
+| At a tabletop | [`contexts/tabletop.puck`](contexts/tabletop.puck) | `tabletopControls()`: the `tabletop` group's Board page, and the seat library a game's rules read a seated player through (`seatButtons`, `seatHeld`, `seatPress`, `seatStepCell`) | The seat sits at a board: `engagement` reads `tabletop` |
+| At a terminal | [`contexts/terminal.puck`](contexts/terminal.puck) | `terminalPlay(terminals)`, `terminalFamily()`, `terminalCamera(...)`, `terminalRoute()` and `pointerCapture()` | The context button, within a terminal's reach |
+
+`contexts/modes.puck` holds the other half of a context: which actions the
+simulation accepts in it. `engagementFamily()` is the `inputModes` family for the
+contexts the engine's engagement selects (a tabletop, a machine's screen, a
+screen pointed at, another body), and each opt-in context brings its own family
+(`terminalFamily`, `typingFamily`, `instrumentFamily`). A binding group decides
+what a key does; an input family decides whether the action is live.
+
+A world switches a seat between contexts with the mechanism every one of these
+uses: a binding overlay's `contexts` rows, each naming a family, a state and the
+binding group that state selects. The family is one the engine publishes
+(`engagement`, `pointer`, `editor`), a `state:<row>` family that reads a world
+row keyed by the seat's body, or a seat mode a world declares. The first row
+that matches decides, in the order the overlays are listed, and a group's page
+may inherit the resting page, so a context restates only what it changes.
+
+`controls.puck` lists the sets every world gets without declaring anything (on
+foot, piloting and the tabletop) after the row that carries the bar. A world
+opts into the others where it has them: swimming needs water, a terminal needs a
+place to stand. The typing bench (`typing.puck`), the instrument
+(`instrument.puck`), build mode (`editor.puck`) and Free Cam
+(`free-camera.puck`) are contexts authored the same way. An author composes a
+set of their own by listing the functions in their own `bindingOverlays`, or
+refines one of these by overlay id, page id and source.
+
+A terminal is a thing a player walks up to and works in place: a console, a
+control panel, an arcade cabinet, a television, a handheld. All are used the same
+way (walk into reach, press the context button, the camera frames the screen,
+the inputs go to it, the same button steps back) and differ in the framing an
+author chooses, between two ends. A desk view looks at the terminal from where
+the body stands, a console the seat looks down at with the room still round it:
+`terminalCamera` writes its camera from the screen's place, how much of the view
+it fills and how far the eye is raised, and `terminalPlay` authors the reach, the
+press, the stand and the `terminal` binding group, in which the seat points at
+the screen and taps it. A full view fills the window with the screen's picture,
+pixel for pixel on a matte, so nothing of the world shows: a screen row's
+`route: terminalRoute()` engages it, and the seat plays it through a kit's pad
+map (`machines.puck`'s `deviceRoute` and `deckRoute` are that route with the
+device pad). `pointerCapture` makes a press that lands on a pointer surface the
+surface's alone until release; `terminalPlay` lists it, and a world with
+surfaces and no terminals lists it itself. The debug world's gallery displays
+are the worked desk view ([`../debug/gallery.md`](../debug/gallery.md#display-consoles)),
+and its toybox cabinets and television sets, its rental handhelds and its
+desktop monitor the worked full views.
+
+## The documents
 
 Start from the worked example, [`../minimal/minimal.puck`](../minimal/minimal.puck): a world that imports the
 standard through its plain walker and declares only its floor, its spawn point and its seat count. It boots on its
@@ -50,14 +101,14 @@ import "../standard/walker"
 
 `standard.puck` composes `inputs.puck`, `quality.puck`, `skin.puck`, `controls.puck`, `editor.puck` and
 `companions.puck`, and expands `camera.puck`'s `cameraFeel()`. It names no schema, so it is a fragment the importer
-composes, and it depends on nothing outside this package: its controls author the resting page (the `bare` overlay)
-they refine. `walker.puck` is the plain avatar: a capsule that walks, runs, jumps and falls, framed by `chaseCamera`.
-It imports the standard and refines it, so a world imports it in the standard's place; an author's own avatar refines
-its `walker` kit, look and prototype by id, or replaces it (the debug world's Moth, whose own controls refine the
-standard's in [`../debug/moth-controls.puck`](../debug/moth-controls.puck)).
+composes, and it depends on nothing outside this package: its controls author the bar (the `bar` overlay) and the
+resting page (the `on-foot` overlay) every refinement builds on. `walker.puck` is the plain avatar: a capsule that
+walks, runs, jumps and falls, framed by `chaseCamera`. It imports the standard and refines it, so a world imports it in
+the standard's place; an author's own avatar refines its `walker` kit, look and prototype by id, or replaces it (the
+debug world's avatar is its own, [`../debug/avatars/moth.puck`](../debug/avatars/moth.puck)).
 
-`motion.puck` authors the standard's body motion programs: `walk`, which both the walker and the Moth import, so a
-correction to it reaches every avatar that walks. An avatar's speeds, holds, turn and actions stay in its own kit; a
+`motion.puck` authors the standard's body motion programs: `walk`, which every avatar that walks imports, so a
+correction to it reaches them all. An avatar's speeds, holds, turn and actions stay in its own kit; a
 world refines the program itself by declaring a `bodyMotionPrograms` row named `walk` in its own body.
 
 `skin.puck` also authors the standard's screen materials (`screenMaterials`): the display treatment a screen row or a
@@ -85,14 +136,19 @@ and on it the `key` light's direction, colour and illuminance and a clear sky th
 resting page carries, the read-only label and the build bar) and the `editor` binding overlay, whose context row
 selects its build page while a seat builds. A world without the section has no build controls, and the editor verbs
 refuse by name. The controls document
-authors the cursor, icon and badge tables, binding bar, shared pages and play
-wheel. `pad-kit.puck` is a library of source lists and shared ring definitions.
-The standard's rings and pages name only what the standard provides. The Moth's
-Respawn, Suit, layout and jetpack controls live in
-[`../debug/moth-controls.puck`](../debug/moth-controls.puck), which the debug world,
-the garden and the night field import in the standard's place; the debug world's
-Go and Tour pages, Places ring and gallery icons live in
-[`../debug/controls.puck`](../debug/controls.puck), which refines those.
+authors the cursor, icon and badge tables, binding bar, trigger pages and play
+wheel, and lists the default context sets. `pad-kit.puck` is a library of source
+lists, the bar's slot list (`barSlots`), shared ring definitions and the play
+wheel's row (`playWheel(rings)`). The bar's icon row is keyed by action id
+(`forward`, `rise`, `interact`, `confirm`), so a context's entry that names a
+standard action wears its icon. The standard's rings, pages and slots name only
+what the standard provides. What the debug world set adds to them (Respawn to
+its stage, the Suit sector, its avatar's inspection layouts and jetpack
+isolation) lives in [`../debug/set-controls.puck`](../debug/set-controls.puck),
+which the debug world, the garden, the night field and the moon import in the
+standard's place; the debug world's Go and Tour pages, Places ring and gallery
+icons live in [`../debug/controls.puck`](../debug/controls.puck), which refines
+those.
 
 `free-camera.puck` is a library whose `freeCamera(...)` template authors Free Cam (a seat leaves its body and flies a camera):
 the `camera` seat-mode family, the first-person `views.cameraRig`, a `camera-seat-<slot>` body per local seat with the kit
@@ -131,6 +187,11 @@ pieces are the arcade cabinet (for one player or two), the television set (a tel
 its shelf and a cabled pad for each player) and the lounge (a rug and two beanbags). The debug world's gallery is built
 from it (`../debug/gallery.md`), and `../debug/gallery-kit.puck` holds one of each canyon piece for `puck mesh preview`.
 
+`place.puck` is the carrier a named place rides on: a creation that draws nothing, which a world places with a `region`
+so `body.place` names where a body stands and a rule sweeps whoever stands there. `reach.puck` is a library over it:
+`reach(id, box)` is the floor before a plate, a button or a door where the context button acts, and `pressing()` the
+test a reach's rule gates on, so one rule over `region(id)` costs the bodies in reach.
+
 `bounds.puck` is a library of boxes given their bounds (`boundsBox` for a world-space box in a creation at the origin,
 `localBox` for one in the creation's own frame, `barRing` for the three bars round a canvas), for shells, furniture and
 frames built from boxes.
@@ -156,7 +217,7 @@ the faint pull of open space), the launch pad that carries a body standing in a 
 (`launchPad`), and the pad that writes a gravity row (`gravitySwitch`). The debug world's planetoid field
 (`../debug/galaxy.puck`) is built from them.
 
-`seat.puck` is a library of a seated player's buttons at a table game: the buttons and the channel each reads
+`contexts/tabletop.puck` also holds a seated player's buttons at a table game: the buttons and the channel each reads
 (`seatButtons`, `seatSteps`), whether one is held past half way (`seatHeld`), and the rule template that records its
 press in a seat row's `<button>Edge` and `<button>Down` cells (`seatPress`), which a game's presses rule calls in a
 `for` over its buttons.
@@ -270,7 +331,7 @@ model displaying every bank placed by the selected layout.
 
 A context overlay replaces only what it declares
 ([decision](../../docs/decisions/input-channels.md#an-overlay-replaces-only-what-it-declares)).
-Sitting at a board (the debug world's `tabletop` overlay, `../debug/chess.puck`)
+Sitting at a board (the `tabletop` overlay, `contexts/tabletop.puck`)
 makes its Board page replace page 1, the resting page. Every page and chord
 command the overlay does not declare stays the player's: the triggers still open
 View and Debug, the shoulder and Tab still open the wheel. An overlay page that
@@ -289,7 +350,7 @@ For example, change the bar's plate size without copying its layout:
 ```puck
 bindingOverlays [
   {
-    id: "bare"
+    id: "bar"
     bindingBar {
       layouts {
         standard { buttonSize: 0.045 }

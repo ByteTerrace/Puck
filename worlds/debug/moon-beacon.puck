@@ -5,8 +5,8 @@
 // lit beacon shows through the painting's glass and to anyone standing on the moon.
 
 import "../standard/bounds"
-import "place-kit"
-import "reach"
+import "../standard/place"
+import "../standard/reach"
 
 // The plate stands on the wing's south wall, left of the moon painting as a viewer facing the painting sees it, its
 // face toward +Z; the reach box is the floor before it.

@@ -31,9 +31,9 @@
 import "../../standard/bounds"
 import "../../standard/kits"
 import "../../standard/architecture"
-import "../../standard/station"
-import "../place-kit"
-import "../reach"
+import "../../standard/contexts/terminal"
+import "../../standard/place"
+import "../../standard/reach"
 import "../shapes"
 import "layout"
 import "shell"
@@ -48,7 +48,7 @@ import "wonder"
 exports {
   reads [liftDoors, gallery]
   // The debug world's lamp over the context button reads which display a seat stands at (debug.puck).
-  bindings [galleryExposure, stationNear]
+  bindings [galleryExposure, terminalNear]
 }
 
 // The exposure `gallery.inspect On` pins the camera at, in EV100 (a lit room is about 7).
@@ -196,7 +196,7 @@ let hallLampLevels = concat(
 // `galleryStep`, a rule moves the stop, and the stop's own rule stands body 0 before the exhibit's display, facing it,
 // and shows the exhibit on its turntable.
 
-// A reach standing in the building's frame: a region a press acts in (reach.puck), under the root.
+// A reach standing in the building's frame: a region a press acts in (../../standard/reach.puck), under the root.
 template galleryReach(id, box) {
   placement id {
     prototype: "place"
@@ -1252,25 +1252,21 @@ rule "gallery-inspect-off" {
 
 // One camera per bookmarked viewpoint (look.puck's lookShots), its eye and aim placed from the building's site when the
 // document compiles; `gallery.shot` selects one.
-// The station view: one camera per display, anchored on its plinth placement (`display-<id>-plinth`, which stays put while an exhibit is lifted or swapped) and offset in that
-// placement's own axes, so it frames the exhibit and the whole console from the same vantage whichever way the display
-// faces and wherever it stands, and follows the display when it moves. The vantage is look.puck's lookStation: the eye
-// and aim in the plinth's axes (+Y up, -Z toward a viewer before the console).
-cameras: concat(map(galleryDisplays, display => {
-  name: $"gallery-station-{display.id}"
-  rig {
-    name: $"gallery-station-{display.id}"
-    version: "puck.camera.program.v1"
-    operations [
-      { $type: "anchor", subject { $type: "placement", placementId: $"display-{display.id}-plinth" } }
-      { $type: "offset", value: lookStation.eye }
-      { $type: "lookAt", subject { $type: "placement", placementId: $"display-{display.id}-plinth" }, targetOffset: lookStation.aim }
-      { $type: "fieldOfView", fieldOfViewRadians: (lookStation.fov * 0.017453293) }
-    ]
-  }
-  renderWidth: 1672
-  renderHeight: 941
-}), map(lookShots, view => {
+// The station view: one camera per display, a terminal's desk view anchored on its plinth placement
+// (`display-<id>-plinth`, which stays put while an exhibit is lifted or swapped) and placed in that placement's own
+// axes, so it frames the exhibit and the whole console from the same vantage whichever way the display faces and
+// wherever it stands, and follows the display when it moves. The vantage is look.puck's lookStation: the aim in the
+// plinth's axes (+Y up, -Z toward a viewer before the console), how much of the view the framed height fills and how
+// far the eye is raised over it.
+cameras: concat(map(galleryDisplays, display => terminalCamera(
+  name: $"gallery-station-{display.id}",
+  anchor: { $type: "placement", placementId: $"display-{display.id}-plinth" },
+  centre: lookStation.aim,
+  halfHeight: lookStation.halfHeight,
+  fill: lookStation.fill,
+  tilt: lookStation.tilt,
+  fieldOfView: lookStation.fov
+)), map(lookShots, view => {
   name: $"gallery-shot-{view.name}"
   rig {
     name: $"gallery-shot-{view.name}"
@@ -1285,14 +1281,14 @@ cameras: concat(map(galleryDisplays, display => {
   renderHeight: 941
 }))
 
-// Every display is a station (../../standard/station.puck): a player standing before its console presses the context
+// Every display is a terminal (../../standard/contexts/terminal.puck): a player standing before its console presses the context
 // button (E, or the pad's RB) to use it, and stands at the display's spawn point while the seat's camera eases to the
 // display's station view above, the hero angle every display shares. Engaged, the left mouse button is the console's
 // tap and nothing turns the camera, E or Backspace (the pad's RB or B) steps back, and the camera eases back to the chase
 // camera. The station view's eye stands behind her at the spawn point, so its near plane cuts her away: along the view,
 // her body spans about 1.6 to 2.45 m from the eye and the console's glass begins past 3 m.
-stationPlay(
-  stations: map(galleryDisplays, display => {
+terminalPlay(
+  terminals: map(galleryDisplays, display => {
     at: displayWorld(display, displayStand)
     camera: $"gallery-station-{display.id}"
     spawn: $"display-{display.id}"

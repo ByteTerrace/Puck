@@ -21,7 +21,7 @@ import "set-controls"
 import "suit"
 import "size"
 import "painting-kit"
-import "place-kit"
+import "../standard/place"
 import "../standard/visitors"
 // The pond plot west of the frames: a hound pack, stalking spiders, dragonflies and fish (pond.puck).
 import "garden-pond"
@@ -110,7 +110,7 @@ placements {
     previewDeadlineFrames: 1
   }
 
-  // The garden's places (place-kit.puck): the plot, the ground before the arrival frame a crossing walks out onto, and
+  // The garden's places (../standard/place.puck): the plot, the ground before the arrival frame a crossing walks out onto, and
   // the pond plot west of the frames (pond.puck).
   placement "place-garden" {
     prototype: "place"

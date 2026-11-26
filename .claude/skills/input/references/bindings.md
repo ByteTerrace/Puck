@@ -21,14 +21,14 @@ when the down set is exactly its members; a row with neither list is the
 group's resting page. A command row takes the press that completes it (and
 that press's release) from the source's own page binding, so the most specific
 match wins; `passThrough: true` leaves the press to its own binding too, so the
-row adds its destination beside what each member does alone (the Moth's
+row adds its destination beside what each member does alone (the on-foot page's
 `held [mouse.button1, mouse.button2]` row walks forward while each button keeps
 its own drag, in either press order). A command row targeting a channel may author
 `mode: Toggle`: each chord completion flips the input-side channel latch, and
 breaking the physical chord leaves that latch untouched. This is the first-class
 authoring model for auto-actions: auto-X toggles channel X without inventing a
 bespoke command or simulation state. A page entry takes `mode: Toggle` the same way, and the
-debug world authors its auto-actions so: the Moth's resting page toggles `run` on the left stick's press beside the
+standard authors its auto-actions so: the on-foot page (`contexts/on-foot.puck`) toggles `run` on the left stick's press beside the
 held `run` on Left Shift (West/J now dash), and the bar's View page (`pad-lt`, held on LT or Z, `controls.puck`) toggles `forward` on the left
 stick's press (autorun) and `rise` on the right stick's press (autofly). The page's entry replaces the resting page's at
 that source, and the latch outlives the page, so the trigger lets go and she keeps going. Toggle contributions are owned by the compiled command destination,
@@ -219,7 +219,7 @@ Each `WorldBindingOverlay` may also carry `bindingBar`: the presentation policy
 for the on-screen mapping bar. Absence anywhere in the resolved chain (no
 identity row, no world row) resolves to `WorldBindingBarAuthoring.Absent` — NO
 bar draws. The live example is `worlds/standard/controls.puck`, which the debug world
-refines and the garden imports: it refines the Moth basis's `bare` row with a `bindingBar`
+refines and the garden imports: its first row, `bar`, carries a `bindingBar`
 (the standard controller cluster: the d-pad diamond with LB and the left stick's press, the face diamond with RB and the
 right stick's press, an `iconRow` keyed by entry id, and one bank per page of the trigger-held pages with
 `modelCell` reading `single`, so the bar swaps pages in place; `modifiers`, `declaredModifiersOnly` and `pageLabel` draw
@@ -376,10 +376,12 @@ matching context row's group (document order) → the seat's requested group
 A family is one of three kinds: a BUILT-IN engine family
 (`WorldContextFamilies` — the output of one per-seat single-valued state
 machine): `roster` publishes `unjoined|claimed|pending|active`, `engagement`
-publishes `engaged|none` (a loopback read of whether the grant table's
-control-application set names anything beyond the seat's own body, synced once
-at post-build wiring and every tick post-step via
-`WorldSeatContextSync.Publish`), `layout` publishes the window composer's
+publishes `engaged|tabletop|passthrough|body|none` (a loopback read of the grant
+table's control-application set, synced once at post-build wiring and every tick
+post-step via `WorldSeatContextSync.Publish`: `tabletop` while the seat is
+captured at a board, `passthrough` on a screen showing a desktop capture, `body`
+while it possesses another body, which is what selects the standard's piloting
+controls, and `engaged` for any other set beyond its own body), `layout` publishes the window composer's
 active layout selection (an authored `views.layouts` name, or `builtin`) — an
 OPEN-states family (`WorldContextFamilies.IsOpenStates`): any state token is
 admitted, and a token matching no authored layout simply never matches; and
@@ -389,7 +391,7 @@ the seat is vacated); and `pointer` publishes `surface|none`, whether the seat's
 pointer ray lands on a pointer surface, re-read only while the seat holds no
 pointer button (`WorldPointerRayCapture`), so a group a `surface` row selects
 owns a press that lands there until its release (the standard's
-`pointerCapture` row, `worlds/standard/station.puck`). A context group's page
+`pointerCapture` row, `worlds/standard/contexts/terminal.puck`). A context group's page
 may inherit a page of the default group (never another context group's), so a
 context group refines the player's resting page instead of restating it. The engine composes a build layer beneath every world
 that binds anything and authors an `editor` section (`WorldEditorBindings.Layer`,

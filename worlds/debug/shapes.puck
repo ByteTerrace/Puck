@@ -24,7 +24,7 @@
 // console controls the motion exhibits answer to. This file is a library: debug.puck and gallery/gallery.puck expand
 // its templates and lets, and gallery/gallery.puck holds the displays' rules.
 import "gallery/layout"
-import "reach"
+import "../standard/reach"
 import "../standard/styles"
 import "../standard/rig"
 import "../standard/architecture"
@@ -3215,7 +3215,7 @@ template galleryPrototypes() {
       name: "gallery-display"
       schema: "puck.creation.v1"
       palette: plinthPalette
-      exhibitPlinth(base: 0)
+      displayPlinth(base: 0)
     }
   }
   for display in galleryDisplays {

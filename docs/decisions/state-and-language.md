@@ -995,7 +995,7 @@ list), one latch key per binding (`RuleEvaluator.SweepLatchKey`) and one
 pricing (`RuleWorkBudget.Contributor`). What the per-member copies lacked was a
 set to name: the bodies players hold (`$players`) and the bodies standing in
 reach of a plate or door (`region(placement)`, its reach a region placement,
-`worlds/debug/reach.puck`). Option B would spell the same thing twice; option C
+`worlds/standard/reach.puck`). Option B would spell the same thing twice; option C
 prices a rule about a dozen players at the whole population.
 
 **Attacks it closes.** A visitor is a member of `$players` in whichever slot

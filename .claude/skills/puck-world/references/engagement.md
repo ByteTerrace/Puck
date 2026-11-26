@@ -152,7 +152,9 @@ resolution point every seat-relative presentation derivation resolves through
 (`PerceivedBody(slot)`); `WorldSeatContextSync.Publish` writes it every tick (and
 once at boot) from the SAME `Applications` loopback read that publishes the
 `engagement` context family — one read, two derived facts, never a second
-grant-table query. A set that RETAINS its own-body application never swaps the
+grant-table query. That family reads `body` for exactly this set, so a context
+row gives a possessing seat the driven body's controls (the standard's
+`pilotControls`, `worlds/standard/contexts/piloting.puck`, for a boarded craft). A set that RETAINS its own-body application never swaps the
 anchor: the seat is still driving its own avatar. A screen application never
 swaps it either. `body.where`'s `anchor=body:<n>` echo is the read-back (see
 [hud.md](hud.md) for the `seat.<n>.position.*` consumer). Deliberately NOT
@@ -283,7 +285,7 @@ faces the body most squarely, every edge when none is authored,
 the chair it is laid out for (the card table's one chair at -Z), so its layout,
 camera and controls agree wherever the player walks up. The one mapping from a
 seat's ahead and right presses to columns (+X) and rows (+Z) is the standard seat
-library's `seatStepCell` (`worlds/standard/seat.puck`), the right being forward
+library's `seatStepCell` (`worlds/standard/contexts/tabletop.puck`), the right being forward
 crossed with up as the board view's camera has it; a board never turns presses
 by side itself. The windowed host casts the OS pointer whenever
 the world declares an engageable tabletop (`WorldPointerRayCapture`), so a
@@ -292,7 +294,8 @@ seated seat's ray reaches the rules every tick.
 Presentation: `WorldSeatContextSync` publishes the seated placement into
 `WorldPerceptionAnchor.EngagedTabletop` and the `engagement` context family's
 `tabletop` state (instead of `engaged`), so a binding overlay's context row
-`{engagement, tabletop, <group>}` swaps in the table's controls. The group
+`{engagement, tabletop, <group>}` swaps in the table's controls (the standard's
+`tabletopControls`, `worlds/standard/contexts/tabletop.puck`). The group
 replaces only what it declares: its resting page replaces the player's, and
 every page and chord command it leaves alone stays reachable
 (`BindingProfile.Compile`'s effective rows,
@@ -595,7 +598,7 @@ a surface (`WorldPointerSurfaces.Lands`), `none` otherwise, re-read only while t
 seat holds no pointer button (`WorldPointer.IsAnyButtonDown`). So a press that
 lands on a surface keeps whatever group a context row gives `surface` until its
 release, and a drag begun elsewhere stays the seat's own controls' when it crosses
-one. The standard's `pointerCapture` overlay row (`worlds/standard/station.puck`)
+one. The standard's `pointerCapture` overlay row (`worlds/standard/contexts/terminal.puck`)
 is that row: its `pointer` group's page inherits the resting page and binds the
 left button to `tap` alone, so a drag on a console scrolls it and never orbits the
 camera. A context group's page may inherit a default-group page
@@ -603,23 +606,28 @@ camera. A context group's page may inherit a default-group page
 page rather than restate it. The test ignores occlusion, as the `$pointer:` read
 does: a surface behind a wall under the cursor still takes the press.
 
-**Stations: engaging a placement in Puck code.** A gallery display's console is
-engaged without a control application: the standard's `stationPlay` template
-(`worlds/standard/station.puck`) authors it as rules over `$players` and the
-`interact` channel, as the typing bench is. A body within reach of a station's
-`at` sets its `stationNear` cell; the context button sets `stationAt` and the body
-register `station` to the station's number and poses the body at its spawn point;
+**Terminals: engaging a placement in Puck code.** A gallery display's console is
+engaged without a control application: the standard's `terminalPlay` template
+(`worlds/standard/contexts/terminal.puck`) authors it as rules over `$players` and the
+`interact` channel, as the typing bench is. A body within reach of a terminal's
+`at` sets its `terminalNear` cell; the context button sets `terminalAt` and the body
+register `terminal` to the terminal's number and poses the body at its spawn point;
 the context button again, `cancel`, or leaving the reach zeroes both. The engine
-supplies only generic mechanisms: the `station` input family (`stationFamily`,
+supplies only generic mechanisms: the `terminal` input family (`terminalFamily`,
 a `BodyState` selector) suspends the movement families a world names, a
-`state:stationAt` context row (keyed by the seat's body) gives the seat the
-station's binding group, and one `views.framings` row eases the seat camera to
-`station-view`, a `selectProgram` keyed `state.stationAt.$body` over each
-station's camera. A framing program's bound operands read `$body` through the
+`state:terminalAt` context row (keyed by the seat's body) gives the seat the
+terminal's binding group, and one `views.framings` row eases the seat camera to
+`terminal-view`, a `selectProgram` keyed `state.terminalAt.$body` over each
+terminal's camera (`terminalCamera` writes one from the screen's place, how much
+of the view it fills and how far the eye is raised). The same library names the
+screen route as the other end of a terminal's framing (`terminalRoute()`, the
+framed picture above), so a world authors a console, a cabinet and a handheld
+from one document; the two are still engaged by different machinery, because no
+rule effect composes a control application. A framing program's bound operands read `$body` through the
 seat's own reads (`IWorldCameraProgramRig.Reads`, set by `WorldSeatFramings`), as
 its `when` does. The screen-route and tabletop engagements stay for what needs a
-control application (a machine's pad, a board's seat reads); a station needs none,
-because its console's rules already read the seat's pointer and channels.
+control application (a machine's pad, a board's seat reads); a desk-view terminal
+needs none, because its console's rules already read the seat's pointer and channels.
 
 ## `Dissolve` — three outcomes, no repair
 
@@ -912,9 +920,9 @@ world's device row declares engageable machine screens 0 to 2, and the
 gallery's toybox screens 20 to 31 (`worlds/debug/gallery/toybox.puck`: one
 screen a deck, its route `deckRoute` naming both controller ports, so a second
 seat engaging a station while the first plays takes the second port),
-all through the standard's `deviceRoute` (`worlds/standard/machines.puck`: kit
-`devicePad`, engage radius 3, engage channel `interact`, the Moth's context
-button on E and the pad's RB; `devices.md` has the stand-there `body.pose`
+all through the standard's `deviceRoute` (`worlds/standard/machines.puck`: the
+terminal library's `terminalRoute()` with kit `devicePad`, engage radius 3,
+engage channel `interact`, the context button on E and the pad's RB; `devices.md` has the stand-there `body.pose`
 lines), so the screen path runs in the live world: drive the button through
 the real input path with `player.signal keyboard.e press`, a `world.wait`, and
 `release`, never `body.engage`, when the probe is what you are showing. Remember actor ≠ target: every seat holds wide grants by default, so

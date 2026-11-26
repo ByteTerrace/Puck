@@ -83,7 +83,7 @@ a local seat's or an admitted visitor's wherever admission placed it,
 ascending, priced at `localSeats + networkPlayers`: the form for a rule about
 what any player does, never a `for b in range(...)` copy per body index. A
 press at a plate or door is a `forEach: region(<reach>)` rule gated on
-`channel(each, interact)` over a reach region (`worlds/debug/reach.puck`). `maxFirings: n` on an iterating rule ends its sweep after `n` firings,
+`channel(each, interact)` over a reach region (`worlds/standard/reach.puck`). `maxFirings: n` on an iterating rule ends its sweep after `n` firings,
 leaving later bindings' latches untouched, and the work sheet prices its
 firings at `n`; author it where the gate already admits that few (a batch
 window over a distinct ordinal row, one held piece), since an over-priced

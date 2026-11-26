@@ -66,7 +66,13 @@ function onFootControls() = {
               scale: 1
               sources ["keyboard.n", "gamepad.leftStickPress"]
             }
-            { channel: "flight", id: "flight", label: "Flight", scale: 1, sources ["keyboard.f", "gamepad.buttonNorth"] }
+            {
+              channel: "flight"
+              id: "flight"
+              label: "Flight"
+              scale: 1
+              sources ["keyboard.f", "gamepad.buttonNorth"]
+            }
             // Fly while held (Left Ctrl, M, the right stick's press): rise without jump, which a jetpack reads as
             // switching flight mode on, so the body takes off and climbs, and letting go hovers. The View page's right
             // stick press is autofly.

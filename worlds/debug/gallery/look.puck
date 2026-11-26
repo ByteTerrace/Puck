@@ -195,9 +195,11 @@ let lookAfternoon = 0.62
 // paintings' views of the entrance and the outside. `toybox` looks from level 2's north balcony down across the void
 // into level 1's south stations, as a player drawn in from another level sees them, and `toybox-across` from level 1's
 // south balcony edge across to its north stations.
-// The station view every display shares (gallery.station): the eye and aim in the plinth placement's own axes
-// (+Y up, -Z toward a viewer before the console), framing the exhibit and the console's base with a little room.
-let lookStation = { eye [0, 2.305, -4.06], aim [0, 1.75, -1.8], fov: 55 }
+// The station view every display shares (gallery.station), a terminal's desk view (the standard's `terminalCamera`):
+// it aims at a point in the plinth placement's own axes (+Y up, -Z toward a viewer before the console) and frames the
+// 2.42 m about it, the exhibit and the console's base with a little room, to the view's full height, from an eye
+// raised 13.8 degrees over the aim.
+let lookStation = { aim [0, 1.75, -1.8], halfHeight: 1.2114, fill: 1, tilt: 13.797, fov: 55 }
 
 let lookShots = [
   { name: "hall", eye [34.5, 1.6, 19], aim [60, 3.9, 19], fov: 70 }

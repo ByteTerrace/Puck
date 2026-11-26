@@ -82,12 +82,17 @@ pin. A host epoch timeout freezes the affected authority and refuses a checkpoin
 of its incomplete tick; it is not a timing-dependent simulated fault. See
 [`WorldAddonRuntime`'s contract](../../../src/Puck.World.Addons/README.md#durable-guest-state).
 
-**The standard is authored.** `worlds/standard/standard.puck` composes the
-optional controls and skin. Shared cursor, icons, binding-bar designs, pages
-and wheel belong there; the debug world's Go/Tour pages and Places ring refine
-it in `worlds/debug/controls.puck`. The garden and night field import the
-standard directly. Add mechanisms to the engine and concrete design to the
-standard, with avatar tuning and rig animation in the avatar document. Authors
+**The standard is authored, and organized by context.** `worlds/standard/standard.puck`
+composes the optional controls and skin. Shared cursor, icons, binding-bar
+designs, pages and wheel belong there, and so does each context's set of
+controls, camera and rules (`worlds/standard/contexts/`: on foot, piloting,
+swimming, at a tabletop, at a terminal), named for what it is and does, never
+for the world, character or exhibit that first used it. The debug world set
+(the debug world, the garden, the night field, the moon) refines the standard in
+`worlds/debug/set-controls.puck`, and the debug world's Go/Tour pages and Places
+ring refine that in `worlds/debug/controls.puck`. Add mechanisms to the engine
+and concrete design to the standard, with avatar tuning and rig animation in the
+avatar document. Authors
 override rows by id in the importing document's own body, or replace/omit the
 package through the existing composition path; do not copy a second standard
 into a world. [The package README](../../../worlds/standard/README.md) owns the

@@ -5,16 +5,16 @@
 import "../standard/contexts/modes"
 import "../standard/instrument"
 import "../standard/typing"
-import "../standard/station"
+import "../standard/contexts/terminal"
 
 let movement = movementChannels
 let controls = ["jump", "suit", "noclip"]
 let flyingRise = [{ keep ["rise"], from { flight: "flying" }, to { flight: "flying" } }]
-// A seat engaged anywhere, at a bench or at a station, has none of the families that move her or play an instrument.
+// A seat engaged anywhere, at a bench or at a terminal, has none of the families that move her or play an instrument.
 let engagedAnywhere = [
   whileEngaged
   { family: "typing", states ["seated"] }
-  { family: "station", states ["engaged"] }
+  { family: "terminal", states ["engaged"] }
 ]
 
 inputModes {
@@ -66,8 +66,8 @@ inputModes {
     // The instrument's vents are offered while the breath holds it up (bard.puck), and a seat engaged anywhere has none.
     instrumentFamily(suspendedBy: engagedAnywhere)
     // The press's typed text is offered while the seat sits at its bench (press.puck), in place of her movement.
-    typingFamily(suspendedBy: [whileEngaged, { family: "station", states ["engaged"] }])
+    typingFamily(suspendedBy: [whileEngaged, { family: "terminal", states ["engaged"] }])
     // A gallery display's console takes the seat's taps and its step back while she uses it (gallery/gallery.puck).
-    stationFamily(suspendedBy: [whileEngaged, { family: "typing", states ["seated"] }])
+    terminalFamily(suspendedBy: [whileEngaged, { family: "typing", states ["seated"] }])
   ]
 }

@@ -334,7 +334,7 @@ displays and the console lines.
 The owner's ruling: a player walks up to a display, uses it, and ends up at
 the hero angle every display shares, and while using it the inputs go to the
 display, as a result of Puck code rather than an engine special case. So every
-display is a station ([station.puck](../standard/station.puck), expanded in
+display is a terminal ([terminal.puck](../standard/contexts/terminal.puck), expanded in
 [gallery/gallery.puck](gallery/gallery.puck)):
 
 - Standing before a console (within 1.6 m of the display's spawn point), the
@@ -344,21 +344,21 @@ display is a station ([station.puck](../standard/station.puck), expanded in
   her away where she stands between the camera and the console. In the debug
   world the E key's lamp lights while she is in reach.
 - While she uses it, the left mouse button is the console's tap and nothing
-  turns the camera or walks her: the seat's controls are the station's binding
-  group, and the debug world's `station` input family suspends her movement
+  turns the camera or walks her: the seat's controls are the terminal's binding
+  group, and the debug world's `terminal` input family suspends her movement
   (input-modes.puck). E or Backspace (RB or B, or the right mouse button)
   steps back, and the camera eases back to the chase camera. Leaving the
   reach any other way (`gallery.go`, a pose) steps back too.
-- Outside a station, a press that lands on a console's glass is still the
+- Away from a terminal, a press that lands on a console's glass is still the
   console's alone until it is released (pointer capture, the standard's
   `pointerCapture` row): a drag on the list scrolls it and never orbits the
   camera, while a press anywhere else is the camera's drag.
 - `gallery.station <display>` still films a display from the station view
   without using it.
 
-Read the state with `world.state stationNear` and `world.state stationAt`
+Read the state with `world.state terminalNear` and `world.state terminalAt`
 (keyed by body index: the display's place in `galleryDisplays` plus one, 0 for
-none) and `player.bindings 1` (`group=station` while engaged).
+none) and `player.bindings 1` (`group=terminal` while engaged).
 
 Every part of a display is an engine mechanism a world authors:
 
@@ -548,9 +548,9 @@ persist with the player between sessions: an identity fact would, but
 times the body's size, measured on the ground plane and within that reach of
 the screen's height (`WorldTick.CheckScreenEngagePolicy`). At Alice's size a
 cabinet's picture, 1.62 m over the floor, is far above her 0.45 m reach; at
-full size it is within 3 m. A station ([`station.puck`](../standard/station.puck))
+full size it is within 3 m. A terminal ([`terminal.puck`](../standard/contexts/terminal.puck))
 names what it needs in `needs`, such as `[{ register: "size", atLeast: 0.5 }]`:
-a body that falls short stands in no station's reach, so the context button
+a body that falls short stands in no terminal's reach, so the context button
 does nothing there.
 
 **The stairs shrink with her.** A body's step height is its kit's 0.3 m times

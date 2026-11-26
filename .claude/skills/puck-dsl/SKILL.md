@@ -78,7 +78,7 @@ A document's `schema:` field selects its vocabulary, never the filename.
   `template name(p, q = d) { }` a parametric block (admitting `enum` and
   `export` inside its body); `rule template name(p) { }` a block of rule-body
   statements (locals, `when`, `if`, effects) a rule body calls and splices
-  (`worlds/standard/seat.puck`'s `seatPress`); `import "name" [as alias]`,
+  (`worlds/standard/contexts/tabletop.puck`'s `seatPress`); `import "name" [as alias]`,
   `export` (and `exports { … }`, whose repeated blocks merge facet lists), and
   `use m as a(args)` compose modules. An aliased library's template or rule
   template is called as a statement by its qualified name (`m.sized(size: 7)`),

@@ -1,0 +1,353 @@
+// At a terminal: a thing a player walks up to and works in place, then steps back from. A console, a control panel, an
+// arcade cabinet, a television, a handheld. A library: it hands its importers functions and a template and emits no
+// document, and it names no place or look: where each terminal stands and what its screen shows are the importing
+// world's.
+//
+// Every terminal is used the same way. The player walks into its reach, the context button (`interact`) engages it,
+// the seat's camera eases to the terminal's framing, the seat's inputs go to the terminal, and the same button steps
+// back. What an author chooses is the framing, anywhere between two ends:
+//
+//   a desk view    The seat looks at the terminal from where its body stands: a console it looks down at, with the room
+//                  still round it. The framing is a camera program the terminal names (`camera`); `terminalCamera`
+//                  writes one from the screen's place, how much of the view it fills (`fill`) and how far the eye is
+//                  raised over it (`tilt`). The seat points at the screen (a pointer surface) and taps it.
+//   a full view    The screen's picture fills the window as an emulator shows it, pixel for pixel, on a matte, and
+//                  nothing of the world shows. A screen row routes it (`terminalRoute`), and the seat plays it through
+//                  a kit's pad map.
+//
+// The two ends are engaged by different machinery. A full view is a control application on a screen: the engine's
+// context-button probe composes it, which is what carries a kit's pad to a machine and frames the picture
+// (`screens[*].route`). A desk view is this library's rules over a placement: `terminalPlay` authors the reach, the
+// press, the stand and the camera in state and rules, since a console's own rules already read the seat's pointer and
+// channels. A rule has no effect that composes a control application, so neither stands in for the other, and a world
+// lists each kind by its own function here.
+//
+// `terminalPlay(...)` and `terminalFamily(...)` are the desk view's. A player standing within `radius` of a terminal's
+// `at` (on the ground plane, and within `height` of it up or down) presses the context button to engage it: its body
+// moves to the terminal's `spawn`, its `terminal` register and its `terminalAt` cell hold the terminal's number (its
+// place in `terminals` plus one), and the seat's camera eases to the terminal's `camera` program. While engaged:
+//
+// - the seat's controls are the `terminal` binding group: the left mouse button (`tapSources`) presses `tap`, the
+//   surface press a pointer surface's rules read, and nothing else the mouse does turns the camera or the body; the
+//   context button (`leaveSources`) and `cancel` (`backSources`) leave;
+// - the `terminal` input family offers `cancel` (and what a world adds) and suspends the families a world names, so its
+//   movement does not walk the body away;
+// - leaving, by the context button, `cancel`, or the body leaving the terminal's reach any other way (a teleport),
+//   zeroes both cells and the camera eases back to the chase camera.
+//
+// The state, for a world's rules, panels and lamps to read, keyed by body index:
+//
+//   terminal       the body register: the terminal number the body is engaged with, 0 for none (the input family's
+//                  selector)
+//   terminalAt     the same number as a world cell, which framings, binding contexts and lamps read with `$body`
+//   terminalNear   the number of the terminal whose reach the body stands in, engaged or not, 0 for none: what the
+//                  context button does something with, so a lamp bound to it lights while the button is live
+//
+//   import "../standard/contexts/terminal"
+//   inputModes { global ["interact", "tap"], families [terminalFamily(suspendedBy: []), ...] }
+//   cameras [terminalCamera(name: "desk-view", anchor: { $type: "placement", placementId: "desk" }, centre: [0, 1, 0], halfHeight: 0.3, fill: 0.5, tilt: 30)]
+//   terminalPlay(terminals: [{ at: [4, 0, 9], camera: "desk-view", spawn: "desk" }])
+//   screens [{ index: 0, ..., route: (terminalRoute() with { kit: "devicePad" }) }]
+//
+// A world whose movement family should stand still while a seat is engaged lists
+// `suspendedBy [{ family: "terminal", states ["engaged"] }]` on it.
+
+// The most terminals one world declares: the register's range, and the engaged state's.
+let terminalLimit = 64
+
+// The family that offers a terminal's channels while the seat is engaged. `suspendedBy` is the families whose selection
+// takes the terminal away; `channels` what the engaged seat may press beyond the world's globals.
+function terminalFamily(suspendedBy = [], channels = ["cancel"]) = {
+  name: "terminal"
+  selector { kind: BodyState, name: "terminal" }
+  default: "free"
+  states [
+    { name: "free", ranges [{ minimum: 0, maximum: 0 }], channels [] }
+    { name: "engaged", ranges [{ minimum: 1 / 65536, maximum: terminalLimit }], channels: channels }
+  ]
+  suspendedBy: suspendedBy
+  transitions []
+}
+
+// Whether a point stands within a terminal's reach: within `r` of its `at` on the ground plane and within `h` of it
+// vertically.
+function terminalReach(terminal, px, py, pz, r, h) = ((((px - terminal.at[0]) * (px - terminal.at[0])) +
+  ((pz - terminal.at[2]) * (pz - terminal.at[2])) <=
+  (r * r)) and
+  (absolute(py - terminal.at[1]) <= h))
+
+// A desk view's camera, as a `cameras` row a terminal names by `camera`. It looks at `centre`, a point in the axes of
+// `anchor` (a camera subject: a placement, a world point), from far enough that a height of twice `halfHeight` there
+// takes `fill` of the view's height: 1 fills the view with the screen, a half leaves as much room round it as the
+// screen takes, and a small fraction shows the terminal as one thing in its room. The eye stands along `out` (the
+// unit direction the screen faces, in the same axes), raised `tilt` degrees about the centre toward +Y, so a tilt
+// looks down at the screen. `fieldOfView` is in degrees.
+function terminalCamera(name, anchor, centre, halfHeight, fill = 0.5, tilt = 0, out = [0, 0, -1], fieldOfView = 55, renderWidth = 1672, renderHeight = 941) = {
+  name: name
+  rig {
+    name: name
+    version: "puck.camera.program.v1"
+    operations [
+      { $type: "anchor", subject: anchor }
+      {
+        $type: "offset"
+        value: (centre + (((out * cosine((tilt * 0.017453293))) + ([0, 1, 0] * sine((tilt * 0.017453293)))) *
+          terminalDistance(
+            halfHeight,
+            fill,
+            fieldOfView
+          )))
+      }
+      { $type: "lookAt", subject: anchor, targetOffset: centre }
+      { $type: "fieldOfView", fieldOfViewRadians: (fieldOfView * 0.017453293) }
+    ]
+  }
+  renderWidth: renderWidth
+  renderHeight: renderHeight
+}
+
+// How far an eye stands from a height of twice `halfHeight` for it to take `fill` of a view `fieldOfView` degrees tall.
+function terminalDistance(halfHeight, fill, fieldOfView) = ((halfHeight * cosine((fieldOfView * 0.008726646))) /
+  (fill * sine((fieldOfView * 0.008726646))))
+
+// A full view's route, for a screen row: the context button engages the screen from within `radius` metres and leaves
+// it again, and once the camera has framed the picture the window shows it alone on a matte of `fill`. A screen adds
+// what it is played through with `with`: the kit whose pad map a machine reads (`with { kit: "devicePad" }`), the
+// controller ports a machine seats players on (`ports`: the first seat to engage plays the first, a second that
+// engages while the first still plays takes the next, and leaving frees the port), a pad's pointer over a desktop
+// (`padPointer`).
+function terminalRoute(radius = 3, fill = "#000000") = {
+  engageable: true
+  engageRadius: radius
+  engageChannel: "interact"
+  display {
+    fill: fill
+  }
+}
+
+// Pointer capture, a binding overlay row: while a seat's pointer rests on a pointer surface (a console's glass, a
+// Simulation screen), and until a press that landed there is released (the host's `pointer` context family), the left
+// mouse button (`tapSources`) is the surface's tap alone, so a drag on the surface scrolls it and never turns the camera.
+// A press that lands anywhere else stays the camera's drag, even when it crosses a surface. Everything else is the
+// resting page's (`restingPage`, which the pointer page inherits). `terminalPlay` lists it after the terminals' controls;
+// a world with pointer surfaces and no terminals lists it in its own `bindingOverlays`.
+function pointerCapture(tapSources = ["mouse.button1"], restingPage = "base") = {
+  id: "pointer-capture"
+  document {
+    version: "puck.input.bindings.v1"
+    modifiers []
+    contexts [
+      { family: "pointer", state: "surface", group: "pointer" }
+    ]
+    chords [
+      {
+        chord []
+        group: "pointer"
+        page {
+          id: "pointer"
+          inherits: restingPage
+          label: "Pointer"
+          entries [
+            { channel: "tap", id: "tap", label: "Tap", scale: 1, sources: tapSources }
+          ]
+        }
+      }
+    ]
+  }
+}
+
+// `terminals` lists each terminal's `at` (a world point), `camera` (a camera program the seat eases to), `spawn` (the
+// spawn point the body stands at while engaged) and, optionally, `needs`: the body registers a body must hold at least
+// a value of to use it, [{ register, atLeast }] (`register: "size"` for a terminal a small body cannot reach). A body
+// that falls short stands in no terminal's reach, so the context button does nothing there and a terminal it is engaged
+// with lets it go. `margin` widens the reach a body must leave before it stops being in
+// it, so standing on the edge does not flicker. `near` is the framing's near plane, which cuts away the engaged body
+// where it stands between the terminal's camera and what it frames. `seats` sizes the cells (bodies 0 to seats - 1 are
+// seeded; a visitor's body takes a cell when it first engages, up to `capacity`). The terminals' controls come with
+// pointer capture (`pointerCapture`), listed after them so a seat engaged at a terminal keeps the terminal's controls
+// while its pointer rests on the terminal's own glass; `restingPage` is the page pointer capture refines.
+template terminalPlay(terminals, radius = 1.6, height = 2, margin = 0.25, near = 0, seats = 4, capacity = 16, tapSources = [
+  "mouse.button1"
+], leaveSources = [
+  "keyboard.e"
+  "gamepad.rightShoulder"
+], backSources = [
+  "keyboard.backspace"
+  "mouse.button2"
+  "gamepad.buttonEast"
+], restingPage = "base") {
+  let count = length(terminals)
+  let gated = map(terminals, terminal => ({ needs [] } with terminal))
+
+  state {
+    body [
+      {
+        name: "terminal"
+        kind: "Counter"
+        initial: 0
+        envelope { $type: "range", minimum: 0, maximum: terminalLimit }
+      }
+    ]
+    world {
+      row {
+        name: "terminalAt"
+        kind: Int
+        capacity: capacity
+        cells: map(range(0, seats), seat => { key: $"{seat}", value: 0 })
+      }
+      row {
+        name: "terminalNear"
+        kind: Int
+        capacity: capacity
+        cells: map(range(0, seats), seat => { key: $"{seat}", value: 0 })
+      }
+      row {
+        name: "terminalPosed"
+        kind: Int
+        capacity: capacity
+        cells: map(range(0, seats), seat => { key: $"{seat}", value: 0 })
+      }
+    }
+  }
+
+  // Which terminal's reach each player's body stands in: a body leaves a terminal's reach `margin` past its radius, and
+  // takes the first terminal whose reach it then stands in. A terminal's `needs` fold into `fit{i}n{k}`: whether the body
+  // holds the first k of them. The answer is computed once (`target`) and written only when it differs, so the rule is
+  // judged as bodies move but fires, and writes, only when a body crosses a reach.
+  rule "terminal-near" {
+    forEach: $players
+    local near = terminalNear[$each]
+    local px = bodyPosition(each, x)
+    local py = bodyPosition(each, y)
+    local pz = bodyPosition(each, z)
+    for (terminal, i) in gated {
+      local $"fit{i}n0" = 1
+      for (need, k) in terminal.needs {
+        local $"fit{i}n{k + 1}" = $"fit{i}n{k}" and (bodyState(each, need.register) >= need.atLeast)
+      }
+    }
+    // Whether the body still stands in the reach of the terminal it is near, and the first terminal it would enter.
+    local kept0 = 0
+    for (terminal, i) in gated {
+      local $"kept{i + 1}" = (
+        $"kept{i}" or
+        (
+          near == i + 1 and
+            terminalReach(terminal, px, py, pz, radius + margin, height) and
+            $"fit{i}n{length(terminal.needs)}"
+        )
+      )
+    }
+    local $"first{count}" = 0
+    for j in range(0, count) {
+      local $"first{count - 1 - j}" = (
+        (
+          terminalReach(gated[count - 1 - j], px, py, pz, radius, height) and
+          $"fit{count - 1 - j}n{length(gated[count - 1 - j].needs)}"
+        ) ?
+          (count - j) :
+        $"first{count - j}"
+      )
+    }
+    local target = $"kept{count}" ? near : first0
+    when terminalNear[$each] != target
+    mode: Level
+    terminalNear[$each] = target
+  }
+
+  // The context button engages the terminal in reach and leaves the one engaged: one answer, written once.
+  // `terminal-pose` carries the change to the body.
+  rule "terminal-use" {
+    forEach: $players
+    local target = (terminalAt[$each] != 0) ? 0 : terminalNear[$each]
+    when channel(each, interact) >= 1
+    mode: Edge
+    terminalAt[$each] = target
+  }
+  // Carries a change of `terminalAt` to the body, once per change: its `terminal` register, and onto the terminal's spawn
+  // point when it engages one. `terminalPosed` follows `terminalAt`, so the gate closes as it fires; the rules that write
+  // `terminalAt` write nothing else.
+  rule "terminal-pose" {
+    forEach: $players
+    local at = terminalAt[$each]
+    when terminalPosed[$each] != at
+    mode: Level
+    terminalPosed[$each] = at
+    if at == 0 {
+      setBodyState(key: $each, state: "terminal", expression: 0.0)
+    }
+    for (terminal, i) in terminals {
+      if at == (i + 1) {
+        setBodyState(key: $each, state: "terminal", expression: i + 1)
+        pose(key: $each, spawnPoint: terminal.spawn)
+      }
+    }
+  }
+
+  // `cancel` leaves, and so does a body that left its terminal's reach any other way.
+  rule "terminal-cancel" {
+    forEach: $players
+    when channel(each, cancel) >= 1 and terminalAt[$each]
+    mode: Edge
+    terminalAt[$each] = 0
+  }
+  rule "terminal-drift" {
+    forEach: $players
+    when terminalAt[$each] and terminalNear[$each] != terminalAt[$each]
+    mode: Level
+    terminalAt[$each] = 0
+  }
+
+  // An engaged seat's camera eases to its terminal's camera: one framing whose program picks the terminal's camera by the
+  // seat's own cell.
+  views {
+    framings [
+      { id: "terminal", program: "terminal-view", when: "state.terminalAt.$body", near: near }
+    ]
+    programs [
+      {
+        name: "terminal-view"
+        version: "puck.camera.program.v1"
+        operations [
+          selectProgram(
+            key: "state.terminalAt.$body",
+            cases: map(terminals, (terminal, i) => { value: i + 1, program: $"{terminal.camera}" }),
+            default: $"{terminals[0].camera}"
+          )
+        ]
+      }
+    ]
+  }
+
+  // The terminal's controls, which the seat's bindings switch to while its cell names a terminal, then pointer capture,
+  // whose context row the terminal's rows come before.
+  bindingOverlays [
+    {
+      id: "terminal"
+      document {
+        version: "puck.input.bindings.v1"
+        modifiers []
+        contexts: map(
+          range(1, count + 1),
+          number => { family: "state:terminalAt", state: $"{number}", group: "terminal" }
+        )
+        chords [
+          {
+            chord []
+            group: "terminal"
+            page {
+              id: "terminal"
+              label: "Terminal"
+              entries [
+                { channel: "tap", id: "tap", label: "Tap", scale: 1, sources: tapSources }
+                { channel: "interact", id: "interact", label: "Leave", scale: 1, sources: leaveSources }
+                { channel: "cancel", id: "cancel", label: "Back", scale: 1, sources: backSources }
+              ]
+            }
+          }
+        ]
+      }
+    }
+    pointerCapture(tapSources: tapSources, restingPage: restingPage)
+  ]
+}

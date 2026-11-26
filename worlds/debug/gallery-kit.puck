@@ -32,7 +32,7 @@ prototypes {
       name: "kit-plinth"
       schema: "puck.creation.v1"
       palette: plinthPalette
-      exhibitPlinth(base: 0)
+      displayPlinth(base: 0)
       shape Sphere "subject" {
         material: plinthBrass
         position [0, 1.2, 0]

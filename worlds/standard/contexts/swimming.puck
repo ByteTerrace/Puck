@@ -30,7 +30,13 @@ function swimControls(restingPage = "base") = {
           inherits: restingPage
           label: "Swim"
           entries [
-            { channel: "rise", id: "rise", label: "Surface", scale: 1, sources ["keyboard.space", "gamepad.buttonSouth"] }
+            {
+              channel: "rise"
+              id: "rise"
+              label: "Surface"
+              scale: 1
+              sources ["keyboard.space", "gamepad.buttonSouth"]
+            }
             { channel: "jump", id: "jump", scale: 1, sources ["keyboard.space", "gamepad.buttonSouth"] }
             { channel: "rise", id: "descend", label: "Dive", scale: -1, sources ["keyboard.c", "gamepad.buttonEast"] }
           ]

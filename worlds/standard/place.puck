@@ -1,0 +1,18 @@
+// The carrier a place's region rides on: a creation that draws nothing. A world gives a named stretch of ground, or the
+// floor a press acts on (reach.puck), a placement of it with a `region`, so `body.place` names the places of whichever
+// world a body stands in and a rule sweeps the bodies standing there. Each world that has places imports it.
+//
+//   import "../standard/place"
+exports {
+  reads [place]
+}
+
+prototypes {
+  prototype "place" {
+    document {
+      name: "place"
+      schema: "puck.creation.v1"
+      palette [{ color: "#000000" }]
+    }
+  }
+}

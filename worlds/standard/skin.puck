@@ -135,7 +135,7 @@ theme {
 // picture, and any bezel is geometry the device authors around the face. A seat that frames the screen fades the whole
 // treatment out, so the framed picture is source-exact. A world refines a row by id or adds its own. A material is a
 // module's own until it exports it under `bindings`, so every document a world imports in the skin's place re-exports
-// `crt` (standard.puck, walker.puck, and the debug world's moth-controls.puck and controls.puck).
+// `crt` (standard.puck, walker.puck, and the debug world's set-controls.puck and controls.puck).
 export binding crt
 
 screenMaterials [

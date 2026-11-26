@@ -59,12 +59,12 @@ let consoleLook = {
 // A display plinth that faces +Z (docs/game/art/gallery-kit-pack/display-plinth.png): a deep-teal foot, an ochre body
 // clad in panels with dark joints between them, a thick bevelled cream cap whose top stands 0.75 m up with a glowing
 // turntable ring set in it, and a cream console tilted back across the whole front, its face one glass screen in a cream
-// bezel (a display's interface glows on it, gallery shapes.puck). About 1.8 m wide and 1.6 m deep with its console; an
-// exhibit stands on the cap from y 0.75. Every shape is a union, so a creation that holds it keeps panels and trims.
+// bezel, which a terminal's interface glows on. About 1.8 m wide and 1.6 m deep with its console; what it shows stands
+// on the cap from y 0.75. Every shape is a union, so a creation that holds it keeps panels and trims.
 let plinthCapTop = 0.75
 // The cap's half-extents across (x) and front to back (z), the plinth's widest.
 let plinthCapHalf = [0.9, 0.68]
-template exhibitPlinth(base) {
+template displayPlinth(base) {
   shape Box "plinth-foot" {
     material: (base + plinthTeal)
     position [0, 0.11, 0]

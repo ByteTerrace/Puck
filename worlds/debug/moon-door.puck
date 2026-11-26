@@ -14,8 +14,8 @@ import "../standard/agreement"
 import "../standard/bounds"
 import "moon-frame"
 import "painting-kit"
-import "place-kit"
-import "reach"
+import "../standard/place"
+import "../standard/reach"
 
 // The painting hangs on the wing's south wall at x 66, its canvas facing +Z (paintings.puck's `wallPaintings`); the
 // step is the floor before it, and the curtain hangs a hand in front of the canvas.

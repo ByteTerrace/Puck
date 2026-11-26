@@ -6,6 +6,7 @@
 // document spells each path from where it stands; an imported fragment's paths are carried to the importing world's
 // directory when it composes.
 import "kits"
+import "contexts/terminal"
 
 // Each engine's picture: its columns and rows, and its pixels' width over their height. The bricks' pixels are square;
 // the deck's are 8:7, as a television of its day shows them.
@@ -80,18 +81,9 @@ let devicePadKit = {
   }
 }
 
-// A device's screen engages on the context button (`interact`) within 3 m, and the same press leaves, since the pad
-// does not play it. Once the camera has framed the picture, the window shows it alone, as a desktop emulator does, on
-// a black matte. A deck's screen seats a player on each of its controller ports (`deckRoute`): the first seat to engage
-// it plays the first port, a second seat that engages while the first still plays takes the second, and leaving frees
-// the port.
-let deviceRoute = {
-  engageable: true
-  engageRadius: 3
-  engageChannel: "interact"
-  kit: "devicePad"
-  display {
-    fill: "#000000"
-  }
-}
+// A device's screen is a terminal with a full view (contexts/terminal.puck's `terminalRoute`): the context button
+// engages it within 3 m and the same press leaves, since the pad does not play it, and the window shows its picture
+// alone on a black matte. The seat plays it through the device pad. A deck's screen seats a player on each of its
+// controller ports (`deckRoute`).
+let deviceRoute = (terminalRoute() with { kit: "devicePad" })
 let deckRoute = (deviceRoute with { ports ["controls", "controls-2"] })

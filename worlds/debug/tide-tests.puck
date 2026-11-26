@@ -9,7 +9,7 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "tide-tests"
 
-import "place-kit"
+import "../standard/place"
 import "../standard/kits"
 
 // Where the marbles float, clear of the basis's floor.

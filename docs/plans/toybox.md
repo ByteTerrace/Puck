@@ -56,7 +56,7 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
 - The rental stalls stand (worlds/debug/gallery/rentals.puck, worlds/debug/gallery.md "The rentals"): a rented
   device rides its renter's hip, shows its pool machine's game and plays in its renter's hands. Open: creating a pool
   machine's runtime only when its `runsWhen` first holds; reading the body's size in `rentalCanRent`, as a station's
-  `needs` does (worlds/standard/station.puck), so a small body cannot rent.
+  `needs` does (worlds/standard/contexts/terminal.puck), so a small body cannot rent.
 - The cartridge library (the owner's request: a folder of curated ROMs per console, a nice diegetic way to switch
   between them, renting known titles welcome). Built: a machine's `contentBy` cell selects a title of its
   `contentFolders` library, the rack at bay 9 lends the deck library's titles through the rentals' loan row, and a

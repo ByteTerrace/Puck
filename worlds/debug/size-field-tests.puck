@@ -6,7 +6,7 @@
 //   the grow zone      x 20, from z 0 to z -6, full size along its length: a body anywhere in it is asked to grow to one
 //   the canopy         a slab over the grow zone's first two metres, its underside 1 m up: half the Moth's height
 //   the small box      x -8 .. -4, z -4 .. 0: `shrinkEnd` throughout, unless the body holds the `pass` register
-//   the stand          a station at (-6, 0, -2), inside the small box, that needs a size of at least a half
+//   the stand          a terminal at (-6, 0, -2), inside the small box, that needs a size of at least a half
 //
 // Size is the body's `size` register (size.puck), read back with bodyState. The middle of the shrink zone is the
 // geometric mean of its two ends, the square root of `shrinkEnd`, not their average.
@@ -16,7 +16,7 @@ documentId: "size-field-tests"
 
 import "../standard/bounds"
 import "../standard/size-field"
-import "../standard/station"
+import "../standard/contexts/terminal"
 import "size"
 import "set-controls"
 
@@ -34,7 +34,7 @@ sizeField(
   passSize: "full"
 )
 
-stationPlay(stations: [{ at [-6, 0, -2], camera: "moth-camera", spawn: "stand", needs [{ register: "size", atLeast: 0.5 }] }])
+terminalPlay(terminals: [{ at [-6, 0, -2], camera: "moth-camera", spawn: "stand", needs [{ register: "size", atLeast: 0.5 }] }])
 
 spawnPoints [
   { id: "stand", position [-6, 0, -2], yawDegrees: 0 }
@@ -66,18 +66,18 @@ rule "pass-grant" {
 
 // Small in the box, the stand's needs keep her out of its reach; given the pass she grows to full size there and the
 // stand takes her.
-test "a body too small for a station stands in no station's reach" {
+test "a body too small for a terminal stands in no terminal's reach" {
   when {
     seat1: body.pose -6 0 -2 0 0 0 0
     ticks 10
   }
   expect {
     bodyState(body, 0, size) == shrinkEnd
-    stationNear["0"] == 0
+    terminalNear["0"] == 0
   }
 }
 
-test "the pass gives her the pass size in the zone, and the station takes her" {
+test "the pass gives her the pass size in the zone, and the terminal takes her" {
   when {
     seat1: body.pose -6 0 -2 0 0 0 0
     ticks 10
@@ -86,7 +86,7 @@ test "the pass gives her the pass size in the zone, and the station takes her" {
   }
   expect {
     bodyState(body, 0, size) == 1
-    stationNear["0"] == 1
+    terminalNear["0"] == 1
   }
 }
 

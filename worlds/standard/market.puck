@@ -9,7 +9,7 @@
 //
 // `stalls` lists each stall as `{ key, x, z, price }`: `key` its name in the rows, `x` and `z` the centre of the
 // 2 by 2 m spot a buyer stands on, `price` its price in coins. `buyerBody` and `buyerSeat` name the body that stands on
-// the spot and the seat whose context button buys (the debug world's Moth is body 0 on seat 1). Each stall opens with
+// the spot and the seat whose context button buys (seat 1's body is body 0). Each stall opens with
 // `stock` items and the buyer with `purse` coins; at `restockHour` of `clock` (skies.puck's `dayCycle` row) every stall
 // is restocked and its till emptied. The rows: `marketStock`, `marketPrice` and `marketTill` keyed by stall,
 // `marketPurse` and `marketGoods` the buyer's, and `marketSales` the trades made.

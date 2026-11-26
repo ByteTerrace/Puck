@@ -12,7 +12,7 @@ namespace Puck.World;
 /// <para>A seat at a side looks across the board toward the opposite edge, and its right is that forward crossed
 /// with world up, the camera basis <c>CameraSnapshot.Create</c> builds: from the -Z side ahead is +Z and right is -X,
 /// and each side round the board (+X, +Z, -X) turns both a quarter. The standard seat library's board steps
-/// (<c>worlds/standard/seat.puck</c>) turn a seat's presses into columns and rows by the same rule.</para>
+/// (<c>worlds/standard/contexts/tabletop.puck</c>) turn a seat's presses into columns and rows by the same rule.</para>
 /// </summary>
 public static class WorldTabletopFrame {
     /// <summary>The side of a board whose edge faces -Z: a seat there looks toward +Z.</summary>

@@ -25,9 +25,9 @@
 // world the star's body is in rides a body on the same rail (`starRail`'s `body`), wears `starSurface` on it and
 // authors its dangers with `starHeat`. Nothing about the star is sent between worlds but the clock.
 
-// A sun for a world that stands alone: the directional light named `key` (the name the Moth basis gives its sun, so a
-// world over that basis restyles the basis's light rather than adding a second), from `direction`, at `illuminance`
-// lux, casting shadows whose edge is `softness` radians soft.
+// A sun for a world that stands alone: the directional light named `key` (the standard's name for a world's sun, so a
+// world over a basis that authors one restyles that light rather than adding a second), from `direction`, at
+// `illuminance` lux, casting shadows whose edge is `softness` radians soft.
 function sunlight(direction = [3, 5, -4], color = "#FFF0DC", illuminance = 100000lx, softness = 0.2, name = "key", shadow = always) = directional(
   name: name,
   direction: direction,
