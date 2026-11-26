@@ -3,8 +3,8 @@
 // stall's west arm, which puts the device on loan to it and starts its pool brick (`rental-hgb-0`, through the
 // machine's `runsWhen`), then returns it at the stall's tray, which clears the loan and stops the brick where it stood.
 // Which brick it rents is whichever reach the body settles in, so the claims read the device it holds.
-// The brick's divider register (DIV, 0xFF04) counts while it runs and holds still while it does not, read through a
-// screen this fixture gives the pool brick.
+// The brick's divider register (DIV, 0xFF04) counts while it runs and holds still while it does not, read through the
+// pool brick's own screen (screen 40, body 0's brick, which its device carries).
 //
 // Positions are world coordinates with the building at layout.puck's `gallerySite`: the south-east stall's corner
 // stands at (66.725, 18.775), the west arm's bricks run south of it, and the tray's floor is at (65.975, 19.525), on
@@ -14,26 +14,10 @@ basis: "debug"
 // Keep same-world portals in this fixture's boot instance instead of opening another live debug world.
 documentId: "debug"
 import "stopped-machines"
-import "../standard/machines"
 
 // Every other machine stays stopped; seat 1's pool brick runs whenever its runsWhen holds.
 machines [
   { name: "rental-hgb-0", running: true }
-]
-
-screens [
-  {
-    index: 90
-    origin [0, -50, 0]
-    right [1, 0, 0]
-    up [0, 1, 0]
-    halfWidth: 0.08
-    halfHeight: 0.072
-    halfDepth: 0.002
-    round: 0
-    source: machine(instance: `rental-hgb-0`, output: "video")
-    route: deviceRoute
-  }
 ]
 
 state {
@@ -54,7 +38,7 @@ state {
 rule "probe-running-0" {
   when $tick == 50
   mode: Edge
-  rentalProbe.running0 = machine(90, 65284)
+  rentalProbe.running0 = machine(40, 65284)
   rentalProbe.loan = rentalLoan[rentalHeld["0"]]
   rentalProbe.held = rentalHeld["0"]
   rentalProbe.model = rentalModel["0"]
@@ -62,18 +46,18 @@ rule "probe-running-0" {
 rule "probe-running-1" {
   when $tick == 60
   mode: Edge
-  rentalProbe.running1 = machine(90, 65284)
+  rentalProbe.running1 = machine(40, 65284)
 }
 rule "probe-stopped-0" {
   when $tick == 100
   mode: Edge
-  rentalProbe.stopped0 = machine(90, 65284)
+  rentalProbe.stopped0 = machine(40, 65284)
   rentalProbe.returned = rentalLoan[rentalProbe.held]
 }
 rule "probe-stopped-1" {
   when $tick == 110
   mode: Edge
-  rentalProbe.stopped1 = machine(90, 65284)
+  rentalProbe.stopped1 = machine(40, 65284)
 }
 
 test "a rented brick runs while held and stops back in its cubby" {

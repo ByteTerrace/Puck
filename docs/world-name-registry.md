@@ -863,6 +863,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `screens[].magazine.entries[][machine].instance` | Machine | Names | Read | `WorldScreenSource.Machine.Instance` |
 | `screens[].magazine.entries[][view].cameraName` | Camera | Names | Read | `WorldScreenSource.View.CameraName` |
 | `screens[].magazine.entries[][text].lines` | State | Template | Binding | `WorldScreenSource.Text.Lines` |
+| `screens[].carry.placements` | Placement | Names | Read | `WorldScreenCarry.Placements` |
 | `screens[].carry.camera` | Camera | Names | Read | `WorldScreenCarry.Camera` |
 | `screens[].material` | ScreenMaterial | Names | Binding | `WorldScreen.Material` |
 | `screenMaterials[].id` | ScreenMaterial | Declares |  | `WorldScreenMaterial.Id` |
@@ -4785,9 +4786,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `screens[].magazine.entries[][text].foreground` | `WorldScreenSource.Text.Foreground` | a color literal |
 | `screens[].magazine.entries[][text].background` | `WorldScreenSource.Text.Background` | a color literal |
 | `screens[].magazine.entries[][probe].id` | `WorldScreenSource.Probe.Id` | a probe id |
+| `screens[].carry.shape` | `WorldScreenCarry.Shape` | a creation shape |
 | `screens[].carry.look` | `WorldScreenCarry.Look` | a look in the composed world |
 | `screens[].carry.pose` | `WorldScreenCarry.Pose` | a creation frame |
-| `screens[].carry.shape` | `WorldScreenCarry.Shape` | a creation shape |
 | `cameras[].rig.name` | `WorldCameraProgram.Name` | a camera program name |
 | `cameras[].rig.version` | `WorldCameraProgram.Version` | a schema or program version |
 | `cameras[].rig.operations[][path].curve` | `WorldCameraProgramOp.Path.Curve` | a curve name |

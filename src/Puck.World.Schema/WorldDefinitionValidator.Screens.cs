@@ -934,9 +934,26 @@ public static partial class WorldDefinitionValidator {
             value: padPointer.ScrollSpeed
         );
     }
-    // A carried screen's picture rides a creation look's ungrouped box while the look's pose holds, so the look, the pose
-    // and the box must all resolve: the presentation reads the box's face as the picture.
+    // A carried screen's picture rides an ungrouped box of its anchor's creation, so the anchor (a look and its pose, or
+    // attached placements) and the box must all resolve: the presentation reads the box's face as the picture.
     private static void ValidateCarry(WorldDefinition definition, WorldScreenCarry carry, string path, List<string> errors) {
+        if (
+            (carry.Camera is { } camera) &&
+            !definition.Cameras.Any(predicate: row => string.Equals(a: row.Name, b: camera, comparisonType: StringComparison.Ordinal))
+        ) {
+            errors.Add(item: $"{path}.camera '{camera}' names no cameras row.");
+        }
+        if (carry.Placements is { } placements) {
+            ValidatePlacementCarry(definition: definition, carry: carry, placements: placements, path: path, errors: errors);
+
+            return;
+        }
+        if ((carry.Look is null) || (carry.Pose is null)) {
+            errors.Add(item: $"{path} names neither a look and its pose nor placements: a carried picture rides one of the two.");
+
+            return;
+        }
+
         WorldLook? look = null;
 
         foreach (var row in definition.Looks) {
@@ -955,28 +972,73 @@ public static partial class WorldDefinitionValidator {
 
             return;
         }
-        if (
-            (carry.Camera is { } camera) &&
-            !definition.Cameras.Any(predicate: row => string.Equals(a: row.Name, b: camera, comparisonType: StringComparison.Ordinal))
-        ) {
-            errors.Add(item: $"{path}.camera '{camera}' names no cameras row.");
-        }
         if ((look.Motion.Poses is not { } poses) || !poses.ContainsKey(key: carry.Pose)) {
             errors.Add(item: $"{path}.pose '{carry.Pose}' is not a pose of look '{carry.Look}' (its motion.poses names the frames a body holds).");
         }
 
-        foreach (var shape in (creation.Document.Shapes ?? [])) {
-            if (!string.Equals(a: shape.Name?.Value, b: carry.Shape, comparisonType: StringComparison.Ordinal)) {
-                continue;
-            }
-            if ((shape.Type != SdfSolidPrimitive.Box) || ((shape.Group ?? 0) != 0)) {
-                errors.Add(item: $"{path}.shape '{carry.Shape}' must be an ungrouped box: its front face shows the picture.");
-            }
-
-            return;
+        if (CarryBoxRefusal(carry: carry, creation: creation) is { } refusal) {
+            errors.Add(item: $"{path}.shape '{carry.Shape}' {refusal} of look '{carry.Look}''s creation '{source.PrototypeId.Value}'.");
+        }
+    }
+    // A placement-carried picture rides attached rows (only a row riding a body moves with a holder), each of which can
+    // show the box in at least one of the creations its responses choose; where it shows the box, the box is an ungrouped
+    // box.
+    private static void ValidatePlacementCarry(WorldDefinition definition, WorldScreenCarry carry, IReadOnlyList<string> placements, string path, List<string> errors) {
+        if (carry.Look is not null) {
+            errors.Add(item: $"{path} names both a look and placements: a carried picture rides one of the two.");
+        }
+        if (carry.Pose is not null) {
+            errors.Add(item: $"{path}.pose is authored without a look: a pose is a look's.");
+        }
+        if (placements.Count == 0) {
+            errors.Add(item: $"{path}.placements is empty.");
         }
 
-        errors.Add(item: $"{path}.shape '{carry.Shape}' names no shape of look '{carry.Look}''s creation '{source.PrototypeId.Value}'.");
+        var rows = WorldPlacementIndex.Of(placements: definition.Placements).Rows;
+
+        for (var index = 0; (index < placements.Count); index++) {
+            var id = placements[index];
+
+            if (!rows.TryGetValue(key: id, value: out var row)) {
+                errors.Add(item: $"{path}.placements[{index}] '{id}' names no placement.");
+
+                continue;
+            }
+            if (row.Attach is null) {
+                errors.Add(item: $"{path}.placements[{index}] '{id}' rides no body (it has no attach): a carried picture moves with its holder.");
+            }
+
+            var shows = false;
+
+            foreach (var prototypeId in WorldPlacementResponse.Showable(placement: row)) {
+                if (WorldDefinitionRows.FindCreation(creations: definition.Creations, id: prototypeId) is not { } creation) {
+                    continue;
+                }
+                if (carry.ShapeSlotIn(shapes: creation.Document.Shapes) is null) {
+                    continue;
+                }
+
+                shows = true;
+
+                if (CarryBoxRefusal(carry: carry, creation: creation) is { } refusal) {
+                    errors.Add(item: $"{path}.shape '{carry.Shape}' {refusal} of placement '{id}''s creation '{prototypeId}'.");
+                }
+            }
+            if (!shows) {
+                errors.Add(item: $"{path}.shape '{carry.Shape}' names no shape of any creation placement '{id}' shows.");
+            }
+        }
+    }
+    // Why a creation's carried box cannot show a picture, or null when it can: the box must exist and be an ungrouped box,
+    // whose front face is the picture.
+    private static string? CarryBoxRefusal(WorldScreenCarry carry, WorldPrototype creation) {
+        if (carry.ShapeSlotIn(shapes: creation.Document.Shapes) is not { } slot) {
+            return "names no shape";
+        }
+
+        var shape = creation.Document.Shapes![slot];
+
+        return (((shape.Type != SdfSolidPrimitive.Box) || ((shape.Group ?? 0) != 0)) ? "must be an ungrouped box (its front face shows the picture), not a shape" : null);
     }
     // How an engaged seat's framed view of the screen is matted: only an engageable screen is ever seen that way, and
     // its fill is a colour.

@@ -56,8 +56,7 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
 - A switchback's second flight arrives against the arcade's end pier over half its width (gallery.md, "What is still
   open"): move the pier or narrow the arrival.
 - The rental stalls stand (worlds/debug/gallery/rentals.puck, worlds/debug/gallery.md "The rentals"): a rented
-  device rides its renter's hip and its seat's pool machine runs, but nothing shows its picture. Open: a screen that
-  follows a body, so the carried device shows its game and engages wherever its holder stands; creating a pool
+  device rides its renter's hip, shows its pool machine's game and plays in its renter's hands. Open: creating a pool
   machine's runtime only when its `runsWhen` first holds; reading the body's size in `rentalCanRent`, as a station's
   `needs` does (worlds/standard/station.puck), so a small body cannot rent.
 - The flaw: the light tube, then its hollow interior, its openings and exits, and the imprint (light lane in

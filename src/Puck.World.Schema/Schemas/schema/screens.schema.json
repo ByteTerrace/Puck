@@ -277,23 +277,45 @@
         "default": null
       },
       "carry": {
-        "description": "The body that carries the screen\u0027s picture while it holds the device (see WorldScreenCarry), or null for a screen that stays where it is authored. Omitted from the wire when null.",
+        "description": "The body that carries the screen\u0027s picture while it holds the device (see WorldScreenCarry), or null for a screen that stays where it is authored. A placement-carried screen\u0027s frame here is where its surface rests while nobody holds it; it draws no slab there. Omitted from the wire when null.",
         "type": [
           "object",
           "null"
         ],
         "properties": {
-          "look": {
-            "description": "The look row whose wearer carries the picture; a creation look.",
+          "shape": {
+            "description": "The name of the ungrouped box in the anchor\u0027s creation that shows the picture.",
             "type": "string"
+          },
+          "look": {
+            "description": "The look row whose wearer carries the picture; a creation look. null for a placement-carried screen. Omitted from the wire when null.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           },
           "pose": {
-            "description": "The look\u0027s Poses frame that holds while the body carries it.",
-            "type": "string"
+            "description": "The look\u0027s Poses frame that holds while the body carries it; authored with Look and only then. Omitted from the wire when null.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           },
-          "shape": {
-            "description": "The name of the ungrouped box in the look\u0027s creation that shows the picture.",
-            "type": "string"
+          "placements": {
+            "description": "The attached placement rows that carry the picture, in order of precedence, or null for a look-carried screen. Omitted from the wire when null.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "default": null
           },
           "camera": {
             "description": "The name of a Cameras row whose rig frames the body holding the device, or null for none (a seat engaged on the carried screen then starts on the framed picture, as at any device). The rig runs against an anchor at the picture\u0027s front face whose axes are the picture\u0027s: \u002BX its right, \u002BY its up and \u002BZ its normal, toward the body looking at it (offset and lookAt without worldAxes read in those axes).",
@@ -305,8 +327,6 @@
           }
         },
         "required": [
-          "look",
-          "pose",
           "shape"
         ],
         "additionalProperties": false,

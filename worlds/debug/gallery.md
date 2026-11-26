@@ -186,8 +186,13 @@ No device on the counter runs a machine: each seat's body has a pool brick and
 a pool advanced brick (`rental-hgb-<body>`, `rental-agb-<body>`) whose
 `runsWhen` advances it only while that body holds a device of its model, so at
 most one handheld runs per player. `machine.state rental-hgb-0` reads
-`running`. The rented device's picture is not yet shown: a screen cannot follow
-a body, so the pool machine runs with no display (see "What is still open").
+`running`. Each pool machine has a screen (40 and up, two a body: its brick
+then its advanced brick) whose `carry` lists the body's two device rows, so the
+rented device's glass shows its game wherever the renter walks. The context
+button engages the renter's own device, anywhere (only its holder engages it,
+the engage radius measured from the device), and the device then moves from the
+hip row (`rental-carried-<body>`) to the hands row (`rental-played-<body>`)
+through `rentalShown`; the same press leaves and puts it back on the hip.
 
 ## The central tree
 
@@ -558,14 +563,6 @@ small that way.
   the tile row in front of a switchback, across the outer half of its second
   flight's head (the south-west stair's west half), so a body walking up that half stops against the pier's foot
   a few centimetres short of the floor; the flight's other half arrives.
-- **A rented handheld's picture.** A screen's frame is fixed in the world
-  (`WorldScreen.Origin`), and its `carry` is presentation keyed to one look's
-  pose, with the engage radius left at the authored frame, so the pool machine
-  a renter's device runs has no display that rides the device and cannot be
-  engaged away from where its screen is authored. A screen that follows a body
-  (the device's hip, then its hands when played) is the engine gap; the rentals
-  then give each pool machine that screen. Network visitors already rent
-  (the reach rules cover every seat's body).
 - **Dormant pool runtimes.** A gated-off pool machine is not advanced but its
   runtime is created at boot, 24 runtimes for 12 seats. Creating a runtime on
   the first tick its `runsWhen` holds would make an unused pool free.

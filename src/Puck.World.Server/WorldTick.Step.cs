@@ -564,6 +564,8 @@ public sealed partial class WorldTick {
         // a state-driven prototype swap for a placement carrying a Respond trait (see WorldPlacementResponse).
         work.Next(HostFrameWorkPart.TickResponses);
         SweepPlacementResponses(tick: tick);
+        // After the sweep, so the holdings it installed decide who holds each carried device this tick.
+        ReleaseCarriedScreens();
         GateMachines(tick: tick);
         // Placement deal sweep — after the rule frame has folded, so a cell a rule wrote this tick deals on this
         // tick; each dealt template's children follow its row (see WorldPlacementDeal).

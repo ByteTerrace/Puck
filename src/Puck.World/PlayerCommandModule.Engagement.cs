@@ -1,6 +1,4 @@
-using System.Globalization;
 using Puck.Commands;
-using Puck.Maths;
 using Puck.World.Protocol;
 
 namespace Puck.World;
@@ -239,20 +237,10 @@ internal sealed partial class PlayerCommandModule {
                 return CommandResult.Error(output: $"[body.engage: screen {screenIndex} has no machine to control and shows no producer — screen.insert a cart first]");
             }
 
-            if (screen.Route.EngageRadius > 0f) {
-                var position = player.FixedPosition;
-                var delta = new FixedVector2(
-                    X: (position.X - FixedQ4816.FromDouble(value: screen.Origin.X)),
-                    Y: (position.Z - FixedQ4816.FromDouble(value: screen.Origin.Z))
-                );
-                var radius = player.EngageReach(radius: screen.Route.EngageRadius);
-
-                if (delta.LengthSquared > (radius * radius)) {
-                    return CommandResult.Error(output: string.Create(
-                        provider: CultureInfo.InvariantCulture,
-                        handler: $"[body.engage: body:{index} is {((double)delta.Length):0.00}u from screen {screenIndex} — within {((double)radius):0.00}u to engage at its size (body.pose closer)]"
-                    ));
-                }
+            // The reach (the engage radius from where the screen's device is this tick, and a carried device's holder) is
+            // the authority's own policy, which the engage command checks again.
+            if (!m_server.CheckEngagePolicy(entityIndex: index, reason: out var reachReason, target: target)) {
+                return CommandResult.Error(output: $"[body.engage: {reachReason} (body.pose closer)]");
             }
         } else if (Population.EntryBody(index: target.Value) is null) {
             return CommandResult.Error(output: $"[body.engage: no body {target.Value} — see world.population]");

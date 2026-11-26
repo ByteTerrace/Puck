@@ -195,6 +195,14 @@ state {
       capacity: length(rentalBodies)
       cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
     }
+    // Where a body's device shows: its ordinal while it rides the hip, its ordinal plus `rentalPlayed` while the body
+    // plays it in its hands (engaged on its screen), 0 while it holds none.
+    row {
+      name: "rentalShown"
+      kind: Int
+      capacity: length(rentalBodies)
+      cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
+    }
     // The number a loan names each seat's body by, its index + 1: fixed.
     row {
       name: "rentalHolder"
@@ -216,10 +224,12 @@ function rentalPalette(c) = [
   rentalGlass
   { color: c.key, roughness: 0.35, specular: 0.04 }
 ]
+// Each glass is its model's picture box: the box a carried device's screen shows its game on (`screen-hgb`,
+// `screen-agb`, named by the screens below), its half-extents the picture's, 160 by 144 and 240 by 160 pixels.
 template rentalBrick(c) {
   shape Box "shell" { material: 0, position [0, 0.0665, 0], scale [0.0375, 0.0665, 0.01375], rounding: 0.006 }
   shape Box "bezel" { material: 1, position [0, 0.095, -0.0135], scale [0.031, 0.026, 0.0015], rounding: 0.0012 }
-  shape Box "glass" { material: 2, position [0, 0.096, -0.0146], scale [0.022, 0.0198, 0.0008] }
+  shape Box "screen-hgb" { material: 2, position [0, 0.096, -0.0146], scale [0.022, 0.0198, 0.0008] }
   shape Box "pad-x" { material: 3, position [0.019, 0.042, -0.0142], scale [0.0095, 0.003, 0.0015], rounding: 0.001 }
   shape Box "pad-y" { material: 3, position [0.019, 0.042, -0.0142], scale [0.003, 0.0095, 0.0015], rounding: 0.001 }
   shape Cylinder "a" { material: 3, position [-0.024, 0.046, -0.0142], rotation [0.7071, 0, 0, 0.7071], scale [0.0045, 0.0015, 0.0045] }
@@ -228,7 +238,7 @@ template rentalBrick(c) {
 template rentalAdvanced(c) {
   shape Box "shell" { material: 0, position [0, 0.041, 0], scale [0.072, 0.041, 0.0125], rounding: 0.012 }
   shape Box "bezel" { material: 1, position [0, 0.043, -0.0122], scale [0.038, 0.027, 0.0015], rounding: 0.0012 }
-  shape Box "glass" { material: 2, position [0, 0.043, -0.0133], scale [0.0306, 0.0204, 0.0008] }
+  shape Box "screen-agb" { material: 2, position [0, 0.043, -0.0133], scale [0.0306, 0.0204, 0.0008] }
   shape Box "pad-x" { material: 3, position [0.054, 0.045, -0.0128], scale [0.009, 0.003, 0.0015], rounding: 0.001 }
   shape Box "pad-y" { material: 3, position [0.054, 0.045, -0.0128], scale [0.003, 0.009, 0.0015], rounding: 0.001 }
   shape Cylinder "a" { material: 3, position [-0.058, 0.049, -0.0128], rotation [0.7071, 0, 0, 0.7071], scale [0.0045, 0.0015, 0.0045] }
@@ -331,20 +341,62 @@ placements {
     }
     reach(id: $"rental-reach-{d.ordinal}", box: rentalDeviceReach(d))
   }
-  // The device a seat's body holds rides its right hip, its face out.
+  // The device a seat's body holds rides its left hip (a body faces -Z, so -X is its left), its face out, and while the
+  // body plays it, its hands, its face toward the body. Each row shows the device while `rentalShown` names it there.
   for b in rentalBodies {
     placement $"rental-carried-{b}" {
       prototype: "rental-device-empty"
       position [0, 0, 0]
       attach {
         bodyIndex: b
-        localOffset [-0.26, 0.92, 0]
-        localYawDegrees: 90
+        localOffset [-0.3, 0.92, -0.38]
+        localYawDegrees: 180
       }
-      respond: map(rentalDevices, d => { when: state(state: rentalHeld, key: $"{b}", comparison: Equal, value: d.ordinal), prototypeId: rentalPrototype(d) })
+      respond: map(rentalDevices, d => { when: state(state: rentalShown, key: $"{b}", comparison: Equal, value: d.ordinal), prototypeId: rentalPrototype(d) })
+    }
+    placement $"rental-played-{b}" {
+      prototype: "rental-device-empty"
+      position [0, 0, 0]
+      attach {
+        bodyIndex: b
+        localOffset [0, 1.3, -0.5]
+      }
+      respond: map(rentalDevices, d => { when: state(state: rentalShown, key: $"{b}", comparison: Equal, value: (d.ordinal + rentalPlayed)), prototypeId: rentalPrototype(d) })
     }
   }
 }
+
+// Each seat's two handheld screens, one for each pool machine, their pictures carried by the device their body holds:
+// in its hands while it plays, at its hip otherwise (screens' `carry`, the first of the two rows showing the model's
+// picture box). Only the holder engages its own device, wherever it stands, with the context button (the standard's
+// device route), and the same press leaves. The screen rests where its frame is authored while nobody holds a device of
+// its model, and draws nothing there.
+let rentalScreen = 40
+function rentalScreenOf(b, model) = (rentalScreen + (2 * b) + (model - 1))
+let rentalScreenRest = rentalPlan(rentalStalls[0], 0, 0)
+screens: flatMap(
+  rentalBodies,
+  b => map(
+    rentalModels,
+    m => {
+      index: rentalScreenOf(b, m.model)
+      origin: galleryWorld(rentalScreenRest[0], (galleryFloor[toyboxLevel] + rentalCounterTop), rentalScreenRest[1])
+      right [1, 0, 0]
+      up [0, 1, 0]
+      halfWidth: ((m.model == 1) ? 0.022 : 0.0306)
+      halfHeight: ((m.model == 1) ? 0.0198 : 0.0204)
+      halfDepth: 0.0008
+      round: 0
+      source: machine(instance: $"rental-{m.id}-{b}", output: "video")
+      luminance: ((m.model == 1) ? 70nit : 90nit)
+      route: deviceRoute
+      carry {
+        shape: $"screen-{m.id}"
+        placements [$"rental-played-{b}", $"rental-carried-{b}"]
+      }
+    }
+  )
+)
 
 // Renting: a seat's body before a device in its cubby, holding none, presses the context button.
 for d in rentalDevices {
@@ -358,10 +410,12 @@ for d in rentalDevices {
   }
 }
 
-// Returning at a stall's tray: the device goes back to its cubby and the body lets go.
+// Returning at a stall's tray: the device goes back to its cubby and the body lets go. A holder's press engages its own
+// device (the context button's first target), so at the tray that engagement returns it, and the authority then
+// releases the engagement on the device nobody holds.
 for stall in rentalStalls {
   rule $"rental-return-{stall.id}" {
-    when pressing() and rentalCanRent() and rentalHeld[$each] > 0
+    when (pressing() or rentalShown[$each] > rentalPlayed) and rentalCanRent() and rentalHeld[$each] > 0
     mode: Edge
     forEach: region($"rental-return-{stall.id}")
     rentalLoan[rentalHeld[$each]] = 0
@@ -378,6 +432,19 @@ rule "rental-leave" {
   rentalLoan[rentalHeld[$each]] = 0
   rentalHeld[$each] = 0
   rentalModel[$each] = 0
+}
+
+// Playing: while a body is engaged on either of its screens (only one can be, the one its device's model shows) it plays
+// the device it holds, which moves from its hip to its hands; leaving puts it back on the hip. One rule a body, which
+// writes only when where the device shows moves.
+let rentalPlayed = 64
+function rentalShows(b) = (rentalHeld[$"{b}"] + (rentalPlayed * (engaged($"body:{b}", $"{rentalScreenOf(b, 1)}") + engaged($"body:{b}", $"{rentalScreenOf(b, 2)}"))))
+for b in rentalBodies {
+  rule $"rental-shown-{b}" {
+    when rentalShown[$"{b}"] != rentalShows(b)
+    mode: Level
+    rentalShown[$"{b}"] = rentalShows(b)
+  }
 }
 
 // Each seat's handheld pool: a brick and an advanced brick, advanced only while the body holds a device of that model.
