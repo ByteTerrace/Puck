@@ -1,17 +1,24 @@
-// Level 1's toybox: arcade cabinets on both galleries, facing the nave across its void, each screen a hosted machine
-// running one of the world's shipped cartridges, so a player on any other level looks across into live game screens
-// even when the floor is empty. The gallery module imports this, so the gallery booted alone (gallery-root.puck) and
-// the debug world both host the machines; their names are this document's own, apart from the Wonderland devices'
-// (devices.puck).
+// Level 1's toybox: twelve Humble Gaming Deck stations on both galleries, facing the nave across its void, each screen
+// a hosted deck running one of the world's shipped deck programs, so a player on any other level looks across into
+// live game screens even when the floor is empty. The gallery module imports this, so the gallery booted alone
+// (gallery-root.puck) and the debug world both host the decks.
 //
-// The two cabinets in a bay play one game across the nave, each on its own hardware: the tetromino game on a Color
-// brick and on a monochrome one, the deck's bouncing ball on two decks, and the drifting test card on an Advanced brick
-// and on a monochrome brick. Each cartridge moves by itself on its attract screen, so the screens flicker with no one
-// playing: the tetromino game's title chases its colours through PRESS START, the ball bounces and the bars drift. Walk
-// up to a cabinet and press the context button (E, or RB on a pad) to play it, as at a Wonderland device.
+// Two kinds of station alternate along each gallery (layout.puck's toyboxPlan), and every connection is an object in
+// the world:
 //
-// The bays, rows and facing are layout.puck's (`toyboxBays`, `toyboxRows`), the cabinet's form the standard's
-// (architecture.puck's arcadeCabinet), and its colours and the screens' luminance look.puck's.
+//   a two-player arcade cabinet   one picture over a wide shelf with a control panel for each player, marked 1P and
+//                                 2P; the deck inside it takes the 1P panel on its first controller port and the 2P
+//                                 panel on its second
+//   a living-room television set  a toy television on a low stand, the deck on the stand's shelf with a pad cabled to
+//                                 each of its two ports and lying on a rug before it, two beanbags behind the pads
+//
+// Walk up to a station and press the context button (E, or RB on a pad) to play: the first seat to engage a station
+// plays the deck's first port, and a second seat that engages it while the first still plays takes the second. The
+// same press leaves. Every deck can swap to the shipped deck programs and the owner's local deck folder
+// (`machine.content toybox-cabinet-south-3`, `machine.swap …`, gallery.md's "The toybox").
+//
+// The stations' places are layout.puck's (`toyboxStations`), the kit pieces the standard's (architecture.puck's
+// arcadeCabinet, televisionSet and lounge), and their colours and the screens' luminance look.puck's.
 
 import "../../standard/architecture"
 import "../../standard/machines"
@@ -19,98 +26,87 @@ import "layout"
 import "look"
 
 // The screens' indices: the debug world's other screens hold 0 to 17 (devices.puck, range.puck, alchemy.puck,
-// chess.puck, desktop.puck, granaries.puck), so the toybox's start at 20.
+// chess.puck, desktop.puck, granaries.puck), so the toybox's start at 20, two to a station.
 let toyboxScreen = 20
 
-// The games, one colourway (look.puck's lookCabinets) and one marquee each.
-let toyboxGames = [
-  { id: "tetromino", title: "TETROMINO" }
-  { id: "bounce", title: "BOUNCE" }
-  { id: "test-card", title: "TEST CARD" }
-]
-
-// Each cabinet: its game, the bay it stands in (an index into toyboxBays) and the gallery (an index into toyboxRows,
-// south then north), the machine its screen shows, that machine's picture and the route a seat plays it through. A
-// machine's content path resolves beside this file.
-let toyboxCabinets = [
-  {
-    id: "tetromino", game: 0, bay: 0, side: 0, video: brickVideo, route: deviceRoute
-    machine: brickMachine("toybox-tetromino", "../cartridges/cgb/tetromino.cgb.puck")
-  }
-  {
-    id: "tetromino-mono", game: 0, bay: 0, side: 1, video: brickVideo, route: deviceRoute
-    machine: brickMachine("toybox-tetromino-mono", "../cartridges/dmg/tetromino.dmg.puck", "dmg")
-  }
-  {
-    id: "bounce", game: 1, bay: 1, side: 0, video: deckVideo, route: deckRoute
-    machine: deckMachine("toybox-bounce", "../cartridges/deck/moving-sprite.deck")
-  }
-  {
-    id: "bounce-north", game: 1, bay: 1, side: 1, video: deckVideo, route: deckRoute
-    machine: deckMachine("toybox-bounce-north", "../cartridges/deck/moving-sprite.deck")
-  }
-  {
-    id: "test-card", game: 2, bay: 2, side: 0, video: advancedBrickVideo, route: deviceRoute
-    machine: advancedBrickMachine("toybox-test-card", "../cartridges/agb/test-card.agb.puck")
-  }
-  {
-    id: "test-card-mono", game: 2, bay: 2, side: 1, video: brickVideo, route: deviceRoute
-    machine: brickMachine("toybox-test-card-mono", "../cartridges/dmg/test-card.dmg.puck", "dmg")
-  }
-]
-
-// Where a cabinet stands in the building's frame, on its tile.
-function toyboxAt(c) = [bayX(toyboxBays[c.bay]), galleryFloor[toyboxLevel], tileZ(toyboxRows[c.side].row)]
+// Where a station stands in the building's frame, on its tile.
+function toyboxAt(s) = [bayX(s.bay), galleryFloor[toyboxLevel], tileZ(s.row)]
 
 prototypes {
-  for (game, g) in toyboxGames {
-    prototype $"toybox-cabinet-{game.id}" {
+  for (c, i) in lookCabinets {
+    prototype $"toybox-cabinet-{i}" {
       document {
-        name: $"toybox-cabinet-{game.id}"
+        name: $"toybox-cabinet-{i}"
         schema: "puck.creation.v1"
-        palette: lookCabinetPalette(lookCabinets[g])
-        arcadeCabinet(base: 0, title: game.title)
+        palette: lookCabinetPalette(c)
+        arcadeCabinet(base: 0, title: "BOUNCE", players: 2)
+      }
+    }
+  }
+  for (t, i) in lookTelevisions {
+    prototype $"toybox-television-{i}" {
+      document {
+        name: $"toybox-television-{i}"
+        schema: "puck.creation.v1"
+        palette: lookTelevisionPalette(t)
+        televisionSet(base: 0)
+        lounge(base: (setLamp + 1))
       }
     }
   }
 }
 
 placements {
-  for c in toyboxCabinets {
-    placement $"toybox-cabinet-{c.id}" {
-      prototype: $"toybox-cabinet-{toyboxGames[c.game].id}"
+  for s in toyboxStations {
+    placement $"toybox-{s.id}" {
+      prototype: $"toybox-{s.kind}-{s.look}"
       parent: "gallery"
-      position: toyboxAt(c)
-      yawDegrees: toyboxRows[c.side].yaw
+      position: toyboxAt(s)
+      yawDegrees: s.yaw
       solid
     }
   }
 }
 
-machines: map(toyboxCabinets, c => c.machine)
+// A deck for each station, booting its shipped program; it can swap to every program in the shipped deck folder and the
+// owner's local one (`roms/hgd`, absent in a clean checkout). A path resolves beside this file.
+machines: map(toyboxStations, s => (deckMachine(s.machine, $"../cartridges/deck/{s.cartridge}.deck") with {
+  contentFolders ["../cartridges/deck", "../../../roms/hgd"]
+}))
 
-// Each picture stands upright in its cabinet's bezel, its glass exactly the machine's picture at the largest size the
-// bezel frames. A screen's frame is in the world's, so it is placed from the building's site (galleryWorld), as the
-// gallery's other world-space pieces are. A cabinet facing +z (the south gallery's) has the picture's right along +x,
-// one facing -z along -x.
+// Each station's picture stands upright in its frame (a cabinet's bezel, a television's), its glass exactly the deck's
+// picture at the largest size the frame holds. A screen's frame is in the world's, so it is placed from the building's
+// site (galleryWorld), as the gallery's other world-space pieces are. A station facing +z (the south gallery's) has the
+// picture's right along +x, one facing -z along -x.
+//
+// A station shows its picture twice, one screen for each of the deck's ports (machines.puck's deckPortRoutes), because a
+// screen's route seats its players on one port: the first engages the visible picture, and the second, a seat engaging
+// the station while the first is taken, the screen sunk 12 mm behind it inside the frame, which no view sees. The tube's
+// light is the visible screen's alone; the sunk one casts the least a screen may.
+let toyboxSunk = 0.012
+let toyboxSunkLuminance = 1nit
 screens [
-  for (c, i) in toyboxCabinets {
-    let at = toyboxAt(c)
-    let facing = toyboxRows[c.side].facing
-    let half = cabinetPictureHalves(videoAspect(c.video))
-    {
-      index: (toyboxScreen + i)
-      origin: galleryWorld(at[0], (at[1] + cabinetPicture[1]), (at[2] + (facing * cabinetPicture[2])))
-      right [facing, 0, 0]
-      up [0, 1, 0]
-      halfWidth: half[0]
-      halfHeight: half[1]
-      halfDepth: 0.004
-      round: 0
-      source: machine(instance: c.machine.name, output: "video")
-      luminance: lookCabinetLuminance
-      material: crt
-      route: c.route
+  for (s, i) in toyboxStations {
+    let at = toyboxAt(s)
+    let picture = ((s.kind == "cabinet") ? cabinetPicture : televisionSetPicture)
+    let half = ((s.kind == "cabinet")
+      ? cabinetPictureHalves(videoAspect(deckVideo))
+      : televisionPictureHalves(videoAspect(deckVideo)))
+    for (route, p) in deckPortRoutes {
+      {
+        index: (toyboxScreen + (2 * i) + p)
+        origin: galleryWorld(at[0], (at[1] + picture[1]), (at[2] + (s.facing * (picture[2] - (p * toyboxSunk)))))
+        right [s.facing, 0, 0]
+        up [0, 1, 0]
+        halfWidth: half[0]
+        halfHeight: half[1]
+        halfDepth: 0.004
+        round: 0
+        source: machine(instance: s.machine, output: "video")
+        luminance: ((p == 0) ? lookCabinetLuminance : toyboxSunkLuminance)
+        material: crt
+        route: route
+      }
     }
   }
 ]

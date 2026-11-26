@@ -753,6 +753,7 @@ public sealed record WorldRenderLightOrbit(
 [JsonDerivedType(typeof(WorldRenderLight.Point), typeDiscriminator: "point")]
 [JsonDerivedType(typeof(WorldRenderLight.Spot), typeDiscriminator: "spot")]
 [JsonDerivedType(typeof(WorldRenderLight.Occluder), typeDiscriminator: "occluder")]
+[JsonDerivedType(typeof(WorldRenderLight.Tube), typeDiscriminator: "tube")]
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 public abstract record WorldRenderLight {
     private WorldRenderLight() {
@@ -891,6 +892,47 @@ public abstract record WorldRenderLight {
         public const float DefaultAngle = (MathF.PI / 4f);
         /// <summary>The share of the outer half angle a spot that authors no inner angle is at full strength within.</summary>
         public const float DefaultInnerShare = 0.75f;
+
+        /// <inheritdoc/>
+        public override string? LightName => Name;
+    }
+    /// <summary>A tube light, such as a fluorescent or neon tube: a straight segment from <paramref name="From"/> to
+    /// <paramref name="To"/> whose every length element emits alike in every direction, so a surface beside it is lit
+    /// softly and evenly along its length and a glossy one reflects it as a streak. It falls off with the point light's
+    /// window, measured from the segment's nearest point, and is traced and occluded by the irradiance volume while
+    /// static as a point light is. A curve is a chain of tubes, end to end; each is one light of the lights table, and
+    /// the culling keeps only those near what a view shades.</summary>
+    /// <param name="From">The segment's first end: world space for a static light, an offset in the anchor's frame when
+    /// an anchor is authored. Absent is the origin.</param>
+    /// <param name="To">The segment's second end, in the same frame as <paramref name="From"/>. Absent is the
+    /// origin.</param>
+    /// <param name="Anchor">An entity, entity part, or placement frame. A missing live target disables the light.</param>
+    /// <param name="Radius">The tube's radius, in metres, zero or more: the nearest the light's distance is taken as
+    /// and how far its reflection's lobe widens. Absent is zero, which the point light's nearest distance stands
+    /// in for.</param>
+    /// <param name="Color">The light's colour, scaled to unit luminance. Refused beside
+    /// <paramref name="Temperature"/>.</param>
+    /// <param name="Intensity">The luminous intensity of each metre of the tube, in candela per metre. Refused beside
+    /// <paramref name="Power"/>; absent with it is the engine default point intensity per metre.</param>
+    /// <param name="Power">The luminous power of the whole segment, in lumens, emitted alike in every direction: a
+    /// 1.2 m fluorescent tube gives about 3,000. Refused beside <paramref name="Intensity"/>.</param>
+    /// <param name="Temperature">The light's colour as a black body's, in kelvin, in <c>[1000, 40000]</c>. Refused
+    /// beside <paramref name="Color"/>.</param>
+    /// <param name="Name">The name a section key addresses the light by, unique among the lights.</param>
+    public sealed record Tube(
+        BindableVector3? From = null,
+        BindableVector3? To = null,
+        WorldAnchor? Anchor = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float Radius = 0f,
+        BindableColor? Color = null,
+        BindableScalar? Intensity = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Power = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Temperature = null,
+        [property: DocumentText("a light name a section key addresses")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null
+    ) : WorldRenderLight {
+        /// <summary>The largest tube radius, in metres.</summary>
+        public const float MaxRadius = 1f;
 
         /// <inheritdoc/>
         public override string? LightName => Name;

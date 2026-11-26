@@ -3,6 +3,14 @@
 // world's suit and noclip channels are its suit.puck's and noclip.puck's).
 schema: "puck.world.definition.v1"
 
+// Each owner's retained input, sized for a pad played as a player plays it: both sticks moving every tick are four axis
+// samples a tick, which at 60 ticks a second over the two seconds an event stays retained is 480 events, beside the
+// buttons and typed text. An owner whose ring is full admits nothing more until retained events expire, so a ring sized
+// below the rate a seat sends at holds a remote seat's input back further every second it plays.
+inputHistory {
+  eventCapacity: 1024
+}
+
 channels [
   { composition: true, name: "dash", shape: Binary }
   {

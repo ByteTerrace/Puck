@@ -1,3 +1,5 @@
+using System.Buffers;
+using Puck.Abstractions.Memory;
 using Puck.Assets;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -40,11 +42,23 @@ public readonly record struct WorldProjectionDelivery(WorldProjectionDeliveryKin
 }
 /// <summary>
 /// One presentation-tier recipient's feed: what the authority composes for it and what it already holds. Its first
-/// delivery is the whole projection; every later composition travels as the delta of the members that changed, by the
-/// one document delta (<see cref="WorldDocumentBasis.Diff"/>), and a composition that changes nothing sends nothing.
+/// delivery is the whole projection, composed from the whole document. Every later delivery is a delta: a composition
+/// whose document frame (<see cref="WorldDisclosureImages"/>), audience and referenced rows stand is composed from the
+/// rows the arena's journal names as moved alone (<see cref="StateArena.TryReadMoves"/>), each read as the shared
+/// image its audience is disclosed of it, and travels as the observation rows and cells that changed, written
+/// directly; anything else is composed whole again and travels as the one document delta
+/// (<see cref="WorldDocumentBasis.Diff"/>). A composition that changes nothing sends nothing.
 /// Its state clocks travel as anchors (<see cref="WorldClockAnchorLedger"/>): a composition carries the anchors the
 /// recipient holds while their predictions hold, and <see cref="Step(WorldDefinition, ulong, ulong, StateArena?)"/> sends a timeline delta at exactly the
 /// authoritative ticks a prediction misses, so a steady sky sends nothing.
+/// <para>Invariant: the projection the feed holds (<see cref="Held"/>) is the projection a whole composition of the
+/// recipient's view composes at the same tick (<see cref="WorldRecipientView.Project"/>), its provenance revision and
+/// its anchors aside, and every delta merges over what the recipient holds into it. What enforces it: every value
+/// delivery is composed in one place, the value composition, which runs only while the frame identity, the audience key,
+/// the arena, the row layout and every row a document value references (with the rows its policies read) stand as the
+/// last whole composition recorded them, and which reads every row the journal names as moved since. A policy move
+/// re-asks the composition's own refusals of hidden clocks and bindings. <see cref="Verify"/> composes the view whole
+/// and compares, the check a law runs after every delivery.</para>
 /// <para>Counts its deliveries and their bytes under <see cref="WorldProjectionWork"/>. Not thread-safe: one
 /// recipient's deliveries run on the thread that steps its world.</para>
 /// </summary>
@@ -53,27 +67,55 @@ public readonly record struct WorldProjectionDelivery(WorldProjectionDeliveryKin
 /// (<see cref="WorldClockAnchors.Seeds"/>), or <see langword="null"/> for none.</param>
 /// <param name="content">The store receiving disclosed prototype bodies, or the shared store.</param>
 public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionary<string, ulong>? seeds = null, ContentAddressedStore? content = null) {
+    private const string ObservationsMember = "observations";
+    private const string ProvenanceMember = "provenance";
+    private const string SpacesMember = "spaces";
+
     private readonly WorldClockAnchorLedger m_anchors = new(seeds: seeds);
 
     private WorldProjectionDocument? m_held;
-    private JsonObject? m_tree;
     private Puck.Abstractions.Sha256Digest? m_recipientIdentity;
     private ContentPin? m_recipientFrame;
+    // What the last whole composition was composed under, which a value composition requires to stand: the arena, the
+    // source, the audience key and the policy revision its refusals were asked at.
     private StateArena? m_heldArena;
-    private long m_heldDisclosureRevision = -1L;
+    private WorldDefinition? m_heldSource;
     private string? m_heldAudienceKey;
-    private WorldDefinition? m_referencedSource;
+    private long m_heldDisclosureRevision = -1L;
+    // Every row a document value references, with its version and its dependencies' versions then.
     private int[] m_referencedRowOrdinals = [];
     private ulong[] m_referencedRowVersions = [];
+    private ulong[] m_referencedDependencies = [];
+    // Per authored row: the digest of the image its observation was last composed from (the default for a row that
+    // cannot cross as one), and its index in the held observations, or -1.
+    private Puck.Abstractions.Sha256Digest[] m_rowDigests = [];
+    private int[] m_observedAt = [];
+    // The journal place the rows were last read to.
+    private long m_movesRead = -1L;
+    // The rows that moved since the cursor last recorded the stream's rows, or every row when the cursor must record
+    // them all (a whole composition that delivered nothing read past the moves).
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_undelivered = new();
+    private bool m_cursorWhole = true;
+    private readonly List<int> m_moved = [];
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_affected = new();
+    private int[] m_ordered = [];
+    private readonly System.Buffers.ArrayBufferWriter<byte> m_delta = new();
 
     /// <summary>Composes through the capability and advances only this delivery's cursor. Hidden-only changes
     /// reuse the shared row images; a read of the same view cannot seed this feed.</summary>
+    /// <param name="view">The recipient's view.</param>
+    /// <param name="cursor">The recipient's delivery cursor.</param>
+    /// <returns>The delivery owed.</returns>
+    /// <exception cref="WorldDisclosureException">The projection refuses for this recipient
+    /// (<see cref="WorldProjection.Compose"/>).</exception>
     public WorldProjectionDelivery Compose(WorldRecipientView view, WorldDeliveryCursor cursor) {
         var walked = WorldDocumentWalker.MembersVisited;
         var allocated = GC.GetAllocatedBytesForCurrentThread();
 
         try {
-            return ComposeCore(view: view, cursor: cursor);
+            using (view.Admit()) {
+                return ComposeCore(view: view, cursor: cursor);
+            }
         } finally {
             WorldProjectionWork.Count(amount: (WorldDocumentWalker.MembersVisited - walked), kind: WorldProjectionWork.WalkedMembers);
             WorldProjectionWork.Count(amount: (GC.GetAllocatedBytesForCurrentThread() - allocated), kind: WorldProjectionWork.ComposedBytes);
@@ -89,263 +131,440 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
             return Step(view, cursor, time.Tick, time.EngineTick);
         }
         var frame = view.Images.FrameIdentity(view);
-        if (TryComposeStateOnly(view: view, cursor: cursor, identity: identity, frame: frame, delivery: out var stateDelivery)) {
-            return stateDelivery;
+        if (TryComposeValues(view: view, cursor: cursor, identity: identity, frame: frame, delivery: out var delivery)) {
+            return delivery;
         }
+        return ComposeWhole(view: view, cursor: cursor, identity: identity, frame: frame);
+    }
+
+    // Composes the recipient's whole projection from the whole document and diffs it against what the recipient holds:
+    // its first delivery, and every one whose frame, audience, arena, layout or referenced rows moved.
+    private WorldProjectionDelivery ComposeWhole(WorldRecipientView view, WorldDeliveryCursor cursor, Puck.Abstractions.Sha256Digest identity, ContentPin frame) {
         WorldProjectionWork.Count(kind: WorldProjectionWork.WholeCompositions);
-        m_recipientIdentity = identity;
-        RecordBasis(view: view, frame: frame);
         var projection = view.Project(m_anchors, m_held?.Provenance.Revision ?? 0)!;
+        m_recipientIdentity = identity;
+        RecordBasis(view: view, frame: frame, observations: projection.Observations);
         var payload = WorldProjection.SerializeCompact(projection);
         var tree = WorldProjectionDelta.Tree(payload);
-        tree.Remove("observations", out var nextObservations);
+        tree.Remove(ObservationsMember, out var nextObservations);
         var observationsChanged = !(projection.Observations ?? []).SequenceEqual(m_held?.Observations ?? []);
-        var delta = m_tree is null ? null : WorldProjectionDelta.Diff(m_tree, tree);
-        // Retain state only as shared typed row images, never as a JSON tree per spectator. The common document
-        // merge keys arrays by name/key, so a new observation array is not a replacement: diff the transient state
-        // trees too, including removal markers for clocks, traits and cells that disappeared.
-        var previousObservations = observationsChanged && m_held?.Observations is { } previous
-            ? WorldProjectionDelta.Tree(previous.ToArray(), WorldJsonContext.Default.WorldObservedRowArray) : null;
-        JsonObject? stateDelta = null;
-        if (m_tree is not null && observationsChanged) {
-            var before = new JsonObject();
-            var after = new JsonObject();
-            if (previousObservations is not null) { before["observations"] = previousObservations.DeepClone(); }
-            if (nextObservations is not null) { after["observations"] = nextObservations.DeepClone(); }
-            stateDelta = WorldProjectionDelta.Diff(before, after);
+        JsonObject? delta = null;
+        JsonNode? previousObservations = null;
+        if (m_held is { } held) {
+            var heldTree = HeldTree(held);
+            heldTree.Remove(ObservationsMember, out previousObservations);
+            delta = WorldProjectionDelta.Diff(heldTree, tree);
         }
+        // The common document merge keys arrays by name/key, so a new observation array is not a replacement: diff the
+        // observation trees apart, including removal markers for clocks, traits and cells that disappeared.
+        var stateDelta = ((m_held is not null) && observationsChanged) ? DiffObservations(previousObservations, nextObservations) : null;
         // Reclaimed images can have new typed references with identical content. Only a semantic difference can
         // advance this stream; adopt the current shared rows even when their payload owes no delivery.
         if (delta is { Count: 0 } && (!observationsChanged || stateDelta is { Count: 0 })) {
             m_held = projection;
+            m_cursorWhole = true;
             return WorldProjectionDelivery.Nothing;
         }
         cursor.Delivered(view);
+        m_undelivered.Clear();
+        m_cursorWhole = false;
         projection = projection with { Provenance = projection.Provenance with { Revision = checked((int)cursor.Sequence) } };
         m_anchors.Retain(projection.Timeline?.Clocks ?? []);
         if (delta is null || (observationsChanged && stateDelta is null)) {
-            payload = WorldProjection.SerializeCompact(projection);
-            tree = WorldProjectionDelta.Tree(payload);
-            tree.Remove("observations", out _);
-            return Whole(projection, tree, payload);
+            return Whole(projection, WorldProjection.SerializeCompact(projection));
         }
-        var provenanceNode = WorldProjectionDelta.Tree(projection.Provenance, WorldJsonContext.Default.For<WorldProjectionProvenance>());
-        tree["provenance"] = provenanceNode;
-        delta["provenance"] = provenanceNode.DeepClone();
+        delta[ProvenanceMember] = WorldProjectionDelta.Tree(projection.Provenance, WorldJsonContext.Default.For<WorldProjectionProvenance>());
         if (stateDelta is not null) {
             foreach (var (name, value) in stateDelta) { delta[name] = value?.DeepClone(); }
         }
         var valuesOnly = WorldProjectionDelta.IsValuesOnly(delta, previousObservations, nextObservations);
-        m_held = projection; m_tree = tree;
+        m_held = projection;
         return Partial(projection, delta, valuesOnly);
     }
+    // The held projection as the canonical tree the recipient holds: what a whole composition is diffed against. Only a
+    // whole composition asks for it, so no tree is kept between deliveries.
+    private static JsonObject HeldTree(WorldProjectionDocument held) => WorldProjectionDelta.Tree(WorldProjection.SerializeCompact(held));
 
-    private void RecordBasis(WorldRecipientView view, ContentPin frame) {
+    // Records what a whole composition was composed under, so that a later value composition can tell it still stands,
+    // and every row's digest and observation index as the composition read them.
+    private void RecordBasis(WorldRecipientView view, ContentPin frame, IReadOnlyList<WorldObservedRow>? observations) {
         m_recipientFrame = frame;
         var arena = view.Arena;
         if (arena.Journal.Scopes != 0) {
+            // A composition inside an open scope reads a store a rewind may take back: no value composition follows it.
             m_heldArena = null;
             m_heldAudienceKey = null;
-            m_heldDisclosureRevision = -1L;
             return;
         }
         var source = view.Source;
-        if (!ReferenceEquals(m_referencedSource, source) || !ReferenceEquals(m_heldArena, arena)) {
-            var names = WorldStateDocumentValues.ReferencedRows(definition: source);
-            if (names.Count == 0) {
-                m_referencedRowOrdinals = [];
-                m_referencedRowVersions = [];
-            } else {
-                var ordinals = new List<int>(capacity: names.Count);
-                foreach (var name in names) {
-                    if (arena.Catalog.TryResolve(lane: StateLane.Document, name: name, handle: out var handle)) {
-                        ordinals.Add(item: handle.Ordinal);
-                    }
-                }
-                m_referencedRowOrdinals = [.. ordinals];
-                m_referencedRowVersions = new ulong[m_referencedRowOrdinals.Length];
-            }
-            m_referencedSource = source;
-        }
-        for (var index = 0; (index < m_referencedRowOrdinals.Length); index++) {
-            m_referencedRowVersions[index] = arena.RowVersion(rowOrdinal: m_referencedRowOrdinals[index]);
-        }
+        var images = view.Images;
+        var audience = images.Audience(view);
         m_heldArena = arena;
+        m_heldSource = source;
+        m_heldAudienceKey = audience.Text;
         m_heldDisclosureRevision = arena.DisclosureRevision;
-        m_heldAudienceKey = view.AudienceKey;
-    }
-
-    private bool ReferencedRowsStand(WorldDefinition source, StateArena arena) {
-        var names = WorldStateDocumentValues.ReferencedRows(definition: source);
-        if (names.Count == 0) { return true; }
-        if (!ReferenceEquals(m_referencedSource, source) && (m_referencedRowOrdinals.Length != names.Count)) {
-            return false;
-        }
-        for (var index = 0; (index < m_referencedRowOrdinals.Length); index++) {
-            if (arena.RowVersion(rowOrdinal: m_referencedRowOrdinals[index]) != m_referencedRowVersions[index]) {
-                return false;
+        m_movesRead = arena.MoveSequence;
+        RecordReferences(view: view, source: source);
+        var count = source.AuthoredState.Count;
+        m_rowDigests = new Puck.Abstractions.Sha256Digest[count];
+        m_observedAt = new int[count];
+        var presented = images.Presented(source);
+        var next = 0;
+        for (var row = 0; row < count; row++) {
+            m_observedAt[row] = -1;
+            if (!view.ObservesRow(row, presented)) { continue; }
+            m_rowDigests[row] = images.RowDigest(audience, row);
+            // The composition's observations are in row order, each a row ObservesRow admits whose image observes.
+            if ((observations is not null) && (next < observations.Count) &&
+                string.Equals(observations[next].Name, arena.Rows[row].Name.Value, StringComparison.Ordinal)) {
+                m_observedAt[row] = next++;
             }
         }
-        m_referencedSource = source;
+    }
+    private void RecordReferences(WorldRecipientView view, WorldDefinition source) {
+        var arena = view.Arena;
+        var names = WorldStateDocumentValues.ReferencedRows(definition: source);
+        var ordinals = new List<int>(capacity: names.Count);
+        foreach (var name in names) {
+            if (arena.Catalog.TryResolve(lane: StateLane.Document, name: name, handle: out var handle)) { ordinals.Add(item: handle.Ordinal); }
+        }
+        ordinals.Sort();
+        m_referencedRowOrdinals = [.. ordinals];
+        m_referencedRowVersions = new ulong[m_referencedRowOrdinals.Length];
+        m_referencedDependencies = new ulong[m_referencedRowOrdinals.Length];
+        for (var index = 0; index < m_referencedRowOrdinals.Length; index++) {
+            (m_referencedRowVersions[index], m_referencedDependencies[index]) = view.Images.Versions(view, m_referencedRowOrdinals[index]);
+        }
+    }
+    // Whether every row a document value of the source references, and every row its policies read, stands as the last
+    // whole composition flattened and checked them: a referenced row's value is flattened into the frame, and its
+    // readability gates the composition.
+    private bool ReferencedRowsStand(WorldRecipientView view, WorldDefinition source) {
+        if (!ReferenceEquals(source, m_heldSource)) {
+            var names = WorldStateDocumentValues.ReferencedRows(definition: source);
+            if (names.Count != m_referencedRowOrdinals.Length) { return false; }
+            foreach (var name in names) {
+                if (!view.Arena.Catalog.TryResolve(lane: StateLane.Document, name: name, handle: out var handle) ||
+                    (Array.BinarySearch(m_referencedRowOrdinals, handle.Ordinal) < 0)) { return false; }
+            }
+        }
+        for (var index = 0; index < m_referencedRowOrdinals.Length; index++) {
+            var (version, dependencies) = view.Images.Versions(view, m_referencedRowOrdinals[index]);
+            if ((version != m_referencedRowVersions[index]) || (dependencies != m_referencedDependencies[index])) { return false; }
+        }
         return true;
     }
 
-    // Composes only observations, spaces and timeline when the disclosed frame, audience and every state cell bound by a
-    // document-value reference stand: avoids re-projecting, serializing and diffing unchanged megabyte sections per tick.
-    private bool TryComposeStateOnly(WorldRecipientView view, WorldDeliveryCursor cursor, Puck.Abstractions.Sha256Digest identity, ContentPin frame, out WorldProjectionDelivery delivery) {
+    // The value composition: composes the observations, spaces and timeline of a projection whose frame, audience,
+    // arena, row layout and referenced rows stand, from the rows the journal names as moved since the last composition,
+    // and delivers the rows and cells that changed. False when anything else moved, which only a whole composition
+    // answers.
+    private bool TryComposeValues(WorldRecipientView view, WorldDeliveryCursor cursor, Puck.Abstractions.Sha256Digest identity, ContentPin frame, out WorldProjectionDelivery delivery) {
         delivery = WorldProjectionDelivery.Nothing;
         var arena = view.Arena;
-        if ((m_held is not { } held) || (m_tree is not { } tree) || (arena.Journal.Scopes != 0) ||
-            (frame != m_recipientFrame) || !ReferenceEquals(arena, m_heldArena) ||
-            (arena.DisclosureRevision != m_heldDisclosureRevision) ||
-            !string.Equals(view.AudienceKey, m_heldAudienceKey, StringComparison.Ordinal) ||
-            !ReferencedRowsStand(source: view.Source, arena: arena)) {
+        var source = view.Source;
+        if ((m_held is not { } held) || (arena.Journal.Scopes != 0) || !ReferenceEquals(arena, m_heldArena) ||
+            (frame != m_recipientFrame) || (source.AuthoredState.Count != m_rowDigests.Length)) {
             return false;
         }
-
+        var images = view.Images;
+        var audience = images.Audience(view);
+        if (!string.Equals(audience.Text, m_heldAudienceKey, StringComparison.Ordinal) || !ReferencedRowsStand(view: view, source: source)) {
+            return false;
+        }
         WorldProjectionWork.Count(kind: WorldProjectionWork.Compositions);
+        if (arena.DisclosureRevision != m_heldDisclosureRevision) {
+            // A policy, membership or audience write: what the frame and the referenced rows decide stands, but whether
+            // the recipient may still read a keyed clock or a bound cell is asked again, as a composition asks it.
+            WorldProjection.RefuseHidden(definition: source, arena: arena, recipient: view.Recipient, unrestricted: view.Unrestricted);
+            m_heldDisclosureRevision = arena.DisclosureRevision;
+        }
+
+        // The rows that can have moved: every row the journal names since the last read and every row whose policies
+        // read one, or every row when the journal cannot name them or the source was replaced.
+        var count = m_rowDigests.Length;
+        m_moved.Clear();
+        m_affected.Clear();
+        var named = arena.TryReadMoves(ref m_movesRead, m_moved);
+        var every = !named || !ReferenceEquals(source, m_heldSource);
+        m_heldSource = source;
+        ReadOnlySpan<int> rows;
+        if (every) {
+            ArrayCapacity.EnsureScratch(ref m_ordered, count);
+            for (var row = 0; row < count; row++) { m_ordered[row] = row; }
+            rows = m_ordered.AsSpan(0, count);
+        } else {
+            images.Affected(view, System.Runtime.InteropServices.CollectionsMarshal.AsSpan(m_moved), m_affected);
+            ArrayCapacity.EnsureScratch(ref m_ordered, m_affected.Count);
+            m_affected.Members.CopyTo(m_ordered);
+            var ordered = m_ordered.AsSpan(0, m_affected.Count);
+            ordered.Sort();
+            rows = ordered;
+        }
+        WorldProjectionWork.Count(amount: rows.Length, kind: WorldProjectionWork.RowsRead);
+
+        var presented = images.Presented(source);
+        var observations = held.Observations ?? [];
+        WorldObservedRow[]? next = null;
+        List<int>? replaced = null;
+        var reshaped = false;
+        foreach (var row in rows) {
+            if (row >= count) { break; }
+            if (!m_cursorWhole) { m_undelivered.Add(row); }
+            var observes = view.ObservesRow(row, presented);
+            var digest = observes ? images.RowDigest(audience, row) : default;
+            if (digest == m_rowDigests[row]) { continue; }
+            m_rowDigests[row] = digest;
+            var observation = observes ? images.Image(audience, row).Observation : null;
+            var at = m_observedAt[row];
+            if ((at >= 0) && (observation is not null) && string.Equals(observation.Space, observations[at].Space, StringComparison.Ordinal)) {
+                if (SameObservation(observation, observations[at])) { continue; }
+                next ??= [.. observations];
+                next[at] = observation;
+                (replaced ??= []).Add(at);
+            } else if ((at >= 0) || (observation is not null)) {
+                reshaped = true;
+                (m_reshapedRows ??= []).Add((row, observation));
+            }
+        }
+        if (reshaped) {
+            return TryComposeReshaped(view, cursor, identity, held, next ?? [.. observations], out delivery);
+        }
+
+        var time = view.Time;
+        var timeline = WorldProjection.ComposeTimeline(definition: source, anchors: m_anchors, arena: arena, time: in time);
+        var timelineChanged = !SameTimeline(timeline, held.Timeline);
+        var nextObservations = ((next is null) ? held.Observations : next);
+        if ((replaced is null) && !timelineChanged) {
+            m_recipientIdentity = identity;
+            m_held = held with { Observations = nextObservations, Timeline = timeline };
+            return true;
+        }
+
+        DeliverRows(view: view, cursor: cursor);
+        var provenance = held.Provenance with { Revision = checked((int)cursor.Sequence) };
+        var valuesOnly = true;
+        m_delta.ResetWrittenCount();
+        m_delta.Write("{"u8);
+        if (replaced is not null) {
+            m_delta.Write("\"observations\":["u8);
+            for (var index = 0; index < replaced.Count; index++) {
+                if (index != 0) { m_delta.Write(","u8); }
+                var at = replaced[index];
+                valuesOnly &= WriteObservationPatch(before: observations[at], after: next![at]);
+            }
+            m_delta.Write("],"u8);
+        }
+        m_delta.Write("\"provenance\":"u8);
+        m_delta.Write(CanonicalJsonDocument.SerializeCompact(provenance, WorldJsonContext.Default.For<WorldProjectionProvenance>()));
+        if (timelineChanged) {
+            m_delta.Write(",\"timeline\":"u8);
+            WriteTimeline(held.Timeline, timeline);
+        }
+        m_delta.Write("}"u8);
+
+        var nextProjection = held with { Provenance = provenance, Observations = nextObservations, Timeline = timeline };
+        m_anchors.Retain(nextProjection.Timeline?.Clocks ?? []);
+        m_recipientIdentity = identity;
+        m_held = nextProjection;
+        delivery = Partial(projection: nextProjection, payload: m_delta.WrittenSpan.ToArray(), valuesOnly: valuesOnly, timelineOnly: (replaced is null));
+        return true;
+    }
+    // The rows a value composition found entering or leaving the observations, by row, with the observation entering.
+    private List<(int Row, WorldObservedRow? Observation)>? m_reshapedRows;
+
+    // A value composition whose observed rows changed in number or order (a row turning readable, or no longer
+    // crossing): the observations are composed again in row order and travel as the document delta of the observation
+    // trees, with the spaces they name. The frame still stands, so nothing else is composed.
+    private bool TryComposeReshaped(WorldRecipientView view, WorldDeliveryCursor cursor, Puck.Abstractions.Sha256Digest identity,
+        WorldProjectionDocument held, WorldObservedRow[] current, out WorldProjectionDelivery delivery) {
+        delivery = WorldProjectionDelivery.Nothing;
         var source = view.Source;
-        var observations = view.Observations(view.Images.Presented(source));
+        var arena = view.Arena;
+        var count = m_rowDigests.Length;
+        var entering = new Dictionary<int, WorldObservedRow?>();
+        foreach (var (row, observation) in m_reshapedRows!) { entering[row] = observation; }
+        m_reshapedRows.Clear();
+        var rebuilt = new List<WorldObservedRow>();
+        for (var row = 0; row < count; row++) {
+            WorldObservedRow? observation;
+            if (entering.TryGetValue(row, out var moved)) { observation = moved; }
+            else if (m_observedAt[row] >= 0) { observation = current[m_observedAt[row]]; }
+            else { continue; }
+            m_observedAt[row] = -1;
+            if (observation is null) { continue; }
+            m_observedAt[row] = rebuilt.Count;
+            rebuilt.Add(observation);
+        }
+        IReadOnlyList<WorldObservedRow>? observations = (rebuilt.Count == 0) ? null : rebuilt;
         var spaces = WorldProjection.SpacesOf(observations: observations, spaces: source.StateRaw?.Spaces);
         var time = view.Time;
         var timeline = WorldProjection.ComposeTimeline(definition: source, anchors: m_anchors, arena: arena, time: in time);
 
-        var observationsChanged = !Puck.Maths.SequenceEqualityComparer<WorldObservedRow>.Instance.Equals(x: held.Observations, y: observations);
-        var spacesChanged = !Puck.Maths.SequenceEqualityComparer<StateSpace>.Instance.Equals(x: held.Spaces, y: spaces);
-        var timelineChanged = !(((timeline is null) == (held.Timeline is null)) && (timeline?.Clocks ?? []).SequenceEqual(held.Timeline?.Clocks ?? []));
-
-        if (!observationsChanged && !spacesChanged && !timelineChanged) {
-            m_recipientIdentity = identity;
-            m_held = held with { Observations = observations, Spaces = spaces, Timeline = timeline };
-            return true;
-        }
-
-        var delta = new JsonObject();
-        JsonNode? previousObservations = null;
-        JsonNode? nextObservations = null;
-        JsonObject? stateDelta = null;
-        var fastObservationsValuesOnly = true;
-        var usedFastObservationDiff = false;
-
-        if (observationsChanged) {
-            if (TryDiffChangedObservations(previous: held.Observations, current: observations, stateDelta: out stateDelta, valuesOnly: out fastObservationsValuesOnly)) {
-                usedFastObservationDiff = true;
-            } else {
-                previousObservations = ((held.Observations is { } previous)
-                    ? WorldProjectionDelta.Tree(previous.ToArray(), WorldJsonContext.Default.WorldObservedRowArray)
-                    : null);
-                nextObservations = ((observations is { } current)
-                    ? WorldProjectionDelta.Tree(current.ToArray(), WorldJsonContext.Default.WorldObservedRowArray)
-                    : null);
-                var before = new JsonObject();
-                var after = new JsonObject();
-                if (previousObservations is not null) { before["observations"] = previousObservations.DeepClone(); }
-                if (nextObservations is not null) { after["observations"] = nextObservations.DeepClone(); }
-                stateDelta = WorldProjectionDelta.Diff(held: before, next: after);
-                if (stateDelta is null) { return false; }
-            }
-        }
-
-        JsonNode? spacesNode = null;
-        if (spacesChanged) {
-            spacesNode = ((spaces is null) ? null : WorldProjectionDelta.Tree(spaces, WorldJsonContext.Default.For<StateSpace[]>()));
-            var before = new JsonObject();
-            var after = new JsonObject();
-            if (tree.TryGetPropertyValue("spaces", out var heldSpaces) && (heldSpaces is not null)) { before["spaces"] = heldSpaces.DeepClone(); }
-            if (spacesNode is not null) { after["spaces"] = spacesNode.DeepClone(); }
-            var spacesDelta = WorldProjectionDelta.Diff(held: before, next: after);
+        var previousObservations = ((held.Observations is { } previous) ? WorldProjectionDelta.Tree(previous.ToArray(), WorldJsonContext.Default.WorldObservedRowArray) : null);
+        var nextObservations = ((observations is { } next) ? WorldProjectionDelta.Tree(next.ToArray(), WorldJsonContext.Default.WorldObservedRowArray) : null);
+        var delta = DiffObservations(previousObservations, nextObservations);
+        if (delta is null) { return false; }
+        if (!Puck.Maths.SequenceEqualityComparer<StateSpace>.Instance.Equals(x: held.Spaces, y: spaces)) {
+            var spacesDelta = WorldProjectionDelta.Diff(
+                held: (held.Spaces is { } heldSpaces) ? new JsonObject { [SpacesMember] = WorldProjectionDelta.Tree(heldSpaces, WorldJsonContext.Default.For<IReadOnlyList<StateSpace>>()) } : [],
+                next: (spaces is { } nextSpaces) ? new JsonObject { [SpacesMember] = WorldProjectionDelta.Tree(nextSpaces, WorldJsonContext.Default.For<StateSpace[]>()) } : []);
             if (spacesDelta is null) { return false; }
             foreach (var (name, value) in spacesDelta) { delta[name] = value?.DeepClone(); }
         }
-
-        JsonNode? timelineNode = null;
-        if (timelineChanged) {
-            timelineNode = ((timeline is null) ? null : WorldProjectionDelta.Tree(timeline: timeline));
-            var before = new JsonObject();
-            var after = new JsonObject();
-            if (tree.TryGetPropertyValue(WorldProjectionDelta.Timeline, out var heldTimeline) && (heldTimeline is not null)) { before[WorldProjectionDelta.Timeline] = heldTimeline.DeepClone(); }
-            if (timelineNode is not null) { after[WorldProjectionDelta.Timeline] = timelineNode.DeepClone(); }
-            var timelineDelta = WorldProjectionDelta.Diff(held: before, next: after);
-            if (timelineDelta is null) { return false; }
-            foreach (var (name, value) in timelineDelta) { delta[name] = value?.DeepClone(); }
+        if (!SameTimeline(timeline, held.Timeline)) {
+            delta[WorldProjectionDelta.Timeline] = ((timeline is null) ? null : WorldProjectionDelta.Tree(timeline: timeline));
         }
 
-        if ((delta.Count == 0) && (!observationsChanged || (stateDelta is { Count: 0 }))) {
-            m_recipientIdentity = identity;
-            m_held = held with { Observations = observations, Spaces = spaces, Timeline = timeline };
-            return true;
-        }
-
-        cursor.Delivered(view);
+        DeliverRows(view: view, cursor: cursor);
         var provenance = held.Provenance with { Revision = checked((int)cursor.Sequence) };
-        var provenanceNode = WorldProjectionDelta.Tree(provenance, WorldJsonContext.Default.For<WorldProjectionProvenance>());
-        tree["provenance"] = provenanceNode;
-        delta["provenance"] = provenanceNode.DeepClone();
-        if (spacesChanged) {
-            if (spacesNode is null) { _ = tree.Remove("spaces"); } else { tree["spaces"] = spacesNode; }
-        }
-        if (timelineChanged) {
-            if (timelineNode is null) { _ = tree.Remove(WorldProjectionDelta.Timeline); } else { tree[WorldProjectionDelta.Timeline] = timelineNode; }
-        }
-        if (stateDelta is not null) {
-            foreach (var (name, value) in stateDelta) { delta[name] = value?.DeepClone(); }
-        }
+        delta[ProvenanceMember] = WorldProjectionDelta.Tree(provenance, WorldJsonContext.Default.For<WorldProjectionProvenance>());
         var nextProjection = held with { Provenance = provenance, Observations = observations, Spaces = spaces, Timeline = timeline };
         m_anchors.Retain(nextProjection.Timeline?.Clocks ?? []);
-        var valuesOnly = (usedFastObservationDiff
-            ? (fastObservationsValuesOnly && WorldProjectionDelta.HasOnlyValueMembers(delta: delta))
-            : WorldProjectionDelta.IsValuesOnly(delta, previousObservations, nextObservations));
         m_recipientIdentity = identity;
         m_held = nextProjection;
-        delivery = Partial(nextProjection, delta, valuesOnly);
+        delivery = Partial(nextProjection, delta, WorldProjectionDelta.IsValuesOnly(delta, previousObservations, nextObservations));
         return true;
     }
 
-    private static bool TryDiffChangedObservations(IReadOnlyList<WorldObservedRow>? previous, IReadOnlyList<WorldObservedRow>? current, out JsonObject? stateDelta, out bool valuesOnly) {
-        stateDelta = null;
-        valuesOnly = true;
-        if ((previous is null) || (current is null) || (previous.Count != current.Count) || (previous.Count == 0)) {
-            return false;
+    // Records on the cursor the rows this delivery's stream holds now: the rows that moved since it last recorded them,
+    // or every row when it must record them all.
+    private void DeliverRows(WorldRecipientView view, WorldDeliveryCursor cursor) {
+        if (m_cursorWhole) {
+            cursor.Delivered(view);
+        } else {
+            ArrayCapacity.EnsureScratch(ref m_ordered, m_undelivered.Count);
+            m_undelivered.Members.CopyTo(m_ordered);
+            var rows = m_ordered.AsSpan(0, m_undelivered.Count);
+            rows.Sort();
+            cursor.Delivered(view, rows);
         }
-        List<int>? changed = null;
-        for (var index = 0; (index < previous.Count); index++) {
-            var beforeRow = previous[index];
-            var afterRow = current[index];
-            if (ReferenceEquals(objA: beforeRow, objB: afterRow)) { continue; }
-            if (!string.Equals(a: beforeRow.Name, b: afterRow.Name, comparisonType: StringComparison.Ordinal)) {
-                return false;
+        m_undelivered.Clear();
+        m_cursorWhole = false;
+    }
+
+    private static JsonObject? DiffObservations(JsonNode? previous, JsonNode? next) {
+        var before = new JsonObject();
+        var after = new JsonObject();
+        if (previous is not null) { before[ObservationsMember] = previous.DeepClone(); }
+        if (next is not null) { after[ObservationsMember] = next.DeepClone(); }
+        return WorldProjectionDelta.Diff(held: before, next: after);
+    }
+
+    private static bool SameTimeline(WorldTimelineSection? left, WorldTimelineSection? right) =>
+        ((left is null) == (right is null)) && (left?.Clocks ?? []).SequenceEqual(right?.Clocks ?? []);
+
+    // Writes one observation row's patch: its changed cells, each replacing the cell of its key, when the row kept its
+    // shape and every member but its cells; otherwise the whole row, replacing the row of its name. Answers whether the
+    // patch moves values only.
+    private bool WriteObservationPatch(WorldObservedRow before, WorldObservedRow after) {
+        var sameShape = WorldProjectionDelta.SameObservationRowShape(left: before, right: after);
+        if (!sameShape || (before.HiddenCount != 0) || (after.HiddenCount != 0) || HoldsHidden(after) ||
+            ((after with { Cells = before.Cells }) != before)) {
+            WriteReplaced(CanonicalJsonDocument.SerializeCompact(after, WorldJsonContext.Default.For<WorldObservedRow>()));
+            return sameShape;
+        }
+        m_delta.Write("{\"name\":"u8);
+        m_delta.Write(CanonicalJsonDocument.SerializeCompact(after.Name, WorldJsonContext.Default.For<string>()));
+        m_delta.Write(",\"cells\":["u8);
+        var first = true;
+        for (var index = 0; index < after.Cells.Count; index++) {
+            if (after.Cells[index] == before.Cells[index]) { continue; }
+            if (!first) { m_delta.Write(","u8); }
+            first = false;
+            WriteReplaced(CanonicalJsonDocument.SerializeCompact(after.Cells[index], WorldJsonContext.Default.For<WorldObservedCell>()));
+        }
+        m_delta.Write("]}"u8);
+        return true;
+    }
+    // Whether two observations of one row carry the same content: a digest also moves with replica cells an
+    // observation does not carry.
+    private static bool SameObservation(WorldObservedRow left, WorldObservedRow right) =>
+        ((left with { Cells = right.Cells }) == right) && left.Cells.SequenceEqual(right.Cells);
+    private static bool HoldsHidden(WorldObservedRow row) {
+        foreach (var cell in row.Cells) { if (cell.Hidden) { return true; } }
+        return false;
+    }
+    // Writes an object as a delta that replaces its target whole (WorldDocumentBasis.ReplaceMemberName).
+    private void WriteReplaced(byte[] value) {
+        if (value.Length <= 2) { m_delta.Write("{\"$replace\":true}"u8); return; }
+        m_delta.Write("{\"$replace\":true,"u8);
+        m_delta.Write(value.AsSpan(1));
+    }
+    // Writes a timeline's delta: the clocks that changed, each replacing the clock of its name, when the timeline kept
+    // its clocks in number, name and order and every member but its clocks; otherwise the whole timeline.
+    private void WriteTimeline(WorldTimelineSection? previous, WorldTimelineSection? timeline) {
+        if (timeline is null) { m_delta.Write("null"u8); return; }
+        if ((previous?.Clocks is { } before) && (timeline.Clocks is { } after) && (before.Count == after.Count) &&
+            ((previous with { Clocks = after }) == timeline)) {
+            var changed = 0;
+            for (var index = 0; index < after.Count; index++) {
+                if ((before[index] is not { } held) || (after[index] is not { } clock) || !string.Equals(held.Name, clock.Name, StringComparison.Ordinal)) {
+                    changed = -1;
+                    break;
+                }
+                if (held != clock) { changed++; }
             }
-            if (beforeRow == afterRow) { continue; }
-            (changed ??= []).Add(item: index);
-            if (valuesOnly && !WorldProjectionDelta.SameObservationRowShape(left: beforeRow, right: afterRow)) {
-                valuesOnly = false;
+            if (changed > 0) {
+                m_delta.Write("{\"clocks\":["u8);
+                var first = true;
+                for (var index = 0; index < after.Count; index++) {
+                    var (held, clock) = (before[index]!, after[index]!);
+                    if (held == clock) { continue; }
+                    if (!first) { m_delta.Write(","u8); }
+                    first = false;
+                    if ((clock with { Anchor = held.Anchor }) == held) {
+                        // An anchor correction, the common step: the clock's anchor alone, replacing the one held.
+                        m_delta.Write("{\"name\":"u8);
+                        m_delta.Write(CanonicalJsonDocument.SerializeCompact(clock.Name, WorldJsonContext.Default.For<string>()));
+                        m_delta.Write(",\"anchor\":"u8);
+                        if (clock.Anchor is { } anchor) {
+                            WriteReplaced(CanonicalJsonDocument.SerializeCompact(anchor, WorldJsonContext.Default.For<WorldClockAnchor>()));
+                        } else {
+                            m_delta.Write("null"u8);
+                        }
+                        m_delta.Write("}"u8);
+                        continue;
+                    }
+                    WriteReplaced(CanonicalJsonDocument.SerializeCompact(clock, WorldJsonContext.Default.For<WorldClock>()));
+                }
+                m_delta.Write("]}"u8);
+                return;
             }
         }
-        if (changed is null) {
-            stateDelta = new JsonObject();
-            return true;
+        WriteReplaced(CanonicalJsonDocument.SerializeCompact(timeline, WorldJsonContext.Default.WorldTimelineSection));
+    }
+
+    /// <summary>Composes the view's whole projection and compares it with the projection the feed holds, provenance
+    /// and timeline aside: the feed's invariant (a value composition holds what a whole composition composes), which a
+    /// law asks after every delivery. Changes no state of the feed or its cursor.</summary>
+    /// <param name="view">The recipient's view.</param>
+    /// <returns>The first member that differs, or <see langword="null"/> when the held projection is the whole
+    /// composition's, or when nothing is held.</returns>
+    public string? Verify(WorldRecipientView view) {
+        if ((m_held is not { } held) || !view.Observes) { return null; }
+        var whole = view.Project(anchors: null, sequence: held.Provenance.Revision)!;
+        var expected = WorldProjectionDelta.Tree(WorldProjection.SerializeCompact(whole with { Provenance = held.Provenance, Timeline = null }));
+        var actual = WorldProjectionDelta.Tree(WorldProjection.SerializeCompact(held with { Timeline = null }));
+        foreach (var (name, value) in expected) {
+            if (!JsonNode.DeepEquals(value, actual[name])) { return name; }
         }
-        var sliceBefore = new WorldObservedRow[changed.Count];
-        var sliceAfter = new WorldObservedRow[changed.Count];
-        for (var ordinal = 0; (ordinal < changed.Count); ordinal++) {
-            var rowIndex = changed[ordinal];
-            sliceBefore[ordinal] = previous[rowIndex];
-            sliceAfter[ordinal] = current[rowIndex];
+        foreach (var (name, _) in actual) {
+            if (!expected.ContainsKey(name)) { return name; }
         }
-        var beforeNode = WorldProjectionDelta.Tree(sliceBefore, WorldJsonContext.Default.WorldObservedRowArray);
-        var afterNode = WorldProjectionDelta.Tree(sliceAfter, WorldJsonContext.Default.WorldObservedRowArray);
-        stateDelta = WorldProjectionDelta.Diff(
-            held: new JsonObject { ["observations"] = beforeNode },
-            next: new JsonObject { ["observations"] = afterNode }
-        );
-        return (stateDelta is not null);
+        return null;
     }
 
     /// <summary>Advances a primed projection from changed presentation rows, falling back to a disclosure composition
     /// when state or policy also moved.</summary>
+    /// <param name="view">The recipient's view.</param>
+    /// <param name="cursor">The recipient's delivery cursor.</param>
+    /// <param name="rows">The presentation rows the edit changed.</param>
+    /// <returns>The delivery owed.</returns>
     public WorldProjectionDelivery ComposeAppearance(WorldRecipientView view, WorldDeliveryCursor cursor, WorldPresentationRows rows) {
+        using var hold = view.Admit();
         if (!view.Observes) { return WorldProjectionDelivery.Nothing; }
-        if (rows.ChangesProjectionDependencies || m_held is not { } held || m_tree is not { } tree ||
+        if (rows.ChangesProjectionDependencies || m_held is not { } held ||
             !view.Images.TryAdvanceAppearance(view, m_recipientFrame, m_recipientIdentity, out var frame, out _, out var identity)) {
             return Compose(view, cursor);
         }
@@ -383,22 +602,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
 
         cursor.Delivered();
         var provenance = held.Provenance with { Revision = checked((int)cursor.Sequence) };
-        delta["provenance"] = JsonSerializer.SerializeToNode(provenance, WorldJsonContext.Default.For<WorldProjectionProvenance>());
-        tree["provenance"] = delta["provenance"]!.DeepClone();
-        var heldReferences = (JsonArray)tree["prototypes"]!;
-        for (var index = 0; index < replacements.Count; index++) {
-            heldReferences[replacements[index].Ordinal] = changedReferences[index]!.DeepClone();
-        }
-        if (!rows.HasShades) {
-            tree.Remove("shades");
-        } else if (delta["shades"] is JsonObject changedShades) {
-            var heldShades = tree["shades"] as JsonObject;
-            if (heldShades is null) { tree["shades"] = heldShades = new JsonObject(); }
-            foreach (var (name, shade) in changedShades) {
-                if (shade is null) { heldShades.Remove(name); } else { heldShades[name] = shade.DeepClone(); }
-            }
-        }
-
+        delta[ProvenanceMember] = JsonSerializer.SerializeToNode(provenance, WorldJsonContext.Default.For<WorldProjectionProvenance>());
         m_held = held with { Creations = references, Provenance = provenance, Shades = view.Source.ShadesRaw };
         return Partial(m_held, delta, valuesOnly: false) with {
             Appearance = new([.. replacements], rows.Shades, HasCreations: true, rows.HasShades)
@@ -406,20 +610,32 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     }
 
     /// <summary>Delivers anchor corrections at this stream's sequence.</summary>
+    /// <param name="view">The recipient's view.</param>
+    /// <param name="cursor">The recipient's delivery cursor.</param>
+    /// <param name="tick">The authoritative simulation tick.</param>
+    /// <param name="engineTick">The engine tick that simulation tick stands at.</param>
+    /// <returns>The delivery owed: a delta of the timeline and the provenance, or nothing.</returns>
     public WorldProjectionDelivery Step(WorldRecipientView view, WorldDeliveryCursor cursor, ulong tick, ulong engineTick) {
-        var delivery = Step(view.Source, tick, engineTick, view.Arena);
-        if (delivery.Kind == WorldProjectionDeliveryKind.None) { return delivery; }
+        if (StepTimeline(view.Source, tick, engineTick, view.Arena) is not { } timeline) { return WorldProjectionDelivery.Nothing; }
         cursor.Delivered();
-        var provenance = m_held!.Provenance with { Revision = checked((int)cursor.Sequence) };
-        var provenanceNode = WorldProjectionDelta.Tree(provenance, WorldJsonContext.Default.For<WorldProjectionProvenance>());
-        m_held = m_held with { Provenance = provenance };
-        m_tree!["provenance"] = provenanceNode;
-        if (delivery.Kind == WorldProjectionDeliveryKind.Document) {
-            return delivery with { Projection = m_held, Payload = WorldProjection.SerializeCompact(m_held) };
+        return StepDelta(timeline: timeline, provenance: m_held!.Provenance with { Revision = checked((int)cursor.Sequence) });
+    }
+    // The delta a step owes: the timeline's changed clocks, and the provenance that numbers the delivery when a cursor
+    // numbered it.
+    private WorldProjectionDelivery StepDelta(WorldTimelineSection timeline, WorldProjectionProvenance? provenance) {
+        var previous = m_held!.Timeline;
+        m_held = m_held with { Provenance = provenance ?? m_held.Provenance, Timeline = timeline };
+        m_delta.ResetWrittenCount();
+        m_delta.Write("{"u8);
+        if (provenance is not null) {
+            m_delta.Write("\"provenance\":"u8);
+            m_delta.Write(CanonicalJsonDocument.SerializeCompact(provenance, WorldJsonContext.Default.For<WorldProjectionProvenance>()));
+            m_delta.Write(","u8);
         }
-        var delta = WorldProjectionDelta.Tree(delivery.Payload);
-        delta["provenance"] = provenanceNode.DeepClone();
-        return delivery with { Projection = m_held, Payload = CanonicalJsonDocument.SerializeCompact(delta), TimelineOnly = false };
+        m_delta.Write("\"timeline\":"u8);
+        WriteTimeline(previous, timeline);
+        m_delta.Write("}"u8);
+        return Partial(projection: m_held, payload: m_delta.WrittenSpan.ToArray(), valuesOnly: true, timelineOnly: true);
     }
 
     /// <summary>Gets the anchors the recipient holds.</summary>
@@ -453,37 +669,26 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
 
         m_anchors.Retain(clocks: (projection.Timeline?.Clocks ?? []));
         var payload = WorldProjection.SerializeCompact(projection: projection);
-        var tree = WorldProjectionDelta.Tree(utf8Json: payload);
 
-        if (m_tree is null) {
-            return Whole(
-                payload: payload,
-                projection: projection,
-                tree: tree
-            );
+        if (m_held is not { } heldProjection) {
+            return Whole(projection: projection, payload: payload);
         }
 
-        var delta = WorldProjectionDelta.Diff(
-            held: m_tree,
-            next: tree
-        );
+        var held = HeldTree(heldProjection);
+        var tree = WorldProjectionDelta.Tree(utf8Json: payload);
+        var delta = WorldProjectionDelta.Diff(held: held, next: tree);
 
         if (delta is null) {
-            return Whole(
-                payload: payload,
-                projection: projection,
-                tree: tree
-            );
+            return Whole(projection: projection, payload: payload);
         }
 
         var valuesOnly = WorldProjectionDelta.IsValuesOnly(
             delta: delta,
-            previousObservations: m_tree["observations"],
-            nextObservations: tree["observations"]
+            previousObservations: held[ObservationsMember],
+            nextObservations: tree[ObservationsMember]
         );
 
         m_held = projection;
-        m_tree = tree;
 
         return ((delta.Count == 0)
             ? WorldProjectionDelivery.Nothing
@@ -502,9 +707,13 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     /// <param name="engineTick">The engine tick that simulation tick stands at.</param>
     /// <returns>The delivery owed.</returns>
     public WorldProjectionDelivery Step(WorldDefinition definition, ulong tick, ulong engineTick, StateArena? arena = null) {
+        return (StepTimeline(definition, tick, engineTick, arena) is { } timeline) ? StepDelta(timeline: timeline, provenance: null) : WorldProjectionDelivery.Nothing;
+    }
+    // The timeline a step owes the recipient, or null when every held prediction stands: each anchored clock carries
+    // what the ledger holds, which is nothing once a stale anchor was dropped with no seed to replace it.
+    private WorldTimelineSection? StepTimeline(WorldDefinition definition, ulong tick, ulong engineTick, StateArena? arena) {
         if (
             (m_held?.Timeline is not { Clocks: { } clocks } timeline) ||
-            (m_tree is null) ||
             !m_anchors.Step(
             arena: arena,
             definition: definition,
@@ -512,7 +721,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
             tick: tick
         )
         ) {
-            return WorldProjectionDelivery.Nothing;
+            return null;
         }
 
         var carried = new WorldClock[clocks.Count];
@@ -520,8 +729,6 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
         for (var index = 0; (index < carried.Length); index++) {
             var clock = clocks[index];
 
-            // An anchored clock carries what the ledger holds, which is nothing once a stale anchor was dropped with
-            // no seed to replace it.
             carried[index] = (clock.IsAnchored
                 ? (clock with {
                     Anchor = (m_anchors.TryHeld(
@@ -534,47 +741,33 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
                 : clock);
         }
 
-        var next = (timeline with { Clocks = carried });
-        var node = WorldProjectionDelta.Tree(timeline: next);
-        var delta = WorldProjectionDelta.Diff(
-            held: new JsonObject { [WorldProjectionDelta.Timeline] = m_tree[WorldProjectionDelta.Timeline]?.DeepClone() },
-            next: new JsonObject { [WorldProjectionDelta.Timeline] = node.DeepClone() }
-        );
-
-        m_held = (m_held with { Timeline = next });
-        m_tree[WorldProjectionDelta.Timeline] = node;
-
-        return ((delta is null)
-            ? Whole(
-                payload: WorldProjection.SerializeCompact(projection: m_held),
-                projection: m_held,
-                tree: m_tree
-            )
-            : Partial(
-                delta: delta,
-                projection: m_held,
-                valuesOnly: true
-            ));
+        return (timeline with { Clocks = carried });
     }
     /// <summary>Releases everything held for the recipient, its anchor rows included: it left or lost disclosure, and
     /// its next delivery is a whole projection.</summary>
     public void Release() {
         m_anchors.Release();
         m_held = null;
-        m_tree = null;
         m_recipientIdentity = null;
         m_recipientFrame = null;
         m_heldArena = null;
+        m_heldSource = null;
         m_heldAudienceKey = null;
         m_heldDisclosureRevision = -1L;
-        m_referencedSource = null;
         m_referencedRowOrdinals = [];
         m_referencedRowVersions = [];
+        m_referencedDependencies = [];
+        m_rowDigests = [];
+        m_observedAt = [];
+        m_movesRead = -1L;
+        m_undelivered.Clear();
+        m_cursorWhole = true;
+        m_reshapedRows?.Clear();
     }
 
-    private WorldProjectionDelivery Partial(WorldProjectionDocument projection, JsonObject delta, bool valuesOnly) {
-        var payload = CanonicalJsonDocument.SerializeCompact(node: delta);
-
+    private WorldProjectionDelivery Partial(WorldProjectionDocument projection, JsonObject delta, bool valuesOnly) =>
+        Partial(projection: projection, payload: CanonicalJsonDocument.SerializeCompact(node: delta), valuesOnly: valuesOnly, timelineOnly: WorldProjectionDelta.IsTimelineOnly(delta: delta));
+    private static WorldProjectionDelivery Partial(WorldProjectionDocument projection, byte[] payload, bool valuesOnly, bool timelineOnly) {
         WorldProjectionWork.Count(kind: WorldProjectionWork.Deltas);
         WorldProjectionWork.Count(
             amount: payload.Length,
@@ -585,13 +778,12 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
             Kind: WorldProjectionDeliveryKind.Delta,
             Payload: payload,
             Projection: projection,
-            TimelineOnly: WorldProjectionDelta.IsTimelineOnly(delta: delta),
+            TimelineOnly: timelineOnly,
             ValuesOnly: valuesOnly
         );
     }
-    private WorldProjectionDelivery Whole(WorldProjectionDocument projection, JsonObject tree, byte[] payload) {
+    private WorldProjectionDelivery Whole(WorldProjectionDocument projection, byte[] payload) {
         m_held = projection;
-        m_tree = tree;
         WorldProjectionWork.Count(kind: WorldProjectionWork.Documents);
         WorldProjectionWork.Count(
             amount: payload.Length,
@@ -604,755 +796,5 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
             Projection: projection,
             ValuesOnly: false
         );
-    }
-}
-/// <summary>A recipient's side of a <see cref="WorldProjectionFeed"/>: the projection it holds, which a whole
-/// delivery replaces and a delta merges into, and the definition hydrated from it.</summary>
-/// <param name="content">The recipient content cache, or the shared store.</param>
-/// <param name="fetch">The authorized fetch door for objects absent from the cache.</param>
-/// <param name="basis">Reads the document the recipient holds for the sender's world, which a replica's manifest is
-/// assembled over: its own copy of the world, then each document the stream delivered; <see langword="null"/> assembles
-/// every manifest whole.</param>
-/// <param name="seed">An optional initial local definition whose literal prototypes may satisfy matching pins.</param>
-public sealed class WorldProjectionHold(ContentAddressedStore? content = null, Func<ContentPin, byte[]?>? fetch = null, Func<WorldDefinition?>? basis = null, WorldDefinition? seed = null) {
-    private WorldProjectionDocument? m_projection;
-    private JsonObject? m_tree;
-    private Dictionary<string, int>? m_observationOrdinals;
-
-    /// <summary>Assembles the document a replica's manifest names over the document the recipient holds
-    /// (<see cref="WorldDocumentManifest.TryAssemble"/>).</summary>
-    /// <param name="manifest">The manifest's bytes.</param>
-    /// <param name="definition">The assembled, validated document on success.</param>
-    /// <param name="reason">The named refusal, or empty on success.</param>
-    /// <returns><see langword="true"/> when the manifest assembled into a document this process may present.</returns>
-    public bool TryHoldReplica(ReadOnlySpan<byte> manifest, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out string reason) =>
-        WorldDocumentManifest.TryAssemble(
-            basis: (basis?.Invoke() ?? seed),
-            definition: out definition,
-            held: assembled => WorldContentIndex.Fetch(definition: assembled, fetch: fetch, held: content),
-            manifest: manifest,
-            reason: out reason,
-            resolve: WorldDocumentManifest.Resolve(content: content, fetch: fetch)
-        );
-
-    /// <summary>Gets the definition hydrated from the projection held, or <see langword="null"/> before the first
-    /// whole projection.</summary>
-    public WorldDefinition? Definition { get; private set; }
-
-    /// <summary>Holds a whole projection and hydrates it.</summary>
-    /// <param name="utf8Json">The projection's bytes.</param>
-    /// <param name="definition">The hydrated definition on success.</param>
-    /// <param name="reason">The named refusal, or empty on success.</param>
-    /// <returns><see langword="true"/> when the projection parsed and hydrated; the hold is unchanged otherwise.</returns>
-    public bool TryHold(ReadOnlySpan<byte> utf8Json, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out string reason) {
-        definition = null;
-        var prior = (Definition ?? basis?.Invoke());
-
-        if (
-            !WorldProjection.TryDeserialize(
-            projection: out var projection,
-            reason: out reason,
-            utf8Json: utf8Json
-        ) ||
-            !WorldProjection.TryToDefinition(
-            content: content,
-            definition: out definition,
-            fallbackKnown: seed,
-            fetch: fetch,
-            known: prior,
-            projection: projection!,
-            reason: out reason
-        )
-        ) {
-            definition = null;
-
-            return false;
-        }
-
-        m_projection = projection;
-        m_tree = WorldProjectionDelta.Tree(utf8Json: utf8Json);
-        m_observationOrdinals = IndexObservations(observations: projection!.Observations);
-        Definition = definition;
-
-        return true;
-    }
-
-    private static Dictionary<string, int>? IndexObservations(IReadOnlyList<WorldObservedRow>? observations) {
-        if ((observations is null) || (observations.Count == 0)) { return null; }
-        var map = new Dictionary<string, int>(capacity: observations.Count, comparer: StringComparer.Ordinal);
-        for (var index = 0; (index < observations.Count); index++) {
-            map[observations[index].Name] = index;
-        }
-        return map;
-    }
-
-    private bool TryPatchObservationsInPlace(WorldProjectionDocument heldProjection, JsonObject delta, out IReadOnlyList<WorldObservedRow>? patchedObservations, out List<(int Ordinal, JsonNode MergedNode)>? treeUpdates, out bool observationsValuesOnly, out JsonObject remainingDelta) {
-        patchedObservations = null;
-        treeUpdates = null;
-        observationsValuesOnly = true;
-        remainingDelta = delta;
-
-        if (!delta.TryGetPropertyValue(propertyName: "observations", jsonNode: out var obsPatchNode) ||
-            (obsPatchNode is not JsonArray patchRows) || (patchRows.Count == 0) ||
-            WorldDocumentBasis.IsReplaceMarker(node: patchRows[0]) ||
-            (m_tree?["observations"] is not JsonArray heldObsTree) ||
-            (heldProjection.Observations is not { Count: > 0 } heldObsList) ||
-            (heldObsTree.Count != heldObsList.Count)) {
-            return false;
-        }
-        var indexMap = (m_observationOrdinals ??= IndexObservations(observations: heldObsList));
-        if ((indexMap is null) || (indexMap.Count != heldObsList.Count)) {
-            return false;
-        }
-
-        var ordinals = new int[patchRows.Count];
-        var basisSlice = new JsonArray();
-        var overlaySlice = new JsonArray();
-
-        for (var i = 0; (i < patchRows.Count); i++) {
-            if ((patchRows[i] is not JsonObject patchObj) ||
-                patchObj.ContainsKey(propertyName: WorldDocumentBasis.DropMemberName) ||
-                patchObj.ContainsKey(propertyName: WorldDocumentBasis.BeforeMemberName) ||
-                (patchObj["name"] is not JsonValue nameVal) ||
-                !nameVal.TryGetValue<string>(value: out var rowName) ||
-                !indexMap.TryGetValue(key: rowName, value: out var ordinal)) {
-                return false;
-            }
-            for (var prior = 0; (prior < i); prior++) {
-                if (ordinals[prior] == ordinal) { return false; }
-            }
-            ordinals[i] = ordinal;
-            basisSlice.Add(value: heldObsTree[ordinal]?.DeepClone());
-            overlaySlice.Add(value: patchObj.DeepClone());
-        }
-
-        if (!WorldDocumentBasis.TryMerge(
-            basis: new JsonObject { ["observations"] = basisSlice },
-            overlay: new JsonObject { ["observations"] = overlaySlice },
-            composed: out var sliceComposed,
-            reason: out _
-        ) || (sliceComposed?["observations"] is not JsonArray mergedSlice) || (mergedSlice.Count != ordinals.Length)) {
-            return false;
-        }
-
-        WorldObservedRow[]? deserialized;
-        try {
-            deserialized = JsonSerializer.Deserialize(
-                utf8Json: CanonicalJsonDocument.SerializeCompact(node: mergedSlice),
-                jsonTypeInfo: WorldJsonContext.Untrusted.WorldObservedRowArray
-            );
-        } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
-            return false;
-        }
-        if ((deserialized is null) || (deserialized.Length != ordinals.Length)) {
-            return false;
-        }
-
-        var updated = new WorldObservedRow[heldObsList.Count];
-        for (var i = 0; (i < heldObsList.Count); i++) { updated[i] = heldObsList[i]; }
-        var updates = new List<(int Ordinal, JsonNode MergedNode)>(capacity: ordinals.Length);
-        for (var i = 0; (i < ordinals.Length); i++) {
-            var ordinal = ordinals[i];
-            if (observationsValuesOnly && !WorldProjectionDelta.SameObservationRowShape(left: heldObsList[ordinal], right: deserialized[i])) {
-                observationsValuesOnly = false;
-            }
-            updated[ordinal] = deserialized[i];
-            updates.Add(item: (ordinal, WorldProjectionDelta.Tree(value: deserialized[i], jsonTypeInfo: WorldJsonContext.Default.For<WorldObservedRow>())));
-        }
-
-        var reduced = new JsonObject();
-        foreach (var (member, value) in delta) {
-            if (!string.Equals(a: member, b: "observations", comparisonType: StringComparison.Ordinal)) {
-                reduced[member] = value?.DeepClone();
-            }
-        }
-
-        patchedObservations = updated;
-        treeUpdates = updates;
-        remainingDelta = reduced;
-        return true;
-    }
-    /// <summary>Merges a delta over the projection held and hydrates the result. A delta of the timeline alone replaces
-    /// the held definition's timeline and hydrates nothing else.</summary>
-    /// <param name="utf8Json">The delta's bytes.</param>
-    /// <param name="definition">The hydrated definition on success.</param>
-    /// <param name="valuesOnly">Whether the delta changes only values (<see cref="WorldProjectionDelivery.ValuesOnly"/>).</param>
-    /// <param name="timelineOnly">Whether the delta changes the timeline alone
-    /// (<see cref="WorldProjectionDelivery.TimelineOnly"/>).</param>
-    /// <param name="reason">The named refusal, or empty on success.</param>
-    /// <returns><see langword="true"/> when the delta merged and the result hydrated; the hold is unchanged
-    /// otherwise.</returns>
-    public bool TryApply(ReadOnlySpan<byte> utf8Json, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldDefinition? definition, out bool valuesOnly, out bool timelineOnly, out string reason) {
-        definition = null;
-        valuesOnly = false;
-        timelineOnly = false;
-
-        if ((m_tree is null) || (m_projection is not { } heldProjection) || (Definition is not { } held)) {
-            reason = "a projection delta arrived before any whole projection it could merge over.";
-
-            return false;
-        }
-
-        JsonObject delta;
-
-        try {
-            delta = WorldProjectionDelta.Tree(utf8Json: utf8Json);
-        } catch (JsonException exception) {
-            reason = $"the projection delta is not JSON: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-            return false;
-        }
-
-        var fastObs = TryPatchObservationsInPlace(
-            heldProjection: heldProjection,
-            delta: delta,
-            patchedObservations: out var patchedObservations,
-            treeUpdates: out var obsTreeUpdates,
-            observationsValuesOnly: out var obsValuesOnly,
-            remainingDelta: out var effectiveDelta
-        );
-
-        if (!WorldProjectionDelta.TryMerge(
-            delta: effectiveDelta,
-            held: m_tree,
-            merged: out var merged,
-            reason: out reason
-        )) {
-            return false;
-        }
-
-        valuesOnly = (fastObs
-            ? (obsValuesOnly && WorldProjectionDelta.HasOnlyValueMembers(delta: delta))
-            : WorldProjectionDelta.IsValuesOnly(
-                delta: delta,
-                previousObservations: m_tree["observations"],
-                nextObservations: (merged.TryGetValue(key: "observations", value: out var observations) ? observations : m_tree["observations"])
-            ));
-        timelineOnly = WorldProjectionDelta.IsTimelineOnly(delta: delta);
-        WorldProjectionDocument? nextProjection;
-
-        if (timelineOnly) {
-            WorldTimelineSection? timeline;
-
-            try {
-                timeline = merged[WorldProjectionDelta.Timeline]?.Deserialize(jsonTypeInfo: WorldJsonContext.Untrusted.WorldTimelineSection);
-            } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
-                reason = $"the projection delta's timeline is not a timeline: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-
-                return false;
-            }
-
-            nextProjection = (heldProjection with { Timeline = timeline });
-            definition = (held with { TimelineRaw = timeline });
-
-            if (WorldProjection.Uncarried(definition: definition) is { } uncarried) {
-                definition = null;
-                reason = uncarried;
-
-                return false;
-            }
-        } else {
-            if (!TryMergeProjection(
-                current: (fastObs ? (heldProjection with { Observations = patchedObservations }) : heldProjection),
-                delta: effectiveDelta,
-                heldTree: m_tree,
-                merged: merged,
-                next: out nextProjection,
-                reason: out reason
-            ) || !WorldProjection.TryToDefinition(
-                content: content,
-                definition: out definition,
-                fallbackKnown: (basis?.Invoke() ?? seed),
-                fetch: fetch,
-                known: held,
-                previousProjection: heldProjection,
-                projection: nextProjection!,
-                reason: out reason
-            )) {
-                definition = null;
-
-                return false;
-            }
-        }
-
-        foreach (var (member, node) in merged) {
-            if (node is null) {
-                _ = m_tree.Remove(propertyName: member);
-            } else {
-                m_tree[member] = node.DeepClone();
-            }
-        }
-        if (fastObs) {
-            var heldObsArray = (JsonArray)m_tree["observations"]!;
-            foreach (var (ordinal, mergedNode) in obsTreeUpdates!) {
-                heldObsArray[ordinal] = mergedNode.DeepClone();
-            }
-        } else if (merged.ContainsKey(key: "observations")) {
-            m_observationOrdinals = IndexObservations(observations: nextProjection!.Observations);
-        }
-
-        m_projection = nextProjection;
-        Definition = definition;
-        reason = string.Empty;
-
-        return true;
-    }
-
-    // Deserializes only the top-level members the delta touched and shares unchanged rows inside model sections
-    // (such as placements), keeping every untouched member of the held projection by reference.
-    private static bool TryMergeProjection(WorldProjectionDocument current, JsonObject heldTree, JsonObject delta, Dictionary<string, JsonNode?> merged, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldProjectionDocument? next, out string reason) {
-        next = current;
-        Dictionary<string, JsonElement>? extensions = null;
-
-        T ReadRequired<T>(string member, JsonNode? node) {
-            if (node is null) {
-                throw new JsonException(message: $"projection member '{member}' cannot be null.");
-            }
-            var value = JsonSerializer.Deserialize(
-                utf8Json: CanonicalJsonDocument.SerializeCompact(node: node),
-                jsonTypeInfo: (System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>)WorldJsonContext.Untrusted.Options.GetTypeInfo(type: typeof(T))
-            );
-
-            return (value ?? throw new JsonException(message: $"projection member '{member}' deserialized to null."));
-        }
-
-        T? ReadOptional<T>(JsonNode? node) => ((node is null)
-            ? default
-            : JsonSerializer.Deserialize(
-                utf8Json: CanonicalJsonDocument.SerializeCompact(node: node),
-                jsonTypeInfo: (System.Text.Json.Serialization.Metadata.JsonTypeInfo<T>)WorldJsonContext.Untrusted.Options.GetTypeInfo(type: typeof(T))
-            ));
-
-        T ShareSection<T>(string member, T value, T? basis) where T : class => (
-            (basis is not null) &&
-            heldTree.TryGetPropertyValue(propertyName: member, jsonNode: out var basisNode) &&
-            (basisNode is not null) &&
-            merged.TryGetValue(key: member, value: out var valueNode) &&
-            (valueNode is not null) &&
-            delta.TryGetPropertyValue(propertyName: member, jsonNode: out var patchNode) &&
-            (patchNode is not null)
-                ? WorldDocumentWalker.Share(basis: basis, basisTree: basisNode, patch: patchNode, value: value, valueTree: valueNode)
-                : value
-        );
-
-        try {
-            foreach (var (member, node) in merged) {
-                switch (member) {
-                    case "schema":
-                        next = (next with { Schema = ReadRequired<string>(member: member, node: node) });
-                        break;
-                    case "provenance":
-                        next = (next with { Provenance = ReadRequired<WorldProjectionProvenance>(member: member, node: node) });
-                        break;
-                    case "motion":
-                        next = (next with { Motion = ReadRequired<WorldMotionDefaults>(member: member, node: node) });
-                        break;
-                    case "spawnPoints":
-                        next = (next with { SpawnPoints = ShareSection(member: member, value: ReadRequired<IReadOnlyList<WorldSpawnPoint>>(member: member, node: node), basis: next.SpawnPoints) });
-                        break;
-                    case "render":
-                        next = (next with { Render = ShareSection(member: member, value: ReadRequired<WorldRenderDefaults>(member: member, node: node), basis: next.Render) });
-                        break;
-                    case "screens":
-                        next = (next with { Screens = ShareSection(member: member, value: ReadRequired<IReadOnlyList<WorldScreen>>(member: member, node: node), basis: next.Screens) });
-                        break;
-                    case "screenMaterials":
-                        next = (next with { ScreenMaterials = ShareSection(member: member, value: ReadRequired<IReadOnlyList<WorldScreenMaterial>>(member: member, node: node), basis: next.ScreenMaterials) });
-                        break;
-                    case "cameras":
-                        next = (next with { Cameras = ShareSection(member: member, value: ReadRequired<IReadOnlyList<WorldCamera>>(member: member, node: node), basis: next.Cameras) });
-                        break;
-                    case "population":
-                        next = (next with { Population = ReadRequired<WorldBodiesDefaults>(member: member, node: node) });
-                        break;
-                    case "playerDefaults":
-                        next = (next with { PlayerDefaults = ShareSection(member: member, value: ReadRequired<WorldPlayerDefaults>(member: member, node: node), basis: next.PlayerDefaults) });
-                        break;
-                    case "channels":
-                        next = (next with { Channels = ShareSection(member: member, value: ReadRequired<IReadOnlyList<WorldChannel>>(member: member, node: node), basis: next.Channels) });
-                        break;
-                    case "kits":
-                        next = (next with { Kits = ReadRequired<IReadOnlyList<WorldProjectedKit>>(member: member, node: node) });
-                        break;
-                    case "defaultSeatKit":
-                        next = (next with { DefaultSeatKit = ReadRequired<string>(member: member, node: node) });
-                        break;
-                    case "assignment":
-                        next = (next with { Assignment = ShareSection(member: member, value: ReadRequired<WorldRowAssignment>(member: member, node: node), basis: next.Assignment) });
-                        break;
-                    case "bindingOverlays":
-                        next = (next with { BindingOverlays = ShareSection(member: member, value: ReadRequired<IReadOnlyList<WorldBindingOverlay>>(member: member, node: node), basis: next.BindingOverlays) });
-                        break;
-                    case "prototypes":
-                        next = (next with { Creations = ReadRequired<IReadOnlyList<WorldPrototypeReference>>(member: member, node: node) });
-                        break;
-                    case "placements":
-                        next = (next with { Placements = ShareSection(member: member, value: ReadRequired<IReadOnlyList<WorldPlacement>>(member: member, node: node), basis: next.Placements) });
-                        break;
-                    case "speakers":
-                        next = (next with { Speakers = ShareSection(member: member, value: ReadRequired<IReadOnlyList<WorldSpeaker>>(member: member, node: node), basis: next.Speakers) });
-                        break;
-                    case "tunes":
-                        next = (next with { Tunes = ShareSection(member: member, value: ReadRequired<IReadOnlyList<WorldTune>>(member: member, node: node), basis: next.Tunes) });
-                        break;
-                    case "patches":
-                        next = (next with { Patches = ShareSection(member: member, value: ReadRequired<IReadOnlyList<WorldPatch>>(member: member, node: node), basis: next.Patches) });
-                        break;
-                    case "audio":
-                        next = (next with { Audio = ShareSection(member: member, value: ReadRequired<WorldAudioDefaults>(member: member, node: node), basis: next.Audio) });
-                        break;
-                    case "collision":
-                        next = (next with { Collision = ShareSection(member: member, value: ReadRequired<WorldCollision>(member: member, node: node), basis: next.Collision) });
-                        break;
-                    case "views": {
-                            var views = ReadOptional<WorldViewDefaults>(node: node);
-                            next = (next with { Views = ((views is null) ? null : ShareSection(member: member, value: views, basis: next.Views)) });
-                            break;
-                        }
-                    case "looks":
-                        next = (next with { Looks = ShareSection(member: member, value: ReadRequired<IReadOnlyList<WorldLook>>(member: member, node: node), basis: next.Looks) });
-                        break;
-                    case "lookAssignment":
-                        next = (next with { LookAssignment = ShareSection(member: member, value: ReadRequired<WorldRowAssignment>(member: member, node: node), basis: next.LookAssignment) });
-                        break;
-                    case "dynamics":
-                        next = (next with { Dynamics = ShareSection(member: member, value: ReadRequired<IReadOnlyList<DynamicsRow>>(member: member, node: node), basis: next.Dynamics) });
-                        break;
-                    case "hud":
-                        next = (next with { Hud = ShareSection(member: member, value: ReadRequired<WorldHudSection>(member: member, node: node), basis: next.Hud) });
-                        break;
-                    case "fieldRegions":
-                        next = (next with { FieldRegions = ReadOptional<IReadOnlyList<WorldFieldsSection>>(node: node) });
-                        break;
-                    case "simulation": {
-                            var simulation = ReadOptional<WorldSimulationDefaults>(node: node);
-                            next = (next with { Simulation = ((simulation is null) ? null : ShareSection(member: member, value: simulation, basis: next.Simulation)) });
-                            break;
-                        }
-                    case "interactions": {
-                            var interactions = ReadOptional<WorldInteractionsSection>(node: node);
-                            next = (next with { Interactions = ((interactions is null) ? null : ShareSection(member: member, value: interactions, basis: next.Interactions)) });
-                            break;
-                        }
-                    case "references": {
-                            var references = ReadOptional<IReadOnlyList<WorldReference>>(node: node);
-                            next = (next with { References = ((references is null) ? null : ShareSection(member: member, value: references, basis: next.References)) });
-                            break;
-                        }
-                    case "destinations": {
-                            var destinations = ReadOptional<IReadOnlyList<WorldDestination>>(node: node);
-                            next = (next with { Destinations = ((destinations is null) ? null : ShareSection(member: member, value: destinations, basis: next.Destinations)) });
-                            break;
-                        }
-                    case "adjacencies": {
-                            var adjacencies = ReadOptional<IReadOnlyList<WorldAdjacency>>(node: node);
-                            next = (next with { Adjacencies = ((adjacencies is null) ? null : ShareSection(member: member, value: adjacencies, basis: next.Adjacencies)) });
-                            break;
-                        }
-                    case "metadata":
-                        next = (next with { Metadata = ReadOptional<WorldProjectedMetadata>(node: node) });
-                        break;
-                    case "observations":
-                        next = (next with { Observations = ReadOptional<IReadOnlyList<WorldObservedRow>>(node: node) });
-                        break;
-                    case "spaces":
-                        next = (next with { Spaces = ReadOptional<IReadOnlyList<StateSpace>>(node: node) });
-                        break;
-                    case "timeline": {
-                            var timeline = ReadOptional<WorldTimelineSection>(node: node);
-                            next = (next with { Timeline = ((timeline is null) ? null : ShareSection(member: member, value: timeline, basis: next.Timeline)) });
-                            break;
-                        }
-                    case "music": {
-                            var music = ReadOptional<IReadOnlyList<WorldMusicRow>>(node: node);
-                            next = (next with { Music = ((music is null) ? null : ShareSection(member: member, value: music, basis: next.Music)) });
-                            break;
-                        }
-                    case "haptics": {
-                            var haptics = ReadOptional<IReadOnlyList<WorldHapticRow>>(node: node);
-                            next = (next with { Haptics = ((haptics is null) ? null : ShareSection(member: member, value: haptics, basis: next.Haptics)) });
-                            break;
-                        }
-                    case "keyLights": {
-                            var keyLights = ReadOptional<WorldKeyLightSection>(node: node);
-                            next = (next with { KeyLights = ((keyLights is null) ? null : ShareSection(member: member, value: keyLights, basis: next.KeyLights)) });
-                            break;
-                        }
-                    case "highlights": {
-                            var highlights = ReadOptional<IReadOnlyList<WorldHighlightRow>>(node: node);
-                            next = (next with { Highlights = ((highlights is null) ? null : ShareSection(member: member, value: highlights, basis: next.Highlights)) });
-                            break;
-                        }
-                    case "shades":
-                        next = (next with { Shades = ReadOptional<IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>>(node: node) });
-                        break;
-                    case "text": {
-                            var text = ReadOptional<Puck.Text.TextFontCatalogDefinition>(node: node);
-                            next = (next with { Text = ((text is null) ? null : ShareSection(member: member, value: text, basis: next.Text)) });
-                            break;
-                        }
-                    case "machines":
-                        next = (next with { Machines = ReadOptional<IReadOnlyList<WorldProjectedMachine>>(node: node) });
-                        break;
-                    case "navigation": {
-                            var navigation = ReadOptional<WorldNavigationSection>(node: node);
-                            next = (next with { Navigation = ((navigation is null) ? null : ShareSection(member: member, value: navigation, basis: next.Navigation)) });
-                            break;
-                        }
-                    case "inputModes":
-                        next = (next with { InputModes = ReadOptional<WorldProjectedInputModes>(node: node) });
-                        break;
-                    case "seatModes": {
-                            var seatModes = ReadOptional<IReadOnlyList<WorldSeatModeFamily>>(node: node);
-                            next = (next with { SeatModes = ((seatModes is null) ? null : ShareSection(member: member, value: seatModes, basis: next.SeatModes)) });
-                            break;
-                        }
-                    case "inputEventsPerStep":
-                        next = (next with { InputEventsPerStep = ((node is null) ? null : JsonSerializer.Deserialize(utf8Json: CanonicalJsonDocument.SerializeCompact(node: node), jsonTypeInfo: WorldJsonContext.Untrusted.For<int>())) });
-                        break;
-                    case "bodyState": {
-                            var bodyState = ReadOptional<IReadOnlyList<WorldProjectedBodyRegister>>(node: node);
-                            next = (next with { BodyState = ((bodyState is null) ? null : ShareSection(member: member, value: bodyState, basis: next.BodyState)) });
-                            break;
-                        }
-                    case "identityState": {
-                            var identityState = ReadOptional<IReadOnlyList<WorldProjectedBodyRegister>>(node: node);
-                            next = (next with { IdentityState = ((identityState is null) ? null : ShareSection(member: member, value: identityState, basis: next.IdentityState)) });
-                            break;
-                        }
-                    default:
-                        if (!DocumentExtensionsPolicy.IsReservedKey(key: member)) {
-                            reason = $"projection contains unrecognized top-level member '{member}'.";
-                            next = null;
-
-                            return false;
-                        }
-                        extensions ??= ((next.Extensions is { } heldExtensions)
-                            ? new Dictionary<string, JsonElement>(dictionary: heldExtensions, comparer: StringComparer.Ordinal)
-                            : new Dictionary<string, JsonElement>(comparer: StringComparer.Ordinal));
-                        if (node is null) {
-                            _ = extensions.Remove(key: member);
-                        } else {
-                            extensions[member] = JsonSerializer.Deserialize<JsonElement>(utf8Json: CanonicalJsonDocument.SerializeCompact(node: node));
-                        }
-                        break;
-                }
-            }
-        } catch (Exception exception) when (WorldJsonPayload.IsParseFailure(exception: exception)) {
-            reason = $"the projection is not a valid {WorldProjectionDocument.SchemaVersion} document: {exception.Message.ReplaceLineEndings(replacementText: " ")}";
-            next = null;
-
-            return false;
-        }
-
-        if (extensions is not null) {
-            next = (next with { Extensions = ((extensions.Count == 0) ? null : extensions) });
-        }
-        if (!string.Equals(a: next.Schema, b: WorldProjectionDocument.SchemaVersion, comparisonType: StringComparison.Ordinal)) {
-            reason = $"projection schema '{next.Schema}' is not {WorldProjectionDocument.SchemaVersion}.";
-            next = null;
-
-            return false;
-        }
-        if (next.Provenance.Tier != WorldDisclosureTier.Presentation) {
-            reason = $"projection provenance names tier '{next.Provenance.Tier}'; only '{WorldDisclosureTier.Presentation}' composes a projection document.";
-            next = null;
-
-            return false;
-        }
-
-        reason = string.Empty;
-
-        return true;
-    }
-}
-/// <summary>The member delta a projection travels in: the one document delta (<see cref="WorldDocumentBasis"/>)
-/// applied to a projection's top-level members.</summary>
-public static class WorldProjectionDelta {
-    /// <summary>The projection member a timeline travels in.</summary>
-    public const string Timeline = "timeline";
-
-    // The members whose change moves values only: what a recipient re-reads without rebuilding anything shaped.
-    private static readonly HashSet<string> ValueMembers = new(comparer: StringComparer.Ordinal) { Timeline, "observations", "provenance" };
-
-    /// <summary>Returns a serialized projection's tree.</summary>
-    /// <param name="utf8Json">The projection's bytes.</param>
-    /// <returns>The tree.</returns>
-    /// <exception cref="JsonException">The bytes are not a JSON object.</exception>
-    public static JsonObject Tree(ReadOnlySpan<byte> utf8Json) => CanonicalJsonDocument.ParseObject(utf8Json);
-    /// <summary>Returns a typed member's canonical tree, as a projection carries it.</summary>
-    public static JsonNode Tree<T>(T value, System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> jsonTypeInfo) where T : class =>
-        JsonNode.Parse(utf8Json: CanonicalJsonDocument.SerializeCompact(jsonTypeInfo: jsonTypeInfo, value: value))!;
-    /// <summary>Returns a timeline's canonical tree, as a projection carries it.</summary>
-    /// <param name="timeline">The timeline.</param>
-    /// <returns>The tree.</returns>
-    public static JsonNode Tree(WorldTimelineSection timeline) => Tree(
-        value: timeline,
-        jsonTypeInfo: WorldJsonContext.Default.WorldTimelineSection
-    );
-    /// <summary>Returns the delta whose merge over <paramref name="held"/> reproduces <paramref name="next"/>, checked
-    /// by merging it.</summary>
-    /// <param name="held">The tree the recipient holds.</param>
-    /// <param name="next">The tree it is owed.</param>
-    /// <returns>The delta, empty when the trees are equal, or <see langword="null"/> when no delta reproduces
-    /// <paramref name="next"/>, which is then owed whole.</returns>
-    public static JsonObject? Diff(JsonObject held, JsonObject next) {
-        ArgumentNullException.ThrowIfNull(argument: held);
-        ArgumentNullException.ThrowIfNull(argument: next);
-
-        var delta = WorldDocumentBasis.Diff(
-            basis: held,
-            target: next
-        );
-
-        if (delta.Count == 0) {
-            return delta;
-        }
-
-        if (!TryMerge(
-            delta: delta,
-            held: held,
-            merged: out var merged,
-            reason: out _
-        )) {
-            return null;
-        }
-
-        foreach (var (member, node) in merged) {
-            if (!JsonNode.DeepEquals(
-                node1: node,
-                node2: (next.TryGetPropertyValue(jsonNode: out var expected, propertyName: member) ? expected : null)
-            ) || ((node is null) && next.ContainsKey(propertyName: member))) {
-                return null;
-            }
-        }
-
-        return delta;
-    }
-    /// <summary>Merges a delta over the members of a held tree it names, without touching the held tree.</summary>
-    /// <param name="held">The tree held.</param>
-    /// <param name="delta">The delta.</param>
-    /// <param name="merged">Each member the delta names, merged; a member the delta removes maps to
-    /// <see langword="null"/>.</param>
-    /// <param name="reason">The named refusal, or empty on success.</param>
-    /// <returns><see langword="true"/> when every member merged.</returns>
-    public static bool TryMerge(JsonObject held, JsonObject delta, out Dictionary<string, JsonNode?> merged, out string reason) {
-        ArgumentNullException.ThrowIfNull(argument: held);
-        ArgumentNullException.ThrowIfNull(argument: delta);
-
-        merged = new Dictionary<string, JsonNode?>(comparer: StringComparer.Ordinal);
-
-        foreach (var (member, change) in delta) {
-            var basis = new JsonObject();
-
-            if (held.TryGetPropertyValue(jsonNode: out var current, propertyName: member)) {
-                basis[member] = current?.DeepClone();
-            }
-
-            if (!WorldDocumentBasis.TryMerge(
-                basis: basis,
-                composed: out var composed,
-                overlay: new JsonObject { [member] = change?.DeepClone() },
-                reason: out reason
-            )) {
-                return false;
-            }
-
-            merged[member] = (composed!.TryGetPropertyValue(jsonNode: out var node, propertyName: member)
-                ? node?.DeepClone()
-                : null);
-        }
-
-        reason = string.Empty;
-
-        return true;
-    }
-    /// <summary>Returns whether a delta changes the timeline and nothing else.</summary>
-    /// <param name="delta">The delta.</param>
-    /// <returns><see langword="true"/> when the timeline is the one member the delta names.</returns>
-    public static bool IsTimelineOnly(JsonObject delta) {
-        ArgumentNullException.ThrowIfNull(argument: delta);
-
-        return ((delta.Count == 1) && delta.ContainsKey(propertyName: Timeline));
-    }
-    /// <summary>Returns whether every member a delta names is a value-only projection member.</summary>
-    public static bool HasOnlyValueMembers(JsonObject delta) {
-        ArgumentNullException.ThrowIfNull(argument: delta);
-
-        foreach (var (member, _) in delta) {
-            if (!ValueMembers.Contains(item: member)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    /// <summary>Returns whether two typed observation rows have the same disclosed shape and cell keys.</summary>
-    public static bool SameObservationRowShape(WorldObservedRow left, WorldObservedRow right) {
-        if (!string.Equals(a: left.Name, b: right.Name, comparisonType: StringComparison.Ordinal) ||
-            (left.Kind != right.Kind) ||
-            !string.Equals(a: left.Space, b: right.Space, comparisonType: StringComparison.Ordinal) ||
-            (left.Cells.Count != right.Cells.Count)) {
-            return false;
-        }
-        for (var index = 0; (index < left.Cells.Count); index++) {
-            var leftCell = left.Cells[index];
-            var rightCell = right.Cells[index];
-            if ((leftCell.Hidden != rightCell.Hidden) ||
-                !string.Equals(a: leftCell.Key, b: rightCell.Key, comparisonType: StringComparison.Ordinal)) {
-                return false;
-            }
-        }
-        return true;
-    }
-    /// <summary>Returns whether a delta changes only values, preserving the observed row ordinals and cell layout.</summary>
-    /// <param name="delta">The delta.</param>
-    /// <param name="previousObservations">The observations held before the delta.</param>
-    /// <param name="nextObservations">The observations after merging the delta.</param>
-    /// <returns><see langword="true"/> when the recipient can refresh its existing bindings.</returns>
-    public static bool IsValuesOnly(JsonObject delta, JsonNode? previousObservations, JsonNode? nextObservations) {
-        if (!HasOnlyValueMembers(delta: delta)) {
-            return false;
-        }
-
-        return (!delta.ContainsKey(propertyName: "observations") || JsonNode.DeepEquals(
-            node1: ObservationShape(observations: previousObservations),
-            node2: ObservationShape(observations: nextObservations)
-        ));
-    }
-
-    private static JsonArray? ObservationShape(JsonNode? observations) {
-        if (observations is not JsonArray rows) {
-            return null;
-        }
-
-        var shape = new JsonArray();
-
-        foreach (var row in rows) {
-            if (row is not JsonObject observed) {
-                continue; // Hydration refuses malformed rows.
-            }
-
-            var keys = new JsonArray();
-
-            if (observed["cells"] is JsonArray cells) {
-                foreach (var cell in cells) {
-                    if (cell is JsonObject value) {
-                        keys.Add(item: new JsonObject {
-                            ["key"] = value["key"]?.DeepClone(),
-                            ["hidden"] = value["hidden"]?.DeepClone(),
-                        });
-                    }
-                }
-            }
-
-            shape.Add(item: new JsonObject {
-                ["name"] = observed["name"]?.DeepClone(),
-                ["kind"] = observed["kind"]?.DeepClone(),
-                ["space"] = observed["space"]?.DeepClone(),
-                ["cells"] = keys,
-            });
-        }
-
-        return shape;
     }
 }

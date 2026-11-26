@@ -168,6 +168,7 @@ namespace Puck.World;
 // WorldRenderLight.Point and WorldMarkerSource.Point share a simple name (see the WorldCameraSubject.Placement
 // note above) — named explicitly.
 [JsonSerializable(typeof(WorldRenderLight.Point), TypeInfoPropertyName = "WorldRenderLightPoint")]
+[JsonSerializable(typeof(WorldRenderLight.Tube), TypeInfoPropertyName = "WorldRenderLightTube")]
 [JsonSerializable(typeof(WorldRenderSkyLayer))]
 [JsonSerializable(typeof(WorldRenderSkyLayer.Gradient), TypeInfoPropertyName = "WorldRenderSkyLayerGradient")]
 [JsonSerializable(typeof(WorldRenderSkyLayer.SunDisc), TypeInfoPropertyName = "WorldRenderSkyLayerSunDisc")]

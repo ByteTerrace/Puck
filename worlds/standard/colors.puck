@@ -1,0 +1,16 @@
+// Compile-time colour helpers, a library: a colour from its red, green and blue as the #RRGGBB a palette row or a light
+// reads, and a colour eased round a closed loop of keys.
+
+import "paths"
+
+let colorHexDigits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"]
+// A channel in 0 .. 255, held to that range and rounded down, and its two hexadecimal digits.
+function colorByte(v) = floor(((v < 0) ? 0 : ((v > 255) ? 255 : v)))
+function colorHexByte(v) = $"{colorHexDigits[floor((colorByte(v) / 16))]}{colorHexDigits[(colorByte(v) - (16 * floor((colorByte(v) / 16))))]}"
+// The #RRGGBB of [red, green, blue], each in 0 .. 255.
+function rgbHex(rgb) = $"#{colorHexByte(rgb[0])}{colorHexByte(rgb[1])}{colorHexByte(rgb[2])}"
+// The colour a fraction f in [0, 1) of the way round a closed loop whose keys ([red, green, blue] each) stand evenly
+// round it from f = 0, eased linearly from each key to the next and from the last back to the first.
+function loopGradient(keys, f) = ((loopItem(keys, floor((f * length(keys)))) *
+  (1 - ((f * length(keys)) - floor((f * length(keys)))))) +
+  (loopItem(keys, (floor((f * length(keys))) + 1)) * ((f * length(keys)) - floor((f * length(keys))))))

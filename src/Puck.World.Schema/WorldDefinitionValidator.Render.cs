@@ -281,6 +281,33 @@ public static partial class WorldDefinitionValidator {
 
                             break;
                         }
+                    case WorldRenderLight.Tube tube: {
+                            JudgePosition(errors: errors, path: $"{lightPath}.from", position: tube.From);
+                            JudgePosition(errors: errors, path: $"{lightPath}.to", position: tube.To);
+                            if (!float.IsFinite(f: tube.Radius) || (tube.Radius < 0f) || (tube.Radius > WorldRenderLight.Tube.MaxRadius)) {
+                                errors.Add(item: $"{lightPath}.radius {tube.Radius} lies outside [0, {WorldRenderLight.Tube.MaxRadius}] metres.");
+                            }
+                            JudgeOutput(
+                                definition: definition,
+                                errors: errors,
+                                intensity: tube.Intensity,
+                                intensityField: WorldValueFields.TubeIntensity,
+                                path: lightPath,
+                                power: tube.Power,
+                                powerField: WorldValueFields.TubePower
+                            );
+                            JudgeChromaticity(
+                                color: tube.Color,
+                                definition: definition,
+                                errors: errors,
+                                field: WorldValueFields.TubeTemperature,
+                                path: lightPath,
+                                temperature: tube.Temperature
+                            );
+                            ValidateLightAnchor(anchor: tube.Anchor, definition: definition, errors: errors, path: $"{lightPath}.anchor");
+
+                            break;
+                        }
                     case WorldRenderLight.Spot spot: {
                             JudgePosition(
                                 errors: errors,
@@ -402,6 +429,7 @@ public static partial class WorldDefinitionValidator {
         WorldRenderLight.Rim rim => rim.Color,
         WorldRenderLight.Point point => point.Color,
         WorldRenderLight.Spot spot => spot.Color,
+        WorldRenderLight.Tube tube => tube.Color,
         _ => null,
     });
     // A light's colour is a colour or a black body's temperature, never both.

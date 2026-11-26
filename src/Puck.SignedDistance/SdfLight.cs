@@ -26,6 +26,19 @@ public enum SdfLightKind : uint {
     Point = 2,
     /// <summary>A bounded attenuation field with position, radius, and weight in [0, 1].</summary>
     Occluder = 3,
+    /// <summary>A tube (line) light, such as a fluorescent or neon tube: a straight segment whose every length element
+    /// emits alike in every direction, <see cref="SdfLight.Weight"/> its luminous intensity per metre over π
+    /// (<see cref="SdfPhotometry.PositionalWeight"/> of the candela per metre). <see cref="SdfLight.Direction"/> carries
+    /// the segment's midpoint, <see cref="SdfLight.SpotAxis"/> the vector from the midpoint to its end (half the segment)
+    /// and <see cref="SdfLight.SpotOffset"/> the tube's radius; <see cref="SdfLight.Param"/> is its range measured from the
+    /// nearest point of the segment (<see cref="SdfPhotometry.LineRangeOf"/>). A surface receives the segment's exact
+    /// vector irradiance (the integral of cos θ / r² along it, unclipped by the horizon: Karis 2013, "Real Shading in
+    /// Unreal Engine 4"), a specular lobe from the segment's point nearest the reflected ray with the sphere and line
+    /// energy normalizations, and the point light's window at its nearest distance. A long tube is a chain of segments,
+    /// each one record, so the light culling keeps only the segments near what it shades. A static one is traced into
+    /// the irradiance volume as a point at its midpoint carrying the segment's whole intensity
+    /// (<see cref="SdfLight.IsTraced"/>).</summary>
+    Line = 4,
 }
 /// <summary>
 /// One light of the lit path, and one record of the lights table the kernels read (<c>sdfLights</c>, a World-group
@@ -38,7 +51,8 @@ public enum SdfLightKind : uint {
 [StructLayout(LayoutKind.Explicit, Size = 64)]
 public record struct SdfLight {
     /// <summary>A directional's direction from the surface toward the light, any nonzero length (normalized on
-    /// upload); a point's or an occluder's world-space POSITION instead (see <see cref="SdfLightKind.Point"/>).</summary>
+    /// upload); a point's or an occluder's world-space POSITION instead (see <see cref="SdfLightKind.Point"/>), and a
+    /// line's midpoint (see <see cref="SdfLightKind.Line"/>).</summary>
     [FieldOffset(0)] public Vector3 Direction;
     /// <summary>The strength: a directional's illuminance over π, a point's or spot's luminous intensity over π, a rim's
     /// luminance, an occluder's attenuation in [0, 1].</summary>
@@ -63,9 +77,11 @@ public record struct SdfLight {
     [FieldOffset(44)] public float Bounce;
     /// <summary>A spot's aim, the unit direction it shines along, scaled by its cone's scale
     /// (<see cref="SdfPhotometry.Cone"/>): the cone's attenuation is <c>saturate(dot(−toLight, SpotAxis) + SpotOffset)²</c>.
-    /// Zero for a point, which shines alike in every direction.</summary>
+    /// Zero for a point, which shines alike in every direction. A line's half segment, from its midpoint to its end
+    /// (<see cref="SdfLightKind.Line"/>).</summary>
     [FieldOffset(48)] public Vector3 SpotAxis;
-    /// <summary>A spot's cone offset (<see cref="SpotAxis"/>); one for a point.</summary>
+    /// <summary>A spot's cone offset (<see cref="SpotAxis"/>); one for a point; a line's tube radius, in world
+    /// units.</summary>
     [FieldOffset(60)] public float SpotOffset;
 
     /// <summary>Creates a light.</summary>
@@ -98,15 +114,18 @@ public record struct SdfLight {
     /// <summary>Gets whether the irradiance volume traces the light: a static point or spot light, with
     /// <see cref="Shadows"/> set, whose light the volume bounces and whose visibility each probe records, so a view
     /// occludes it by the probes about a surface.</summary>
-    public readonly bool IsTraced => ((Shadows != 0u) && (Kind == SdfLightKind.Point));
-    /// <summary>Gets whether the light reaches only the sphere of its range about its position: a point or a spot. Every
-    /// other kind may light any surface.</summary>
-    public readonly bool IsRanged => (Kind == SdfLightKind.Point);
+    public readonly bool IsTraced => ((Shadows != 0u) && IsRanged);
+    /// <summary>Gets whether the light reaches only the sphere of its range about its position (a point or a spot), or
+    /// the capsule of its range about its segment (a line). Every other kind may light any surface.</summary>
+    public readonly bool IsRanged => (Kind is SdfLightKind.Point or SdfLightKind.Line);
+    /// <summary>Gets a line's length, twice its half segment (<see cref="SpotAxis"/>); zero for every other kind.</summary>
+    public readonly float LineLength => ((Kind == SdfLightKind.Line) ? (2f * SpotAxis.Length()) : 0f);
 
-    /// <summary>Returns whether a light of a kind sits at a position its <see cref="DynamicSlot"/> may ride: a point or an
-    /// occluder.</summary>
+    /// <summary>Returns whether a light of a kind sits at a position its <see cref="DynamicSlot"/> may ride: a point, a
+    /// line or an occluder.</summary>
     /// <param name="kind">The kind.</param>
-    /// <returns><see langword="true"/> for <see cref="SdfLightKind.Point"/> and <see cref="SdfLightKind.Occluder"/>.</returns>
+    /// <returns><see langword="true"/> for <see cref="SdfLightKind.Point"/>, <see cref="SdfLightKind.Line"/> and
+    /// <see cref="SdfLightKind.Occluder"/>.</returns>
     public static bool IsPositional(SdfLightKind kind) =>
-        (kind is SdfLightKind.Point or SdfLightKind.Occluder);
+        (kind is SdfLightKind.Point or SdfLightKind.Line or SdfLightKind.Occluder);
 }

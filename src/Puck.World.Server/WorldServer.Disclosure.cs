@@ -154,6 +154,7 @@ internal sealed class WorldDeliveryRows {
 
     internal ReadOnlyMemory<FieldCellDelta> Advance(WorldRecipientView view, WorldDeliveryCursor cursor,
         ReadOnlyMemory<FieldCellDelta> changes, bool rows) {
+        using var hold = view.Admit();
         // The delivery before this one is over (its cells were borrowed until this call), so a sink that never calls
         // Settle lets an oversized scratch go here.
         if ((m_cells.Length > ScratchKept) && (m_count < (m_cells.Length / ScratchSlack))) { m_cells = []; }

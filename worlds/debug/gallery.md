@@ -76,34 +76,53 @@ showing off the games the world hosts. Players on the other levels look across
 the nave's void into it.
 
 So level 1 wears the toybox's colours (look.puck's `lookLevelToybox` and its
-pastel piers), and [gallery/toybox.puck](gallery/toybox.puck) stands six toy
-arcade cabinets on it, three on each gallery in the middle showcase bays
-(layout.puck's `toyboxBays` and `toyboxRows`), each facing the nave. The two
-cabinets in a bay play one game across the void, each on its own hardware, in
-one colourway with the game's name on its glowing marquee:
+pastel piers), and [gallery/toybox.puck](gallery/toybox.puck) stands twelve
+Humble Gaming Deck stations on it, six on each gallery, each facing the nave
+and mirrored across the void (layout.puck's `toyboxPlan` and `toyboxStations`).
+Along each gallery a living-room television set and a two-player arcade cabinet
+alternate, a station and its twin across the void in one colourway:
 
-| Bay | South cabinet | North cabinet |
+| Bay | Station | Deck program |
 |---|---|---|
-| TETROMINO | a Color brick running `cartridges/cgb/tetromino.cgb.puck` | a monochrome brick running `cartridges/dmg/tetromino.dmg.puck` |
-| BOUNCE | a deck running `cartridges/deck/moving-sprite.deck` | a second deck running the same |
-| TEST CARD | an Advanced brick running `cartridges/agb/test-card.agb.puck` | a monochrome brick running `cartridges/dmg/test-card.dmg.puck` |
+| 2 | television set (sunflower, cherry rug) | `cartridges/deck/moving-sprite.deck` |
+| 3 | arcade cabinet BOUNCE (tomato) | `cartridges/deck/moving-sprite.deck` |
+| 5 | television set (candy pink, sky rug) | `cartridges/deck/colour-bars.deck` |
+| 6 | arcade cabinet BOUNCE (cobalt) | `cartridges/deck/moving-sprite.deck` |
+| 7 | television set (sky blue, lilac rug) | `cartridges/deck/moving-sprite.deck` |
+| 8 | arcade cabinet BOUNCE (mint) | `cartridges/deck/moving-sprite.deck` |
 
-Each cartridge moves on its own with no one playing: the tetromino game's
-title chases its colours through PRESS START, the ball bounces, and the bars
-drift. Each screen is a hosted machine's video in its cabinet's dark bezel, at
-the largest size the bezel frames for that machine's picture, through the
-standard's CRT material. Walk up to a cabinet and press the context button (E,
-or RB on a pad) to play it, through the same device route and `devicePad` kit
-as a Wonderland device ([devices.md](devices.md)). The machines are the
-toybox's own (`toybox-*`), so the gallery booted alone hosts them, and the
-debug world runs them beside the Wonderland devices. The cabinet is the
-standard's `arcadeCabinet` ([architecture.puck](../standard/architecture.puck));
-the machine rows, pictures, pad and route are the standard's
-[machines.puck](../standard/machines.puck).
+The cabinet is the standard's `arcadeCabinet` with two players: one picture
+over a wide shelf carrying a stick and two buttons for each player, marked 1P
+and 2P, and a glowing marquee. The television set is the standard's
+`televisionSet` and `lounge`: a toy television with rabbit ears on a low stand,
+the deck on the stand's shelf with a pad cabled to each of its two ports lying
+on a rug, and two beanbags behind the pads
+([architecture.puck](../standard/architecture.puck)). The plan leaves the
+corner bays and the walls beside them clear, and the lift's landing (bay 4) and
+the endless fall (bay 11).
+
+The ball bounces on its own with no one playing, so the screens move with the
+floor empty. Each screen is a deck's video in its station's dark bezel, at the
+largest size the bezel frames, through the standard's CRT material. Walk up to
+a station and press the context button (E, or RB on a pad) to play it, through
+the same device route and `devicePad` kit as a Wonderland device
+([devices.md](devices.md)). Every station seats two players: the first seat to
+engage it plays the deck's first controller port, and a second seat that
+engages while the first still plays takes the second. A screen's route seats
+its players on one port, so each station shows its picture on two screens, the
+second sunk inside the frame behind the first, where no view sees it, and
+casting the least light a screen may. The decks are the toybox's own
+(`toybox-cabinet-south-3` and so on, layout.puck's `toyboxMachines`), so the
+gallery booted alone hosts them, and the debug world runs them beside the
+Wonderland devices. Each can swap among the shipped deck programs and the
+owner's local `roms/hgd` folder: `machine.content <deck>`, then
+`machine.swap <deck> <name>`. The machine rows, pictures, pad and routes are the
+standard's [machines.puck](../standard/machines.puck).
 
 Read them with `machine.state` (each machine's frames advance) and
-`screen.state <index>` (screens 20 to 25). `gallery.shot toybox` looks from
-level 2's north balcony down across the void at the south cabinets, and
+`screen.state <index>` (screens 20 to 43, two to a station in the plan's order,
+south then north, the even one the visible picture). `gallery.shot toybox` looks from
+level 2's north balcony down across the void at the south stations, and
 `gallery.shot toybox-across` from level 1's south balcony edge at the north
 ones.
 
@@ -345,7 +364,7 @@ own materials `exhibitSubjects` in [`shapes.puck`](shapes.puck). Edit a value,
 | `hall-side` | The nave from beside its south arcade, looking north-east across it |
 | `plinth`, `arcade`, `bay`, `balcony`, `floor`, `ceiling`, `furniture` | What each kit sheet draws: the primitives display's console, the north arcade, the end wall's wide bays, the balcony edges from the bridge, the tiles and a pad, a coffered soffit, a banner and planter |
 | `atrium`, `outside` | The entrance looking in, and the south front from the forecourt |
-| `toybox`, `toybox-across` | Level 1's south cabinets from level 2's north balcony, and its north cabinets from level 1's south balcony edge |
+| `toybox`, `toybox-across` | Level 1's south stations from level 2's north balcony, and its north stations from level 1's south balcony edge |
 
 A shot's eye and aim are placed from `gallerySite` when the document compiles,
 as the other world-space pieces are.

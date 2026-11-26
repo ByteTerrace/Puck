@@ -4207,8 +4207,12 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
                     indices.Add(item: index);
                 } else if (light.IsTraced) {
                     // Every traced light, a dark one included: its visibility bits are the geometry's (Relight), and its
-                    // range, zero while it is dark, bounds only its bounce.
-                    points.Add(item: new TracedLight(Bounce: light.Bounce, Color: light.Color, Index: index, Position: light.Direction, Range: light.Param, SpotAxis: light.SpotAxis, SpotOffset: light.SpotOffset, Weight: light.Weight));
+                    // range, zero while it is dark, bounds only its bounce. A line is traced as a point at its midpoint
+                    // carrying its whole intensity, shining alike every way, its range widened by its half length so the
+                    // point's sphere holds the line's capsule (SdfLightKind.Line).
+                    points.Add(item: ((light.Kind == SdfLightKind.Line)
+                        ? new TracedLight(Bounce: light.Bounce, Color: light.Color, Index: index, Position: light.Direction, Range: (light.Param + (0.5f * light.LineLength)), SpotAxis: Vector3.Zero, SpotOffset: 1f, Weight: (light.Weight * light.LineLength))
+                        : new TracedLight(Bounce: light.Bounce, Color: light.Color, Index: index, Position: light.Direction, Range: light.Param, SpotAxis: light.SpotAxis, SpotOffset: light.SpotOffset, Weight: light.Weight)));
                 }
             }
 

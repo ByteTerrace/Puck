@@ -374,6 +374,14 @@ public sealed partial class WorldDisclosureImages {
         foreach (var dependency in m_dependencies[row]) { dependencies = checked(dependencies + arena.RowVersion(dependency)); }
         return dependencies;
     }
+    // A row's version and its dependencies' versions (containing zones and the rows its policies read readers from),
+    // folded as DependencyVersions folds them: while both stand, nothing a policy answers about the row can have moved
+    // under an unchanged audience key.
+    internal (ulong Row, ulong Dependencies) Versions(WorldRecipientView view, int row) {
+        Prepare(view);
+        var arena = view.Arena;
+        return (arena.RowVersion(row), DependencyVersions(arena, row));
+    }
     // Adds the authored rows whose image the changed rows can move (each row and the rows whose policies read it) to
     // affected, unordered.
     internal void Affected(WorldRecipientView view, ReadOnlySpan<int> rows, Puck.Abstractions.Collections.MarkedIndexSet affected) {

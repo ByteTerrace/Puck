@@ -201,6 +201,32 @@ let fallHole = 1
 let fallX = (gallerySite[0] + fallPlan[0])
 let fallZ = (gallerySite[2] + fallPlan[1])
 
+// The flaw's path (flaw.puck): the control points of one closed, smooth curve (a quadratic B-spline: the curve runs
+// from the midpoint of each pair of neighbouring points to the next, bending toward the point between them), in the
+// building's frame, metres. It weaves along the north arcade eastward, a wave from under the roof down to level 0 and
+// back twice, its flanks passing behind the arcade's piers (z 30.6) and through the slabs of levels 1 to 3 in the
+// walls of the north gallery, its crests and troughs out over the void (z 27.6); crosses the void under the roof at the
+// east end; weaves back west along the south arcade the same way; and climbs from level 0 through the bridge's three
+// floors at the west end to where it began. It keeps out of the corner stair bays (0 and 12) and clear of the showcase
+// displays, and a crest of each arcade's wave stands at bay 6 (x 29.7), where the hall's tree grows: there the flaw
+// passes 16 to 17 m up, 10 m from the trunk's axis and over every branch's landing on the balcony edges, leaving the
+// trunk and the branches' walkable tops clear. A curve crosses a slab between two points that stand either side of
+// it; move a point and the curve and every light along it follow.
+let flawControls = [
+  [12.2, 15.15, 30.6], [14.7, 9.8, 30.6], [17.2, 4.45, 30.6], [19.7, 2.25, 27.6], [22.2, 4.45, 30.6]
+  [24.7, 9.8, 30.6], [27.2, 15.15, 30.6], [29.7, 17.35, 27.6], [32.2, 15.15, 30.6], [34.7, 9.8, 30.6]
+  [37.2, 4.45, 30.6], [39.7, 2.25, 27.6], [42.2, 4.45, 30.6], [44.7, 9.8, 30.6], [47.2, 15.15, 30.6]
+  [49.7, 17.35, 27.6], [52.2, 15.15, 30.6]
+  [55.2, 16.9, 24.2], [56.2, 16.9, 18.4], [55.2, 16.9, 12.6]
+  [52.2, 15.15, 6.4], [49.7, 17.35, 9.25], [47.2, 15.15, 6.4], [44.7, 9.8, 6.4], [42.2, 4.45, 6.4]
+  [39.7, 2.25, 9.25], [37.2, 4.45, 6.4], [34.7, 9.8, 6.4], [32.2, 15.15, 6.4], [29.7, 17.35, 9.25]
+  [27.2, 15.15, 6.4], [24.7, 9.8, 6.4], [22.2, 4.45, 6.4], [19.7, 2.25, 9.25]
+  [15.2, 3.4, 11.0], [10.4, 4.3, 12.8], [7.4, 7.6, 15.6], [7.0, 10.8, 19.6], [7.4, 13.8, 23.4], [9.7, 16.6, 26.4]
+]
+// The heights the flaw's lights are cut at, each slab's middle, so every stretch of light lies in one storey and the
+// irradiance volume shuts it out of the storeys the slabs close off.
+let flawCuts = map(range(1, 3), k => ((galleryStorey * k) - 0.1))
+
 // The display stations: the showcase's twelve stand in its bays (shapes.puck's galleryDisplays), a pair to each bay
 // across the nave on the two showcase rows, each console toward the centre aisle (yaw 180 faces +z, yaw 0 faces -z); a
 // gallery's displays stand along its middle, their consoles toward its balcony edge.
@@ -216,14 +242,37 @@ let displayExhibitScale = 2
 // cap, some dipping a little under it, so each stands this much higher and reads as a specimen held over the light.
 let displayExhibitLift = 0.3
 
-// Level 1's toybox (toybox.puck): an arcade cabinet in each of the three middle showcase bays on both galleries, facing
-// the nave across its void, so every other level looks across into live game screens. The bays stand clear of the
-// stairs and the lift's landing (bays 3 and 4) and the endless fall's well (bay 11). Each cabinet stands on a gallery's
-// third tile row in from its wall, mirrored about the nave, leaving about 4 m before it to the balcony edge to stand and
-// play, and a walkway behind it.
+// Level 1's toybox (toybox.puck): twelve Humble Gaming Deck stations, six on each gallery, mirrored about the nave so
+// each north station stands across the void from its south twin. Along each gallery, in bays 2, 3, 5, 6, 7 and 8, a
+// living-room television set and a two-player arcade cabinet alternate. The plan keeps clear of the corner bays and the
+// walls beside them (0 and 12: the corner stairs, and the handhelds' corners to come), the lift's landing (bay 4) and
+// the endless fall's well (bay 11), and ends where the size walk (size-walk.puck) starts shrinking a body. A cabinet
+// stands on a gallery's third tile row in from its wall and a television set's stand on its second, so a set's rug and
+// beanbags reach no nearer than 2.8 m to the balcony edge; each faces the nave, a south one +z (yaw 180), a north one -z
+// (yaw 0). `look` is the colourway a station wears (look.puck's lookCabinets and lookTelevisions) and `cartridge` the
+// shipped deck program it boots.
 let toyboxLevel = 1
-let toyboxBays = [showcaseBays[2], showcaseBays[3], showcaseBays[4]]
-let toyboxRows = [{ row: (wallRowSouth + 2), yaw: 180, facing: 1 }, { row: (wallRowNorth - 2), yaw: 0, facing: -1 }]
+let toyboxSides = [
+  { name: "south", cabinetRow: (wallRowSouth + 2), televisionRow: (wallRowSouth + 1), yaw: 180, facing: 1 }
+  { name: "north", cabinetRow: (wallRowNorth - 2), televisionRow: (wallRowNorth - 1), yaw: 0, facing: -1 }
+]
+let toyboxPlan = [
+  { bay: 2, kind: "television", look: 0, cartridge: "moving-sprite" }
+  { bay: 3, kind: "cabinet", look: 0, cartridge: "moving-sprite" }
+  { bay: 5, kind: "television", look: 1, cartridge: "colour-bars" }
+  { bay: 6, kind: "cabinet", look: 1, cartridge: "moving-sprite" }
+  { bay: 7, kind: "television", look: 2, cartridge: "moving-sprite" }
+  { bay: 8, kind: "cabinet", look: 2, cartridge: "moving-sprite" }
+]
+// Every station, south then north, with the name of the deck it hosts, its side's row for its kind and its facing.
+let toyboxStations = flatMap(toyboxSides, side => map(toyboxPlan, s => (s with {
+  id: $"{s.kind}-{side.name}-{s.bay}"
+  machine: $"toybox-{s.kind}-{side.name}-{s.bay}"
+  row: ((s.kind == "cabinet") ? side.cabinetRow : side.televisionRow)
+  yaw: side.yaw
+  facing: side.facing
+})))
+let toyboxMachines = map(toyboxStations, s => s.machine)
 
 // Level 1's lattice (shell.puck): a toy construction panel along every edge level 1 shares with the nave's void,
 // standing on the floor and reaching into the fascia (or the slab) above, so no body flies or jumps into the toybox

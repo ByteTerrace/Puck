@@ -171,6 +171,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         public ulong ChargedTicks { get; set; }
         public ulong AuthoritySpan { get; set; }
         public ulong PredictedTicks { get; set; }
+        public int DoorsAvoided { get; set; }
         public string Prediction { get; set; } = string.Empty;
         public int ControlLines { get; set; }
         public int ControlRefusals { get; set; }
@@ -631,6 +632,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
             chapter.ChargedTicks = driver.ChargedTicks;
             chapter.AuthoritySpan = driver.AuthoritySpan;
             chapter.PredictedTicks = driver.PredictedTicks;
+            chapter.DoorsAvoided = (driver.DoorsAvoided + m_companions.Sum(selector: static companion => companion.DoorsAvoided));
             chapter.Prediction = (senses?.DescribePrediction(slot: driver.Seat) ?? string.Empty);
             chapter.ControlLines = (driver.Submitted + m_companions.Sum(selector: static companion => companion.Submitted));
             chapter.ControlRefusals = (driver.Refused + m_companions.Sum(selector: static companion => companion.Refused));
@@ -1159,7 +1161,7 @@ public sealed partial class WorldBenchmarkCommandModule(WorldTickScript script, 
         var disturbed = Disturbances(chapter: chapter, statistics: statistics);
         var arrival = (chapter.Driven
             ? ((chapter.Arrived ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"arrived in {chapter.Duration} ticks") : $"FAILED: {chapter.Failure}") +
-                string.Create(provider: CultureInfo.InvariantCulture, handler: $" ({chapter.ChargedTicks} ticks charged to its budget, the authority ticked {chapter.AuthoritySpan}; {chapter.PredictedTicks} steered from a prediction; prediction {chapter.Prediction})"))
+                string.Create(provider: CultureInfo.InvariantCulture, handler: $" ({chapter.ChargedTicks} ticks charged to its budget, the authority ticked {chapter.AuthoritySpan}; {chapter.PredictedTicks} steered from a prediction, {chapter.DoorsAvoided} kept off unaimed glass; prediction {chapter.Prediction})"))
             : (!read ? "arrival unmeasured (no body pose was read)" : ((failed.Count > 0) ? $"OFF COURSE: {string.Join(separator: "; ", values: failed)}" : ((unjudged.Count > 0) ? $"arrived ({unjudged.Count} gate(s) only the headless test judges)" : "arrived"))));
 
         var from = PlacesOf(read: chapter.Opening) is { Count: > 0 } start ? start[0]!.GetValue<string>() : "none";

@@ -303,6 +303,71 @@ public sealed class DeliveryReviewLawTests {
     }
 
     [Fact]
+    public void AValueCompositionHoldsWhatAWholeCompositionComposesAndItsDeltasRebuildItForTheRecipient() {
+        var other = new WorldStateRow(Name: CellName.Parse("tally"), Kind: CellKind.Int, Domain: StateDomain.Keys.Instance,
+            Cells: [new StateCell(CellName.Parse("a"), CellValue.Int(1))]);
+        var phase = new WorldStateRow(Name: CellName.Parse("phase"), Kind: CellKind.Fixed,
+            Cells: [new StateCell(WorldStateRow.SlotKey, CellValue.Fixed(0))]);
+        using var fixture = Fixtures.FreshServer(Document(tier: WorldDisclosureTier.Presentation) with {
+            StateRaw = new WorldStateSection(World: [Row(), other, phase]),
+            TimelineRaw = new WorldTimelineSection(Clocks: [new WorldClock(Name: "day", State: "phase")]),
+            RenderRaw = new WorldRenderDefaults(Atmosphere: new WorldRenderAtmosphere(Fog: new WorldRenderFog(
+                Density: new BindableScalar(keys: new WorldKeyTrack<BindableScalar>(clock: "day", keys: [
+                    new WorldKey<BindableScalar>(At: 0, Value: 0, Ease: WorldEase.Linear), new WorldKey<BindableScalar>(At: 0.5, Value: 0.1f, Ease: WorldEase.Linear)]))))),
+        });
+        var images = new WorldDisclosureImages();
+        var view = View(fixture, images, WorldDisclosureTier.Presentation);
+        var feed = new WorldProjectionFeed(Principal.Seat(1));
+        var cursor = new WorldDeliveryCursor();
+        var hold = new WorldProjectionHold();
+        var work = new WorldProjectionWork();
+        using var attributed = WorldProjectionWork.Attribute(work);
+        long Read(Puck.Abstractions.Counting.WorkKind kind) {
+            Assert.True(work.TryRead(kind, out var value));
+            return value;
+        }
+        void Deliver() {
+            var delivery = feed.Compose(view, cursor);
+            switch (delivery.Kind) {
+                case WorldProjectionDeliveryKind.Document:
+                    Assert.True(hold.TryHold(delivery.Payload, out _, out var reason), reason);
+                    break;
+                case WorldProjectionDeliveryKind.Delta:
+                    Assert.True(hold.TryApply(delivery.Payload, out _, out _, out _, out var refusal), refusal);
+                    break;
+            }
+            Assert.Null(feed.Verify(view));
+            Assert.Equal(WorldProjection.SerializeCompact(feed.Held!), WorldProjection.SerializeCompact(hold.Projection!));
+        }
+        void Write(WorldMutation mutation) {
+            fixture.Server.EnqueueMutation(mutation);
+            fixture.Step();
+            Deliver();
+        }
+
+        Deliver();
+        var whole = Read(WorldProjectionWork.WholeCompositions);
+        // A value, a membership write elsewhere (which moves the policy revision) and a cell joining the restricted row
+        // are each composed from the moved rows alone.
+        Write(new WorldMutation.UpsertStateCell(Principal.Console, "hand", "pub", 9, WorldDocumentWriteKind.Set));
+        Write(new WorldMutation.UpsertStateCell(Principal.Console, "tally", "b", 2, WorldDocumentWriteKind.Set));
+        Write(new WorldMutation.UpsertStateCell(Principal.Console, "hand", "extra", 5, WorldDocumentWriteKind.Set));
+        Write(new WorldMutation.RemoveStateCell(Principal.Console, "hand", "extra"));
+        // A state clock's correction travels as its anchor alone.
+        Write(new WorldMutation.UpsertStateCell(Principal.Console, "phase", WorldStateRow.SlotKey.Value, 16384, WorldDocumentWriteKind.Set));
+        Assert.NotNull(Assert.Single(hold.Projection!.Timeline!.Clocks!).Anchor);
+        Assert.Equal(whole, Read(WorldProjectionWork.WholeCompositions));
+        Assert.Equal(9L, Assert.Single(hold.Projection!.Observations!).Cells.Single(cell => cell.Key == "pub").Value);
+        // A policy that withholds the recipient's cell, and one that stops the row crossing as an observation at all.
+        var row = Row(value: 9);
+        Write(new WorldMutation.UpsertStateRow(Principal.Console, row with {
+            Cells = [row.Cells![0], row.Cells[1] with { Visibility = new StateVisibility(Readers: ["seat2"]) }],
+        }));
+        Write(new WorldMutation.UpsertStateRow(Principal.Console, row with { Visibility = null, CellVisibility = false, Cells = [row.Cells[0]] }));
+        Assert.Null(hold.Projection!.Observations);
+    }
+
+    [Fact]
     public void ReclaimingAnObsoleteImageCannotTurnAHiddenOnlyInstallIntoAPresentationDelivery() {
         using var fixture = Fixtures.FreshServer(Document(tier: WorldDisclosureTier.Presentation));
         var images = new WorldDisclosureImages();
