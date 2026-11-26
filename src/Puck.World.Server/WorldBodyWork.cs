@@ -25,6 +25,9 @@ public sealed class WorldBodyWork : WorkLedger<WorkCounterSet> {
     public static WorkKind LocalSteers { get; } = new(name: "physics.bodies.local-steers", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting kit partitions run: each partition holding a local body counts once a tick.</summary>
     public static WorkKind KitPartitions { get; } = new(name: "physics.bodies.kit-partitions", unit: "count", workClass: WorkClass.Deterministic);
+    /// <summary>Gets the kind counting the bodies a tick's curve order sorted again: those that joined the step or crossed
+    /// into another cell. The rest of the step bodies kept their place.</summary>
+    public static WorkKind CurveResorts { get; } = new(name: "physics.bodies.curve-resorts", unit: "count", workClass: WorkClass.Deterministic);
     /// <summary>Gets the kind counting the sections a step copied aside so a refused sweep could put them back: one for
     /// each section behind a holder that the step wrote (<see cref="Puck.State.SlotBinding.BeginRestore"/>). A step
     /// that writes no such section counts none.</summary>
@@ -59,7 +62,7 @@ public sealed class WorldBodyWork : WorkLedger<WorkCounterSet> {
 
     /// <summary>Initializes a new instance of the <see cref="WorldBodyWork"/> class, every kind at zero.</summary>
     public WorldBodyWork() : base(counters: new(
-        kinds: [Advances, LocalAdvances, LocalSteers, KitPartitions, StepSaves, StepSavedBytes, FieldWakes, FieldObserved, GyroscopicSteps, GyroscopicRefusals, GyroscopicRescaleSkips, AdjacencyCorrectionClamps],
+        kinds: [Advances, LocalAdvances, LocalSteers, KitPartitions, CurveResorts, StepSaves, StepSavedBytes, FieldWakes, FieldObserved, GyroscopicSteps, GyroscopicRefusals, GyroscopicRescaleSkips, AdjacencyCorrectionClamps],
         name: SourceName
     )) { }
 
