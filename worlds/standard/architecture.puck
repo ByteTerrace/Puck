@@ -92,3 +92,48 @@ template exhibitPlinth(base) {
     }
   }
 }
+
+// The structure's materials, in slot order from `base`: deep teal steel and its brass inlay.
+let structureTeal = 0
+let structureBrass = 1
+let structurePalette = [
+  { color: "#2C5A63", roughness: 0.55, specular: 0.3 }
+  { color: "#C8902E", roughness: 0.3, metal: 1 }
+]
+let structureAcross = [0.7071, 0, 0, 0.7071]
+
+// A teal branched pier that faces +Z: a chamfered square shaft that splits into two arches springing toward ±X, cut by
+// two circles so the haunch above the shaft curves out to a band along the ceiling, with two brass inlay strips up the
+// shaft's face. It stands from the floor (y 0) to `height`; each arch reaches `span` metres out from the shaft's centre,
+// where the next pier's arch meets it, so piers `2 × span` apart join into an arcade.
+template branchedPier(base, height, span, depth = 0.34, shaft = 0.34) {
+  shape Box "pier-shaft" {
+    material: (base + structureTeal)
+    position [0, (height / 2), 0]
+    scale [shaft, (height / 2), depth]
+    chamfer: 0.06
+  }
+  shape Box "pier-haunch" {
+    material: (base + structureTeal)
+    position [0, (height - ((span - shaft) + 0.25) / 2), 0]
+    scale [span, (((span - shaft) + 0.25) / 2), (depth * 0.8)]
+    chamfer: 0.04
+  }
+  for side in [-1, 1] {
+    shape Cylinder $"pier-arch-{side}" {
+      blend: SmoothSubtraction
+      smooth: 0.05
+      material: (base + structureTeal)
+      position [(side * span), ((height - 0.25) - (span - shaft)), 0]
+      rotation: structureAcross
+      scale [(span - shaft), depth, (span - shaft)]
+    }
+  }
+  for side in [-1, 1] {
+    shape Box $"pier-inlay-{side}" {
+      material: (base + structureBrass)
+      position [(side * (shaft * 0.45)), (height * 0.42), (depth + 0.004)]
+      scale [0.025, (height * 0.3), 0.012]
+    }
+  }
+}

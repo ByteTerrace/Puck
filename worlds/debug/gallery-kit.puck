@@ -8,6 +8,14 @@ documentId: "gallery-kit"
 import "../standard/architecture"
 
 prototypes {
+  prototype "kit-pier" {
+    document {
+      name: "kit-pier"
+      schema: "puck.creation.v1"
+      palette: structurePalette
+      branchedPier(base: 0, height: 4.2, span: 2.0)
+    }
+  }
   prototype "kit-plinth" {
     document {
       name: "kit-plinth"
@@ -24,6 +32,10 @@ prototypes {
 }
 
 placements {
+  placement "kit-pier" {
+    prototype: "kit-pier"
+    position [6, 0, 4]
+  }
   placement "kit-plinth" {
     prototype: "kit-plinth"
     position [0, 0, 4]
