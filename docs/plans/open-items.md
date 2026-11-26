@@ -924,15 +924,25 @@ camera latch, and Vulkan's capture copy and record fork.
      anyway, so taking them before the restore point opens saves nothing
      else; the durable input's own writes of the submitted image need the
      same order first.
-   - **The host thread still composes every instance's wave from scratch.**
-     Before each step the thread that also runs the frame scans every body
-     slot of every instance against every seam face
-     (`WorldAdjacencyOwnership.Sweep`, which makes its answer's array on
-     every call), builds each mirrored session's body image whole
-     (`WorldSessionMirror.CaptureBodyImage`) and makes the observation
-     tables and the seam projections again
-     (`WorldPresentationCopy.Observations`,
-     `WorldAdjacencyFields.BuildProjections`). Built: the seam scan's
+   - **The host thread replays every delivery into every session mirror
+     whole.** The thread that also runs the frame spends about half of its
+     step taking the boot authority's deliveries into the mirrors that
+     observe it (`WorldOutputHub.Collect`): each state delivery makes a
+     mirror reload every row and bind the whole document again
+     (`WorldDocumentStateView.Adopt`) and compare every placement
+     (`WorldPlacementResponse.ComparePlacements`), and each snapshot fills
+     the mirror's published image with every body
+     (`WorldSessionMirror.ApplySnapshot`), which its readers then copy whole
+     (`WorldSessionMirror.CaptureBodyImage`). The debug world delivers a
+     changed definition on every tick, so none of it is ever skipped: the
+     first thing to name is which placement row moves every tick, and the
+     structure is a mirror that takes a delivery by the rows and bodies it
+     names. A fifth of the step is the portal scan, every portal face
+     against every body slot (`WorldInstanceHost`'s `ScanInstancePortals`);
+     the seam scan beside it (`WorldAdjacencyOwnership.Sweep`) reads the
+     same way but costs little where few seams stand. A body at rest beyond
+     a face answers crossed on every scan, so a scan of the bodies that
+     moved must keep those it last found beyond one. Built: the seam scan's
      selection makes no closure for a slot that crossed nothing, a
      reference's document path is resolved once, and the site attention
      reads its faces by index, which halved what that thread allocates an
