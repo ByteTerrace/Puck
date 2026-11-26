@@ -30,9 +30,9 @@ import "shapes"
 let wingFloor = galleryFloor[0]
 let wingTop = galleryCeiling[0]
 // The faces paintings hang on: the south wall's inner face, each fin's east face and the east wall's inner face.
-let wingSouth = galleryWall
-let wingFins = [courtWest, courtFin]
-let wingEast = galleryEast
+let courtWall = galleryWall
+let courtFins = [courtWest, courtFin]
+let courtEast = galleryEast
 
 // The canvas of a wall painting: a thin rim box 2.24 m wide and 2.84 m tall whose centre is carved away, so the glass,
 // which fills the face shape a centimetre short of its faces, shows through. Its lower 0.12 m is below the floor so a
@@ -86,39 +86,39 @@ let brass = { lip: paintBlack, lipWidth: 0.03, mat: paintMat, matWidth: 0, borde
 // arrives out of.
 let wallPaintings = [
   {
-    name: "garden", x: 34.4, z: wingSouth, yaw: 180, frame: ornate, destination: "garden", counterpart: "arrival/glass", fallback: fallbackGarden
+    name: "garden", x: 34.4, z: courtWall, yaw: 180, frame: ornate, destination: "garden", counterpart: "arrival/glass", fallback: fallbackGarden
     title: "THE GARDEN", note: "A sunset plot beyond the glass. Walk or jump in; the frame behind you leads back."
   }
   {
-    name: "night", x: 38, z: wingSouth, yaw: 180, frame: modern, destination: "night", counterpart: "arrival/glass", fallback: fallbackNight
+    name: "night", x: 38, z: courtWall, yaw: 180, frame: modern, destination: "night", counterpart: "arrival/glass", fallback: fallbackNight
     title: "THE NIGHT FIELD", note: "A snowfield under the stars. Step in; turn round to come back."
   }
   {
-    name: "city", x: 41.6, z: wingSouth, yaw: 180, frame: ornate, destination: "city", counterpart: "arrival/glass", fallback: fallbackCity
+    name: "city", x: 41.6, z: courtWall, yaw: 180, frame: ornate, destination: "city", counterpart: "arrival/glass", fallback: fallbackCity
     title: "THE CITY", note: "A town on a river bend, its market, terraces, works and quay. Step in; the frame behind you leads back."
   }
   {
-    name: "moon", x: 48.5, z: wingSouth, yaw: 180, frame: modern, destination: "moon", counterpart: "moon-socket/glass", fallback: fallbackMoon
+    name: "moon", x: 48.5, z: courtWall, yaw: 180, frame: modern, destination: "moon", counterpart: "moon-socket/glass", fallback: fallbackMoon
     title: "THE MOON", note: "The pale moon over the valley, the same one a ship from the launch field lands on. Knock and wait for the moon to answer; the frame it opens leads back."
   }
   {
-    name: "galaxy", x: 52.5, z: wingSouth, yaw: 180, frame: brass, destination: "galaxy", counterpart: "arrival/glass", fallback: fallbackGalaxy
+    name: "galaxy", x: 52.5, z: courtWall, yaw: 180, frame: brass, destination: "galaxy", counterpart: "arrival/glass", fallback: fallbackGalaxy
     title: "THE PLANETOIDS", note: "Six small worlds in open space, each with gravity of its own shape. Step in; the glowing pads launch you from one to the next."
   }
   {
-    name: "sun", x: wingEast, z: 6.6, yaw: 90, frame: brass, destination: "sun", counterpart: "arrival/glass", fallback: fallbackSun
+    name: "sun", x: courtEast, z: 6.6, yaw: 90, frame: brass, destination: "sun", counterpart: "arrival/glass", fallback: fallbackSun
     title: "PERIHELION", note: "A rock the sun passes once a day, the same sun that lights the valley. Step in and watch it come; keep to the rock while it passes, and do not fly to it."
   }
   {
-    name: "globe", x: (wingFins[0] + galleryWall), z: 2.4, yaw: 270, frame: ornate, destination: "globe", counterpart: "arrival/glass", fallback: fallbackGlobe
+    name: "globe", x: (courtFins[0] + galleryWall), z: 2.4, yaw: 270, frame: ornate, destination: "globe", counterpart: "arrival/glass", fallback: fallbackGlobe
     title: "THE BOTTLE WORLD", note: "A room whose gravity this gallery owns. Press the lever before it and watch which way the marbles fall; step in and someone out here can turn you over."
   }
   {
-    name: "link-west", x: (wingFins[1] + galleryWall), z: 2.4, yaw: 270, frame: brass, destination: "self", counterpart: "painting-link-east/glass", fallback: fallbackSelf
+    name: "link-west", x: (courtFins[1] + galleryWall), z: 2.4, yaw: 270, frame: brass, destination: "self", counterpart: "painting-link-east/glass", fallback: fallbackSelf
     title: "ACROSS THE ROOM", note: "Step in and you step out of its twin on the far wall, facing out."
   }
   {
-    name: "link-east", x: wingEast, z: 2.4, yaw: 90, frame: brass, destination: "self", counterpart: "painting-link-west/glass", fallback: fallbackSelf
+    name: "link-east", x: courtEast, z: 2.4, yaw: 90, frame: brass, destination: "self", counterpart: "painting-link-west/glass", fallback: fallbackSelf
     title: "ACROSS THE ROOM", note: "Step in and you step out of its twin on the far wall, facing out."
   }
 ]
@@ -219,8 +219,8 @@ template wallPainting(label, frame, title, note) {
 
 // The wing's shell: a partition wall with a doorway, and a lining over the south, north and east walls, up to the slab
 // above. Every piece is a box rather than a subtraction, so a visitor in the doorway meets analytic boxes rather than a
-// carve's field solve (hall.puck). The walls are a warm stone a shade under the hall's cream, so the wing reads as its own
-// room and still carries its fixtures' light (hall.puck's wingDownlights and wingWashes) about each canvas.
+// carve's field solve (gallery/gallery.puck). The walls are a warm stone a shade under the hall's cream, so the wing reads as its own
+// room and still carries its fixtures' light (gallery/gallery.puck's wingDownlights and wingWashes) about each canvas.
 let wingWall = 0
 let wingTrim = 1
 let wingBoard = 2
@@ -256,7 +256,7 @@ prototypes {
       name: "wing-fins"
       schema: "puck.creation.v1"
       palette: wingPalette
-      for (x, n) in wingFins {
+      for (x, n) in courtFins {
         boundsBox(
           label: $"fin-{n}",
           x0: x,
@@ -429,9 +429,9 @@ spawnPoints [
   { id: "portal-city", parent: gallery, position [41.6, wingFloor, 3.4], yawDegrees: 0 }
   { id: "portal-moon", parent: gallery, position [48.5, wingFloor, 3.4], yawDegrees: 0 }
   { id: "portal-galaxy", parent: gallery, position [52.5, wingFloor, 3.4], yawDegrees: 0 }
-  { id: "portal-sun", parent: gallery, position [(wingEast - 3.1), wingFloor, 6.6], yawDegrees: 270 }
-  { id: "portal-globe", parent: gallery, position [((wingFins[0] + galleryWall) + 3.1), wingFloor, 2.4], yawDegrees: 90 }
-  { id: "portal-link", parent: gallery, position [((wingFins[1] + galleryWall) + 3.2), wingFloor, 2.4], yawDegrees: 90 }
+  { id: "portal-sun", parent: gallery, position [(courtEast - 3.1), wingFloor, 6.6], yawDegrees: 270 }
+  { id: "portal-globe", parent: gallery, position [((courtFins[0] + galleryWall) + 3.1), wingFloor, 2.4], yawDegrees: 90 }
+  { id: "portal-link", parent: gallery, position [((courtFins[1] + galleryWall) + 3.2), wingFloor, 2.4], yawDegrees: 90 }
   { id: "portal-fall", parent: gallery, position [fallPlan[0], wingFloor, (fallPlan[1] + 3.2)], yawDegrees: 0 }
   // Eleven metres north of the garden painting, facing it: the seam walk's second crossing (walkthrough-tests.puck).
   { id: "seam-painting", parent: gallery, position [34.4, wingFloor, 11.3], yawDegrees: 0 }

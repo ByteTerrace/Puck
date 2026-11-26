@@ -22,7 +22,7 @@ The wing is x 51 to 69.7, z 12.3 to 39.7. A partition wall at x = 51 shuts it
 off from the exhibit rows, with a doorway at z 24 to 28 under a "PAINTING WING"
 board, and a lining over the south, north and east walls hides their windows.
 The wing's own downlights and a track of wall washes over each wall painting
-(`wing-down-*` and `wing-wash-*`, hall.puck) light it whatever the lobby's
+(`wing-down-*` and `wing-wash-*`, gallery/gallery.puck) light it whatever the lobby's
 switch says, and each canvas, which shows a live view, lights it further. Each painting has a plaque; the floor painting's lies on
 the floor before it, and a rail rings the hole in level 1's floor over the
 ceiling painting (below).
@@ -76,7 +76,7 @@ the body in place rather than transferring it to another world.
 
 A body falling out of the ceiling painting needs 2.2 m of air over its head, so
 level 1's floor is holed over the ceiling painting (`fallSlab` in
-[hall.puck](hall.puck)) and railed on level 1. The hole is a real hole: a body
+[gallery/gallery.puck](gallery/gallery.puck)) and railed on level 1. The hole is a real hole: a body
 that falls into it from level 1 falls through the ceiling painting's back and
 onto the floor painting, and from there it is in the loop.
 

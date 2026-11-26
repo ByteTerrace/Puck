@@ -1,7 +1,7 @@
 # Debug world shape gallery
 
-The debug world shows every authorable signed-distance construct in the gallery
-hall, a four-storey building on the open ground at +X/+Z, one prototype an
+The debug world shows every authorable signed-distance construct in the
+gallery, a four-storey building on the open ground at +X/+Z, one prototype an
 exhibit, so a change to the field, the bake, the stamp pool or the renderer
 shows on every construct at once, and the building itself exercises stairs, a
 lift, floors, walls, windows and indoor light. Two rows move: their exhibits
@@ -12,165 +12,78 @@ expands `galleryPrototypes()` in its `prototypes` block, `galleryPlacements()`
 in its `placements` block and `galleryState()` in its `state.world` block,
 concatenates `gallerySpawns` into its `spawnPoints` and `galleryCommands` into
 its `commands`, and declares the font the labels emboss in.
-[`hall.puck`](hall.puck) is the building: its shell, floors, stairs, lift,
-lights, level boards, tour and keys. West of the entrance the lobby holds a
-desktop computer showing the whole desktop ([`desktop.md`](desktop.md)) and the
-big painting to Wonderland, where the gaming devices stand
-([`devices.md`](devices.md)). The east end of level 0 is the painting wing,
-five portal paintings behind a doorway ([`paintings.md`](paintings.md)), and the
-east end of level 2 is the board game room, the chess, Go, Reversi, Alchemy, granary
-and card tables behind a doorway ([below](#the-board-game-room)).
+[`gallery/gallery.puck`](gallery/gallery.puck) is the building, a module under
+one root placement: its shell, floors, stairs, lift, lights, level boards, tour
+and keys. [gallery.md](gallery.md) draws its plan and says what stands where.
 
-Each exhibit hangs 1.2 m over a dark plinth whose label faces -Z, with a plaque
-in small type under the label saying what the exhibit demos and what to look
-for. The plinth is the exhibit's last shape, so an exhibit's subtraction or
-intersection never cuts it. A plinth that renders wrong shows the exhibit's
-scope or bound reaching its siblings. Slot 0 is the exhibit's grey, slot 1 the
-plinth, slot 2 the label, and slot 3 the exhibit's own second material: a
-blend's tool, the palette channel under test, or a moving part.
+Each exhibit stands over a display plinth whose console faces its walkway,
+with a plaque in small type under the label saying what the exhibit demos and
+what to look for. The plinth is a creation of its own, stamped once an
+exhibit, so an exhibit's subtraction or intersection never cuts it. Slot 0 is
+the exhibit's grey, a plain dielectric, slot 1 the label's ground, slot 2 the
+label, and slot 3 the exhibit's own second material: a blend's tool, the
+palette channel under test, or a moving part.
 
-## The hall
+## The building
 
-The footprint is x 10 to 70, z 12 to 40. Level k's floor stands at y = 4.5k +
-0.05, k = 0 to 3, under a flat roof at 18.05 with three skylights over level 3.
-Every piece is a solid box, so the Moth walks every floor, climbs the stairs and
-rides the lift, and the chase camera's clearance keeps the eye inside the rooms.
+[gallery.md](gallery.md) holds the plan and its dimensions. In short: a nave
+runs the building's length, open from level 0's floor to three skylights, with
+an arcade of branched piers either side and three tall bays in its east wall.
+Level 0's aisles and the galleries over them on levels 1 to 3 stand round it,
+their balcony edges guarded by a glass balustrade. The stairs, the lift's
+glass tower and the entrance stand together against the south wall. Every
+piece a body meets is a union of boxes, so the Moth walks every floor, climbs
+the stairs and rides the lift, and the chase camera's clearance keeps the eye
+inside the rooms.
 
-| Where | What |
-|---|---|
-| South wall, x 14 to 18 | The entrance, 3.3 m high, facing the spawn; `gallery` stands outside it |
-| x 10 to 20, z 12 to 34 | The lobby on level 0; each level above has its landing here. The lobby's contents are in the next table |
-| x 10 to 14, z 34.5 to 40 | The stairs: per storey a flight up +Z at x 10 to 12, a half landing at the north wall and a flight back down -Z at x 12 to 14, eighteen 0.25 m risers on 0.4 m treads |
-| x 14 to 18, z 36 to 40 | The lift shaft, its 1.8 m door facing south onto each landing, a board over it naming the level |
-| x 20 to 70 | The halls: each level's rows run along +X from x = 23; section signs hang above the first exhibit, facing the landing down the hall |
-| x 51 to 69.7, z 12.3 to 39.7, level 0 | The painting wing: a partition at x = 51 with a doorway at z 24 to 28, and five portal paintings ([`paintings.md`](paintings.md)). Level 1's floor is holed and railed over the ceiling painting of the endless fall, at (66, 22.6) |
-| x 51 to 69.7, z 12.3 to 39.7, level 2 | The board game room: a partition at x = 51 with a doorway at z 24 to 28, and the chess, Go, Reversi, Alchemy, granary and card tables ([below](#the-board-game-room)) |
-| South, north and east walls | A 2.4 m window band on every level, a blind in every window; the roof's skylights light level 3 |
-
-The lobby on level 0, from the entrance north. The walk from the door to the
-lift and the stairs runs at x 14 to 18 and stays clear; the desk and the painting
-stand west of it.
-
-| Where | What |
-|---|---|
-| (12.4, 16) | The hanging map board, left of the door, facing it: how to get around, the levels and their rows, the painting wing (`debug.go portals`) and the board game room (`debug.go boardroom`) |
-| x 10.33 to 11.08, z 22.95 to 24.45 | The desktop computer against the west wall, its monitor facing +X and its chair at (11.55, 23.7) ([`desktop.md`](desktop.md)) |
-| West wall, z 30.5 | The big painting to Wonderland, facing +X: walk through to come out a quarter your size among the gaming devices ([`wonderland.md`](wonderland.md)) |
-| West wall, z 32.5 | The level's light switch |
-
-The hall is the gallery's inspection room, a debug tool for a person looking
-and an agent capturing, so its light is chosen for reading surfaces: every
-exhibit's albedo, roughness, normals and material should read, none lost in
-shadow or clipped, under light neutral enough to judge colour, while staying
-physical so a leak or a lighting bug still shows. Everything the light meets
-before an exhibit is neutral grey: light grey walls (`#D4D4D4`), a white
-ceiling (`#E8E8E8`, the underside of every slab and the roof, `hallSlab`), a
-mid grey floor (`#9A9A9A`, light enough to fill an exhibit's underside) and
-near-black trim. The light is a neutral 6500 K, the display's own white, from
-overhead: the strips' luminous bands lit through the irradiance volume as the
-soft area light, the downlights over them as a soft key with a highlight that
-shows roughness. The level aims at inspection lighting (EN 12464-1 asks 750 lux
-for inspection work), which also keeps a lit level above the darkest exposure
-the hall adapts to by day (`render.exposure` in `hall.puck`: its floor of
-`EV100` 7 under its day's stop and a quarter of compensation clamps a room
-averaging under about 38 nits), so a lit room never renders darker than its light. Every lit room of
-the hall is held to that level: one lit more dimly reads as murk at noon,
-since the floor holds it under what its meter asks. The blinds start down, as a gallery keeps
-daylight off its exhibits: with them up, daylight through three window walls
-is several times the electric light and moves the exposure by up to three stops
-between neighbouring exhibits (`world.exposure` read `EV100` 9 to 12 along
-level 0's rows with the blinds up).
-
-Lighting is in real units: the sun gives 100,000 lux, an emissive strip
-(4,000 nits, white) runs along the ceiling over each viewing aisle and three over
-each landing (`hallStrips`, part of the slab or roof above them), a 5,000-lumen
-6500 K downlight hangs every 12 m along each strip and, on level 3, in three more rows across the skylights' frames (`hallDownlights`), an
-800-lumen pendant and a luminous panel on the north wall over each half
-landing (`stair-light-<k>`, always lit, as a stair's egress light is) light the
-stairwell, and the lift car has a luminous
-ceiling (120 nits, nearly the whole ceiling) over a 6,000-lumen wide spot that
-rides the car's body. The volume cannot see the moving car's light, so the car
-takes the darkest exposure, `EV100` 7, and its light is sized to read there
-without the panel clipping. The camera's exposure adapts to what each view sees
-(`render.exposure` in the Moth basis), so a dim room and the sunlit lawn both
-read. A fixture that stands still is traced into the irradiance volume, which
-bounces its light about its room and occludes it at every surface whose probes
-cannot see it, so a level's downlights stop at its slab; the lift car's lamp
-rides a body, so it is neither traced nor occluded. The rooms' light is
-otherwise the strips' (and the windows', with the blinds up), carried by the
-traced indirect light, the shadow cascades under the roof and ambient
-occlusion.
+The building has no sun of its own: the world that stands it lights it
+([`day.puck`](day.puck) in the debug world). Its own light is in real units.
+An emissive strip (4,000 nits) runs along the ceiling over each aisle, over
+the bridge and over the lift's landing, as part of the slab or roof above it
+(`shellStrips`). A 5,000-lumen downlight hangs along each aisle
+(`hallDownlights`), eight 30,000-lumen high bays under the roof light the
+nave's floor, and washes on level 1's balcony edges light level 0's two lines
+from the side. A pendant lights the stairwell, and the lift's car has a
+luminous ceiling over a 6,000-lumen spot that rides the car's body. Every
+fixture but the car's is anchored to the building's root and stands still, so
+the irradiance volume traces it: its light bounces about its room and stops at
+the slab under it. The camera's exposure is the world's
+([`exposure.puck`](exposure.puck)).
 
 Each level's room lights switch on and off. `hallLights` holds each level's
-state (`Off` or `On`), and every level starts `On`. A level that is off shows the dark variant of the slab or
-roof above it (`hall-floor-<k+1>-dark`, `hall-roof-dark`: the same boxes with a
-pale, unlit diffuser in the strips' palette slot) through the placement's
-`respond` facet, and its fixtures (`hallLamps`: each level's downlights, and
-the stairwell's pendant for level 1) read a power of 0 lumens; the lift car's
-lamp stays with the car.
-A swap shows the same geometry, so the mesh library answers it without a bake,
-and a responding row registers both variants' palettes, so it moves no other
-group's material ids; the irradiance volume retraces under the new materials and
-blinds. Each level's switch is a plate on the west wall at z = 32.5, south of
-the stairs, 1.1 to 1.46 m over the floor and labelled `LIGHTS`: a warm indicator
-when on, a green locator glow when off, so it shows in the dark. The two are one
-geometry, so a flip bakes nothing. Level 2 has a second plate on the same
-circuit inside the board game room's doorway, as a room with two doors has
-([below](#the-board-game-room)).
+state (`Off` or `On`), and every level starts `On`. A level that is off shows
+the dark variant of the slab or roof above it (`gallery-floor-<k+1>-dark`,
+`gallery-roof-dark`: the same boxes with a pale, unlit diffuser in the strips'
+palette slot) through the placement's `respond` facet, and its fixtures
+(`hallLamps`) read a power of 0 lumens; the lift car's lamp stays with the car.
+A swap shows the same geometry, so the mesh library answers it without a bake.
+Each level's switch is a plate on the south wall east of the lift's door, 1.1
+to 1.46 m over the floor and labelled `LIGHTS`: a warm indicator when on, a
+green locator glow when off, so it shows in the dark.
 
-Each level's blinds stand apart from its lights: `hallBlinds` holds each level's
-(`Up` or `Down`), every level starts `Down`, and `gallery.blinds <level>
-up|down` raises or lowers them over every window of that level (the south
-face's ten, and its window over the entrance above the lobby; the north face's
-ten; the east face's five; level 3's three skylights too). The entrance stays
-an open doorway. A lowered blind is a pale
-board standing in the wall's thickness 5 cm back from the room face, one per
-face and level (`hall-blind-<k>-south`, `-north`, `-east`, and
-`hall-blind-3-skylight-<x>` in the roof), running inside the piers between the
-windows and 3 cm into every sill and head, so each opening shows a panel that
-covers it whole and no sunlight or traced indirect light comes through. Eight
-painted seams across each window's board read as nine horizontal slats; a paint
-draws at the hit alone, so the seams cost the bake nothing. A raised blind has
-rolled into the charcoal cassette at its opening's head, part of `hall-shell`
-and always drawn. The boards are solid, so a line of sight through a window
-reads them (`hall-tests.puck`), and swap through `respond` to `hall-blinds-up`,
-a creation with nothing to draw. Raising a level's blinds bakes nothing;
-lowering them bakes that level's boards the first time they show under a bake
-identity, and the mesh store keeps them after (every level's bake with the
-boot, since they start down). The CPU bake (`puck mesh audit --cpu --group
-hall-blind`) meshes a south or north board in about 190,000 triangles, an east
-one in 49,000 and a skylight's in 95,000, so a lowered level adds about
-420,000, near one floor slab's 530,000. With the lobby's lights off its light is
-the device screens' and the entrance's; the lit levels above still light the
-stairwell, which is open between floors.
+Each level's fan shades stand apart from its lights. `hallBlinds` holds each
+level's (`Up` or `Down`); levels 0 and 1 start `Up` and levels 2 and 3 `Down`.
+`gallery.blinds <level> up|down` gathers or spreads the shades over that
+level's south and east windows, and each leaf eases to its place over a few
+seconds, since the shades are moving parts on a driver that follows the cell
+([gallery.md](gallery.md#the-kit)).
 
 ### The board game room
 
-The east end of level 2, x 51 to 69.7 and z 12.3 to 39.7, is the board game
-room, partitioned from the hall as the painting wing is on level 0: a wall in
-the hall's grey at x 51 to 51.3, from the floor to the slab above, with a
-2.95 m doorway at z 24 to 28 (`boardroom-shell` in [`hall.puck`](hall.puck)).
-A section board in the rows' style hangs before the doorway, facing the landing
-down the hall, and names the room (`BOARD GAMES`). The room is part of level 2:
-it keeps the window band and level 2's blinds, its ceiling strips are level 2's
-and two columns of level 2's downlights hang over its tables (x 56.5 and 65,
-over each aisle's strip), so level 2's switch lights it. A second plate for that
-switch stands on the partition's east face north of the doorway, at z = 29.5
-(`body.pose spawn:boardroom-switch`). `debug.go boardroom` stands a body inside
-the doorway, facing in.
+Level 2's south gallery from the lift's landing east, with the wing that
+projects over the forecourt, is the board game room. It is open to the nave
+across its balustrade, and a section board in the rows' style names it
+(`BOARD GAMES`) where the landing meets it. `debug.go boardroom` stands a body
+inside it, facing in. Its tables stand in two rows.
 
-| Where | What |
+| Table | Page |
 |---|---|
-| (56.5, 22.6), 2 m square | The chess table ([`chess.md`](chess.md)): White sits on its -Z side, Black on its +Z side; `debug.go chess` |
-| (65, 22.6), 3.5 by 1.7 m | The Reversi table ([`reversi.md`](reversi.md)): Black sits on its -Z side, White on its +Z side, each tray at its player's right; `debug.go reversi` |
-| (56.5, 30.6), 3.5 by 1.7 m | The Go table ([`go.md`](go.md)): Black on its -Z side, White on its +Z side; `debug.go go` |
-| (65, 30.6), 3.5 by 1.7 m | The Alchemy table ([`alchemy.md`](alchemy.md)): a cauldron with two hand wells, 31 element tokens and a lectern recipe-book screen; `debug.go alchemy` |
-| (65, 14.6), 3.5 by 1.7 m | The granary board ([`granaries.md`](granaries.md)): the platform's storage accounts as timber stores on a 4 by 4 board, with water and power providers and a lectern readout; `debug.go granaries` |
-| (60.8, 35.9), 1.6 by 1.5 m | The card table ([`cardtable.md`](cardtable.md)): Klondike with 52 physical cards of the standard deck, north of the Go table; she sits on its -Z side; `debug.go cards` |
-| (56.5, 15.6), 1.2 m square | The auction table ([`auction.puck`](auction.puck)): a sealed-bid auction of three lots among four seats, a chip standing for each bid at the reveal; `debug.go auction` |
-| (60.8, 15.6), 1.2 m square | The shedding table ([`shedding.puck`](shedding.puck)): a card game for four seats, each hand standing in a rack along its seat's edge, faces toward its seat; `debug.go shedding` |
-| (55, 36.5), 1.2 m square | The deduction table ([`deduction.puck`](deduction.puck)): social deduction for four seats, two of them moles, its talk, whispers and den as state; `debug.go deduction` |
-| (67, 36.5), 1.2 m square | The skirmish table ([`skirmish.puck`](skirmish.puck)): a fog-of-war skirmish of two sides of three units on a 6 by 6 board with two walls; `debug.go skirmish` |
+| Chess, Go, Reversi, Alchemy and the granary board, along the projecting wing's windows | [`chess.md`](chess.md), [`go.md`](go.md), [`reversi.md`](reversi.md), [`alchemy.md`](alchemy.md), [`granaries.md`](granaries.md) |
+| The card table, the auction, the shedding game, social deduction and the fog-of-war skirmish, toward the balustrade | [`cardtable.md`](cardtable.md), [`auction.puck`](auction.puck), [`shedding.puck`](shedding.puck), [`deduction.puck`](deduction.puck), [`skirmish.puck`](skirmish.puck) |
+
+Each table's document holds its position (`chessTable` and its fellows) and a
+place of its own for `debug.go`: `chess`, `go`, `reversi`, `alchemy`,
+`granaries`, `cards`, `auction`, `shedding`, `deduction` and `skirmish`.
 
 Every table is a tabletop: walk within 2.5 m of its board and press the context
 button (E, or RB on a pad) to sit down, the camera easing to the board from the
@@ -186,69 +99,65 @@ judge it. The card table's cards are posed by the rules, which judge each reques
 | To | How |
 |---|---|
 | Enter | `debug.go gallery`, then walk +Z through the door |
-| Change level on foot | The stairs at the lobby's north-west corner: walk +Z up the first flight, step east on the half landing, walk -Z up the second |
-| Call the lift | Stand before the wall-mounted `CALL` plate right of the landing door and press the context button (E, or RB on a pad); its button lights until the car arrives. Or `gallery.lift <level>`, which calls as the plate does |
-| Ride the lift | Stand in the car facing its back wall, where the brushed panel has a round button each for floors 0 to 3, then door open and door close. Stand before the one you want and press the context button; a floor button lights while that floor is pending |
+| Change level on foot | The stairs west of the lift: walk -Z up the first flight, step east on the half landing at the south wall, walk +Z up the second |
+| Call the lift | Stand before the wall-mounted `CALL` plate east of the landing door and press the context button (E, or RB on a pad); its button lights until the car arrives. Or `gallery.lift <level>`, which calls as the plate does |
+| Ride the lift | Stand in the car facing its glazed back, where a rail carries a round button each for floors 0 to 3, then door open and door close. Stand before the one you want and press the context button; a floor button lights while that floor is pending |
 | Stand on a level's landing | `gallery.level <level> [body]` |
-| Go to the board game room | `debug.go boardroom` (its doorway, facing in), or `debug.go chess`, `go`, `reversi`, `alchemy`, `granaries` or `cards` (a table's edge, close enough to sit) |
-| Raise or lower a level's blinds | `gallery.blinds <level> up\|down`; down, the default, keeps daylight off the exhibits |
-| Inspect without the showcase lighting | `gallery.inspect on\|off`: On lights every surface from five unshadowed neutral directional fills (60 lux each), raises the sky ambient gain to 2.5 against the authored 0.40625, pins the camera at EV100 7 with no local adaptation (about where the lit hall meters) and takes the screens out of the traced light, so a capture reads albedo and form alike at every exhibit, shadowed sides included. The sky ambient barely reaches the baked interior, so the fills do the work there. Off writes the authored values back exactly. It touches only those render values (`galleryFill` cells bound by the fill lights' illuminance, `render.environment.ambient`, `render.exposure.hold` and `render.indirect.sources.screens`), so the fixtures, strips, blinds and traced bounce stay as `gallery.lights` and `gallery.blinds` leave them; turn it Off for a lighting or photometric check |
-| Switch a level's lights | Stand before the level's wall switch (west wall, z = 32.5; `body.pose spawn:hall-switch-<level>`) and press the context button (E, or RB on a pad), or `gallery.lights <level> on\|off`. The press counts while seat 1's body stands within 1.5 m of the wall and 0.6 m of the plate's centre line; a rule reads no facing, so that box stands in for facing the plate |
-| Walk to an exhibit | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`) stands her 2.8 m before it, turned east of it (`gallerySpawnTurn`) so the chase camera frames the exhibit beside her; `gallery.go` alone returns to the entrance |
+| Go to the board game room | `debug.go boardroom`, or a table's own place (a table's edge, close enough to sit) |
+| Spread or gather a level's fan shades | `gallery.blinds <level> up\|down` |
+| Inspect without the showcase lighting | `gallery.inspect on\|off`: On lights every surface from five unshadowed neutral directional fills (60 lux each), raises the sky ambient gain to 2.5 against the authored 0.40625, pins the camera at EV100 7 with no local adaptation and takes the screens out of the traced light, so a capture reads albedo and form alike at every exhibit, shadowed sides included. Off writes the authored values back exactly. It touches only those render values (`galleryFill` cells bound by the fill lights' illuminance and by the world's `render.environment.ambient`, `render.exposure.hold` and `render.indirect.sources.screens`), so the fixtures, strips, shades and traced bounce stay as `gallery.lights` and `gallery.blinds` leave them; turn it Off for a lighting or photometric check |
+| Switch a level's lights | Stand before the level's wall switch (`body.pose spawn:hall-switch-<level>`) and press the context button (E, or RB on a pad), or `gallery.lights <level> on\|off`. The press counts while a body stands in the reach box before the plate; a rule reads no facing, so that box stands in for facing the plate |
+| Walk to an exhibit | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`) stands her 2.8 m before its console, turned past it (`gallerySpawnTurn`) so the chase camera frames the exhibit beside her; `gallery.go` alone returns to the entrance |
 | Step through every exhibit in walking order | `gallery.next` and `gallery.prev`: `=` steps on, `-` steps back, or the gallery wheel; after the last it wraps to the first |
 | Draw one exhibit's shape alone | `gallery.isolate <exhibit> [shape]`, then `view.isolate off` |
 | Flag an exhibit that looks wrong | `gallery.flag [exhibit] [note]`, or `G` for the one at hand: `world.flag` writes `worlds/debug/flags/<exhibit>.json` (the note, the tick, the seat's pose and camera) and captures the view to `<exhibit>.png` beside it, in the git-ignored folder an agent reads back. The exhibit defaults to `near`, the spawn point nearest the seat's body |
 | Step the debug view | `gallery.view [view]`, or `V`: `world.debug-view next` cycles off, depth, normals, raydir, material-id, visibility, motion, sky-cost, ao, shadow and indirect (the irradiance volume's light alone, exposed); a view's name selects it |
 | Slice an exhibit's field | `gallery.slice [exhibit] [axis] [offset]`, or `B` for the one at hand: `world.slice.save` cuts the field through the exhibit's placement, by default on the level plane 1.2 m over its floor (an x or z cut wants offset 0), and writes `worlds/debug/slices/<exhibit>-<axis>.png` (git-ignored); the statistics land on stderr as `world.slice`'s do |
 
-The lift car is a population body (`lift-car`, body 41, below the companion) carrying the attached
-solid platform, cab shell and car doors. The shell encloses the car with side
-and back walls and a lit ceiling. Rules move
-it: `liftTarget` and
-`liftAt` count sixteenths of a metre, and `lift-ride` glides the car to cell
-`liftAt` of the `liftShaft` topology every tick (`poseCell(…, glide: true)`, a
-continuous move a client interpolates rather than a teleport), so it climbs
-1.875 m/s and stops exactly at each floor. A body standing on the platform rides it up and
-down through the analytic provider's attached-box support path
-(`src/Puck.World.Server/README.md`). `hall-tests.puck` checks a level 0 to 2
-ride and grounding on arrival. `liftDoors` closes the car and all landing
-doors before travel starts, then opens the car and only the landing at its
-destination. Each door has two leaves that retract behind the jambs; both
+The lift car is a population body the `lift-car` placement spawns, carrying
+the attached solid platform, cab and car doors, each of which names that
+placement as its carrier. The cab is glass on three sides under a lit ceiling.
+Rules move it: `liftTarget` and `liftAt` count sixteenths of a metre, and
+`lift-ride` glides the car to cell `liftAt` of the `liftShaft` topology every
+tick (`poseCell(…, glide: true, frame: gallery)`, a continuous move a client
+interpolates rather than a teleport, read in the building's frame), so it
+climbs 1.875 m/s and stops exactly at each floor. A body standing on the
+platform rides it up and down through the analytic provider's attached-box
+support path (`src/Puck.World.Server/README.md`). `gallery-tests.puck` checks a
+level 0 to 2 ride and grounding on arrival. `liftDoors` closes the car and all
+landing doors before travel starts, then opens the car and only the landing at
+its destination. Each door has two leaves that retract behind the jambs; both
 variants collide as drawn. `liftLevel` records the last level reached.
-`galleryPopulation` sets the debug world's capacity; the car's attachment
-index is two below it, keeping the car between the companion and chess cursor.
-Ceiling strips stop outside the enclosed shaft, and the cab's ceiling hides the
-slabs above it.
 
 The input panel is state and rules (the block comment above the rules in
-`hall.puck` has the order). A landing's CALL button writes `liftHall[levelK]`
-and a car floor button `liftCarCall[levelK]`; each button's placement shows its
-lit prototype while its cell is 1, and the cell clears when the car stops
-there. A stopped car waits out its dwell (four seconds after its doors open,
-`liftClock[dwell]`), then serves pending levels in its direction of travel
-(`liftDir`), nearest first, and turns round only when none is left that way; a
-pending level that lies ahead of a moving car and nearer than its target is
-taken on the way. Door open (`liftOpenReq`) opens or holds the doors and
+`gallery/gallery.puck` has the order). A landing's CALL button writes
+`liftHall[levelK]` and a car floor button `liftCarCall[levelK]`; each button's
+placement shows its lit prototype while its cell is 1, and the cell clears when
+the car stops there. A stopped car waits out its dwell (four seconds after its
+doors open, `liftClock[dwell]`), then serves pending levels in its direction of
+travel (`liftDir`), nearest first, and turns round only when none is left that
+way; a pending level that lies ahead of a moving car and nearer than its target
+is taken on the way. Door open (`liftOpenReq`) opens or holds the doors and
 restarts the dwell, door close (`liftCloseReq`) shuts them and ends it, and
 each lights its lamp (`liftLamp`) for 0.4 s. `liftFloor` and `liftArrow` drive
 the level displays. A level written to `liftCall`, as `gallery.lift` and the
-traversal addon do, becomes a landing call. The buttons read the Moth's body
-against a reach box before each plate, since a rule reads no facing: six cells
-of the body's x across the car's back wall, and one box on each landing.
-`hall-tests.puck` checks the door buttons' collider swaps reproducing from a
+traversal addon do, becomes a landing call. Each button reads the bodies in a
+reach box of its own, since a rule reads no facing: one before each landing's
+plate, and six that ride the car before its rail.
+`gallery-tests.puck` checks the door buttons' collider swaps reproducing from a
 checkpoint; the calls and the queue order are shown by riding the lift.
 
-Section boards hang on two rods from the ceiling above each row's first
-exhibit, with their text facing the landing along -X. Their lower edge is
-2.6 m above the floor, clear of a walking Moth. The lobby map hangs from its
-ceiling too. Individual labels and plaques remain on their plinths.
+Section boards hang on two rods from the ceiling where each row begins. Their
+lower edge is 2.6 m above the floor, clear of a walking Moth. The lobby map
+hangs from its ceiling too, facing the entrance. Individual labels and plaques
+remain on their plinths.
 
-The gallery's keys live in `hall.puck`'s `gallery-keys` overlay on the debug
-world's resting page: `=`, `-`, `G`, `V` and `B` act at once, and holding `Q`
-opens the gallery wheel (aim with the mouse, release to commit, as Tab opens the
-play wheel), whose ring carries next, previous, flag, view, slice and the
-entrance. A pad reaches next, previous, flag and slice on the bar's Tour page
-(right then left trigger); its right shoulder is the context button. Each
+The gallery's keys live in `gallery/gallery.puck`'s `gallery-keys` overlay on
+the debug world's resting page: `=`, `-`, `G`, `V` and `B` act at once, and
+holding `Q` opens the gallery wheel (aim with the mouse, release to commit, as
+Tab opens the play wheel), whose ring carries next, previous, flag, view, slice
+and the entrance. A pad reaches next, previous, flag and slice on the bar's Tour
+page (right then left trigger); its right shoulder is the context button. Each
 exhibit's and sign's in-world text is a text run on its placement: the debug
 world draws no HUD, so there is nothing to show or hide. `gallery.view` and
 `gallery.slice` call verbs only a rendered World registers, so a headless host
@@ -258,23 +167,24 @@ refuses them when they run.
 
 Prototype names are `shape-<exhibit>` for the still rows and `motion-<exhibit>`
 for the moving ones; the rows' arrays in `shapes.puck` list them in order, and
-`galleryRows` places each row on its level.
+`galleryRows` places each row on its level and its lines
+([gallery.md](gallery.md#what-stands-where)).
 
-| Row | Level, z | Exhibits, from x = 23 |
+| Row | Level, where | Exhibits, in order |
 |---|---|---|
-| Uniform | 0, 16 | sphere, box, torus, cylinder, capsule, ellipsoid, round cone, cone, superellipsoid (exponent 4), plane (a sphere intersected with a tilted plane) |
-| Stretched | 0, 22 | sphere, box, torus with X ≠ Z, torus with Y alone stretched, cylinder with X ≠ Z, capsule with X ≠ Z, ellipsoid, round cone, cone with X ≠ Z, superellipsoid (exponent 3), a stretched capsule, cone and torus cut from a slab, the same three cut smoothly |
-| Extruded profiles | 0, 28 | trapezoid, rounded rectangle, polygon 6, polygon 12, polygon 12 with X ≠ Y, ellipse, chamfered rectangle, convex pentagon, path fill, path stroke, path stroke with X ≠ Y |
-| Revolved profiles | 0, 34 | trapezoid, rounded rectangle, polygon 6, ellipse, chamfered rectangle, convex pentagon |
-| Sweeps and facets | 1, 17 | sweep, tapered sweep, three-strand sweep, rounding, chamfer, onion, dilate, flare, shear, bumps, cells F1, cells F2 − F1, polar fold |
-| Blends | 1, 25 | union, subtraction, intersection, xor, smooth union, smooth subtraction, smooth intersection, chamfer union, chamfer subtraction, chamfer intersection, groove union, pipe union, groove subtraction, pipe subtraction |
-| Folds | 1, 33 | symmetry, repeat of 5, repeat 3 × 3, even repeat (symmetry over a repeat), unbounded repeat clipped by an intersection, mirrored polar, polar about Z with an origin, polar material stride, wallpaper Pmm, P4M, P3M1 and P6M (the hex two clipped), wallpaper material stride, erode, creation noise |
-| Motion | 2, 17 | spin, rock, slide, parent chain, moving smooth blend, state-placed smooth blend, moving smooth cut, moving mirror fold, moving polar fold, nodding blend, three moving owners |
-| Motion II | 2, 25 | moving paints, moving inset, twist, bend, radial pulse, moving cells, moving volume, IK reach, timeline frames, paint across a moving seam |
-| Warps II | 2, 33 | domain warp, sine relief, elongation, jittered lattice, tumbled jittered lattice, log-spherical fold, stairs union, stairs subtraction, morph |
-| Forms | 3, 17 | superellipsoid exponent 2 and 8, prism taper 0 and 1, polygon 3, rounded prism, chamfered prism, chamfered cylinder, solid of revolution, path holes (cubic Bezier, even-odd arcs), path shear, closed cubic stroke, linear stroke ramp along a clockwise arc, four-strand braided sweep |
-| Surfaces | 3, 25 | metal, coat, sheen, emissive, wrap and soften (on cells), fill, bleed and receive, edge weathering (two stages), line weathering, settle weathering, recessed panel, raised panel, trims, world-space static paint, engraved text, text riding a shape, flow volume, cloud volume, state-bound colour |
-| Glass | 3, 37 | glass: an orange acrylic box holding a sphere, a thin pane and a thick block of one window glass, a frosted pane, the rods behind them |
+| Uniform | 0, the nave's south line | sphere, box, torus, cylinder, capsule, ellipsoid, round cone, cone, superellipsoid (exponent 4), plane (a sphere intersected with a tilted plane) |
+| Stretched | 0, the nave's north line | sphere, box, torus with X ≠ Z, torus with Y alone stretched, cylinder with X ≠ Z, capsule with X ≠ Z, ellipsoid, round cone, cone with X ≠ Z, superellipsoid (exponent 3), a stretched capsule, cone and torus cut from a slab, the same three cut smoothly |
+| Extruded profiles | 0, the north aisle, west | trapezoid, rounded rectangle, polygon 6, polygon 12, polygon 12 with X ≠ Y, ellipse, chamfered rectangle, convex pentagon, path fill, path stroke, path stroke with X ≠ Y |
+| Revolved profiles | 0, the north aisle, east | trapezoid, rounded rectangle, polygon 6, ellipse, chamfered rectangle, convex pentagon |
+| Sweeps and facets | 1, the south gallery, in two facing lines | sweep, tapered sweep, three-strand sweep, rounding, chamfer, onion, dilate, flare, shear, bumps, cells F1, cells F2 − F1, polar fold |
+| Blends | 1, the north gallery's inner line | union, subtraction, intersection, xor, smooth union, smooth subtraction, smooth intersection, chamfer union, chamfer subtraction, chamfer intersection, groove union, pipe union, groove subtraction, pipe subtraction |
+| Folds | 1, the north gallery's outer line | symmetry, repeat of 5, repeat 3 × 3, even repeat (symmetry over a repeat), unbounded repeat clipped by an intersection, mirrored polar, polar about Z with an origin, polar material stride, wallpaper Pmm, P4M, P3M1 and P6M (the hex two clipped), wallpaper material stride, erode, creation noise |
+| Motion | 2, the north gallery's outer line, west | spin, rock, slide, parent chain, moving smooth blend, state-placed smooth blend, moving smooth cut, moving mirror fold, moving polar fold, nodding blend, three moving owners |
+| Motion II | 2, the north gallery's inner line | moving paints, moving inset, twist, bend, radial pulse, moving cells, moving volume, IK reach, timeline frames, paint across a moving seam |
+| Warps II | 2, the north gallery's outer line, east | domain warp, sine relief, elongation, jittered lattice, tumbled jittered lattice, log-spherical fold, stairs union, stairs subtraction, morph |
+| Forms | 3, the north gallery's inner line | superellipsoid exponent 2 and 8, prism taper 0 and 1, polygon 3, rounded prism, chamfered prism, chamfered cylinder, solid of revolution, path holes (cubic Bezier, even-odd arcs), path shear, closed cubic stroke, linear stroke ramp along a clockwise arc, four-strand braided sweep |
+| Surfaces | 3, the north gallery's outer line | metal, coat, sheen, emissive, wrap and soften (on cells), fill, bleed and receive, edge weathering (two stages), line weathering, settle weathering, recessed panel, raised panel, trims, world-space static paint, engraved text, text riding a shape, flow volume, cloud volume, state-bound colour |
+| Glass | 3, the projecting wing | glass: an orange acrylic box holding a sphere, a thin pane and a thick block of one window glass, a frosted pane, the rods behind them |
 
 ## Coverage
 

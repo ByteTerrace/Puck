@@ -349,7 +349,7 @@ window renders at the power-of-two share of the screen its glass covers, as clea
 glass sampled linearly (the paintings author `filter: linear`), without shadows.
 The axis lines meet two metres to the spawn's +X side and run along +X and +Z,
 and the reference cubes and the test room stand behind the spawn on +Z and -X.
-The gallery hall ([hall.puck](hall.puck), four storeys holding the shape gallery)
+The gallery hall ([gallery/gallery.puck](gallery/gallery.puck), four storeys holding the shape gallery)
 stands on the open ground at x 10 to 70, z 12 to 40, its entrance in the south
 wall facing the spawn; [shapes.md](shapes.md) says how to get round it.
 

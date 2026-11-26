@@ -884,7 +884,7 @@ laws exercise that boundary.
   floors bakes as one union whose lattice is sized by its height, so a 0.3 m
   slab between two samples never crosses and is dropped while it still
   collides. Give each storey's floor its own prototype and placement
-  (`worlds/debug/hall.puck`), so each is a flat group. Trim set into a large
+  (`worlds/debug/gallery/gallery.puck`), so each is a flat group. Trim set into a large
   union is the same case: the hall's walls bake at 15 cm, so the cassettes at
   their window heads, set 2 cm and 5 cm back from the wall's faces, are a row
   per level and face of their own (`hall-cassettes-*`), each baking at 5 cm.
@@ -960,7 +960,7 @@ laws exercise that boundary.
   kept by the distance test (`SdfMeshPathBakeLawTests`, the plates law: four
   standalone 48 m strips); keeping samples within half a cell's diagonal
   instead fattens the converged box until the final lattice steps over the
-  plates and the group bakes nothing. `hall.puck`'s strips ride each slab (`hallStrips`) as thin
+  plates and the group bakes nothing. `gallery/gallery.puck`'s strips ride each slab (`hallStrips`) as thin
   trim of the solid they hang from, which also keeps a level's lit and dark
   looks one geometry. The bake caps declared-detail refinement at eight cells
   per coarse axis.

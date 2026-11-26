@@ -1,6 +1,6 @@
 // The tight-space camera course: four small solid structures for comparing the chase camera's modes (cutaway, fade,
 // first person) on the same input, west of the gi-corner test room on the open ground at x -26 .. -13, z 16 .. 44. The
-// lift car and the switchback stairs (hall.puck) are the other two tight spaces; `debug.go lift` and `debug.go stairs`
+// lift car and the switchback stairs (gallery/gallery.puck) are the other two tight spaces; `debug.go lift` and `debug.go stairs`
 // reach them, and `debug.go camera-course` reaches this one (places.puck lists every place). Each structure is one
 // camera problem, and a spawn point stands before it:
 //

@@ -1,0 +1,54 @@
+// The gallery (gallery/gallery.puck), each scenario booted in the whole debug world: `puck test
+// worlds/debug/gallery-tests.puck --reproduce`. The lift's car is an attached solid riding the body its own placement
+// spawns, which a rule poses along a box topology read in the building's frame, and its doors swap their colliders
+// through `respond`; these scenarios pin the ride's exact floor stop and that a collider swap, and its swap back,
+// reproduce from the checkpoint. Positions are world coordinates with the building at layout.puck's `gallerySite`:
+// the car's centre stands at (28.8, 10.35), and its buttons along the rail at its back, door open at x 29.275 and door
+// close at 29.592. Enum members are written as their numbers: the rows reach this file only through the debug world's
+// import of the gallery.
+
+schema: "puck.world.definition.v1"
+basis: "debug"
+// Keep same-world portals in this fixture's boot instance instead of opening another live debug world.
+documentId: "debug"
+import "stopped-machines"
+
+test "the lift carries a standing Moth from level 0 to level 2" {
+  when {
+    seat1: body.pose 28.8 0.05 10.35 0 0 0 0
+    ticks 30
+    seat1: world.state.cell.set liftCall $value 2
+    ticks 180
+  }
+  expect {
+    liftAt == 144
+    liftLevel == 2
+    bodyPosition(body, 0, y) > 9
+    bodyPosition(body, 0, y) < 9.15
+    fact(body, 0, Grounded) == 1
+    liftDoors.car == 1
+    liftDoors.level0 == 0
+    liftDoors.level1 == 0
+    liftDoors.level2 == 1
+    liftDoors.level3 == 0
+  }
+}
+
+test "door open after door close brings the doors back and the lamp goes out" {
+  when {
+    seat1: body.pose 29.592 0.05 9.4 0 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 10
+    seat1: body.pose 29.275 0.05 9.4 0 0 0 0
+    ticks 10
+    seat1: body.press interact 1 0.2 0
+    ticks 30
+  }
+  expect {
+    liftDoors.car == 1
+    liftDoors.level0 == 1
+    liftLamp.open == 0
+    liftLamp.close == 0
+  }
+}

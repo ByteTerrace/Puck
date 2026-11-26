@@ -304,6 +304,7 @@ public sealed partial class WorldRigidAssets {
     }
     // The templates the latest emission wrote, with the scale each baked at.
     private readonly List<(StaticAsset Asset, float Scale)> m_emittedStaticAssets = [];
+    private readonly List<SdfMeshTemplateRange> m_templateRanges = [];
 
     // Why a static row is left to the ordinary visual emission, or null when it is a rigid static copy.
     private static string? Refusal(WorldPrototype creation, WorldPlacement placement) {
@@ -370,7 +371,11 @@ public sealed partial class WorldRigidAssets {
             WorldCreationWork.ProcessWork.Count(WorldCreationWork.StaticTemplates);
         }
         m_emittedStaticAssets.Clear();
-        foreach (var asset in m_staticAssets) { m_emittedStaticAssets.Add(item: (asset, asset.MaxScale)); }
+        m_templateRanges.Clear();
+        foreach (var asset in m_staticAssets) {
+            m_emittedStaticAssets.Add(item: (asset, asset.MaxScale));
+            if (asset.Range.InstanceCount > 0) { m_templateRanges.Add(item: asset.Range); }
+        }
         PlaceStaticCopies();
     }
     /// <summary>Writes every static copy's row from the templates the latest emission wrote: its pose, its scale against its

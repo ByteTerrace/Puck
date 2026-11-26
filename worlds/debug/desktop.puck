@@ -43,7 +43,7 @@ views {
 }
 
 // ---- The desktop computer --------------------------------------------------------------------------------------
-// A desk against the gallery lobby's west wall (hall.puck, its inner face at x = 10.3), south of the big painting to
+// A desk against the gallery lobby's west wall (gallery/gallery.puck, its inner face at x = 10.3), south of the big painting to
 // Wonderland (wonderland.puck), with a 27-inch monitor on a stand, a tower beside it on the floor, a keyboard and mouse, and an office
 // chair. Whoever sits at it faces the wall, -X; the monitor faces +X, into the lobby. Every number is a world coordinate
 // on the level 0 floor (y = 0.05): each placement stands at the origin and `boundsBox` (standard/bounds.puck) writes a box's author-frame row

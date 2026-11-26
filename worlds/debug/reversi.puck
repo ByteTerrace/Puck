@@ -5,7 +5,7 @@ import "shapes"
 import "gametable"
 // Physical Reversi (Othello) on an 8x8 board, played to the World Othello Federation's official rules
 // (https://www.worldothello.org/about/about-othello/othello-rules/official-rules/english): 64 rigid two-faced discs,
-// black on one face and white on the other, on a table in the gallery hall's board game room (hall.puck), whose every
+// black on one face and white on the other, on a table in the gallery hall's board game room (gallery/gallery.puck), whose every
 // settled arrangement is judged against the position the rules last accepted, and a computer opponent. The debug world
 // imports this file whole. The table stands east of the chess table, its board's centre at (65, 9.905, 22.6) on level
 // 2; Black sits at its -Z edge and White at its +Z edge, each with a tray of 32 discs at their right-hand end.
@@ -25,7 +25,7 @@ import "gametable"
 // The table's placement (its creation's floor 0.5 m under its origin on level 2's floor), the ticks the physics must
 // stay at rest before an arrangement is judged (0.3 s at 30 Hz) and the board. A cell's ordinal is 8 * row + column:
 // its column runs along +X and its row along +Z, so cell 0 is the -X, -Z corner, at Black's right hand.
-let reversiTable = [65, 8.55, 22.6]
+let reversiTable = [51, 8.55, 10.3]
 let reversiSettleTicks = 9
 let reversiSize = 8
 let reversiCells = (reversiSize * reversiSize)

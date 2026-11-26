@@ -22,14 +22,14 @@ let traversalStudioGoals = [
 ]
 // The host places the idle stand-in at this pass's first goal before selecting start=15, count=23.
 let traversalGalleryGoals = [
-  { x: 11.2, y: 0.05, z: 32.5 } // gallery stairwell approach
-  { x: 11.2, y: 2.3, z: 38.5 } // flight A and half landing
-  { x: 13.2, y: 2.3, z: 38.5 } // cross landing around divider
-  { x: 13.7, y: 4.55, z: 33.2 } // flight B to first floor, clear of the stairwell wall's south end at z 34.5
-  { x: 15.9, y: 4.55, z: 35.3 } // call lift on level 1
-  { x: 15.9, y: 4.55, z: 38.05 } // enter car, then request ground
-  { x: 15.9, y: 0.05, z: 38.05 } // ride down
-  { x: 15.9, y: 0.05, z: 34.0 } // leave car
+  { x: 23.3, y: 0.05, z: 19 } // gallery stairwell approach
+  { x: 23.3, y: 2.3, z: 13.3 } // flight A and half landing
+  { x: 25.3, y: 2.3, z: 13.3 } // cross landing around the spine
+  { x: 25.3, y: 4.55, z: 18.4 } // flight B to first floor, clear of the stairwell's foot at z 17.5
+  { x: 29.8, y: 4.55, z: 13 } // call lift on level 1
+  { x: 28.8, y: 4.55, z: 10.35 } // enter car, then request ground
+  { x: 28.8, y: 0.05, z: 10.35 } // ride down
+  { x: 28.8, y: 0.05, z: 14.5 } // leave car
 ]
 let traversalGoals = concat(traversalStudioGoals, traversalGalleryGoals)
 

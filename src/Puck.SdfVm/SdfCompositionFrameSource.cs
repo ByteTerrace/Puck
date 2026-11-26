@@ -90,6 +90,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     // Each published copy's revision as this pack read it, beside m_meshInstances.
     private readonly List<long> m_meshInstanceRevisions = [];
     private readonly List<int> m_meshAssetSlots = [];
+    private readonly List<SdfMeshTemplateRange> m_meshTemplateRanges = [];
     private readonly Puck.Abstractions.Gpu.GpuChangedRows m_copyChanges = new();
     private readonly SdfMovedTransforms m_moved = new();
 
@@ -779,7 +780,10 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         // that moved makes a new set, and the program stands.
         m_sampled = SdfSampledSet.Capture(program: m_program!, previous: (m_sampled ?? m_program!.Sampled));
         dressed.PickMap = ComposePickMap();
-        dressed.Compose(meshAssetSlots: m_meshAssetSlots, meshInstances: m_meshInstances, sampled: m_sampled, slotClips: ComposeSlotClips(),
+        // Every emitter writes its templates into the one composed program, so its ranges are already that program's.
+        m_meshTemplateRanges.Clear();
+        for (var owner = 0; (owner < m_emitters.Count); owner++) { m_meshTemplateRanges.AddRange(collection: m_emitters[owner].MeshTemplateRanges); }
+        dressed.Compose(meshAssetSlots: m_meshAssetSlots, meshInstances: m_meshInstances, meshTemplateRanges: m_meshTemplateRanges, sampled: m_sampled, slotClips: ComposeSlotClips(),
             copyChanges: m_copyChanges.Reader, copyChangesSerial: m_copyChanges.Serial);
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
         if (Frames == 0) { Console.Error.WriteLine(value: $"[world.render] envelope: {m_program!.Instances.Count} instances, {m_program.MaterialCount} materials, {m_program.WordCount} program words, {m_transforms.Length} dynamic slots, {m_meshAssetSlots.Count} geometry assets, {m_meshInstances.Count} rigid copies"); }

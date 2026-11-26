@@ -4,7 +4,7 @@
 // place here are lit by it. A 24-minute day turns the sun a
 // quarter of a degree a second, slow enough to watch the shadows creep and fast enough that a session sees a sunset.
 // At night a deep-blue moon of 6 lux, brighter than a real full moon so the valley reads, lights it opposite the sun,
-// under a night sky of 1 nit and its stars; the hall's exposure floor drops with the day to meet it (hall.puck). The
+// under a night sky of 1 nit and its stars; the hall's exposure floor drops with the day to meet it (gallery/gallery.puck). The
 // moon that hangs in that sky is the moon's own world (moon.puck), which a painting and the launch field's ship reach.
 // debug.md's "Time of day" gives the levers: write `day` to move the time, and its advance to hold the sun.
 

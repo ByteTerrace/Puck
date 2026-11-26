@@ -1,6 +1,6 @@
 // The debug world: a caldera's flat floor (valley.puck) under a clear day, with reference
 // cubes and the Moth avatar to walk it, and an open-fronted coloured room beside them for judging indirect light. Its
-// portals are paintings in the gallery hall's east wing (paintings.puck): three onto other lands, the garden
+// portals are paintings in the gallery's painting wing (paintings.puck): three onto other lands, the garden
 // (garden.puck), the night field (night.puck) and the city (city.puck), two facing each other across the room, and the
 // endless fall's floor and ceiling. It is
 // the plain starting point the island is built up from, in engine: boot its package with `--world worlds/debug`, edit
@@ -48,7 +48,10 @@ import "fuzzer"
 import "traversal"
 import "kinematics-scope"
 import "companion"
-import "hall"
+// The camera's exposure, which the gallery's inspection lever drives (exposure.puck), and the gallery itself, a module
+// under one root placement (gallery/gallery.puck): this world stands it at layout.puck's `gallerySite`.
+import "exposure"
+import "gallery/gallery"
 import "chess"
 // The board game room's hidden-information tables, which hold no bodies: the sealed-bid auction, the shedding card game,
 // social deduction and the fog-of-war skirmish (auction.puck, shedding.puck, deduction.puck, skirmish.puck).
@@ -96,7 +99,7 @@ let roomGreen = 2 // #2FA84A
 
 metadata {
   title: "Debug"
-  description: "The flat floor of a caldera ringed by eight terrain sectors with an overlook, under a clear day, with axis markers, 1, 2 and 4 m reference cubes, a coloured test room near the origin and a gallery hall whose east wing holds five portal paintings."
+  description: "The flat floor of a caldera ringed by eight terrain sectors with an overlook, under a clear day, with axis markers, 1, 2 and 4 m reference cubes, a coloured test room near the origin and a four-storey gallery whose painting wing holds its portal paintings."
 }
 
 host {

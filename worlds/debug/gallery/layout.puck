@@ -108,8 +108,8 @@ let fallZ = (gallerySite[2] + fallPlan[1])
 // centre aisle and stop either side of the cross aisle from the entrance; a gallery's outer line stands toward its
 // windows and its inner line toward the balcony edge, the two facing each other across a walkway.
 function galleryLine(x, z, pitch, count, yaw) = { x: x, z: z, pitch: pitch, count: count, yaw: yaw }
-let naveLineSouth = 11.2
-let naveLineNorth = 16.8
+let naveLineSouth = 10.9
+let naveLineNorth = 17.1
 let northOuter = 24.6
 let northInner = 20.9
 let southOuter = 3.4

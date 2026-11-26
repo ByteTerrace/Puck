@@ -543,7 +543,7 @@ render {
   // A camera in vacuum meters its sunlit ground, not the black sky round it: the darkest seven tenths of the image
   // stay out of the meter, and the exposure keeps to daylight's range, so the lit ground holds its tone against the
   // void and the night side goes dark under the stars. The meter otherwise reads as the valley's does at the seam
-  // (hall.puck's exposure at the top of its `altitude` keys), so a camera crossing it keeps its exposure.
+  // (gallery/gallery.puck's exposure at the top of its `altitude` keys), so a camera crossing it keeps its exposure.
   exposure {
     mode: Auto
     minimum: 11

@@ -1990,7 +1990,7 @@ Remaining detailed findings and smaller cuts in this area:
   detail derive from what the document means:
   - a static group's detail follows the whole group's size, so authors split
     one object into prototypes to keep detail (`devices.puck`, `desktop.puck`,
-    `hall.puck`);
+    `gallery/gallery.puck`);
   - a warped shape bakes alone and forces the next shape alone, so shape order
     changes grouping (`WorldPlacementStamper`);
   - every text run bakes as its own group;
@@ -6026,7 +6026,7 @@ content on the owner's call.
   ([the seam walk](streaming-and-memory.md#the-seam-walk)): a hub of large
   worlds and a crowd of distinct looks; the walk's three crossings are the
   debug world's `seams` route.
-- [medium] The lift (`worlds/debug/hall.puck`), the owner's example of polish
+- [medium] The lift (`worlds/debug/gallery/gallery.puck`), the owner's example of polish
   as engine systems doing real work, on the owner's go: its displays as one
   emulated machine running an authored cartridge, mirrored to every panel and
   driven by the lift's state cells, after confirming a generic

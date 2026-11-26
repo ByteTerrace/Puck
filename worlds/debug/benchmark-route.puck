@@ -7,7 +7,7 @@
 // course, and a chapter fails, naming the place and the tick, on a stick held against a wall or on leaving the places its path
 // crosses.
 //
-// The walk is the owner's: from the stage into the hall and its lobby, along the east wing into the painting room,
+// The walk is the owner's: from the stage into the gallery and its lobby, up the nave and into the painting wing,
 // through the looping pair, back to the lobby, into Wonderland through the big painting to the machines and out
 // through the mouse hole. Then the seams: the valley into the lobby and back, the garden painting, the city painting, and
 // the lift ridden by its buttons. Places are places.puck's regions (`place-*`); headings are yaws (0 faces -Z, 90 faces
@@ -17,13 +17,14 @@
 let floor0 = 0.05
 let floor3 = 13.55
 
-// The lift (hall.puck): the landing's call plate reach box before the car's door, the car's door, and the car's panel,
-// whose buttons for levels 0 to 3 stand left to right from the viewer facing it (+Z).
-let liftPad = 17
-let liftPadZ = 35.4
-let liftDoorX = 15.9
-let liftPanelZ = 38.85
-function liftButton(level) = (16.85 - ((1.9 / 6) * (level + 0.5)))
+// The lift (gallery/gallery.puck), in world coordinates: the landing's call plate reach box east of the car's door, the
+// car's door in the south wall, and the car's rail at its back, whose buttons for levels 0 to 3 stand left to right
+// from the viewer facing it (-Z).
+let liftPad = 29.8
+let liftPadZ = 12.9
+let liftDoorX = 28.8
+let liftPanelZ = 9.4
+function liftButton(level) = (liftDoorX - (0.95 - ((1.9 / 6) * (level + 0.5))))
 
 // Steps the chapters share.
 function stand(seconds) = { $type: "rest", seconds: seconds }
@@ -38,16 +39,16 @@ function press(action, seconds) = { $type: "press", action: action, seconds: sec
 // open. Inside the car every step walks.
 function ride(from, to, level, pace) = [
   goTo([liftPad, from, liftPadZ], pace, 0.15)
-  face(180, 0.5)
+  face(0, 0.5)
   press("interact", 3)
-  step([liftDoorX, from, 35.2])
-  step([liftDoorX, from, 37.6])
+  step([liftDoorX, from, 13.4])
+  step([liftDoorX, from, 10.8])
   step([liftButton(level), from, liftPanelZ], 0.12)
-  face(180, 0.5)
+  face(0, 0.5)
   { $type: "press", action: "interact", until: $"place-gallery-level-{level}", seconds: 40 }
   stand(4)
-  step([liftDoorX, to, 37])
-  step([liftDoorX, to, 34.8])
+  step([liftDoorX, to, 11])
+  step([liftDoorX, to, 13.6])
 ]
 
 // The seams (docs/plans/streaming-and-memory.md#the-seam-walk), each from its own spawn so a chapter fails alone. The
@@ -58,8 +59,8 @@ function valleySeam(name, pace) = {
   steps [
     { $type: "pose", spawn: `seam-valley` }
     stand(1)
-    goTo([16, floor0, 20], pace)
-    goTo([16, floor0, -14], pace)
+    goTo([36, floor0, 18], pace)
+    goTo([36, floor0, -14], pace)
     go("place-lobby", pace)
     stand(1)
   ]
@@ -69,7 +70,7 @@ function gardenSeam(name, pace) = {
   steps [
     { $type: "pose", spawn: `portal-garden` }
     stand(1)
-    { $type: "cross", headingDegrees: 180, pace: pace, metres: 11 }
+    { $type: "cross", headingDegrees: 0, pace: pace, metres: 11 }
     stand(1)
     { $type: "cross", headingDegrees: 180, relative: true, until: "place-garden-painting", pace: pace, metres: 14 }
     stand(1)
@@ -119,7 +120,7 @@ routes [
   {
     name: "debug"
     program: "walker"
-    captures ["place-stage", "place-hall-entrance", "place-lobby", "place-east-wing", "place-painting-room", "place-wonderland"]
+    captures ["place-stage", "place-hall-entrance", "place-lobby", "place-nave", "place-painting-room", "place-wonderland"]
     chapters: concat(
       [
         {
@@ -130,21 +131,21 @@ routes [
             stand(1)
             go("place-hall-entrance", "run")
             go("place-lobby", "run")
-            goTo([16, floor0, 20], "walk")
+            goTo([36, floor0, 19], "walk")
           ]
         }
         {
-          name: "the east wing and the looping pair"
+          name: "the nave and the looping pair"
           steps [
-            go("place-east-wing", "run")
+            go("place-nave", "run")
             go("place-painting-room", "run")
             go("place-loop-portal-east", "walk")
-            goTo([68.4, floor0, 34.5], "walk", 0.1)
+            goTo([68.4, floor0, 14.4], "walk", 0.1)
             face(270, 0.5)
             { $type: "cross", headingDegrees: 270, until: "place-loop-portal-west", pace: "walk", metres: 6 }
             stand(1)
-            { $type: "rest", seconds: 2, lookAt [57, 1.5, 39.4] }
-            go("place-east-wing", "run")
+            { $type: "rest", seconds: 2, lookAt [44.4, 1.5, 12.3] }
+            go("place-nave", "run")
             go("place-lobby", "run")
           ]
         }
@@ -159,7 +160,7 @@ routes [
             { $type: "rest", seconds: 4, lookAt [1.4, 0.6, 30.5] }
             goTo([8.7, floor0, 30.5], "walk", 0.08)
             face(270, 0.5)
-            { $type: "cross", headingDegrees: 270, until: "place-lobby", pace: "walk", metres: 3 }
+            { $type: "cross", headingDegrees: 270, until: "place-west-hall", pace: "walk", metres: 3 }
             goTo([16, floor0, 26], "walk")
           ]
         }

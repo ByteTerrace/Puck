@@ -152,7 +152,7 @@ icons {
     { name: "act.interact", glyph { font: mono, glyph: "U+25C7" } }
     { name: "act.desktop", glyph { font: mono, glyph: "U+25E8" } }
     { name: "act.play", glyph { font: mono, glyph: "U+25A0" } }
-    // The gallery's keys (hall.puck): the next and previous exhibit, flagging and slicing the one at hand, the debug view.
+    // The gallery's keys (gallery/gallery.puck): the next and previous exhibit, flagging and slicing the one at hand, the debug view.
     { name: "act.view", label: "DV" }
     { name: "act.wheel", label: "WH" }
     { name: "act.run", glyph { font: mono, glyph: "U+00BB" } }

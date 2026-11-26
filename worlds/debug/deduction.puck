@@ -20,7 +20,7 @@ export read deductionMail1, deductionMail2, deductionMail3, deductionMail4
 
 let deductionSeats = 4
 let deductionMoles = 2
-let deductionTable = [55, boardRoomFloor - 0.5, 36.5]
+let deductionTable = [54.5, boardRoomFloor - 0.5, 17.2]
 
 state {
   world {

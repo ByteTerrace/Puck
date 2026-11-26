@@ -797,6 +797,8 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     public IReadOnlyList<int> MeshAssetSlots => m_pool.Rigid.Slots;
     public IReadOnlyList<SdfMeshInstance> MeshInstances => m_pool.Rigid.Copies;
     /// <inheritdoc/>
+    public IReadOnlyList<SdfMeshTemplateRange> MeshTemplateRanges => m_pool.Rigid.TemplateRanges;
+    /// <inheritdoc/>
     public IReadOnlyList<int> MeshInstanceChanges => m_pool.Rigid.ChangedCopies;
     /// <inheritdoc/>
     public long MeshInstancesRevision => m_pool.Rigid.CopiesRevision;

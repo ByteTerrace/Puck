@@ -377,15 +377,19 @@ template planter(base, length = 1.7) {
     detail: true
   }
   for (blade, i) in [
-    { x: -0.5, lean: -22, tall: 0.5 }, { x: -0.42, lean: -9, tall: 0.62 }, { x: -0.34, lean: 3, tall: 0.7 }
-    { x: -0.26, lean: 14, tall: 0.58 }, { x: -0.18, lean: 26, tall: 0.46 }
+    { lean: -34, turn: 20, tall: 0.5 }, { lean: -16, turn: -35, tall: 0.64 }, { lean: -3, turn: 60, tall: 0.74 }
+    { lean: 12, turn: -10, tall: 0.66 }, { lean: 27, turn: 40, tall: 0.54 }, { lean: 41, turn: -50, tall: 0.42 }
   ] {
     shape Prism $"planter-blade-{i}" {
       material: (base + (((i % 2) == 0) ? kitLeafDeep : kitLeaf))
-      position [((length / 3.4) * (blade.x / 0.34) * 0.5 - (length * 0.08)), (0.62 + (blade.tall / 2)), (0.03 * (i - 2))]
-      rotation: turnAbout([0, 0, 1], blade.lean)
-      scale [0.075, (blade.tall / 2), 0.016]
-      taper: 0.08
+      position [
+        ((0 - (length * 0.27)) - ((sine((blade.lean * 0.017453293)) * blade.tall) / 2)),
+        (0.6 + ((cosine((blade.lean * 0.017453293)) * blade.tall) / 2)),
+        (0.02 * (i - 2.5))
+      ]
+      rotation: turnAfter(turnAbout([0, 0, 1], blade.lean), turnAbout([0, 1, 0], blade.turn))
+      scale [0.07, (blade.tall / 2), 0.014]
+      taper: 0.1
       detail: true
     }
   }

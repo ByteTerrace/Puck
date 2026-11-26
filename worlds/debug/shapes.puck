@@ -243,12 +243,14 @@ let galleryStyle = celStyle with {
   ink: standardInk with { weight: 0.022, bold: 1.8, tint [0.42, 0.42, 0.48], crease: 0.6, fold: 0.45, uneven: 0 }
 }
 function galleryCel(base) = celMaterial(base, galleryStyle)
+// The exhibits' own grey is a plain dielectric, so a subject's form reads by its shading and no exhibit is glossier than
+// its plaque says: an exhibit that shows gloss, metal or a coat authors it in its own slots.
 let galleryPalette = [
-  { color: "#B9C4D0", roughness: 0.45, specular: 0.3 }
+  { color: "#B9C4D0", roughness: 0.5, specular: 0.04 }
   galleryCel({ color: "#3A3F47", roughness: 0.85 })
   galleryCel({ color: "#F2EEE4", roughness: 0.6 })
 ]
-let accent = { color: "#D9822B", roughness: 0.45, specular: 0.3 }
+let accent = { color: "#D9822B", roughness: 0.5, specular: 0.04 }
 
 // The palette, the plinth beneath the exhibit, the plinth's label and its plaque. Expanded after the exhibit's own
 // shapes, so an exhibit's subtraction or intersection never reaches the plinth. `extra` appends palette slots from 3 on,
@@ -290,7 +292,7 @@ template exhibit(label, extra = [], runs = [], note = "") {
 }
 
 // A section board hanging on two rods from the ceiling over a level's floor, its lower edge 2.6 m up: a row's sign,
-// and the board game room's over its doorway (hall.puck). Its placement's yaw turns the text's face.
+// and the board game room's over its doorway (gallery/gallery.puck). Its placement's yaw turns the text's face.
 template sectionSign(name, title, what) {
   prototype name {
     document {

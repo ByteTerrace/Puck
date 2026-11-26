@@ -13,10 +13,11 @@
 // The world's rooms and areas are regions here too: each `place-*` placement below carries a region facet, a box over
 // a room, a corridor or an area of the valley floor, drawing nothing. `body.place` names the regions a body stands in,
 // innermost first, so a scripted walk or the benchmark reads which room it is in from the world's own documents; rules
-// read the same occupancy as `$region:place-<name>`. Boxes are world coordinates (center and half-extents); a level's
-// rooms reach from half a metre under its floor to the underside of the slab above (hall.puck: floors at 4.5k + 0.05,
-// slabs 0.3 m thick). Nested places list smallest first: an exhibit's guide region (guide.puck) inside the east wing,
-// inside the gallery's level 0, inside the hall, inside the valley.
+// read the same occupancy as `$region:place-<name>`. A box is a centre and half-extents. The gallery's rooms are given
+// in the building's frame and stand under its root placement (gallery/layout.puck, gallery.md): a level's rooms reach
+// from half a metre under its floor to the underside of the slab above. The valley's are world coordinates. Nested
+// places list smallest first: an exhibit's guide region (guide.puck) inside the nave, inside the gallery's level 0,
+// inside the hall, inside the valley.
 
 import "shapes"
 import "place-kit"
@@ -34,57 +35,75 @@ function groundPlace(name, x0, x1, z0, z1) = {
   half [((x1 - x0) / 2), 2.5, ((z1 - z0) / 2)]
 }
 
-let regionPlaces = concat(
+// The gallery's places, in the building's frame.
+let galleryPlaces = concat(
   [
-    // The caldera's floor out to the walls' feet (valley.puck), and the hall as one building.
-    { id: "valley", at [0, 10, 0], half [232, 60, 232] }
-    { id: "hall", at [40, 9.2, 26], half [30, 9.7, 14] }
-    // The spawn's open ground, and the hall's south entrance (x 14 .. 18 in the wall at z 12), outside and in.
-    groundPlace("stage", -6, 6, -6, 6)
-    { id: "hall-entrance", at [16, 1.5, 12], half [3, 2, 2.5] }
-    // Level 0: the lobby (the map board, the desktop, the wonderland painting), the exhibit rows east of it, and the
-    // painting wing behind its partition at x 51 (paintings.puck).
-    storeyPlace("lobby", 0, 10.3, 20, 12.3, 34.5)
-    storeyPlace("east-wing", 0, 20, 51, 12.3, 39.7)
-    storeyPlace("painting-room", 0, 51, 69.7, 12.3, 39.7)
-    // Before each painting of the wing: the looping pair facing each other at z 34.5 (west and east walls), the garden
-    // and the night field on the north wall, the city on the south wall, and the endless fall in the floor at
-    // (66, 22.6), its column up to the ceiling twin.
-    storeyPlace("loop-portal-west", 0, 51.3, 53.3, 33.3, 35.7)
-    storeyPlace("loop-portal-east", 0, 67.4, 69.4, 33.3, 35.7)
-    storeyPlace("garden-painting", 0, 55.8, 58.2, 37.4, 39.4)
-    storeyPlace("night-painting", 0, 62.8, 65.2, 37.4, 39.4)
-    storeyPlace("city-painting", 0, 58.8, 61.2, 12.6, 14.6)
-    { id: "endless-fall", at [fallX, 1.6, fallZ], half [1.5, 2.6, 1.5] }
-    // The lobby's west wall: the desktop computer before it, and the big painting into Wonderland (wonderland.puck).
-    storeyPlace("desktop", 0, 10.3, 13.3, 22.4, 25)
-    // The typesetter's bench against the same wall, south of the desktop (press.puck).
-    storeyPlace("press", 0, 10.3, 14.5, 17.4, 21.6)
-    storeyPlace("wonderland-threshold", 0, 10.3, 12.3, 29, 32)
-    // Wonderland: the room beyond the lobby's west wall, the device row along its west side, and the mouse hole in
-    // its east wall back to the lobby.
-    { id: "wonderland", at [5.2, 2, 29], half [4.5, 2.5, 5.3] }
-    { id: "machines", at [4.8, 2, 30.5], half [4.1, 2.5, 3] }
-    { id: "mouse-hole", at [8.9, 1, 30.5], half [0.5, 1.5, 1] }
-    // The stairwell and the lift shaft, every storey (hall.puck).
-    { id: "stairs", at [12.35, 9.2, 37.1], half [2.05, 9.7, 2.6] }
-    { id: "lift", at [16, 9.2, 38], half [2, 9.7, 2] }
-    // The board game room on level 2 behind its partition at x 51 (hall.puck).
-    storeyPlace("board-room", 2, 51.3, 69.7, 12.3, 39.7)
-    // The valley floor's places (valley.puck lists what stands where).
-    groundPlace("studio", 24, 72, -76, -20)
-    groundPlace("camera-course", -26, -13, 16, 44)
-    groundPlace("pool", -66, -46, -22, -2)
-    groundPlace("meadow", 90, 140, -85, -35)
-    groundPlace("forest", -95, 110, -190, -88)
-    groundPlace("range", -106, -88, -52, 118)
+    // The building as one, its forecourt's doorway outside and in, and the lobby inside the entrance.
+    { id: "hall", at [(galleryWidth / 2), 9.2, 12], half [(galleryWidth / 2), 9.7, 16] }
+    { id: "hall-entrance", at [((entranceWest + entranceEast) / 2), 1.5, 0], half [3, 2, 2.5] }
+    storeyPlace("lobby", 0, wingWest, courtWest, galleryWall, naveSouth)
+    // Level 0: the nave between its arcades, the north aisle behind the north one, the west hall under the bridge
+    // (the map of the lobby's old furniture: the desktop, the press, the painting into Wonderland), and the painting
+    // wing east of the lobby (paintings.puck).
+    storeyPlace("nave", 0, naveWest, galleryEast, naveSouth, naveNorth)
+    storeyPlace("north-aisle", 0, galleryWall, galleryEast, naveNorth, galleryNorth)
+    storeyPlace("west-hall", 0, galleryWall, naveWest, galleryWall, naveNorth)
+    storeyPlace("painting-room", 0, courtWest, galleryEast, galleryWall, naveSouth)
+    // Before each painting of the wing: the looping pair facing each other across the east court, the garden, the
+    // night field and the city on the south wall, and the endless fall in the floor, its column up to the ceiling twin.
+    storeyPlace("loop-portal-west", 0, (courtFin + galleryWall), ((courtFin + galleryWall) + 2), 1.2, 3.6)
+    storeyPlace("loop-portal-east", 0, (galleryEast - 2), galleryEast, 1.2, 3.6)
+    storeyPlace("garden-painting", 0, 33.2, 35.6, galleryWall, 2.3)
+    storeyPlace("night-painting", 0, 36.8, 39.2, galleryWall, 2.3)
+    storeyPlace("city-painting", 0, 40.4, 42.8, galleryWall, 2.3)
+    { id: "endless-fall", at [fallPlan[0], 1.6, fallPlan[1]], half [1.5, 2.6, 1.5] }
+    // The west wall: the desktop computer before it, the typesetter's bench south of that (press.puck), and the big
+    // painting into Wonderland (wonderland.puck).
+    storeyPlace("desktop", 0, galleryWall, 3.3, 10.4, 13)
+    storeyPlace("press", 0, galleryWall, 4.5, 5.4, 9.6)
+    storeyPlace("wonderland-threshold", 0, galleryWall, 2.3, 17, 20)
+    // The stairwell and the lift's tower, every storey.
+    { id: "stairs", at [((stairWest + stairEast) / 2), 9.2, ((galleryWall + stairFoot) / 2)], half [2.1, 9.7, 2.8] }
+    { id: "lift", at [liftX, 9.2, liftZ], half [1.7, 9.7, 1.9] }
+    // The board game room: level 2's south gallery and the wing that projects over the forecourt.
+    storeyPlace("board-room", wingLevel, wingWest, galleryEast, (wingSouth + galleryWall), naveSouth)
   ],
-  // Each gallery level whole, and the lift landing before the shaft's door on it.
-  map(range(0, 4), level => storeyPlace($"gallery-level-{level}", level, 10.3, 69.7, 12.3, 39.7)),
-  map(range(0, 4), level => storeyPlace($"lift-landing-{level}", level, 14.4, 17.6, 33.5, 36))
+  // Each gallery level whole, and the lift landing before the tower's door on it.
+  map(range(0, 4), level => storeyPlace($"gallery-level-{level}", level, galleryWall, galleryEast, (wingSouth + galleryWall), galleryNorth)),
+  map(range(0, 4), level => storeyPlace($"lift-landing-{level}", level, (towerWest + 0.2), (towerEast - 0.2), galleryWall, 3.4))
 )
 
+// The valley's places, in world coordinates.
+let regionPlaces = [
+  // The caldera's floor out to the walls' feet (valley.puck).
+  { id: "valley", at [0, 10, 0], half [232, 60, 232] }
+  // The spawn's open ground.
+  groundPlace("stage", -6, 6, -6, 6)
+  // Wonderland: the room beyond the gallery's west wall, the device row along its west side, and the mouse hole in
+  // its east wall back to the gallery.
+  { id: "wonderland", at [5.2, 2, 29], half [4.5, 2.5, 5.3] }
+  { id: "machines", at [4.8, 2, 30.5], half [4.1, 2.5, 3] }
+  { id: "mouse-hole", at [8.9, 1, 30.5], half [0.5, 1.5, 1] }
+  // The valley floor's places (valley.puck lists what stands where).
+  groundPlace("studio", 24, 72, -76, -20)
+  groundPlace("camera-course", -26, -13, 16, 44)
+  groundPlace("pool", -66, -46, -22, -2)
+  groundPlace("meadow", 90, 140, -85, -35)
+  groundPlace("forest", -95, 110, -190, -88)
+  groundPlace("range", -106, -88, -52, 118)
+]
+
 placements {
+  for place in galleryPlaces {
+    placement $"place-{place.id}" {
+      prototype: "place"
+      parent: "gallery"
+      position: place.at
+      region {
+        halfExtents: place.half
+      }
+    }
+  }
   for place in regionPlaces {
     placement $"place-{place.id}" {
       prototype: "place"
@@ -98,25 +117,22 @@ placements {
 
 
 spawnPoints [
-  // Tight-space camera comparisons. Call gallery.lift 0 before visiting the car.
-  { id: "lift", position [16, 0.1, 38], yawDegrees: 0 }
-  { id: "stairs", position [12.2, 2.3, 38.7], yawDegrees: 0 }
   // In Wonderland (wonderland.puck), 2.3 m in front of the deck's television on the west wall (devices.puck), facing
   // it, with the Advanced Brick on her right and the Humble Brick on her left: posed here, she keeps whatever size she
   // was.
   { id: "devices", position [4, 0.05, 30.5], yawDegrees: 90 }
   // At White's edge of the chess table in the gallery's board game room (chess.puck), 1.6 m from the board's centre and
   // facing it, inside the board's engage radius: the context button sits her down. The room's other tables have places
-  // of their own beside them (go.puck, reversi.puck, alchemy.puck, granaries.puck), and the room's doorway is `boardroom` (hall.puck).
-  { id: "chess", position [56.5, 9.05, 21], yawDegrees: 180 }
-  // Behind the chair at the desktop computer in the gallery lobby (desktop.puck), facing its monitor, inside the
-  // screen's engage radius.
+  // of their own beside them (go.puck, reversi.puck, alchemy.puck, granaries.puck), and the room's own place is
+  // `boardroom` (gallery/gallery.puck).
+  { id: "chess", position [37, 9.05, 8.7], yawDegrees: 180 }
+  // Behind the chair at the desktop computer against the gallery's west wall (desktop.puck), facing its monitor, inside
+  // the screen's engage radius.
   { id: "desktop", position [12.4, 0.05, 23.7], yawDegrees: 90 }
-  // Outside the gallery hall's entrance (hall.puck), facing in; the map board stands in the lobby ahead and left.
-  { id: "gallery", position [16, 0, 9], yawDegrees: 180 }
-  // On the valley floor in line with the hall's entrance, 36 m south of it, facing it: the seam walk's first crossing
-  // (walkthrough-tests.puck) starts here and walks into the lobby.
-  { id: "seam-valley", position [16, 0.05, -24], yawDegrees: 180 }
+  // On the valley floor in line with the gallery's entrance, 36 m south of it, facing it: the seam walk's first crossing
+  // (walkthrough-tests.puck) starts here and walks into the lobby. The gallery's own places (`gallery`, outside its
+  // entrance; `lift`; `stairs`) are the module's (gallery/gallery.puck).
+  { id: "seam-valley", position: galleryWorld(((entranceWest + entranceEast) / 2), 0.05, -36), yawDegrees: 180 }
 ]
 
 commands [

@@ -186,7 +186,7 @@ Built by this feature:
   that keys a field itself keeps its keys over a section's keys on that field (`WorldRenderKeys`). The valley's exposure
   floor and key are keyed on `altitude`, their ground keys holding the day's keys and their seam key the moon's, and
   its meter's dark cut (`render.exposure.low`) rises to the moon's seven tenths, so a black sky never pulls the meter
-  down (hall.puck). One star field answers both the night and the height (`day.puck`'s `starsByHeight`). The invariant
+  down (gallery/gallery.puck). One star field answers both the night and the height (`day.puck`'s `starsByHeight`). The invariant
   is that every reader resolves a nested key through one path, `WorldStateMirror`'s keyed read, and every clock the
   keys nest is noted for re-resolution (`WorldClockReads.Note`); the validator judges every nested track's clock and
   times as a keyed value of its own (`WorldKeyedValues`) and every literal it holds against the field's domain. A rate
@@ -235,7 +235,7 @@ Left open, in the order they matter to the trip:
    so writing `day` in the valley moves the moon's sun on the next tick, and
    writing it on the moon is refused. The night crossing no longer lights the
    ship in one frame: the valley's sun rises with height to the moon's full
-   strength (hall.puck's `key` light, keyed on `altitude` with the day's sun in its ground keys).
+   strength (gallery/gallery.puck's `key` light, keyed on `altitude` with the day's sun in its ground keys).
 5. **A crossing turns a body about up only.** `WorldFrameIsometry` and the
    adjacency validator admit a yaw, so the two worlds' axes agree and the side of
    the moon that faces the valley has its up pointing down in the shared frame.

@@ -5,7 +5,7 @@ import "../games/chess"
 // Physical chess: a table of 32 rigid piece bodies whose every settled arrangement is judged against the last legal
 // board (the tabletop primitive), with captures, promotion, castling, en passant, check, the draw limits and a
 // one-ply computer opponent. The debug world imports this file whole. The table stands in the gallery hall's board game
-// room at the east end of level 2 (hall.puck), south-west of the Reversi table and south of the Go table: its board's
+// room at the east end of level 2 (gallery/gallery.puck), south-west of the Reversi table and south of the Go table: its board's
 // centre at (56.5, 9.85, 22.6), White's back rank on its -Z side, toward the south windows, and Black's on +Z, toward
 // the room's doorway aisle. chess.md beside this file says how to move a piece,
 // read the game and set the opponent.
@@ -27,7 +27,7 @@ grants: concat(
 // physics must stay at rest before an arrangement is judged (0.3 s at the debug world's 30 Hz). The rigid solver's own
 // resting latch has already held each piece still before its own resting fact reads 1, so the hold only has to outlast
 // a piece that is touched, knocked or dropped beside another settling.
-let chessTable = [56.5, 8.55, 22.6]
+let chessTable = [37, 8.55, 10.3]
 let chessSettleTicks = 9
 let chessDemoIdleSeconds = 60
 let chessDemoHoldSeconds = 12

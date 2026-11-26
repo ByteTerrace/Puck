@@ -71,6 +71,9 @@ public sealed partial class WorldRigidAssets {
 
     /// <summary>Gets the template slots, in the composed program's address space.</summary>
     public IReadOnlyList<int> Slots => m_slots;
+    /// <summary>Gets the instance ranges of the static templates the latest emission wrote, in the composed program's
+    /// address space: every creation a static row shows or can show by a response, whether or not a copy draws it.</summary>
+    public IReadOnlyList<SdfMeshTemplateRange> TemplateRanges => m_templateRanges;
     /// <summary>Gets the rigid copies at their current poses.</summary>
     public IReadOnlyList<SdfMeshInstance> Copies => m_copies;
     /// <summary>Gets the number of template slots held by this world's definitions.</summary>

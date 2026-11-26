@@ -6,7 +6,7 @@
 // A surface domain samples one ground per column: the first surface under its probe's start, origin height plus
 // probeUp. The start stands below every lintel a walker passes under (the hall's entrance opening is 3.3 m tall,
 // Wonderland's doorway 3.05 m, the wing's 3 m) and above the Moth's 2.06 m, so a doorway's cells find its floor rather
-// than starting inside the wall over it. The hall's switchback stairs (hall.puck) repeat every storey, so no one
+// than starting inside the wall over it. The hall's switchback stairs (gallery/gallery.puck) repeat every storey, so no one
 // ground per column can hold a level and the flights above and below it, and each storey's stairwell is two domains of
 // its own. Flight A's side (x 10.25 .. 12.25) probes from under the next storey's flight A down over its treads and the
 // half landing, and shares cells with the level under it on those treads. Flight B's side (x 12.25 .. 14.5) has nothing
@@ -32,19 +32,20 @@ navigation {
       // The caldera's floor out to the walls' feet (valley.puck), x and z -210 .. 210, down to the pool's basin.
       walkable("valley", [-210, 0.05, -210], 2, 211, 211, 2.2, 3, 1024)
     ],
-    // Each storey of the hall above level 0, x 10 .. 70, z 12 .. 40: its probe starts 1.9 m over the floor (under every
-    // doorway, over the next storey's flights) and reaches down to the half landing under it.
+    // Each storey of the gallery above level 0, x 10 .. 70, z 8 .. 40 with the projecting wing: its probe starts 1.9 m
+    // over the floor (under every doorway, over the next storey's flights) and reaches down to the half landing under
+    // it.
     map(
       range(1, 3),
-      level => walkable($"hall-level-{level}", [10, galleryFloor[level], 12], 0.5, 120, 56, 1.9, 2.35, 1024)
+      level => walkable($"hall-level-{level}", [10, galleryFloor[level], 8], 0.5, 120, 64, 1.9, 2.35, 1024)
     ),
-    // Flight A's side of the stairwell from each level to the next, x 10.25 .. 12.25, z 33.75 .. 39.75: its probe
+    // Flight A's side of the stairwell from each level to the next, x 22.25 .. 24.5, z 12 .. 18.25: its probe
     // starts 4.45 m over the lower floor, under the next storey's flight A (4.5 m), and reaches the lower floor.
     map(
       range(0, 3),
       level => walkable(
         $"hall-stairs-a-{level}",
-        [10.25, (galleryFloor[level] + 2.2), 33.75],
+        [22.25, (galleryFloor[level] + 2.2), 12],
         0.25,
         9,
         25,
@@ -53,13 +54,13 @@ navigation {
         225
       )
     ),
-    // Flight B's side, x 12.25 .. 14.5: its probe starts 0.4 m over the next level's floor, under the next storey's half
+    // Flight B's side, x 24.25 .. 26.75: its probe starts 0.4 m over the next level's floor, under the next storey's half
     // landing (2 m over that floor), and reaches the half landing 2.2 m below.
     map(
       range(0, 3),
       level => walkable(
         $"hall-stairs-b-{level}",
-        [12.25, galleryFloor[(level + 1)], 33.75],
+        [24.25, galleryFloor[(level + 1)], 12],
         0.25,
         10,
         25,
