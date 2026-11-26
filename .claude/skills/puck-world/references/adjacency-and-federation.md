@@ -385,6 +385,22 @@ the issuer root whose players it admits
   leave's answer runs. Park and resume follow a traveler that walked on
   (`SetTravelerPresence`), so its grace runs where its body is. Both are queued
   under the calling authority's gate and applied in `DrainPendingTransfers`.
+- A route stands only while its next hop holds a credential for its traveler,
+  in every host. Both words cross a socket on the routed lane
+  (`WorldFederationRequest.Presence`, `WorldFederationRequest.Retire`, sent by
+  `WorldRemoteAuthority.TellTraveler` and served by
+  `WorldPeerHost.ServeTravelerWordAsync` through the doors a colocated arm
+  calls); a retire word never retires a body that stands at the authority it
+  reaches (`WorldTick.TryRetireHandedOnTraveler`). An authority in another
+  process that retires a traveler tells no one upstream: it answers the next
+  routed request for the traveler `WorldFederationRefusal.TravelerUnknown`, and
+  the asking host retires its route on that answer
+  (`WorldInstanceHost.RetireUnheldRoutes`). A route recovered from a checkpoint
+  is checked against its colocated destination on the first drain after the
+  recovery (`WorldInstanceHost.RetireUnheldRecoveries`). One door decides a
+  routed request's credential (`WorldPeerHost.AdmitRoutedCredentialAsync`):
+  `TravelerUnknown` only for an admitted source and no credential at any
+  epoch, `CredentialUnknown` otherwise.
 - A recovery point is captured as a baseline
   (`WorldReleaseRewindBoundary.Baseline`). Restoring one ends every traveler
   minted outside the group inside `WorldPersistence.EndRewoundGuests`, so a

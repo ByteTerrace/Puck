@@ -150,17 +150,25 @@ public sealed partial class WorldInstanceHost {
                     definition
                 ) is not { } remote) { continue; }
 
-                deferred.TryBind(current: new WorldRemoteForwardedAuthority(
+                deferred.TryBind(current: RemoteArm(
                     authority: remote,
                     credential: new(
                         pair.Value.BodyIndex,
                         description.SourceAuthority,
                         description.Mobility
-                    )
+                    ),
+                    source: pair.Key.Left
                 ));
             }
         }
     }
+    // The socket arm of a route `source` keeps. The remote authority's answer that it holds no credential for the
+    // traveler is queued for the host loop, which retires the route (RetireUnheldRoutes).
+    private WorldRemoteForwardedAuthority RemoteArm(WorldServer source, WorldRemoteAuthority authority, WorldRemoteRouteCredential credential) => new(
+        authority: authority,
+        credential: credential,
+        unheld: destination => m_unheldRoutes.Enqueue(item: (source, destination))
+    );
     private void RemoveSourceForwarding(WorldServer source) {
         foreach (var incarnation in m_forwardedBodies.RightsOf(left: source)) {
             if (m_forwardedBodies.TryRemove(left: source, right: incarnation, removed: out var removed)) {
@@ -181,12 +189,23 @@ public sealed partial class WorldInstanceHost {
     // destination on the drain that follows (RetireUnheldRecoveries).
     private readonly List<(WorldServer Source, WorldEntityAddress Incarnation)> m_recoveredRoutes = [];
 
-    // A recovered route stands only while its destination holds a credential for its traveler. A destination that
-    // retires a traveler tells this host under its own gate, and the host drops the routes on its next loop
-    // (RetireTraveler); a process that stopped between the two recovers the forwarding row's route and a destination
-    // that holds no credential for it. Such a route is retired here as the destination's word would have retired it.
-    // The check waits for the drain because a destination is bound as it is admitted, before its own checkpoint and
-    // crossing log are redone, and every row has recovered by the first drain after its admission (RecoverCrossings).
+    // The routes whose next hop, in another process, answered that it holds no credential for the traveler
+    // (WorldFederationRefusal.TravelerUnknown), with the destination the answering arm forwarded to. Written from
+    // whichever thread reads the answer and drained on the host loop (RetireUnheldRoutes).
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(WorldServer Source, WorldForwardingDestination Destination)> m_unheldRoutes = new();
+
+    // A route stands only while its next hop holds a credential for its traveler: a next hop that holds none retired
+    // the traveler, and nothing reaches it from here. Two things break that without this host being told. A colocated
+    // destination tells the host under its own gate and the host drops the routes on its next loop (RetireTraveler), so
+    // a process that stopped between the two recovers the forwarding row's route and a destination that holds no
+    // credential for it. And a destination in another process tells no one upstream. Each is caught where the next
+    // hop is asked: a recovered colocated route on the first drain after its recovery (RetireUnheldRecoveries), and a
+    // socket route when its next hop answers TravelerUnknown to anything this host sends it for the traveler
+    // (RetireUnheldRoutes). Either retires the traveler through RetireForwardedTraveler, as the word would have.
+    //
+    // A recovered route is not checked where it is bound, because a destination is bound as it is admitted, before its
+    // own checkpoint and crossing log are redone; every row has recovered by the first drain after its admission
+    // (RecoverCrossings).
     private void RetireUnheldRecoveries() {
         if (m_recoveredRoutes.Count == 0) {
             return;
@@ -202,25 +221,48 @@ public sealed partial class WorldInstanceHost {
 
             if (
                 (FindRecoveryDestination(authority: description.DestinationAuthority) is not { } destination) ||
-                destination.Server.TryTransferredPrincipal(mobility: description.Mobility, principal: out _, sourceAuthority: description.SourceAuthority)
+                destination.Server.HoldsTransferredTraveler(incarnation: incarnation, sourceAuthority: description.SourceAuthority)
             ) {
                 continue;
             }
-            if (m_narration.HasNarrationSink) {
-                m_narration.Narrate(
-                    channel: "world.transfer",
-                    text: $"[world.transfer: recovered route of traveler {incarnation} from '{description.SourceAuthority}' retired: '{description.DestinationAuthority}' holds no credential for it]"
-                );
-            }
-            RetireForwardedTraveler(incarnation: incarnation);
+            RetireUnheld(description: description, told: null);
         }
         m_recoveredRoutes.Clear();
+    }
+    // A late answer about a route this host has since replaced (the traveler came back and left again, at a later
+    // epoch or for another destination) retires nothing: only the route the answering arm stood for is retired.
+    private void RetireUnheldRoutes() {
+        while (m_unheldRoutes.TryDequeue(result: out var unheld)) {
+            if (!m_forwardedBodies.TryGetValue(left: unheld.Source, right: unheld.Destination.Mobility.Incarnation, value: out var route)) {
+                continue;
+            }
+            var current = route.Authority.DescribeForCheckpoint();
+
+            if (
+                (current.DestinationAuthority == unheld.Destination.DestinationAuthority) &&
+                (current.SourceAuthority == unheld.Destination.SourceAuthority) &&
+                (current.Mobility == unheld.Destination.Mobility)
+            ) {
+                // The hop that answered has nothing left to be told.
+                RetireUnheld(description: current, told: route.Authority);
+            }
+        }
+    }
+    private void RetireUnheld(WorldForwardingDestination description, IWorldForwardedAuthority? told) {
+        if (m_narration.HasNarrationSink) {
+            m_narration.Narrate(
+                channel: "world.transfer",
+                text: $"[world.transfer: route of traveler {description.Mobility.Incarnation} from '{description.SourceAuthority}' retired: '{description.DestinationAuthority}' holds no credential for it]"
+            );
+        }
+        RetireForwardedTraveler(incarnation: description.Mobility.Incarnation, told: told);
     }
     // Applies, in the order they were queued, what the authorities of this host learned since the last drain about
     // travelers they forward: whether each one's source still attends to it, passed to the authority it stands at, and
     // each one whose body was retired where it stood. Runs on the host loop.
     private void RetireEndedTravelers() {
         RetireUnheldRecoveries();
+        RetireUnheldRoutes();
         while (m_travelerPresence.TryDequeue(result: out var presence)) {
             if (m_forwardedBodies.TryGetValue(left: presence.Source, right: presence.Incarnation, value: out var route)) {
                 route.Authority.SetPresence(present: presence.Present);
@@ -234,10 +276,15 @@ public sealed partial class WorldInstanceHost {
     // drops its route and its credential. An accepted leave reaches it when the leave's answer arrives, and a body
     // retired where it stood (its reconnect grace ran out, or it disconnected with none) reaches it from the authority
     // that retired it. A traveler can revisit an authority, so every retained branch for the incarnation goes, a stale
-    // route the last request did not traverse included.
-    private void RetireForwardedTraveler(WorldEntityAddress incarnation) {
+    // route the last request did not traverse included. Each dropped route's next hop is told, so an authority in
+    // another process drops what it keeps for the traveler too (IWorldForwardedAuthority.TellRetired). `told` is the
+    // hop the retirement came from, which already knows: the one that answered the leave, or that it holds nothing.
+    private void RetireForwardedTraveler(WorldEntityAddress incarnation, IWorldForwardedAuthority? told = null) {
         foreach (var source in m_forwardedBodies.LeftsOf(right: incarnation)) {
             if (m_forwardedBodies.TryRemove(left: source, right: incarnation, removed: out var retired)) {
+                if (!ReferenceEquals(objA: retired.Authority, objB: told)) {
+                    retired.Authority.TellRetired();
+                }
                 (retired.Authority as IDisposable)?.Dispose();
                 source.RetireTransferredIncarnation(incarnation: incarnation);
             }

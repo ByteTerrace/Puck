@@ -148,9 +148,10 @@ public sealed partial class WorldInstanceHost {
                         Mobility: member.Mobility.Advance()
                     );
 
-                    onward = new WorldRemoteForwardedAuthority(
+                    onward = RemoteArm(
                         authority: forwardedAuthority,
-                        credential: credential
+                        credential: credential,
+                        source: sourceInstance.Server
                     );
                     onwardSlot = credential.BodyIndex;
                 } else if (targetAuthority.Local is { } localTarget) {

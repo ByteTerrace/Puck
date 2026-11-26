@@ -184,6 +184,23 @@ redone its own checkpoint and crossing log, and retires a route the
 destination does not answer for, as the lost word would have
 (`WorldInstanceHost.RetireUnheldRecoveries`).
 
+Both words follow the route in every host, since the integration lead ruled
+that absence and retirement following the forwarding route is not a closed
+group's rule alone. A closed group runs in one process, so what follows
+matters to open worlds. Across a socket the forwarding world sends each word
+on the routed lane (`WorldFederationRequest.Presence`,
+`WorldFederationRequest.Retire`), and the world at the far end runs the door a
+colocated neighbour runs. A retire word drops what a forwarding world keeps of
+a traveller, a credential and its onward routes, and is refused by name for a
+traveller whose body stands there (`WorldTick.TryRetireHandedOnTraveler`): a
+body ends by its own disconnect and grace. A world that retires a body has no
+connection to the worlds upstream of it, which dialled it. It answers the next
+routed request they send for the traveller
+`WorldFederationRefusal.TravelerUnknown`, and the asking host retires its
+route on that answer (`WorldInstanceHost.RetireUnheldRoutes`). So the
+invariant is one sentence for both cases: a route stands only while its next
+hop holds a credential for its traveller.
+
 A guest's ledger is bounded on its own terms.
 
 - One session holds at most `WorldTransferLimits.GuestTransferKeysPerSession`

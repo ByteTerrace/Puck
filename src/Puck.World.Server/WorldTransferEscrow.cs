@@ -2788,6 +2788,12 @@ public sealed partial class WorldTransferEscrow {
         principal = default;
         return false;
     }
+    /// <summary>Returns whether a credential stands for a traveler under a source namespace, at any ownership
+    /// epoch.</summary>
+    /// <param name="sourceAuthority">The source namespace.</param>
+    /// <param name="incarnation">The traveler's incarnation.</param>
+    /// <returns><see langword="true"/> when a credential stands.</returns>
+    public bool HoldsTraveler(string sourceAuthority, WorldEntityAddress incarnation) => m_mobilityAdmissions.ContainsKey(key: (sourceAuthority, incarnation));
     public bool TryMobilityPrincipal(string sourceAuthority, in WorldMobilityIdentity mobility, out Principal principal) {
         if (
             m_mobilityAdmissions.TryGetValue(

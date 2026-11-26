@@ -1134,12 +1134,25 @@ open.
     traveler's origin, which no law runs. Check: the probe hops the guest
     before its capture and both restored rows hold no guest and no forwarding
     route.
-  - A retirement's word stops at a socket. A traveler retired by a world in another
-    process is retired upstream only when an accepted leave's answer comes
-    back, and a player's absence reaches a remote hop only as the streams to
-    it ending. Closed groups run in one process, so this is an open-world
-    gap. Check: a forwarding world retires its route when its next hop
-    answers that it holds no credential for the traveler.
+  - A world in another process that retires a traveler's body tells the worlds
+    upstream of it only when one of them next asks it about the traveler
+    (`WorldFederationRefusal.TravelerUnknown`,
+    `WorldInstanceHost.RetireUnheldRoutes`), because they dialled it and it
+    holds no connection to them. Until then each keeps a route and a
+    credential, and each hop learns one request after the hop below it. Closed
+    groups run in one process, so this is an open-world gap. Check: a
+    forwarding world's route to a traveler retired two hops away is gone
+    without a client asking for the traveler twice.
+  - A presence or retire word for a route whose next hop is not bound yet (a
+    recovered route whose destination row is not admitted) is dropped
+    (`WorldDeferredForwardedAuthority.SetPresence`). Check: the word a route
+    was owed while unbound reaches the next hop when it binds.
+  - An open world's client whose traveler was retired while it was away is
+    answered `RouteUnknown` when it observes the traveler, and only a closed
+    group answers `WorldFederationRefusal.SessionEnded`, which is what brings a
+    seat home (`WorldInstanceHost.ReturnSeatHome`). Check: decide whether a
+    traveler an open world holds no credential for ends the client's route the
+    same way, and show the seat comes home.
   - Two parts of the guest design are covered by their predicate and not by a
     run. A federation handshake by a vouched identity that signed for no
     session is refused its credential (`WorldTransferBoundary.CredentialRefusal`),

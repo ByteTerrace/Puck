@@ -14,7 +14,13 @@ public readonly record struct WorldRemoteRouteCredential(int BodyIndex, string S
 /// <summary>The forwarded-authority arm for a traveler whose current authority is reached over a socket.</summary>
 /// <param name="authority">The remote authority holding the traveler.</param>
 /// <param name="credential">The immutable route credential committed for it.</param>
-public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority, WorldRemoteRouteCredential credential) : IWorldForwardedAuthority {
+/// <param name="unheld">Called, from whichever thread reads the answer, each time the remote authority answers a
+/// request of this arm that it holds no credential for the traveler
+/// (<see cref="WorldFederationRefusal.TravelerUnknown"/>); it receives this arm's destination. The route's owner
+/// retires the route on it.</param>
+public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority, WorldRemoteRouteCredential credential, Action<WorldForwardingDestination>? unheld = null) : IWorldForwardedAuthority {
+    private void Unheld() => unheld?.Invoke(obj: DescribeForCheckpoint());
+
     /// <inheritdoc/>
     public WorldForwardingDestination DescribeForCheckpoint() => new(
         authority.PeerAuthority,
@@ -24,7 +30,20 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
         authority.Definition
     );
     /// <inheritdoc/>
-    public void SetPresence(bool present) { }
+    /// <remarks>Sends the word over the routed lane (<see cref="WorldFederationRequest.Presence"/>); the authority at
+    /// the far end parks or resumes the body through the doors a colocated arm calls.</remarks>
+    public void SetPresence(bool present) {
+        var held = credential;
+
+        authority.TellTraveler(credential: in held, kind: WorldFederationRequest.Presence, present: present, unheld: Unheld);
+    }
+    /// <inheritdoc/>
+    /// <remarks>Sends the word over the routed lane (<see cref="WorldFederationRequest.Retire"/>).</remarks>
+    public void TellRetired() {
+        var held = credential;
+
+        authority.TellTraveler(credential: in held, kind: WorldFederationRequest.Retire, present: false);
+    }
     /// <inheritdoc/>
     public ValueTask<byte[]?> FetchPrototypeAsync(ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
         authority.FetchPrototypeAsync(pin: pin, traveler: new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility, ceiling, remainingHops));
@@ -41,7 +60,7 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
             ct
         );
     /// <inheritdoc/>
-    public ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeRouteAsync() => authority.DescribeRouteAsync(credential);
+    public ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeRouteAsync() => authority.DescribeRouteAsync(credential: credential, unheld: Unheld);
     /// <inheritdoc/>
     public bool TryForwardIntent(in IntentSubmission submission, out string reason) {
         var held = credential;
@@ -61,7 +80,8 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
             credential: in held,
             operationId: operationId,
             payload: payload,
-            reason: out reason
+            reason: out reason,
+            unheld: Unheld
         );
     }
 }
@@ -103,6 +123,11 @@ public readonly record struct WorldFederationAnswer(WorldFederationResponse Kind
     /// <summary>Gets a value indicating whether the peer answered at all (no transport refusal).</summary>
     public bool Ok => !Failure.IsRefusal;
 
+    /// <summary>Returns whether the peer answered with one named refusal. A transport refusal names none.</summary>
+    /// <param name="refusal">The refusal to look for.</param>
+    /// <returns><see langword="true"/> when the peer refused under <paramref name="refusal"/>.</returns>
+    public bool Names(WorldFederationRefusal refusal) =>
+        (Ok && (Kind == WorldFederationResponse.Refusal) && WorldFederationCodec.NamesRefusal(body: Body.Span, refusal: refusal));
     /// <summary>Narrates this answer as a refusal sentence.</summary>
     public string Describe() =>
         (Failure.IsRefusal
@@ -378,12 +403,17 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         TryRouteCredential(bodyIndex, out var credential) ? DescribeRouteAsync(credential) :
             new((null, $"forwarded body:{bodyIndex} has no committed destination credential"));
 
-    internal async ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeRouteAsync(WorldRemoteRouteCredential credential) {
+    // `unheld` is told when the peer answers that it holds no credential for the traveler (TravelerUnknown), here and
+    // in every routed request below that takes one.
+    internal async ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeRouteAsync(WorldRemoteRouteCredential credential, Action? unheld = null) {
         var target = m_submissionAuthority ?? this;
         var mobility = credential.Mobility;
         var answer = await target.AnswerAsync(credential.SourceAuthority, WorldFederationRequest.Route,
             WorldFederationCodec.EncodeRouteCredential(credential.SourceAuthority, in mobility)).ConfigureAwait(ConfigureAwaitOptions.ForceYielding);
-        if (answer.Kind != WorldFederationResponse.Route) { return (null, answer.Describe()); }
+        if (answer.Kind != WorldFederationResponse.Route) {
+            if (answer.Names(refusal: WorldFederationRefusal.TravelerUnknown)) { unheld?.Invoke(); }
+            return (null, answer.Describe());
+        }
         return WorldFederationCodec.TryDecodeRoute(answer.Body.Span, target.Definition, out var route, out var failure) ? (route, string.Empty) : (null, failure.ToString());
     }
 
@@ -424,10 +454,73 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     }
     // Forwards one submission over the routed lane and answers its completion with the destination's typed result,
     // which a destination sends once its own verdict exists (a buffered mutation's at its tick boundary).
-    internal bool TryForwardSubmission(in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason) =>
-        TrySendSubmission(this, in credential, payload, operationId, completion, out reason);
+    internal bool TryForwardSubmission(in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason, Action? unheld = null) =>
+        TrySendSubmission(this, in credential, payload, operationId, completion, out reason, unheld);
 
-    internal static bool TrySendSubmission(IWorldRoutedRequests authority, in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason) {
+    // The word a forwarding authority owes its next hop about one traveler: its presence, the latest value winning,
+    // or its retirement, which nothing follows. The sequence is what a waiting resend compares itself with.
+    private readonly ConcurrentDictionary<(string SourceAuthority, WorldEntityAddress Incarnation), long> m_travelerWords = new();
+    private readonly Lock m_travelerWordGate = new();
+    private long m_travelerWordSequence;
+
+    /// <summary>Tells the peer, as the authority that handed a traveler on to it, whether the traveler's source still
+    /// attends to it (<see cref="WorldFederationRequest.Presence"/>) or that the traveler is gone for good
+    /// (<see cref="WorldFederationRequest.Retire"/>). Returns at once. The word is sent again while the lane cannot
+    /// carry it, until the peer answers, a later word about the same traveler replaces it, or this authority is
+    /// disposed; words about one traveler reach the peer in the order they were given.</summary>
+    /// <param name="credential">The route's credential at the peer.</param>
+    /// <param name="kind">The word.</param>
+    /// <param name="present">Whether the source attends to the traveler; read for a presence word only.</param>
+    /// <param name="unheld">Called when the peer answers that it holds no credential for the traveler.</param>
+    internal void TellTraveler(in WorldRemoteRouteCredential credential, WorldFederationRequest kind, bool present, Action? unheld = null) {
+        // The authority that owns the lanes orders the words.
+        if (m_submissionAuthority is { } upstream) {
+            upstream.TellTraveler(credential: in credential, kind: kind, present: present, unheld: unheld);
+            return;
+        }
+        var mobility = credential.Mobility;
+        var source = credential.SourceAuthority;
+        var key = (source, mobility.Incarnation);
+        var body = ((kind == WorldFederationRequest.Presence)
+            ? WorldFederationCodec.EncodePresence(mobility: in mobility, present: present, sourceAuthority: source)
+            : WorldFederationCodec.EncodeRouteCredential(mobility: in mobility, sourceAuthority: source));
+        long sequence;
+        Task<WorldFederationAnswer> pending;
+
+        // Issued under the gate that orders the words: a resend that finds itself replaced here was replaced before
+        // the lane took the newer word.
+        lock (m_travelerWordGate) {
+            sequence = ++m_travelerWordSequence;
+            m_travelerWords[key] = sequence;
+            pending = AnswerAsync(body: body, kind: kind, sourceAuthority: source);
+        }
+        _ = DeliverAsync();
+
+        async Task DeliverAsync() {
+            try {
+                while (true) {
+                    var answer = await pending.ConfigureAwait(continueOnCapturedContext: false);
+
+                    if (answer.Ok) {
+                        _ = m_travelerWords.TryRemove(item: new(key: key, value: sequence));
+                        if (answer.Names(refusal: WorldFederationRefusal.TravelerUnknown)) { unheld?.Invoke(); }
+                        return;
+                    }
+                    await Task.Delay(cancellationToken: m_lifetime.Token, delay: LaneBackoff, timeProvider: m_clock).ConfigureAwait(continueOnCapturedContext: false);
+                    lock (m_travelerWordGate) {
+                        if (!m_travelerWords.TryGetValue(key: key, value: out var latest) || (latest != sequence)) {
+                            return;
+                        }
+                        pending = AnswerAsync(body: body, kind: kind, sourceAuthority: source);
+                    }
+                }
+            } catch (OperationCanceledException) {
+                // This authority was disposed: its lanes are gone, and so is what it owed the peer.
+            }
+        }
+    }
+
+    internal static bool TrySendSubmission(IWorldRoutedRequests authority, in WorldRemoteRouteCredential credential, WorldSubmissionPayload payload, Guid operationId, Action<WorldSubmissionResult> completion, out string reason, Action? unheld = null) {
         ArgumentNullException.ThrowIfNull(argument: completion);
 
         if (!Puck.World.Protocol.WorldFrameCodec.TryEncode(
@@ -464,6 +557,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                 if (answer.Kind == WorldFederationResponse.Completion) {
                     _ = TryReadCompletion(answer.Body, out result, out detail);
                 } else {
+                    if (answer.Names(refusal: WorldFederationRefusal.TravelerUnknown)) { unheld?.Invoke(); }
                     detail = answer.Describe();
                 }
             } catch (Exception exception) {
@@ -639,7 +733,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         );
     private static WorldFederationLane LaneOf(WorldFederationRequest kind) => kind switch {
         WorldFederationRequest.Prototype => WorldFederationLane.Content,
-        WorldFederationRequest.Route or WorldFederationRequest.Submission => WorldFederationLane.Routed,
+        WorldFederationRequest.Route or WorldFederationRequest.Submission or WorldFederationRequest.Presence or WorldFederationRequest.Retire => WorldFederationLane.Routed,
         _ => WorldFederationLane.Transaction,
     };
     // The current observation session's ingress, so the span it holds closes when the session ends.
@@ -754,7 +848,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         }
                     }
                     // A refusal frame's text opens with its refusal's name. This one is terminal for the traveler.
-                    if (m_submissionCredential.HasValue && frame.Body.Span.StartsWith(value: SessionEndedPrefix) && (Interlocked.Exchange(location1: ref m_ended, value: 1) == 0)) {
+                    if (m_submissionCredential.HasValue && WorldFederationCodec.NamesRefusal(body: frame.Body.Span, refusal: WorldFederationRefusal.SessionEnded) && (Interlocked.Exchange(location1: ref m_ended, value: 1) == 0)) {
                         m_routeEnded?.Invoke();
                     }
                     return false;
@@ -934,8 +1028,6 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
     // Reconnect the same held lease until its owner releases it. Each session is a stream of its own: when one ends,
     // by a lost connection, an invalidation or the lease's release, the span it held closes, so the reader shows
     // nothing of it while disconnected, and the authored unavailable policy remains the crossing-side safety net.
-    private static ReadOnlySpan<byte> SessionEndedPrefix => "SessionEnded:"u8;
-
     private async Task ObserveUntilCancelledAsync(WorldSinkRoute sink, CancellationToken ct) {
         var observed = new ObservedStream();
 

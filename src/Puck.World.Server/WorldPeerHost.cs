@@ -905,10 +905,111 @@ public sealed class WorldPeerHost : IDisposable {
             return operation();
         }, credential.Token);
 
-    private Task<Principal?> TransferredPrincipalAsync(Credential credential, WorldMobilityIdentity mobility, string sourceAuthority) =>
-        ExecuteAuthenticatedAsync<Principal?>(credential, () =>
-            ((WorldAdmissionDoor.TryAdmitArrival(m_server.AdmissionPolicy, sourceAuthority, out _, WorldAdmissionArrival.Visitor) is null) &&
-            m_server.TryTransferredPrincipal(sourceAuthority, mobility, out var principal)) ? principal : null);
+    // The one door a routed request's credential passes: the source it names is the one this connection authenticated
+    // as, this authority's admission still takes that source's visitors, and the escrow holds the credential. A
+    // credential that fails is refused here by name and the caller answers nothing more. An admitted source that
+    // names a traveler this authority holds no credential for, at any epoch, is told TravelerUnknown, which is what a
+    // forwarding authority retires its route on; every other failure is CredentialUnknown.
+    private async Task<Principal?> AdmitRoutedCredentialAsync(Stream stream, string sourceAuthority, Credential credential, string carriedAuthority, WorldMobilityIdentity mobility, string what, CancellationToken ct) {
+        if (!string.Equals(
+            a: carriedAuthority,
+            b: sourceAuthority,
+            comparisonType: StringComparison.Ordinal
+        )) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: $"the {what} names a source authority this connection did not authenticate as",
+                refusal: WorldFederationRefusal.SourceAuthorityMismatch,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return null;
+        }
+        var (principal, unknown) = await ExecuteAuthenticatedAsync(credential, () => {
+            if (WorldAdmissionDoor.TryAdmitArrival(m_server.AdmissionPolicy, sourceAuthority, out _, WorldAdmissionArrival.Visitor) is not null) {
+                return (((Principal?)null), false);
+            }
+            return (m_server.TryTransferredPrincipal(sourceAuthority, mobility, out var held)
+                ? (held, false)
+                : (((Principal?)null), !m_server.HoldsTransferredTraveler(incarnation: mobility.Incarnation, sourceAuthority: sourceAuthority)));
+        }).ConfigureAwait(false);
+
+        if (principal is null) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: $"the {what} names no committed transfer body",
+                refusal: (unknown ? WorldFederationRefusal.TravelerUnknown : WorldFederationRefusal.CredentialUnknown),
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+        }
+        return principal;
+    }
+    // A forwarding authority's word about a traveler it handed on here: whether the traveler's source still attends to
+    // it, or that the traveler is gone for good. Each runs the door a colocated forwarder calls, so the word means the
+    // same whether or not a socket carried it.
+    private async Task<bool> ServeTravelerWordAsync(Stream stream, string sourceAuthority, Credential credential, WorldFederationRequest kind, ReadOnlyMemory<byte> body, CancellationToken ct) {
+        var present = false;
+        var failure = default(WireFailure);
+        string carriedAuthority;
+        WorldMobilityIdentity mobility;
+
+        if (!((kind == WorldFederationRequest.Presence)
+            ? WorldFederationCodec.TryDecodePresence(body: body.Span, failure: out failure, mobility: out mobility, present: out present, sourceAuthority: out carriedAuthority)
+            : WorldFederationCodec.TryDecodeRouteCredential(body: body.Span, failure: out failure, mobility: out mobility, sourceAuthority: out carriedAuthority))) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: $"{kind} word — {failure}",
+                refusal: WorldFederationRefusal.FrameMalformed,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+        if (await AdmitRoutedCredentialAsync(
+            carriedAuthority: carriedAuthority,
+            credential: credential,
+            ct: ct,
+            mobility: mobility,
+            sourceAuthority: sourceAuthority,
+            stream: stream,
+            what: $"{kind} word"
+        ).ConfigureAwait(continueOnCapturedContext: false) is null) {
+            return true;
+        }
+        var applied = await ExecuteAuthenticatedAsync(credential, () => {
+            if (kind == WorldFederationRequest.Retire) {
+                return m_server.TryRetireHandedOnTraveler(mobility: in mobility, sourceAuthority: sourceAuthority);
+            }
+            if (present) {
+                _ = m_server.GrantTable.TryResumeTransferredPeer(mobility: in mobility, sourceAuthority: sourceAuthority);
+            } else {
+                m_server.GrantTable.ParkTransferredPeer(mobility: in mobility, sourceAuthority: sourceAuthority);
+            }
+            return true;
+        }).ConfigureAwait(false);
+
+        if (!applied) {
+            await WriteFederationRefusal(
+                ct: ct,
+                detail: "the traveler's body stands at this authority, which a forwarding authority's word does not retire",
+                refusal: WorldFederationRefusal.SubmissionRefused,
+                stream: stream
+            ).ConfigureAwait(continueOnCapturedContext: false);
+
+            return true;
+        }
+        if (kind == WorldFederationRequest.Retire) {
+            _ = m_travelerLiveness.TryRemove(key: (sourceAuthority, mobility.Incarnation), value: out _);
+        }
+        await WorldFederationCodec.WriteResponseAsync(
+            body: ReadOnlyMemory<byte>.Empty,
+            ct: ct,
+            kind: WorldFederationResponse.Ack,
+            stream: stream
+        ).ConfigureAwait(continueOnCapturedContext: false);
+
+        return true;
+    }
 
     // A destination asks this authority, as a companion's title authority, whether a hop is currently granted to it.
     // The destination is the namespace this connection authenticated as, never one the body names.
@@ -1198,6 +1299,17 @@ public sealed class WorldPeerHost : IDisposable {
                     stream: stream
                 ).ConfigureAwait(continueOnCapturedContext: false);
 
+            case WorldFederationRequest.Presence:
+            case WorldFederationRequest.Retire:
+                return await ServeTravelerWordAsync(
+                    body: body,
+                    credential: credential,
+                    ct: ct,
+                    kind: kind,
+                    sourceAuthority: sourceAuthority,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+
             case WorldFederationRequest.Route:
                 return await ServeRouteAsync(
                     credential: credential,
@@ -1396,29 +1508,15 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        if (!string.Equals(
-            a: carriedAuthority,
-            b: sourceAuthority,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            await WriteFederationRefusal(
-                ct: ct,
-                detail: "the route credential names a source authority this connection did not authenticate as",
-                refusal: WorldFederationRefusal.SourceAuthorityMismatch,
-                stream: stream
-            ).ConfigureAwait(continueOnCapturedContext: false);
-
-            return true;
-        }
-
-        if (await TransferredPrincipalAsync(credential, mobility, sourceAuthority).ConfigureAwait(false) is not { } principal) {
-            await WriteFederationRefusal(
-                ct: ct,
-                detail: "the route credential names no committed transfer body",
-                refusal: WorldFederationRefusal.CredentialUnknown,
-                stream: stream
-            ).ConfigureAwait(continueOnCapturedContext: false);
-
+        if (await AdmitRoutedCredentialAsync(
+            carriedAuthority: carriedAuthority,
+            credential: credential,
+            ct: ct,
+            mobility: mobility,
+            sourceAuthority: sourceAuthority,
+            stream: stream,
+            what: "route credential"
+        ).ConfigureAwait(continueOnCapturedContext: false) is not { } principal) {
             return true;
         }
 
@@ -1483,21 +1581,6 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        if (!string.Equals(
-            a: carriedAuthority,
-            b: sourceAuthority,
-            comparisonType: StringComparison.Ordinal
-        )) {
-            await WriteFederationRefusal(
-                ct: ct,
-                detail: "the submission names a source authority this connection did not authenticate as",
-                refusal: WorldFederationRefusal.SourceAuthorityMismatch,
-                stream: stream
-            ).ConfigureAwait(continueOnCapturedContext: false);
-
-            return true;
-        }
-
         if (!TryDecodeSubmissionFrame(
             failure: out var codecFailure,
             frame: submittedFrame,
@@ -1514,14 +1597,15 @@ public sealed class WorldPeerHost : IDisposable {
             return true;
         }
 
-        if (await TransferredPrincipalAsync(credential, mobility, sourceAuthority).ConfigureAwait(false) is not { } principal) {
-            await WriteFederationRefusal(
-                ct: ct,
-                detail: "the submission credential names no committed transfer body",
-                refusal: WorldFederationRefusal.CredentialUnknown,
-                stream: stream
-            ).ConfigureAwait(continueOnCapturedContext: false);
-
+        if (await AdmitRoutedCredentialAsync(
+            carriedAuthority: carriedAuthority,
+            credential: credential,
+            ct: ct,
+            mobility: mobility,
+            sourceAuthority: sourceAuthority,
+            stream: stream,
+            what: "submission"
+        ).ConfigureAwait(continueOnCapturedContext: false) is not { } principal) {
             return true;
         }
 

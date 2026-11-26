@@ -51,7 +51,7 @@ public sealed partial class WorldTransferEscrow {
     public bool TravelerEnded(WorldTransferCaller? caller, string sourceAuthority, in WorldMobilityIdentity mobility) {
         var admission = Admit(caller: caller, sourceAuthority: sourceAuthority);
 
-        return (admission.Refused || (admission.IsGuest && !m_mobilityAdmissions.ContainsKey(key: (sourceAuthority, mobility.Incarnation))));
+        return (admission.Refused || (admission.IsGuest && !HoldsTraveler(incarnation: mobility.Incarnation, sourceAuthority: sourceAuthority)));
     }
 
     // Whether this ledger holds any row of a source: a key (leased, committed, uncertain or spent), a floor or a

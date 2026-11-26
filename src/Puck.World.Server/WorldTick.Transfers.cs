@@ -418,6 +418,37 @@ public sealed partial class WorldTick {
     /// <param name="incarnation">The traveler's incarnation.</param>
     internal void RetireTransferredIncarnation(WorldEntityAddress incarnation) =>
         Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.RetireIncarnation(incarnation: incarnation));
+    /// <summary>Retires a traveler here on the word of the authority that handed it on, which says the traveler is gone
+    /// for good: every credential this authority keeps for it goes, and its host is told so the authority's own
+    /// onward routes go too (<see cref="IWorldTransferForwarder.RetireTraveler"/>). A traveler whose body stands at
+    /// this authority, live or parked, is left as it is: the word retires what a forwarding authority keeps of a
+    /// traveler, never a body, whose own disconnect and reconnect grace end it.</summary>
+    /// <param name="sourceAuthority">The authenticated namespace of the authority that handed the traveler on.</param>
+    /// <param name="mobility">The traveler's credential.</param>
+    /// <returns><see langword="true"/> when the traveler was retired here; <see langword="false"/> when its body
+    /// stands here.</returns>
+    internal bool TryRetireHandedOnTraveler(string sourceAuthority, in WorldMobilityIdentity mobility) {
+        var credential = mobility;
+
+        return Host.ExecuteAuthorityOperation(operation: () => {
+            if (
+                Host.TransferEscrow.TryMobilityPrincipal(mobility: in credential, principal: out var principal, sourceAuthority: sourceAuthority) &&
+                ((principal.Kind != PrincipalKind.Peer) || Host.Population.HoldsPeer(principal: principal))
+            ) {
+                return false;
+            }
+            Host.TransferEscrow.RetireIncarnation(incarnation: credential.Incarnation);
+            Host.TransferForwarder?.RetireTraveler(incarnation: credential.Incarnation);
+            return true;
+        });
+    }
+    /// <summary>Returns whether this authority keeps a credential for a traveler under a source namespace, at any
+    /// ownership epoch.</summary>
+    /// <param name="sourceAuthority">The source namespace.</param>
+    /// <param name="incarnation">The traveler's incarnation.</param>
+    /// <returns><see langword="true"/> when a credential stands.</returns>
+    internal bool HoldsTransferredTraveler(string sourceAuthority, WorldEntityAddress incarnation) =>
+        Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.HoldsTraveler(incarnation: incarnation, sourceAuthority: sourceAuthority));
     /// <summary>Returns the destination's view of a source-scoped transfer. A <see cref="WorldTransferStatus.Missing"/>
     /// answer is final: the key is tombstoned before it is given (<see cref="WorldTransferEscrow.Status"/>).</summary>
     /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>

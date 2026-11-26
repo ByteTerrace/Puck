@@ -738,15 +738,17 @@ public sealed partial class WorldInstanceHost {
         }
 
         var traveler = mobility;
+        var answering = route.Authority;
 
         return route.Authority.TryForwardSubmission(
             completion: result => {
-                // An accepted leave retires the forwarded traveler once its answer arrives.
+                // An accepted leave retires the forwarded traveler once its answer arrives. The hop that answered it
+                // retired the traveler before it answered.
                 if (
                     (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
                     (result is WorldSubmissionResult.Session { Reply.Accepted: true })
                 ) {
-                    RetireForwardedTraveler(incarnation: traveler.Incarnation);
+                    RetireForwardedTraveler(incarnation: traveler.Incarnation, told: answering);
                 }
 
                 completion(obj: result);
