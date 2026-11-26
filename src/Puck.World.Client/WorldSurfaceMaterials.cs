@@ -36,7 +36,8 @@ internal static class WorldSurfaceMaterials {
                 Glass: entry?.Glass?.ToGlass(resolve: colors.LayerColor, scale: scale),
                 Toon: toon?.ToToon(),
                 Flow: entry?.Flow?.ToFlow(resolve: colors.LayerColor, scale: scale),
-                Shade: ((shade is null) ? null : SdfShadeProgram.Compile(definition: shade.Definition))
+                Shade: ((shade is null) ? null : SdfShadeProgram.Compile(definition: shade.Definition)),
+                CastsNoShadow: (entry?.CastsShadow == false)
             );
     }
 

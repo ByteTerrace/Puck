@@ -84,11 +84,13 @@ float2 sdfGlassProject(ViewportData view, float3 at, uint2 extent, out float for
 
     return (float2(((ndc.x * 0.5) + 0.5), (0.5 - (ndc.y * 0.5))) * float2(extent));
 }
-// The lit image at a continuous render-grid position, bilinearly, clamped to the grid.
+// The lit image at a continuous render-grid position, bilinearly, clamped to the grid, its light in nits
+// (sdfStoredLightScale divided out).
 float4 sdfGlassLitAt(float2 at, uint2 extent) {
     float2 clamped = clamp(at, float2(0.5, 0.5), (float2(extent) - 0.5));
+    float4 stored = lit.SampleLevel(samplers[SDF_FILTER_LINEAR], (clamped / float2(extent)), 0);
 
-    return lit.SampleLevel(samplers[SDF_FILTER_LINEAR], (clamped / float2(extent)), 0);
+    return float4((stored.rgb / sdfStoredLightScale(passGroup.debugMode, passGroup.lightScale)), stored.a);
 }
 // The coverage a glass's contact adds to its flow's at a distance `behind` from the surface to the opaque hit along the
 // ray: the material's contact coverage where the opaque surface touches the glass, falling smoothly to zero at its reach;
@@ -238,7 +240,10 @@ float3 sdfGlassTransmission(SdfMaterialData material, float3 opticalDepth, float
 
 void sdfGlassPixel(uint2 pixel) {
     uint2 extent = passGroup.imageExtent;
+    // The pass works in nits and stores at the view's light scale, as the views pass does.
+    float storedScale = sdfStoredLightScale(passGroup.debugMode, passGroup.lightScale);
     float4 color = lit.Load(int3(pixel, 0));
+    color.rgb /= storedScale;
     ViewportData view = worldView();
     float4 front = glassVisibility.Load(int3(pixel, 0));
     SdfVisibility visibility = sdfLoadVisibility(sdfVisibilityRecord(pixel, 0u, extent));
@@ -530,7 +535,7 @@ void sdfGlassPixel(uint2 pixel) {
     if (writesProbes) {
         sdfProbeHistoryStore(sdfGlassProbeHistoryRW, sdfProbeHistoryEntry((pixel / SDF_VIEWS_PROBE_RATE), 0u), false, float3(0.0, 0.0, 0.0), 0u, 0u, sdfMeshProbesNone());
     }
-    output[pixel] = float4(min(color.rgb, SDF_LUMINANCE_CEILING), color.a);
+    output[pixel] = float4(min((color.rgb * storedScale), SDF_LUMINANCE_CEILING), color.a);
     if ((passGroup.temporal != 0u) && (glass || insideDistance > 0.0)) {
         uint index = sdfReactivityIndex(pixel, 0u, extent);
 

@@ -334,7 +334,7 @@ public sealed class WorldProjectionFeed(Principal? recipient, IReadOnlyDictionar
     public WorldProjectionDelivery ComposeAppearance(WorldRecipientView view, WorldDeliveryCursor cursor, WorldPresentationRows rows) {
         if (!view.Observes) { return WorldProjectionDelivery.Nothing; }
         if (rows.ChangesProjectionDependencies || m_held is not { } held || m_tree is not { } tree ||
-            !view.Images.TryAdvanceAppearance(view, m_recipientFrame, m_recipientIdentity, out var frame, out var identity)) {
+            !view.Images.TryAdvanceAppearance(view, m_recipientFrame, m_recipientIdentity, out var frame, out _, out var identity)) {
             return Compose(view, cursor);
         }
         if (frame == m_recipientFrame) { return WorldProjectionDelivery.Nothing; }

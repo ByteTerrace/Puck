@@ -338,7 +338,8 @@ to what the World's own account lets it reach
 (`HostLoadThresholds.DefaultPeakGb`: `MemoryAccount.DefaultBudgetOf` less
 `MemoryAccount.AuthoringMarginOf`, 10 GB on 16 GB), a start alone is judged
 by its lone need so the machine measures it on its first boot, and peaks are
-learned per world document. The 2060's own quality table
+learned per world document. A World whose store lacks its build's mesh set is
+judged as a cold bake by its cold figure, never by a warm session's lone need. The 2060's own quality table
 (`worlds/standard/quality.puck`) now applies at boot and draws at a 0.75
 render scale with the medium irradiance tier, whose volume, hit cache and
 tables are two thirds of the high tier's.
@@ -597,7 +598,7 @@ held, promised and room.
 | The probe cache's blocks and the volume's slot words | Play | Native storage freed through the volume's reader epochs; the blocks a cached owner in bytes (`sdf.mesh-gi.probe-blocks`), trimmed first, read again on the frame thread (`MemoryAccount.ServiceSampledOwners`), the words an elastic owner (`sdf.mesh-gi.volume`) | 9 |
 | The composed-document store | Play | Released after boot where nothing reads it | 6 |
 | Speculative work: bakes, loads and decodes for a predicted demand | As the work it speculates | A share of the workspace class, cancelled when the demand leaves or pressure asks | 3, 10 |
-| Rented arrays the shared pool keeps | Play | `RentedArrays` limits shared buckets by payload size. All element types share one retention limit for larger reference-free arrays. The cache admits each returned array against host room and releases its charge on reuse or trim. Owned buffers, lists and maps no longer rent from it: they are native (`OwnedBuffer<T>`), and its large pool goes once its last renters hold their scratch that way | 2, 11 |
+| Rented arrays the shared pool keeps | Play | `RentedArrays` keeps only the shared pool's buckets, limited by payload size to 1 MiB; a larger rental is a fresh array the collector reclaims, so large reference-free scratch is native (`OwnedBuffer<T>`) | 2, 11 |
 | A world's far product (`far-product` while it is derived; a library mesh once kept) | Authoring for the derivation, play for the product | The derivation's tables are native under one workspace owner, and a refusal waits and asks again; the product is a mesh the library published from its store, whose planes are let go while nothing draws it | 6, 11 |
 | Native allocator slack | Beyond the owners | Named. The allocator's owner thread decommits freed ranges whose purge delay has passed every `MimallocAllocator.PurgePeriod`, and pages past a slice commit as their blocks are used; `host.memory collect` and a reclaim force the rest (`IAllocatorStatistics.Collect`) | 2 |
 | The managed heap's other tenants | Beyond the owners | Named by a heap walk; each one past a stated size becomes an owner with a capacity. No hard limit on the heap: it would turn pressure into an exception where everything else turns it into a coarser picture | 2, then per tenant |

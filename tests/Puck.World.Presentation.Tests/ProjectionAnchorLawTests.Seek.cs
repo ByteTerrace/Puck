@@ -25,6 +25,7 @@ public sealed partial class ProjectionAnchorLawTests {
 
         public void DeliverAnswer(in QueryAnswer answer) { }
         public void DeliverComposition(WorldComposition composition) => Kinds.Add(item: "composition");
+        public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) { }
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => Kinds.Add(item: "definition");
         public void DeliverSessionLever(WorldSessionLever lever) { }
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }

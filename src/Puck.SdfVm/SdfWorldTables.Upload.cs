@@ -100,6 +100,9 @@ public sealed partial class SdfWorldTables {
     /// <summary>Gets the probe trace's scene words this residency's lighting shares with every residency attached to its
     /// mesh region, or <see langword="null"/> once that region is gone.</summary>
     internal SdfMeshProbeScenes? ProbeScenes => m_meshStore.ProbeScenes;
+    /// <summary>Gets whether the mesh region this residency attaches to owes copies that only an upload's opening records
+    /// (<see cref="SdfMeshRegionStore.OwesUploadCopies"/>): any residency's upload carries them.</summary>
+    internal bool OwesUploadCopies => m_meshStore.OwesUploadCopies;
     /// <summary>Records the open upload into its ring slot's command list: the fillers' first transitions, the regions'
     /// copies, the lighting's and the world's shadow layers. It touches only these tables and the device's recorder, so
     /// it runs on whichever thread holds the tables between <see cref="OpenUpload"/> and <see cref="CloseUpload"/>.</summary>

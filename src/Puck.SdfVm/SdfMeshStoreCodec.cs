@@ -193,7 +193,7 @@ internal static class SdfMeshStoreCodec {
                 WritePlane(writer, quantized.Slice(axis * positions.Length, positions.Length), width);
                 continue;
             }
-            using var lease = RentedArrays.Rent<uint>(minimumLength: positions.Length, array: out var rented);
+            using var rented = OwnedBuffer<uint>.OfLength(allocator: null, clear: false, length: positions.Length);
             var words = rented.AsSpan(start: 0, length: positions.Length);
 
             for (var index = 0; index < words.Length; index++) {
@@ -207,7 +207,7 @@ internal static class SdfMeshStoreCodec {
 
         writer.Write(value: oct);
         {
-            using var lease = RentedArrays.Rent<uint>(minimumLength: normals.Length, array: out var rented);
+            using var rented = OwnedBuffer<uint>.OfLength(allocator: null, clear: false, length: normals.Length);
             var words = rented.AsSpan(start: 0, length: normals.Length);
 
             if (oct) {
@@ -237,7 +237,7 @@ internal static class SdfMeshStoreCodec {
         {
             var influences = mesh.Influences.Span;
 
-            using var lease = RentedArrays.Rent<uint>(minimumLength: influences.Length, array: out var rented);
+            using var rented = OwnedBuffer<uint>.OfLength(allocator: null, clear: false, length: influences.Length);
             var words = rented.AsSpan(start: 0, length: influences.Length);
 
             for (var field = 0; (field < 3); field++) {

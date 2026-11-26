@@ -129,8 +129,8 @@ float3 sdfViewsStage(SdfPixel p, bool shadesPixel, out float coverage, out float
 
     // The view's screen fidelity clears the atmosphere's hold on what the view shows, so a framed screen's pixels leave
     // as the glass shaded them (SdfViewSnapshot.ScreenFidelity); the composite clears the in-scatter by the same share.
-    // The luminance is held within the half-float range the lit image stores.
-    return min((viewColor * (s.hit ? lerp(transmittance, 1.0, saturate(passGroup.screenFidelity)) : 1.0)), SDF_LUMINANCE_CEILING);
+    // The luminance is stored at the view's light scale, held within the half-float range the lit image stores.
+    return min((viewColor * (s.hit ? lerp(transmittance, 1.0, saturate(passGroup.screenFidelity)) : 1.0) * sdfStoredLightScale((uint)p.viewMode, passGroup.lightScale)), SDF_LUMINANCE_CEILING);
 }
 
 #endif

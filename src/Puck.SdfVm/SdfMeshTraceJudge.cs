@@ -108,11 +108,11 @@ internal static class SdfMeshTraceJudge {
         return total;
     }
     // A held mesh's pieces as one triangle list: a published chunked mesh keeps no joined indices. A one-piece mesh is
-    // read where it lies, for as long as its hold stands; a chunked one is joined into rented arrays the check returns
+    // read where it lies, for as long as its hold stands; a chunked one is joined into native buffers the check frees
     // when it ends, since a pair of tiers runs to tens of megabytes and a bake checks one pair per admitted floor.
     private readonly struct Joined : IDisposable {
-        private readonly Vector3[]? m_positions;
-        private readonly uint[]? m_indices;
+        private readonly OwnedBuffer<Vector3>? m_positions;
+        private readonly OwnedBuffer<uint>? m_indices;
 
         public ReadOnlyMemory<Vector3> Positions { get; }
         public ReadOnlyMemory<uint> Indices { get; }
@@ -134,8 +134,8 @@ internal static class SdfMeshTraceJudge {
                 corners += mesh.Piece(index: piece).IndexCount;
             }
 
-            m_positions = RentedArrays.Rent<Vector3>(minimumLength: vertices);
-            m_indices = RentedArrays.Rent<uint>(minimumLength: corners);
+            m_positions = OwnedBuffer<Vector3>.OfLength(allocator: null, clear: false, length: vertices);
+            m_indices = OwnedBuffer<uint>.OfLength(allocator: null, clear: false, length: corners);
 
             var vertexAt = 0;
             var cornerAt = 0;
@@ -148,13 +148,13 @@ internal static class SdfMeshTraceJudge {
                 foreach (var index in part.Indices.Span) { m_indices[cornerAt++] = (index + (uint)vertexAt); }
                 vertexAt += positions.Length;
             }
-            Positions = m_positions.AsMemory(start: 0, length: vertices);
-            Indices = m_indices.AsMemory(start: 0, length: corners);
+            Positions = m_positions.Memory;
+            Indices = m_indices.Memory;
         }
 
         public void Dispose() {
-            if (m_positions is not null) { RentedArrays.Return(array: m_positions); }
-            if (m_indices is not null) { RentedArrays.Return(array: m_indices); }
+            m_positions?.Dispose();
+            m_indices?.Dispose();
         }
     }
 }

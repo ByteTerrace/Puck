@@ -62,8 +62,8 @@ internal sealed class SdfMeshTriangleGrid : IDisposable {
     private readonly long m_spanY;
     private readonly OwnedLongMap<int> m_cells;
     // Each occupied cell's first triangle in m_triangles, by the slot m_cells maps the cell to, then the run's end.
-    private int[] m_starts;
-    private int[] m_triangles;
+    private readonly OwnedBuffer<int> m_starts = new(allocator: null);
+    private readonly OwnedBuffer<int> m_triangles = new(allocator: null);
 
     public SdfMeshTriangleGrid(ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices, float cellSize) {
         m_cellSize = cellSize;
@@ -88,7 +88,7 @@ internal sealed class SdfMeshTriangleGrid : IDisposable {
 
         // The first pass numbers each occupied cell in the order a triangle first reaches it and counts its triangles;
         // the counts become the runs' starts, and the second pass lays each triangle into its cells' runs.
-        var counts = RentedArrays.Rent<int>(minimumLength: Math.Max(val1: 16, val2: triangleCount));
+        var counts = new OwnedBuffer<int>(allocator: null, capacity: Math.Max(val1: 16, val2: triangleCount));
         var occupied = 0;
         var total = 0;
 
@@ -104,8 +104,7 @@ internal sealed class SdfMeshTriangleGrid : IDisposable {
                             if (!m_cells.TryGetValue(key: key, value: out var slot)) {
                                 slot = occupied++;
                                 m_cells.Add(key: key, value: slot);
-                                if (slot >= counts.Length) { counts = RentedArrays.Grow(array: counts, keep: slot, minimumLength: (2 * counts.Length)); }
-                                counts[slot] = 0;
+                                counts.Add(item: 0);
                             }
                             counts[slot]++;
                             total = checked(total + 1);
@@ -114,8 +113,8 @@ internal sealed class SdfMeshTriangleGrid : IDisposable {
                 }
             }
 
-            m_starts = RentedArrays.Rent<int>(minimumLength: (occupied + 1));
-            m_triangles = RentedArrays.Rent<int>(minimumLength: total);
+            m_starts.Resize(clear: false, length: (occupied + 1));
+            m_triangles.Resize(clear: false, length: total);
 
             var at = 0;
 
@@ -138,7 +137,7 @@ internal sealed class SdfMeshTriangleGrid : IDisposable {
                 }
             }
         } finally {
-            RentedArrays.Return(array: counts);
+            counts.Dispose();
         }
     }
 
@@ -165,13 +164,11 @@ internal sealed class SdfMeshTriangleGrid : IDisposable {
         return nearest;
     }
 
-    // Returns the grid's storage to the pools it was rented from.
+    // Frees the grid's native storage.
     public void Dispose() {
         m_cells.Dispose();
-        RentedArrays.Return(array: m_starts);
-        RentedArrays.Return(array: m_triangles);
-        m_starts = [];
-        m_triangles = [];
+        m_starts.Dispose();
+        m_triangles.Dispose();
     }
 
     private ((int X, int Y, int Z) Low, (int X, int Y, int Z) High) CellsOf(ReadOnlySpan<uint> indices, ReadOnlySpan<Vector3> positions, int triangle) {

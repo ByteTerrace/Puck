@@ -454,7 +454,7 @@ public readonly record struct SdfMeshDraw {
     public bool Equals(SdfMeshDraw other) =>
         ReferenceEquals(objA: Mesh, objB: other.Mesh) && (Material == other.Material) && Equals(objA: Identity, objB: other.Identity) &&
         Equals(objA: MotionIdentity, objB: other.MotionIdentity) && (IsDynamic == other.IsDynamic) && (Tier == other.Tier) &&
-        ReferenceEquals(objA: Trace, objB: other.Trace) && (Piece == other.Piece) && (Glass == other.Glass) && (FrameSlot == other.FrameSlot) &&
+        ReferenceEquals(objA: Trace, objB: other.Trace) && (Piece == other.Piece) && (Glass == other.Glass) && (CastsNoShadow == other.CastsNoShadow) && (FrameSlot == other.FrameSlot) &&
         (UsesRootMaterialFrame == other.UsesRootMaterialFrame) && (ObjectKey == other.ObjectKey) && CarryRotation.Equals(other: other.CarryRotation) &&
         CarryTranslation.Equals(other: other.CarryTranslation) && CarryScale.Equals(obj: other.CarryScale) && ClipPlane.Equals(other: other.ClipPlane) &&
         (Displacement == other.Displacement) && (Band == other.Band) && (PlacedBySlot ? SlotScale.Equals(obj: other.SlotScale) : Matrix.Equals(other: other.Matrix));
@@ -506,6 +506,11 @@ public readonly record struct SdfMeshDraw {
     /// the opaque image, the cascades integrate its authored shadow density, and the opaque mesh pass and the
     /// irradiance volume's static scene leave it out.</summary>
     public bool Glass { get; init; }
+    /// <summary>Gets whether the draw casts no shadow (<see cref="SdfMeshBakeGroup.CastsNoShadow"/>): no shadow drawing
+    /// selects it (<see cref="SdfMeshRecord.NoShadowFlag"/>) and its motion owes the world's shadows nothing, while every
+    /// view still draws it. A static one stays in the irradiance volume's static scene, so it still bounces light and
+    /// still hides a traced light from the probes behind it.</summary>
+    public bool CastsNoShadow { get; init; }
     /// <summary>Gets the dynamic-transform slot whose frame the mesh's object space is, or <see langword="null"/> for a
     /// mesh in no slot's frame: the shading places a material's layers in that frame and reads its lanes, as it does for
     /// a field hit of a shape riding the slot. A draw with a frame slot rides it (<see cref="RidesSlot"/>): it is placed
@@ -604,6 +609,7 @@ public readonly record struct SdfMeshDraw {
             (!ReferenceEquals(objA: this.Mesh, objB: other.Mesh) && !(groupMesh && (this.Trace is { } trace) && ReferenceEquals(objA: trace, objB: other.Trace))) ||
             (this.Material != other.Material) ||
             (this.Glass != other.Glass) ||
+            (this.CastsNoShadow != other.CastsNoShadow) ||
             (this.IsDynamic != other.IsDynamic) ||
             (this.FrameSlot != other.FrameSlot) ||
             (this.UsesRootMaterialFrame != other.UsesRootMaterialFrame) ||
@@ -735,6 +741,12 @@ public static class SdfMeshRegion {
         return true;
 
     }
+
+    /// <summary>Returns whether a packed record's draw casts a shadow: every record but one carrying
+    /// <see cref="SdfMeshRecord.NoShadowFlag"/>, the flag the shadow drawings' selection reads.</summary>
+    /// <param name="record">The record, <see cref="SdfMeshRecord.DrawWords"/> words that a write of this type packed.</param>
+    /// <returns><see langword="false"/> for a draw no shadow drawing selects.</returns>
+    public static bool CastsShadow(ReadOnlySpan<uint> record) => ((record[SdfMeshRecord.SelectionWord + 3] & SdfMeshRecord.NoShadowFlag) == 0u);
 
     internal readonly record struct SelectionCarry(Quaternion Rotation, Vector3 Translation, float Scale) {
         public SdfMeshBox Place(Vector3 center, Vector3 half, float scale, in DynamicTransform transform) => SdfMeshBox.Ridden(
@@ -1169,7 +1181,8 @@ public static class SdfMeshRegion {
         var slotBox = (rides && boxed && draw.Mesh.Members.IsEmpty);
 
         writer[(SdfMeshRecord.SelectionWord + 3)] = (boxed ? 0u : 1u) | (draw.Glass ? 2u : 0u) | (enclosed ? 4u : 0u) |
-            (draw.IsStatic ? 0u : SdfMeshRecord.DynamicFlag) | (slotBox ? SdfMeshRecord.SlotBoxFlag : 0u) | (((uint)draw.Audience) << SdfMeshRecord.AudienceShift);
+            (draw.IsStatic ? 0u : SdfMeshRecord.DynamicFlag) | (slotBox ? SdfMeshRecord.SlotBoxFlag : 0u) | (draw.CastsNoShadow ? SdfMeshRecord.NoShadowFlag : 0u) |
+            (((uint)draw.Audience) << SdfMeshRecord.AudienceShift);
 
         return boxChanged;
     }

@@ -258,7 +258,7 @@ public static class MeshCommand {
         }
 
         try {
-            identity = MeshBuildIdentity.Read(buildDirectory: buildDirectory, extension: extension).Value;
+            identity = MeshBuildIdentity.ValueOf(buildDirectory: buildDirectory, extension: extension).Value;
             return true;
         } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException)) {
             Console.Error.WriteLine(value: $"{verb}: cannot read the bake identity of the build in '{buildDirectory}' — {exception.Message}");

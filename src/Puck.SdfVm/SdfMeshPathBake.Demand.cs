@@ -97,11 +97,12 @@ public sealed partial class SdfMeshPathBake {
         // The records' values at the current layout, and the buffer the next layout's records are carried into, kept
         // between layouts, since a layout moves whenever a frustum lane's point comes, goes or jumps. Either may be
         // longer than the records need. A reused buffer's old values are never read: a record is read only at its own
-        // offset, only while owned, and Carry, a measure or Unseen writes the whole of it when it is taken.
-        private float[] m_values = [];
-        private float[] m_spare = [];
+        // offset, only while owned, and Carry, a measure or Unseen writes the whole of it when it is taken. Both are
+        // native, as are the stamps, so a layout that changes the record length leaves no dead array behind.
+        private OwnedBuffer<float> m_values = new(allocator: null);
+        private OwnedBuffer<float> m_spare = new(allocator: null);
         private Group?[] m_owners = [];
-        private long[] m_stamps = [];
+        private readonly OwnedBuffer<long> m_stamps = new(allocator: null);
         private readonly Stack<int> m_free = new();
         private int m_prune;
 
@@ -113,7 +114,7 @@ public sealed partial class SdfMeshPathBake {
 
         public Group? OwnerOf(int record) => m_owners[record];
         public long StampOf(int record) => m_stamps[record];
-        public Span<float> Of(int record) => m_values.AsSpan(start: (record * Length), length: Length);
+        public Span<float> Of(int record) => m_values.GetSpan().Slice(start: (record * Length), length: Length);
 
         // The record of a group measured at a stamp, taken for it when it holds none.
         public Span<float> Take(Group group, long stamp) {
@@ -129,12 +130,14 @@ public sealed partial class SdfMeshPathBake {
         // measured at the stamp passed over; returns the records read.
         public int Trip(SdfMeshDemand demand, List<Group> due, long stamp) {
             var read = 0;
+            var values = m_values.GetSpan();
+            var stamps = m_stamps.GetSpan();
 
             due.Clear();
             for (var record = 0; (record < Count); record++) {
-                if ((m_owners[record] is not { } owner) || (m_stamps[record] == stamp)) { continue; }
+                if ((m_owners[record] is not { } owner) || (stamps[record] == stamp)) { continue; }
                 read++;
-                if (demand.Moves(metres: 0f, watch: m_values.AsSpan(start: (record * Length), length: Length))) { due.Add(item: owner); }
+                if (demand.Moves(metres: 0f, watch: values.Slice(start: (record * Length), length: Length))) { due.Add(item: owner); }
             }
 
             return read;
@@ -161,31 +164,44 @@ public sealed partial class SdfMeshPathBake {
             var length = demand.WatchLength;
             var carries = (demand.Layout == (Layout + 1));
             // The layout moves whenever a view's lanes do, so the records are carried between two buffers the watches keep
-            // rather than into a new array each time. A carry writes every value of a record it keeps, and a record it
-            // does not keep is freed, so nothing reads what the spare buffer held before.
+            // rather than into a new one each time. A carry writes every value of a record it keeps, and a record it does
+            // not keep is freed, so nothing reads what the spare buffer held before.
             var size = (m_owners.Length * length);
 
-            if (m_spare.Length < size) { m_spare = GC.AllocateUninitializedArray<float>(length: size); }
-            var values = m_spare;
+            if (m_spare.Length < size) { m_spare.Resize(clear: false, length: size, preserve: false); }
+
+            var values = m_spare.GetSpan();
 
             for (var record = 0; (record < Count); record++) {
                 if (m_owners[record] is not { } owner) { continue; }
-                if (carries && demand.Carry(after: values.AsSpan(start: (record * length), length: length), before: Of(record: record))) { continue; }
+                if (carries && demand.Carry(after: values.Slice(start: (record * length), length: length), before: Of(record: record))) { continue; }
                 if (!carries) { lost.Add(item: owner); }
                 Release(group: owner);
             }
-            m_spare = m_values;
-            m_values = values;
+            (m_spare, m_values) = (m_values, m_spare);
             Length = length;
             Layout = demand.Layout;
+        }
+        // Frees every record and its storage, for a bake retired: each owner holds no record afterward, and a later
+        // measure takes records afresh at the next layout.
+        public void Free() {
+            for (var record = 0; (record < Count); record++) {
+                if (m_owners[record] is { } owner) { owner.FrustumWatch = -1; }
+            }
+            m_owners = [];
+            m_free.Clear();
+            (Count, Length, Layout, m_prune) = (0, 0, -1, 0);
+            m_values.Free();
+            m_spare.Free();
+            m_stamps.Free();
         }
         private int Grow() {
             if (Count == m_owners.Length) {
                 var capacity = Math.Max(val1: 64, val2: (2 * m_owners.Length));
 
                 Array.Resize(array: ref m_owners, newSize: capacity);
-                Array.Resize(array: ref m_stamps, newSize: capacity);
-                if (m_values.Length < (capacity * Length)) { Array.Resize(array: ref m_values, newSize: (capacity * Length)); }
+                m_stamps.Resize(clear: false, length: capacity);
+                if (m_values.Length < (capacity * Length)) { m_values.Resize(clear: false, length: (capacity * Length)); }
             }
 
             return Count++;
@@ -292,13 +308,18 @@ public sealed partial class SdfMeshPathBake {
             if (outcome == WaitOutcome.DeadlinePassed) { HostWaits.ThrowIfPending(pending: MeasureWait); }
         }
     }
-    // Joins the measure and stops its lane for a bake retired: a frame prepared after measures on its own thread.
+    // Joins the measure and stops its lane for a bake retired: a frame prepared after measures on its own thread, under
+    // the measure gate (PostMeasure), so the watch's native storage is freed under that gate too and a later measure
+    // takes it afresh.
     private void RetireMeasure() {
         JoinMeasure();
         lock (m_measureGate) {
             m_measureRetired = true;
             m_measureLane?.Dispose();
             m_measureLane = null;
+            m_watches.Free();
+            m_readings.Free();
+            m_chosenWatches.Free();
         }
     }
     // Throws when the demand watch's state is touched off the measure while a measure is posted (the invariant above).
@@ -385,10 +406,11 @@ public sealed partial class SdfMeshPathBake {
     // The groups the tier decisions read (Attend).
     private readonly MarkedGroups m_attention = new(mark: GroupMarks.Attended);
     // The groups the frame's routes chose to measure, each once (MeasureDemands' Measure), with each one's readings and
-    // frustum watch as MeasureChosen takes them before it keeps them; the bias and watch length they are taken under.
+    // frustum watch as MeasureChosen takes them before it keeps them, native and reused from measure to measure; the bias
+    // and watch length they are taken under.
     private readonly List<Group> m_chosen = [];
-    private DemandReading[] m_readings = [];
-    private float[] m_chosenWatches = [];
+    private readonly OwnedBuffer<DemandReading> m_readings = new(allocator: null);
+    private readonly OwnedBuffer<float> m_chosenWatches = new(allocator: null);
     private int m_chosenBias;
     private int m_chosenLength;
 
@@ -731,9 +753,9 @@ public sealed partial class SdfMeshPathBake {
         var length = Demand.WatchLength;
 
         if (m_readings.Length < count) {
-            m_readings = new DemandReading[ArrayCapacity.Grown(m_readings.Length, count)];
+            m_readings.Resize(clear: false, length: ArrayCapacity.Grown(current: m_readings.Length, required: count), preserve: false);
         }
-        if (m_chosenWatches.Length < (m_readings.Length * length)) { m_chosenWatches = new float[(m_readings.Length * length)]; }
+        if (m_chosenWatches.Length < (m_readings.Length * length)) { m_chosenWatches.Resize(clear: false, length: (m_readings.Length * length), preserve: false); }
         (m_chosenBias, m_chosenLength) = (bias, length);
         for (var index = 0; (index < count); index++) { ReadChosen(index: index); }
         for (var index = 0; (index < count); index++) {
@@ -769,7 +791,7 @@ public sealed partial class SdfMeshPathBake {
         var slack = DemandSlack(bias: bias, group: group, pixel: pixel);
         var pinned = (float.IsFinite(f: pixel) && !float.IsFinite(f: slack));
         var top = (float.IsFinite(f: pixel) ? (pixel + slack) : CoarsestEdgeOf(bias: bias, group: group));
-        var watch = m_chosenWatches.AsSpan(start: (index * m_chosenLength), length: m_chosenLength);
+        var watch = m_chosenWatches.GetSpan().Slice(start: (index * m_chosenLength), length: m_chosenLength);
         var bounds = SdfMeshDemand.Bounds.None;
 
         SdfMeshDemand.Unwatched(watch: watch);
@@ -809,7 +831,7 @@ public sealed partial class SdfMeshPathBake {
         if (reading.Bounds.Framed) {
             var kept = m_watches.Take(group: group, stamp: stamp);
 
-            m_chosenWatches.AsSpan(start: (index * m_chosenLength), length: m_chosenLength).CopyTo(destination: kept);
+            m_chosenWatches.GetSpan().Slice(start: (index * m_chosenLength), length: m_chosenLength).CopyTo(destination: kept);
             Demand.Watch(watch: kept);
         } else {
             m_watches.Release(group: group);

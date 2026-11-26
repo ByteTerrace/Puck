@@ -15,8 +15,9 @@ public interface IGpuRecorder {
     void EndCommandBuffer(nint commandBufferHandle);
     /// <summary>Opens a named debug-marker group scoping the commands recorded until the matching
     /// <see cref="EndDebugGroup"/>, which GPU capture tools show as a labeled scope. It maps to
-    /// <c>vkCmdBeginDebugUtilsLabelEXT</c> and a Direct3D 12 PIX event, is a no-op when the backend's debug-label
-    /// facility is unavailable, and records no GPU work.</summary>
+    /// <c>vkCmdBeginDebugUtilsLabelEXT</c> and a Direct3D 12 PIX event, recorded only on a device that names its objects
+    /// (<see cref="GpuDeviceOptions.NameObjects"/>: a debug-layers or capture-tool run), is a no-op otherwise and when the
+    /// backend's debug-label facility is unavailable, and records no GPU work.</summary>
     /// <param name="commandBufferHandle">The command buffer being recorded.</param>
     /// <param name="label">The non-empty capture-tool label.</param>
     void BeginDebugGroup(nint commandBufferHandle, string label);

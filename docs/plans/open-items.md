@@ -909,9 +909,15 @@ camera latch, and Vulkan's capture copy and record fork.
      signature, channel table, generation and human occupancy) need one
      version moved at their setters, the selector rows the arena's row
      versions, and the owner's own epoch and producer an invalidation where
-     the runtime changes them. Under the checked hash every standing is
-     verified in full, so a missed door fails a reproduce leg. Check:
-     `world.tick.input-refreshes-standing` and
+     the runtime changes them (`RecordProgramStanding` and every
+     `standing.Valid = false`). Nothing verifies a skipped standing yet, and
+     a missed door would replay identically, so the gate lands with a mode
+     that walks in full beside it and refuses a disagreement. In the headless
+     debug world the walks cost no sample (`puck host samples --focus
+     WorldInputRuntime.RefreshPermissions` and `TrySynchronize`: 0 of
+     `WorldTick.StepCore`'s 255 over 12 s), about 80 refreshes and 40
+     synchronizations a tick, all but 6 standing; the city is where it pays.
+     Check: `world.tick.input-refreshes-standing` and
      `input-synchronizations-standing` a tick fall to zero in a still town.
    - **A producer's changed image still passes the whole admission.** About
      70 to 330 a tick in the city: the producer's batch is built, folded and
@@ -925,41 +931,29 @@ camera latch, and Vulkan's capture copy and record fork.
      anyway, so taking them before the restore point opens saves nothing
      else; the durable input's own writes of the submitted image need the
      same order first.
-   - **The host thread replays every delivery into every session mirror
-     whole.** The thread that also runs the frame spends about half of its
-     step taking the boot authority's deliveries into the mirrors that
-     observe it (`WorldOutputHub.Collect`): each state delivery makes a
-     mirror reload every row and bind the whole document again
-     (`WorldDocumentStateView.Adopt`) and compare every placement
-     (`WorldPlacementResponse.ComparePlacements`), and each snapshot fills
-     the mirror's published image with every body
-     (`WorldSessionMirror.ApplySnapshot`), which its readers then copy whole
-     (`WorldSessionMirror.CaptureBodyImage`). The debug world hands a
-     replica its whole document on every tick, so none of it is ever
-     skipped. The door is `WorldSessionSink.DeliverState`: a replica is owed
-     the document again when a delivery is not of values alone or its frame
-     moved (`WorldDeliveryCursor.FrameMoved`), and the frame is every
-     section but the state rows, digested with the rows its placements read
-     (`WorldStateDisclosed.PlacementReads`, kept only for a recipient some
-     row is withheld from). So a row a placement reads that a rule writes
-     every tick moves the frame every tick; which row is not yet named (the
-     card tables' dealt and zone rows are the candidates), and pausing the
-     rule that writes it while reading `WorldOutputHub.Collect`'s samples
-     names it. The structure is a replica that takes a moved frame as the
-     placement rows that moved, as a presentation observer already takes an
-     appearance (`IClientSink.DeliverPresentation`), and a mirror that
-     takes a snapshot by the bodies it names. A fifth of the step is the portal scan, every portal face
-     against every body slot (`WorldInstanceHost`'s `ScanInstancePortals`);
-     the seam scan beside it (`WorldAdjacencyOwnership.Sweep`) reads the
-     same way but costs little where few seams stand. A body at rest beyond
-     a face answers crossed on every scan, so a scan of the bodies that
-     moved must keep those it last found beyond one. Built: the seam scan's
-     selection makes no closure for a slot that crossed nothing, a
-     reference's document path is resolved once, and the site attention
-     reads its faces by index, which halved what that thread allocates an
-     iteration in the headless debug world. Check: `host.frames`' frame
-     thread allocation an iteration, and `puck host allocations` naming no
-     site beneath `WorldInstanceHost.TryStepInstances`.
+   - **Every session mirror applies every snapshot.** The thread that also
+     runs the frame spends about half of its step taking the boot
+     authority's snapshots into the mirrors that observe it
+     (`WorldOutputHub.Collect`, beneath it `WorldSessionMirror.ApplySnapshot`
+     and `WorldDocumentStateView.ApplyFieldCells`): each mirror admits every
+     entry it is handed, about 8,000 entries and 5,000 cells a tick across
+     the sessions (`world.boot.session-entries-delivered` and
+     `session-cells-delivered`), most of them the same bodies for every
+     mirror of one authority. The structure is one image per authority and
+     disclosure that its mirrors share, as a world is resident once however
+     many views show it, and a stream that sends a mirror the bodies that
+     changed. Built: a replica whose frame moved with values alone takes the
+     placement rows that moved through the presentation door
+     (`WorldDeliveryCursor.TryDeliverPlacements`), though the debug world's
+     frame does not move in steady state
+     (`world.disclosure.definition-compositions` flat); a mirror fills and
+     copies its body images by its changed-body journal
+     (`WorldSessionMirror.FillImage`, `CaptureBodyImage`); the portal and
+     seam scans visit the bodies whose answer can move
+     (`WorldBoundaryScan`). Check: `host.frames`' frame thread allocation an
+     iteration (19,056 bytes at the median after these, 35,344 before), and
+     `WorldOutputHub.Collect`'s share of `FixedStepPump.Step`'s samples in a
+     quiet window.
 
    Left, in the order the debug world spends them:
    - **An arm that would change nothing.** A Level rule that poses a body every
@@ -1469,8 +1463,8 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
     long-to-int map in `Puck.Abstractions` is its home), the stages' exact
     outputs listed above, and the mesh store's `RentedMemoryStream` payloads
     (the stream takes an allocator; `SdfMeshStoreCodec` does not pass one yet).
-    Read the `done` line's `allocated:` and `rented-large-fresh` on the next
-    cold bake to confirm what moved.
+    Read the `done` line's `allocated:` on the next cold bake to confirm what
+    moved.
   - GPU side: `SdfMeshProbeGpuWork` recreates a slot's origins buffer
     whenever the batch size changes.
 
@@ -2279,28 +2273,36 @@ check; this packet holds the defects beside it.
   tables (`SdfMeshCollapse`, `SdfMeshPlanarMerge`, `SdfMeshChunks`); the far product, which a boot
   derived whole in managed arrays and now reads from the mesh store
   ([decision](../decisions/rendering.md#a-far-viewer-draws-a-worlds-far-product)); the lighting
-  batch's answer words and saved hits and the probe service's part answers; and a goal field's
-  frozen junctions, shared across requests of one network (`NavigationRuntime.FrozenJunctions`).
-  What still allocates large managed arrays, largest first as the 2060's allocation trace read
-  them:
-  - `SdfProgram` allocates fresh arrays on every build (its words, appearance sections, Lipschitz
-    factors, side tables and part-program offsets, and the field evaluator's `CompiledInstruction`
-    and `RotationBounds` tables beside them), about 320 MiB over a route. Rebuild only what
-    changed, into owned and reused storage; a program is read from several threads and held by
-    several holders, so its storage needs an owner whose last reader frees it.
-  - The trace scene's hierarchy (`SdfMeshIrradianceScene.Hierarchy.BuildPacked` and its
-    `MemoryAccount.Owner.AllocateArray` calls for nodes, frames, braids and triangles, about 350 MiB)
-    and the geometry build's rented boxes are arrays; its traversal reads them as arrays, so the
-    move is the hierarchy's storage type and every reader's.
-  - The probe cache's publication columns (`PublishArena`, 42 arrays of 3.7 MB live) hold a
-    reference in each slot, so they need block indices before they can be native.
-  - The bake's frustum watches keep two value arrays that regrow (`SdfMeshPathBake.FrustumWatches`,
-    about 100 MiB of growth), and the lattice refinement (`SdfSampledLattice`) still rents arrays.
+  batch's answer words and saved hits and the probe service's part answers; a goal field's
+  frozen junctions, shared across requests of one network (`NavigationRuntime.FrozenJunctions`);
+  the trace scene's hierarchy, its top level and every build workspace
+  (`SdfMeshIrradianceScene.Hierarchy`, the change trees); the bake's frustum watches and chosen
+  readings (`SdfMeshPathBake.FrustumWatches`); the lattice's weld, crease split and refinement
+  masks (`SdfSampledLattice`), the triangle grid, the trace judge's joined mesh, the store codec's
+  planes, the volume's refill words, `DisjointSet` and `SpanDistinct`; and the canonical document
+  serializer (`CanonicalJsonDocument`, through `OwnedBufferWriter<T>`). `RentedArrays` keeps only
+  the shared pool's buckets; its large pool is gone. What still allocates large managed arrays:
+  - `SdfProgram` allocates fresh arrays on every field build (its words, the instruction copy, the
+    appearance section and the analysis passes' tables), about 320 MiB over a route: the debug
+    world's composed program is about 5.3 million words, so each field rebuild in
+    `SdfCompositionFrameSource` allocates tens of megabytes. Native storage needs an owner whose
+    last reader frees it, and the program is held across threads by the composition, every
+    `SdfFrame`, `SdfWorldTables`' live, background, shading and paint programs, the bake
+    (`SdfMeshPathBake` and its prepared frame), the dresser, the presenters and pick results, and
+    weakly by `SdfProgramDelta`. Give `SdfProgram` a claim count (`Acquire`/`Release`, the
+    composition holding the first) and move every holder to swap claims at one door, then move the
+    words and the instruction stream to owned storage freed at the last release; a rebuild then
+    reuses the replaced program's storage when it holds the last claim. A use after free here is a
+    crash in presentation, so the change needs a windowed run in the same batch.
+  - The probe cache's publication columns (`PublishArena`, 42 arrays of 3.7 MB live) hold
+    `ProbeBlock` and `LightBlock` references in each `ProbeData` slot, and each table's keys,
+    flags and entry indices are managed arrays. Give the blocks indices in a registry whose slots
+    are reused only after the reader epochs reclaim a block, keep `ProbeData.Hits` and `Shading` as
+    properties over those indices, then store an arena of unmanaged values natively; a table the
+    cache drops (the spare it replaces, the volume's end) frees its columns.
   - A far product derived on a miss still builds its cluster's mesh, its chunks and its levels in
-    managed arrays before the library copies the result; only its tables are native.
-  - `RentedArrays`' pool of arrays past a mebibyte gives an idle array back after ten seconds, so
-    work that repeats more slowly allocates afresh each time. Retire the pool once the renters
-    above are moved, rather than tune it.
+    managed arrays before the library copies the result; only its tables are native. It runs once
+    per product per store.
   Check: the 2060's route ends under its host bar with the LOH flat across loops, and
   `puck host heap` reads live large objects near the heap's large-object bytes.
 - [medium] **Read the native allocator's slack on the RTX 2060's route.** The 2060 read 1.83 GB
@@ -2573,17 +2575,24 @@ The volume's cost and convergence:
   as program material 0, albedo (1, 0.078, 0.005), and so an orange-red
   bounce. Turning `world.rays off` and resetting the layout (`world.indirect
   medium`, then `high`) gave a neutral hall where the same reset with rays on
-  gave the orange and olive tints again, but the second boot's hardware path
-  was neutral too, so the rays are not the cause alone. Both readers resolve a
-  hit as the draw's material base plus its traced geometry's triangle
-  materials (`SdfMeshIrradianceScene.Instance.MaterialOf`, `sdfProbeSurface`);
-  the trace geometry can be a group's floor or another tier
-  (`SdfMeshDraw.Trace`, `SdfMeshTraceJudge`), whose triangle materials need not
-  be numbered as the draw's base expects. Next: on a fresh boot whose probes
-  show the tint, compare the traced geometry's mesh with the draw's mesh for
-  the floor and the exhibit, and the material ids each reader resolves for one
-  hit, then make the trace geometry carry the materials its draw names, in
-  one place both readers read.
+  gave the orange and olive tints again. The tint is the device's: on a cold
+  D3D12 boot whose restores write the ids a mesh carries
+  (`SdfMesh.Restore.cs`), settled, the probe
+  at `(35.5, 1.5, 15.5)` published `(36.91, 10.65, 1.73)` against the CPU
+  reference's `(243.44, 216.28, 207.14)` (`reference-local-error=0.99994`,
+  `reference-visibility-errors=0`, the reference's face material 3058), and the
+  whole hall, grey exhibits included, read deep orange while `world.indirect
+  off` showed them grey on a peach floor. Unverified lead: a hardware-ray hit
+  takes its triangle from the bottom structure (`TryTakeStructures`, bottoms
+  keyed by geometry and shared through `TraceBottoms`), which keeps the
+  positions it was built from, while its material is read from the mesh
+  region at the instance's placement (`sdfProbeSurface`), so a trace mesh whose
+  region words were taken back or unmapped (a kept floor no list names,
+  `SdfMeshRegionStore.Cover`) still hits on the device and reads zero words,
+  program material 0. Next: on a cold boot, compare `world.rays off` against
+  on for that probe (published against reference), and check whether every
+  instance a published top level names still stands in the region
+  (`SdfMeshRegionStore.StandsUnderGate`) for as long as the top is used.
 - [medium] Faster probe convergence costs host time while the volume works.
   With several probe jobs in flight, one commit a batch and placement trials
   sharing rounds (`SdfMeshProbeGpuWork.Run`, `SdfMeshIrradiance.PlaceBatch`),

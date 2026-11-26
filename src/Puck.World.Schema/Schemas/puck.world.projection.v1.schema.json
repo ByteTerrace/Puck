@@ -941,7 +941,7 @@
           "default": null
         },
         "farProduct": {
-          "description": "What the world shows of itself to a far viewer (WorldFarProduct): the product a sky view asking for it draws. Absent takes the product\u0027s defaults.",
+          "description": "What the world shows of itself to a far viewer (WorldFarProduct): the product a sky view asking for it draws. Declared, the boot world builds it from the start; absent, a product is built with the defaults only once a sky view asks for it, and a world nothing views from afar builds none.",
           "type": [
             "object",
             "null"
@@ -5799,6 +5799,14 @@
                     "shade": {
                       "$ref": "#/$defs/ShadeReference",
                       "description": "The slot\u0027s shade program (ShadeReference), or null for the world\u0027s default.",
+                      "default": null
+                    },
+                    "castsShadow": {
+                      "description": "Whether the slot\u0027s shapes cast shadows (null = true). A shape whose every slot says false casts none (CastsNoShadow): a body that stands between the surfaces and its own light, a star\u0027s ball or a lamp\u0027s bulb, lights them instead of shadowing them.",
+                      "type": [
+                        "boolean",
+                        "null"
+                      ],
                       "default": null
                     },
                     "paints": {
