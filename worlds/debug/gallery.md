@@ -3,7 +3,7 @@
 The debug world's gallery is one building in the selected
 [canyon workshop](../../docs/game/art/canyon-workshop-pack/README.md) direction:
 four storeys round a nave, with the exhibits, the portal paintings, the board
-games, a stair and one lift. It is a module. Every row of it stands under one
+games, four stairs and one lift. It is a module. Every row of it stands under one
 root placement, so a world stands the whole building by placing that row, and
 [`gallery-root.puck`](gallery-root.puck) boots it alone for work on the
 building.
@@ -17,20 +17,24 @@ wall's outer face, y up from the ground. The debug world stands the building
 at `gallerySite`, with the entrance in the south wall facing the spawn.
 
 ```text
-  z 38 +----------------------------------------------------------------------+
-       |  north aisle (level 0) and north gallery (levels 1 to 3): displays   |
-  z 29 |- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o - -|
-       |  bridge |                                                            E  one
-       |  on     |   NAVE: a void from level 0's floor to the skylights,      E  tier of
-       |  1 to 3 |   four displays staged either side of the centre aisle      E  three
-       |         |                                                            E  wide bays
-  z  9 |- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o - -|
-       |  west   |stairs|      | lobby |  painting wing (level 0)             |
-       |  hall   |      | lift |       |  board game room (level 2)           |
-  z  0 +---------+------+-[  ]-+=door==+--------------------------------------+
-       x 0      12.4  16.2 17-20.6 24-28  30                                x 60
-                         tower    forecourt, arches under the projecting wing
+  z 36.85 +-------------------------------------------------------------------+
+          | (@) |  north aisle (level 0) and north gallery (1 to 3)     | Z  |
+          | NW  |  displays                                             | NE |
+  z 29    |- o ----- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o --- o-|
+          |  bridge |                                                         E  one
+          |  on     |   NAVE: a void from level 0's floor to the skylights,   E  tier of
+          |  1 to 3 |   four displays staged either side of the centre aisle   E  three
+          |         |                                                         E  wide bays
+  z  7.8  |- o ----- o ---- o ---- o ---- o ---- o ---- o ---- o ---- o --- o-|
+          | Z  |  west hall   | lift | lobby |  painting wing (level 0)  | (@) |
+          | SW |              |      |       |  board game room (2)      | SE  |
+  z  0    +----+--------------+-[  ]-+=door==+---------------------------+-----+
+          x -3.75  1.55       17-20.6 24-28                         57.8   63.1
+                              tower   forecourt, arches under the projecting wing
 ```
+
+`Z` is a switchback stair and `(@)` a spiral stair, one in each corner of the
+aisles.
 
 | What | Where | Size |
 |---|---|---|
@@ -39,11 +43,11 @@ at `gallerySite`, with the entrance in the south wall facing the spawn.
 | Nave | x 12 to the east wall, z 9 to 29 | 20 m wide, 47.7 m long, open from level 0 to three skylights |
 | Arcades | piers every 5 m, 0.4 m behind each balcony edge | a branched pier on every level, 4.2 m tall, one wide bay between each pair |
 | Balcony edges | round the nave's void on levels 1 to 3 | glass balustrade, brass rail 1.1 m up |
-| Stairs | x 12.4 to 16.2, against the south wall | two 1.8 m flights a storey, eighteen 0.25 m risers, treads 0.4 m |
+| Stairs | one in each corner of the aisles, in the end bays (0 and 12), every one serving every storey: switchbacks south-west and north-east, spirals south-east and north-west, so the plan reads the same turned half round | eighteen 0.25 m risers a storey. A switchback fills 4 by 5 tiles (5 by 6.25 m): two 2.4 m flights of eight 0.47 m treads either side of a spine, a 2.5 m half landing against the long wall. A spiral fills 4 by 4 tiles round a 0.5 m newel, one turn a storey, its treads 0.52 m deep 1.5 m out; each floor rails its well but where the stair arrives |
 | Lift | car centre (18.8, -1.65), in a glass tower outside the south wall | car 2.8 by 3.1 m, door 1.8 m wide in the wall |
 | Entrance | x 24 to 28 in the south wall | 4 m wide, 3.3 m high, under the first arch |
 | Projecting wing | x 21 to 60, levels 2 and 3, 4 m south of the wall | on six arches 7.5 m apart over the forecourt |
-| Terrace | x 0 to 12.4, z 0 to 8.7, off level 3 | the roof of the west wing's south aisle |
+| Terrace | x -3.75 to 12.8, z 0 to 7.5, off level 3 | the roof of the west wing's south aisle; the south-west stair arrives on it inside a guarded well |
 | Window bays | one every 4 m along a face | opening 3.2 by 3.1 m, sill 0.6 m; the nave's end wall holds one tier of three 5 by 7.3 m bays through levels 0 and 1 |
 | Display stations | the nave's two lines, 4.5 m in from each balcony edge, and along the middle of each gallery | a display plinth 2.5 m wide with its cap 1.05 m up, staged 12 m or more apart on a cream pad |
 
@@ -55,10 +59,10 @@ of headroom over every tread.
 
 | Level | South of the nave | The nave | North of the nave |
 |---|---|---|---|
-| 0 | West hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); stairs, lift and lobby; the painting wing east of the lobby | Four displays flanking the centre aisle: primitives and stretched to the south, extruded and revolved to the north | The north aisle, open |
-| 1 | The toybox: a lounge west of the stairs; three arcade cabinets east of the lift's landing; the rail round the endless fall's well | void | The toybox's three other arcade cabinets, facing the south ones across the void |
+| 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay | The north aisle, open, between the north-west and north-east stairs |
+| 1 | The toybox: a lounge beside the south-west stair; its game stations; the rail round the endless fall's well | void | The toybox's other game stations, facing the south ones across the void |
 | 2 | The board game room, from the lift's landing east and out into the projecting wing | void | The motion and motion II displays |
-| 3 | The terrace west of the stairs | void | The north gallery, open |
+| 3 | The terrace, with the south-west stair's head | void | The north gallery, open |
 
 [shapes.md](shapes.md) lists the displays and what each exhibit shows,
 [paintings.md](paintings.md) the wing, and the tables' own pages their games.

@@ -86,15 +86,51 @@ function galleryTileZ(z) = tileZ(floor(((z - gridZ0) / galleryTile)))
 // The north aisle's middle, where its ceiling strip, its downlights and its galleries' displays stand.
 let northAisleMid = ((naveNorth + galleryNorth) / 2)
 
-// The core, against the south wall: the stairs (a switchback of two 1.8 m flights either side of a spine, eighteen
-// 0.25 m risers a storey), the lift tower outside the wall east of them, and the entrance east of that.
-let stairWest = 12.4
-let stairSpine = 14.2
-let stairEast = 16.2
-let stairFoot = 5.5
-let stairLanding = 2.3
-let stairTread = 0.4
-let stairRiser = 0.25
+// The stairs: one in each corner of the aisles, in the end rest bays (0 and 12) between the end wall and the first
+// arcade bay, inside the aisle's first five tile rows, every dimension a count of tiles. Switchbacks stand in the
+// south-west and north-east corners and spiral stairs in the south-east and north-west, so the plan reads the same
+// turned half round. Each serves every storey in eighteen 0.25 m risers to the storey. A row's `well` is the stair's
+// footprint in the plan, which every upper floor leaves open over it; the stair's kit piece (the standard's
+// `switchbackStair` and `spiralStair`, architecture.puck) stands at the well's centre, one copy a storey, turned by
+// `yaw` so the piece's front (+Z: where a switchback's first flight starts and its second arrives, and where a spiral
+// starts and arrives) faces the nave. A switchback fills four tiles by five: two flights two tiles wide less a spine,
+// each a run of three tiles, and a half landing two tiles deep against the long wall. A spiral fills four tiles by
+// four, one turn round its newel to the storey.
+let stairRisers = 18
+let stairTiles = galleryBayTiles
+let switchbackTiles = (galleryAisleTiles - 1)
+let switchbackLanding = (2 * galleryTile)
+let spiralRadius = ((stairTiles * galleryTile) / 2)
+let spiralNewel = 0.5
+function stairWell(i, j, across, deep) = {
+  x0: tileEdgeX(i)
+  x1: tileEdgeX((i + across))
+  z0: tileEdgeZ(j)
+  z1: tileEdgeZ((j + deep))
+}
+let galleryStairs = [
+  { id: "south-west", form: "switchback", yaw: 180, well: stairWell(0, 0, stairTiles, switchbackTiles) }
+  { id: "south-east", form: "spiral", yaw: 180, well: stairWell((gridTilesX - stairTiles), 0, stairTiles, stairTiles) }
+  { id: "north-west", form: "spiral", yaw: 0, well: stairWell(0, (gridTilesZ - stairTiles), stairTiles, stairTiles) }
+  {
+    id: "north-east"
+    form: "switchback"
+    yaw: 0
+    well: stairWell((gridTilesX - stairTiles), (gridTilesZ - switchbackTiles), stairTiles, switchbackTiles)
+  }
+]
+let galleryStairWells = map(galleryStairs, stair => stair.well)
+function galleryStair(id) = filter(galleryStairs, stair => (stair.id == id))[0]
+function stairCentreX(stair) = ((stair.well.x0 + stair.well.x1) / 2)
+function stairCentreZ(stair) = ((stair.well.z0 + stair.well.z1) / 2)
+// Whether something `halfX` by `halfZ` about (x, z) keeps clear of every stair's well: the opening the benches and
+// planters on every level yield to.
+function galleryStairClear(x, z, halfX, halfZ) = (length(filter(
+  galleryStairWells,
+  well => ((((x + halfX) > well.x0) and ((x - halfX) < well.x1)) and (((z + halfZ) > well.z0) and ((z - halfZ) < well.z1)))
+)) == 0)
+
+// The core, against the south wall: the lift tower outside the wall and the entrance east of it.
 // The lift: the car's centre, in a tower 3.6 m wide that stands outside the south wall, its door in the wall. The
 // car's floor reaches to 0.1 m short of the wall's outer face.
 let liftX = 18.8
@@ -108,14 +144,15 @@ let entranceEast = 28
 let entranceTop = 3.3
 
 // The east wing's upper two storeys project 4 m south of the wall from x 21, carried on arches over the forecourt; the
-// west wing's top storey stops at the nave, leaving a roof terrace over its south aisle.
+// west wing's top storey stops at the nave, leaving a roof terrace over its south aisle that runs east to the third
+// pier's tile.
 let wingWest = 21
 let wingSouth = -4
 let wingLevel = 2
 let archZ = -3.4
 let archSpan = 3.75
 let archXs = map(range(0, 6), i => (22.5 + ((2 * archSpan) * i)))
-let terraceEast = stairWest
+let terraceEast = tileEdgeX(((galleryBayTiles * arcadeWestBays) + 1))
 let terraceNorth = (naveSouth - galleryWall)
 
 // A window bay's opening: 3.2 m wide and 3.1 m tall, from 0.6 m over its floor, one every 4 m along a face.
@@ -133,7 +170,7 @@ let tallBayZs = [(naveMid - tallBayPitch), naveMid, (naveMid + tallBayPitch)]
 // The bays of each face by level, as the centre of each along its face. The south face's are the west wing's (the
 // terrace takes level 3's), level 1's over the entrance and along the painting wing, and the projecting wing's on
 // levels 2 and 3, which stand in its own south face.
-let southBaysWest = [2, 6, 10]
+let southBaysWest = [4, 8, 12]
 let southBaysEast = map(range(0, 7), i => (31.5 + (4 * i)))
 let wingBays = map(range(0, 9), i => (23.5 + (4 * i)))
 let northBays = map(range(0, 15), i => (2 + (4 * i)))

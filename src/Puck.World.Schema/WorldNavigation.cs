@@ -163,8 +163,9 @@ public static class WorldNavigationCapacity {
     public const int MaxCellsPerDomain = 65_536;
     /// <summary>The greatest total cell count compiled by one world.</summary>
     public const int MaxCellsPerWorld = 262_144;
-    /// <summary>The greatest number of named domains in one world.</summary>
-    public const int MaxDomains = 16;
+    /// <summary>The greatest number of named domains in one world: a building whose stairs repeat every storey takes
+    /// two a stair a storey. The world's cell ceiling, not this, bounds their memory and search.</summary>
+    public const int MaxDomains = 64;
     /// <summary>The greatest number of equal subsegments checked along one live medium edge.</summary>
     public const int MaxMediumSegmentSubdivisions = 32;
     /// <summary>The greatest route length retained per body.</summary>

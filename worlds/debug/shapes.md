@@ -45,7 +45,7 @@ the bridge and over the lift's landing, as part of the slab or roof above it
 (`shellStrips`). A 5,000-lumen downlight hangs along each aisle
 (`hallDownlights`), eight 30,000-lumen high bays under the roof light the
 nave's floor, and washes on level 1's balcony edges light level 0's two lines
-from the side. A pendant lights the stairwell, and the lift's car has a
+from the side. A pendant lights the south-west stair's well, and the lift's car has a
 luminous ceiling over a 6,000-lumen spot that rides the car's body. Every
 fixture but the car's is anchored to the building's root and stands still, so
 the irradiance volume traces it: its light bounces about its room and stops at
@@ -101,7 +101,7 @@ judge it. The card table's cards are posed by the rules, which judge each reques
 | To | How |
 |---|---|
 | Enter | `debug.go gallery`, then walk +Z through the door |
-| Change level on foot | The stairs west of the lift: walk -Z up the first flight, step east on the half landing at the south wall, walk +Z up the second |
+| Change level on foot | A stair in each corner of the aisles. At a switchback (south-west, north-east) walk up the first flight from the nave side toward the long wall, cross the half landing behind the spine and walk up the second flight back out; at a spiral (south-east, north-west) step on from the nave side and climb one turn round the newel, stepping off where the rail opens |
 | Call the lift | Stand before the wall-mounted `CALL` plate east of the landing door and press the context button (E, or RB on a pad); its button lights until the car arrives. Or `gallery.lift <level>`, which calls as the plate does |
 | Ride the lift | Stand in the car facing its glazed back, where a rail carries a round button each for floors 0 to 3, then door open and door close. Stand before the one you want and press the context button; a floor button lights while that floor is pending |
 | Stand on a level's landing | `gallery.level <level> [body]` |
