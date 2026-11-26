@@ -198,7 +198,7 @@ public sealed partial class SdfWorldTables {
             var light = frame.Lights[index];
 
             if (SdfLight.IsPositional(kind: light.Kind) && (light.DynamicSlot >= 0)) {
-                m_frameReaders.Add(item: new(Center: light.Direction, Half: new(value: SdfLightSelection.ReachOf(light: in light)), Reader: "light", Slot: light.DynamicSlot, Turn: Quaternion.Identity));
+                m_frameReaders.Add(item: new(Center: light.Direction, Half: new(value: (SdfLightSelection.ReachOf(light: in light) + (0.5f * light.LineLength))), Reader: "light", Slot: light.DynamicSlot, Turn: Quaternion.Identity));
             }
         }
         for (var index = 0; (index < frame.Volumes.Count); index++) {

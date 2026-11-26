@@ -39,26 +39,30 @@ the stairs and rides the lift, and the chase camera's clearance keeps the eye
 inside the rooms.
 
 The building has no sun of its own: the world that stands it lights it
-([`day.puck`](day.puck) in the debug world). Its own light is in real units.
-An emissive strip (4,000 nits) runs along the ceiling over each aisle, over
-the bridge and over the lift's landing, as part of the slab or roof above it
-(`shellStrips`). A 5,000-lumen downlight hangs along each aisle
-(`hallDownlights`), eight 30,000-lumen high bays under the roof light the
-nave's floor, and washes on level 1's balcony edges light level 0's two lines
-from the side. A pendant lights the south-west stair's well, and the lift's car has a
-luminous ceiling over a 6,000-lumen spot that rides the car's body. Every
-fixture but the car's is anchored to the building's root and stands still, so
-the irradiance volume traces it: its light bounces about its room and stops at
-the slab under it. The camera's exposure is the world's
-([`exposure.puck`](exposure.puck)).
+([`day.puck`](day.puck) in the debug world). Its own light is in real units,
+and almost all of it is the flaw ([`gallery/flaw.puck`](gallery/flaw.puck)):
+one continuous glowing tube, a neon core in a frosted sleeve whose tint drifts
+along its length, that weaves through every floor. It runs east along the
+north arcade as a wave from under the roof to level 0 and back, its flanks
+passing behind the piers and through the north gallery's slabs, crosses the
+void under the roof at the east end, weaves back west along the south arcade,
+and climbs from level 0 through the bridge's three floors to where it began.
+Its path is a list of control points (`flawControls` in
+[`gallery/layout.puck`](gallery/layout.puck)); its look and its light per metre
+are `lookFlaw` and `lookFlawTint` in [`gallery/look.puck`](gallery/look.puck).
+It lights like a fluorescent tube: a chain of tube lights along the same
+curve, cut at each slab so every one lies in one storey, anchored to the
+building's root and standing still, so the irradiance volume traces each: its
+light bounces about its storey and stops at the slabs. Beside it a pendant
+lights the south-west stair's well, which the flaw never enters, and the lift's car has a
+luminous ceiling over a 6,000-lumen spot that rides the car's body. The
+camera's exposure is the world's ([`exposure.puck`](exposure.puck)).
 
 Each level's room lights switch on and off. `hallLights` holds each level's
-state (`Off` or `On`), and every level starts `On`. A level that is off shows
-the dark variant of the slab or roof above it (`gallery-floor-<k+1>-dark`,
-`gallery-roof-dark`: the same boxes with a pale, unlit diffuser in the strips'
-palette slot) through the placement's `respond` facet, and its fixtures
-(`hallLamps`) read a power of 0 lumens; the lift car's lamp stays with the car.
-A swap shows the same geometry, so the mesh library answers it without a bake.
+state (`Off` or `On`), and every level starts `On`. A level that is off sets
+its `hallLamps` cell to 0, which quiets the light of the stretch of the flaw
+that storey holds and its lamps; the tube itself keeps its glow, and the lift
+car's lamp stays with the car.
 Each level's switch is a plate on the south wall east of the lift's door, 1.1
 to 1.46 m over the floor and labelled `LIGHTS`: a warm indicator when on, a
 green locator glow when off, so it shows in the dark.

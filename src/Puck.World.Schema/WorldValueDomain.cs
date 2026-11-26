@@ -87,6 +87,12 @@ public static class WorldValueFields {
     public static WorldValueField PointPower { get; } = new(typeof(WorldRenderLight.Point), nameof(WorldRenderLight.Point.Power), Power, Why: PowerWhy);
     /// <summary>A point light's colour temperature, in kelvin.</summary>
     public static WorldValueField PointTemperature { get; } = new(typeof(WorldRenderLight.Point), nameof(WorldRenderLight.Point.Temperature), Temperature, Why: TemperatureWhy);
+    /// <summary>A tube light's luminous intensity per metre, in candela per metre.</summary>
+    public static WorldValueField TubeIntensity { get; } = new(typeof(WorldRenderLight.Tube), nameof(WorldRenderLight.Tube.Intensity), Intensity, Why: IntensityWhy);
+    /// <summary>A tube light's luminous power, in lumens.</summary>
+    public static WorldValueField TubePower { get; } = new(typeof(WorldRenderLight.Tube), nameof(WorldRenderLight.Tube.Power), Power, Why: PowerWhy);
+    /// <summary>A tube light's colour temperature, in kelvin.</summary>
+    public static WorldValueField TubeTemperature { get; } = new(typeof(WorldRenderLight.Tube), nameof(WorldRenderLight.Tube.Temperature), Temperature, Why: TemperatureWhy);
     /// <summary>A spot light's luminous intensity along its aim, in candela.</summary>
     public static WorldValueField SpotIntensity { get; } = new(typeof(WorldRenderLight.Spot), nameof(WorldRenderLight.Spot.Intensity), Intensity, Why: IntensityWhy);
     /// <summary>A spot light's luminous power, in lumens.</summary>
@@ -374,6 +380,9 @@ public static class WorldValueFields {
         PointIntensity,
         PointPower,
         PointTemperature,
+        TubeIntensity,
+        TubePower,
+        TubeTemperature,
         SpotIntensity,
         SpotPower,
         SpotTemperature,
