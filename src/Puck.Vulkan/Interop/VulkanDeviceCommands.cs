@@ -61,8 +61,8 @@ public sealed unsafe class VulkanDeviceCommands {
     public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, void> CmdDispatchIndirect;
     /// <summary>The <c>vkCmdDraw</c> entry point.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, uint, uint, uint, uint, void> CmdDraw;
-    /// <summary>The <c>vkCmdDrawIndirect</c> entry point, used by the fixed-record fallback.</summary>
-    public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, uint, uint, void> CmdDrawIndirect;
+    /// <summary>The <c>vkCmdDrawIndexedIndirect</c> entry point, used by the fixed-record fallback.</summary>
+    public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, uint, uint, void> CmdDrawIndexedIndirect;
 
     /// <summary>Gets whether the device enabled several indirect records in one native call.</summary>
     public bool MultiDrawIndirectEnabled { get; }
@@ -73,9 +73,9 @@ public sealed unsafe class VulkanDeviceCommands {
     /// <summary>The device extension counted indirect draws need, <c>VK_KHR_draw_indirect_count</c>.</summary>
     public const string DrawIndirectCountExtension = "VK_KHR_draw_indirect_count";
 
-    /// <summary>The <c>vkCmdDrawIndirectCountKHR</c> entry point; <see langword="null"/> unless
+    /// <summary>The <c>vkCmdDrawIndexedIndirectCountKHR</c> entry point; <see langword="null"/> unless
     /// <c>VK_KHR_draw_indirect_count</c> is enabled beside <c>multiDrawIndirect</c>.</summary>
-    public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, ulong, uint, uint, void> CmdDrawIndirectCountKhr;
+    public readonly delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, ulong, uint, uint, void> CmdDrawIndexedIndirectCountKhr;
     /// <summary>The <c>vkCmdEndDebugUtilsLabelEXT</c> entry point; <see langword="null"/> unless <c>VK_EXT_debug_utils</c> is enabled.</summary>
     public readonly delegate* unmanaged[Cdecl]<nint, void> CmdEndDebugUtilsLabelExt;
     /// <summary>The <c>vkCmdEndRenderPass</c> entry point.</summary>
@@ -231,7 +231,7 @@ public sealed unsafe class VulkanDeviceCommands {
     /// <param name="deviceFaultEnabled">Whether the device was created with deviceFault enabled.</param>
     /// <param name="checkpointsEnabled">Whether the device was created with <see cref="VulkanDeviceCheckpoints.ExtensionName"/>.</param>
     /// <param name="drawIndirectCountEnabled">Whether the device was created with <see cref="DrawIndirectCountExtension"/>;
-    /// <see cref="CmdDrawIndirectCountKhr"/> resolves only then.</param>
+    /// <see cref="CmdDrawIndexedIndirectCountKhr"/> resolves only then.</param>
     /// <param name="multiDrawIndirectEnabled">Whether the device enabled <c>multiDrawIndirect</c>.</param>
     /// <param name="addressBindings">The instance's address record, when the device was created with
     /// <see cref="VulkanDeviceAddressBindings.ExtensionName"/>; its loss report names the objects its fault addresses fall
@@ -343,18 +343,18 @@ public sealed unsafe class VulkanDeviceCommands {
             deviceHandle: deviceHandle,
             functionName: "vkCmdDraw"u8
         ));
-        CmdDrawIndirect = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, uint, uint, void>)procedures.ResolveDeviceProc(
+        CmdDrawIndexedIndirect = ((delegate* unmanaged[Cdecl]<nint, nint, ulong, uint, uint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
-            functionName: "vkCmdDrawIndirect"u8
+            functionName: "vkCmdDrawIndexedIndirect"u8
         ));
         CmdDrawIndexed = ((delegate* unmanaged[Cdecl]<nint, uint, uint, uint, int, uint, void>)procedures.ResolveDeviceProc(
             deviceHandle: deviceHandle,
             functionName: "vkCmdDrawIndexed"u8
         ));
-        CmdDrawIndirectCountKhr = (drawIndirectCountEnabled
+        CmdDrawIndexedIndirectCountKhr = (drawIndirectCountEnabled
             ? ((delegate* unmanaged[Cdecl]<nint, nint, ulong, nint, ulong, uint, uint, void>)procedures.ResolveOptionalDeviceProc(
                 deviceHandle: deviceHandle,
-                functionName: "vkCmdDrawIndirectCountKHR"u8
+                functionName: "vkCmdDrawIndexedIndirectCountKHR"u8
             ))
             : null);
         CmdEndDebugUtilsLabelExt = ((delegate* unmanaged[Cdecl]<nint, void>)procedures.ResolveOptionalDeviceProc(

@@ -7,7 +7,7 @@ namespace Puck.DirectX;
 [SupportedOSPlatform("windows10.0.10240")]
 public sealed partial class DirectXPipelineLayout {
     /// <summary>Returns the command signature a counted indirect draw through this layout executes, creating it on first
-    /// use: a root-constant argument writing a record's identity into the layout's root constants, then a draw, over
+    /// use: a root-constant argument writing a record's identity into the layout's root constants, then an indexed draw, over
     /// <see cref="GpuDrawIndirectCommand.StrideBytes"/>-byte records; a layout without root constants draws alone. It is
     /// released with the layout.</summary>
     /// <param name="device">The device the layout's root signature was created on.</param>
@@ -29,7 +29,7 @@ public sealed partial class DirectXPipelineLayout {
                 count++;
             }
 
-            arguments[count].Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
+            arguments[count].Type = D3D12_INDIRECT_ARGUMENT_TYPE.D3D12_INDIRECT_ARGUMENT_TYPE_DRAW_INDEXED;
             count++;
 
             var description = new D3D12_COMMAND_SIGNATURE_DESC {

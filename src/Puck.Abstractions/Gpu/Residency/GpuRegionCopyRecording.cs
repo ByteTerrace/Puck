@@ -17,7 +17,8 @@ namespace Puck.Abstractions.Gpu;
 /// </summary>
 /// <param name="recorder">The recorder the copies and barriers are recorded through: the one the regions record their
 /// copies through.</param>
-/// <param name="readers">The shader stages that read the regions' buffers.</param>
+/// <param name="readers">The stages that read the regions' buffers; with <see cref="GpuStage.VertexInput"/> the
+/// regions' buffers are also an indexed draw's indices (<see cref="GpuRegion.ReaderAccess"/>).</param>
 /// <param name="begin">Returns the command buffer the copies are recorded into, called once, before the first copy: an
 /// owner recording ahead of its passes begins a buffer of its own there, and one recording inside its frame returns the
 /// frame's buffer.</param>
@@ -72,7 +73,7 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
                 commandBufferHandle: m_commandBuffer,
                 destinationAccessMask: GpuAccess.ShaderWrite,
                 destinationStageMask: GpuStage.ComputeShader,
-                sourceAccessMask: GpuAccess.ShaderRead,
+                sourceAccessMask: GpuRegion.ReaderAccess(readers: readers),
                 sourceStageMask: readers
             );
         }
@@ -113,7 +114,7 @@ public sealed class GpuRegionCopyRecording(IGpuRecorder recorder, GpuStage reade
             recorder.TransitionBuffer(
                 bufferHandle: buffer.BufferHandle,
                 commandBufferHandle: m_commandBuffer,
-                destinationAccessMask: GpuAccess.ShaderRead,
+                destinationAccessMask: GpuRegion.ReaderAccess(readers: readers),
                 destinationStageMask: readers,
                 sourceAccessMask: GpuAccess.ShaderWrite,
                 sourceStageMask: GpuStage.ComputeShader

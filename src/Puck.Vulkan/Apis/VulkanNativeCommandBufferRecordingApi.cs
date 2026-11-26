@@ -564,12 +564,12 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
     public void DrawIndirectCount(VulkanDeviceCommands device, nint commandBufferHandle, nint bufferHandle, ulong offset, nint countBufferHandle, ulong countBufferOffset, uint maxDrawCount, uint stride) {
         ArgumentNullException.ThrowIfNull(argument: device);
 
-        var drawIndirectCount = device.CmdDrawIndirectCountKhr;
+        var drawIndirectCount = device.CmdDrawIndexedIndirectCountKhr;
 
         if (drawIndirectCount is null) {
-            // Every supplied record is initialized, with zero vertex/instance counts for a rejected draw. The recorder
+            // Every supplied record is initialized, with zero index/instance counts for a rejected draw. The recorder
             // calls once per slot on this fallback, so multiDrawIndirect is not needed either.
-            device.CmdDrawIndirect(commandBufferHandle, bufferHandle, offset, maxDrawCount, stride);
+            device.CmdDrawIndexedIndirect(commandBufferHandle, bufferHandle, offset, maxDrawCount, stride);
             return;
         }
 

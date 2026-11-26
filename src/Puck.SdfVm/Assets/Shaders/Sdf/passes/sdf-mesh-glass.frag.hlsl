@@ -17,13 +17,14 @@ struct GlassFragment {
     float depth : SV_Depth;
 };
 
-GlassFragment PSMain(MeshRasterVertex input) {
+GlassFragment PSMain(MeshRasterVertex input, uint primitive : SV_PrimitiveID) {
     sdfStampFade(input.draw, uint2(input.position.xy));
     ViewportData view = worldView();
     uint2 pixel = uint2(input.position.xy);
     float t = length(input.world - view.position.xyz);
     uint record = sdfMeshRecord(input.draw);
-    uint first = (3u * input.triangleIndex);
+    uint triangleIndex = sdfMeshRasterTriangle(input, primitive);
+    uint first = (3u * triangleIndex);
     float3 a = sdfMeshWorldPosition(record, first);
     bool front = (dot(cross((sdfMeshWorldPosition(record, (first + 1u)) - a), (sdfMeshWorldPosition(record, (first + 2u)) - a)), (input.world - view.position.xyz)) < 0.0);
     bool counts = false;
@@ -38,18 +39,18 @@ GlassFragment PSMain(MeshRasterVertex input) {
         counts = (t < opaque);
         float3 ray = cameraRayDirection(view, (float2(pixel) + 0.5) / float2(passGroup.imageExtent));
         float start = worldSurfaceNearDistance(view) / dot(ray, view.forward.xyz);
-        int materialId = sdfMeshRasterMaterial(input.draw, input.triangleIndex);
+        int materialId = sdfMeshRasterMaterial(input.draw, triangleIndex);
         SdfMaterialData material = sdfMaterialLoad(materialId);
         bool clippedDraw = any(sdfMeshClipPlane(record) != 0.0);
 
         sdfGlassAccumulate(sdfGlassSumWord(pixel, passGroup.imageExtent), t, start, opaque, front, material.absorption,
-            materialId, input.draw, input.triangleIndex, clippedDraw);
+            materialId, input.draw, triangleIndex, clippedDraw);
     }
     puckCountFragmentWork(0u, 1u);
 
     GlassFragment fragment;
 
-    fragment.target = float4(t, float(input.draw + 1u), float(input.triangleIndex), 0.0);
+    fragment.target = float4(t, float(input.draw + 1u), float(triangleIndex), 0.0);
     fragment.depth = ((front && counts) ? input.position.z : 0.0);
 
     return fragment;

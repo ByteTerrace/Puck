@@ -93,7 +93,26 @@ against the same frame:
   (`SDF_VIEWS_OMIT_SHADING`: the load, the hit door, the store). Of the rest,
   the light walk (`SDF_VIEWS_OMIT_LIGHTS`) and the reflected environment
   (`SDF_VIEWS_OMIT_REFLECTION`) are the two large parts and the material layers
-  (`SDF_VIEWS_OMIT_MATERIALS`) the small one.
+  (`SDF_VIEWS_OMIT_MATERIALS`) the small one. In the hall at 2560 by 1440 the
+  light walk is most of the pass: 5.6 ms with it, 2.1 ms without, 0.5 ms with
+  the shading out, over about eleven light visits a pixel (40.8 million a frame,
+  counted with a scratch tree adding to `sdfWorkGradients` in the walk). The
+  traced lights' probe reads (`sdfViewsLightVisibility`) are a tenth of a
+  millisecond of it, so the cost is the visit's own shading (the light phase
+  and `sdfLightResponse`) at the kernel's occupancy, and a cut there is fewer
+  visits a pixel or a cheaper visit, never a cheaper visibility read.
+- **`mesh`** in the forest: the selection marks count 15.7 million triangles
+  drawn in the main view, four a pixel, about two in five of them at the
+  collapse's coarsest levels. The pass is bound by its triangles more than its
+  vertex work: a PIX capture counts 14.9 million primitives into the clipper and
+  10.2 million of them culled (facing away or covering no sample), and indexed
+  draws, which halved the vertex invocations (33.5 to 15.9 million), took an
+  eighth off the pass. Copies of a creation share one mesh at the tier its nearest copy
+  demands, the collapse levels coarsen to 32 cells at most, and a group's floor
+  draws only where its cell projects under half a pixel, so a tree tens to
+  hundreds of metres off draws a fine tier's coarse level. The cut is a level or
+  tier a far copy can take: more collapse levels past 32 cells, a coarser tier
+  a copy selects by its own distance, or an impostor.
 - **`resolve`**: standing, every pixel sums its window; `world.temporal off`
   removes the pass and a third of the probe lookup with it.
 - **`main`**: the root places every view and pane in one pass

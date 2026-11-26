@@ -22,8 +22,8 @@ namespace Puck.World.Server;
 /// <see cref="WorldDisclosureTier.Presentation"/>.</param>
 /// <param name="view">An ingress-minted view with live admission, or null to mint it from the server and tier.</param>
 /// <param name="lineage">The stream this sink serves a segment of, or <see langword="null"/> for a stream of its own.
-/// A sink that takes up a stream another segment has stamped opens with a cut record, then its route, its whole
-/// disclosed document and a primer.</param>
+/// A sink that takes up a stream another segment has stamped opens with its whole disclosed document, whose record
+/// carries the cut, then its route and a primer.</param>
 /// <param name="hasMoved">Reads, once <paramref name="isCurrent"/> has answered that the route no longer holds, whether
 /// that is because the recipient's traveler moved to another authority, where its stream goes on; or
 /// <see langword="null"/> for a projection that follows no traveler.</param>
@@ -197,12 +197,16 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
                 break;
         }
     }
-    // Queues one observation record behind the stream stamp it takes, so the peer's ingress orders it.
+    // Queues one observation record behind the stream stamp it takes, so the peer's ingress orders it. The record that
+    // opens a generation is followed by the route the cut held back.
     private void WriteRecord(WorldFederationResponse kind, byte[] body) {
         if (m_invalidated) {
             return;
         }
-        Write(kind, WorldFederationCodec.Stamped(body: body, stream: m_cursor.Stamp()));
+        var opens = m_opening;
+
+        Write(kind, WorldFederationCodec.Stamped(body: body, stream: StampRecord(kind: kind)));
+        if (opens) { WriteOwedRoute(); }
     }
     // Reads the live body policy and records it on the cursor, which decides a cut when the policy turns redacting.
     private WorldSinkDisclosure ObserveBodies() {
@@ -210,21 +214,49 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
         m_cursor.ObserveBodies(bodies.Policy);
         return bodies;
     }
-    // Queues the record a cut the cursor decided owes, once: the new generation, with no content. True when one was
-    // queued, after which the stream owes its whole disclosed document and a primer before anything newer.
-    private bool AnnounceCut() {
+    // Set from a cut being taken until the generation it opened has its first record.
+    private bool m_opening;
+    // Takes the cut the cursor decided, once. True when one was taken, after which the stream owes its whole disclosed
+    // document and a primer before anything newer, and the generation's first record announces the cut (StampRecord).
+    private bool TakeCut() {
         if (!m_cursor.TakeCut()) {
             return false;
         }
         m_manifestBasis = null;
         m_history.Clear();
+        m_opening = true;
+
+        return true;
+    }
+    // The one door every record's stamp is taken through. A generation a cut opened is announced by its first record:
+    // its whole document carries the cut itself, so the peer replaces the document it held in one record and never
+    // holds none between the cut and the new document, however its records are paced; any other first record finds a
+    // cut record, with no content, written ahead of it.
+    private WorldStreamStamp StampRecord(WorldFederationResponse kind) {
+        if (kind != WorldFederationResponse.Definition) {
+            AnnounceCut();
+        }
+        m_opening = false;
+
+        return m_cursor.Stamp();
+    }
+    // Queues the cut record a taken cut still owes, once: a generation with no document to carry its cut (a stream
+    // whose view withholds, or a frames-tier stream), or one whose delivery wrote nothing. Then the route the cut held
+    // back.
+    private void AnnounceCut() {
+        if (!m_opening || m_invalidated) {
+            return;
+        }
+        m_opening = false;
         Write(WorldFederationResponse.Cut, WorldFederationCodec.EncodeCut(stream: m_cursor.Stamp(), terminal: false));
+        WriteOwedRoute();
+    }
+    // Queues the route a cut held back, behind the record that opened the cut's generation.
+    private void WriteOwedRoute() {
         if (m_routeOwed && (m_route is { } route)) {
             m_routeOwed = false;
             PrimeRoute(route: in route);
         }
-
-        return true;
     }
     // After a cut, the whole disclosed document under the new generation; the next snapshot this stream sends
     // completes it as the primer.
@@ -310,7 +342,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
             try {
                 var delivery = rows is null ? m_feed.Compose(m_view, m_cursor) : m_feed.ComposeAppearance(m_view, m_cursor, rows);
 
-                if (AnnounceCut()) {
+                if (TakeCut()) {
                     cut = true;
                     m_feed.Release();
                     delivery = m_feed.Compose(cursor: m_cursor, view: m_view);
@@ -324,13 +356,13 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
             } catch (WorldDisclosureException) {
                 End(reason: DisclosureDetachReason);
             }
-            if (cut) { PrimeSnapshot(); }
+            if (cut) { PrimeSnapshot(); AnnounceCut(); }
 
             return;
         }
 
         if (m_cursor.DeliverDefinition(view: m_view) is { } delivered) {
-            var cut = AnnounceCut();
+            var cut = TakeCut();
 
             WriteRecord(WorldFederationResponse.Definition, WorldFederationCodec.DocumentLeaf(
                 payload: Manifest(definition: delivered), tier: tier, version: Version));
@@ -338,9 +370,10 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
             // whatever its cadence while the cursor owes rows (DeliverSnapshot), so it counts as following.
             var completion = m_cursor.Completion(cut: cut, replaced: replaced, snapshotFollows: server!.SnapshotFollows);
             if (completion != WorldReplicaCompletion.None) { PrimeSnapshot(cells: (completion == WorldReplicaCompletion.Whole)); }
-        } else if (AnnounceCut()) {
+        } else if (TakeCut()) {
             PrimeAfterCut();
             PrimeSnapshot();
+            AnnounceCut();
         }
     }
     // Completes a document delivery with the primer snapshot it owes, outside the cadence: the authority's current table
@@ -389,8 +422,8 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
             return;
         }
         // Every authoritative tick checks the peer's anchors, sampled or not: a prediction that misses is owed now. A
-        // stream that owes a cut owes its whole projection behind the cut record instead, which this tick's snapshot
-        // sends (WriteSnapshot), so no delta of the new generation goes ahead of it.
+        // stream that owes a cut owes its whole projection, carrying the cut, instead, which this tick's snapshot sends
+        // ahead of itself (WriteSnapshot), so no delta of the new generation goes ahead of it.
         if ((m_feed is not null) && !m_cursor.CutOwed) {
             Present(
                 delivery: m_feed.Step(m_view!, m_cursor, snapshot.Tick, snapshot.EngineTick),
@@ -429,12 +462,12 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
             InputAnswers = ((recipient is { } answerOwner) ? WorldOwnedRecords.ForOwner(projected.InputAnswers, answerOwner, ref m_answerDisclosure) : default),
             OwnBodies = ((recipient is { } bodyOwner) ? WorldOwnedRecords.ForOwner(projected.OwnBodies, bodyOwner, ref m_ownBodyDisclosure) : default),
         };
-        if (AnnounceCut()) {
+        if (TakeCut()) {
             PrimeAfterCut();
             if (m_view is not null) { projected = projected with { FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica) }; }
         }
         projected = projected with { Revision = checked((int)m_cursor.Sequence) };
-        var stamp = m_cursor.Stamp();
+        var stamp = StampRecord(kind: WorldFederationResponse.Snapshot);
         var (ordinal, baseline) = m_history.Baseline(stamp);
         var image = frame.Capture(projected.Entries);
         var changes = frame.Changes(image, baseline);
@@ -458,12 +491,12 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
         if ((m_feed is not null) || !stamp.ArenaValues || ((m_view is not null) && m_cursor.FrameMoved(view: m_view))) { DeliverDocument(replaced: false); }
     }
     /// <summary>Queues the route the stream's records describe a traveler along. A sink that owes its reader a cut
-    /// holds the route back and sends it behind the cut record, so the route is read under the generation it belongs
-    /// to.</summary>
+    /// holds the route back and sends it behind the record that opens the cut's generation (its whole document, which
+    /// carries the cut), so the route is read under the generation it belongs to.</summary>
     /// <param name="route">The traveler's route at this authority.</param>
     public void PrimeRoute(in WorldAuthorityRouteDescription route) {
         m_route = route;
-        if (m_cursor.CutOwed) {
+        if (m_cursor.CutOwed || m_opening) {
             m_routeOwed = true;
 
             return;

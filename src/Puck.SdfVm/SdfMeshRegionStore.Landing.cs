@@ -20,8 +20,10 @@ namespace Puck.SdfVm;
 // one already in flight completes into a progress no longer kept (LandingProgress identity) and lands nothing; its
 // words were queued before any later job's, which rewrites them for the mesh the arena gave them to.
 public sealed partial class SdfMeshRegionStore {
-    /// <summary>The stages that read the region: what a region copy hands its buffer to.</summary>
-    internal const GpuStage Readers = GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader;
+    /// <summary>The stages that read the region: what a region copy hands its buffer to. The raster passes' indexed draws
+    /// read its indices at the vertex input (<see cref="SdfMeshOcclusion.RecordDraws"/>), so a copy hands it to their index
+    /// reads too (<see cref="GpuRegion.ReaderAccess"/>).</summary>
+    internal const GpuStage Readers = GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader | GpuStage.VertexInput;
 
     // The placed meshes whose words the region still owes.
     private readonly OwedMeshes m_owed;

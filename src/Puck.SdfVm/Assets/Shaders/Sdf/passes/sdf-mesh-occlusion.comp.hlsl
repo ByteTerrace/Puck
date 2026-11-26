@@ -25,7 +25,7 @@
 // (SdfMeshOcclusion, SdfMeshSelectionMarks).
 // The controls' header holds the draw count and pyramid levels, and the compaction row the slots a phase holds and where
 // the compact lists and group counts start; each phase writes one GpuDrawIndirectCommand a candidate at the candidate's
-// slot, empty where it draws nothing, with the identity first and first instance zero.
+// slot, empty where it draws nothing, with the identity first and the vertex offset and first instance zero.
 // KEEP IN SYNC with SdfMeshOcclusion. Bounds, levels and mesh identity come from the retained mesh region.
 #include "../isa/sdf-mesh.interface.hlsli"
 #include "../frame/sdf-viewport.hlsli"
@@ -34,7 +34,8 @@
 #include "../frame/sdf-shadow-optical.hlsli"
 
 static const uint SdfOcclusionUncovered = 0x7F800000u;
-static const uint SdfOcclusionCommandWords = 5u;
+// GpuDrawIndirectCommand.Words: the identity, then the indexed draw's five arguments.
+static const uint SdfOcclusionCommandWords = 6u;
 static const uint SdfOcclusionDrawnWords = 4u;
 static const uint SdfOcclusionUnboxed = 1u;
 
@@ -100,18 +101,23 @@ void sdfOcclusionCount(uint draws, uint vertices) {
 // Writes a candidate's command into a phase's list at the candidate's own record, so each phase draws in the order the
 // host staged its draws. Coplanar ties across phases can depend on the prior visible set. A candidate the phase does not draw gets
 // an empty command. The identity is the draw with the level the selection kernel chose for it from bit SDF_MESH_LEVEL_SHIFT up, which
-// the vertex stage reads its level's first triangle by.
+// the fragment stages read its level's first triangle by. The draw is indexed: its first index is where the mesh region holds the
+// level's indices (the draw's index word, then the level's first triangle's three), with no vertex offset, so a vertex stage reads
+// each index the mesh holds as its vertex id (sdfMeshWorldVertexOf).
 void sdfOcclusionEmit(uint phase, uint candidate, uint identity, uint vertices, bool emit) {
     uint capacity = sdfMeshOcclusionCandidates[SDF_COMPACT_ROW].x;
 
     if (candidate < capacity) {
         uint word = (((phase * capacity) + candidate) * SdfOcclusionCommandWords);
+        uint record = sdfMeshRecord(identity & SdfMeshDrawMask);
+        uint first = (emit ? (sdfMeshRecordWord(record + SDF_MESH_INDEX_WORD) + sdfMeshLevelIndex(record, (identity >> SDF_MESH_LEVEL_SHIFT))) : 0u);
 
         sdfMeshOcclusionDrawsRW[word] = identity;
         sdfMeshOcclusionDrawsRW[(word + 1u)] = (emit ? vertices : 0u);
         sdfMeshOcclusionDrawsRW[(word + 2u)] = (emit ? 1u : 0u);
-        sdfMeshOcclusionDrawsRW[(word + 3u)] = 0u;
+        sdfMeshOcclusionDrawsRW[(word + 3u)] = first;
         sdfMeshOcclusionDrawsRW[(word + 4u)] = 0u;
+        sdfMeshOcclusionDrawsRW[(word + 5u)] = 0u;
     }
 }
 
