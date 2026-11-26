@@ -1,0 +1,87 @@
+// The gallery's look: every value a look pass tunes, each named once. shell.puck and gallery.puck read these and hold
+// no colour, finish, brush or shade figure of their own, so one edit here changes one thing wherever it shows. The
+// plan's sizes and spacings are layout.puck's, the kit pieces' forms the standard's (architecture.puck), and the
+// exhibits' own materials shapes.puck's (`exhibitSubjects`). A module library: it emits no document.
+//
+// Judge a change from a bookmarked view at a held time (`gallery.view hall`, `gallery.time`), beside
+// docs/game/art/gallery-kit-pack/level-zero-exhibit-hall.png.
+
+// Paint. The walls and ceilings are warm creams a step apart, the cladding ochre, the structure teal.
+let lookWall = "#EADBBE"
+let lookBoard = "#F1E6CF"
+let lookCeiling = "#F3E9D4"
+let lookCoffer = "#E7D6B2"
+let lookCofferTone = "#ECDDBC"
+let lookCofferLamp = "#FFF4D6"
+let lookCream = "#EFE3C8"
+let lookOchre = "#E0A13A"
+let lookTeal = "#2F6E7A"
+let lookBrass = "#C8902E"
+let lookGlass = "#EEF8F6"
+let lookPaving = "#C46F4C"
+
+// The floor: a tile's two clays, the grout between tiles, the cream pad under an exhibit line and the joint drawn over it.
+let lookTile = "#B4553A"
+let lookTileTone = "#C86E48"
+let lookGrout = "#8A3F2C"
+let lookPad = "#EADBBE"
+let lookPadJoint = "#8A4A34"
+// A tile's side and its joint's width, in metres, and how smooth the glaze is.
+let lookTileSize = 1.2
+let lookTileJoint = 0.01
+let lookFloorRoughness = 0.16
+let lookFloorSpecular = 0.05
+// A pad's reach past its line's end plinths, its half depth and its corner's radius, in metres.
+let lookPadReach = 1.35
+let lookPadHalfDepth = 1.25
+let lookPadCorner = 0.3
+
+// The kit's paints, by the standard's slots (architecture.puck's kitPalette): the cream, ochre, teal and terracotta of
+// the pieces, their brass and glass, a fan shade's two oranges and its hub, then a planter's soil, three greens and pot.
+let lookShade = "#EE7F2D"
+let lookShadeDeep = "#D9661F"
+let lookHub = "#1F3A42"
+let lookKit = [
+  lookCream, lookOchre, lookTeal, "#B85A3C", lookBrass, lookGlass, lookShade, lookShadeDeep, lookHub,
+  "#4A3426", "#3F7A3A", "#8FB03E", "#2F5E38", "#B8623A"
+]
+
+// The brush: how far a surface's value drifts (a share of it), over patches how many metres across, the colour it leans
+// toward where it lifts, and the pattern's seed. The floor, the ceiling, the cladding and the structure take their own
+// amounts; every other surface takes `lookBrush`.
+let lookBrush = 0.07
+let lookBrushScale = 1.9
+let lookBrushLean = [1, 0.86, 0.62]
+let lookBrushSeed = 41
+let lookBrushFloor = 0.09
+let lookBrushFloorScale = 2.6
+let lookBrushCeiling = 0.04
+let lookBrushCladding = 0.09
+let lookBrushStructure = 0.1
+
+// The fan shades: a bay's, and the narrow one on each side bay of the nave's end wall. `radius` is a leaf's length in
+// metres, `spread` the fan's whole angle in degrees, and `leaf` a leaf's width at its tip as a share of its length.
+let lookFan = { radius: 1.75, leaves: 6, spread: 150, leaf: 0.42 }
+let lookFanTall = { radius: 2.5, leaves: 5, spread: 58, leaf: 0.26 }
+
+// The times of day the look is judged at, as the `day` cell's fraction: noon, and a warmer afternoon.
+let lookNoon = 0.5
+let lookAfternoon = 0.62
+
+// The bookmarked views (`gallery.view <name>`), each an eye and an aim in the building's frame and a field of view in
+// degrees. `hall` is the level-zero hall painting's viewpoint and `hall-side` its second angle; the rest face what a
+// kit sheet draws: a station, the arcade, a window bay, a balcony edge, the floor and the ceiling, the furniture, and
+// the two concept paintings' views of the entrance and the outside.
+let lookViews = [
+  { name: "hall", eye [37, 1.6, 14], aim [60, 3.9, 14], fov: 70 }
+  { name: "hall-side", eye [40, 1.6, 9.6], aim [54, 4.6, 18], fov: 78 }
+  { name: "plinth", eye [50.4, 1.6, 14.2], aim [53.4, 0.95, 10.9], fov: 55 }
+  { name: "arcade", eye [42, 1.6, 12.6], aim [44, 3.3, 19.4], fov: 68 }
+  { name: "bay", eye [54, 1.6, 14], aim [60, 3.2, 14], fov: 60 }
+  { name: "balcony", eye [10.4, 6.15, 14], aim [40, 5.4, 18.7], fov: 62 }
+  { name: "floor", eye [40, 1.6, 14], aim [43.4, 0, 16.4], fov: 60 }
+  { name: "ceiling", eye [40, 1.6, 22.7], aim [45, 4.2, 23.6], fov: 60 }
+  { name: "furniture", eye [46.2, 1.6, 13.4], aim [44, 1.9, 9.5], fov: 58 }
+  { name: "atrium", eye [26, 1.6, 1.6], aim [27, 5.2, 16], fov: 78 }
+  { name: "outside", eye [44, 2.2, -30], aim [36, 8.5, 0], fov: 68 }
+]

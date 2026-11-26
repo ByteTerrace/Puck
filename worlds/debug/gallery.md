@@ -121,9 +121,32 @@ drifts a few hundredths over patches a couple of metres across, so no wall,
 pier or floor is one flat colour. The kit's paints are plain dielectrics, and
 the primitives that open the nave each take a material of their own.
 
-The slice the look is judged on is the nave's east end on level 0: stand in
-the centre aisle 23 m from the east wall at 1.6 m and look east, with the day
-pinned (`world.state.cell.set day $value 0.5`, and 0.62 for the afternoon).
+### Tuning it
+
+[`gallery/look.puck`](gallery/look.puck) names every value a look pass tunes,
+once: the paints, the tile's size, joint and glaze, the pads, the kit's
+colours, the brush amounts, the fan shades' proportions, the times of day and
+the bookmarked views. The plan's sizes and spacings are
+[`gallery/layout.puck`](gallery/layout.puck)'s, the kit pieces' forms
+[`architecture.puck`](../standard/architecture.puck)'s, and the primitives'
+own materials `exhibitSubjects` in [`shapes.puck`](shapes.puck). Edit a value,
+`world.reload`, and look again from the same view.
+
+| Console line | What it does |
+|---|---|
+| `gallery.view <name>` | Films the gallery from a bookmarked viewpoint; `view.override camera auto` returns to the chase camera |
+| `gallery.time [day]` | Moves the day to a fraction, noon when omitted; 0.62 is the afternoon reading. Hold the advance as [debug.md](debug.md#time-of-day) gives it |
+| `gallery.blinds <level> Up\|Down` | Gathers or spreads a level's fan shades |
+
+| View | What it faces |
+|---|---|
+| `hall` | The level-zero hall painting's viewpoint: the centre aisle 23 m from the east wall, 1.6 m up, looking east. The slice the look is judged on |
+| `hall-side` | The same bay from the south line, looking north-east across the nave |
+| `plinth`, `arcade`, `bay`, `balcony`, `floor`, `ceiling`, `furniture` | What each kit sheet draws: a station, the north arcade, the tall bays, the balcony edges from the bridge, the tiles and a pad, a coffered soffit, a banner and planter |
+| `atrium`, `outside` | The entrance looking in, and the south front from the forecourt |
+
+A view's eye and aim are placed from `gallerySite` when the document compiles,
+as the other world-space pieces are.
 
 ## What is still open
 

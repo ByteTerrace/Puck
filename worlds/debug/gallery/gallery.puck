@@ -34,6 +34,7 @@ import "../reach"
 import "../shapes"
 import "layout"
 import "shell"
+import "look"
 // The companion hears the lift's authored door edge through its read-only sensory projection, and the world that stands
 // the building binds its camera to the inspection lever's cells (the debug world's exposure.puck).
 exports {
@@ -1286,6 +1287,23 @@ rule "gallery-inspect-off" {
   galleryFill[$"fill"] = 0
 }
 
+// One camera per bookmarked view (look.puck's lookViews), its eye and aim placed from the building's site when the
+// document compiles; `gallery.view` selects one.
+cameras: map(lookViews, view => {
+  name: $"gallery-view-{view.name}"
+  rig {
+    name: $"gallery-view-{view.name}"
+    version: "puck.camera.program.v1"
+    operations [
+      { $type: "anchor", subject { $type: "worldPoint", point: galleryWorld(view.eye[0], view.eye[1], view.eye[2]) } }
+      { $type: "lookAt", subject { $type: "worldPoint", point: galleryWorld(view.aim[0], view.aim[1], view.aim[2]) } }
+      { $type: "fieldOfView", fieldOfViewRadians: (view.fov * 0.017453293) }
+    ]
+  }
+  renderWidth: 1672
+  renderHeight: 941
+})
+
 commands [
   {
     name: "gallery.inspect"
@@ -1306,6 +1324,26 @@ commands [
     ]
     lines [
       "world.state.cell.set hallLights level{level} {state}"
+    ]
+  }
+  {
+    name: "gallery.view"
+    help: "Films the gallery from a bookmarked viewpoint (look.puck's lookViews): hall is the level-zero hall painting's, hall-side its second angle, and the rest face what a kit sheet draws. view.override camera auto returns to the chase camera."
+    parameters [
+      { name: "view", kind: Choice, values: map(lookViews, view => view.name), default: "hall" }
+    ]
+    lines [
+      "view.override camera gallery-view-{view}"
+    ]
+  }
+  {
+    name: "gallery.time"
+    help: "Moves the day to a fraction, noon by default (look.puck's lookNoon; lookAfternoon is the warmer reading the look is also judged at). The day still advances: hold it with world.row.set state day advance, as debug.md's time of day gives it."
+    parameters [
+      { name: "day", kind: Number, default: $"{lookNoon}" }
+    ]
+    lines [
+      "world.state.cell.set day $value {day}"
     ]
   }
   {
