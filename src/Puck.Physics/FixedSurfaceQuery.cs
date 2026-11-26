@@ -418,16 +418,27 @@ public static class FixedSurfaceQuery {
         var travelled = FixedQ4816.Zero;
 
         for (var step = 0; (step < CastSteps); step++) {
+            var point = (origin + (unitDirection * travelled));
+
             if (!TryNearest(
                 candidate: out var nearest,
                 colliders: colliders,
                 dynamicColliders: dynamicColliders,
-                probe: (origin + (unitDirection * travelled)),
+                probe: in point,
                 reach: (maxDistance - travelled)
             )) {
                 return false;
             }
-            if (nearest.Distance <= CastTolerance) {
+
+            // A collider whose nearest point is not its true distance (a field's projection through relief) can let
+            // a step carry the ray through its surface. The ray is then behind the surface it reports, which is the
+            // surface it met.
+            var crossed = ((step > 0) && (FixedVector3.Dot(
+                left: (point - nearest.Point),
+                right: nearest.Normal
+            ) < FixedQ4816.Zero));
+
+            if (crossed || (nearest.Distance <= CastTolerance)) {
                 if (FixedVector3.Dot(
                     left: nearest.Normal,
                     right: unitDirection

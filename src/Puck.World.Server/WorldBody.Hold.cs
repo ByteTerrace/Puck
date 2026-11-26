@@ -223,10 +223,13 @@ public sealed partial class WorldBody {
             (StateCounter(slot: slot) > FixedQ4816.Zero)
         );
     }
-    // Drains one step of what the current hold spends, once the step has moved the body: at its moving rate while the
-    // body is commanded and the step carried it along the held face (anywhere at all, under a row with no face), at
-    // its resting rate while it hangs still or pushes against what stops it. The remainder carries in the hold's own
-    // accumulator, so a rate that does not divide the step evenly still drains exactly the authored amount over time.
+    // Drains one step of what the current hold spends, once the step has moved the body. The rate runs from the
+    // row's resting rate, for a body that hangs still or pushes against what stops it, to its moving rate, for a
+    // commanded body the step carried a full step of the row's speed along the held face (anywhere at all, under a
+    // row with no face), in proportion to how far it went: a climber creeping at a fraction of her pace pays by the
+    // metre, not by the second. A row with no speed of its own pays the moving rate for any commanded travel. The
+    // remainder carries in the hold's own accumulator, so a rate that does not divide the step evenly still drains
+    // exactly the authored amount over time.
     private void SpendHold(in PlayerIntent intent, ulong stepTicks) {
         if (!TryCurrentHold(hold: out var hold)) {
             return;
@@ -244,10 +247,24 @@ public sealed partial class WorldBody {
             travel = travel.RejectFrom(unitAxis: m_holdNormal);
         }
 
-        var rate = (((travel != FixedVector3.Zero) && TryCommandedDirection(direction: out _, intent: in intent))
-            ? hold.SpendPerSecond
-            : hold.SpendRestingPerSecond
-        );
+        var rate = hold.SpendRestingPerSecond;
+
+        if (
+            (hold.SpendPerSecond != rate) &&
+            (travel != FixedVector3.Zero) &&
+            TryCommandedDirection(direction: out _, intent: in intent)
+        ) {
+            var fullStep = FixedTickConversion.ShareOfStep(
+                perSecond: (hold.Speed * m_scale),
+                stepTicks: stepTicks
+            );
+            var share = ((fullStep > FixedQ4816.Zero)
+                ? FixedQ4816.Min(x: FixedQ4816.One, y: (travel.Length / fullStep))
+                : FixedQ4816.One
+            );
+
+            rate += ((hold.SpendPerSecond - rate) * share);
+        }
 
         if (rate <= FixedQ4816.Zero) {
             return;

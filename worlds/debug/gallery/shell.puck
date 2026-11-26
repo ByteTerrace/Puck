@@ -960,6 +960,13 @@ template shellPlacements() {
       solid
     }
   }
+  // The central tree (tree.puck) can be climbed: its trunk and limbs hold a climber, and its treads and branch tops
+  // are ground she walks. This row adds only the grip to the placement that file declares.
+  placement "gallery-tree" {
+    grip {
+      holdable: true
+    }
+  }
   placement "gallery-floor-0" {
     prototype: "gallery-floor-0"
     parent: "gallery"

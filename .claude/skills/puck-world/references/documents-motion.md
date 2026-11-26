@@ -496,10 +496,11 @@ far a surface row's probes search; required positive), `onDrive` +
 down keeps the body off the face), and `spend` (drain a body-lane Counter
 slot at a rate; the row becomes ineligible the tick the slot cannot pay — the
 engine has no stamina concept of its own). The drain is settled at the end of
-the step: `ratePerSecond` while the body is commanded and the step carried it
-along the held face, and `spend.restingRatePerSecond` while it hangs still or
-pushes against what stops it. Zero lets a climber hang for free, and omitted it
-equals `ratePerSecond`. `restore { state, ratePerSecond, when }`
+the step, between `spend.restingRatePerSecond` for a body that hangs still or
+pushes against what stops it and `ratePerSecond` for a commanded body the step
+carried a full step of the row's `speed` along the held face, in proportion to
+how far it went, so creeping pays by the metre. A resting rate of zero lets a
+climber hang for free, and omitted it equals `ratePerSecond`. `restore { state, ratePerSecond, when }`
 refills a Counter slot while the row holds, up to the slot's range envelope
 (which it must declare), and only while its own `when` gate is open: a fall row
 that restores `when: now(fact: Grounded)` refills a body standing on any ground
