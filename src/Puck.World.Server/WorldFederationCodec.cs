@@ -166,6 +166,11 @@ public enum WorldFederationRefusal : byte {
 
     /// <summary>This authority runs no issuer, or its issuer refused the sign-in or the key's proof of possession.</summary>
     IssuanceRefused,
+
+    /// <summary>This authority holds nothing of the asking session: the traveler it asks after was retired when its
+    /// reconnect grace ran out, or the authority was restored to a recovery point. Terminal for the traveler; the
+    /// session takes its seat back and enters again.</summary>
+    SessionEnded,
 }
 /// <summary>
 /// The one authority-to-authority codec. It carries the same frame grammar, bounded reader, and named refusal
@@ -187,7 +192,7 @@ public static partial class WorldFederationCodec {
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
     /// that follows rides ordinary frames. The key's final digit is the contract's version: raise it whenever the
     /// federation wire contract changes.</summary>
-    public const ulong WireKey = 0x384445464B435550UL; // "PUCKFED8"
+    public const ulong WireKey = 0x394445464B435550UL; // "PUCKFED9"
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;
@@ -451,7 +456,8 @@ public static partial class WorldFederationCodec {
     }
     /// <summary>Encodes a commit verdict: one status byte, then the detail.</summary>
     /// <param name="status">The destination's verdict: <see cref="WorldTransferStatus.Committed"/>,
-    /// <see cref="WorldTransferStatus.Uncertain"/>, or <see cref="WorldTransferStatus.Missing"/> for a refusal.</param>
+    /// <see cref="WorldTransferStatus.Uncertain"/>, <see cref="WorldTransferStatus.Ended"/>, or
+    /// <see cref="WorldTransferStatus.Missing"/> for a refusal.</param>
     /// <param name="reason">The refusal or uncertainty narration; empty on a commit.</param>
     /// <returns>The encoded leaf.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="status"/> is
@@ -460,7 +466,7 @@ public static partial class WorldFederationCodec {
         if (!IsCommitVerdict(status: status)) {
             throw new ArgumentOutOfRangeException(
                 actualValue: status,
-                message: "a commit answers Committed, Uncertain, or Missing",
+                message: "a commit answers Committed, Uncertain, Ended, or Missing",
                 paramName: nameof(status)
             );
         }
@@ -1288,7 +1294,7 @@ public static partial class WorldFederationCodec {
         return true;
     }
 
-    private static bool IsCommitVerdict(WorldTransferStatus status) => (status is WorldTransferStatus.Committed or WorldTransferStatus.Uncertain or WorldTransferStatus.Missing);
+    private static bool IsCommitVerdict(WorldTransferStatus status) => (status is WorldTransferStatus.Committed or WorldTransferStatus.Uncertain or WorldTransferStatus.Missing or WorldTransferStatus.Ended);
 
     /// <summary>Decodes a tier-tagged document leaf, hydrating a projection into a locally-valid definition.</summary>
     /// <param name="body">The leaf bytes.</param>

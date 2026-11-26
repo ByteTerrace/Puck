@@ -1125,25 +1125,41 @@ client authorities rejoin cleanly, and departed travellers release after
 `bodies.reconnectGraceSeconds`. Machine content is the part of step 3 still
 open.
 
-- [high, M1] **The hosted silo refuses every player's party.** A release deploys
-  its silo with `ClosedGroupRewind` (`AzureWorld`), and an activation then
-  installs `ContainsRewindAuthority` as the transfer boundary
-  (`WorldSiloHost.ActivationWiring`). A `--connect` client joins by
-  transferring its party from its own session-qualified authority, which is
-  never in the rewind inventory, so `WorldTick.ReserveTransfer` refuses it:
-  `transfer=0 refused ('remote-boot' refused reservation (closed rewind group
-  refuses an external transfer; terminal refusal …))`. The client signs in and
-  is vouched for, its sessions are granted the world's screens, and its seat
-  never leaves its own boot world. [The issuer decision](../decisions/worlds-and-federation.md#players-are-admitted-through-their-hosts-issuer)
-  says a closed group "keeps admitting players while it refuses every other
-  authority", but the boundary checks only the source authority's name, which
-  for a player is its traveller namespace. Decide what a player's party is to a
-  closed group (an issuer-vouched traveller whose body the group owns once it
-  commits, so a group rewind does not reach back into the client), then admit it
-  at the boundary. `puck benchmark --remote local` and `--remote issued` never
-  reach this: neither starts a silo. Check: the RTX 2060's player install
-  joins the hosted authority (play.puck.byteterrace.com, port 7825) and its seat's body arrives in the
-  hosted world.
+- [high, M1] **A player's seat in the hosted world, seen on the deployment.** A
+  closed rewind group admits a signed-in player's party as a guest
+  ([decision](../decisions/worlds-and-federation.md#a-closed-rewind-group-admits-players-as-guests),
+  [design note](closed-group-players.md)), and a law boots a silo, its issuer and
+  a client in one process to show the join, a capture with the player present,
+  the restore and the client's rejoin
+  (`WorldReleaseCutoverLawTests.AClosedGroupAdmitsAPlayerAsAGuestAndARestoreEndsIt`).
+  What only the deployment can show is still owed. Check: the RTX 2060's player
+  install joins the hosted authority (play.puck.byteterrace.com, port 7825)
+  and its seat's body arrives in the hosted world. The deploy that carries this
+  change resets the hosted store, since the checkpoint layout and the
+  federation wire key both moved.
+- [medium] What the guest design leaves unbuilt, each named in
+  [the design note](closed-group-players.md#where-the-guarantee-stops):
+  - A client whose issuer replaces its root mid-run is told its session ended
+    and must be started again (`IssuedKeySigningOracle`). Carrying the running
+    client over to a session under the new root needs the boot authority to
+    take a new namespace in place. Check: a client survives a root replacement
+    without a restart.
+  - What a hosted world's rules write on a guest's identity copy ends with the
+    guest's body. Player progress that outlives a visit needs a record the
+    group owns and restores with itself.
+  - The law covers one entry row. A restore taken after a guest walked from one
+    world of the group to another rests on each row ending what it holds by
+    the traveler's origin, which no law runs. Check: the probe hops the guest
+    from `alpha` to `beta` before its capture and both restored rows hold no
+    guest and no forwarding route.
+  - A crash recovery redoes arrivals from the crossing log and no retirement
+    the tick made between them. Two arrivals in one journal tail, with the first
+    traveler retired in between, redo as two bodies, and a second arrival that
+    took the first one's slot does not redo at all. A guest's rejoin after its
+    grace ran out is one way to write that tail; an ordinary leave and rejoin
+    is another. Check: read `WorldInstanceHost.RecoverCrossings` against a tail
+    that holds an arrival, a tick-driven retirement and a second arrival, and
+    record the retirement in the log if the redo cannot infer it.
 - [medium] A manifest's member is fetched whole and the whole manifest is sent
   each time ([decision 4](remote-content.md#decision-4-the-document-travels-as-a-manifest)).
   A recipient with another version of the package fetches each differing
@@ -6049,6 +6065,22 @@ Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: the agent harness and embeddings as features, then new
 content on the owner's call.
 
+- [medium] **`debug.go overlook` frames a featureless slab.** The overlook
+  spawn (`valley.puck`, id `overlook`) sets the body 6 m in from the sector's
+  inner face (`overlookFace - deckReach + 4`) with `yawDegrees` equal to the
+  sector's compass bearing (body at yaw 225°, camera yaw -135). The chase
+  camera's clearance shortens the boom from 4.2 m to 0.35 m
+  (`world.view.camera`: `boom=0.35/4.2 clearance=shortened cutaway=false`,
+  eye 0.24 m behind and 1.8 m above the feet), and the near plane sits
+  inside the Moth. The frame shows the rim's tops over two flat taupe bands,
+  with no body and no deck. Seen on the RTX 2060 (0.1.198, Vulkan, 1920x1080).
+  Unconfirmed: whether the bands are the deck's own slab seen from inside the
+  body, or the parapet. Find what the clearance probe hits behind the body on
+  an open deck, and whether the spawn should face into the caldera as the
+  glacier's spawn does. In the same run
+  `world.view.pick <x> <y>` answered only `pending` for every point and never
+  logged an answer, which needs checking too. Check: the overlook capture
+  shows the Moth on the deck with the valley floor below.
 - [medium] Text paints, which draw state-bound lettering on a creation's
   surface with no bake, have gaps the press and the chess screens meet
   ([the press](../game/press.md#what-it-does-not-do-yet) lists its own): a

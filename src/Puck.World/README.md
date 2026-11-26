@@ -385,7 +385,15 @@ answer. The primary world admits sixteen network players and gives disconnected
 seats sixty seconds of reconnect grace. Connections in one process share a
 session namespace, `<issuer domain>/<subject>/<session>`; starting a new process
 creates a fresh traveller namespace. Cross-process body recovery is a separate
-travel concern. The [Azure sign-in provider](../Puck.World.Azure/README.md#silo-hosting)
+travel concern. The hosted silo is a closed rewind group, which admits a signed-in
+player's party as a guest: its seats land at the world's own spawn, and the world
+keeps nothing of a session whose last traveller it retired
+([decision](../../docs/decisions/worlds-and-federation.md#a-closed-rewind-group-admits-players-as-guests)).
+A client whose traveller is gone, because it was away past the reconnect grace or
+the deployment was restored to an earlier point, is told so
+(`[world.transfer: seat N returned to 'boot': its traveler ended …]`), takes its
+seat back and joins again at the spawn. A client whose issuer replaced its root
+during the run is told its session ended and must be started again. The [Azure sign-in provider](../Puck.World.Azure/README.md#silo-hosting)
 owns token validation and group membership policy; those concepts stay outside
 the engine, and the
 [issuer decision](../../docs/decisions/worlds-and-federation.md#players-are-admitted-through-their-hosts-issuer)

@@ -136,6 +136,13 @@ public enum WorldTransferStatus : byte {
     /// travelers and refuses every later step for the transfer and for each traveler; only its recovery from its
     /// crossing log answers <see cref="Committed"/> or <see cref="Missing"/>.</summary>
     Uncertain = 3,
+
+    /// <summary>The destination holds nothing of the source's session, and nothing the session did there before will
+    /// ever be honoured: its travelers were retired when their reconnect grace ran out, or the destination was restored
+    /// to a recovery point. A closed rewind group answers it, and records nothing to do so. It is terminal for every
+    /// transfer and traveler the source held there, a commit the source heard confirmed included: the source takes
+    /// its travelers back and enters again as a first entry.</summary>
+    Ended = 4,
 }
 /// <summary>Bounded operational counts for transfer-state churn laws and diagnostics.</summary>
 /// <param name="ActiveTransactions">The live leases, retained commits and uncertain arrivals.</param>
@@ -791,18 +798,31 @@ public sealed partial class WorldTransferEscrow {
     /// is left as it is.</summary>
     /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
     /// <param name="transferId">The source-minted transfer id.</param>
-    public void Abort(string sourceAuthority, ulong transferId) => KillLease(key: new WorldTransferKey(
-        SourceAuthority: sourceAuthority,
-        TransferId: transferId
-    ));
+    /// <param name="caller">Who made the call; a closed rewind group changes nothing for a caller outside it.</param>
+    public void Abort(string sourceAuthority, ulong transferId, WorldTransferCaller? caller = null) {
+        if (Admit(caller: caller, sourceAuthority: sourceAuthority).Refused) {
+            return;
+        }
+        KillLease(key: new WorldTransferKey(
+            SourceAuthority: sourceAuthority,
+            TransferId: transferId
+        ));
+    }
     /// <summary>Retires disposable exact-retry payload after the source has observed and published commit. The key keeps
     /// answering <see cref="WorldTransferStatus.Committed"/>.</summary>
     /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
     /// <param name="transferId">The source-minted transfer id.</param>
-    public void Acknowledge(string sourceAuthority, ulong transferId) => RetireCommittedTransaction(key: new WorldTransferKey(
-        SourceAuthority: sourceAuthority,
-        TransferId: transferId
-    ));
+    /// <param name="caller">Who made the call; a closed rewind group changes nothing for a caller outside it.</param>
+    public void Acknowledge(string sourceAuthority, ulong transferId, WorldTransferCaller? caller = null) {
+        if (Admit(caller: caller, sourceAuthority: sourceAuthority).Refused) {
+            return;
+        }
+        RetireCommittedTransaction(key: new WorldTransferKey(
+            SourceAuthority: sourceAuthority,
+            TransferId: transferId
+        ));
+        ReclaimGuest(sourceAuthority: sourceAuthority);
+    }
     /// <summary>Re-arms a committed arrival's reciprocal edge after the body has been observed fully inside its new
     /// owner's half-space. The expected identity makes slot reuse or a later arrival unable to clear another
     /// transfer's latch.</summary>
@@ -832,9 +852,36 @@ public sealed partial class WorldTransferEscrow {
     /// <param name="confirmed">Home's answers to this destination's own question for this commit: the epoch each
     /// companion's currently granted hop lands it at. A leased companion with no matching answer is left out of the
     /// landing while the rest land.</param>
-    /// <returns><see cref="WorldTransferStatus.Committed"/>, <see cref="WorldTransferStatus.Uncertain"/>, or
-    /// <see cref="WorldTransferStatus.Missing"/> for a refusal.</returns>
-    public WorldTransferStatus Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null) {
+    /// <param name="caller">Who made the call. A closed rewind group refuses a caller outside it and writes nothing,
+    /// and answers a guest whose session it holds nothing of <see cref="WorldTransferStatus.Ended"/>.</param>
+    /// <returns><see cref="WorldTransferStatus.Committed"/>, <see cref="WorldTransferStatus.Uncertain"/>,
+    /// <see cref="WorldTransferStatus.Ended"/>, or <see cref="WorldTransferStatus.Missing"/> for a refusal.</returns>
+    public WorldTransferStatus Commit(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null, WorldTransferCaller? caller = null) {
+        var admission = Admit(caller: caller, sourceAuthority: sourceAuthority);
+
+        if (admission.Refused) {
+            reason = WorldTransferBoundary.Refusal;
+            return WorldTransferStatus.Missing;
+        }
+        if (admission.IsGuest && !HoldsSource(sourceAuthority: sourceAuthority)) {
+            reason = $"transfer {transferId}: this authority holds nothing of the session '{sourceAuthority}'; its entry here ended";
+            return WorldTransferStatus.Ended;
+        }
+        try {
+            return CommitAdmitted(
+                admission: in admission,
+                confirmed: confirmed,
+                members: members,
+                reason: out reason,
+                sourceAuthority: sourceAuthority,
+                transferId: transferId
+            );
+        } finally {
+            ReclaimGuest(sourceAuthority: sourceAuthority);
+        }
+    }
+    // The commit behind the door: a live one decided by Admit, or a recorded one redone as it was admitted.
+    private WorldTransferStatus CommitAdmitted(in WorldTransferAdmission admission, string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null) {
         var key = new WorldTransferKey(
             SourceAuthority: sourceAuthority,
             TransferId: transferId
@@ -847,6 +894,7 @@ public sealed partial class WorldTransferEscrow {
 
         try {
             status = CommitUnder(
+                guest: admission.IsGuest,
                 key: key,
                 members: members,
                 reason: out reason
@@ -871,13 +919,20 @@ public sealed partial class WorldTransferEscrow {
                 key: key
             );
         }
+        // A guest's session that holds nothing live after its refused commit keeps no row, so its key needs no
+        // tombstone: the key died with the session, and every later question about it answers Ended. A commit that
+        // landed and rolled back still records the generations it burned.
+        if (admission.IsGuest && (m_rolledBack.Count == 0) && !HoldsLive(sourceAuthority: sourceAuthority)) {
+            ForgetSource(sourceAuthority: sourceAuthority);
+            return WorldTransferStatus.Missing;
+        }
         return AnswerMissing(
             burned: [.. m_rolledBack],
             key: key,
             reason: ref reason
         );
     }
-    private WorldTransferStatus CommitUnder(WorldTransferKey key, IReadOnlyList<WorldTransferCommitMember> members, out string reason) {
+    private WorldTransferStatus CommitUnder(WorldTransferKey key, IReadOnlyList<WorldTransferCommitMember> members, bool guest, out string reason) {
         var transferId = key.TransferId;
 
         if (IsUncertain(
@@ -922,6 +977,11 @@ public sealed partial class WorldTransferEscrow {
         )) {
             reason = $"transfer {transferId} has no live reservation";
 
+            return WorldTransferStatus.Missing;
+        }
+        // A guest's commit lands only in the shape a closed rewind group admits; a recorded one already passed here.
+        if (guest && !m_relanding && (WorldTransferBoundary.GuestCommitRefusal(members: members) is { } guestRefusal)) {
+            reason = $"transfer {transferId}: {guestRefusal}";
             return WorldTransferStatus.Missing;
         }
 
@@ -1666,8 +1726,32 @@ public sealed partial class WorldTransferEscrow {
             );
         }
     }
-    public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null) {
+    /// <summary>Leases destination body indices to a cohort, or refuses by name. A closed rewind group refuses a
+    /// caller outside it, and a guest's cohort that is not in the shape it admits
+    /// (<see cref="WorldTransferBoundary.GuestReservationRefusal"/>); neither writes anything.</summary>
+    /// <param name="request">The reservation.</param>
+    /// <param name="confirmed">Home's answers to this destination's question for this reservation.</param>
+    /// <param name="caller">Who made the call, or <see langword="null"/> for a caller that proved nothing.</param>
+    /// <returns>The destination's verdict and assigned body indices.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
+    public WorldTransferReservationReply Reserve(WorldTransferReservationRequest request, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null, WorldTransferCaller? caller = null) {
         ArgumentNullException.ThrowIfNull(argument: request);
+        var admission = Admit(caller: caller, sourceAuthority: request.SourceAuthority);
+
+        return ReserveAdmitted(
+            admission: in admission,
+            confirmed: confirmed,
+            request: request
+        );
+    }
+    // The reservation behind the door: a live one decided by Admit, or a recorded one redone as it was admitted.
+    private WorldTransferReservationReply ReserveAdmitted(in WorldTransferAdmission admission, WorldTransferReservationRequest request, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null) {
+        if (admission.Refused) {
+            return WorldTransferReservationReply.Refused(reason: WorldTransferBoundary.Refusal);
+        }
+        if (admission.IsGuest && (WorldTransferBoundary.GuestReservationRefusal(request: request) is { } guestRefusal)) {
+            return WorldTransferReservationReply.Refused(reason: guestRefusal);
+        }
         var key = new WorldTransferKey(
             SourceAuthority: request.SourceAuthority,
             TransferId: request.TransferId
@@ -2476,7 +2560,10 @@ public sealed partial class WorldTransferEscrow {
         // lease the arrival bound is restored as it was decided.
         var request = arrival.Request;
         var reply = (m_leases.ContainsKey(key: arrival.Key)
-            ? Reserve(request: request)
+            ? ReserveAdmitted(
+                admission: WorldTransferAdmission.Recorded(boundary: m_boundary, sourceAuthority: request.SourceAuthority),
+                request: request
+            )
             : RestoreLease(
                 arrival: arrival,
                 landings: (recorded?.Generations.Count ?? arrival.Members.Count)
@@ -2517,7 +2604,8 @@ public sealed partial class WorldTransferEscrow {
         m_relandRolledBack = false;
 
         try {
-            var status = Commit(
+            var status = CommitAdmitted(
+                admission: WorldTransferAdmission.Recorded(boundary: m_boundary, sourceAuthority: request.SourceAuthority),
                 members: arrival.Members,
                 reason: out reason,
                 sourceAuthority: request.SourceAuthority,
@@ -2563,6 +2651,8 @@ public sealed partial class WorldTransferEscrow {
         }
         foreach (var key in m_mobilityAdmissions.Keys.Where(predicate: candidate => (candidate.Incarnation == incarnation)).ToArray()) {
             _ = m_mobilityAdmissions.Remove(key: key);
+            // The traveler was the last thing a guest's session held here once its credential goes.
+            ReclaimGuest(sourceAuthority: key.SourceAuthority);
         }
     }
 
@@ -2591,8 +2681,15 @@ public sealed partial class WorldTransferEscrow {
     /// answers <see cref="WorldTransferStatus.Uncertain"/>. The caller holds the authority gate.</summary>
     /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
     /// <param name="transferId">The source-minted transfer id.</param>
+    /// <param name="caller">Who made the call. A closed rewind group answers a caller outside it, and a guest whose
+    /// session it holds nothing of, <see cref="WorldTransferStatus.Ended"/>, and records nothing for either.</param>
     /// <returns>The transfer's status here.</returns>
-    public WorldTransferStatus Status(string sourceAuthority, ulong transferId) {
+    public WorldTransferStatus Status(string sourceAuthority, ulong transferId, WorldTransferCaller? caller = null) {
+        var admission = Admit(caller: caller, sourceAuthority: sourceAuthority);
+
+        if (admission.Refused || (admission.IsGuest && !HoldsSource(sourceAuthority: sourceAuthority))) {
+            return WorldTransferStatus.Ended;
+        }
         var key = new WorldTransferKey(
             SourceAuthority: sourceAuthority,
             TransferId: transferId
@@ -2600,7 +2697,7 @@ public sealed partial class WorldTransferEscrow {
         var reason = string.Empty;
 
         // A key whose lease or arrival record is in flight is neither reserved nor committed until the record settles.
-        return ((m_uncertain.ContainsKey(key: key) || IsOpen(key: key))
+        var status = ((m_uncertain.ContainsKey(key: key) || IsOpen(key: key))
             ? WorldTransferStatus.Uncertain
             : ((m_committed.Contains(item: key) || (m_spent.TryGetValue(key: key, value: out var spent) && spent.Committed))
                 ? WorldTransferStatus.Committed
@@ -2611,6 +2708,9 @@ public sealed partial class WorldTransferEscrow {
                         reason: ref reason
                     )
         )));
+
+        ReclaimGuest(sourceAuthority: sourceAuthority);
+        return status;
     }
     /// <summary>Reads the authenticated source-border identity retained for one active arrived body.</summary>
     public bool TryArrivalBorder(int bodyIndex, out string border) =>
