@@ -217,7 +217,8 @@ public static class DocumentScalars {
                 ),
                 "cosine" => Math.Cos(d: numbers[0]),
                 "floor" => Math.Floor(d: numbers[0]),
-                "logarithm" => (Math.Log(d: numbers[0]) / Math.Log(d: numbers[1])),
+                // Base 2 on both sides, as the rule language's FixedQ4816.Log2 quotient is, so a power of the base folds exactly.
+                "logarithm" => (Math.Log2(x: numbers[0]) / Math.Log2(x: numbers[1])),
                 "maximum" => Math.Max(
                     val1: numbers[0],
                     val2: numbers[1]

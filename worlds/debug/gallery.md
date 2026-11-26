@@ -43,7 +43,7 @@ aisles.
 | Nave | x 12 to the east wall, z 9 to 29 | 20 m wide, 47.7 m long, open from level 0 to three skylights |
 | Arcades | piers every 5 m, 0.4 m behind each balcony edge | a branched pier on every level, 4.2 m tall, one wide bay between each pair |
 | Balcony edges | round the nave's void on levels 1 to 3 | level 1: a toy lattice from floor to fascia ([the lattice](#the-lattice)); level 2: glass balustrade, brass rail 1.1 m up; level 3: open. Each opens in bay 6 where [the central tree](#the-central-tree)'s branches land |
-| Stairs | one in each corner of the aisles, in the end bays (0 and 12), every one serving every storey: switchbacks south-west and north-east, spirals south-east and north-west, so the plan reads the same turned half round | eighteen 0.25 m risers a storey. A switchback fills 4 by 5 tiles (5 by 6.25 m): two 2.4 m flights of eight 0.47 m treads either side of a spine, a 2.5 m half landing against the long wall. A spiral fills 4 by 4 tiles round a 0.5 m newel, one turn a storey, its treads 0.52 m deep 1.5 m out; each floor rails its well but where the stair arrives |
+| Stairs | one in each corner of the aisles, in the end bays (0 and 12), every one serving every storey: switchbacks south-west and north-east, spirals south-east and north-west, so the plan reads the same turned half round | eighteen 0.25 m risers a storey, but for the two storeys either side of level 1, whose risers grow finer toward it (see "The size of level 1"). A switchback fills 4 by 5 tiles (5 by 6.25 m): two 2.4 m flights of eight 0.47 m treads either side of a spine, a 2.5 m half landing against the long wall. A spiral fills 4 by 4 tiles round a 0.5 m newel, one turn a storey, its treads 0.52 m deep 1.5 m out; each floor rails its well but where the stair arrives |
 | Lift | car centre (18.8, -1.65), in a glass tower outside the south wall | car 2.8 by 3.1 m, door 1.8 m wide in the wall |
 | Entrance | x 24 to 28 in the south wall | 4 m wide, 3.3 m high, under the first arch |
 | Projecting wing | x 21 to 60, levels 2 and 3, 4 m south of the wall | on six arches 7.5 m apart over the forecourt |
@@ -508,6 +508,25 @@ names what it needs in `needs`, such as `[{ register: "size", atLeast: 0.5 }]`:
 a body that falls short stands in no station's reach, so the context button
 does nothing there.
 
+**The stairs shrink with her.** A body's step height is its kit's 0.3 m times
+its size (`WorldBody.StepHeight`), so the two storeys of each corner stair
+either side of level 1 are shaped to the size she has on them: each storey's
+piece is its own creation (`gallery-switchback-<k>`, `gallery-spiral-<k>` in
+`gallery/shell.puck`), its foot and head taking their floors' sizes (Alice's on
+level 1, full elsewhere, from the same `lookWonderSize` the field reads), and
+the standard's riser schedule (`stairFlight`, `stairRiserCount` and
+`stairStepHeight` in [`architecture.puck`](../standard/architecture.puck))
+steps the reciprocal of her size evenly over the risers. Each riser is then
+the same share of her size, 0.25 m at full size, so every step costs her the
+same stride and leaves her the same 1.2 margin of step height over the riser;
+the storey's rise stays 4.5 m, so the risers grow finer and more numerous
+toward level 1 (a switchback's flights take 16 and 40 treads, a spiral 60 a
+turn, against 8, 8 and 18 elsewhere), and the treads shrink with them at the
+flight's slope. To an observer it is an ordinary stair that grows finer as it
+nears level 1, and she shrinks in step with it. A spiral's treads turn as far
+as they rise, so their centres stay on the one helix its panes and handrail
+follow. Retuning `lookWonderSize` reshapes these flights at the next reload.
+
 The size is fixed-point state on the authority, so her collider, pace, step
 height, jump, reach and camera follow it, and a window, another player or a
 spectator sees her the size she is. A body asked to grow where it does not fit
@@ -534,15 +553,11 @@ small that way.
 
 ## What is still open
 
-- **A shrinking body cannot climb the stairs.** A body's step height is its
-  kit's 0.3 m times its size (`WorldBody.StepHeight`), and the corner stairs'
-  risers are all 0.25 m, so a body climbing from level 0 stops once its size
-  falls under about 0.83, a riser or two up the first flight; at Alice's size
-  it cannot climb from level 1 to level 2 either. Walking down works, and the
-  lift works both ways. The fix is the evolving staircase the owner described:
-  treads and risers that shrink with the body over the flight, so each step
-  costs it the same share of its stride (the curve the size field already
-  follows).
+- **A pier stands at a switchback's head.** The arcade's end pier on every
+  level (`shellPiers`, tile row `arcadeRowSouth` and its north twin) stands in
+  the tile row in front of a switchback, across the outer half of its second
+  flight's head (the south-west stair's west half), so a body walking up that half stops against the pier's foot
+  a few centimetres short of the floor; the flight's other half arrives.
 - **A rented handheld's picture.** A screen's frame is fixed in the world
   (`WorldScreen.Origin`), and its `carry` is presentation keyed to one look's
   pose, with the engage radius left at the authored frame, so the pool machine

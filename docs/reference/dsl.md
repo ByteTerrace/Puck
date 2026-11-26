@@ -363,13 +363,14 @@ something else, or nothing, in a document.
 The two evaluators fold a name differently, on purpose:
 
 - A function defined over integers (the bit, lattice, grid, and combinatorial family—
-  `greatestCommonDivisor`, `leastCommonMultiple`, `floorDivide`, `floorModulo`, `power`, `modularPower`, `modularInverse`, `binomialCoefficient`, `primeAt`, `setBitCount`,
+  `greatestCommonDivisor`, `leastCommonMultiple`, `floorDivide`, `floorModulo`, `modularPower`, `modularInverse`, `binomialCoefficient`, `primeAt`, `setBitCount`,
   `hexIndex`, `mortonIndex`, `hilbertIndex`, `pairMinimum`, `pairMaximum`, and the rest) is evaluated by the engine's
   own `ExpressionArithmetic` rather than reimplemented here. Integers are exact in both evaluators, so delegating
   makes a numeric disagreement between a rule and a document impossible rather than merely unlikely.
 - Everything else the document language can fold—`absolute`, `ceiling`, `clamp`, `floor`, `maximum`, `minimum`,
-  `round`, `sign`, `sine`, `cosine`, `squareRoot`—uses `double` for fractional operations, while whole-number
-  inputs to integer-preserving functions retain their signed 64-bit precision. Routing an authored `0.7071068` through the
+  `round`, `sign`, `sine`, `cosine`, `squareRoot`, `power`, `logarithm`—uses `double` for fractional operations,
+  while whole-number inputs to integer-preserving functions retain their signed 64-bit precision (a whole `power`
+  with a non-negative exponent is evaluated exactly by `ExpressionArithmetic`). Routing an authored `0.7071068` through the
   rule language's `Q48.16` fixed point to agree with it bit-for-bit would quantize the authored value to 1/65536
   for no gain: the folded number is document DATA, baked into JSON at compile time, and never simulation state. The
   double fold already agrees with the fixed-point one exactly on whole numbers.
