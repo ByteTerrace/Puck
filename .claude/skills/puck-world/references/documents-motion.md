@@ -520,7 +520,12 @@ camera behind the body the stick's up is up the wall, whichever way the wall
 faces. A `Gravity` row leaves a world-framed body's axes alone; a
 heading-framed kit's advance is "up the face" on either. A `planarImpulse`
 fired while a pull holds lies in the face, along the command with
-`useMoveDirection`.
+`useMoveDirection`. A row whose `forward` is `Surface` owns the heading while it
+holds a face (`WorldBody.HoldOwnsHeading`): a commanded facing (`FaceX`/`FaceZ`,
+what `player.steer` and `player.look.steer` write) turns the camera and never
+the body off its face. `views.seatControl.faceFrame: Body` then makes the seat's
+movement the body's own on a face
+([views](views.md#camera-programs-and-layouts)).
 
 **`mantle { height, depth, seconds, state }` (a `Pull` row only).** While the
 body is driven up the face and the face ends within `height` above its feet,
@@ -531,8 +536,27 @@ move that rises first and then moves in. `state` names a Timer slot the mantle
 starts for its own length. A row with a mantle also guards its edges: where
 the face ends above, below or to a side and nothing is proven, the part of the
 command that would carry the body off the face is removed for the step, so the
-body hangs at the edge. `worlds/standard/abilities.puck`'s `climbAbility` is
-the worked use, and `worlds/debug/climb-tests.puck` its scenarios.
+body hangs at the edge. The guard reads an impulse with the command: a leap up
+a face begins the mantle where the edge comes within reach and a landing is
+proven, stops at the edge where none is, and a firing whose `planarImpulse` an
+edge would stop whole is refused, so none of its effects apply
+(`WorldBody.ImpulseStopsAtFaceEdge`). `worlds/standard/abilities.puck`'s
+`climbAbility` is the worked use, and `worlds/debug/climb-tests.puck` its
+scenarios.
+
+**`corner { depth, seconds }` (a `Pull` row only).** While the body is driven
+sideways and its face ends one body radius ahead, the row's probe looks back at
+the corner from beyond it for a face inside the row's cone that faces the way
+the body is going (an outside corner; a face within 60 degrees of the held one
+is the same face). The body's own sweep proves the way round, out along the
+traverse and then in along the new face to `depth` past the corner, and the
+body is carried there over `seconds` as an exclusive timed move through the
+corner of that path (`WorldBody.TryBeginCornerWrap`). It keeps its row, which
+holds the new face from the start of the move, and a `forward: Surface` row
+turns it to face the new face on the way, so a heading-framed traverse carries
+on round. Where no face is found within the row's `reach`, or the way is not
+clear, the edge is an edge. A wall thinner than `depth` is not wrapped: its end
+is no face to arrive on.
 
 A pull owns the whole tangent-plane velocity, rise included; the tick it ends
 (released, spent out, or its face lost) that rise is split against gravity-up

@@ -684,7 +684,7 @@ public sealed class WorldSeatViewState {
             livePitch: pitch,
             liveYaw: yaw,
             yawReference: views.SeatControl.YawReference
-        ) with { Distance = distance };
+        ) with { Distance = distance, DistanceReference = AuthoredDistance(views: views) };
 
         return rig;
     }

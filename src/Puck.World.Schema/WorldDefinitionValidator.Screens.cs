@@ -1239,6 +1239,9 @@ public static partial class WorldDefinitionValidator {
         if (!Enum.IsDefined(value: control.YawReference)) {
             errors.Add(item: $"{path}.yawReference is unknown.");
         }
+        if (!Enum.IsDefined(value: control.FaceFrame)) {
+            errors.Add(item: $"{path}.faceFrame is unknown.");
+        }
         if (control.Boom is { } boom) {
             RequirePositive(value: boom.Minimum, name: new Subject(Member: ".boom.minimum", Path: path), errors: errors);
             RequirePositive(value: boom.Maximum, name: new Subject(Member: ".boom.maximum", Path: path), errors: errors);

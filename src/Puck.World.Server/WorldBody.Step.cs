@@ -111,6 +111,9 @@ public sealed partial class WorldBody {
         if ((m_stateLane?.Input is { } input) && !input.TryValidateEffects(body: scratch.EntityIndex, effects: effects, reason: out _, targets: scratch.EffectTargets)) {
             return false;
         }
+        if (ImpulseStopsAtFaceEdge(effects: effects, scratch: ref scratch)) {
+            return false;
+        }
         var epoch = InputEpoch;
         var writesState = false;
 
@@ -162,9 +165,7 @@ public sealed partial class WorldBody {
         if (resetPosition) {
             m_positionAccumulator.Reset();
             // A hard reposition cancels any in-flight impulse overlay (a warp never carries a dash across).
-            m_overlayVelocity = default;
-            m_overlayRemaining = 0;
-            m_overlayAccumulator.Reset();
+            CancelImpulse();
             // Same discontinuity reason as the velocity resets below: without this, a warped body's swept
             // portal-crossing segment would ghost from the pre-warp position through every frame in between. The
             // caller has already written the new m_position by the time CommitTeleport runs, so this collapses the
@@ -182,6 +183,12 @@ public sealed partial class WorldBody {
         if (resetVertical) {
             ResetVertical();
         }
+    }
+    // Ends the impulse overlay a planarImpulse effect started, where something else takes the body's translation.
+    private void CancelImpulse() {
+        m_overlayVelocity = default;
+        m_overlayRemaining = 0;
+        m_overlayAccumulator.Reset();
     }
     // An angle in radians normalized into [0, 360) degrees, so an echo is a stable compass reading (a -10° pitch reads
     // as 350°, level as 0°).
@@ -1808,7 +1815,7 @@ public sealed partial class WorldBody {
     // yaw = atan2 of a world planar direction, facing (-sin yaw, -cos yaw). FaceY is elevation — no yaw to take
     // from it.
     private void SnapYawToPlanarIntent(ref BodyMotionScratch scratch) {
-        if (HasTimedYaw) { return; }
+        if (HasTimedYaw || HoldOwnsHeading) { return; }
 
         var faceX = Role(
             intent: in scratch.Intent,

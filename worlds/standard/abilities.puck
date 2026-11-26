@@ -158,12 +158,15 @@ template dashAbility(kit, speed = 14, duration = 0.2, cooldown = 0.8) {
 // go starts the `climbRest` timer, `regrabSeconds` long, so the wall she dropped from does not take her straight back.
 // At the top, where the face ends within `mantleHeight` of her feet, she is carried `mantleDepth` in over the edge in
 // `mantleSeconds` (the `mantling` timer runs meanwhile); where a face ends with nowhere to stand she hangs at its edge.
+// At an outside corner she swings round onto the face past it in `cornerSeconds`, arriving `cornerDepth` along it, and
+// keeps traversing the way she was going. A leap ends where its face ends: up into a mantle where the top can be stood
+// on, at the edge where it cannot, and a leap an edge would stop at once is not made and costs nothing.
 //
 // Expand it in a document of its own that the kit's document imports, so the climb row composes ahead of the kit's own
 // ground and fall rows. Stamina refills under the rows she rests under, so the kit authors `restore: staminaRestore()`
 // on its ground and fall rows. Which surfaces can be climbed is the world's `collision.defaultHold` and a placement's
 // `grip { holdable }`.
-template climbAbility(kit, speed = 2.2, cone = [60, 120], reach = 0.8, pull = 6, driveAlignment = 0.5, driveSeconds = 0.2, airGrabSeconds = 0.2, staminaMax = 10, moveSpend = 1, restSpend = 0, jumpCost = 2, jumpSpeed = 9, jumpSeconds = 0.2, regrabSeconds = 0.4, mantleHeight = 2.3, mantleDepth = 0.8, mantleSeconds = 0.5) {
+template climbAbility(kit, speed = 2.2, cone = [60, 120], reach = 0.8, pull = 6, driveAlignment = 0.5, driveSeconds = 0.2, airGrabSeconds = 0.2, staminaMax = 10, moveSpend = 1, restSpend = 0, jumpCost = 2, jumpSpeed = 9, jumpSeconds = 0.2, regrabSeconds = 0.4, mantleHeight = 2.3, mantleDepth = 0.8, mantleSeconds = 0.5, cornerDepth = 0.45, cornerSeconds = 0.4) {
   state {
     body [
       {
@@ -221,6 +224,10 @@ template climbAbility(kit, speed = 2.2, cone = [60, 120], reach = 0.8, pull = 6,
               depth: mantleDepth
               seconds: mantleSeconds
               state: "mantling"
+            }
+            corner {
+              depth: cornerDepth
+              seconds: cornerSeconds
             }
           }
         ]
