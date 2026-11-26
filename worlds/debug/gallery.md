@@ -350,6 +350,26 @@ drifts a few hundredths over patches a couple of metres across, so no wall,
 pier or floor is one flat colour. The kit's paints are plain dielectrics, and
 the primitives that open the nave each take a material of their own.
 
+### Lighting
+
+Every light in the building comes from something a body can see, and there
+are four kinds:
+
+| Source | What it is | Its light |
+|---|---|---|
+| The sun | The world's sun, with its moon and the companion star ([day.puck](day.puck)) | Through the windows and skylights |
+| The flaw | The glowing tube that weaves through every floor ([flaw.puck](gallery/flaw.puck)) | A chain of tube lights along it, each in one storey, on that storey's switch |
+| Screens | The toybox's twelve visible pictures ([toybox.puck](gallery/toybox.puck)) | Each lights what stands before it with its own picture: the engine reduces the picture to its mean on the GPU and shades it as an area light the size of the face, and the irradiance volume bounces it |
+| Lamps | The lift car's luminous ceiling and the south-west stair's pendant, hung from the soffit of level 2's half landing (the standard's `pendantLamp`) | A spot at the lamp's glowing face, in that face's colour, giving what the face shows (`glowSpotPower`); the pendant follows level 1's switch and goes dark with it |
+
+Glowing marquees, indicators and the display consoles' interfaces are emissive
+surfaces that light nothing directly. A material's emission reaches its
+surroundings through the irradiance volume's bounce. The consoles' interfaces
+are paint on glass, which the volume does not trace, so they light nothing yet
+([open items](../../docs/plans/open-items.md#debug-tools)).
+`gallery.inspect On` pins the camera at EV100 7 so that captures of different
+exhibits compare at one exposure. It adds no light.
+
 ### Tuning it
 
 [`gallery/look.puck`](gallery/look.puck) names every value a look pass tunes,

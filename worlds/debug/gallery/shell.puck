@@ -102,7 +102,7 @@ function shellPalette(pads, level = 0, below = 0) = [
   shellBrushed({ color: lookTeal, roughness: 0.6, specular: 0.04 })
   shellBrushed({ color: lookBoard, roughness: 0.6 })
   shellBrushed({ color: lookLevels[below].ceiling, roughness: 0.9, specular: 0.02, paints: shellCoffers(lookLevels[below]) }, lookBrushCeiling)
-  { color: "#FFFFFF", roughness: 0.5, emissive: 120nit }
+  { color: lookCarLamp.color, roughness: 0.5, emissive: lookCarLamp.luminance }
   shellBrushed({ color: lookOchre, roughness: 0.6, specular: 0.04 }, lookBrushCladding)
   shellBrushed({ color: lookLevels[level].cream, roughness: 0.6, specular: 0.04 })
   { color: lookGlass, roughness: 0.03, glass { depth: 0.04, ior: 1.5 } }

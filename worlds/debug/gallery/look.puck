@@ -199,3 +199,11 @@ let lookFlaw = {
 // start (the nave's west end, under the roof) and the tint eases from each to the next, slowly enough that no stretch
 // reads as a fixture's one colour: ice, violet, orchid, ember, mint, and back to ice where the loop closes.
 let lookFlawTint = [[120, 226, 255], [150, 128, 255], [236, 112, 236], [255, 170, 120], [118, 246, 196]]
+
+// The building's two lamps besides the flaw, each a glowing face whose light stands at it in its colour and gives what
+// the face shows (architecture.puck's glowSpotPower): `color` is the face's and the light's, `luminance` the face's in
+// nits. The lift car's luminous ceiling panel, a cool white over the cab; the south-west stair's pendant, a warm frosted
+// diffuser under a teal drum, hung from the soffit of level 2's half landing, and `off` its diffuser while level 1's
+// switch is off.
+let lookCarLamp = { color: "#F4F8FF", luminance: 120 }
+let lookStairPendant = { drum: lookTeal, cord: "#23262B", color: "#FFD9A8", luminance: 3000, off: "#C9BFB2" }

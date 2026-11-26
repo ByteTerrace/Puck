@@ -5721,8 +5721,13 @@ annotate, the `probes` and `exposure` views) are
 - [low] `view.override camera swallow-portrait` echoed success but left the
   seat's camera on screen. Find why a named world camera row does not replace
   the view.
-- `gallery.inspect`'s values (60 lux fills, EV100 7) are first picks tuned on
-  one exhibit; a flat ambient for baked meshes would replace the fills.
+- The gallery's twelve display consoles light nothing: each interface is paint
+  on the plinth's glass (`displayScreen`, `consoleText` in `shapes.puck`), and
+  the irradiance volume traces neither paint nor glass, while only a `screens`
+  row lights through the screen-light walk. Rebuild each interface as a screen
+  whose picture is its glyph decal (`SdfWorldTables.SetScreenDecal`), so it
+  lights what stands before it as the toybox's pictures do, or let the volume
+  trace a paint's emission.
 - The GPU looks owed at the gallery (the warps II row, the hall's light
   switches) and the `puck mesh audit` gaps are the
   [rendering plan](rendering.md)'s.
