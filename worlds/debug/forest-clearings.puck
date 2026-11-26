@@ -39,6 +39,20 @@ placements {
         margin: 0
       }
     }
+    // Grass gathers in a ragged ring at the boulder's foot, sized by the boulder's own scale.
+    for k in range(0, 7) {
+      placement $"forest-rock-tuft-{i}-{k}" {
+        surface: forestGround
+        prototype: "forest-tuft"
+        position [
+          p[0] + (0.6 + 0.8 * forestVariation(i, 0.2)) * (0.95 + 0.3 * forestVariation(k, 0.5)) * cosine(k * 0.8975979 + i),
+          0,
+          p[2] - 150 + (0.6 + 0.8 * forestVariation(i, 0.2)) * (0.8 + 0.3 * forestVariation(k, 0.5)) * sine(k * 0.8975979 + i),
+        ]
+        scale: 1.2 + 0.9 * forestVariation(k + i, 0.4)
+        yawDegrees: k * 137.5 + i * 23
+      }
+    }
   }
   for (drift, j) in forestFlowerDrifts {
     for k in range(0, 7) {

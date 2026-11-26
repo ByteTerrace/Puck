@@ -62,6 +62,45 @@ let meadowSand = [
   }
 ]
 
+// Boulders: position, scale and yaw (sceneryScatter rows).
+let meadowRocks = [
+  {
+    position [-3.8, 0, 5.4],
+    scale: 1.1,
+    yaw: 20
+  }
+  {
+    position [-5.3, 0, 5.9],
+    scale: 0.55,
+    yaw: 138
+  }
+  {
+    position [6.5, 0, 9.8],
+    scale: 1.3,
+    yaw: 225
+  }
+  {
+    position [7.9, 0, 10.4],
+    scale: 0.58,
+    yaw: 320
+  }
+  {
+    position [20.6, 0, 2.2],
+    scale: 1,
+    yaw: 60
+  }
+  {
+    position [21.8, 0, 1.4],
+    scale: 0.46,
+    yaw: 180
+  }
+  {
+    position [25, 0, 10],
+    scale: 1.45,
+    yaw: 270
+  }
+]
+
 prototypes {
   mossyRock(id: "meadow-rock")
   broadleafTree(id: "meadow-tree")
@@ -124,49 +163,24 @@ placements {
     origin: meadowOrigin,
     contact: { margin: 0 }
   )
-  sceneryScatter(
-    id: "meadow-rock",
-    prototype: "meadow-rock",
-    rows: [
-      {
-        position [-3.8, 0, 5.4],
-        scale: 1.1,
-        yaw: 20
-      }
-      {
-        position [-5.3, 0, 5.9],
-        scale: 0.55,
-        yaw: 138
-      }
-      {
-        position [6.5, 0, 9.8],
-        scale: 1.3,
-        yaw: 225
-      }
-      {
-        position [7.9, 0, 10.4],
-        scale: 0.58,
-        yaw: 320
-      }
-      {
-        position [20.6, 0, 2.2],
-        scale: 1,
-        yaw: 60
-      }
-      {
-        position [21.8, 0, 1.4],
-        scale: 0.46,
-        yaw: 180
-      }
-      {
-        position [25, 0, 10],
-        scale: 1.45,
-        yaw: 270
-      }
-    ],
-    origin: meadowOrigin,
-    contact: { margin: 0 }
-  )
+  sceneryScatter(id: "meadow-rock", prototype: "meadow-rock", rows: meadowRocks, origin: meadowOrigin, contact: { margin: 0 })
+  // Grass gathers in a ragged ring at each boulder's foot, sized by the boulder's scale.
+  for (rock, r) in meadowRocks {
+    sceneryScatter(
+      id: $"meadow-rock-tuft-{r}",
+      prototype: "meadow-tuft",
+      origin: meadowOrigin,
+      rows: map(range(0, 8), k => {
+        position [
+          rock.position[0] + rock.scale * (0.95 + 0.12 * (k % 3)) * cosine(k * 0.7853982 + r)
+          0.025
+          rock.position[2] + rock.scale * (0.8 + 0.12 * (k % 3)) * sine(k * 0.7853982 + r)
+        ]
+        yaw: k * 53 + r * 31
+        scale: 0.9 + 0.25 * (k % 3)
+      })
+    )
+  }
   for (bank, i) in meadowBanks {
     placement $"meadow-bank-{i}" {
       prototype: $"meadow-bank-{i}"
@@ -201,14 +215,14 @@ placements {
       id: $"meadow-tuft-{cluster}",
       prototype: "meadow-tuft",
       origin: meadowOrigin,
-      rows: map(range(0, 6), i => {
+      rows: map(range(0, 10), i => {
         position [
-          center[0] + (0.28 + i % 3 * 0.3) * cosine(i * 2.39996323 + cluster)
+          center[0] + 1.3 * squareRoot((i + 0.5) / 10) * cosine(i * 2.39996323 + cluster)
           0.025
-          center[1] + (0.28 + i % 3 * 0.3) * sine(i * 2.39996323 + cluster)
+          center[1] + 1.3 * squareRoot((i + 0.5) / 10) * sine(i * 2.39996323 + cluster)
         ]
         yaw: i * 67 + cluster * 19
-        scale: 0.75 + i % 3 * 0.2
+        scale: 1.1 - 0.04 * i + i % 3 * 0.1
       })
     )
   }
