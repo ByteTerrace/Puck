@@ -1,7 +1,7 @@
 // The gallery's plan, every dimension the building and what stands in it are placed by (gallery.md beside this file
 // draws it). A module library: it hands its importers lets and functions and emits no document.
 //
-// Positions are in the building's own frame, metres: x runs east from the west wall's outer face (0 .. 62.5), z north
+// Positions are in the building's own frame, metres: x runs east from the west wall's outer face (0 .. 62.925), z north
 // from the south wall's outer face (0 .. 38), y up from the ground. The building's rows are placed under one root
 // placement, `gallery` (gallery.puck), so a world stands the building by giving that row a position and a turn; the
 // yaw of a row here is the row's own, with yaw 0 facing -z (south) and yaw 180 facing +z, as a placement's does.
@@ -19,11 +19,8 @@ let galleryRoof = 18.05
 let galleryParapet = 19.1
 
 // The footprint and its walls, 0.3 m thick.
-// The footprint runs half an arcade bay past 60 m, so the arcades' last arches close on a pier at the east wall.
-let galleryWidth = 62.5
 let galleryDepth = 38
 let galleryWall = 0.3
-let galleryEast = (galleryWidth - galleryWall)
 let galleryNorth = (galleryDepth - galleryWall)
 
 // The nave runs east from x 12 to the east wall, 21.25 m wide (seventeen tiles): a void from level 0's floor to the roof between the two
@@ -42,6 +39,10 @@ let arcadeSouth = (naveSouth - (galleryTile / 2))
 let arcadeNorth = (naveNorth + (galleryTile / 2))
 let arcadePitch = 5
 let arcadeXs = map(range(0, 11), i => (naveWest + (arcadePitch * i)))
+// The footprint's east end: the arcades' last pier stands against the east wall, whose inner face lies on the tile edge
+// that pier's foot ends at, so the room ends at a full tile and the arcades' last arches close on that pier.
+let galleryEast = ((arcadeXs[(length(arcadeXs) - 1)] + (galleryTile / 2)))
+let galleryWidth = (galleryEast + galleryWall)
 // The centre of the tile nearest a plan position, along x or z: tile centres stand on the west arcade's line and the
 // south arcade's row, a tile apart.
 function galleryTileX(x) = (naveWest + (galleryTile * floor((((x - naveWest) / galleryTile) + 0.5))))
