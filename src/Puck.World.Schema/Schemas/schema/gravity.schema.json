@@ -436,6 +436,14 @@
             "description": "The speed, in world units per second, at which a body away from the orbit closes on it once it rides again, on top of the orbit\u0027s own motion: it catches the rails rather than jumping onto them. Zero, the default, puts the body on the orbit at once.",
             "type": "number",
             "default": 0
+          },
+          "phaseBy": {
+            "description": "A Fixed state row whose value\u0027s fractional part is the orbit\u0027s phase, in place of the engine tick: one whole unit of the row is one turn, and Phase is added to it. The row is the orbit\u0027s clock, so a row another world owns and this one follows places the orbit where that world\u0027s clock says, and writing or holding the row moves or holds the body. PeriodSeconds then states the period the row\u0027s own advance gives and places nothing. Absent reads the engine tick.",
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
           }
         },
         "required": [

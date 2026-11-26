@@ -50,7 +50,7 @@ test "a lever in the debug world turns over a seat in the bottle world" {
 }
 
 // The sun goes out by the debug world's switch. The switch reaches the sun six seconds later; the dark then reaches
-// the moon, 13.6 km from the sun, before the valley, 15 km from it. Twelve seconds after the switch the moon's
+// the moon, 12 km from where the sun stands at the day's start, before the valley, 15 km from it. Twelve seconds after the switch the moon's
 // received light reads dark while the valley's still reads full.
 test "the sun's dark reaches the moon before the valley" {
   when {

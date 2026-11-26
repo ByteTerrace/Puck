@@ -1,5 +1,7 @@
-// The debug world's time of day: the standard's day cycle (skies.puck) on the hall's `key` sun, a 24-minute day that
-// starts at ten in the morning, with the noon sun 46 degrees up toward +x and -z. A 24-minute day turns the sun a
+// The debug world's time of day: the standard's day cycle (skies.puck) under the system's sun (moon-frame.puck's
+// `sunStar`, the star that is a place of its own in sun.puck), a 24-minute day that starts at ten in the morning, with
+// the noon sun 46 degrees up toward +x and -z. This document owns the debug world's sun: the hall and every other
+// place here are lit by it. A 24-minute day turns the sun a
 // quarter of a degree a second, slow enough to watch the shadows creep and fast enough that a session sees a sunset.
 // At night a deep-blue moon of 6 lux, brighter than a real full moon so the valley reads, lights it opposite the sun,
 // under a night sky of 1 nit and its stars; the hall's exposure floor drops with the day to meet it (hall.puck). The
@@ -53,11 +55,25 @@ let starLuminanceByHeight = {
   ]
 }
 
+// The day turns the sun and dims it below the horizon (skies.puck's `sunIlluminance`); above the valley the horizon
+// falls away, so from 300 m the sun's light rises with the viewer's height (launch.puck's `altitude` clock) to the
+// full strength the moon's sun has all the way round, and a night crossing of the sky seam keeps the light it had.
+let sunByHeight = {
+  clock: altitude
+  keys [
+    { at: 0, value: sunIlluminance("day") }
+    { at: 300, value: sunIlluminance("day") }
+    { at: 2250, value: 100000, ease: Step }
+  ]
+}
+
 dayCycle(
   daySeconds: sharedDaySeconds,
   start: sharedDayStart,
   noonElevation: sharedNoonElevation,
   heading: sharedSunHeading,
+  daystar: sunStar,
+  illuminance: sunByHeight,
   airOpacity: airFade,
   cloudOpacity: cloudFade,
   space: [

@@ -9636,6 +9636,94 @@
       ],
       "title": "WorldShadowMode"
     },
+    "WorldRenderLightOrbit": {
+      "description": "A closed-form orbit a light\u0027s source rides: the conic a gravity.orbits row of the same elements places a body on (WorldGravityOrbit), read on a presentation clock, so a recipient that holds the render section and the clock places the source with no simulation state.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "clock": {
+          "description": "The clock, by name in the timeline section, whose phase is the orbit\u0027s: one turn of the clock is one period.",
+          "type": "string"
+        },
+        "semiMajorAxis": {
+          "description": "The positive semi-major axis, in metres.",
+          "type": "number"
+        },
+        "eccentricity": {
+          "description": "The eccentricity, zero for a circle and below FixedConicOrbit.MaxEccentricity.",
+          "type": "number",
+          "default": 0
+        },
+        "inclinationDegrees": {
+          "description": "The tilt of the orbit\u0027s plane from the world\u0027s XZ plane, about its line of nodes.",
+          "type": "number",
+          "default": 0
+        },
+        "ascendingNodeDegrees": {
+          "description": "The heading of the line of nodes about \u002BY from \u002BX.",
+          "type": "number",
+          "default": 0
+        },
+        "periapsisDegrees": {
+          "description": "The angle in the plane from the line of nodes to the periapsis.",
+          "type": "number",
+          "default": 0
+        },
+        "phase": {
+          "description": "The fraction of a turn past the periapsis at the clock\u0027s phase zero.",
+          "type": "number",
+          "default": 0
+        }
+      },
+      "required": [
+        "clock",
+        "semiMajorAxis"
+      ],
+      "additionalProperties": false,
+      "title": "WorldRenderLightOrbit"
+    },
+    "WorldRenderLightSource": {
+      "description": "The body a directional light comes from (Source): a sphere standing at a place of the world\u0027s frame, or riding closed-form orbits about that place. Each frame the presentation reads where the body stands and where the frame\u0027s first view stands, and from the two derives the light\u0027s direction (toward the body), its illuminance (the authored illuminance at Distance, falling with the square of the distance) and, for a light that authors no angular radius, the angular radius the body shows. A sun disc drawn about the light that authors no radius shows the same angular radius, so the disc is the body\u0027s own outline wherever the body\u0027s geometry is too far to draw. While no view has been placed, or an orbit\u0027s clock reads no phase, the light keeps its authored direction and illuminance.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "position": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "Where the body stands, or the focus of the first of its Orbits, in the world\u0027s coordinates. Absent is the origin.",
+          "default": null
+        },
+        "orbits": {
+          "description": "The orbits the body rides, at most MaxOrbits: the first about Position, and each further one about the point the orbits before it reach, so a star of a pair rides the pair\u0027s orbit and then its own about their common centre. Absent stands still.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldRenderLightOrbit"
+          },
+          "default": null
+        },
+        "radius": {
+          "description": "The body\u0027s radius, in metres, zero or more. Zero is a point, which shows no size.",
+          "type": "number",
+          "default": 0
+        },
+        "distance": {
+          "description": "The distance from the body, in metres, at which the light gives its authored illuminance. Absent is the first orbit\u0027s semi-major axis; absent with no orbit, the light gives its authored illuminance at every distance.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderLightSource"
+    },
     "WorldRenderLightDirectional": {
       "description": "A Lambert directional light, such as the sun.",
       "properties": {
@@ -9678,6 +9766,11 @@
         "temperature": {
           "$ref": "#/$defs/BindableScalar",
           "description": "The light\u0027s colour as a black body\u0027s at this temperature, in kelvin, in [1000, 40000]: noon sunlight about 5,500, a sunset about 3,000. Refused beside Color.",
+          "default": null
+        },
+        "source": {
+          "$ref": "#/$defs/WorldRenderLightSource",
+          "description": "The body the light comes from, a place in the world\u0027s frame: the light\u0027s direction is then toward that place from where the viewer stands, its illuminance falls with the square of the distance, and its angular radius is the body\u0027s as seen from there. Absent is a light at infinity, which Direction alone places.",
           "default": null
         },
         "lightName": {
@@ -10417,7 +10510,7 @@
         },
         "radius": {
           "$ref": "#/$defs/BindableAngle",
-          "description": "The disc\u0027s angular half-radius, in (0, \u03C0/2] radians. Absent is the engine default.",
+          "description": "The disc\u0027s angular half-radius, in (0, \u03C0/2] radians. Absent is the angular radius of the body its light comes from (WorldRenderLightSource), or the engine default for a light that names no body with a size.",
           "default": null
         },
         "intensity": {
@@ -10441,6 +10534,14 @@
         "texture": {
           "$ref": "#/$defs/WorldRenderSkyTexture",
           "description": "The texture body shape: the screen whose image the disc shows. Absent is the glow.",
+          "default": null
+        },
+        "follows": {
+          "description": "The name of the directional light the disc is drawn about, which outranks Light: a name stays true when another document\u0027s lights merge in ahead of it. A name no directional light carries draws nothing.",
+          "type": [
+            "string",
+            "null"
+          ],
           "default": null
         },
         "layerName": {

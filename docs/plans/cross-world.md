@@ -222,7 +222,7 @@ by a `puck test --reproduce` scenario.
 | World | Reached by | What it proves |
 |---|---|---|
 | The planetoid field (`galaxy.puck`) | A painting in the painting wing | Mechanisms 1 to 5: planetoids of several shapes each with its own pull, launch pads between them, a corridor whose gravity a switch flips, and a small moon on rails |
-| The sun (`sun.puck`), with the debug world and the moon | Rows the debug world and the moon follow | Mechanisms 6 to 8: the sun's mass and light reach each world after its own delay, and the sun going out reaches the valley and the moon at different ticks |
+| The sun (`sun.puck`), with the debug world and the moon | Rows the debug world and the moon follow, and a painting onto the outpost its star passes ([stars](stars.md)) | Mechanisms 5 to 8: the star rides a rail the shared day turns, its mass and light reach each world after its own delay, and the sun going out reaches the valley and the moon at different ticks |
 | The bottle world (`globe.puck`) | A glass in the painting wing | What only Puck's world model allows: the globe's gravity is a value the debug world owns. A lever beside the glass tilts the globe, and the globe's own authority follows the lever with a delay, with one visitor inside and another watching through the glass |
 
 ### Left open
