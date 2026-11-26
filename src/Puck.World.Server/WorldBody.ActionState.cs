@@ -23,17 +23,23 @@ public sealed partial class WorldBody {
 
     // The action-state portion of WorldStateHashComposition's authoritative boundary: the declaration and the
     // per-lane trigger runtime. The stored values are the arena's own, folded by the Arena component.
-    internal void AppendActionStateHash(ref Fnv1aHash hash) {
-        hash.Add(value: ((uint)m_actionStateDefinitions.Length));
+    // The declaration's digest is folded once, where the declaration is compiled (CompileActionState, its one writer):
+    // the names are fixed for the declaration's life, so the hash folds no name per body per tick.
+    private ulong m_actionStateDeclarationDigest = ActionStateDeclarationDigest(definitions: []);
 
-        for (var slot = 0; (slot < m_actionStateDefinitions.Length); slot++) {
-            var definition = m_actionStateDefinitions[slot];
+    private static ulong ActionStateDeclarationDigest(CompiledActionStateSlot[] definitions) {
+        var hash = Fnv1aHash.Create();
 
+        hash.Add(value: ((uint)definitions.Length));
+        foreach (var definition in definitions) {
             hash.Add(value: Fnv1aHash.Compute(values: definition.Name.AsSpan()));
             hash.Add(value: ((byte)definition.Kind));
             hash.Add(value: ((byte)definition.Lifetime));
         }
-
+        return hash.Value;
+    }
+    internal void AppendActionStateHash(ref Fnv1aHash hash) {
+        hash.Add(value: m_actionStateDeclarationDigest);
         hash.Add(value: ((uint)ActionLaneCount));
 
         for (var lane = 0; (lane < ActionLaneCount); lane++) {
@@ -479,6 +485,7 @@ public sealed partial class WorldBody {
             ? []
             : [.. state]
         );
+        m_actionStateDeclarationDigest = ActionStateDeclarationDigest(definitions: m_actionStateDefinitions);
         m_actionStateRequested = new long[m_actionStateDefinitions.Length];
         m_actionStateLastWriter = new string[m_actionStateDefinitions.Length];
         m_actionStateLastReason = new string[m_actionStateDefinitions.Length];
@@ -545,6 +552,13 @@ public sealed partial class WorldBody {
         : raw.ToString(provider: CultureInfo.InvariantCulture)
     );
     private bool FactHolds(ActionFact fact) {
+        var gravity = default(SolvedGravityRead);
+
+        return FactHolds(fact: fact, gravity: ref gravity);
+    }
+    // The one fact predicate. The solved-gravity answer two facts read (HoldingUnwalkable through the hold's up axis,
+    // Weightless through the pull) is read once per caller's memo, so a whole fact mask samples the field once.
+    private bool FactHolds(ActionFact fact, ref SolvedGravityRead gravity) {
         return fact switch {
             ActionFact.Grounded => m_grounded,
             ActionFact.Airborne => !m_grounded,
@@ -552,10 +566,10 @@ public sealed partial class WorldBody {
             ActionFact.Falling => ((IsRigid ? m_rigidVelocity.Y : m_verticalVelocity) < FixedQ4816.Zero),
             ActionFact.InMedium => m_inMedium,
             ActionFact.AtMediumBand => m_atMediumBand,
-            ActionFact.HoldingUnwalkable => HoldsUnwalkableSurface(),
+            ActionFact.HoldingUnwalkable => HoldsUnwalkableSurface(gravity: ref gravity),
             ActionFact.Unsupported => HoldsFree(),
             ActionFact.Resting => m_resting,
-            ActionFact.Weightless => (TrySolvedGravityMagnitude(magnitude: out var pull) && (pull < MinFieldUpMagnitude)),
+            ActionFact.Weightless => (gravity.Read(body: this).Has && (gravity.Magnitude < MinFieldUpMagnitude)),
             _ => (m_affectingSubject >= 0),
         };
     }

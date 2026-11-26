@@ -14,6 +14,9 @@ public sealed partial class WorldInputOwner {
     private readonly FixedQ4816 m_lateness;
     private readonly FixedQ4816 m_calibrationLimit;
     private readonly WorldInputSourceState[] m_sources;
+    // Every source's registration (handle, channel, kind, name, binding) is fixed for the owner's life: a batch writes
+    // a source's level, a restore refuses another registry. So the hash folds the registrations once, here.
+    private readonly ulong m_sourceRegistryDigest;
     private readonly WorldInputSourceState[] m_sourceScratch;
     private readonly bool[] m_seen;
     private readonly Dictionary<ushort, int> m_handles;
@@ -74,6 +77,7 @@ public sealed partial class WorldInputOwner {
         m_lateness = Parse(value: policy.MaximumLatenessSeconds);
         m_calibrationLimit = Parse(value: policy.CalibrationLimitSeconds);
         m_sources = catalog.CompileSources(sources: sources, handles: out m_handles);
+        m_sourceRegistryDigest = SourceRegistryDigest(sources: m_sources);
         m_sourceScratch = new WorldInputSourceState[sources.Count];
         m_seen = new bool[sources.Count];
         m_reboundActivations = new HashSet<ulong>(capacity: sources.Count);
@@ -192,11 +196,13 @@ public sealed partial class WorldInputOwner {
         var time = now.Time(default);
 
         while ((m_switchCount != 0) && ((time - SwitchRecord(index: 0).Interval.Time(default)) > m_retention)) {
+            TouchRetained();
             m_switches[m_switchHead] = default;
             m_switchHead = ((m_switchHead + 1) % m_switches.Length);
             m_switchCount--;
         }
         while ((m_count != 0) && ((time - Record(index: 0).Capture.Time(Record(index: 0).Event.Offset)) > m_retention)) {
+            TouchRetained();
             m_history[m_head] = default;
             m_head = ((m_head + 1) % m_history.Length);
             m_count--;
@@ -460,6 +466,7 @@ public sealed partial class WorldInputOwner {
             }
         }
         if (hasEvents) {
+            TouchRetained();
             for (var written = holdsWritten; (written != 0); written &= (written - 1)) {
                 var address = (int)UInt128.TrailingZeroCount(value: written);
 
@@ -528,6 +535,7 @@ public sealed partial class WorldInputOwner {
 
     /// <summary>Requires neutral observations from a replaced profile before any source may act in its new meaning.</summary>
     public void RequireNeutralSources(WorldInputOwner previous) {
+        TouchRetained();
         for (var index = 0; (index < m_sources.Length); index++) {
             m_sources[index] = m_sources[index] with { RawValue = 0, AwaitingNeutral = true };
         }
@@ -577,6 +585,7 @@ public sealed partial class WorldInputOwner {
         if (consumedActivations.Length > WorldInputSwitch.MaximumConsumedActivations) { throw new ArgumentException(message: "input boundary exceeds its activation budget", paramName: nameof(consumedActivations)); }
         var previous = Mapping;
 
+        TouchRetained();
         Expire(now: interval);
         if (m_switchCount == m_switchCapacity) {
             RefusedBatches++;
