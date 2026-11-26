@@ -933,11 +933,21 @@ camera latch, and Vulkan's capture copy and record fork.
      (`WorldPlacementResponse.ComparePlacements`), and each snapshot fills
      the mirror's published image with every body
      (`WorldSessionMirror.ApplySnapshot`), which its readers then copy whole
-     (`WorldSessionMirror.CaptureBodyImage`). The debug world delivers a
-     changed definition on every tick, so none of it is ever skipped: the
-     first thing to name is which placement row moves every tick, and the
-     structure is a mirror that takes a delivery by the rows and bodies it
-     names. A fifth of the step is the portal scan, every portal face
+     (`WorldSessionMirror.CaptureBodyImage`). The debug world hands a
+     replica its whole document on every tick, so none of it is ever
+     skipped. The door is `WorldSessionSink.DeliverState`: a replica is owed
+     the document again when a delivery is not of values alone or its frame
+     moved (`WorldDeliveryCursor.FrameMoved`), and the frame is every
+     section but the state rows, digested with the rows its placements read
+     (`WorldStateDisclosed.PlacementReads`, kept only for a recipient some
+     row is withheld from). So a row a placement reads that a rule writes
+     every tick moves the frame every tick; which row is not yet named (the
+     card tables' dealt and zone rows are the candidates), and pausing the
+     rule that writes it while reading `WorldOutputHub.Collect`'s samples
+     names it. The structure is a replica that takes a moved frame as the
+     placement rows that moved, as a presentation observer already takes an
+     appearance (`IClientSink.DeliverPresentation`), and a mirror that
+     takes a snapshot by the bodies it names. A fifth of the step is the portal scan, every portal face
      against every body slot (`WorldInstanceHost`'s `ScanInstancePortals`);
      the seam scan beside it (`WorldAdjacencyOwnership.Sweep`) reads the
      same way but costs little where few seams stand. A body at rest beyond
