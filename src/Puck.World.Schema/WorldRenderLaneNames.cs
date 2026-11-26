@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -29,17 +30,46 @@ public static class WorldRenderLaneNames {
     private const string NameMember = "name";
 
     // Every JSON name a render-lane member carries, read off the model once.
+    private static readonly Lazy<FrozenSet<string>> MemberSet = new(valueFactory: static () => WorldModelShape.Types
+        .SelectMany(selector: static type => type.Members.Concat(second: type.Properties))
+        .Where(predicate: static member => member.RenderLane)
+        .Select(selector: static member => member.Name)
+        .ToFrozenSet(comparer: StringComparer.Ordinal));
     private static readonly Lazy<byte[][]> MemberNames = new(valueFactory: static () => [
-        .. WorldModelShape.Types
-            .SelectMany(selector: static type => type.Members.Concat(second: type.Properties))
-            .Where(predicate: static member => member.RenderLane)
-            .Select(selector: static member => member.Name)
-            .Distinct(comparer: StringComparer.Ordinal)
-            .Select(selector: static name => Encoding.UTF8.GetBytes(s: $"\"{name}\"")),
+        .. MemberSet.Value.Select(selector: static name => Encoding.UTF8.GetBytes(s: $"\"{name}\"")),
     ]);
     private static readonly Puck.Abstractions.CodeDerivedTable<Type, object> Reach = new();
     private static readonly object Holds = new();
     private static readonly object Lacks = new();
+
+    /// <summary>Returns whether a document member of this name selects a render lane
+    /// (<see cref="DocumentRenderLaneAttribute"/>).</summary>
+    /// <param name="name">The member's JSON name.</param>
+    /// <returns><see langword="true"/> when some model type carries a render-lane member of that name.</returns>
+    public static bool IsMember(string name) => MemberSet.Value.Contains(item: name);
+
+    /// <summary>Lists the lanes a document's <c>render.lanes</c> declares, each with the render lane it takes.</summary>
+    /// <param name="document">The document's root object, composed when its imports' rows are wanted; <see langword="null"/>
+    /// reads as no lanes.</param>
+    /// <returns>Each named row in written order, with its name and the render lane it numbers (render lane 4 plus its
+    /// position); a repeated name appears at each position.</returns>
+    public static IReadOnlyList<(string Name, int Lane)> Lanes(JsonObject? document) {
+        return (((document?[RenderMember] as JsonObject)?[LanesMember] is JsonArray rows)
+            ? LanesOf(rows: rows)
+            : []
+        );
+    }
+    private static List<(string Name, int Lane)> LanesOf(JsonArray rows) {
+        var lanes = new List<(string Name, int Lane)>(capacity: rows.Count);
+
+        for (var index = 0; (index < rows.Count); index++) {
+            if ((rows[index] as JsonObject)?[NameMember] is JsonValue spelled && spelled.TryGetValue<string>(value: out var name)) {
+                lanes.Add(item: (name, (SdfLanes.FirstWorld + index)));
+            }
+        }
+
+        return lanes;
+    }
 
     /// <summary>Resolves a document's lane names in its UTF-8 JSON. A document no render-lane member of which holds a
     /// string comes back as it is, after one scan of its bytes; otherwise only the root members that hold such a name are
@@ -130,10 +160,9 @@ public static class WorldRenderLaneNames {
         if ((render as JsonObject)?[LanesMember] is not JsonArray rows) { return lanes; }
         var pointer = DocumentJsonPointer.Child(name: LanesMember, pointer: DocumentJsonPointer.Child(name: RenderMember, pointer: string.Empty));
 
-        for (var index = 0; (index < rows.Count); index++) {
-            if ((rows[index] as JsonObject)?[NameMember] is not JsonValue spelled || !spelled.TryGetValue<string>(value: out var name)) { continue; }
-            if (!lanes.TryAdd(key: name, value: (SdfLanes.FirstWorld + index))) {
-                refuse(WorldRenderLaneRefusal.Duplicate, $"render.lanes declares '{name}' twice; each lane's name is its own.", DocumentJsonPointer.Child(name: NameMember, pointer: DocumentJsonPointer.Child(index: index, pointer: pointer)));
+        foreach (var (name, lane) in LanesOf(rows: rows)) {
+            if (!lanes.TryAdd(key: name, value: lane)) {
+                refuse(WorldRenderLaneRefusal.Duplicate, $"render.lanes declares '{name}' twice; each lane's name is its own.", DocumentJsonPointer.Child(name: NameMember, pointer: DocumentJsonPointer.Child(index: (lane - SdfLanes.FirstWorld), pointer: pointer)));
             }
         }
         if (rows.Count > WorldRenderDefaults.MaxLanes) {

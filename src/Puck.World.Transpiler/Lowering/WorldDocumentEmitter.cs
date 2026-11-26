@@ -469,10 +469,12 @@ public static partial class WorldDocumentEmitter {
                             );
                         }
                     }
-                    DocumentLowering.AssignOrExtend(
-                        target,
-                        propNode.Name,
-                        lowered
+                    DocumentLowering.AssignMember(
+                        key: propNode.Name,
+                        scope: scope,
+                        span: propNode.Span,
+                        target: target,
+                        value: lowered
                     );
                     break;
                 }
@@ -773,7 +775,13 @@ public static partial class WorldDocumentEmitter {
             return;
         }
 
-        parent[id] = blockObj;
+        DocumentLowering.AssignMember(
+            key: id,
+            scope: scope,
+            span: block.Span,
+            target: parent,
+            value: blockObj
+        );
     }
     // Appends one facet's exported names into `target["exports"][facetKey]`. Names already exported by an earlier
     // `export` statement or `exports { }` block are not duplicated (so two templates exporting the same binding compose
@@ -906,7 +914,7 @@ public static partial class WorldDocumentEmitter {
             scope: scope,
             span: block.Span
         );
-        parent["cartridge"] = cartObj;
+        DocumentLowering.AssignMember(key: "cartridge", scope: scope, span: block.Span, target: parent, value: cartObj);
 
         return true;
     }
@@ -1346,20 +1354,32 @@ public static partial class WorldDocumentEmitter {
                 if (subBlock.Name is not null) {
                     seatRigObj["name"] = subBlock.Name;
                 }
-                viewsObj["seatRig"] = seatRigObj;
+                DocumentLowering.AssignMember(key: "seatRig", scope: scope, span: subBlock.Span, target: viewsObj, value: seatRigObj);
             } else if (subId is "seatcontrol") {
                 scope.SourceMap?.Register(
                     jsonPointer: DocumentJsonPointer.Child(name: "seatControl", pointer: scope.CurrentPointer),
                     span: subBlock.Span
                 );
-                viewsObj["seatControl"] = LowerBlockToObject(
-                    block: subBlock,
-                    scope: scope
+                DocumentLowering.AssignMember(
+                    key: "seatControl",
+                    scope: scope,
+                    span: subBlock.Span,
+                    target: viewsObj,
+                    value: LowerBlockToObject(
+                        block: subBlock,
+                        scope: scope
+                    )
                 );
             } else {
-                viewsObj[subBlock.Identifier] = LowerBlockToObject(
-                    block: subBlock,
-                    scope: scope
+                DocumentLowering.AssignMember(
+                    key: subBlock.Identifier,
+                    scope: scope,
+                    span: subBlock.Span,
+                    target: viewsObj,
+                    value: LowerBlockToObject(
+                        block: subBlock,
+                        scope: scope
+                    )
                 );
             }
         } else if (stmt is PropertyNode prop) {

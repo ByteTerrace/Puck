@@ -154,10 +154,12 @@ public static partial class WorldDocumentEmitter {
                     break;
                 case PropertyNode prop:
                     var loweredProp = LowerModelMember(holder: typeof(WorldRule), property: prop, scope: stmtScope);
-                    DocumentLowering.AssignOrExtend(
-                        obj,
-                        prop.Name,
-                        loweredProp
+                    DocumentLowering.AssignMember(
+                        key: prop.Name,
+                        scope: stmtScope,
+                        span: prop.Span,
+                        target: obj,
+                        value: loweredProp
                     );
                     break;
                 case EffectStatementNode or ExpressionStatementNode:

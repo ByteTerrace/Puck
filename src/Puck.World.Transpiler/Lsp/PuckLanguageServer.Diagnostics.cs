@@ -425,6 +425,7 @@ public sealed partial class PuckLanguageServer {
         _ = m_dependencies.Remove(key: uri);
         _ = m_semanticPending.Remove(key: uri);
         _ = m_lastCompilations.Remove(key: uri);
+        _ = m_renderLanes.Remove(key: uri);
 
         var affected = new HashSet<string>(comparer: StringComparer.OrdinalIgnoreCase) { uri };
 

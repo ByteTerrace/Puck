@@ -151,10 +151,12 @@ public static partial class WorldDocumentEmitter {
                 ));
             } else if (stmt is PropertyNode prop) {
                 rowScope.CurrentPointer = placementsPointer;
-                DocumentLowering.AssignOrExtend(
-                    placementsObj,
-                    prop.Name,
-                    DocumentLowering.LowerMember(
+                DocumentLowering.AssignMember(
+                    key: prop.Name,
+                    scope: rowScope,
+                    span: prop.Span,
+                    target: placementsObj,
+                    value: DocumentLowering.LowerMember(
                         fieldKey: prop.Name,
                         holder: typeof(WorldPlacementsSection),
                         holderName: null,
@@ -171,9 +173,15 @@ public static partial class WorldDocumentEmitter {
                     jsonPointer: rowScope.CurrentPointer,
                     span: nested.Span
                 );
-                placementsObj[nested.Identifier] = LowerBlockToObject(
-                    block: nested,
-                    scope: rowScope
+                DocumentLowering.AssignMember(
+                    key: nested.Identifier,
+                    scope: rowScope,
+                    span: nested.Span,
+                    target: placementsObj,
+                    value: LowerBlockToObject(
+                        block: nested,
+                        scope: rowScope
+                    )
                 );
             } else {
                 ReportUnrecognizedSectionStatement(

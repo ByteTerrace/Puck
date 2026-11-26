@@ -358,6 +358,10 @@ public static class PuckDiagnosticCodes {
     public const string UnknownRenderLane = "PUCK138";
     /// <summary>PUCK139: a document's <c>render.lanes</c> declaring one name twice, or more lanes than the world's four.</summary>
     public const string RenderLaneDeclaration = "PUCK139";
+    /// <summary>PUCK140: a document member (a section, a block's field, a property) written twice where the two writings
+    /// cannot compose: two arrays append and two objects merge member by member, so what is refused is a member both
+    /// set, which would otherwise drop the earlier one silently.</summary>
+    public const string RepeatedMember = "PUCK140";
 
     private static readonly FrozenSet<string> DeclaredCodes = typeof(PuckDiagnosticCodes)
         .GetFields(bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)

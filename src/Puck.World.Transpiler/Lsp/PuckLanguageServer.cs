@@ -25,6 +25,7 @@ public sealed partial class PuckLanguageServer {
     private readonly IMachineValidationCatalog? m_machines;
 
     private readonly Dictionary<string, string> m_documents = new(comparer: StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, (WorldCompilation Compilation, IReadOnlyList<(string Name, int Lane)> Lanes)> m_renderLanes = new(comparer: StringComparer.OrdinalIgnoreCase);
     private bool m_running = true;
 
     private Action<JsonObject>? m_send;
@@ -220,6 +221,40 @@ public sealed partial class PuckLanguageServer {
             WorldMemberPosition.Property => (opensStatement && (end < text.Length) && (text[end] is ':' or '[')),
             _ => false,
         });
+    }
+    // The lanes the buffer's composed document declares: its imports' rows come first or last as `$before` places them,
+    // so only the composition knows the list. Read from the last published compile (never compiling on the message
+    // thread) and held until that compile is replaced; a buffer without a path, or a composition that refuses, reads as
+    // its own rows.
+    private IReadOnlyList<(string Name, int Lane)> RenderLanesOf(string uri) {
+        if (!m_lastCompilations.TryGetValue(key: uri, value: out var compilation) || (compilation.Json is not { } own)) {
+            return [];
+        }
+        if (m_renderLanes.TryGetValue(key: uri, value: out var held) && ReferenceEquals(objA: held.Compilation, objB: compilation)) {
+            return held.Lanes;
+        }
+
+        var lanes = WorldRenderLaneNames.Lanes(document: own);
+
+        try {
+            if (
+                TryGetLocalPath(path: out var path, uri: uri) &&
+                m_session.TryCompose(
+                    composed: out var composed,
+                    reason: out _,
+                    rootBytes: Encoding.UTF8.GetBytes(s: own.ToJsonString()),
+                    rootResolvedPath: path
+                ) &&
+                (composed is not null)
+            ) {
+                lanes = WorldRenderLaneNames.Lanes(document: composed);
+            }
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException) {
+            // A composition that cannot read its imports leaves the buffer's own rows.
+        }
+        m_renderLanes[uri] = (compilation, lanes);
+
+        return lanes;
     }
     // Looks `word` up among the buffer's `state` declarations: first directly in the parsed AST, then in the last
     // published compile's lowered state section (never compiling synchronously on the message thread).
@@ -695,6 +730,28 @@ public sealed partial class PuckLanguageServer {
             : ""
         );
         var cursorOffset = LspJson.Offset(character: col, line: line, source: completionText);
+
+        if (
+            WorldRenderLaneLanguageServices.TryLocate(
+                completing: true,
+                member: out var laneMember,
+                offset: cursorOffset,
+                quoted: out var laneQuoted,
+                text: completionText,
+                value: out _
+            ) &&
+            (RenderLanesOf(uri: uri) is { Count: > 0 } laneNames)
+        ) {
+            SendResponse(
+                id: id,
+                result: new JsonObject {
+                    ["isIncomplete"] = false,
+                    ["items"] = WorldRenderLaneLanguageServices.Completions(lanes: laneNames, member: laneMember, quoted: laneQuoted),
+                }
+            );
+            return;
+        }
+
         var enclosing = WorldConstructLanguageServices.ConstructAt(
             offset: cursorOffset,
             table: WorldConstructs.Table,
@@ -1220,6 +1277,29 @@ public sealed partial class PuckLanguageServer {
                     ["contents"] = new JsonObject {
                         ["kind"] = "markdown",
                         ["value"] = embeddingCard,
+                    },
+                }
+            );
+            return;
+        }
+
+        if (
+            WorldRenderLaneLanguageServices.TryLocate(
+                completing: false,
+                member: out var laneMember,
+                offset: offset,
+                quoted: out _,
+                text: text,
+                value: out var laneValue
+            ) &&
+            (WorldRenderLaneLanguageServices.Hover(lanes: RenderLanesOf(uri: uri), member: laneMember, value: laneValue) is { } laneCard)
+        ) {
+            SendResponse(
+                id: id,
+                result: new JsonObject {
+                    ["contents"] = new JsonObject {
+                        ["kind"] = "markdown",
+                        ["value"] = laneCard,
                     },
                 }
             );
