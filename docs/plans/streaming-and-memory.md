@@ -338,7 +338,8 @@ to what the World's own account lets it reach
 (`HostLoadThresholds.DefaultPeakGb`: `MemoryAccount.DefaultBudgetOf` less
 `MemoryAccount.AuthoringMarginOf`, 10 GB on 16 GB), a start alone is judged
 by its lone need so the machine measures it on its first boot, and peaks are
-learned per world document. The 2060's own quality table
+learned per world document. A World whose store lacks its build's mesh set is
+judged as a cold bake by its cold figure, never by a warm session's lone need. The 2060's own quality table
 (`worlds/standard/quality.puck`) now applies at boot and draws at a 0.75
 render scale with the medium irradiance tier, whose volume, hit cache and
 tables are two thirds of the high tier's.

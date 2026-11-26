@@ -112,7 +112,7 @@ public static class WorldCachesCommand {
         identity = default;
         if (!CliWorldDocuments.TryExtension(backend: backend, extension: out var extension, verb: Verb)) { why = $"names the unknown backend {backend}"; return false; }
         try {
-            identity = MeshBuildIdentity.Read(buildDirectory: folder, extension: extension).Value;
+            identity = MeshBuildIdentity.ValueOf(buildDirectory: folder, extension: extension).Value;
             why = null;
             return true;
         } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException) {
