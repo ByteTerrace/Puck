@@ -11,7 +11,7 @@ public static class HostCommand {
     private const string SamplesVerb = "host samples";
 
     // What a reading reports a start's demand for: each kind, and the windowed World whose mesh store is cold, whose peak is
-    // measured apart from the warm one's.
+    // measured apart from the warm one's, beside every profile (each backend, store and document) this machine has measured.
     private static readonly HostStartProfile[] Profiles = [.. Enum.GetValues<HostStartKind>().Select(static kind => new HostStartProfile(Kind: kind)), new HostStartProfile(Kind: HostStartKind.WindowedWorld).Cold];
 
     private static int Load(bool watch, int interval, int window, HostLoadThresholds thresholds, bool json, CancellationToken cancellationToken) {
@@ -25,7 +25,7 @@ public static class HostCommand {
         do {
             var sample = probe.Sample(firstInterval: TimeSpan.FromSeconds(seconds: 1));
             var lines = monitor.Observe(sample: sample);
-            var demands = Profiles.Select(profile => HostStartTracker.Session.Judge(
+            var demands = Profiles.Concat(HostStartTracker.Session.MeasuredProfiles()).Distinct().Select(profile => HostStartTracker.Session.Judge(
                 sample, profile, thresholds, TimeProvider.System, reserve: false)).ToArray();
 
             if (records is null) {

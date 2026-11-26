@@ -9,8 +9,10 @@ namespace Puck.Cli.Host;
 /// under the pressure threshold, while the commit headroom is under its reserve (allocation fails at the limit with
 /// physical memory still free) and while free disk is under the pressure threshold. A start is admitted by what it
 /// needs, never by a fixed free-memory or commit floor (<see cref="HostStartTracker"/>): the commit headroom must cover
-/// the start's own peak in private bytes (what its <see cref="HostStartProfile"/> has measured on this machine, else
-/// <see cref="HostLoadThresholds.DefaultPeakGb"/>, the machine's World budget)
+/// the start's own peak in private bytes (what its <see cref="HostStartProfile"/>, the world document included, has measured
+/// on this machine, else what any World of its kind reached here, else <see cref="HostLoadThresholds.DefaultPeakGb"/>; a start
+/// of an unmeasured profile with no other Puck work on the machine is judged by its least possible commit, so it runs and is
+/// measured)
 /// plus what the admitted starts still running have left to grow, since admitted Worlds grow into each other, and
 /// still hold the commit reserve afterwards (<see cref="HostLoadThresholds.CommitCovers"/>); free physical memory must
 /// cover the start's own private working set plus the running starts' private working-set growth and still sit at the
@@ -42,7 +44,7 @@ public static class HostAdmission {
         var named = profile.Class;
 
         return named.Kind switch {
-            HostStartKind.WindowedWorld => string.Concat("windowed World", (named.Store == StoreWarmth.Cold) ? " with a cold mesh store" : string.Empty, (named.Device is { } device) ? $" on {device}" : string.Empty),
+            HostStartKind.WindowedWorld => string.Concat("windowed World", (named.Document is { } document) ? $" of {document}" : string.Empty, (named.Store == StoreWarmth.Cold) ? " with a cold mesh store" : string.Empty, (named.Device is { } device) ? $" on {device}" : string.Empty),
             HostStartKind.HeadlessWorld => "headless World",
             HostStartKind.HeavySuite => "heavy suite",
             HostStartKind.ReproduceReplica => "test-batch replica",
@@ -63,7 +65,7 @@ public static class HostAdmission {
         } else if (demand is { CommitCovered: false } uncovered) {
             shortfalls.Add(item: (
                 string.Create(provider: CultureInfo.InvariantCulture, handler: $"commit headroom {uncovered.HeadroomGb:0.0}GB"),
-                string.Create(provider: CultureInfo.InvariantCulture, handler: $"at least {(uncovered.NeedGb + reserve):0.0}GB ({uncovered.OwnGb:0.0}GB expected peak of a {KindName(profile: uncovered.Profile ?? uncovered.Kind)} plus {uncovered.GrowthGb:0.0}GB still to grow in {uncovered.Growing} admitted start(s) plus the {reserve:0.0}GB commit reserve)")
+                string.Create(provider: CultureInfo.InvariantCulture, handler: $"at least {(uncovered.NeedGb + reserve):0.0}GB ({uncovered.OwnGb:0.0}GB {((uncovered.OwnGb < uncovered.ExpectedOwnGb) ? $"lone need ({uncovered.ExpectedOwnGb:0.0}GB expected)" : "expected peak")} of a {KindName(profile: uncovered.Profile ?? uncovered.Kind)} plus {uncovered.GrowthGb:0.0}GB still to grow in {uncovered.Growing} admitted start(s) plus the {reserve:0.0}GB commit reserve)")
             ));
         }
         if ((thresholds.PressureRamGb is { } floor) && (reading.FreeRamGb < floor)) {
@@ -169,7 +171,7 @@ public static class HostAdmission {
             }
 
             if (!held && demand.Covered) {
-                if (peak.Kind != HostStartKind.Step && double.IsFinite(demand.HeadroomGb)) { error.WriteLine(string.Create(CultureInfo.InvariantCulture, $"gate: admitted {step}: commit headroom {demand.HeadroomGb:0.0}GB covers {demand.NeedGb:0.0}GB ({demand.OwnGb:0.0}GB expected peak plus {demand.GrowthGb:0.0}GB growth in {demand.Growing} start(s)).")); }
+                if (peak.Kind != HostStartKind.Step && double.IsFinite(demand.HeadroomGb)) { error.WriteLine(string.Create(CultureInfo.InvariantCulture, $"gate: admitted {step}: commit headroom {demand.HeadroomGb:0.0}GB covers {demand.NeedGb:0.0}GB ({demand.OwnGb:0.0}GB expected peak plus {demand.GrowthGb:0.0}GB growth in {demand.Growing} start(s)){(demand.Measured ? string.Empty : $"; this machine has not measured a {KindName(profile: peak)}, so this start teaches it")}.")); }
                 if (reason is not null) { error.WriteLine(value: $"gate: capacity returned for {step}."); }
                 if (reading.CpuPercent >= (thresholds.CapacityCpuPercent ?? 100)) {
                     error.WriteLine(value: string.Create(provider: CultureInfo.InvariantCulture, handler: $"gate: {step} runs under cpu={reading.CpuPercent:0}% (over {thresholds.CapacityCpuPercent}%; CPU load is advisory and only slows the step)."));
