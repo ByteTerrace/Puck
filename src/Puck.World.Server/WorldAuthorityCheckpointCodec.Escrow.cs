@@ -319,6 +319,10 @@ public static partial class WorldAuthorityCheckpointCodec {
                 writer: w
             )
         );
+        writer.WriteArray(
+            items: section.RewindBaseline,
+            writeItem: static (w, authority) => w.WriteString(value: authority)
+        );
 
         return writer.ToArray();
     }
@@ -433,6 +437,14 @@ public static partial class WorldAuthorityCheckpointCodec {
             },
             maximum: MaxCollectionCount
         );
+        var rewindBaseline = reader.ReadArray(
+            field: "escrow rewind baseline",
+            readItem: static (ref WireReader r) => r.ReadString(
+                field: "rewind baseline authority",
+                maxBytes: MaxStringBytes
+            ),
+            maximum: MaxCollectionCount
+        );
 
         return new WorldTransferEscrowCheckpoint(
             BorderAdmissions: borderAdmissions,
@@ -444,6 +456,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             Leases: leases,
             MobilityAdmissions: mobilityAdmissions,
             MobilityLeases: mobilityLeases,
+            RewindBaseline: rewindBaseline,
             SpentKeys: spentKeys
         );
     }

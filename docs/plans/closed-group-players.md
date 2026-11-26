@@ -1,10 +1,12 @@
 # Players in a closed rewind group
 
 A hosted deployment runs its silo as a closed rewind group, so that a release
-can restore every world of the group to one captured point. Until this change
-the group refused every player. This note says what a player's party is to
-such a group, names the one place that decides it, and answers the review of
-the first design finding by finding.
+can restore every world of the group to one captured point. A group built
+that way refuses every transfer from outside itself, and a player's party
+comes from outside. This note says what a player's party is to such a group,
+names the one place that decides it, and answers the review of the first
+design finding by finding. The settled decision is recorded in
+[worlds and federation](../decisions/worlds-and-federation.md#a-closed-rewind-group-admits-players-as-guests).
 
 ## Summary
 
@@ -24,23 +26,23 @@ A client whose session the group no longer knows is told so with a terminal
 answer, `Ended`. It takes back every seat it had sent, and its ordinary join
 sends them again.
 
-## What was wrong
+## The problem
 
 - A release deploys its silo with `ClosedGroupRewind` (`AzureWorld`), and its
   documentation promises that "ordinary authenticated player connections
   remain available".
-- An activation installed a name predicate as the transfer boundary. A
+- The transfer boundary an activation installed was a predicate over names. A
   `--connect` client joins by transferring its party from its own boot world,
   whose authority is a per-run session namespace
   `<issuer root>/<subject>/<session>`
   ([multi-seat client, decision 7](multi-seat-client.md#decision-7-what-names-a-clients-authority-and-when-its-travellers-lapse)).
   That name is never in the group's inventory, so every join was refused:
-  `closed rewind group refuses an external transfer`. This was seen on the RTX
-  2060's player install against the hosted authority, after the issuer had
+  `closed rewind group refuses an external transfer`. The RTX 2060's player
+  install met that refusal against the hosted authority, after the issuer had
   vouched for the player.
-- A capture also refused any checkpoint holding a committed transfer or a
-  traveller credential from outside the group, so a point taken while anyone
-  played would have failed too.
+- A capture refused any checkpoint holding a committed transfer or a traveller
+  credential from outside the group, so a point taken while anyone played
+  would have failed as well.
 
 ## Why a closed group refuses outside transfers
 
@@ -78,8 +80,9 @@ In a closed rewind group:
 `WorldTransferEscrow.Admit` classifies the caller of every operation that can
 change a world's crossing ledger: reserve, commit, abort, acknowledge and
 status. The escrow is the only owner of that ledger, and each of those
-operations runs behind a value only `Admit` produces, so a new caller cannot
-reach the ledger around it. The classification is a `WorldTransferParty`:
+operations runs behind the value `Admit` returns (`WorldTransferAdmission`,
+whose default refuses), so a new caller cannot reach the ledger around it.
+The classification is a `WorldTransferParty`:
 
 | Party | Who | What it may do |
 |---|---|---|
@@ -127,7 +130,9 @@ A world keeps rows for a guest's session (its transfer keys, its settled
 floor, the credentials of its travellers) only while the session holds a live
 reservation or a landed traveller there. When the last one goes,
 `WorldTransferEscrow.ReclaimGuest` drops every row of the session. The same
-rule runs when a crash recovery redoes the crossing log.
+rule runs when a crash recovery redoes the crossing log. A guest's commit that
+is refused when the session holds nothing else is answered at once, with the
+refusal's own name, and writes no tombstone: the key died with the session.
 
 Three things follow.
 
@@ -207,8 +212,10 @@ standing in its own boot world again, where the ordinary join sends them.
   session. Each returned traveller comes back two ownership epochs ahead, so
   it can never be mistaken for the traveller the ended entry held.
 - **A seat it had already handed over.** The traveller's observation is
-  refused with `WorldFederationRefusal.SessionEnded`. The client retires the
-  route and seats the player in its boot world again as a new body
+  refused with `WorldFederationRefusal.SessionEnded`, which a world of a closed
+  group answers when it holds no credential for the traveller a guest asks
+  after (`WorldTransferEscrow.TravelerEnded`). The client retires the route
+  and seats the player in its boot world again as a new body
   (`WorldInstanceHost.ReturnSeatHome`).
 
 `Ended` differs from the two answers a client already handled. `Missing` says
@@ -344,14 +351,38 @@ session in place: the player starts the client again
 - A restore taken while a guest is in the middle of a hop between two worlds
   of the group is refused at capture, as any unsettled hop inside the group
   already was.
+- The process is trusted. A caller inside the silo that presents
+  `WorldTransferCaller.Colocated` is a member.
+
+Four things are designed here and not shown by a running check, or not built.
+Each is an [open item](open-items.md#a-hosted-world-on-a-client) with its own
+check: the join on the deployment itself; a restore after a guest walked from
+one world of the group to another; a running client carried across an issuer
+root replacement; and a crash recovery of a journal tail in which the tick
+retired a traveller between two arrivals, which is older than this design and
+is reached by a guest's rejoin as it is by any leave and rejoin.
 
 ## Proof
 
 `WorldReleaseCutoverLawTests.AClosedGroupAdmitsAPlayerAsAGuestAndARestoreEndsIt`
-boots a silo with `ClosedGroupRewind` and an issuer, and a client host that
-signs in through it. It checks that the seat's body arrives; that a party in a
-disallowed shape is refused by name; that a capture with the player present
-succeeds; that the restored world holds no guest and no row of the session;
-that the client is answered `Ended`, takes its seat back and joins again; and
-that a session whose traveller's grace ran out leaves no row. The live check
-is the RTX 2060's player install joining the hosted authority.
+boots a two-row silo with `ClosedGroupRewind` and an issuer, and a client host
+that signs in through the issuer and joins over QUIC on loopback. In order, it
+checks that:
+
+1. the seat's body arrives in the entry row, minted in the client's session;
+2. a companion, a member that is not a seat and an incarnation another session
+   minted are each refused by name; a session no root vouched for, a session
+   another root vouched for, a network caller named after a world of the group
+   and a caller that proves nothing are refused as outside; a status question
+   from a session the row holds nothing of answers `Ended`; and none of these
+   adds a row to the ledger;
+3. a guest's commit that carries a mapped arrival is refused by name, and the
+   session is then forgotten;
+4. a capture with the player present succeeds, and its checkpoint is a
+   baseline that still holds the player's rows;
+5. the restored rows hold no guest and an empty ledger, at the point's tick;
+6. the client's seat comes home and joins the restored group again;
+7. once the client is gone and its reconnect grace runs out on the tick, the
+   ledger is empty again.
+
+The live check is the RTX 2060's player install joining the hosted authority.

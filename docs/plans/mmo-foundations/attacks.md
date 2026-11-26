@@ -602,9 +602,11 @@ so the round need not re-litigate them. Each names where the guarantee stops.
   answers `Missing` after `Committed`, and the ledger is bounded without
   eviction (`docs/architecture/worlds.md:1172-1213`) **[checked]**. Stops at
   the log's existence: the silo has one, a desktop does not (A3, A8).
-- **A silo release rewind refuses a checkpoint with obligations outside its
-  closed group** (`src/Puck.World.Server/WorldReleaseRewindBoundary.cs:30-46`)
-  **[checked]**. Stops at the silo: a desktop host rewinds by restarting.
+- **A silo release rewind owes nothing outside its closed group**
+  (`WorldReleaseRewindBoundary.RequireContained`, `WorldPersistence.EndRewoundGuests`)
+  **[checked]**: a capture refuses unsettled obligations inside the group and
+  routes that leave it, and a restore ends the players the group admitted as
+  guests. Stops at the silo: a desktop host rewinds by restarting.
 
 ## 4. Questions for the research lanes
 

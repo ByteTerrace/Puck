@@ -408,25 +408,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                 Generation: boot.Server.Population.Generation(index: rosterSlot)
             )
         );
-        if (
-            locationEndpoint.Identity.StartsWith(
-            comparisonType: StringComparison.Ordinal,
-            value: "$traveler/"
-        ) &&
-            m_remoteAuthorities.Remove(
-            key: locationEndpoint.Identity,
-            value: out var travelerRoute
-        )
-        ) {
-            _ = m_remoteCustodyPeers.TryRemove(key: travelerRoute, value: out _);
-            travelerRoute.Dispose();
-            if (m_authorityEndpoints.Remove(
-                key: locationEndpoint.Identity,
-                value: out var travelerEndpoint
-            )) {
-                travelerEndpoint.Dispose();
-            }
-        }
+        RetireTravelerRoute(location: locationEndpoint);
 
         if (!string.Equals(
             a: locationEndpoint.Identity,
@@ -437,6 +419,31 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
         }
 
         return true;
+    }
+
+    // Disposes the route wrapper a followed local seat observed and drove its remote traveler through, once the seat
+    // no longer follows it. An endpoint that is not such a route is left alone.
+    private void RetireTravelerRoute(WorldAuthorityEndpoint location) {
+        if (
+            !location.Identity.StartsWith(
+            comparisonType: StringComparison.Ordinal,
+            value: "$traveler/"
+        ) ||
+            !m_remoteAuthorities.Remove(
+            key: location.Identity,
+            value: out var travelerRoute
+        )
+        ) {
+            return;
+        }
+        _ = m_remoteCustodyPeers.TryRemove(key: travelerRoute, value: out _);
+        travelerRoute.Dispose();
+        if (m_authorityEndpoints.Remove(
+            key: location.Identity,
+            value: out var travelerEndpoint
+        )) {
+            travelerEndpoint.Dispose();
+        }
     }
 
     /// <summary>Attaches a sink that receives this host's own narration — a cross-instance transfer/adjacency/
@@ -1691,8 +1698,15 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     private WorldPeerCall LocalPeerCall(WorldInstance local) => new(
         Local: local,
         Remote: null,
-        Fault: m_peerCallFaults.GetValueOrDefault(key: local.Name)
+        Fault: m_peerCallFaults.GetValueOrDefault(key: local.Name),
+        Colocated: (m_colocatedCaller ??= ColocatedCaller)
     );
+    private Func<string, WorldTransferCaller?>? m_colocatedCaller;
+    // The caller a row of this host is to another row's crossing door: the row whose authority the call names, found by
+    // authority identity as a recovery destination is, never by a registry name.
+    private WorldTransferCaller? ColocatedCaller(string sourceAuthority) => ((FindRecoveryDestination(authority: sourceAuthority) is { } source)
+        ? WorldTransferCaller.Colocated(source: source.Server)
+        : null);
 
     /// <summary>Captures this row's own slice of the host engine's cross-instance tables — see
     /// <see cref="WorldAuthorityHostRowCheckpoint"/>. In-doubt transfers and forwarded bodies are captured as

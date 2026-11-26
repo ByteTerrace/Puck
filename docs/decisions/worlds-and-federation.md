@@ -831,7 +831,9 @@ binding lasts), and a local World names the same shape with
 key-bearing rows when the row's authenticator builds its trust list
 (`WorldAttestationIssuer.Trust`). It is never written into the world document.
 A closed rewind group trusts the issuer's root alone, so it keeps admitting
-players while it refuses every other authority. The issuance exchange rides the
+players while it refuses every other authority; what a player's party is to
+such a group is [decided below](#a-closed-rewind-group-admits-players-as-guests).
+The issuance exchange rides the
 federation wire: a client sends `Issue` in place of `Authenticate`
 (`WorldFederationRequest.Issue`). The issuer checks the key's signature over the
 transport-bound challenge (`WorldFederationCodec.BindIssuanceChallenge`) before
@@ -884,6 +886,63 @@ a host lists accounts and their public keys, and a player signs the exchange
 with one) for player hosts and rehearsals. `puck benchmark --remote issued`
 plays the route against a local authority that runs an issuer, with a client
 that signs in through it and holds no key the document pins.
+
+### A closed rewind group admits players as guests
+
+**Decided.** A hosted silo that can restore its worlds to a recovery point
+(`WorldSiloReleaseManagement.ClosedGroupRewind`) refuses every transfer from
+outside its inventory, because a restore would forget what an outside source
+remembers. A player's party comes from outside too: its source is the client's
+own session. The group admits it as a guest, on four terms.
+
+- **Who.** A network caller whose verified identity carries a session a chain
+  under the host's own issuer root vouched for (`VerifiedPeerIdentity.Session`).
+  A name never decides it. A world of the group is a caller inside the silo's
+  process (`WorldTransferCaller.Colocated`), so a sign-in subject that spells
+  a world's name is still outside.
+- **What.** Human seats only, each landing at the world's own spawn, naming an
+  incarnation its own session minted, with no companion, no title, no carried
+  motion and nothing to drive (`WorldTransferBoundary.GuestReservationRefusal`,
+  `WorldTransferBoundary.GuestCommitRefusal`). A guest brings a copy of its
+  identity and takes nothing out: a closed group sends no body outside itself.
+- **How long.** A world keeps a session's transfer keys and traveler
+  credentials only while the session holds a live reservation or a landed
+  traveler there (`WorldTransferEscrow.ReclaimGuest`). For a session it holds
+  nothing of it answers `WorldTransferStatus.Ended` and writes nothing.
+- **At a restore.** A recovery point is a baseline
+  (`WorldTransferEscrowCheckpoint.RewindBaseline`): restoring it ends every
+  traveler minted outside the group and drops every row of an outside source,
+  inside the restore function, before any tick or admission.
+
+**The invariant and its enforcement.** After any capture and restore the group
+owes nothing to anyone outside it, and no player body exists twice. One door
+enforces the live half: `WorldTransferEscrow.Admit` decides the caller of
+reserve, commit, abort, acknowledge and status, and each runs behind the value
+it returns (`WorldTransferAdmission`), so a new caller cannot reach the ledger
+around it. Custody questions from the network are refused in `WorldPeerHost`
+before the server is asked. The restore half is enforced by the checkpoint's
+own bytes: `WorldPersistence.EndRewoundGuests` runs for every reader of a
+baseline. The guarantee stops at the process (code inside the silo is
+trusted), at the issuer (a player is who its sign-in says) and at the body:
+what the world's rules gave a guest ends when its body does.
+
+**Why.** The alternatives each fail a property the group needs. Turning the
+closed group off gives up restore on the one live deployment. A join that is
+not a transfer is a second mechanism beside the party join. Admitting by the
+shape of a name lets any namespace imitate one. Ending guests on the restored
+world's first tick lets a restored body take part in that tick, leaves it in a
+replay from the same bytes, and never ends it in a world that does not step.
+
+**The client's half.** `Ended` is terminal for everything a session had at a
+destination. The client returns a cohort it still holds, a confirmed commit
+included, and seats again a player whose traveler's observation is refused
+with `WorldFederationRefusal.SessionEnded`
+(`WorldInstanceHost.ReturnSeatHome`). Its ordinary join then enters as a first
+entry.
+
+**Evidence.** [The design note](../plans/closed-group-players.md), which
+answers its review finding by finding;
+`WorldReleaseCutoverLawTests.AClosedGroupAdmitsAPlayerAsAGuestAndARestoreEndsIt`.
 
 ## The owner's deferred calls
 

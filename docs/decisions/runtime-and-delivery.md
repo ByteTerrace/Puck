@@ -322,7 +322,9 @@ than being cut from a qualification fixture.
 
 **Restore refuses what it cannot reconcile.** An in-place restore within a
 closed group is supported; later external transfers or durable effects outside
-the recovery point's scope refuse it by default. Finalization removes rollback
+the recovery point's scope refuse it by default. Players are the one outside
+party a closed group admits, as guests a restore ends
+([decision](worlds-and-federation.md#a-closed-rewind-group-admits-players-as-guests)). Finalization removes rollback
 eligibility and never deletes backup recovery points.
 
 **Pruning defends against cooperating processes and crashes, not against the
