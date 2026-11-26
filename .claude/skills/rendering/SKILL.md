@@ -761,7 +761,8 @@ phases with the occlusion kernel between them, `SdfMeshOcclusion`) → `pyramid`
 depth pyramid from the mesh target) → `surface` (each pixel's visibility record from the mesh
 target: normal, screen-space AO, the world's shared cascades' soft shadows into K;
 `passes/sdf-surface-stage.hlsli`) → `views-probes` (the irradiance volume's
-gather once a cell, `passes/sdf-views-probes.hlsli`) → `views` (materials and lighting) →
+gather once a cell, `passes/sdf-views-probes.hlsli`) → `views-reflections` (temporal views only,
+the screen-space reflections) → `views` (materials and lighting) →
 `resolve` (reduced or temporal views) → `sky` → `composite`. A view of a
 program with a glass shape (`SdfProgram.HasGlass`) inserts `glass-clear` →
 `glass` (graphics, the glass draws alone) → `glass-shade` after `views`
@@ -1215,6 +1216,22 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   Local adaptation consumes this same gather, so an irradiance error also
   changes exposure. See [mesh GI](references/mesh-gi.md) for sampling, storage,
   boundary behavior and the fixed-camera checks on both backends.
+- **A glossy surface reflects the screen first, then the volume.** In a temporal
+  view the reflection pass (`passes/sdf-world-views-reflections.comp.hlsl`,
+  `SdfWorldPackage.WithReflections`) marches each glossy pixel's mirror ray
+  through the mesh target's forward depth and reads what it reaches from the
+  preceding frame's history colour (a `PreviousFrame` port, bound through
+  `SdfHistoryPorts` like the other histories) at the hit's previous position
+  (`sdfPreviousPoint`); views blends its record over `sdfViewsReflectionSeen` in
+  `sdfViewsScreenReflection`, so the volume still answers what leaves the screen,
+  hides behind a nearer face or lies on a rough surface, and every view without the
+  pass (`passGroup.screenReflections` zero) reflects the volume alone. The history
+  holds light at the epoch's stored scale, which a scale step restarts, so the pass
+  reads nothing while `historyFrames` is zero; a new reader of the history colour
+  keeps that rule. The record is the colour at the stored scale and two shares
+  (screen and open sky); views divides the scale out (`sdfStoredLightScale`).
+  `world.counters gpu pass sdf.world$views-reflections` counts the pixels it marched
+  (texels) and the depths it read (steps).
 - **Glass is a material, a group and a pass, never a blend.** A palette slot's
   `glass` (`SdfGlass`, material row 21) makes its shapes bake into groups of
   their own (`SdfMeshBakeGroup.Glass`; the stampers emit them as instances

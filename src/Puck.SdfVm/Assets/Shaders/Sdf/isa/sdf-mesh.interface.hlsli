@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-mesh' (sha256/85764e789da50a410b2f194396faa9a01612a44ae6415dca8505c126ffb58d64). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-mesh' (sha256/c99e10a47e42ac1217fd780ff102a8012679993321e26590b0fe3cf3c5dc61e6). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_MESH
 #define PUCK_SHADER_INTERFACE_SDF_MESH
 
@@ -86,7 +86,7 @@ struct SdfMeshPass {
     [[vk::offset(928)]] float4 previousView[6];
     [[vk::offset(1024)]] uint screenCount;
     [[vk::offset(1028)]] float screenFidelity;
-    [[vk::offset(1032)]] uint _pad1032;
+    [[vk::offset(1032)]] uint screenReflections;
     [[vk::offset(1036)]] uint _pad1036;
     [[vk::offset(1040)]] float4 screenWindows[128];
     [[vk::offset(3088)]] uint4 shadeBinWidths;

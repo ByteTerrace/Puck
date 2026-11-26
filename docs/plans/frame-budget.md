@@ -198,6 +198,7 @@ only some pixels need lies in a pool, not in every pixel's record.
 | Indirect light and traced-light visibility | `views-probes` | A slot: blended cubes, the lights' agreement, the lights the corners disagree on (`sdf-views-probes.hlsli`) |
 | Lights that reach a sample | `views-filter`, by cluster | A list of light indices a cluster, any count |
 | Shadow visibility | `surface`, after a classification by each layer's block bounds, which the shadow upload reduces (`sdfMeshShadowClass`) | The record's shadow word |
+| The reflected scene on screen | `views-reflections`, in a temporal view | Two words a render pixel: the colour a glossy pixel's mirror ray reached in the preceding frame's history colour, and the shares the screen and the open sky answer (`passes/sdf-views-reflections.hlsli`) |
 | The reflected environment | The environment node | A prefiltered map, one lookup a roughness |
 | Reconstruction's sample (motion, identity, air) | The views pass's epilogue | One record a render pixel; the air is built (`SdfWorldPackage.SampleAir`), motion and identity are step 5 |
 

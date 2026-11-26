@@ -52,6 +52,7 @@ public sealed partial class SdfWorldPasses {
                 entry.Note(revision: HitRevisionOf(entry: entry, instance: instance, tables: tables, target: HitTarget.Visibility), tables: tables, target: HitTarget.Visibility);
                 break;
             case SdfWorldPackage.Parts.ViewsProbes:
+            case SdfWorldPackage.Parts.ViewsReflections:
             case SdfWorldPackage.Parts.Views:
             case SdfWorldPackage.Resolve:
                 entry.Check(revision: HitRevisionOf(entry: entry, instance: instance, tables: tables, target: HitTarget.Visibility), tables: tables, target: HitTarget.Visibility);

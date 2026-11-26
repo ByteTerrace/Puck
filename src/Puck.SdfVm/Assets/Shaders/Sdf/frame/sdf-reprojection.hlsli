@@ -130,6 +130,15 @@ bool sdfProjectView(float4 rows[6], float3 relative, out float2 pixel) {
     pixel = ((ndc * float2(0.5, -0.5) + 0.5) * rows[4].xy);
     return true;
 }
+// The view's own camera rows, unjittered, as sdfProjectView reads a view.
+void sdfCurrentViewRows(out float4 rows[6]) {
+    rows[0] = float4(passGroup.viewPosition, 1.0);
+    rows[1] = float4(passGroup.viewRight, passGroup.tanHalfFieldOfView);
+    rows[2] = float4(passGroup.viewUp, passGroup.aspectRatio);
+    rows[3] = float4(passGroup.viewForward, 0.0);
+    rows[4] = float4((float2)passGroup.imageExtent, 0.0, 0.0);
+    rows[5] = float4(passGroup.nearDistance, passGroup.frustumOffset, 0.0);
+}
 // The preceding view's pixel positions are its jittered render coordinates: where its own sample grid sampled the
 // point. The returned ray parameter is Euclidean distance along the preceding camera's normalized ray. A cut or a
 // point behind that camera has no correspondence. The caller decides whether the position lies inside its history image.

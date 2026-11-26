@@ -189,6 +189,7 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     // The on-demand pipelines a pass records with (SdfWorldPipelines.AcquiredOnDemand), which its build waits for.
     private static SdfKernel[] OnDemandKernelsOf(RenderGraphPackageRecorderContext context) => context.Part switch {
         SdfWorldPackage.Resolve => [SdfKernel.Resolve],
+        SdfWorldPackage.Parts.ViewsReflections => [SdfKernel.ViewsReflections],
         SdfWorldPackage.Parts.ViewsFilter => [SdfKernel.ViewsFilter],
         SdfWorldPackage.Parts.ViewsBins => [SdfKernel.ViewsBins],
         SdfWorldPackage.Parts.Views when ShadesInBins(context: context) => [SdfKernel.ViewsShade, SdfKernel.ViewsShadePlain],
