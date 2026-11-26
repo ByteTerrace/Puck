@@ -72,9 +72,9 @@ template limbFork(label, a, b, c, at, side, reach, rise, radius, material, drop 
     blend: SmoothUnion
     smooth: smooth
     curve {
-      a: (base * [-1, 1, -1])
-      b: (((base + (left * (0.6 * reach))) + [0, (0.25 * rise), 0]) * [-1, 1, -1])
-      c: (tip * [-1, 1, -1])
+      a: base
+      b: ((base + (left * (0.6 * reach))) + [0, (0.25 * rise), 0])
+      c: tip
       radiusStart: radius[0]
       radiusEnd: radius[1]
     }
