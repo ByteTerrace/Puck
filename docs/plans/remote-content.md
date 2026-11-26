@@ -758,12 +758,17 @@ walks from the authority it entered through to another one, and back.
 
 **What ran.** On the headless pair over the debug world with 500 ms of jitter,
 the traveler walked through a painting into another instance of the
-authority's host and back. Each crossing ended the client's observation by
-name (`world.observation.invalidated`), the client opened a new one over a new
-connection, and it held no document until that one's first records arrived:
-seconds at that jitter, twice for each round trip. The return also landed the
-traveler as a new peer generation, so its grants were minted again and its
-input owner started over.
+authority's host and came back. Each crossing ended the client's observation
+by name (`world.observation.invalidated`). The client then opened a new one
+over a new connection, with a handshake and a proof ahead of its first record,
+and held no document until that record arrived, twice for each round trip. The
+return also landed the traveler as a new peer generation, so its grants were
+minted again and its input owner started over.
+
+With the design below, the same pair shows each crossing as
+`world.observation.moved` on the authority and nothing on the client: one
+observation for the run, and the traveler back as the peer generation it left
+as.
 
 | Option | Fails at |
 |---|---|
