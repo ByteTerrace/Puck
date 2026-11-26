@@ -65,23 +65,6 @@ public sealed record WorldPointerSurface(
             SourceWidth: 1
         );
     }
-    /// <summary>Finds a region by its id.</summary>
-    /// <param name="id">The region's id.</param>
-    /// <param name="region">The region, or <see langword="null"/> when the surface names none.</param>
-    /// <returns><see langword="true"/> when the surface names the region.</returns>
-    public bool TryRegion(string id, [System.Diagnostics.CodeAnalysis.NotNullWhen(returnValue: true)] out WorldPointerRegion? region) {
-        foreach (var candidate in (Regions ?? [])) {
-            if ((candidate is not null) && string.Equals(a: candidate.Id, b: id, comparisonType: StringComparison.Ordinal)) {
-                region = candidate;
-
-                return true;
-            }
-        }
-
-        region = null;
-
-        return false;
-    }
 }
 /// <summary>
 /// One named rectangle of a pointer surface (<see cref="WorldPointerSurface.Regions"/>) or of a <c>Simulation</c>

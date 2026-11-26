@@ -261,6 +261,12 @@ as the other world-space pieces are.
   `gallery.station` films from a camera the drag does not move. A press that
   lands on a pointer surface should be captured by it
   ([the UI decisions](../../docs/decisions/ui.md#layout-text-and-interaction)).
+- **Touch reaches the console through contacts.** The console's rules read the
+  first pointing seat's ray and its tap channel. A touchscreen's contacts (a
+  finger, a pen tip, the mouse while its button is held) carry their own phase
+  and number, so once they reach pointer surfaces through the same resolver a
+  screen's do, the press, drag and release rules read each contact instead, and
+  the tap channel's binding goes.
 - **The list scrolls by whole rows.** A drag moves the list a row each row the
   pointer crosses, since a text paint's lines stand at fixed places; a smooth
   scroll waits for an interface that lays its rows out each frame.

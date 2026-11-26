@@ -721,13 +721,21 @@ Transform/Expose condition uses, tested at the placement's own coupled lattice
 cell, `Puck.Physics.Fields.FieldLattice.TryBodyCellOf`) or a state-cell
 condition. The per-tick sweep (`Server/WorldTick.Responses.cs`, run right after
 the field lattice steps) tests every entry and records which held in the row's
-`Holding` mask (bit i for entry i) through an ordinary `UpsertPlacement`. The
+`Holding` (`WorldResponseHolding`, the set of held entries as machine words, so a
+row lists as many entries as `WorldResponseCapacity.MaxEntries` admits) through
+the response selection install. The
 authored `PrototypeId` is never overwritten: the row shows the first holding
 entry (`ShownPrototypeId`, which every draw and collide consumer reads), and its
 authored prototype once none holds. Refused alongside
-`Attach`/`Inhabit`/`FaceSources`, and every candidate prototype (the row's own
-and every entry's) must be a declared, non-animated creation. Read back with
+`Inhabit`/`FaceSources`, and every candidate prototype (the row's own and every
+entry's) must be a declared creation; an animated one draws through the stamp
+pool while the row shows it. Read back with
 `world.responses`.
+`Pointer` (`WorldPointerSurface`) is a rectangle in the row's frame that a
+seat's pointer ray maps onto (`MappingIn`, over the row's resolved frame), with
+named `WorldPointerRegion` rectangles; the `$pointer:` rule operand names the
+row by its id and hit-tests a region or a list region's row. Refused on an
+attached row.
 `Deal` (`WorldPlacementDeal`) makes the row a template whose instances are
 dealt from a keyed `state.world` row of any cell kind: one child placement per
 cell, named `<template>/<cellKey>`, parented to the template at an offset of
