@@ -3000,6 +3000,10 @@ export type PalettePaintDocument = {
    * The lettering the paint draws in place of filling its primitive, or null for a paint that covers its primitive: the surface takes Color only inside both the primitive and a glyph, the text laid out in the primitive's box. A text paint's primitive is bounded (a Box is the plain choice: its Scale is the box's half-extents, and its z half-extent bounds which side of the part the lettering reaches) and carries no Stroke.
    */
   text?: PalettePaintTextDocument | null;
+  /**
+   * The lattice the paint repeats on, or null for a paint drawn once; a text paint cannot repeat.
+   */
+  repeat?: PalettePaintRepeatDocument | null;
 };
 
 export type PalettePaintDocumentVariant2 = {
@@ -3063,6 +3067,28 @@ export type PalettePaintDocumentVariant2 = {
    * The lettering the paint draws in place of filling its primitive, or null for a paint that covers its primitive: the surface takes Color only inside both the primitive and a glyph, the text laid out in the primitive's box. A text paint's primitive is bounded (a Box is the plain choice: its Scale is the box's half-extents, and its z half-extent bounds which side of the part the lettering reaches) and carries no Stroke.
    */
   text?: PalettePaintTextDocument | null;
+  /**
+   * The lattice the paint repeats on, or null for a paint drawn once; a text paint cannot repeat.
+   */
+  repeat?: PalettePaintRepeatDocument | null;
+};
+
+/**
+ * The lattice a paint repeats on (Repeat): its primitive is drawn once a cell about the cell's centre, and each cell's colour varies between the paint's color and Tone by a hash of the cell, so a floor reads as tiles with joints between them (a box a joint smaller than the cell over the slot's joint colour) and a wall as blocks. It colours the surface alone.
+ */
+export type PalettePaintRepeatDocument = {
+  /**
+   * The period along each axis of the paint's frame, in its units; zero for an axis the paint does not repeat along.
+   */
+  cell: DocumentVector3;
+  /**
+   * The colour the cells vary toward, #RRGGBB or a state binding; null for cells all in the paint's colour.
+   */
+  tone?: string | null;
+  /**
+   * The seed of the cells' hash.
+   */
+  seed?: number;
 };
 
 /**

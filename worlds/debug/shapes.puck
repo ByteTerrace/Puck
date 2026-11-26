@@ -90,7 +90,7 @@ let surfaceRow = [
   "shape-volume-cloud", "shape-state-color"
 ]
 let glassRow = ["shape-glass"]
-let styleRow = ["shape-cel", "shape-cel-hard", "shape-grey-card"]
+let styleRow = ["shape-cel", "shape-cel-hard", "shape-grey-card", "shape-paint-tiles"]
 let motionRow = [
   "motion-spin", "motion-rock", "motion-slide", "motion-chain", "motion-smooth-blend", "motion-state-blend",
   "motion-carve", "motion-mirror", "motion-polar", "motion-nod", "motion-three"
@@ -165,7 +165,7 @@ let galleryRows = [
     level: surfaceLevel
     z: styleZ
     names: styleRow
-    what: "a cel style per material, beside continuous ones, and the grey card"
+    what: "a cel style per material, beside continuous ones, the grey card and tiles"
   }
   {
     title: "GLASS"
@@ -1655,6 +1655,35 @@ template surfacePrototypes() {
           { color: "#0000FF", roughness: 1, specular: 0 }
         ],
         note: "18% grey reads sRGB 118 where white maps to display white; the wedge steps evenly"
+      )
+    }
+  }
+  // A repeated paint: one box paint a joint smaller than its cell, repeated on a world-space lattice over the slot's
+  // joint colour, each tile's tone varied between two terracottas by a hash of the tile.
+  prototype "shape-paint-tiles" {
+    document {
+      shape Box "subject" {
+        material: accentMaterial
+        position [0, 1.2, 0]
+        scale [0.45, 0.45, 0.04]
+      }
+      exhibit(
+        label: "PAINT TILES",
+        extra: [
+          {
+            color: "#8A3F2C"
+            roughness: 0.85
+            paints [
+              {
+                type: "Box"
+                scale [0.145, 0.145, 1]
+                color: "#B4553A"
+                repeat { cell [0.3, 0.3, 0], tone: "#C86E48", seed: 7 }
+              }
+            ]
+          }
+        ],
+        note: "one box paint repeated on a 30 cm lattice: 1 cm joints, each tile's tone hashed"
       )
     }
   }

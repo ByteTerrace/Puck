@@ -108,6 +108,17 @@ public static partial class CreationCanonicalizer {
                     Refuse(field: "type", message: $"a text paint needs a bounded primitive to lay its text out in, not {paint.Type}.");
                 }
             }
+            if (paint.Repeat is { } repeat) {
+                var cell = repeat.Cell.Value;
+
+                if (!float.IsFinite(f: cell.X) || !float.IsFinite(f: cell.Y) || !float.IsFinite(f: cell.Z) ||
+                    (cell.X < 0f) || (cell.Y < 0f) || (cell.Z < 0f) || ((cell.X <= 0f) && (cell.Y <= 0f) && (cell.Z <= 0f))) {
+                    Refuse(field: "repeat.cell", message: "a repeat's cell must be finite and non-negative, with at least one axis positive.");
+                }
+                if (paint.Text is not null) {
+                    Refuse(field: "repeat", message: "a text paint lays its text out once in its box and cannot repeat.");
+                }
+            }
             if (refused) {
                 return null;
             }
