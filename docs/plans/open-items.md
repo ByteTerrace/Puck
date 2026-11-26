@@ -3645,10 +3645,12 @@ Federation and transfers:
 - [medium] A remote seat's own-body prediction steers its route driver only.
   [The multi-seat memo's decision 9](multi-seat-client.md#decision-9-a-remote-seat-predicts-its-own-body)
   built the exact continuation (`WorldOwnBody`) and the predictor
-  (`WorldSeatPrediction`). Open: the predictor builds only from the client's own
-  boot document, since a presentation-tier document withholds the step's code;
-  a world reached through a crossing needs its document resolved from the
-  client's package by pin, as creations are (`WorldProjectionContent`). The
+  (`WorldSeatPrediction`). Open: the predictor builds from the client's own
+  copy of a document (`WorldPackageDocuments`: the boot document and those its
+  references rows name, by document id), since a presentation-tier document
+  withholds the step's code; a world the boot document does not reference, or
+  a copy that differs from what the authority runs, needs the document resolved
+  from the client's package by pin, as creations are (`WorldProjectionContent`). The
   presented body and the seat camera still
   draw the delivered pose, so a player's own body does not yet move at once;
   presenting the prediction, with a correction eased by the client's existing
