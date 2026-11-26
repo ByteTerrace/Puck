@@ -412,11 +412,12 @@ public sealed partial class WorldTick {
             request: request
         ));
     /// <summary>Terminally retires a traveler incarnation after its accepted leave has propagated through this hop.</summary>
-    internal void RetireTransferredMobility(in WorldMobilityIdentity mobility) {
-        var credential = mobility;
-
-        Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.RetireMobility(mobility: in credential));
-    }
+    internal void RetireTransferredMobility(in WorldMobilityIdentity mobility) => RetireTransferredIncarnation(incarnation: mobility.Incarnation);
+    /// <summary>Terminally retires a traveler incarnation here: the lease that holds it, the commit that landed it and
+    /// every credential that names it go (<see cref="WorldTransferEscrow.RetireIncarnation"/>).</summary>
+    /// <param name="incarnation">The traveler's incarnation.</param>
+    internal void RetireTransferredIncarnation(WorldEntityAddress incarnation) =>
+        Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.RetireIncarnation(incarnation: incarnation));
     /// <summary>Returns the destination's view of a source-scoped transfer. A <see cref="WorldTransferStatus.Missing"/>
     /// answer is final: the key is tombstoned before it is given (<see cref="WorldTransferEscrow.Status"/>).</summary>
     /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>

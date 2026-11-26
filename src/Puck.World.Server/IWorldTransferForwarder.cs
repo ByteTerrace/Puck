@@ -18,6 +18,20 @@ public interface IWorldTransferForwarder {
     /// <param name="mobility">The traveler credential.</param>
     /// <returns><see langword="true"/> when the route is published.</returns>
     bool HasOnwardRoute(WorldServer source, in WorldMobilityIdentity mobility);
+    /// <summary>Tells the host that a traveler's body was retired at the authority that held it and went nowhere: its
+    /// reconnect grace ran out, or it disconnected with none. Every authority of the host that still forwards to the
+    /// traveler drops its route and its credential, as each does when an accepted leave's answer arrives. Called under
+    /// the retiring authority's gate, so the host defers the work to its own loop.</summary>
+    /// <param name="incarnation">The retired traveler's incarnation.</param>
+    void RetireTraveler(WorldEntityAddress incarnation);
+    /// <summary>Passes on whether a departed traveler's source still attends to it, to the authority this one forwards
+    /// it to. A traveler that walked on keeps its credential at <paramref name="source"/> and its body further along, so
+    /// the body parks when the source goes away and resumes when it returns, wherever it stands. Called under the
+    /// source authority's gate, so the host defers the work to its own loop.</summary>
+    /// <param name="source">The authority that holds the credential and no longer the body.</param>
+    /// <param name="mobility">The traveler credential.</param>
+    /// <param name="present">Whether the source attends to the traveler.</param>
+    void SetTravelerPresence(WorldServer source, in WorldMobilityIdentity mobility, bool present);
     /// <summary>Forwards one intent addressed to a departed traveler incarnation.</summary>
     bool TryForwardIntent(WorldServer source, in WorldMobilityIdentity mobility, in IntentSubmission submission, out string reason);
     /// <summary>Forwards one typed submission addressed to a departed traveler incarnation, preserving its caller

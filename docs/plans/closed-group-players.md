@@ -105,23 +105,40 @@ carries no title, and nobody else is admitted.
 
 ### What a guest may be
 
-A guest's reservation is refused by name unless every member is a human seat
-(`WorldTransferReservationMember.LandsHuman`) with no companion, and its
-traveller identity was minted in the guest's own session: the incarnation's
-authority and the slot it departed from both name the session, and it carries
-no title. Its commit is refused unless every member lands at the destination's
-own seat spawn (`WorldTransferArrival.Spawn`), with no action registers, no
+A guest's reservation is refused by name unless every member is a seat a
+person holds (`WorldTransferReservationMember.LandsHuman`, on a live source or
+an idle one; a producer's source is refused whatever the sender says holds
+it), with no companion, and its traveller identity was minted in the guest's
+own session: the incarnation's authority and the slot it departed from both
+name the session, and it carries no title. Its commit is refused unless every
+member lands at the destination's own seat spawn
+(`WorldTransferArrival.Spawn`), with no arrival turn, no action registers, no
 carried motion, no companion and no body to drive.
 
-So a guest brings a copy of its identity projection (a name, a colour, its
-speeds, its facts and records) and nothing else. The original stays in the
-player's own identity document. What the hosted world's rules write on the
-copy is the group's progress, tied to the body: it ends when the body is
-retired, by the player leaving, by the reconnect grace running out, or by a
-restore. Nothing of it flows back, because a closed group sends no body
-outside itself (`WorldInstanceHost.ConstrainTransferInventory`, and its
-network refuses outbound connections). Player progress that outlives a visit
-needs a record the group owns, which is not built
+The door also replaces what a guest states and the group decides for itself.
+`WorldTransferBoundary.GuestReservationRefusal` and `GuestCommitRefusal` return
+the shaped reservation and commit, and the escrow leases, compares, records
+and lands only those:
+
+| Field | What lands |
+|---|---|
+| `Border`, `BorderCapacity` | The world's own border for an arrival that crosses none, with no capacity. The sender's border would otherwise choose which seam's arrival latch the body holds. |
+| `PreferredSlot` | The world's choice: the lowest free body. |
+| Identity `Id` | The subject the issuer vouched for, so no guest lands under an id it chose, and every session of one player lands under one. |
+| Identity `Name`, `ColorHex`, the body colour and rig | The player's own. They are shown, and nothing reads them as proof of who a body is. |
+| Identity `MoveSpeed`, `TurnSpeed` | Not carried. The seat moves at the world's kit rates. |
+| Identity `Facts`, `Records` | Not carried. The seat starts from the world's defaults. |
+
+Speeds, facts and records are values a world's rules read. A guest could
+state any, and the group holds no copy to check them against, so they are the
+destination's and never the sender's numbers (`WorldTransferBoundary.GuestIdentity`).
+The original stays in the player's own identity document. What the hosted
+world's rules write on the seat is the group's progress, tied to the body: it
+ends when the body is retired, by the player leaving, by the reconnect grace
+running out, or by a restore. Nothing of it flows back, because a closed group
+sends no body outside itself (`WorldInstanceHost.ConstrainTransferInventory`,
+and its network refuses outbound connections). Player progress that outlives a
+visit needs a record the group owns, which is not built
 ([open item](open-items.md#a-hosted-world-on-a-client)).
 
 ### How long a session lasts in the ledger
@@ -134,10 +151,54 @@ rule runs when a crash recovery redoes the crossing log. A guest's commit that
 is refused when the session holds nothing else is answered at once, with the
 refusal's own name, and writes no tombstone: the key died with the session.
 
+Whether a source is a guest's session is the door's decision. The escrow
+records it when the session's first reservation is admitted, keeps it until
+the session is forgotten, checkpoints it
+(`WorldTransferEscrowCheckpoint.Guests`), and writes it into every crossing
+record and taped arrival of the session. Reclamation reads that mark and never
+the boundary, so a replay, which has no boundary, forgets a session where the
+live world did.
+
+A traveller that walked from one world of the group to another stays live at
+the world it left: that world keeps the session's credential and a forwarding
+route. Two things travel along the route so the session can end.
+
+- The player's presence. A world that holds a traveller's credential and no
+  longer its body passes a disconnect, and a reconnect, to the world it
+  forwards to (`IWorldTransferForwarder.SetTravelerPresence`). The body parks
+  and its reconnect grace runs where it stands.
+- The body's retirement. A world that retires a traveller's body where it
+  stands (its grace ran out, or it disconnected with none) tells the host
+  (`IWorldTransferForwarder.RetireTraveler`), and every world that forwarded
+  to it drops its route and its credential through the retirement an accepted
+  leave already ran (`WorldInstanceHost.RetireForwardedTraveler`). The session
+  then holds nothing live at the first world either, and is reclaimed there.
+
+Both are queued under the calling world's gate and applied on the host loop,
+because no world's gate is held while another world is entered.
+
+A guest's ledger is bounded on its own terms.
+
+- One session holds at most `WorldTransferLimits.GuestTransferKeysPerSession`
+  rows in a world, its floor included, and all guests together at most
+  `WorldTransferLimits.GuestTransferKeys`. Each refuses by name.
+- Guests are counted apart from the group's own worlds. The bounds a world of
+  the group meets (`TransferKeys`, `TransferKeysPerSource`, `Transactions`,
+  `MobilityAdmissions`) count no guest's row, transaction or credential, so no
+  number of players present refuses a portal inside the group.
+- A guest's question about a key that holds no row is answered `Missing` and
+  writes nothing: no row and no tombstone. A tombstone keeps a promise the
+  group makes to a world it rewinds with, that a key answered `Missing` is
+  never leased afterwards. A guest carries nothing the group must give back,
+  so a guest that reserves a key it was told is missing gets a lease its own
+  commit decides. A key the session did lease holds a row inside its budget,
+  and its death is recorded as any key's is.
+
 Three things follow.
 
-- The ledger a guest can occupy is bounded by the bodies and reservations it
-  holds, which the world's `networkPlayers` cap and its lease limits bound.
+- The ledger a guest can occupy is bounded by its session's budget, and its
+  credentials by the bodies it holds, which the worlds' `networkPlayers` caps
+  bound.
 - A session the world holds nothing of looks exactly like a session it never
   saw. Its next reservation is a first entry. That is safe, because the world
   retired every traveller of the session before it forgot the session, so
@@ -158,8 +219,17 @@ the restore itself (`WorldPersistence.EndRewoundGuests`):
   (`WorldGrants.RollbackTransferredEntity`), with its grants and its held
   input;
 - the escrow drops every row of an outside source or an outside incarnation
-  (`WorldTransferEscrow.EndOutside`);
+  (`WorldTransferEscrow.EndOutside`), and takes an outside traveller out of
+  the retained commit of a transfer that also carried one of the group's;
 - the host drops every forwarding route of an outside incarnation.
+
+Guests end after every table the checkpoint held is back as it was captured:
+the retained undo turns, the rule latches, the decisions and the search
+progress are imported against the arena and population they were taken from,
+and the ending then runs through the door a refused arrival leaves by, whose
+writes invalidate what depends on them as they do in play. Ending first would
+import turns that still name a guest's cells, and a later undo would restore
+them.
 
 The restore function is the same one a candidate silo, a crash recovery, a
 history seek and a replay shadow call, and what it does depends only on the
@@ -196,9 +266,23 @@ Rows of outside sources are no longer a reason to refuse, because the
 baseline ends them. A guest in the middle of joining does not block a
 capture: its open reservation is one of the rows the restore drops.
 
-Capture and restore inspection now read one inventory,
+Capture and restore inspection read one inventory,
 `WorldReleaseRewindBoundary.Authorities`: each row's name and the authority
-namespace its definition declares.
+namespace its definition declares. What a restore ends is decided once, by the
+names in the checkpoint's bytes, so restore inspection refuses a point that
+carries no baseline or whose baseline names other authorities than its own
+inventory (`WorldReleaseRewindBoundary.RequireBaseline`).
+
+### What a connection may be
+
+A world of a closed group gives a federation connection a credential only
+when the connection is a guest's: a session vouched for under the host's
+issuer, whose namespace is no world of the group
+(`WorldTransferBoundary.CredentialRefusal`, at the handshake). The leave,
+submission and observation doors look a traveller up by the connection's
+namespace, and a vouched claim that signed for no session has its bare subject
+as its namespace, which could spell a world's name. No such connection reaches
+those doors.
 
 ### What the client does
 
@@ -217,6 +301,12 @@ standing in its own boot world again, where the ordinary join sends them.
   after (`WorldTransferEscrow.TravelerEnded`). The client retires the route
   and seats the player in its boot world again as a new body
   (`WorldInstanceHost.ReturnSeatHome`).
+
+One owner returns a seat. While a departure the client has not settled still
+covers the seat, that departure's own resolution brings back the body the seat
+left with (the destination answers it `Ended` too), so the second path waits
+for it and seats the player as a new body only if the departure settles
+without bringing the seat home.
 
 `Ended` differs from the two answers a client already handled. `Missing` says
 one key is dead and leaves a confirmed commit standing. A lost connection says
@@ -298,6 +388,25 @@ the rotation. What is not built is carrying the running client over to a new
 session in place: the player starts the client again
 ([open item](open-items.md#a-hosted-world-on-a-client)).
 
+## The code review's findings
+
+The built change was reviewed, and each finding is answered in the design
+above.
+
+| Finding | Answer |
+|---|---|
+| A guest's commit could carry an arrival turn | Refused by name (`GuestCommitRefusal`). |
+| A producer's source passed as a seat; the border, its capacity and the identity landed as sent | The shape table in [what a guest may be](#what-a-guest-may-be). |
+| A guest that walked on and outlived its grace was never ended at the world it left | Presence and retirement travel the forwarding route ([how long a session lasts](#how-long-a-session-lasts-in-the-ledger)). |
+| Present guests could fill the ledger; a status question wrote a tombstone | The guest budgets, counted apart from the group's worlds, and the rowless `Missing`. |
+| One seat could be returned twice | One owner returns a seat ([what the client does](#what-the-client-does)). |
+| Reclamation read the boundary, which a replay lacks | The mark is the ledger's own and is in the bytes. |
+| Restore inspection neither required the baseline nor compared it | `WorldReleaseRewindBoundary.RequireBaseline`. |
+| The doors that read a namespace trusted a claim with no session | [What a connection may be](#what-a-connection-may-be). |
+| Guests ended before the undo turns were imported | They end after the checkpoint's own tables are back ([a recovery point is a baseline](#a-recovery-point-is-a-baseline)). |
+| A restore left a guest in the retained commit of a mixed transfer | `WorldTransferEscrow.EndOutside` takes the guest's member out. |
+| Questions about one source scanned the whole ledger | The escrow keeps each source's keys, travellers and counts, and an index from traveller to sources and from peer to traveller. |
+
 ## Options weighed
 
 - **Turn off `ClosedGroupRewind` on the deployment.** Players would join at
@@ -370,19 +479,32 @@ that signs in through the issuer and joins over QUIC on loopback. In order, it
 checks that:
 
 1. the seat's body arrives in the entry row, minted in the client's session;
-2. a companion, a member that is not a seat and an incarnation another session
-   minted are each refused by name; a session no root vouched for, a session
-   another root vouched for, a network caller named after a world of the group
-   and a caller that proves nothing are refused as outside; a status question
-   from a session the row holds nothing of answers `Ended`; and none of these
-   adds a row to the ledger;
-3. a guest's commit that carries a mapped arrival is refused by name, and the
-   session is then forgotten;
-4. a capture with the player present succeeds, and its checkpoint is a
-   baseline that still holds the player's rows;
-5. the restored rows hold no guest and an empty ledger, at the point's tick;
-6. the client's seat comes home and joins the restored group again;
-7. once the client is gone and its reconnect grace runs out on the tick, the
-   ledger is empty again.
+2. a companion, a member that is not a seat, a producer's source a sender
+   calls human and an incarnation another session minted are each refused by
+   name; a session no root vouched for, a session another root vouched for, a
+   network caller named after a world of the group and a caller that proves
+   nothing are refused as outside; a status question from a session the row
+   holds nothing of answers `Ended`; and none of these adds a row to the
+   ledger;
+3. a guest's commit that carries a mapped arrival, and one that carries an
+   arrival turn, are each refused by name, and the session is then forgotten;
+   a reservation naming a border with no room is leased all the same;
+4. a guest that sends another player's id and its own speeds lands under its
+   vouched subject with no claimed speed, in a body the world chose;
+5. a status question about a key the session never reserved answers `Missing`
+   and adds no row; the lease past a session's budget and the lease past the
+   guests' share are each refused by name, and a reservation from the other
+   world of the group is then leased;
+6. a vouched identity that signed for no session, and a session no root
+   vouched for, are refused a credential;
+7. a capture with players present succeeds, and its checkpoint is a baseline
+   that still holds their rows;
+8. the restored rows hold no guest and no guest's row, at the point's tick,
+   and keep the row the group's own reservation left;
+9. the client's seat comes home once, with nothing owed for it, and joins the
+   restored group again;
+10. the player's body walks from the entry row to the other row, the client
+    goes away, the body's grace runs out where it stands, and neither row
+    keeps a body, a credential or a ledger row of the session.
 
 The live check is the RTX 2060's player install joining the hosted authority.

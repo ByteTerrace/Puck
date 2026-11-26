@@ -50,6 +50,11 @@ public interface IWorldForwardedAuthority {
     /// <param name="ct">The observation lifetime cancellation.</param>
     /// <returns>A refusal before streaming, or null after the stream ends.</returns>
     Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct);
+    /// <summary>Tells the traveler's next authority whether its source still attends to it: the body parks there when
+    /// the source went away and resumes when it returned. A hop reached over a socket does nothing, since the authority
+    /// at its far end parks a traveler when the streams this hop holds to it end.</summary>
+    /// <param name="present">Whether the source attends to the traveler.</param>
+    void SetPresence(bool present);
 }
 /// <summary>The data needed to rebind one forwarding hop. Endpoint and Definition are both null for a local hop;
 /// otherwise they seed a new remote connection whose handshake must prove DestinationAuthority.</summary>
@@ -165,6 +170,16 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
         m_sourceAuthority,
         m_mobility
     );
+    /// <inheritdoc/>
+    /// <remarks>Parks or resumes the body at this colocated authority through the doors a direct connection uses, which
+    /// pass the word on themselves when the traveler has walked on from here too.</remarks>
+    public void SetPresence(bool present) {
+        if (present) {
+            _ = m_server.GrantTable.TryResumeTransferredPeer(mobility: in m_mobility, sourceAuthority: m_sourceAuthority);
+        } else {
+            m_server.GrantTable.ParkTransferredPeer(mobility: in m_mobility, sourceAuthority: m_sourceAuthority);
+        }
+    }
     /// <summary>Describes one live body's complete observable authority epoch. MUST be called inside
     /// <see cref="WorldServer.ExecuteAuthorityOperation{T}"/>.</summary>
     /// <param name="server">The authority holding the body.</param>

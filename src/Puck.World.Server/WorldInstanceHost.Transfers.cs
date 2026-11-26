@@ -2158,6 +2158,7 @@ public sealed partial class WorldInstanceHost {
     /// engine-time fence: destination topology resolves before population advance, and any overlapping destination
     /// step skips that traveler without evaluating input, motion, or dynamic contact a second time.</summary>
     public void DrainPendingTransfers() {
+        RetireEndedTravelers();
         ReturnEndedSeats();
         DrainPendingPoseHomes();
         ReconcileInDoubtTransfers();
@@ -2369,7 +2370,7 @@ public sealed partial class WorldInstanceHost {
             FullPolicy: fullPolicy,
             PartyAllOrNothing: partyAllOrNothing,
             BorderCapacity: borderCapacity,
-            Border: (border ?? "transfer"),
+            Border: (border ?? WorldTransferReservationRequest.Unbordered),
             Posed: posed,
             CompanionReturn: companionReturn,
             Rides: rides
@@ -2411,17 +2412,22 @@ public sealed partial class WorldInstanceHost {
     /// transfer's whole member set shares that one resolution, so a <see cref="TransferLifetime.Fresh"/> destination
     /// mints its name once for the whole party, never once per body).</summary>
     public readonly record struct TransferDestination {
-        private TransferDestination(TransferLifetime lifetime, string? name, string? documentPath, string? site, bool retain, string? authority) {
+        private TransferDestination(TransferLifetime lifetime, string? name, string? documentPath, string? site, bool retain, string? authority, string? authorityNamespace = null) {
             Lifetime = lifetime;
             Name = name;
             DocumentPath = documentPath;
             Site = site;
             Retain = retain;
             Authority = authority;
+            AuthorityNamespace = authorityNamespace;
         }
 
         /// <summary>An operator-selected remote authority for this run, overriding the document endpoint.</summary>
         public string? Authority { get; }
+        /// <summary>The namespace the remote authority must prove at its handshake, as the run named it, or
+        /// <see langword="null"/> to expect the one the destination document declares
+        /// (<c>host.authorityNamespace</c>).</summary>
+        public string? AuthorityNamespace { get; }
         /// <summary>The world document to start the instance from if it is not already running — set for
         /// <see cref="TransferLifetime.Fresh"/>, <see cref="TransferLifetime.Persistent"/>, and
         /// <see cref="TransferLifetime.Resolved"/>.</summary>
@@ -2471,8 +2477,15 @@ public sealed partial class WorldInstanceHost {
             site: null
         );
         /// <summary>The normal boot composition routed through a remote authority selected for this run.</summary>
-        public static TransferDestination Remote(string name, string documentPath, string authority) => new(
+        /// <param name="name">The instance name the remote authority is held under.</param>
+        /// <param name="documentPath">The document that stands for the remote world until its own arrives.</param>
+        /// <param name="authority">The remote authority's endpoint.</param>
+        /// <param name="authorityNamespace">The namespace the remote authority must prove, or <see langword="null"/>
+        /// to expect the one <paramref name="documentPath"/> declares.</param>
+        /// <returns>The destination.</returns>
+        public static TransferDestination Remote(string name, string documentPath, string authority, string? authorityNamespace = null) => new(
             authority: authority,
+            authorityNamespace: authorityNamespace,
             documentPath: documentPath,
             lifetime: TransferLifetime.Resolved,
             name: name,
