@@ -1,15 +1,15 @@
 // The gallery's plan, every dimension the building and what stands in it are placed by (gallery.md beside this file
 // draws it). A module library: it hands its importers lets and functions and emits no document.
 //
-// Positions are in the building's own frame, metres: x runs east from the west wall's outer face (0 .. 62.925), z north
+// Positions are in the building's own frame, metres: x runs east from the west wall's outer face (0 .. 63.1), z north
 // from the south wall's outer face (0 .. 36.85), y up from the ground. The building's rows are placed under one root
 // placement, `gallery` (gallery.puck), so a world stands the building by giving that row a position and a turn; the
 // yaw of a row here is the row's own, with yaw 0 facing -z (south) and yaw 180 facing +z, as a placement's does.
 
 // Where the debug world stands the building: its root placement's position. A document that stands something in the
 // building by world coordinates (a table's lattice, a painting's door) adds it to a plan position with `galleryWorld`.
-// The site keeps the nave's south edge at world z 20.375 however deep the south aisle is.
-let gallerySite = [10, 0, (20.375 - naveSouth)]
+// The site keeps the nave's west arcade at world x 22 and its south edge at world z 20.375 however the aisles are sized.
+let gallerySite = [(22 - naveWest), 0, (20.375 - naveSouth)]
 function galleryWorld(x, y, z) = [(gallerySite[0] + x), (gallerySite[1] + y), (gallerySite[2] + z)]
 
 // Four storeys 4.5 m apart: level k's floor top stands at 4.5k + 0.05, on a slab 0.3 m thick, under a ceiling 4.2 m up.
@@ -22,7 +22,7 @@ let galleryParapet = 19.1
 // The footprint's walls, 0.3 m thick; its depth follows the nave (below).
 let galleryWall = 0.3
 
-// The nave runs east from x 12 to the east wall, 21.25 m wide (seventeen tiles): a void from level 0's floor to the roof between the two
+// The nave runs east from the west arcade to the east wall, 21.25 m wide (seventeen tiles): a void from level 0's floor to the roof between the two
 // balcony edges, a hall about as deep from its viewpoint as it is wide (the kit pack's level-zero hall). The aisles
 // either side of it, and the bridge west of it, are floors on every level. The arcades' piers stand half a floor tile
 // behind each balcony edge, one wide bay apart, so every pier stands on a tile's centre.
@@ -35,7 +35,9 @@ let naveSouth = (galleryWall + (6 * galleryTile))
 let naveNorth = (naveSouth + (17 * galleryTile))
 let galleryNorth = (naveNorth + (6 * galleryTile))
 let galleryDepth = (galleryNorth + galleryWall)
-let naveWest = 12
+// The west arcade stands nine and a half tiles east of the west wall's inner face, so the tile grid its piers centre
+// meets that wall at a tile's edge.
+let naveWest = (galleryWall + (9.5 * galleryTile))
 let naveMid = ((naveSouth + naveNorth) / 2)
 let arcadeSouth = (naveSouth - (galleryTile / 2))
 let arcadeNorth = (naveNorth + (galleryTile / 2))
