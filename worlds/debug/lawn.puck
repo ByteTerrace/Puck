@@ -158,7 +158,7 @@ prototypes {
     id: "floor",
     radius: 740,
     turf: lawnTurf,
-    paving: "#BC7F58",
+    paving: "#9A7650",
     paths: lawnPaths,
     pathWidth: lawnPathWidth,
     holes: [poolHole, plungeHole, reservoirHole, riverHole]

@@ -70,65 +70,104 @@ function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, se
   }
 }
 
-// Flat turf and relieved patches share one world-space material, including the noise phase at their seam.
+// Flat turf and relieved patches share one world-space material, including the noise phase at their seam. The pattern
+// is broad (features of several metres): drier, yellower drifts settle soft-edged over the turf, which stays lusher
+// between them. Reveal and settle read one noise, so the turf's own colour carries the lush side.
 function groundSurface(color) = landscapeSurface(
   { color: color, roughness: 0.99, specular: 0.015 },
   under: "#6A6D42",
-  deposit: "#91A459",
+  deposit: "#A3A651",
   seed: 4187,
-  scale: 2.4,
-  noise: 0.7,
-  threshold: 0.65,
-  softness: 0.45,
-  settle: 0.25
+  scale: 0.11,
+  settle: 0.6,
+  settleThreshold: 0.52,
+  settleWidth: 0.3
 )
 
-// Stone palettes for mossyRock: the stone, its shoulder and the moss cap.
+// Stone palettes for mossyRock: the stone, the paler tone its chamfered edges and mottling reveal, and the moss that
+// settles on its upward faces.
 let limestoneRock = ["#888778", "#A7A28B", "#657044"]
 let canyonRock = ["#9A4A2E", "#B8653F", "#5E6E36"]
 
+// The planes that bevel mossyRock's block: each removes a half-space whose normal is turned off +Y (`z` about the
+// author Z axis, `x` about X, `y` a vertical edge cut by yaw) at distance `d` from the block's centre.
+let rockCuts = [
+  { axis: "z", angle: -0.8, d: 0.84 }
+  { axis: "z", angle: 0.95, d: 0.88 }
+  { axis: "x", angle: 0.7, d: 0.72 }
+  { axis: "x", angle: -1.1, d: 0.76 }
+  { axis: "y", angle: 0.7853982, d: 0.95 }
+  { axis: "y", angle: -2.3561945, d: 1.0 }
+]
+let rockCutHalf = 2
+let rockCentre = 0.36
+function rockCutNormal(c) = c.axis == "z" ? [0 - sine(c.angle), cosine(c.angle), 0] : (c.axis == "x" ? [
+  0, cosine(c.angle), sine(c.angle)
+] : [cosine(c.angle), 0, sine(c.angle)])
+function rockCutRotation(c) = c.axis == "z" ? [0, 0, sine(c.angle / 2), cosine(c.angle / 2)] : (c.axis == "x" ? [
+  sine(c.angle / 2), 0, 0, cosine(c.angle / 2)
+] : [0, sine(0 - c.angle / 2), 0, cosine(0 - c.angle / 2)])
+
+// A stylized boulder: a chunky block and a lower shoulder bevelled by flat cuts into broad planes and chamfers, seated
+// about a quarter of its height into the ground. One weathered material reads it as rock: a paler tone along the
+// chamfered edges, soft mottling, and moss settling on the faces that look up, so no colour patch has a hard edge.
 template mossyRock(id, colors = limestoneRock) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
       name: "weathered-limestone"
-      palette: map(colors, (color, i) => landscapeSurface(
-        { color: color, roughness: 0.96, specular: 0.025 },
-        under: color,
-        deposit: i == 2 ? "#7F8B55" : "#B0A080",
-        seed: 7341 + i,
-        scale: 3,
-        settle: 0.45
-      ))
+      palette [
+        landscapeSurface(
+          { color: colors[0], roughness: 0.96, specular: 0.025 },
+          under: colors[1],
+          deposit: colors[2],
+          seed: 7341,
+          scale: 1.6,
+          edge: 0.9,
+          reach: 0.7,
+          noise: 0.55,
+          threshold: 0.62,
+          softness: 0.3,
+          settle: 1,
+          settleThreshold: 0.36,
+          settleWidth: 0.22
+        )
+      ]
       noise {
-        frequency: 1.8
-        amplitude: 0.04
+        frequency: 1.4
+        amplitude: 0.025
         octaves: 2
         gain: 0.4
         seed: 7341
       }
-      shape Superellipsoid "stone" {
-        position [0, 0.43, 0]
-        scale [0.95, 0.75, 0.7]
-        exponent: 2.7
-        rotation [0.08, 0.16, -0.06, 0.982]
+      shape Box "stone" {
+        position [0, rockCentre, 0]
+        scale [0.9, 0.6, 0.7]
+        rounding: 0.05
         material: 0
       }
-      shape Superellipsoid "shoulder" {
-        position [0.59, 0.25, 0.17]
-        scale [0.62, 0.46, 0.56]
-        exponent: 2.5
-        material: 1
+      shape Box "shoulder" {
+        position [0.66, 0.16, 0.24]
+        scale [0.52, 0.4, 0.5]
+        rotation [0, 0.258819, 0.0436194, 0.965]
+        rounding: 0.04
+        material: 0
         blend: SmoothUnion
-        smooth: 0.16
+        smooth: 0.07
       }
-      shape Superellipsoid "moss" {
-        exponent: landscapeExponent
-        position [-0.18, 0.95, -0.15]
-        scale [0.65, 0.2, 0.46]
-        material: 2
-        blend: SmoothUnion
-        smooth: 0.1
+      for (cut, i) in rockCuts {
+        shape Box $"cut-{i}" {
+          position [
+            rockCutNormal(cut)[0] * (cut.d + rockCutHalf),
+            rockCentre + rockCutNormal(cut)[1] * (cut.d + rockCutHalf),
+            rockCutNormal(cut)[2] * (cut.d + rockCutHalf),
+          ]
+          scale [rockCutHalf, rockCutHalf, rockCutHalf]
+          rotation: rockCutRotation(cut)
+          material: 0
+          blend: SmoothSubtraction
+          smooth: 0.035
+        }
       }
     }
   }
@@ -528,8 +567,11 @@ let meadowWind = {
 // The fringe uses tile-local coordinates; gusts use the placed world X/Z, continuous across tiles.
 // fringe [x, z, rx², rz²] is the patch's ellipse and clearing [x, z, r²] the circle it leaves bare, both in tile
 // coordinates; the defaults are the courtyard meadow's patch and its northern boulder. A tile small on screen sways at
-// the update-rate lever's reduced tiers unless the importer passes reducedRateAtDistance: false.
-template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.9, 3.65], clearing = [6.5, 9.8, 2.1], reducedRateAtDistance = true, wind = meadowWind) {
+// the update-rate lever's reduced tiers unless the importer passes reducedRateAtDistance: false. `feather` thins the
+// patch toward its rim: a blade at ellipse value e stands only where e < 1 - feather * h, h its well-spread hash in
+// [0, 1), so density falls linearly over the outer band instead of stopping at a line or the tile's square edge.
+function fringeHash(n) = n * 0.61803398875 - floor(n * 0.61803398875)
+template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.2, 3.2], feather = 0.6, clearing = [6.5, 9.8, 2.1], reducedRateAtDistance = true, wind = meadowWind) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -570,8 +612,8 @@ template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.9, 3
       ]
       for blade in filter(
         filter(meadowBlades, b => (tile[0] + b["x"] - fringe[0]) * (tile[0] + b["x"] - fringe[0]) / fringe[2] +
-          (tile[1] + b["z"] - fringe[1]) * (tile[1] + b["z"] - fringe[1]) / fringe[3] < 1 + 0.09 * sine(
-          b["id"] * 7.1
+          (tile[1] + b["z"] - fringe[1]) * (tile[1] + b["z"] - fringe[1]) / fringe[3] < 1 - feather * fringeHash(
+          b["id"] * 7 + tile[0] * 13 + tile[1] * 29
         )),
         b => (tile[0] + b["x"] - clearing[0]) * (tile[0] + b["x"] - clearing[0]) +
           (tile[1] + b["z"] - clearing[1]) * (tile[1] + b["z"] - clearing[1]) >
@@ -733,7 +775,19 @@ template paintedGround(id, radius, turf, paving, paths = [], pathWidth = 2.4, de
   }
 }
 
-// Broad, readable fronds rather than fine leaflets: a low woodland layer that holds its silhouette in motion.
+// The turn that lays a flat Prism leaf (long along local +Y, thin along local Z) out along yaw `phi` at `a` radians off
+// vertical, its face looking up and its width horizontal: yaw(-phi) * roll about Z(-a) * yaw(pi/2).
+function leafTurn(phi, a) = [
+  0.70710678 * sine(a / 2) * (cosine(phi / 2) + sine(phi / 2)),
+  0.70710678 * cosine(a / 2) * (cosine(phi / 2) - sine(phi / 2)),
+  0.70710678 * sine(a / 2) * (sine(phi / 2) - cosine(phi / 2)),
+  0.70710678 * cosine(a / 2) * (cosine(phi / 2) + sine(phi / 2)),
+]
+// The direction such a leaf runs.
+function leafRun(phi, a) = [sine(a) * cosine(phi), cosine(a), sine(a) * sine(phi)]
+
+// Fronds arching out from a centre: each is a flat, tapered leaf rising from the crown and a second, longer one that
+// arches over and droops toward its tip.
 template fernClump(id, size = 1, colors = ["#365C43", "#547647", "#779153"]) {
   prototype $"{id}" {
     document {
@@ -747,19 +801,35 @@ template fernClump(id, size = 1, colors = ["#365C43", "#547647", "#779153"]) {
         scale: 3,
         settle: 0.35
       ))
-      for i in range(0, 7) {
-        shape Superellipsoid $"frond-{i}" {
-          exponent: 2.2
-          position [0.23 * size * cosine(i * 2.39996323), 0.27 * size,
-            0.23 * size * sine(i * 2.39996323)
+      for f in map(range(0, 8), i => {
+        i: i
+        phi: i * 2.39996323
+        rise: 0.42 + 0.1 * (i % 3)
+        arch: 1.62 + 0.18 * (i % 2)
+        inner: (0.17 + 0.03 * (i % 2)) * size
+        outer: (0.21 + 0.03 * (i % 3)) * size
+      }) {
+        shape Prism $"frond-{f.i}" {
+          profile { kind: "Ellipse" }
+          position [
+            leafRun(f.phi, f.rise)[0] * f.inner,
+            0.03 * size + leafRun(f.phi, f.rise)[1] * f.inner,
+            leafRun(f.phi, f.rise)[2] * f.inner,
           ]
-          scale [0.11 * size, 0.43 * size, 0.065 * size]
-          rotation [sine(i * 2.39996323 / 2) * sine(0.48),
-            sine(i * 2.39996323 / 2) * cosine(0.48),
-            cosine(i * 2.39996323 / 2) * sine(0.48),
-            cosine(i * 2.39996323 / 2) * cosine(0.48)
+          scale [0.032 * size, f.inner, 0.008 * size]
+          rotation: leafTurn(f.phi, f.rise)
+          material: f.i % 3
+        }
+        shape Prism $"frond-tip-{f.i}" {
+          profile { kind: "Ellipse" }
+          position [
+            leafRun(f.phi, f.rise)[0] * f.inner * 1.8 + leafRun(f.phi, f.arch)[0] * f.outer * 0.95,
+            0.03 * size + leafRun(f.phi, f.rise)[1] * f.inner * 1.8 + leafRun(f.phi, f.arch)[1] * f.outer * 0.95,
+            leafRun(f.phi, f.rise)[2] * f.inner * 1.8 + leafRun(f.phi, f.arch)[2] * f.outer * 0.95,
           ]
-          material: i % 3
+          scale [0.05 * size, f.outer, 0.008 * size]
+          rotation: leafTurn(f.phi, f.arch)
+          material: (f.i + 1) % 3
         }
       }
     }
