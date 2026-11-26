@@ -559,7 +559,13 @@ seed derived from the run's, so a failure under a schedule reproduces.
   goal with the release answered and the body at rest.
 - *A chapter's clock.* A chapter's time limit counts the authority ticks
   delivered for the seat's body, so a slow delivery spends none of it; the
-  client's own ticks bound it only as a backstop several times longer.
+  client's own ticks bound it only as a backstop several times longer. The
+  clock is a charged budget (`WorldSeatDriver.ChargedTicks`): it stops while the
+  driver awaits a navigation bake, a tap's party or a yield, so the report
+  prints it beside the span the authority actually ticked
+  (`WorldSeatDriver.AuthoritySpan`) and, against a local remote pair, the
+  authority boot instance's own completed ticks over the route, read from its
+  `world.rate`.
 
 **Invariants and what enforces each.**
 
