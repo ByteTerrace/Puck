@@ -282,6 +282,7 @@ public readonly record struct BodyMotionSection(
 /// continuum trajectory, or <see langword="null"/> when none is in flight.</param>
 /// <param name="OverlayRemainingTicks">The engine ticks left on the live impulse overlay.</param>
 /// <param name="RigidRestingHoldTicks">A rigid kit's engine ticks under the resting thresholds so far.</param>
+/// <param name="ProducerRests">Whether the body's producer was found at rest at its last run with no wake since.</param>
 public readonly record struct BodyClocksSection(
     FixedQuaternion Frame,
     bool UpNeedsReseat,
@@ -294,7 +295,8 @@ public readonly record struct BodyClocksSection(
     bool OrdinaryAdvanceAdmitted,
     ulong? ContinuumConsumedThroughEngineTick,
     ulong OverlayRemainingTicks,
-    ulong RigidRestingHoldTicks
+    ulong RigidRestingHoldTicks,
+    bool ProducerRests = false
 ) : IContinuationSection<BodyClocksSection> {
     /// <inheritdoc/>
     public static WorldContinuationSectionKind Section => WorldContinuationSectionKind.Clocks;
@@ -302,7 +304,7 @@ public readonly record struct BodyClocksSection(
     /// <inheritdoc/>
     public static void Write(WireWriter writer, in BodyClocksSection section) {
         writer.WriteFixedQuaternion(value: section.Frame);
-        var flags = (byte)((section.UpNeedsReseat ? 1 : 0) | (section.IdleSleepGravity.HasValue ? 2 : 0));
+        var flags = (byte)((section.UpNeedsReseat ? 1 : 0) | (section.IdleSleepGravity.HasValue ? 2 : 0) | (section.ProducerRests ? 4 : 0));
         writer.WriteByte(value: flags);
         if (section.IdleSleepGravity is { } gravity) { writer.WriteFixedVector(value: gravity); }
         writer.WriteInt64(value: section.FieldUpTurnRemainder);
@@ -322,7 +324,7 @@ public readonly record struct BodyClocksSection(
     public static BodyClocksSection Read(ref WireReader reader) {
         var frame = reader.ReadFixedQuaternion();
         var flags = reader.ReadByte();
-        if ((flags & ~3) != 0) { reader.Fail(detail: "unknown body clock flags", refusal: WireRefusal.PayloadMalformed); }
+        if ((flags & ~7) != 0) { reader.Fail(detail: "unknown body clock flags", refusal: WireRefusal.PayloadMalformed); }
         return new(
             Frame: frame,
             UpNeedsReseat: (flags & 1) != 0,
@@ -335,7 +337,8 @@ public readonly record struct BodyClocksSection(
             OrdinaryAdvanceAdmitted: reader.ReadBoolean(),
             ContinuumConsumedThroughEngineTick: reader.ReadOptional(readValue: static (ref WireReader r) => r.ReadUInt64()),
             OverlayRemainingTicks: reader.ReadUInt64(),
-            RigidRestingHoldTicks: reader.ReadUInt64()
+            RigidRestingHoldTicks: reader.ReadUInt64(),
+            ProducerRests: (flags & 4) != 0
         );
     }
 }

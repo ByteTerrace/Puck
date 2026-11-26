@@ -50,9 +50,21 @@ public sealed partial class WorldInputRuntime {
     /// <summary>Restores what <see cref="SuspendObservation"/> answered.</summary>
     internal void ResumeObservation(bool observing) => m_observingEvaluation = observing;
     internal void ObserveBodyChannel(int body, ushort channel) {
-        if (!m_observingEvaluation) { return; }
-        foreach (var owner in m_ordered) {
-            if (owner.Body == body) { ObserveHeld(channel: channel, principal: owner.Principal); }
+        if (!m_observingEvaluation || !m_bodyOwners.TryGetValue(key: body, value: out var owners)) { return; }
+        // The body's owners in principal order, the order a walk of every owner would meet them in: the list holds them
+        // in the order they were admitted, and it is a seat and its controllers long.
+        Owner? last = null;
+
+        while (true) {
+            Owner? next = null;
+
+            foreach (var owner in owners) {
+                if (((last is null) || (ComparePrincipal(a: owner.Principal, b: last.Principal) > 0)) &&
+                    ((next is null) || (ComparePrincipal(a: owner.Principal, b: next.Principal) < 0))) { next = owner; }
+            }
+            if (next is null) { return; }
+            ObserveHeld(channel: channel, principal: next.Principal);
+            last = next;
         }
     }
 

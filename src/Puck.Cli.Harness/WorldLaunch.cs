@@ -82,15 +82,20 @@ public sealed record WorldLaunchRequest(string Step, string Artifact) {
         WorldShape.Windowed or WorldShape.Document => HostStartKind.WindowedWorld,
         _ => HostStartKind.HeadlessWorld,
     };
+    /// <summary>Gets the world the host admission learns and judges this start's peak by, a path as <see cref="World"/>
+    /// takes, when the World boots a staged copy of it (a delta written beside the world for one run), or
+    /// <see langword="null"/> for <see cref="World"/> itself.</summary>
+    public string? AdmissionWorld { get; init; }
     /// <summary>Gets the profile the host admission judges the World by: its <see cref="Kind"/>, and for a World that opens a
-    /// device the backend it boots on and whether its mesh store is warm (<see cref="WorldDevices.StoreOf"/>, read from
-    /// <see cref="Arguments"/> when the profile is asked for).</summary>
+    /// device the backend it boots on, whether its mesh store is warm (<see cref="WorldDevices.StoreOf"/>, read from
+    /// <see cref="Arguments"/> when the profile is asked for) and the document it boots
+    /// (<see cref="HostStartProfile.DocumentOfWorld"/> of <see cref="AdmissionWorld"/>, else of <see cref="World"/>).</summary>
     public HostStartProfile Profile => ((Kind == HostStartKind.WindowedWorld)
         ? new HostStartProfile(Kind: Kind, Device: Backend switch {
             WorldBackendPreference.DirectX => WorldBackendTokens.DirectX,
             WorldBackendPreference.Vulkan => WorldBackendTokens.Vulkan,
             _ => null,
-        }, Store: WorldDevices.StoreOf(arguments: Arguments))
+        }, Store: WorldDevices.StoreOf(arguments: Arguments), Document: HostStartProfile.DocumentOfWorld(world: (AdmissionWorld ?? World)))
         : new HostStartProfile(Kind: Kind));
     /// <summary>Gets the program the launch starts: <see cref="Executable"/>, the build's own host when
     /// <see cref="Artifact"/> is a self-contained build (a player build), which <c>dotnet</c> cannot run, or

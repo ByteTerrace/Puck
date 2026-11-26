@@ -217,8 +217,8 @@ public sealed class MemoryAccount {
         m_readAvailable = (availablePhysicalBytes ?? HostMemory.AdmissibleBytes);
         m_readLowMemory = (lowMemorySignaled ?? HostMemory.LowMemorySignaled);
         DefaultBudget = DefaultBudgetOf(installedPhysicalBytes: installed);
-        Headroom = Math.Clamp(max: (512L << 20), min: (16L << 20), value: (installed / 32));
-        AuthoringMargin = Math.Max(val1: Headroom, val2: (installed / 8));
+        Headroom = HeadroomOf(installedPhysicalBytes: installed);
+        AuthoringMargin = AuthoringMarginOf(installedPhysicalBytes: installed);
     }
 
     /// <summary>Gets how long a reading of the machine's free physical memory stands before an admission reads it
@@ -353,6 +353,16 @@ public sealed class MemoryAccount {
     /// <param name="installedPhysicalBytes">The machine's installed physical memory, in bytes.</param>
     /// <returns>The budget, in bytes.</returns>
     public static long DefaultBudgetOf(long installedPhysicalBytes) => Math.Max(val1: 0, val2: ((installedPhysicalBytes * 3) / 4));
+    /// <summary>Returns the failure and allocator reserve (<see cref="Headroom"/>) a process's account derives on a machine of
+    /// a given size: a thirty-second of its installed memory, at least 16 MiB and at most 512 MiB.</summary>
+    /// <param name="installedPhysicalBytes">The machine's installed physical memory, in bytes.</param>
+    /// <returns>The reserve, in bytes.</returns>
+    public static long HeadroomOf(long installedPhysicalBytes) => Math.Clamp(max: (512L << 20), min: (16L << 20), value: (installedPhysicalBytes / 32));
+    /// <summary>Returns the free physical memory authoring work leaves the machine (<see cref="AuthoringMargin"/>) on a
+    /// machine of a given size: an eighth of its installed memory, and at least <see cref="HeadroomOf"/>.</summary>
+    /// <param name="installedPhysicalBytes">The machine's installed physical memory, in bytes.</param>
+    /// <returns>The margin, in bytes.</returns>
+    public static long AuthoringMarginOf(long installedPhysicalBytes) => Math.Max(val1: HeadroomOf(installedPhysicalBytes: installedPhysicalBytes), val2: (installedPhysicalBytes / 8));
     /// <summary>Gets the unspendable failure and allocator reserve.</summary>
     public long Headroom { get; }
     /// <summary>Gets the free physical memory, in bytes, authoring work leaves the machine when it reserves: an eighth of

@@ -48,11 +48,15 @@ public static class SampleTrace {
     /// its thread's outermost frame.</param>
     /// <param name="thread">Only this thread's samples, or <see langword="null"/> for every thread.</param>
     /// <param name="depth">How many callee frames beneath the focus frame name a path, from one.</param>
+    /// <param name="leaves">Zero to name each sample by the callees beneath the focus frame; otherwise how many of its
+    /// innermost frames beneath the focus name it, innermost first, which sums the samples by where each thread was (a
+    /// copy, a clear, a lock) and what called it.</param>
     /// <param name="fromMs">The first millisecond of the trace read.</param>
     /// <param name="toMs">The last millisecond of the trace read.</param>
     /// <returns>The report.</returns>
-    public static SampleReport Read(string path, string? focus, int? thread, int depth = 1, double fromMs = 0, double toMs = double.MaxValue) {
+    public static SampleReport Read(string path, string? focus, int? thread, int depth = 1, double fromMs = 0, double toMs = double.MaxValue, int leaves = 0) {
         ArgumentOutOfRangeException.ThrowIfLessThan(value: depth, other: 1);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: leaves);
 
         var etlx = TraceLog.CreateFromEventPipeDataFile(filePath: path, etlxFilePath: Path.ChangeExtension(path: path, extension: ".etlx"));
 
@@ -93,8 +97,17 @@ public static class SampleTrace {
             if (focusAt < 0) { continue; }
             focused++;
 
-            var beneath = frames.Skip(count: (focusAt + 1)).Take(count: depth).ToArray();
-            var callee = ((beneath.Length == 0) ? "self" : string.Join(separator: " > ", value: beneath));
+            var below = (frames.Count - (focusAt + 1));
+            string callee;
+
+            if (below == 0) {
+                callee = "self";
+            } else if (leaves == 0) {
+                callee = string.Join(separator: " > ", values: frames.Skip(count: (focusAt + 1)).Take(count: depth));
+            } else {
+                // The innermost frames, innermost first, never reaching above the focus frame.
+                callee = string.Join(separator: " < ", values: Enumerable.Reverse(source: frames).Take(count: Math.Min(val1: leaves, val2: below)));
+            }
 
             callees[callee] = callees.GetValueOrDefault(key: callee) + 1;
         }

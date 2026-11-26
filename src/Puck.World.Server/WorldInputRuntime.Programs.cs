@@ -33,6 +33,9 @@ public sealed partial class WorldInputRuntime {
         public long Kit;
         public long[] Selectors = [];
         public string Engagement = string.Empty;
+        // The grant table's version (WorldGrants.InputFactsVersion) under which the body was last found ungated, the
+        // owner's session live and the engagement as recorded: while it stands, none of the three is asked again.
+        public ulong Grants;
         // Whether the admitted observation is one the same observation would repeat: no relative channel moved, the
         // producer holds nothing pending and the tick was not an epoch's first.
         public bool Repeats;
@@ -67,9 +70,21 @@ public sealed partial class WorldInputRuntime {
         ReferenceEquals(objA: m_host.Population.InputCatalog, objB: standing.Catalog) &&
         ReferenceEquals(objA: m_host.Document.Definition, objB: standing.Definition) &&
         (m_host.Population.KitSignature(index: owner.Body) == standing.Kit) &&
-        !m_host.GrantTable.TryGetDriveGate(bodyIndex: owner.Body, gateRow: out _) &&
-        m_host.GrantTable.IsLiveSession(principal: owner.Principal)
+        ProgramGrantsStand(owner: owner, standing: standing)
     );
+    // Whether the grant table still answers for a program owner what its last admission read: the body ungated, the
+    // owner's session live and the world's engagement as recorded. The table's version says so without asking; when
+    // it has moved the three are asked afresh, and the record takes the version they were found standing under.
+    private bool ProgramGrantsStand(Owner owner, ProgramStanding standing) {
+        var grants = m_host.GrantTable;
+        var version = grants.InputFactsVersion;
+
+        if (standing.Grants == version) { return true; }
+        if (grants.TryGetDriveGate(bodyIndex: owner.Body, gateRow: out _) || !grants.IsLiveSession(principal: owner.Principal) ||
+            (Engagement(body: owner.Body, principal: Principal.World) != standing.Engagement)) { return false; }
+        standing.Grants = version;
+        return true;
+    }
 
     // Whether every input of an admission's permission and selection steps stands: the permission facts, the body's
     // generation and channel table, the owner's epoch and producer, the selection registers and the engagement. The
@@ -87,8 +102,11 @@ public sealed partial class WorldInputRuntime {
         Span<long> selectors = stackalloc long[(m_selectorSlots.Length + 1)];
         var count = ReadSelectors(body: body, into: selectors);
 
+        // The engagement is the grant table's and the machine table's answer: ProgramPermissionStands above found the
+        // grant table's version standing or asked it again, and a screen's machine is asked here only when the world
+        // routes one.
         return ((count == standing.Selectors.Length) && selectors[..count].SequenceEqual(other: standing.Selectors) &&
-            (Engagement(body: body, principal: Principal.World) == standing.Engagement));
+            (ReferenceEquals(objA: standing.Engagement, objB: NoEngagement) || (Engagement(body: body, principal: Principal.World) == standing.Engagement)));
     }
 
     // The same proof used by producer admission also covers synchronization after motion and speculative validation.
@@ -134,6 +152,7 @@ public sealed partial class WorldInputRuntime {
         standing.Epoch = owner.Input.Epoch;
         standing.Kit = m_host.Population.KitSignature(index: body);
         standing.Engagement = Engagement(body: body, principal: Principal.World);
+        standing.Grants = m_host.GrantTable.InputFactsVersion;
         standing.Repeats = (!owner.SnapshotRelative && producer.IsQuiescent && ((owner.Input.Epoch <= 1) || (owner.Input.LastSwitch.Tick != tick)));
         standing.Image = image;
         standing.Accepted = accepted;
