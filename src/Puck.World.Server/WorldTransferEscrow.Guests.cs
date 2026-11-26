@@ -55,10 +55,13 @@ public sealed partial class WorldTransferEscrow {
 
     // Whether this ledger holds any row of a source: a key (leased, committed, uncertain or spent), a floor or a
     // traveler credential.
-    private bool HoldsSource(string sourceAuthority) {
-        if (m_sourceRows.ContainsKey(key: sourceAuthority) || m_floors.ContainsKey(key: sourceAuthority)) {
-            return true;
-        }
+    private bool HoldsSource(string sourceAuthority) => (
+        m_sourceRows.ContainsKey(key: sourceAuthority) ||
+        m_floors.ContainsKey(key: sourceAuthority) ||
+        HoldsCredential(sourceAuthority: sourceAuthority)
+    );
+    // Whether a traveler this source handed over still holds a credential here.
+    private bool HoldsCredential(string sourceAuthority) {
         foreach (var alias in m_mobilityAdmissions.Keys) {
             if (string.Equals(a: alias.SourceAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
                 return true;
@@ -77,12 +80,7 @@ public sealed partial class WorldTransferEscrow {
         foreach (var key in m_leases.Keys) { if (Names(key: key)) { return true; } }
         foreach (var key in m_committed) { if (Names(key: key)) { return true; } }
         foreach (var key in m_uncertain.Keys) { if (Names(key: key)) { return true; } }
-        foreach (var alias in m_mobilityAdmissions.Keys) {
-            if (string.Equals(a: alias.SourceAuthority, b: sourceAuthority, comparisonType: StringComparison.Ordinal)) {
-                return true;
-            }
-        }
-        return false;
+        return HoldsCredential(sourceAuthority: sourceAuthority);
     }
     /// <summary>Drops every row of a guest's session once the session holds nothing live here: its settled keys and
     /// its floor. A session this ledger holds nothing of is one it never saw, so its next reservation is a first

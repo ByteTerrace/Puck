@@ -281,7 +281,7 @@ engine's doors **[inference]**. Facts carry no record of which world wrote them
 Home adopts only a colocated seat of its own coming home. `WorldTransferEscrow.AdoptHomeProfiles`
 asks `HomeIdentity` for each traveller (`src/Puck.World.Server/WorldTransferEscrow.cs:1357-1366`),
 and `HomeIdentity` answers only for a non-peer arrival **[opened]**
-(`src/Puck.World.Server/WorldTransferEscrow.cs:1522-1534`):
+(`src/Puck.World.Server/WorldTransferEscrow.cs:1586-1598`):
 
 ```csharp
     // The owned identity a local seat of this authority left with, when traveler `index` is that seat coming home: a
