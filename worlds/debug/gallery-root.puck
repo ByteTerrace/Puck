@@ -1,0 +1,68 @@
+// The gallery on its own: the hall (hall.puck) and its exhibits (shapes.puck) under the debug world's
+// day, booted alone so a change to the gallery bakes and boots only the gallery. The debug world imports hall.puck
+// itself; this root exists for iterating on the building. Boot it with `--world worlds/debug/gallery-root.puck`.
+
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "gallery"
+
+import "day"
+import "moon-frame"
+import "moth-controls"
+import "suit"
+import "shapes"
+import "hall"
+
+metadata {
+  title: "Gallery"
+  description: "The debug world's gallery hall and its exhibits alone, for iterating on the building."
+}
+
+// The sky and the hall's exposure key on the height the debug world's launch field declares (launch.puck).
+timeline {
+  clocks [{ name: "altitude", view { to: skySeamAltitude, axis [0, 1, 0] } }]
+}
+
+spawnPoints: concat(
+  [
+    { id: "hero", position [15, 0.05, 6], yawDegrees: 0 }
+    { id: "gallery", position [16, 0, 9], yawDegrees: 180 }
+  ],
+  gallerySpawns
+)
+
+commands: galleryCommands
+
+bodies {
+  capacity: galleryPopulation
+  localSeats: seatPopulation
+  networkPlayers: visitorPopulation
+}
+
+// The font the plinth labels and signs emboss in, as the debug world declares it.
+text {
+  defaultFont: "inter"
+  fonts [
+    {
+      name: "inter"
+      source: "fonts/inter-regular.ttf"
+      hash: "sha256/40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
+      codePointRanges ["U+0020-U+007E"]
+    }
+  ]
+}
+
+// The exhibits, their motion controls and the cells their state-bound exhibits read (shapes.puck).
+placements {
+  galleryPlacements()
+}
+
+state {
+  world {
+    galleryState()
+  }
+}
+
+prototypes {
+  galleryPrototypes()
+}

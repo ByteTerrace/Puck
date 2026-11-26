@@ -4095,12 +4095,13 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
-- [high] **A player without the Azure CLI cannot sign in.** The `azure.api-users` provider takes
-  its token through `DefaultAzureCredential`'s default chain, which excludes the interactive
-  browser, with a 15 s acquisition deadline (`EntraSignIn`). Add an interactive browser
-  credential for clients in the provider project, with its own longer deadline; the deployment
-  already preauthorizes the Azure CLI client ID, which is the browser credential's default.
-  Check: a clean player install on a machine with no Azure CLI signs in and is admitted.
+- [high] **A player without the Azure CLI signing in is unproven.** The player channel now ships
+  the `Puck.World.Azure` extension (CI's player job passes `--extension`), and `EntraSignIn`'s
+  client chain falls back to a system-browser credential with a persisted token cache and its own
+  deadline (`EntraSignIn.InteractiveTokenAcquisitionTimeout`). Check: a clean player install on a
+  machine with no Azure CLI signs in through the browser, is admitted, and a second start renews
+  without a prompt. If the second start prompts again, persist the browser credential's
+  `AuthenticationRecord` beside the token cache.
 - [medium] `Puck.Launcher.Setup.exe` carries no Authenticode signature (seen on the 2060's clean
   install). The channel's own signature covers the release; an OS-level signature is the
   distributor's choice and needs a certificate the owner provides.
