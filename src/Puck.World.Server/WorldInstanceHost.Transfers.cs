@@ -2146,6 +2146,7 @@ public sealed partial class WorldInstanceHost {
     /// engine-time fence: destination topology resolves before population advance, and any overlapping destination
     /// step skips that traveler without evaluating input, motion, or dynamic contact a second time.</summary>
     public void DrainPendingTransfers() {
+        ReturnEndedSeats();
         DrainPendingPoseHomes();
         ReconcileInDoubtTransfers();
 

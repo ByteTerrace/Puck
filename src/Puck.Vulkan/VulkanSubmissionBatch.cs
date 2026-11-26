@@ -19,7 +19,10 @@ namespace Puck.Vulkan;
 /// </summary>
 /// <param name="device">The command table of the device that owns the queue.</param>
 /// <param name="queue">The device's graphics queue.</param>
-internal sealed class VulkanSubmissionBatch(VulkanDeviceCommands device, VkQueue queue) : GpuSubmissionBatch<VulkanBatchedSubmission> {
+/// <param name="issue">What puts the device's queued sparse operations on the queue
+/// (<see cref="VulkanLogicalDevice.QueueSparse"/>), which a hand-over calls before its entries, since it reads the queue
+/// without passing the device's door.</param>
+internal sealed class VulkanSubmissionBatch(VulkanDeviceCommands device, VkQueue queue, Action issue) : GpuSubmissionBatch<VulkanBatchedSubmission> {
     private Ranges m_deferred = new();
     // The ranges a hand-off is submitting, swapped out with the base batch's entries so a submission deferred while it
     // submits lands in the other lists.
@@ -79,9 +82,14 @@ internal sealed class VulkanSubmissionBatch(VulkanDeviceCommands device, VkQueue
     }
 
     /// <inheritdoc/>
-    /// <remarks>Arms the owner only once <c>vkQueueSubmit</c> returned success: a failed submit leaves its fence
-    /// untouched, so the batch abandons it rather than leaving a wait on a fence nothing signals.</remarks>
+    /// <remarks>Issues the device's queued sparse operations first. Arms the owner only once <c>vkQueueSubmit</c>
+    /// returned success: a failed submit leaves its fence untouched, so the batch abandons it rather than leaving a wait
+    /// on a fence nothing signals.</remarks>
     protected override void Submit(ReadOnlySpan<VulkanBatchedSubmission> entries, GpuBatchedSubmissionFence? owner) {
+        // The entries may write chunks a sparse operation queued before them binds; the base batch has already swapped
+        // its lists out, so a door read inside the issue hands nothing over.
+        issue();
+
         var fence = ((VulkanGpuSubmissionFence?)owner);
         var ranges = m_deferred;
 

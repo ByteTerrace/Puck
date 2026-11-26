@@ -11964,7 +11964,7 @@ export type WorldRenderDefaults = {
    */
   viewsRate?: SdfViewsRate | null;
   /**
-   * What the world shows of itself to a far viewer (WorldFarProduct): the product a sky view asking for it draws. Absent takes the product's defaults.
+   * What the world shows of itself to a far viewer (WorldFarProduct): the product a sky view asking for it draws. Declared, the boot world builds it from the start; absent, a product is built with the defaults only once a sky view asks for it, and a world nothing views from afar builds none.
    */
   farProduct?: WorldFarProduct | null;
 };

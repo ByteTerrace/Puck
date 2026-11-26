@@ -97,6 +97,11 @@ public sealed partial class WorldSiloHost {
                             checkpoint: checkpoint!,
                             containsAuthority: ContainsRewindAuthority
                         );
+                        // The point is stored as a baseline: restoring it ends every guest the capture found here.
+                        bytes = WorldAuthorityCheckpointCodec.Encode(checkpoint: WorldReleaseRewindBoundary.Baseline(
+                            authorities: RewindAuthorities(),
+                            checkpoint: checkpoint!
+                        ));
                     }
                     var identity = new WorldAuthorityIdentity(
                         Owner: declared.Owner,

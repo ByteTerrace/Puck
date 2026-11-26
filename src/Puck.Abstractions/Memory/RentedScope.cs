@@ -2,20 +2,21 @@ namespace Puck.Abstractions.Memory;
 
 /// <summary>
 /// The workspace of one build, charged to one owner and released together when the scope is disposed: a builder that
-/// holds many same-lifetime tables (a mesh simplifier's per-place and per-triangle arrays) takes each through the scope
-/// instead of allocating it, so the next build reuses the storage and the owner is charged for exactly what the build
-/// holds. Arrays come from <see cref="RentedArrays"/>; buffers and lists (<see cref="Buffer{T}"/>, <see cref="RentList{T}"/>)
-/// are native when the scope has an allocator, so a background build's largest scratch never reaches the collector.
+/// holds many same-lifetime tables (a mesh simplifier's per-place and per-triangle tables) takes each through the scope
+/// instead of allocating it, so the owner is charged for exactly what the build holds. Buffers and lists
+/// (<see cref="Buffer{T}"/>, <see cref="RentList{T}"/>) are native storage, so a build's scratch never reaches the
+/// collector; an array (<see cref="Rent{T}"/>) comes from <see cref="RentedArrays"/>, for a caller that needs one (an
+/// element that holds references, an interface that takes an array).
 /// </summary>
 /// <param name="owner">The workspace owner charged for every array and buffer, or null for an unmetered scope.</param>
-/// <param name="allocator">The native allocator the scope's buffers and lists take their storage from, or null to rent it
-/// from <see cref="RentedArrays"/>.</param>
+/// <param name="allocator">The native allocator the scope's buffers and lists take their storage from, or null for the
+/// process's (<see cref="ProcessAllocator.Current"/>).</param>
 public sealed class RentedScope(IAllocationObserver? owner = null, IAllocator? allocator = null) : IDisposable {
     private readonly List<IDisposable> m_leases = [];
 
     /// <summary>Gets the owner the scope charges, or null for an unmetered scope.</summary>
     public IAllocationObserver? Owner => owner;
-    /// <summary>Gets the native allocator the scope's buffers and lists use, or null when they are rented.</summary>
+    /// <summary>Gets the native allocator the scope was given, or null when its buffers and lists use the process's.</summary>
     public IAllocator? Allocator => allocator;
 
     /// <summary>Rents an array of at least <paramref name="minimumLength"/> elements that the scope returns when disposed.</summary>
@@ -32,8 +33,8 @@ public sealed class RentedScope(IAllocationObserver? owner = null, IAllocator? a
 
         return array;
     }
-    /// <summary>Creates a buffer of exactly <paramref name="length"/> elements that the scope releases when disposed,
-    /// native when the scope has an allocator.</summary>
+    /// <summary>Creates a native buffer of exactly <paramref name="length"/> elements that the scope releases when
+    /// disposed.</summary>
     /// <typeparam name="T">The unmanaged element.</typeparam>
     /// <param name="length">The buffer's length.</param>
     /// <param name="clear">Whether the elements are zeroed; otherwise they are unspecified.</param>
@@ -45,8 +46,8 @@ public sealed class RentedScope(IAllocationObserver? owner = null, IAllocator? a
         m_leases.Add(item: buffer);
         return buffer;
     }
-    /// <summary>Creates an empty list whose storage the scope releases when disposed, charged to the scope's owner and
-    /// native when the scope has an allocator.</summary>
+    /// <summary>Creates an empty native list whose storage the scope releases when disposed, charged to the scope's
+    /// owner.</summary>
     /// <typeparam name="T">The unmanaged element.</typeparam>
     /// <param name="capacity">The elements the first storage holds at least.</param>
     /// <returns>The list, valid until the scope is disposed.</returns>

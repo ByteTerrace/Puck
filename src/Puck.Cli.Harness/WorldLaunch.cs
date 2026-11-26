@@ -86,17 +86,47 @@ public sealed record WorldLaunchRequest(string Step, string Artifact) {
     /// takes, when the World boots a staged copy of it (a delta written beside the world for one run), or
     /// <see langword="null"/> for <see cref="World"/> itself.</summary>
     public string? AdmissionWorld { get; init; }
-    /// <summary>Gets the profile the host admission judges the World by: its <see cref="Kind"/>, and for a World that opens a
-    /// device the backend it boots on, whether its mesh store is warm (<see cref="WorldDevices.StoreOf"/>, read from
-    /// <see cref="Arguments"/> when the profile is asked for) and the document it boots
-    /// (<see cref="HostStartProfile.DocumentOfWorld"/> of <see cref="AdmissionWorld"/>, else of <see cref="World"/>).</summary>
-    public HostStartProfile Profile => ((Kind == HostStartKind.WindowedWorld)
-        ? new HostStartProfile(Kind: Kind, Device: Backend switch {
+    /// <summary>Predicts the profile the host admission judges the World by: its <see cref="Kind"/>, and for a World that
+    /// opens a device the backend it boots on, whether its mesh store is warm for the bake identity of
+    /// <see cref="Artifact"/>'s build (<see cref="WorldDevices.StoreOf"/>, reading the store named in <see cref="Arguments"/>
+    /// now) and the document it boots (<see cref="HostStartProfile.DocumentOfWorld"/> of <see cref="AdmissionWorld"/>, else
+    /// of <see cref="World"/>). For a World that opens a device this reads the build's identity
+    /// (<see cref="MeshBuildIdentity.ValueOf"/>), which walks the build's code when no earlier process remembered it, so a
+    /// launch predicts once.</summary>
+    /// <returns>The profile.</returns>
+    public HostStartProfile PredictProfile() {
+        if (Kind != HostStartKind.WindowedWorld) { return new HostStartProfile(Kind: Kind); }
+
+        var device = Backend switch {
             WorldBackendPreference.DirectX => WorldBackendTokens.DirectX,
             WorldBackendPreference.Vulkan => WorldBackendTokens.Vulkan,
             _ => null,
-        }, Store: WorldDevices.StoreOf(arguments: Arguments), Document: HostStartProfile.DocumentOfWorld(world: (AdmissionWorld ?? World)))
-        : new HostStartProfile(Kind: Kind));
+        };
+
+        return new HostStartProfile(Kind: Kind, Device: device, Store: WorldDevices.StoreOf(arguments: Arguments, sets: MeshSets(device: device)), Document: HostStartProfile.DocumentOfWorld(world: (AdmissionWorld ?? World)));
+    }
+    // The store sets the World's bake may key its meshes by, read as they are asked for: its backend's, or each backend's
+    // when the document picks one. A backend whose identity the build cannot give (a kernel it does not ship, a build
+    // without the inspection API) names none.
+    private IEnumerable<string> MeshSets(string? device) {
+        var build = Path.GetDirectoryName(path: Path.GetFullPath(path: Artifact))!;
+        bool[] hostsOnDirectX = device switch {
+            WorldBackendTokens.DirectX => [true],
+            WorldBackendTokens.Vulkan => [false],
+            _ => [true, false],
+        };
+
+        foreach (var directX in hostsOnDirectX) {
+            string? set = null;
+
+            try {
+                set = MeshBuildIdentity.ValueOf(buildDirectory: build, extension: Puck.Abstractions.Gpu.ShaderBytecode.FileExtension(hostsOnDirectX: directX)).Set;
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException or BadImageFormatException or InvalidOperationException)) {
+                // No identity names no set; with none at all the store is predicted cold.
+            }
+            if (set is not null) { yield return set; }
+        }
+    }
     /// <summary>Gets the program the launch starts: <see cref="Executable"/>, the build's own host when
     /// <see cref="Artifact"/> is a self-contained build (a player build), which <c>dotnet</c> cannot run, or
     /// <c>dotnet</c>.</summary>
@@ -155,15 +185,16 @@ public sealed class WorldLaunch : IDisposable {
     public const int BackstopGraceSeconds = 120;
 
     private readonly WorldLaunchRequest m_request;
-    // Read as the admission ends, before the World starts and fills its store, so the mark records the store it started with.
+    // Predicted once as the admission begins, before the World starts and fills its store, so the admission judges and the
+    // mark records the store the World started with.
     private readonly HostStartProfile m_profile;
 
     private IDisposable? m_gpu;
     private bool m_used;
 
-    private WorldLaunch(WorldLaunchRequest request, IDisposable? gpu) {
+    private WorldLaunch(WorldLaunchRequest request, HostStartProfile profile, IDisposable? gpu) {
         m_request = request;
-        m_profile = request.Profile;
+        m_profile = profile;
         m_gpu = gpu;
     }
 
@@ -277,11 +308,13 @@ public sealed class WorldLaunch : IDisposable {
         }
     }
     private static async Task<WorldLaunch> AdmitCoreAsync(WorldLaunchRequest request, Action<string> stage, CancellationToken cancellationToken) {
+        var profile = request.PredictProfile();
+
         if (!request.OpensDevice && !request.HeavySuite) {
             stage.Invoke(obj: "host-admission");
-            await AdmitHostAsync(bound: request.AdmissionWait, cancellationToken: cancellationToken, refuse: true, request: request, reserve: true, stage: stage).ConfigureAwait(continueOnCapturedContext: false);
+            await AdmitHostAsync(bound: request.AdmissionWait, cancellationToken: cancellationToken, profile: profile, refuse: true, request: request, reserve: true, stage: stage).ConfigureAwait(continueOnCapturedContext: false);
 
-            return new WorldLaunch(gpu: null, request: request);
+            return new WorldLaunch(gpu: null, profile: profile, request: request);
         }
 
         var checkout = (request.Checkout ?? (CliPaths.TryGetRepositoryRoot(repositoryRoot: out var root) ? root : Environment.CurrentDirectory));
@@ -289,19 +322,18 @@ public sealed class WorldLaunch : IDisposable {
         var name = (request.OpensDevice ? "gpu" : "heavy");
         var holder = (request.Holder ?? request.Step);
         var lane = (request.Lane ?? CliLease.LaneOf(checkout: checkout));
-        var profile = request.Profile;
         var gpu = await WorldWorkHold.AcquireAsync(checkout, name, holder, lane,
             (root, token) => LeasedAdmission.AcquireAsync(root, name, holder, lane,
                 (place, step, device, heavy, held, bound, reserve, progress, phase, cancel) => WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancel, checkout: place, device: device, heavySuite: heavy, kind: held, reserve: reserve, stage: phase, step: step),
                 checkout, request.Step, request.OpensDevice, request.HeavySuite, profile, TimeProvider.System,
                 (request.AdmissionWait ?? CliLease.DefaultWait), Console.Error, stage, token, request.Timing),
-            token => AdmitHostAsync(bound: request.AdmissionWait, cancellationToken: token, refuse: false, request: request, reserve: true, stage: stage), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
+            token => AdmitHostAsync(bound: request.AdmissionWait, cancellationToken: token, profile: profile, refuse: false, request: request, reserve: true, stage: stage), cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
-        return new WorldLaunch(gpu: gpu, request: request);
+        return new WorldLaunch(gpu: gpu, profile: profile, request: request);
     }
 
-    private static async Task<bool> AdmitHostAsync(WorldLaunchRequest request, TimeSpan? bound, bool reserve, bool refuse, Action<string>? stage, CancellationToken cancellationToken) {
-        var admitted = await WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancellationToken, device: request.OpensDevice, heavySuite: request.HeavySuite, kind: request.Profile, reserve: reserve, stage: stage, step: request.Step, checkout: request.Checkout).ConfigureAwait(continueOnCapturedContext: false);
+    private static async Task<bool> AdmitHostAsync(WorldLaunchRequest request, HostStartProfile profile, TimeSpan? bound, bool reserve, bool refuse, Action<string>? stage, CancellationToken cancellationToken) {
+        var admitted = await WorldAdmission.TryAdmitAsync(bound: bound, cancellationToken: cancellationToken, device: request.OpensDevice, heavySuite: request.HeavySuite, kind: profile, reserve: reserve, stage: stage, step: request.Step, checkout: request.Checkout).ConfigureAwait(continueOnCapturedContext: false);
 
         if (!admitted && refuse) { throw new HostAdmissionRefusedException(step: request.Step); }
 

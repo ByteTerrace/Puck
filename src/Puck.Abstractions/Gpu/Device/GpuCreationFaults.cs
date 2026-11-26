@@ -430,6 +430,7 @@ internal abstract class FaultingWrapper(GpuCreationFaults faults) {
 
 file sealed class FaultingBindings(IGpuBindings inner, GpuCreationFaults faults) : FaultingWrapper(faults: faults), IGpuBindings {
     public ulong MaxConstantBufferBytes => inner.MaxConstantBufferBytes;
+    public ulong MaxStorageBufferBytes => inner.MaxStorageBufferBytes;
 
     public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) =>
         inner.AllocateSet(

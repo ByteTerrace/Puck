@@ -238,6 +238,10 @@ name) opens it at that device's frame-bar size instead (`--frame-bar`, from
 Where advertised,
 `captureTool: "pix"` forwards `--capture-tool pix` before device creation (windowed
 Direct3D 12); `"renderdoc"` selects RenderDoc. Both enable existing GPU object names.
+`withholdGpu: ["mapped-buffers"]` (or `"ray-query"`) creates the device without that
+optional capability, so the path it replaces runs on the same device, and
+`debugLayers: "basic"` (or `"full"`) creates it under the backend's validation, whose
+`[vulkan-debug]` and `[d3d12-debug]` lines `host.log` reads; both require windowed.
 Otherwise use `puck sweep --tour --backend directx --capture-tool pix` with a plan
 that invokes `gpu.capture` after settlement. A capture retains labels that an
 attached timing trace without the capture runtime may lack.

@@ -7,7 +7,9 @@ namespace Puck.Platform;
 /// acquires an already completed latest frame and never waits for the target or capture device; the returned frame's
 /// storage remains valid until the next <see cref="IFrameCaptureSource.TryCapture"/> call on the same feed. Consumption
 /// is safe to race with <see cref="IDisposable.Dispose"/>; a losing read returns no frame rather than exposing released
-/// storage.
+/// storage. A call to <see cref="IFrameCaptureSource.TryCapture"/> is also the consumer's request for frames: a feed
+/// whose consumer has not called it for a while stops copying and reading back until the next call, so a consumer that
+/// no longer shows the feed calls nothing and the feed costs nothing.
 /// </summary>
 public interface INativeImageCaptureFeed : IFrameCaptureSource, IDisposable {
     /// <summary>Gets whether the target or capture session has permanently ended.</summary>

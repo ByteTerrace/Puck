@@ -43,6 +43,8 @@
         <Compile Include="../Shared/World/PerUserRootScan.cs" Link="World/PerUserRootScan.cs" />
         <Compile Include="../Shared/World/HostRowFixture.cs" Link="World/HostRowFixture.cs" />
         <Compile Include="../Shared/World/PeerTestClient.cs" Link="World/PeerTestClient.cs" />
+        <!-- The local seats a joining client host embodies, over the real seat router. -->
+        <Compile Include="../Puck.World.Presentation.Tests/RoutedSeats.cs" Link="World/RoutedSeats.cs" />
         <Compile Include="../Shared/World/PuckStorageTestComposition.cs" Link="World/PuckStorageTestComposition.cs" />
         <Compile Include="../Shared/World/StallingObjectBlobStore.cs" Link="World/StallingObjectBlobStore.cs" />
         <Compile Include="../Shared/World/TestExtension.cs" Link="World/TestExtension.cs" />

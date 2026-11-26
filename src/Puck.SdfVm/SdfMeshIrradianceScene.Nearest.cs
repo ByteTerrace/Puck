@@ -62,7 +62,7 @@ public sealed partial class SdfMeshIrradianceScene {
 
     // Reuse both levels of the ray scene's hierarchy. Transform node boxes conservatively, then test triangles in world
     // space: an object-space closest point is not the world-space closest point under a nonuniform scale or shear.
-    private void NearestNode<TNodes>(TNodes nodes, int index, int instanceIndex, Vector3 point, ref NearestSurface nearest) where TNodes : struct, INodes {
+    private void NearestNode<TNodes>(TNodes nodes, int index, int instanceIndex, Vector3 point, ref NearestSurface nearest) where TNodes : INodes, allows ref struct {
         if (NearestBox(nodes, index, instanceIndex, point) > nearest.Squared) { return; }
         var first = nodes.First(node: index);
         var count = nodes.Count(node: index);
@@ -101,7 +101,7 @@ public sealed partial class SdfMeshIrradianceScene {
         }
     }
 
-    private float NearestBox<TNodes>(TNodes nodes, int index, int instanceIndex, Vector3 point) where TNodes : struct, INodes {
+    private float NearestBox<TNodes>(TNodes nodes, int index, int instanceIndex, Vector3 point) where TNodes : INodes, allows ref struct {
         nodes.Box(node: index, low: out var nodeLow, high: out var nodeHigh);
         var (low, high) = instanceIndex < 0 || m_content.Instances[instanceIndex].Identity
             ? (nodeLow, nodeHigh) : Bounds(m_content.Instances[instanceIndex].ObjectToWorld, nodeLow, nodeHigh);

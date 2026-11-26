@@ -472,6 +472,49 @@ public sealed class HostAdmissionLawTests {
         Assert.False(condition: HostAdmission.Wait("benchmark", true, false, () => Sample(commit: 10, limit: 7.5, ram: 9), clock, _ => Assert.Fail(message: "an impossible start does not wait"), error, CancellationToken.None, machine, TimeSpan.FromMinutes(minutes: 120), null, vulkan, new HostStartTracker()));
         Assert.Contains(expectedSubstring: "a windowed World of debug on vulkan can never be admitted on this machine, it needs at least 7.0GB of commit", actualString: error.ToString());
     }
+    // A cold store bakes every mesh, so a lone cold start this machine has not measured is judged by the cold figure (the
+    // cold fallback, held to the 16 GB machine's 10 GB), never lowered to a warm session's least commit. The RTX 2060's
+    // benchmark read 12.2 GB of commit headroom: a warm start alone fits at its 7 GB least figure, a cold one needs its
+    // 10 GB and the 2.3 GB reserve and waits; 13.7 GB admits it. A cold window this machine measured judges in place of the
+    // fallback, this document's before any document's, and a commit limit that cannot hold the cold figure refuses it by name.
+    [Fact]
+    public void ALoneUnmeasuredColdStartIsJudgedByTheColdFigureNotAWarmSessionsLeastCommit() {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        var machine = HostLoadThresholds.For(installedRamGb: 16, logicalProcessors: 12);
+        HostSample Reading(double headroomGb) => Sample(commit: (100.0 * (22.7 - headroomGb) / 22.7), limit: 22.7, ram: 9);
+        var warm = new HostStartProfile(HostStartKind.WindowedWorld, Device: "directx", Document: "debug");
+        var cold = warm.Cold;
+
+        var warmTight = new HostStartTracker().Judge(reading: Reading(12.2), kind: warm, thresholds: machine, clock: new GateClock(), reserve: false);
+        var coldTight = new HostStartTracker().Judge(reading: Reading(12.2), kind: cold, thresholds: machine, clock: new GateClock(), reserve: false);
+        var coldRoomy = new HostStartTracker().Judge(reading: Reading(13.7), kind: cold, thresholds: machine, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (true, 7.0), actual: (warmTight.CommitCovered, Math.Round(warmTight.OwnGb, 6)));
+        Assert.Equal(expected: (false, 10.0, 10.0, 10.0, false), actual: (coldTight.CommitCovered, coldTight.OwnGb, coldTight.LoneOwnGb, coldTight.ExpectedOwnGb, coldTight.Measured));
+        Assert.Equal(expected: (true, 10.0), actual: (coldRoomy.CommitCovered, coldRoomy.OwnGb));
+
+        // A cold window of any debug-less World on directx judges an unmeasured document in place of the fallback, and the
+        // document's own cold window then judges before it.
+        Observed(directory.RootPath, new GateClock(), HostStartKind.WindowedWorld, id: 1, privateGb: 8.5, workingSetGb: 7, privateResidentGb: 6, marked: (cold with { Document = null }));
+
+        var borrowed = new HostStartTracker(directory.RootPath).Judge(reading: Reading(11), kind: cold, thresholds: machine, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (true, 8.5, false), actual: (borrowed.CommitCovered, borrowed.OwnGb, borrowed.Measured));
+
+        new HostStartTracker(directory.RootPath).Finish(profile: cold, process: (2, 2), peaks: new HostPeaks(PrivateGb: 9.5, ResidentGb: 6.5, WorkingSetGb: 7.5));
+
+        var own = new HostStartTracker(directory.RootPath).Judge(reading: Reading(11), kind: cold, thresholds: machine, clock: new GateClock(), reserve: false);
+
+        Assert.Equal(expected: (false, 9.5, true), actual: (own.CommitCovered, own.OwnGb, own.Measured));
+
+        // An 11 GB commit limit cannot hold the cold 10 GB and its 1.1 GB reserve, where it holds a warm start's 7 GB: the cold
+        // start is refused by name, at once.
+        using var error = new StringWriter();
+
+        Assert.False(condition: HostAdmission.Wait("benchmark", true, false, () => Sample(commit: 10, limit: 11, ram: 9), new GateClock(), _ => Assert.Fail(message: "an impossible start does not wait"), error, CancellationToken.None, machine, TimeSpan.FromMinutes(minutes: 120), null, cold, new HostStartTracker()));
+        Assert.Contains(expectedSubstring: "a windowed World of debug with a cold mesh store on directx can never be admitted on this machine, it needs at least 10.0GB of commit", actualString: error.ToString());
+        Assert.Null(machine.NeverFits(reading: Sample(commit: 10, limit: 11, ram: 9), ownGb: new HostStartTracker().Judge(reading: Sample(commit: 10, limit: 11, ram: 9), kind: warm, thresholds: machine, clock: new GateClock(), reserve: false).LoneOwnGb, residentOwnGb: 0));
+    }
     // A windowed World is learned and judged per document: a small root world measured at 4 GB is admitted beside a running
     // debug World where the debug world's own 13.8 GB is not, and a document this machine has not measured is judged by what
     // any World of its kind, backend and store reached here (every document's observation is also one of those), falling to
@@ -1290,27 +1333,49 @@ public sealed class HostAdmissionLawTests {
     [InlineData(WorldShape.Windowed)]
     [InlineData(WorldShape.Document)]
     [Theory]
-    public void ALaunchPredictsItsProfileFromItsBackendAndItsMeshStore(WorldShape shape) {
+    public void ALaunchPredictsItsProfileFromItsBackendItsBuildsMeshSetAndItsDocument(WorldShape shape) {
         using var directory = new Puck.Testing.TemporaryDirectory();
-        var request = new WorldLaunchRequest(Artifact: "Puck.World.dll", Step: "law") { Arguments = ["--cache-dir", directory.RootPath], Backend = Puck.World.WorldBackendPreference.Vulkan, Shape = shape };
+        // A build this law cannot read (no Puck.SdfVm.dll beside the entry assembly) names no mesh set.
+        var request = new WorldLaunchRequest(Artifact: directory.PathOf("build/Puck.World.dll"), Step: "law") { Arguments = ["--cache-dir", directory.RootPath], Backend = Puck.World.WorldBackendPreference.Vulkan, Shape = shape };
 
-        // An empty store bakes every mesh; one that holds a mesh loads them.
-        Assert.Equal(new HostStartProfile(HostStartKind.WindowedWorld, "vulkan", StoreWarmth.Cold), request.Profile);
-        Directory.CreateDirectory(directory.PathOf("meshes"));
-        File.WriteAllText(directory.PathOf("meshes/a.mesh"), "mesh");
-        Assert.Equal(new HostStartProfile(HostStartKind.WindowedWorld, "vulkan"), request.Profile);
-        Assert.Equal(new HostStartProfile(HostStartKind.WindowedWorld), (request with { Backend = null }).Profile);
-        Assert.Equal(new HostStartProfile(HostStartKind.HeadlessWorld), (request with { Shape = WorldShape.Headless }).Profile);
+        // A store holding meshes the World cannot be shown to key by is predicted cold, whatever the store holds.
+        Directory.CreateDirectory(directory.PathOf("meshes/0123456789abcdef0123456789abcdef"));
+        File.WriteAllText(directory.PathOf("meshes/0123456789abcdef0123456789abcdef/a.mesh"), "mesh");
+        Assert.Equal(new HostStartProfile(HostStartKind.WindowedWorld, "vulkan", StoreWarmth.Cold), request.PredictProfile());
+        Assert.Equal(new HostStartProfile(HostStartKind.WindowedWorld, Store: StoreWarmth.Cold), (request with { Backend = null }).PredictProfile());
+        Assert.Equal(new HostStartProfile(HostStartKind.HeadlessWorld), (request with { Shape = WorldShape.Headless }).PredictProfile());
 
         // The document is the world path's last name up to its first dot, wherever the world lies; a staged copy is measured
         // as the world it stands for, and a headless World measures no document.
         foreach (var world in (string[])["worlds/debug", "C:/install/versions/1/worlds/debug/debug.world.json", "worlds/debug/debug.puck", "worlds/debug/"]) {
-            Assert.Equal(new HostStartProfile(HostStartKind.WindowedWorld, "vulkan", Document: "debug"), (request with { World = world }).Profile.Class);
+            Assert.Equal(new HostStartProfile(HostStartKind.WindowedWorld, "vulkan", StoreWarmth.Cold, Document: "debug"), (request with { World = world }).PredictProfile().Class);
         }
-        Assert.Equal("gallery", (request with { World = "worlds/debug/Gallery.puck" }).Profile.Class.Document);
-        Assert.Null((request with { World = "worlds/debug/.benchmark-pair-0f.puck" }).Profile.Document);
-        Assert.Equal("debug", (request with { World = "worlds/debug/.benchmark-pair-0f.puck", AdmissionWorld = "worlds/debug" }).Profile.Document);
-        Assert.Null((request with { World = "worlds/debug", Shape = WorldShape.Headless }).Profile.Document);
+        Assert.Equal("gallery", (request with { World = "worlds/debug/Gallery.puck" }).PredictProfile().Class.Document);
+        Assert.Null((request with { World = "worlds/debug/.benchmark-pair-0f.puck" }).PredictProfile().Document);
+        Assert.Equal("debug", (request with { World = "worlds/debug/.benchmark-pair-0f.puck", AdmissionWorld = "worlds/debug" }).PredictProfile().Document);
+        Assert.Null((request with { World = "worlds/debug", Shape = WorldShape.Headless }).PredictProfile().Document);
+    }
+    // A World reads and fills only the set its own bake identity names, so its store is warm only when that set holds an
+    // entry: a store holding only another build's set, or the set's empty directory, bakes every mesh as an empty store does.
+    // Of several sets (a World whose document picks its backend may key by either), any one holding an entry warms it.
+    [Fact]
+    public void AStoreIsWarmOnlyWhenTheSetItsBuildKeysByHoldsAnEntry() {
+        using var directory = new Puck.Testing.TemporaryDirectory();
+        const string Current = "00000000000000000000000000000001";
+        const string Other = "00000000000000000000000000000002";
+        string[] arguments = ["--paused", $"--cache-dir={directory.RootPath}"];
+
+        Assert.Equal(StoreWarmth.Cold, WorldDevices.StoreOf(arguments: arguments, sets: [Current]));
+        Directory.CreateDirectory(directory.PathOf($"meshes/{Other}"));
+        File.WriteAllText(directory.PathOf($"meshes/{Other}/a.mesh"), "mesh");
+        Assert.Equal(StoreWarmth.Cold, WorldDevices.StoreOf(arguments: arguments, sets: [Current]));
+        Directory.CreateDirectory(directory.PathOf($"meshes/{Current}"));
+        Assert.Equal(StoreWarmth.Cold, WorldDevices.StoreOf(arguments: arguments, sets: [Current]));
+        File.WriteAllText(directory.PathOf($"meshes/{Current}/b.mesh"), "mesh");
+        Assert.Equal(StoreWarmth.Warm, WorldDevices.StoreOf(arguments: arguments, sets: [Current]));
+        Assert.Equal(StoreWarmth.Warm, WorldDevices.StoreOf(arguments: ["--cache-dir", directory.RootPath], sets: ["00000000000000000000000000000003", Current]));
+        // A build whose identity could not be read names no set, and its World is predicted cold.
+        Assert.Equal(StoreWarmth.Cold, WorldDevices.StoreOf(arguments: arguments, sets: []));
     }
     [Fact]
     public void PersistentPressureStopsAtTheBoundAndCancellationStartsNothing() {

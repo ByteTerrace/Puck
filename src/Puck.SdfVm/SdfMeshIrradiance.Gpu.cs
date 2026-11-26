@@ -70,7 +70,10 @@ public sealed partial class SdfMeshIrradiance {
     // read before the next job is submitted.
     private Vector4[] m_gpuOrigins = [];
     private uint[] m_gpuInput = [];
-    private uint[] m_gpuAnswer = [];
+    private OwnedBuffer<uint>? m_gpuAnswer;
+    // The native buffer a batch's selections, traces and relights answer into, one call after another, allocated at the
+    // batch's first call and freed when the batch ends (BatchEnded).
+    private OwnedBuffer<uint> GpuAnswer => (m_gpuAnswer ??= new OwnedBuffer<uint>(allocator: m_allocator));
     private uint[] m_gpuFresh = [];
     private int[] m_gpuDestinations = [];
     // The candidate each row of a selection answers for (ListGpu).
@@ -246,8 +249,7 @@ public sealed partial class SdfMeshIrradiance {
             return deferred;
         }
         var changes = (m_gpuSelectionRows = SelectionRows(changes: snapshot.Changes, geometry: snapshot.Geometry, layout: layout, rows: m_gpuSelectionRows));
-        var selected = GpuTrace!.Select(snapshot.Scene, origins.AsMemory(start: 0, length: selections), input.AsMemory(start: 0, length: selections * SdfMeshProbeRelight.SelectionInputWords), changes, GpuHitCapacity, reuse: m_gpuAnswer);
-        m_gpuAnswer = selected;
+        var selected = GpuTrace!.Select(snapshot.Scene, origins.AsMemory(start: 0, length: selections), input.AsMemory(start: 0, length: selections * SdfMeshProbeRelight.SelectionInputWords), changes, GpuHitCapacity, answer: GpuAnswer);
         for (var i = 0; i < selections; i++) { candidates[selectRows[i]] = candidates[selectRows[i]] with { Trace = selected[i] != 0 }; }
         OrderCandidates(candidates, all);
         return deferred;
@@ -402,12 +404,11 @@ public sealed partial class SdfMeshIrradiance {
             }
             m_gpuDirty.Clear();
         }
-        uint[] words;
+        ReadOnlySpan<uint> words;
         try {
             words = GpuTrace!.Relight(snapshot.Scene, origins.AsMemory(start: 0, length: count), input.AsMemory(start: 0, length: inputWords), rows, volumeWords, updates,
                 GpuHitCapacity, rays: m_gpuRelightRays.AsMemory(start: 0, length: count), destinations: m_gpuDestinations.AsMemory(start: 0, length: count),
-                geometry: snapshot.Geometry, window: snapshot.WindowVersion, reuse: m_gpuAnswer);
-            m_gpuAnswer = words;
+                geometry: snapshot.Geometry, window: snapshot.WindowVersion, answer: GpuAnswer);
         }
         catch (OperationCanceledException) {
             // A cancelled job may or may not have consumed the delta. Re-send a full snapshot on the next accepted job.
@@ -428,7 +429,7 @@ public sealed partial class SdfMeshIrradiance {
         for (var i = 0; i < count; i++) {
             var probe = probes[i];
             if (probe.Hits is null || probe.Invalid) { continue; }
-            var row = words.AsSpan(i * SdfMeshProbeRelight.ResultWords, SdfMeshProbeRelight.OutputWords);
+            var row = words.Slice(i * SdfMeshProbeRelight.ResultWords, SdfMeshProbeRelight.OutputWords);
             MemoryMarshal.Cast<uint, Vector3>(row[..18]).CopyTo(lights.Radiance(i));
             MemoryMarshal.Cast<uint, Vector3>(row.Slice(18, 18)).CopyTo(lights.Local(i));
             row.Slice(36, SdfMeshIrradianceProbe.LightWords).CopyTo(lights.Lights(i));

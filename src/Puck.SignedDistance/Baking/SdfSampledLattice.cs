@@ -70,9 +70,9 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// vertices lie nearer than a cell resolves (<see cref="Weld"/>), each quad split along its outward diagonal
     /// (<see cref="SelectDiagonals"/>), and split at its creases (<see cref="SplitAtCreases"/>).</summary>
     /// <param name="cell">The contour's finest cell along each axis, in its frame's units.</param>
-    /// <param name="workspace">The workspace owner charged for the stages' rented scratch, or null for unmetered work.</param>
+    /// <param name="workspace">The workspace owner charged for the stages' native scratch, or null for unmetered work.</param>
     /// <returns>The finished contour.</returns>
-    /// <param name="allocator">The native allocator the working lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> to rent them.</param>
+    /// <param name="allocator">The native allocator the working lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> for the process's.</param>
     public SdfContour Finished(Vector3 cell, IAllocationObserver? workspace = null, IAllocator? allocator = null) {
         var welded = Weld(allocator: allocator, distance: (WeldCells * MathF.Min(x: cell.X, y: MathF.Min(x: cell.Y, y: cell.Z))), workspace: workspace);
 
@@ -91,16 +91,15 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// quad that faces out along its lattice edge (<see cref="SdfContourFacing.Splits"/>) so that neither split
     /// does.</summary>
     /// <param name="distance">The longest edge welded, in the contour's units; zero or less welds nothing.</param>
-    /// <param name="workspace">The workspace owner charged for the weld's rented scratch, or null for unmetered work.</param>
+    /// <param name="workspace">The workspace owner charged for the weld's native scratch, or null for unmetered work.</param>
     /// <returns>The welded contour with its unreferenced vertices dropped; this contour when nothing welds.</returns>
-    /// <param name="allocator">The native allocator the working lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> to rent them.</param>
+    /// <param name="allocator">The native allocator the working tables come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> for the process's.</param>
     public SdfContour Weld(float distance, IAllocationObserver? workspace = null, IAllocator? allocator = null) {
         var quadCount = QuadCount;
         var vertexCount = VertexCount;
 
         if (!(distance > 0f) || (quadCount == 0)) { return this; }
 
-        var positions = Positions;
         var limit = (distance * distance);
         // Every short edge as each quad meets it; sorted, an edge two quads share is one entry, as a set would keep it.
         using var candidateList = new OwnedBuffer<(float Length, int A, int B)>(allocator: allocator, observer: workspace);
@@ -111,7 +110,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
             for (var corner = 0; (corner < count); corner++) {
                 var (a, b) = (raw[corner], raw[((corner + 1) % count)]);
-                var length = Vector3.DistanceSquared(value1: At(values: positions, vertex: a), value2: At(values: positions, vertex: b));
+                var length = Vector3.DistanceSquared(value1: At(values: Positions, vertex: a), value2: At(values: Positions, vertex: b));
 
                 if ((a != b) && (length < limit)) {
                     candidateList.Add(item: (length, Math.Min(val1: a, val2: b), Math.Max(val1: a, val2: b)));
@@ -123,20 +122,19 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
         var candidates = candidateList.GetSpan()[..SpanDistinct.Sorted(sorted: candidateList.GetSpan())];
 
-        // The welds work on rented copies, which the welded contour's compacted arrays are copied out of.
-        using var positionLease = RentedArrays.Rent<float>(array: out positions, minimumLength: Positions.Length, owner: workspace);
-        using var normalLease = RentedArrays.Rent<float>(array: out var normals, minimumLength: Normals.Length, owner: workspace);
-        using var patchLease = RentedArrays.Rent<float>(array: out var patches, minimumLength: ((Patches.Length == (3 * vertexCount)) ? Patches.Length : 0), owner: workspace);
-        using var featureLease = Grown(flags: Features, grown: out var features, length: vertexCount, workspace: workspace);
-        using var solvedLease = Grown(flags: Solved, grown: out var solved, length: vertexCount, workspace: workspace);
-        using var besideLease = Grown(flags: Beside, grown: out var beside, length: vertexCount, workspace: workspace);
-        using var parentLease = RentedArrays.Rent<int>(array: out var parent, minimumLength: vertexCount, owner: workspace);
-        using var startLease = RentedArrays.Rent<int>(array: out var starts, minimumLength: (vertexCount + 1), owner: workspace);
+        // The welds work on native copies, which the welded contour's compacted arrays are copied out of.
+        using var positions = OwnedBuffer<float>.OfLength(allocator: allocator, clear: false, length: Positions.Length, observer: workspace);
+        using var normals = OwnedBuffer<float>.OfLength(allocator: allocator, clear: false, length: Normals.Length, observer: workspace);
+        using var patches = OwnedBuffer<float>.OfLength(allocator: allocator, clear: false, length: ((Patches.Length == (3 * vertexCount)) ? Patches.Length : 0), observer: workspace);
+        using var features = Grown(allocator: allocator, flags: Features, length: vertexCount, workspace: workspace);
+        using var solved = Grown(allocator: allocator, flags: Solved, length: vertexCount, workspace: workspace);
+        using var beside = Grown(allocator: allocator, flags: Beside, length: vertexCount, workspace: workspace);
+        using var parent = OwnedBuffer<int>.OfLength(allocator: allocator, clear: false, length: vertexCount, observer: workspace);
+        using var starts = OwnedBuffer<int>.OfLength(allocator: allocator, clear: true, length: (vertexCount + 1), observer: workspace);
 
-        Positions.CopyTo(array: positions, index: 0);
-        Normals.CopyTo(array: normals, index: 0);
-        if (patches.Length > 0) { Patches.CopyTo(array: patches, index: 0); }
-        starts.AsSpan(start: 0, length: (vertexCount + 1)).Clear();
+        Positions.AsSpan().CopyTo(destination: positions.GetSpan());
+        Normals.AsSpan().CopyTo(destination: normals.GetSpan());
+        if (patches.Length > 0) { Patches.AsSpan().CopyTo(destination: patches.GetSpan()); }
         for (var vertex = 0; (vertex < vertexCount); vertex++) { parent[vertex] = vertex; }
         for (var quad = 0; (quad < quadCount); quad++) {
             var count = RawCorners(quad: quad, corners: raw);
@@ -145,10 +143,9 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         }
         for (var vertex = 0; (vertex < vertexCount); vertex++) { starts[(vertex + 1)] += starts[vertex]; }
 
-        using var incidentLease = RentedArrays.Rent<int>(array: out var incident, minimumLength: starts[vertexCount], owner: workspace);
-        using var filledLease = RentedArrays.Rent<int>(array: out var filled, minimumLength: vertexCount, owner: workspace);
+        using var incident = OwnedBuffer<int>.OfLength(allocator: allocator, clear: false, length: starts[vertexCount], observer: workspace);
+        using var filled = OwnedBuffer<int>.OfLength(allocator: allocator, clear: true, length: vertexCount, observer: workspace);
 
-        filled.AsSpan(start: 0, length: vertexCount).Clear();
         for (var quad = 0; (quad < quadCount); quad++) {
             var count = RawCorners(quad: quad, corners: raw);
 
@@ -194,7 +191,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             if ((count < 3) || (quad >= QuadAxes.Length)) { return true; }
             if (count == 3) { corners[3] = corners[2]; }
 
-            return (SdfContourFacing.Splits(axis: QuadAxes[quad], patches: patches, positions: positions, quad: corners) is not (false, false));
+            return (SdfContourFacing.Splits(axis: QuadAxes[quad], patches: patches.GetSpan(), positions: positions.GetSpan(), quad: corners) is not (false, false));
         }
         int Rank(int vertex) => ((features[vertex] && !beside[vertex]) ? 2 : (features[vertex] ? 1 : 0));
         // A quad's area normal about its corners as the welds so far place them (Newell's sum), zero for one closed to
@@ -335,7 +332,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         using var quads = new OwnedBuffer<int>(allocator: allocator, capacity: Quads.Length, observer: workspace);
         using var materials = new OwnedBuffer<int>(allocator: allocator, capacity: quadCount, observer: workspace);
         using var axes = new OwnedBuffer<sbyte>(allocator: allocator, capacity: QuadAxes.Length, observer: workspace);
-        using var remapLease = RentedArrays.Rent<int>(array: out var remap, minimumLength: vertexCount, owner: workspace);
+        using var remap = OwnedBuffer<int>.OfLength(allocator: allocator, clear: false, length: vertexCount, observer: workspace);
 
         remap.AsSpan(start: 0, length: vertexCount).Fill(value: -1);
         for (var quad = 0; (quad < quadCount); quad++) {
@@ -361,16 +358,16 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
         for (var corner = 0; (corner < quadArray.Length); corner++) { quadArray[corner] = remap[quadArray[corner]]; }
 
-        float[] Compact(float[] values) {
+        float[] Compact(ReadOnlySpan<float> values) {
             var compact = new float[(3 * kept)];
 
             for (var vertex = 0; (vertex < vertexCount); vertex++) {
-                if (remap[vertex] >= 0) { values.AsSpan(start: (3 * vertex), length: 3).CopyTo(destination: compact.AsSpan(start: (3 * remap[vertex]), length: 3)); }
+                if (remap[vertex] >= 0) { values.Slice(start: (3 * vertex), length: 3).CopyTo(destination: compact.AsSpan(start: (3 * remap[vertex]), length: 3)); }
             }
 
             return compact;
         }
-        bool[] CompactFlags(bool[] values, bool[] original) {
+        bool[] CompactFlags(ReadOnlySpan<bool> values, bool[] original) {
             if (original.Length == 0) { return []; }
 
             var compact = new bool[kept];
@@ -394,15 +391,15 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             Solved = CompactFlags(original: Solved, values: solved),
         };
 
-        // Flags rented at a vertex each, false past those given.
-        static RentedArrays.Lease<bool> Grown(bool[] flags, int length, out bool[] grown, IAllocationObserver? workspace) {
-            var lease = RentedArrays.Rent<bool>(array: out grown, minimumLength: length, owner: workspace);
+        // Native flags at a vertex each, false past those given.
+        static OwnedBuffer<bool> Grown(bool[] flags, int length, IAllocator? allocator, IAllocationObserver? workspace) {
+            var grown = OwnedBuffer<bool>.OfLength(allocator: allocator, clear: false, length: length, observer: workspace);
             var given = Math.Min(val1: flags.Length, val2: length);
 
-            flags.AsSpan(start: 0, length: given).CopyTo(destination: grown);
-            grown.AsSpan(start: given, length: (length - given)).Clear();
+            flags.AsSpan(start: 0, length: given).CopyTo(destination: grown.GetSpan());
+            grown.AsSpan(start: given).Clear();
 
-            return lease;
+            return grown;
         }
     }
     // A quad's corners as its vertex indices name them: three where its last two are one vertex (a triangle), else four.
@@ -420,7 +417,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// <returns>The normal, as the contour stores it.</returns>
     public Vector3 NormalOf(int vertex) => At(values: Normals, vertex: vertex);
     // A vertex's three floats in an array of positions or normals.
-    internal static Vector3 At(float[] values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
+    internal static Vector3 At(ReadOnlySpan<float> values, int vertex) => new(x: values[(3 * vertex)], y: values[((3 * vertex) + 1)], z: values[((3 * vertex) + 2)]);
     /// <summary>Returns the contour with its crease vertices split: a vertex two of whose quads face
     /// apart by more than 25 degrees gives each quad corner a vertex of its own at the same place, whose normal is the
     /// area-weighted facing of the vertex's quads within 25 degrees of that quad's, so a sharp edge shades as the two faces
@@ -428,10 +425,10 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
     /// quads that face more than 25 degrees from its own normal: a vertex on a rounding narrower than its cell carries the
     /// rounding's normal, which the faces beyond it would otherwise blend across a cell. A quad folded against its own
     /// vertices' normals neither splits nor lends its facing.</summary>
-    /// <param name="workspace">The workspace owner charged for the split's rented scratch, or null for unmetered work.</param>
+    /// <param name="workspace">The workspace owner charged for the split's native scratch, or null for unmetered work.</param>
     /// <returns>The contour with the split vertices appended and its quads renumbered to them; this contour when nothing
     /// splits.</returns>
-    /// <param name="allocator">The native allocator the working lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> to rent them.</param>
+    /// <param name="allocator">The native allocator the working lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> for the process's.</param>
     public SdfContour SplitAtCreases(IAllocationObserver? workspace = null, IAllocator? allocator = null) {
         var positions = Positions;
         var normals = Normals;
@@ -473,7 +470,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         var folded = (quadCount != QuadMaterials.Length);
 
         // Each quad's area-weighted facing: its two triangles along its first diagonal.
-        using var facingLease = RentedArrays.Rent<Vector3>(array: out var facings, minimumLength: quadCount, owner: workspace);
+        using var facings = OwnedBuffer<Vector3>.OfLength(allocator: allocator, clear: false, length: quadCount, observer: workspace);
 
         for (var quad = 0; (quad < quadCount); quad++) {
             var a = At(values: positions, vertex: quads[(4 * quad)]);
@@ -491,7 +488,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
         }
 
         // The quads around each vertex, as compressed rows.
-        using var startLease = RentedArrays.Rent<int>(array: out var starts, minimumLength: (vertexCount + 1), owner: workspace);
+        using var starts = OwnedBuffer<int>.OfLength(allocator: allocator, clear: false, length: (vertexCount + 1), observer: workspace);
 
         starts.AsSpan(start: 0, length: (vertexCount + 1)).Clear();
         for (var corner = 0; (corner < quads.Length); corner++) {
@@ -502,8 +499,8 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
             starts[(vertex + 1)] += starts[vertex];
         }
 
-        using var aroundLease = RentedArrays.Rent<int>(array: out var around, minimumLength: starts[vertexCount], owner: workspace);
-        using var filledLease = RentedArrays.Rent<int>(array: out var filled, minimumLength: vertexCount, owner: workspace);
+        using var around = OwnedBuffer<int>.OfLength(allocator: allocator, clear: false, length: starts[vertexCount], observer: workspace);
+        using var filled = OwnedBuffer<int>.OfLength(allocator: allocator, clear: false, length: vertexCount, observer: workspace);
 
         filled.AsSpan(start: 0, length: vertexCount).Clear();
         for (var corner = 0; (corner < quads.Length); corner++) {
@@ -515,7 +512,7 @@ public sealed record SdfContour(float[] Positions, float[] Normals, int[] Quads,
 
         // Incident faces define the shading crease even when field correction cleared the QEF's feature flag. A normal
         // halfway between a chamfer's faces is less than the split angle from either face and cannot detect that crease.
-        using var creasedLease = RentedArrays.Rent<bool>(array: out var creased, minimumLength: vertexCount, owner: workspace);
+        using var creased = OwnedBuffer<bool>.OfLength(allocator: allocator, clear: false, length: vertexCount, observer: workspace);
 
         creased.AsSpan(start: 0, length: vertexCount).Clear();
 
@@ -760,7 +757,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
     // Per fine key, whether FineInside has read the sample's sign, and that sign: one bit each.
     private readonly OwnedBuffer<ulong> m_signKnown;
     private readonly OwnedBuffer<ulong> m_signInside;
-    // The owner every rented scratch array of the lattice's refinement and contour is charged to, as the owned buffers are.
+    // The owner every native scratch table of the lattice's refinement and contour is charged to.
     private readonly IAllocationObserver? m_observer;
     // The native allocator the lattice's workspaces and its contour's scratch come from, or null for offline managed storage.
     private readonly IAllocator? m_allocator;
@@ -933,8 +930,10 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var cellsY = (m_samplesY - 1);
         var cellsZ = (m_samplesZ - 1);
         var cellCount = ((cellsX * cellsY) * cellsZ);
-        // The per-cell masks are rented: a lattice's cells run to millions, and each mask a split tries is one more.
-        using var measuredLease = RentedArrays.Rent<bool>(array: out var measured, minimumLength: cellCount, owner: m_observer);
+        // The per-cell masks are native: a lattice's cells run to millions, and each mask a split tries is one more.
+        using var measuredFlags = OwnedBuffer<bool>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
+        // An alias, since the chosen split's flags take its place; every buffer goes at the method's end.
+        var measured = measuredFlags;
 
         measured.AsSpan(length: cellCount, start: 0).Clear();
         m_thin.Resize(length: cellCount, clear: true, preserve: false);
@@ -1097,7 +1096,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var regionCells = new List<int>[regions.Length];
         // Each region cell's own factor: the most any region over it asks for, each no more than its surface's turn needs
         // (CurvedSplit). Zero for a cell no region holds.
-        using var wantedLease = RentedArrays.Rent<int>(array: out var wanted, minimumLength: cellCount, owner: m_observer);
+        using var wanted = OwnedBuffer<int>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
 
         wanted.AsSpan(length: cellCount, start: 0).Clear();
 
@@ -1251,18 +1250,20 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         }
         order.Sort(comparison: (a, b) => ((regionCells[a].Count != regionCells[b].Count) ? regionCells[a].Count.CompareTo(value: regionCells[b].Count) : a.CompareTo(value: b)));
 
-        // The mask each split tries and the best one so far: two rented masks that trade places when a split serves more
+        // The mask each split tries and the best one so far: two native masks that trade places when a split serves more
         // regions, so no split's mask is a copy of its own.
-        using var trialLease = RentedArrays.Rent<bool>(array: out var trial, minimumLength: cellCount, owner: m_observer);
-        using var chosenLease = RentedArrays.Rent<bool>(array: out var chosen, minimumLength: cellCount, owner: m_observer);
+        using var trialFlags = OwnedBuffer<bool>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
+        using var chosenFlags = OwnedBuffer<bool>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
+        // Aliases the search swaps; the buffers themselves go at the method's end.
+        var (trial, chosen) = (trialFlags, chosenFlags);
         var hasChosen = false;
         var chosenSplit = 0;
         var chosenServed = -1;
         // The cells whose fine samples the count holds, the samples each added that no cell counted before it held, and
         // their sum: the distinct fine samples of the counted cells.
-        using var countedCellsLease = RentedArrays.Rent<bool>(array: out var countedCells, minimumLength: cellCount, owner: m_observer);
-        using var countedSplitsLease = RentedArrays.Rent<int>(array: out var countedSplits, minimumLength: cellCount, owner: m_observer);
-        using var cellSamplesLease = RentedArrays.Rent<int>(array: out var cellSamples, minimumLength: cellCount, owner: m_observer);
+        using var countedCells = OwnedBuffer<bool>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
+        using var countedSplits = OwnedBuffer<int>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
+        using var cellSamples = OwnedBuffer<int>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
         var counted = 0L;
         var addedCells = new List<int>();
 
@@ -1273,7 +1274,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         // stride beside a thin cell reads the thin cell's fine samples on the face or edge they share while it interpolates
         // its own from its stride's grid, which steps over the sheet: the sheet ends in a false cap at the shared face,
         // inside the solid, and the stride cell's merged vertex takes the mean of the sheet's two faces.
-        using var thinSplitLease = RentedArrays.Rent<bool>(array: out var thinSplit, minimumLength: cellCount, owner: m_observer);
+        using var thinSplit = OwnedBuffer<bool>.OfLength(allocator: m_allocator, clear: false, length: cellCount, observer: m_observer);
 
         thinSplit.AsSpan(length: cellCount, start: 0).Clear();
         if (finest > ordinary) {
@@ -2251,7 +2252,7 @@ public sealed unsafe class SdfSampledLattice : IDisposable {
         var fineSamples = (((long)fineX) * fineY * ((cellsZ * factor) + 1));
         // The samples listed, in the order first listed, and a bit a fine sample marking those already listed.
         var seenWords = ((int)fineSamples.CeilingDivide(divisor: 64L));
-        using var seenLease = RentedArrays.Rent<ulong>(array: out var seen, minimumLength: seenWords, owner: m_observer);
+        using var seen = OwnedBuffer<ulong>.OfLength(allocator: m_allocator, clear: false, length: seenWords, observer: m_observer);
 
         seen.AsSpan(start: 0, length: seenWords).Clear();
         // The keys are listed where they stay, in the lattice's own buffer.

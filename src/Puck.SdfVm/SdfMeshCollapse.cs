@@ -110,16 +110,16 @@ public static class SdfMeshCollapse {
         // The slide targets Kind keeps per place; a place with more recomputes them.
         private const int SlideTargets = 4;
 
-        private readonly int[] m_placeOf;
+        private readonly OwnedBuffer<int> m_placeOf;
         // Each place's position, in doubles.
-        private readonly Point[] m_point;
-        private readonly Vector3[] m_normals;
-        private readonly int[] m_corners;
+        private readonly OwnedBuffer<Point> m_point;
+        private readonly OwnedBuffer<Vector3> m_normals;
+        private readonly OwnedBuffer<int> m_corners;
         // Each corner's place, m_placeOf of its vertex, which Commit keeps beside m_corners.
-        private readonly int[] m_cornerPlace;
-        private readonly uint[] m_materials;
-        private readonly bool[] m_alive;
-        private readonly double[] m_quadrics;
+        private readonly OwnedBuffer<int> m_cornerPlace;
+        private readonly OwnedBuffer<uint> m_materials;
+        private readonly OwnedBuffer<bool> m_alive;
+        private readonly OwnedBuffer<double> m_quadrics;
         private readonly int m_places;
         private readonly int m_triangles;
         private readonly bool m_carriesMaterials;
@@ -128,12 +128,12 @@ public static class SdfMeshCollapse {
 
         // The samples: each one's vertex, material, distance and normal cosine at the triangle it is tracked to, and the
         // next sample tracked to the same triangle.
-        private readonly int[] m_sampleVertex;
+        private readonly OwnedBuffer<int> m_sampleVertex;
         private readonly int m_sampleCount;
-        private readonly uint[] m_sampleMaterial;
-        private readonly double[] m_sampleDistance;
-        private readonly int[] m_sampleNext;
-        private readonly int[] m_tracked;
+        private readonly OwnedBuffer<uint> m_sampleMaterial;
+        private readonly OwnedBuffer<double> m_sampleDistance;
+        private readonly OwnedBuffer<int> m_sampleNext;
+        private readonly OwnedBuffer<int> m_tracked;
 
         // The line samples: each crease or material edge vertex and each such edge's midpoint, tracked to the edge of the
         // line it lies nearest now, keyed by the edge's places; and each one's distance there. A surface sample can sit
@@ -146,18 +146,18 @@ public static class SdfMeshCollapse {
         private readonly Dictionary<long, (int First, int Last)> m_lines = new(comparer: PackedIntPairComparer.Instance);
 
         // Each triangle's bound on how far it strays from the mesh's own surface (zero for the mesh's own triangles).
-        private readonly double[] m_stray;
+        private readonly OwnedBuffer<double> m_stray;
         // A pass's triangles about each place; the pass a collapse moved triangles onto a place (touched) or changed the
         // triangles about it (changed); what each place may do.
-        private readonly int[] m_fanStart;
-        private readonly int[] m_fan;
-        private readonly int[] m_filled;
-        private readonly int[] m_touched;
-        private readonly int[] m_changed;
+        private readonly OwnedBuffer<int> m_fanStart;
+        private readonly OwnedBuffer<int> m_fan;
+        private readonly OwnedBuffer<int> m_filled;
+        private readonly OwnedBuffer<int> m_touched;
+        private readonly OwnedBuffer<int> m_changed;
         // Rejected directed edges stay rejected until the fan the refusal read changes: the collapsing place's always, the
         // neighbour's for a link refusal, and the level's budget for a measured one. Commit stamps every old fan endpoint.
         // No cached result ever accepts a collapse.
-        private readonly int[] m_revisions;
+        private readonly OwnedBuffer<int> m_revisions;
 
         // Keyed by the directed edge (from, to) and holding the two revisions it was refused at, each packed high then low.
         private readonly Dictionary<long, long> m_rejected = new(comparer: PackedIntPairComparer.Instance);
@@ -169,13 +169,13 @@ public static class SdfMeshCollapse {
         // witness cannot raise the current triangle's bound; Next resumes it when another target needs a tighter bound.
         private readonly Dictionary<(long Edge, uint Material), (double Distance, int Next)> m_reverseEdges = [];
 
-        private readonly int[] m_stamp;
-        private readonly byte[] m_kind;
-        private readonly int[] m_slideTargets;
-        private readonly int[] m_slideCounts;
+        private readonly OwnedBuffer<int> m_stamp;
+        private readonly OwnedBuffer<byte> m_kind;
+        private readonly OwnedBuffer<int> m_slideTargets;
+        private readonly OwnedBuffer<int> m_slideCounts;
         private readonly double m_lineLimit;
-        private readonly double[] m_candidateCosts;
-        private readonly int[] m_candidatePlaces;
+        private readonly OwnedBuffer<double> m_candidateCosts;
+        private readonly OwnedBuffer<int> m_candidatePlaces;
 
         private int m_pass;
         private int m_stampValue;
@@ -189,7 +189,7 @@ public static class SdfMeshCollapse {
         // Sorted targets in independent runs. A commit invalidates the old source fan and
         // the old target fan: every edge whose topology or endpoint quadric changed touches one of them.
         private readonly OwnedBuffer<(double Cost, int Place)> m_prices;
-        private readonly (int Start, int Capacity, int Count, bool Ready)[] m_priceRuns;
+        private readonly OwnedBuffer<(int Start, int Capacity, int Count, bool Ready)> m_priceRuns;
         private readonly List<int> m_samples = [];
         private readonly List<(int Triangle, double Distance)> m_choices = [];
         private readonly List<int> m_lineNeighbours = [];
@@ -208,8 +208,8 @@ public static class SdfMeshCollapse {
         private int[] m_ringNext = new int[16];
         private int[] m_ringAfter = new int[16];
 
-        private readonly int[] m_afterFirst;
-        private readonly int[] m_afterCount;
+        private readonly OwnedBuffer<int> m_afterFirst;
+        private readonly OwnedBuffer<int> m_afterCount;
 
         private int[] m_fanCorner = new int[16];
         private int[] m_fanNext = new int[16];
@@ -217,13 +217,13 @@ public static class SdfMeshCollapse {
         private int[] m_fanTwin = new int[16];
 
         // Scratch for Kind's current fan only; every endpoint it reads is cleared before indexing that fan.
-        private readonly (int Outgoing, int Incoming)[] m_fanEdges;
+        private readonly OwnedBuffer<(int Outgoing, int Incoming)> m_fanEdges;
 
         private Candidate[] m_measured = new Candidate[16];
         private OriginalTriangle[] m_previous = new OriginalTriangle[16];
         private int[] m_laid = new int[16];
 
-        public bool HasFeatures => (m_kind.AsSpan(start: 0, length: m_places).Contains(value: Locked) || m_kind.AsSpan(start: 0, length: m_places).Contains(value: Slides));
+        public bool HasFeatures => (m_kind.GetSpan().Contains(value: Locked) || m_kind.GetSpan().Contains(value: Slides));
 
         // Every table is rented through the scope, which the caller disposes: a rented array can be longer than asked for, so
         // each read is bounded by the place, triangle or sample count, never the array's length.
@@ -236,23 +236,23 @@ public static class SdfMeshCollapse {
             var normals = held.Normals.Span;
             var vertices = positions.Length;
             var sites = mesh.Sites();
-            m_placeOf = scope.Rent<int>(minimumLength: vertices);
+            m_placeOf = scope.Buffer<int>(length: vertices);
             for (var vertex = 0; vertex < vertices; vertex++) {
                 m_placeOf[vertex] = sites[vertex] == vertex ? m_places++ : m_placeOf[sites[vertex]];
             }
-            m_point = scope.Rent<Point>(minimumLength: m_places);
+            m_point = scope.Buffer<Point>(length: m_places);
             for (var vertex = 0; (vertex < vertices); vertex++) {
                 m_point[m_placeOf[vertex]] = new Point { X = positions[vertex].X, Y = positions[vertex].Y, Z = positions[vertex].Z };
             }
 
-            m_normals = scope.Rent<Vector3>(minimumLength: normals.Length);
-            normals.CopyTo(destination: m_normals);
+            m_normals = scope.Buffer<Vector3>(length: normals.Length);
+            normals.CopyTo(destination: m_normals.GetSpan());
             m_carriesMaterials = !materials.IsEmpty;
             m_triangles = mesh.TriangleCount;
-            m_corners = scope.Rent<int>(minimumLength: (3 * m_triangles));
-            m_cornerPlace = scope.Rent<int>(minimumLength: (3 * m_triangles));
-            m_materials = scope.Rent<uint>(minimumLength: m_triangles);
-            m_alive = scope.Rent<bool>(minimumLength: m_triangles);
+            m_corners = scope.Buffer<int>(length: (3 * m_triangles));
+            m_cornerPlace = scope.Buffer<int>(length: (3 * m_triangles));
+            m_materials = scope.Buffer<uint>(length: m_triangles);
+            m_alive = scope.Buffer<bool>(length: m_triangles);
             for (var corner = 0; (corner < (3 * m_triangles)); corner++) {
                 m_corners[corner] = ((int)indices[corner]);
                 m_cornerPlace[corner] = m_placeOf[m_corners[corner]];
@@ -263,27 +263,27 @@ public static class SdfMeshCollapse {
                 m_aliveTriangles += (m_alive[triangle] ? 1 : 0);
             }
 
-            m_fanStart = scope.Rent<int>(minimumLength: (m_places + 1));
-            m_fan = scope.Rent<int>(minimumLength: (3 * m_triangles));
-            m_filled = scope.Rent<int>(minimumLength: m_places);
-            m_touched = scope.Rent<int>(minimumLength: m_places, clear: true);
-            m_changed = scope.Rent<int>(minimumLength: m_places, clear: true);
-            m_revisions = scope.Rent<int>(minimumLength: m_places, clear: true);
-            m_stamp = scope.Rent<int>(minimumLength: m_places, clear: true);
-            m_fanEdges = scope.Rent<(int, int)>(minimumLength: m_places);
-            m_afterFirst = scope.Rent<int>(minimumLength: m_places, clear: true);
-            m_afterCount = scope.Rent<int>(minimumLength: m_places, clear: true);
-            m_kind = scope.Rent<byte>(minimumLength: m_places, clear: true);
-            m_slideTargets = scope.Rent<int>(minimumLength: (SlideTargets * m_places), clear: true);
-            m_slideCounts = scope.Rent<int>(minimumLength: m_places, clear: true);
+            m_fanStart = scope.Buffer<int>(length: (m_places + 1));
+            m_fan = scope.Buffer<int>(length: (3 * m_triangles));
+            m_filled = scope.Buffer<int>(length: m_places);
+            m_touched = scope.Buffer<int>(length: m_places, clear: true);
+            m_changed = scope.Buffer<int>(length: m_places, clear: true);
+            m_revisions = scope.Buffer<int>(length: m_places, clear: true);
+            m_stamp = scope.Buffer<int>(length: m_places, clear: true);
+            m_fanEdges = scope.Buffer<(int, int)>(length: m_places);
+            m_afterFirst = scope.Buffer<int>(length: m_places, clear: true);
+            m_afterCount = scope.Buffer<int>(length: m_places, clear: true);
+            m_kind = scope.Buffer<byte>(length: m_places, clear: true);
+            m_slideTargets = scope.Buffer<int>(length: (SlideTargets * m_places), clear: true);
+            m_slideCounts = scope.Buffer<int>(length: m_places, clear: true);
             m_prices = scope.RentList<(double Cost, int Place)>(capacity: (3 * m_triangles));
-            m_priceRuns = scope.Rent<(int, int, int, bool)>(minimumLength: m_places, clear: true);
-            m_candidateCosts = scope.Rent<double>(minimumLength: m_places);
-            m_candidatePlaces = scope.Rent<int>(minimumLength: m_places);
-            m_quadrics = scope.Rent<double>(minimumLength: (10 * m_places), clear: true);
-            m_tracked = scope.Rent<int>(minimumLength: m_triangles);
-            m_stray = scope.Rent<double>(minimumLength: m_triangles, clear: true);
-            m_tracked.AsSpan(start: 0, length: m_triangles).Fill(value: -1);
+            m_priceRuns = scope.Buffer<(int, int, int, bool)>(length: m_places, clear: true);
+            m_candidateCosts = scope.Buffer<double>(length: m_places);
+            m_candidatePlaces = scope.Buffer<int>(length: m_places);
+            m_quadrics = scope.Buffer<double>(length: (10 * m_places), clear: true);
+            m_tracked = scope.Buffer<int>(length: m_triangles);
+            m_stray = scope.Buffer<double>(length: m_triangles, clear: true);
+            m_tracked.GetSpan().Fill(value: -1);
             m_lineX = scope.RentList<double>(capacity: ((m_places / 4) + 16));
             m_lineY = scope.RentList<double>(capacity: ((m_places / 4) + 16));
             m_lineZ = scope.RentList<double>(capacity: ((m_places / 4) + 16));
@@ -292,8 +292,8 @@ public static class SdfMeshCollapse {
 
             // A vertex's first material is a sample at once; only a vertex whose triangles carry a second material asks the
             // set, so the samples keep their first-corner order.
-            var firstMaterial = scope.Rent<uint>(minimumLength: vertices);
-            var hasMaterial = scope.Rent<bool>(minimumLength: vertices, clear: true);
+            var firstMaterial = scope.Buffer<uint>(length: vertices);
+            var hasMaterial = scope.Buffer<bool>(length: vertices, clear: true);
             var sampleOf = new HashSet<(int Vertex, uint Material)>();
             var sampleTriangles = scope.RentList<int>(capacity: vertices);
             var sampleVertices = scope.RentList<int>(capacity: vertices);
@@ -323,11 +323,11 @@ public static class SdfMeshCollapse {
             var samples = sampleTriangles.Length;
 
             m_sampleCount = samples;
-            m_sampleVertex = scope.Rent<int>(minimumLength: samples);
-            sampleVertices.GetSpan().CopyTo(destination: m_sampleVertex);
-            m_sampleMaterial = scope.Rent<uint>(minimumLength: samples);
-            m_sampleDistance = scope.Rent<double>(minimumLength: samples, clear: true);
-            m_sampleNext = scope.Rent<int>(minimumLength: samples);
+            m_sampleVertex = scope.Buffer<int>(length: samples);
+            sampleVertices.GetSpan().CopyTo(destination: m_sampleVertex.GetSpan());
+            m_sampleMaterial = scope.Buffer<uint>(length: samples);
+            m_sampleDistance = scope.Buffer<double>(length: samples, clear: true);
+            m_sampleNext = scope.Buffer<int>(length: samples);
             for (var sample = 0; (sample < samples); sample++) {
                 m_sampleMaterial[sample] = m_materials[sampleTriangles[sample]];
                 Track(sample: sample, triangle: sampleTriangles[sample]);
@@ -385,7 +385,7 @@ public static class SdfMeshCollapse {
 
             var largest = 0.0;
 
-            foreach (var distance in m_sampleDistance.AsSpan(start: 0, length: m_sampleCount)) {
+            foreach (var distance in m_sampleDistance.GetSpan().Slice(start: 0, length: m_sampleCount)) {
                 largest = Math.Max(val1: largest, val2: distance);
             }
             foreach (var distance in m_lineDistance.GetSpan()) {
@@ -413,7 +413,7 @@ public static class SdfMeshCollapse {
             }
 
             // The sort draws on no randomness, so places of equal cost come out in one order on every run.
-            Array.Sort(index: 0, items: m_candidatePlaces, keys: m_candidateCosts, length: count);
+            m_candidateCosts.GetSpan().Slice(start: 0, length: count).Sort(items: m_candidatePlaces.GetSpan().Slice(start: 0, length: count));
 
             var taken = 0;
 
@@ -503,7 +503,7 @@ public static class SdfMeshCollapse {
                     _ = Kind(penalize: false, place: place);
                     m_targetPlaces.AddRange(collection: m_features);
                 } else {
-                    m_targetPlaces.AddRange(source: ((ReadOnlySpan<int>)m_slideTargets.AsSpan(length: count, start: (SlideTargets * place))));
+                    m_targetPlaces.AddRange(source: ((ReadOnlySpan<int>)m_slideTargets.GetSpan().Slice(start: (SlideTargets * place), length: count)));
                 }
 
                 return;
@@ -544,7 +544,7 @@ public static class SdfMeshCollapse {
         private static int PreviousCorner(int corner) => (((corner % 3) == 0) ? (corner + 2) : (corner - 1));
         // Lists each place's alive triangles.
         private void Fans() {
-            Array.Clear(array: m_fanStart);
+            m_fanStart.GetSpan().Clear();
             for (var triangle = 0; (triangle < m_triangles); triangle++) {
                 if (!m_alive[triangle]) { continue; }
 
@@ -556,7 +556,7 @@ public static class SdfMeshCollapse {
                 m_fanStart[(place + 1)] += m_fanStart[place];
             }
 
-            Array.Clear(array: m_filled);
+            m_filled.GetSpan().Clear();
             for (var triangle = 0; (triangle < m_triangles); triangle++) {
                 if (!m_alive[triangle]) { continue; }
 
@@ -654,7 +654,7 @@ public static class SdfMeshCollapse {
             var count = m_features.Count;
 
             m_slideCounts[place] = ((count <= SlideTargets) ? count : -1);
-            if (count <= SlideTargets) { CollectionsMarshal.AsSpan(list: m_features).CopyTo(destination: m_slideTargets.AsSpan(length: SlideTargets, start: (SlideTargets * place))); }
+            if (count <= SlideTargets) { CollectionsMarshal.AsSpan(list: m_features).CopyTo(destination: m_slideTargets.GetSpan().Slice(start: (SlideTargets * place), length: SlideTargets)); }
 
             return Slides;
         }
@@ -1297,14 +1297,14 @@ public static class SdfMeshCollapse {
             return (Evaluate(place: from, x: x, y: y, z: z) + Evaluate(place: to, x: x, y: y, z: z));
         }
         private double Evaluate(int place, double x, double y, double z) {
-            var q = m_quadrics.AsSpan(length: 10, start: (10 * place));
+            var q = m_quadrics.GetSpan().Slice(start: (10 * place), length: 10);
 
             return (((((((((((q[0] * x) * x) + (2.0 * ((q[1] * x) * y))) + (2.0 * ((q[2] * x) * z))) + (2.0 * (q[3] * x))) + ((q[4] * y) * y)) + (2.0 * ((q[5] * y) * z))) + (2.0 * (q[6] * y))) + ((q[7] * z) * z)) + (2.0 * (q[8] * z))) + q[9]);
         }
         // Adds a plane, through a point with a unit normal and a weight, to a place's quadric.
         private void AddPlane(int place, double nx, double ny, double nz, double px, double py, double pz, double weight) {
             var d = -(((nx * px) + (ny * py)) + (nz * pz));
-            var q = m_quadrics.AsSpan(length: 10, start: (10 * place));
+            var q = m_quadrics.GetSpan().Slice(start: (10 * place), length: 10);
 
             q[0] += (weight * (nx * nx));
             q[1] += (weight * (nx * ny));

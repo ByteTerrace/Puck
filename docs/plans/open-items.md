@@ -1078,6 +1078,28 @@ check missed is baked by that boot and listed under the record's
   pace, several times slower than a paused, tick-locked bake. Let the fill
   end when its ladders are whole. Under the ladder policy `world.wait ready`
   also times out.
+- [high · unconfirmed] The RTX 2060's player build drew the glacier's ice
+  edges and the rim slope as large flat facets up close: a floor, the
+  coarsest tier, drawn where a finer one was asked. Two causes fit, and the
+  code alone cannot tell them apart. A group that arrives in view draws its
+  stored floor at once and then owes its first detail; if the store holds
+  that tier it loads outside the budget, and if the store lacks it and holds
+  no tier between, nothing starts (`SdfMeshPathBake.StartReplacement`): the
+  tier waits its hold as an ordinary owed tier and bakes only when the detail
+  budget has room, so on a card whose budget is full the floor keeps drawing.
+  Or every tier is stored and the budget's bias has coarsened the demand to
+  the floor. Read, on the 2060 at the glacier: the log's `[sdf.mesh-bake]
+  rung-missed` lines (each names its group, the tier asked, the tier drawn
+  and the ladder), `world.counters sdf.mesh-cache` (`rungs-missed` less
+  `rungs-missed-live`, `groups-baked`, `dispatches`) and `world.residency`'s
+  tier line (`tiers-held-back`, `detail-bias`, `region-budget`,
+  `region-named`). Missed tiers with `tiers-held-back` above zero is a cache
+  gap the budget then holds: complete the fill (the item on a tick-locked
+  fill above; a ladder fills coarsest first, so a fill cut short lacks its
+  finest tiers), and decide whether a player's missed first detail is the
+  arrival's own bake again. No missed tier with a bias above zero is the
+  device budget: the card's fixed storage leaves detail too little room,
+  which is the device-memory items' work.
 - [medium] A residency no authored spawn point shows gets no ladder, so a
   player who opens one counts `rungs-missed`. Give such a place a spawn
   point, or give the fill a door that draws every residency a world can open.
@@ -1103,25 +1125,41 @@ client authorities rejoin cleanly, and departed travellers release after
 `bodies.reconnectGraceSeconds`. Machine content is the part of step 3 still
 open.
 
-- [high, M1] **The hosted silo refuses every player's party.** A release deploys
-  its silo with `ClosedGroupRewind` (`AzureWorld`), and an activation then
-  installs `ContainsRewindAuthority` as the transfer boundary
-  (`WorldSiloHost.ActivationWiring`). A `--connect` client joins by
-  transferring its party from its own session-qualified authority, which is
-  never in the rewind inventory, so `WorldTick.ReserveTransfer` refuses it:
-  `transfer=0 refused ('remote-boot' refused reservation (closed rewind group
-  refuses an external transfer; terminal refusal …))`. The client signs in and
-  is vouched for, its sessions are granted the world's screens, and its seat
-  never leaves its own boot world. [The issuer decision](../decisions/worlds-and-federation.md#players-are-admitted-through-their-hosts-issuer)
-  says a closed group "keeps admitting players while it refuses every other
-  authority", but the boundary checks only the source authority's name, which
-  for a player is its traveller namespace. Decide what a player's party is to a
-  closed group (an issuer-vouched traveller whose body the group owns once it
-  commits, so a group rewind does not reach back into the client), then admit it
-  at the boundary. `puck benchmark --remote local` and `--remote issued` never
-  reach this: neither starts a silo. Check: the RTX 2060's player install
-  joins the hosted authority (play.puck.byteterrace.com, port 7825) and its seat's body arrives in the
-  hosted world.
+- [high, M1] **A player's seat in the hosted world, seen on the deployment.** A
+  closed rewind group admits a signed-in player's party as a guest
+  ([decision](../decisions/worlds-and-federation.md#a-closed-rewind-group-admits-players-as-guests),
+  [design note](closed-group-players.md)), and a law boots a silo, its issuer and
+  a client in one process to show the join, a capture with the player present,
+  the restore and the client's rejoin
+  (`WorldReleaseCutoverLawTests.AClosedGroupAdmitsAPlayerAsAGuestAndARestoreEndsIt`).
+  What only the deployment can show is still owed. Check: the RTX 2060's player
+  install joins the hosted authority (play.puck.byteterrace.com, port 7825)
+  and its seat's body arrives in the hosted world. The deploy that carries this
+  change resets the hosted store, since the checkpoint layout and the
+  federation wire key both moved.
+- [medium] What the guest design leaves unbuilt, each named in
+  [the design note](closed-group-players.md#where-the-guarantee-stops):
+  - A client whose issuer replaces its root mid-run is told its session ended
+    and must be started again (`IssuedKeySigningOracle`). Carrying the running
+    client over to a session under the new root needs the boot authority to
+    take a new namespace in place. Check: a client survives a root replacement
+    without a restart.
+  - What a hosted world's rules write on a guest's identity copy ends with the
+    guest's body. Player progress that outlives a visit needs a record the
+    group owns and restores with itself.
+  - The law covers one entry row. A restore taken after a guest walked from one
+    world of the group to another rests on each row ending what it holds by
+    the traveler's origin, which no law runs. Check: the probe hops the guest
+    from `alpha` to `beta` before its capture and both restored rows hold no
+    guest and no forwarding route.
+  - A crash recovery redoes arrivals from the crossing log and no retirement
+    the tick made between them. Two arrivals in one journal tail, with the first
+    traveler retired in between, redo as two bodies, and a second arrival that
+    took the first one's slot does not redo at all. A guest's rejoin after its
+    grace ran out is one way to write that tail; an ordinary leave and rejoin
+    is another. Check: read `WorldInstanceHost.RecoverCrossings` against a tail
+    that holds an arrival, a tick-driven retirement and a second arrival, and
+    record the retirement in the log if the redo cannot infer it.
 - [medium] A manifest's member is fetched whole and the whole manifest is sent
   each time ([decision 4](remote-content.md#decision-4-the-document-travels-as-a-manifest)).
   A recipient with another version of the package fetches each differing
@@ -1436,8 +1474,8 @@ as [ordinary work](engine-job-system.md#what-the-job-system-leaves-to-ordinary-w
     long-to-int map in `Puck.Abstractions` is its home), the stages' exact
     outputs listed above, and the mesh store's `RentedMemoryStream` payloads
     (the stream takes an allocator; `SdfMeshStoreCodec` does not pass one yet).
-    Read the `done` line's `allocated:` and `rented-large-fresh` on the next
-    cold bake to confirm what moved.
+    Read the `done` line's `allocated:` on the next cold bake to confirm what
+    moved.
   - GPU side: `SdfMeshProbeGpuWork` recreates a slot's origins buffer
     whenever the batch size changes.
 
@@ -2236,16 +2274,48 @@ check; this packet holds the defects beside it.
   passed its budget, and never recovered. Size these owners from the device's quality table and
   stream what is far or unseen, rather than holding them whole. Check: the same route on the 2060
   holds device memory under its cap, and the second loop matches the first.
-- [high] **Host memory: rebuilt programs and presentation fields churn the large object heap.**
-  On the 2060's player build the managed heap held 4.26 GB, 3.12 GB of it on the LOH. Each
-  presentation-field and program rebuild churns about 150–280 MB through it, and `SdfProgram`
-  allocates fresh managed arrays on every build (appearance sections, Lipschitz factors, side
-  tables, part-program offsets). Rebuild only what changed, into owned and reused storage. The
-  other managed holders: program words (about 22 MB, no owner), the probe-cache tables (93 MB,
-  held by reference; they need block indices), the trace hierarchy's pack and top-level content,
-  the bake's scratch arrays, an unidentified renter of 92–98 MB `ArrayPool.Shared` arrays, and
-  about 140 MB of trace-scene storage still rented managed. Check: the 2060's route ends under
-  its host bar with the LOH flat across loops.
+- [high] **Host memory: the large object heap is mostly gaps, held open by a few long-lived arrays.**
+  On the 2060's player build the managed heap held 4.4 GB, 2.8 GB of it on the LOH, while a heap
+  dump found about 0.2 GB of live objects of a megabyte or more: large rentals of differing sizes
+  come and go between a few long-lived arrays, and their gaps are never reused. The rule is in
+  [data and memory](../../.claude/skills/dotnet-performance/references/data-and-memory.md): scratch
+  and tables of reference-free elements are native (`OwnedBuffer<T>`, which no longer has a managed
+  mode), never rented arrays. Moved so far: every owned buffer, list and map; the simplifier's
+  tables (`SdfMeshCollapse`, `SdfMeshPlanarMerge`, `SdfMeshChunks`); the far product, which a boot
+  derived whole in managed arrays and now reads from the mesh store
+  ([decision](../decisions/rendering.md#a-far-viewer-draws-a-worlds-far-product)); the lighting
+  batch's answer words and saved hits and the probe service's part answers; a goal field's
+  frozen junctions, shared across requests of one network (`NavigationRuntime.FrozenJunctions`);
+  the trace scene's hierarchy, its top level and every build workspace
+  (`SdfMeshIrradianceScene.Hierarchy`, the change trees); the bake's frustum watches and chosen
+  readings (`SdfMeshPathBake.FrustumWatches`); the lattice's weld, crease split and refinement
+  masks (`SdfSampledLattice`), the triangle grid, the trace judge's joined mesh, the store codec's
+  planes, the volume's refill words, `DisjointSet` and `SpanDistinct`; and the canonical document
+  serializer (`CanonicalJsonDocument`, through `OwnedBufferWriter<T>`). `RentedArrays` keeps only
+  the shared pool's buckets; its large pool is gone. What still allocates large managed arrays:
+  - `SdfProgram` allocates fresh arrays on every field build (its words, the instruction copy, the
+    appearance section and the analysis passes' tables), about 320 MiB over a route: the debug
+    world's composed program is about 5.3 million words, so each field rebuild in
+    `SdfCompositionFrameSource` allocates tens of megabytes. Native storage needs an owner whose
+    last reader frees it, and the program is held across threads by the composition, every
+    `SdfFrame`, `SdfWorldTables`' live, background, shading and paint programs, the bake
+    (`SdfMeshPathBake` and its prepared frame), the dresser, the presenters and pick results, and
+    weakly by `SdfProgramDelta`. Give `SdfProgram` a claim count (`Acquire`/`Release`, the
+    composition holding the first) and move every holder to swap claims at one door, then move the
+    words and the instruction stream to owned storage freed at the last release; a rebuild then
+    reuses the replaced program's storage when it holds the last claim. A use after free here is a
+    crash in presentation, so the change needs a windowed run in the same batch.
+  - The probe cache's publication columns (`PublishArena`, 42 arrays of 3.7 MB live) hold
+    `ProbeBlock` and `LightBlock` references in each `ProbeData` slot, and each table's keys,
+    flags and entry indices are managed arrays. Give the blocks indices in a registry whose slots
+    are reused only after the reader epochs reclaim a block, keep `ProbeData.Hits` and `Shading` as
+    properties over those indices, then store an arena of unmanaged values natively; a table the
+    cache drops (the spare it replaces, the volume's end) frees its columns.
+  - A far product derived on a miss still builds its cluster's mesh, its chunks and its levels in
+    managed arrays before the library copies the result; only its tables are native. It runs once
+    per product per store.
+  Check: the 2060's route ends under its host bar with the LOH flat across loops, and
+  `puck host heap` reads live large objects near the heap's large-object bytes.
 - [medium] **Read the native allocator's slack on the RTX 2060's route.** The 2060 read 1.83 GB
   committed against 810 MB named, with 8.6 GB reserved, when freed ranges were decommitted only by
   a later free and every size class committed its whole page. `MimallocAllocator`'s owner thread
@@ -5971,13 +6041,16 @@ screen and see the change hot reload.
 
 ### Media and capture
 
-Owner: media lane · ordinary · Next: let an unread capture feed idle.
+Owner: media lane · ordinary · Next: shrink the glow readback.
 
-- [medium] The desktop capture feed scales frames nobody reads: its thread
-  spends about a core in `Win32GraphicsCaptureDevice.ScaleMapped` in a World
-  started with `--devices none`, and a visible share of a cold bake's
-  processor samples. Find what subscribes it, let an unread feed idle, and
-  downscale on the GPU ahead of the readback.
+- [medium] The desktop capture feed's glow readback still box-scales the whole
+  source on the platform's callback thread (`Win32GraphicsCaptureDevice.ScaleMapped`),
+  once every `NativeImageGpuCaptureTargets.CpuReadbackDivisor` ticks, to produce
+  frames `WorldImageLight.Average` then samples one pixel in sixteen of. Read
+  the average on the GPU, or sample the mapped pixels in place, and the
+  scaler serves only the CPU route. That route is a Vulkan host's HDR display
+  and a render device that refuses the shared targets; the HDR conversion on
+  Vulkan waits on its external-image layout being proven.
 - [medium] `CaptureSink` is constructed nowhere in `src`: an unreached capture
   capability to wire, not delete (AGENTS.md).
 - [medium] The score is the listener's alone, and the authority keeps only
@@ -6000,6 +6073,22 @@ Owner: debug-world content lanes, each started by the owner's direction ·
 ordinary · Next: the agent harness and embeddings as features, then new
 content on the owner's call.
 
+- [medium] **`debug.go overlook` frames a featureless slab.** The overlook
+  spawn (`valley.puck`, id `overlook`) sets the body 6 m in from the sector's
+  inner face (`overlookFace - deckReach + 4`) with `yawDegrees` equal to the
+  sector's compass bearing (body at yaw 225°, camera yaw -135). The chase
+  camera's clearance shortens the boom from 4.2 m to 0.35 m
+  (`world.view.camera`: `boom=0.35/4.2 clearance=shortened cutaway=false`,
+  eye 0.24 m behind and 1.8 m above the feet), and the near plane sits
+  inside the Moth. The frame shows the rim's tops over two flat taupe bands,
+  with no body and no deck. Seen on the RTX 2060 (0.1.198, Vulkan, 1920x1080).
+  Unconfirmed: whether the bands are the deck's own slab seen from inside the
+  body, or the parapet. Find what the clearance probe hits behind the body on
+  an open deck, and whether the spawn should face into the caldera as the
+  glacier's spawn does. In the same run
+  `world.view.pick <x> <y>` answered only `pending` for every point and never
+  logged an answer, which needs checking too. Check: the overlook capture
+  shows the Moth on the deck with the valley floor below.
 - [medium] Text paints, which draw state-bound lettering on a creation's
   surface with no bake, have gaps the press and the chess screens meet
   ([the press](../game/press.md#what-it-does-not-do-yet) lists its own): a

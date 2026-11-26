@@ -3,12 +3,12 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 
-namespace Puck.Cli.Mesh;
+namespace Puck.Cli;
 
 /// <summary>The bake identity a World build keys its stored meshes by, read from the build's own assemblies and bake
-/// kernels in a collectible context: <c>puck mesh identity</c> prints it, and a player build's mesh cache set is named by
-/// it. Only shared-runtime values cross the boundary; neither a target object nor a reflected member survives
-/// unloading.</summary>
+/// kernels in a collectible context: <c>puck mesh identity</c> prints it, a player build's mesh cache set is named by it,
+/// and host admission predicts from it whether a World's mesh store is warm (<see cref="WorldDevices.StoreOf"/>). Only
+/// shared-runtime values cross the boundary; neither a target object nor a reflected member survives unloading.</summary>
 /// <param name="Value">The identity: the name of the store set the build's meshes land in.</param>
 /// <param name="EntryVersion">The entry format's version tag.</param>
 /// <param name="Code">The hash of the code the bake runs.</param>
@@ -33,34 +33,63 @@ public sealed record MeshBuildIdentity(
     /// <returns>The identity.</returns>
     /// <exception cref="InvalidOperationException">The build refused inspection or lacks the inspection API.</exception>
     /// <exception cref="IOException">A file of the build cannot be read.</exception>
-    public static MeshBuildIdentity Read(string buildDirectory, string extension) {
+    public static MeshBuildIdentity Read(string buildDirectory, string extension) => Inspect(buildDirectory, extension, static (target, code, kernels) => {
+        var identity = Invoke(RequiredMethod(target.Identity, "Of", target.Closure, target.Kernels), code, kernels);
+        return new MeshBuildIdentity(
+            Value: Property<UInt128>(identity, "Value"),
+            EntryVersion: Property<string>(identity, "EntryVersion"),
+            Code: Property<UInt128>(identity, "Code"),
+            MaskKernel: Property<UInt128>(identity, "MaskKernel"),
+            BakeKernel: Property<UInt128>(identity, "BakeKernel"),
+            Members: Snapshot(Property<IReadOnlyDictionary<string, UInt128>>(identity, "Members")),
+            Reasons: Snapshot(Property<IReadOnlyDictionary<string, string>>(code, "Reasons")),
+            Stages: new Dictionary<string, UInt128>(StringComparer.Ordinal) {
+                ["sampling"] = Property<UInt128>(identity, "Sampling"),
+                ["contouring"] = Property<UInt128>(identity, "Contouring"),
+                ["simplification"] = Property<UInt128>(identity, "Simplification"),
+                ["landing"] = Property<UInt128>(identity, "Value"),
+            }
+        );
+    });
+    /// <summary>Reads only the value of a build's bake identity for one backend's bake kernels, and the name of the store
+    /// set its meshes land in, through the build's own <c>SdfMeshBakeIdentity.ValueOf</c> and <c>SdfMeshStore.SetNameOf</c>.
+    /// Unlike <see cref="Read"/> it walks none of the build's code when an earlier process of the build remembered the code
+    /// hash, so a caller that only asks which set the build reads and fills uses this.</summary>
+    /// <param name="buildDirectory">The build's directory (its <c>Puck.SdfVm.dll</c>'s).</param>
+    /// <param name="extension">The backend's shader bytecode extension (<c>CliWorldDocuments.TryExtension</c>).</param>
+    /// <returns>The identity's value and its set's directory name under a mesh store.</returns>
+    /// <exception cref="InvalidOperationException">The build refused inspection or lacks the inspection API.</exception>
+    /// <exception cref="IOException">A file of the build cannot be read, such as a backend's bake kernel the build does not
+    /// ship.</exception>
+    public static (UInt128 Value, string Set) ValueOf(string buildDirectory, string extension) => Inspect(buildDirectory, extension, static (target, code, kernels) => {
+        var value = (UInt128)Invoke(RequiredMethod(target.Identity, "ValueOf", target.Closure, target.Kernels), code, kernels);
+        return (value, (string)Invoke(RequiredMethod(target.Store, "SetNameOf", typeof(UInt128)), value));
+    });
+
+    // The target build's bake types, each its own type in the build's load context.
+    private readonly record struct TargetTypes(Type Closure, Type Kernels, Type Identity, Type Store);
+
+    // The one door into a target build: loads its bake code and one backend's kernels in a collectible context, hands them
+    // to the read, and unloads the context whatever the read does. The read returns shared-runtime values only, and a
+    // failure leaves as text, since a target exception or member would keep the context alive.
+    private static T Inspect<T>(string buildDirectory, string extension, Func<TargetTypes, object, object, T> read) {
         var directory = Path.GetFullPath(buildDirectory);
         var context = new TargetBuildContext(directory);
         try {
             var assembly = context.LoadFromAssemblyPath(Path.Combine(directory, "Puck.SdfVm.dll"));
-            var closureType = RequiredType(assembly, "Puck.SdfVm.SdfMeshBakeClosure");
-            var kernelsType = RequiredType(assembly, "Puck.SdfVm.SdfKernelSet");
-            var identityType = RequiredType(assembly, "Puck.SdfVm.SdfMeshBakeIdentity");
-            var code = Invoke(RequiredMethod(closureType, "Of", typeof(string)), directory);
-            var passes = Invoke(RequiredMethod(kernelsType, "PassesDirectory", typeof(string)), Path.Combine(directory, "Assets", "Shaders", "Sdf"));
-            var target = ShaderTargetOf(kernelsType, extension);
-            var kernels = Invoke(RequiredMethod(kernelsType, "Load", target.GetType(), typeof(string)), target, passes);
-            var identity = Invoke(RequiredMethod(identityType, "Of", closureType, kernelsType), code, kernels);
-            return new MeshBuildIdentity(
-                Value: Property<UInt128>(identity, "Value"),
-                EntryVersion: Property<string>(identity, "EntryVersion"),
-                Code: Property<UInt128>(identity, "Code"),
-                MaskKernel: Property<UInt128>(identity, "MaskKernel"),
-                BakeKernel: Property<UInt128>(identity, "BakeKernel"),
-                Members: Snapshot(Property<IReadOnlyDictionary<string, UInt128>>(identity, "Members")),
-                Reasons: Snapshot(Property<IReadOnlyDictionary<string, string>>(code, "Reasons")),
-                Stages: new Dictionary<string, UInt128>(StringComparer.Ordinal) {
-                    ["sampling"] = Property<UInt128>(identity, "Sampling"),
-                    ["contouring"] = Property<UInt128>(identity, "Contouring"),
-                    ["simplification"] = Property<UInt128>(identity, "Simplification"),
-                    ["landing"] = Property<UInt128>(identity, "Value"),
-                }
+            var target = new TargetTypes(
+                Closure: RequiredType(assembly, "Puck.SdfVm.SdfMeshBakeClosure"),
+                Kernels: RequiredType(assembly, "Puck.SdfVm.SdfKernelSet"),
+                Identity: RequiredType(assembly, "Puck.SdfVm.SdfMeshBakeIdentity"),
+                Store: RequiredType(assembly, "Puck.SdfVm.SdfMeshStore")
             );
+            var code = Invoke(RequiredMethod(target.Closure, "Of", typeof(string)), directory);
+            var passes = Invoke(RequiredMethod(target.Kernels, "PassesDirectory", typeof(string)), Path.Combine(directory, "Assets", "Shaders", "Sdf"));
+            var shaderTarget = ShaderTargetOf(target.Kernels, extension);
+            var kernels = Invoke(RequiredMethod(target.Kernels, "Load", shaderTarget.GetType(), typeof(string)), shaderTarget, passes);
+            return read(target, code, kernels);
+        } catch (TargetInvocationException exception) when (exception.GetBaseException() is IOException io) {
+            throw new IOException($"The target build could not read a file its identity needs: {io.Message}");
         } catch (TargetInvocationException exception) {
             // Copy only text: retaining a target exception would retain its collectible assembly context too.
             throw new InvalidOperationException($"The target build's identity code refused inspection: {exception.GetBaseException().Message}");

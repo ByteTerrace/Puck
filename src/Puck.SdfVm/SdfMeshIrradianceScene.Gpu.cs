@@ -138,7 +138,7 @@ public sealed partial class SdfMeshIrradianceScene {
                             target[index] = (((offset + index) == SdfMeshProbeTrace.InstanceBaseWord) ? (uint)instances : root);
                         }
                         break;
-                    case GpuSegmentKind.Triangles: MemoryMarshal.Cast<int, uint>(segment.Geometry!.Triangles.AsSpan(offset, take)).CopyTo(target); break;
+                    case GpuSegmentKind.Triangles: MemoryMarshal.Cast<int, uint>(segment.Geometry!.Triangles.Slice(offset, take)).CopyTo(target); break;
                     default:
                         // Fixed-size records: each one the run reaches is written whole and the part it covers copied.
                         while (!target.IsEmpty) {
@@ -176,7 +176,7 @@ public sealed partial class SdfMeshIrradianceScene {
         void WritePrefixRecord(PrefixPart part, int index, Span<uint> words) {
             switch (part) {
                 case PrefixPart.Node:
-                    WriteNodes(content.Nodes.AsSpan(index, 1), words, prefix, entries, SdfMeshProbeTrace.EntryWords);
+                    WriteNodes(content.Nodes.Slice(index, 1), words, prefix, entries, SdfMeshProbeTrace.EntryWords);
                     break;
                 case PrefixPart.Entry:
                     var entry = content.Entries[index];

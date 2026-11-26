@@ -29,7 +29,13 @@ public sealed partial class WorldSiloHost {
                 RefuseActivation(row: RowKey(identity: identity), reason: $"pipeline {pipelineReason}");
                 return false;
             }
-            if (ClosedGroupRewind) { server.ConstrainTransferAuthorities(allowed: ContainsRewindAuthority); }
+            // The group's worlds, and the issuer whose players it admits as guests: a silo with no issuer admits none.
+            if (ClosedGroupRewind) {
+                server.ConstrainTransferAuthorities(boundary: new WorldTransferBoundary(
+                    contains: ContainsRewindAuthority,
+                    guestIssuer: m_issuer?.Domain
+                ));
+            }
             // The desktop host uses this same mount transaction. Attachment also restores the checkpoint's guest image
             // before journal-tail replay or admission can observe the activation.
             if (!WorldAddonRuntime.TryCreate(server.Definition, server, out _, out var addonReason)) {
