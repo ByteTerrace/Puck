@@ -128,7 +128,12 @@ public sealed partial class WorldInstanceHost {
                     faces = WorldFaceCatalog.For(definition: owner.Server.Configuration);
                     owner.Server.Population.ReadOccupied();
                 }
-                foreach (var row in faces.Rows) {
+                // By index: the rows are read through their interface, whose enumerator is an allocation a session a tick.
+                var rows = faces.Rows;
+
+                for (var face = 0; (face < rows.Count); face++) {
+                    var row = rows[face];
+
                     if (row.ScreenIndex == screen.Index) {
                         // Nobody past the farthest authored reach changes the reading, so the search ends there.
                         nearest = owner.Server.Population.NearestOccupiedSquared(

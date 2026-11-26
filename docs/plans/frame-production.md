@@ -937,7 +937,11 @@ in motion against Direct3D 12's 3 to 4, inside `RenderGraphRuntime.RecordWave`'s
 fork. It needs a frame-thread trace of a settled Vulkan route
 (`puck host samples --focus RecordWave --depth 5`); this machine's Vulkan
 mesh store was cold and its memory taken while this plan's Vulkan boots ran,
-and a trace of a baking World holds almost no recording.
+and a trace of a baking World holds almost no recording. One thing reading
+shows, for the trace to weigh: every image transition a recording makes takes
+a gate the whole recorder shares (`VulkanGpuRecorder.BeginBarriers` and the
+batch lookup beside it), on every thread of the fork, where a batch kept with
+its command buffer's recording would take none.
 
 ## Systems considered
 
