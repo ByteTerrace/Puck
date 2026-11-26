@@ -1049,4 +1049,50 @@ public sealed class SweepLawTests {
             precision: 5
         );
     }
+    // A foot beside one tree of a forest walks about what the same foot beside a lone tree walks: each tree's tapered
+    // trunk and root carry a reach certificate, so the walk skips the trees out of reach, and the tape holds the near ones.
+    [Fact]
+    public void AFootBesideOneTreeOfAForestSkipsTheTreesOutOfReach() {
+        static SdfProgram Forest(int across) {
+            var builder = new SdfProgramBuilder();
+            var material = builder.AddMaterial(material: new SdfMaterial(Albedo: Vector3.One));
+
+            _ = builder.ResetPoint().Translate(offset: new Vector3(x: 0f, y: -1f, z: 0f)).Box(halfExtents: new Vector3(x: 60f, y: 1f, z: 60f), material: material, round: 0f);
+
+            for (var x = 0; (x < across); x++) {
+                for (var z = 0; (z < across); z++) {
+                    var foot = new Vector3(x: (x * 7f), y: 0f, z: (z * 7f));
+
+                    _ = builder.ResetPoint().Translate(offset: foot).Sweep(a: new Vector3(x: 0f, y: -0.15f, z: 0f), b: new Vector3(x: 0.3f, y: 2.2f, z: 0.1f), c: new Vector3(x: 0.1f, y: 5f, z: 0f),
+                        blend: SdfBlendOp.SmoothUnion, bulge: 0f, material: material, radiusEnd: 0.14f, radiusStart: 0.3f, smooth: 0.3f, strandOffset: 0f, strands: 1, twist: 0f);
+                    _ = builder.ResetPoint().Translate(offset: foot).Sweep(a: new Vector3(x: 0f, y: 0.5f, z: 0f), b: new Vector3(x: -0.7f, y: 0.12f, z: 0.2f), c: new Vector3(x: -1.3f, y: -0.24f, z: 0.4f),
+                        blend: SdfBlendOp.SmoothUnion, bulge: 0f, material: material, radiusEnd: 0.1f, radiusStart: 0.2f, smooth: 0.3f, strandOffset: 0f, strands: 1, twist: 0f);
+                }
+            }
+
+            return builder.Build();
+        }
+        static (int First, int Settled) Walked(SdfProgram program) {
+            var evaluator = new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact, regional: true);
+            var foot = FixedPositionOf(value: new Vector3(x: 0.7f, y: 0.05f, z: 0.4f));
+
+            Assert.True(condition: evaluator.TryDistance(distance: out _, instructionsWalked: out var first, material: out _, position: foot));
+
+            var settled = first;
+
+            for (var walk = 0; (walk < 6); walk++) {
+                Assert.True(condition: evaluator.TryDistance(distance: out _, instructionsWalked: out settled, material: out _, position: foot));
+            }
+
+            return (first, settled);
+        }
+
+        var lone = Walked(program: Forest(across: 1));
+        var forest = Walked(program: Forest(across: 8));
+
+        // The first walk reads the whole stream, skipping each tree's chains on its certificate; a settled walk reads
+        // the tape of the foot's region, which holds the near trees alone.
+        Assert.True(condition: (forest.First < 100), userMessage: $"The forest's first walk visited {forest.First} instructions; a lone tree's {lone.First}.");
+        Assert.True(condition: (forest.Settled <= (3 * lone.Settled)), userMessage: $"The forest's settled walk visited {forest.Settled} instructions; a lone tree's {lone.Settled}.");
+    }
 }

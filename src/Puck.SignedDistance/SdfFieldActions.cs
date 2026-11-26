@@ -136,6 +136,7 @@ internal enum SdfCertificateAction {
     Capsule,
     Superellipsoid,
     Trapezoid,
+    Sweep,
     Unavailable,
 }
 

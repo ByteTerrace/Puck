@@ -491,7 +491,7 @@ public static partial class SdfFieldShapes {
         public override SdfShaderAction Shader => SdfShaderAction.Of(Formula!);
         public override bool ReliefRegion => false;
         public override SdfShaderAction ReliefShader => SdfShaderAction.Unavailable;
-        public override SdfCertificateAction Certificate => SdfCertificateAction.Unavailable;
+        public override SdfCertificateAction Certificate => SdfCertificateAction.Sweep;
         public override SdfShapePointAction ShapePoint => SdfShapePointAction.Formula;
         public override SdfShapeIntervalAction ShapeInterval => SdfShapeIntervalAction.Sweep;
         public override SdfProfileIntervalAction ProfileInterval => SdfProfileIntervalAction.Unsupported;

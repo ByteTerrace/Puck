@@ -382,6 +382,9 @@ public sealed partial class SdfFieldEvaluator {
             case SdfCertificateAction.Trapezoid: {
                     return TryTrapezoidCertificate(instruction: in instruction);
                 }
+            case SdfCertificateAction.Sweep: {
+                    return TrySweepCertificate(instruction: in instruction);
+                }
             case SdfCertificateAction.Unavailable: {
                     return null;
                 }
@@ -405,6 +408,39 @@ public sealed partial class SdfFieldEvaluator {
     // Thus v >= (s/max(r))/sqrt(3)*|p| - s - E. The frame's uncullable interval walk proves intermediate
     // operations fit; outside that frame this certificate grants nothing. The numeric sign/range proof and the
     // ratio-rounding envelope live in docs/rendering/sdf/handbook/queries-and-determinism.md.
+    // Point-only: the sweep's candidate is |p - S| - r at a strand centre S and a radius r the formula or the search
+    // picked. A centreline point is a convex combination of a, b and c, so it lies in the ball about the control points'
+    // box centre C through the farthest of them, of radius R; a strand stands at most strandOffset off it, and r is at most
+    // the larger end radius plus a positive bulge (the profile's power is at most one). So v >= |p - C| - R -
+    // strandOffset - max(radiusStart, radiusEnd) - max(bulge, 0). The point side's Lerps, the orbit's frame and power and
+    // the final root round a few raws apiece: the offset and the bulge take a hundredth of themselves, and the slack 32 raws.
+    private static LocalCertificate? TrySweepCertificate(in CompiledInstruction instruction) {
+        if (instruction.SweepCurve is not { } curve) {
+            return null;
+        }
+
+        var (ax, ay, az) = (((double)curve.A.X), ((double)curve.A.Y), ((double)curve.A.Z));
+        var (bx, by, bz) = (((double)curve.B.X), ((double)curve.B.Y), ((double)curve.B.Z));
+        var (cx, cy, cz) = (((double)curve.C.X), ((double)curve.C.Y), ((double)curve.C.Z));
+        var centreX = (0.5 * (Math.Min(val1: ax, val2: Math.Min(val1: bx, val2: cx)) + Math.Max(val1: ax, val2: Math.Max(val1: bx, val2: cx))));
+        var centreY = (0.5 * (Math.Min(val1: ay, val2: Math.Min(val1: by, val2: cy)) + Math.Max(val1: ay, val2: Math.Max(val1: by, val2: cy))));
+        var centreZ = (0.5 * (Math.Min(val1: az, val2: Math.Min(val1: bz, val2: cz)) + Math.Max(val1: az, val2: Math.Max(val1: bz, val2: cz))));
+        var hull = Math.Max(
+            val1: Length(x: (ax - centreX), y: (ay - centreY), z: (az - centreZ)),
+            val2: Math.Max(
+                val1: Length(x: (bx - centreX), y: (by - centreY), z: (bz - centreZ)),
+                val2: Length(x: (cx - centreX), y: (cy - centreY), z: (cz - centreZ))
+            )
+        );
+        var radius = Math.Max(val1: ((double)curve.RadiusStart), val2: ((double)curve.RadiusEnd));
+
+        return new LocalCertificate(
+            BoxLoss: 0.0, BoxRadius: 0.0, Boxed: false,
+            CenterX: centreX, CenterY: centreY, CenterZ: centreZ,
+            PointSlack: (32.0 * RawUnit),
+            Radius: (((hull + radius) + (1.01 * Math.Abs(value: ((double)instruction.Data0W)))) + (1.01 * Math.Max(val1: ((double)curve.Bulge), val2: 0.0)))
+        );
+    }
     private static LocalCertificate? TrySuperellipsoidCertificate(in CompiledInstruction instruction) {
         var (rx, ry, rz) = (instruction.Data0X.Value, instruction.Data0Y.Value, instruction.Data0Z.Value);
         var exponent = instruction.Data0W;
