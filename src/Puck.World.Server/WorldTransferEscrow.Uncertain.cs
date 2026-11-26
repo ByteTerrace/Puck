@@ -8,9 +8,17 @@ public sealed partial class WorldTransferEscrow {
     private readonly Dictionary<WorldTransferKey, WorldCrossingArrival> m_uncertain = new();
 
     private WorldTransferStatus HoldUncertain(WorldCrossingArrival arrival, string detail, out string reason) {
+        if (!m_uncertain.ContainsKey(key: arrival.Key)) {
+            Tally(held: 1, sourceAuthority: arrival.Key.SourceAuthority);
+        }
         m_uncertain[arrival.Key] = arrival;
         reason = $"transfer {arrival.Key.TransferId} arrival record is uncertain ({detail}); its travelers stay suspended until this authority recovers";
         return WorldTransferStatus.Uncertain;
+    }
+    private void ReleaseUncertain(WorldTransferKey key) {
+        if (m_uncertain.Remove(key: key)) {
+            Tally(held: -1, sourceAuthority: key.SourceAuthority);
+        }
     }
     private bool IsUncertain(WorldTransferKey key, out string reason) {
         if (!m_uncertain.ContainsKey(key: key)) {

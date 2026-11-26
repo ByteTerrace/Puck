@@ -1341,6 +1341,15 @@ including one whose commit it had heard confirmed, because `Ended` is the destin
 no traveler of the session remains. This does not weaken the four rules above for the session's
 live keys, and no world outside a closed group ever answers `Ended`.
 
+A guest's rows are bounded apart from the group's own. One session holds at most
+`WorldTransferLimits.GuestTransferKeysPerSession` rows in a world and all guests together at most
+`GuestTransferKeys`, and the bounds above count no guest's row, so players never refuse a world of
+the group a reservation. A guest's question about a key that holds no row answers `Missing` without
+a row or a tombstone: that promise is one a world makes to a source it rewinds with. A traveler that
+walked on to another world of the group keeps its session live at the world it left until its body is
+retired where it stands; the retiring world tells the host, and each world that forwarded to it drops
+its route and credential (`IWorldTransferForwarder.RetireTraveler`).
+
 Every crossing step a peer can see is written ahead to the authority's crossing log
 (`IWorldCrossingLog`) before the step happens:
 

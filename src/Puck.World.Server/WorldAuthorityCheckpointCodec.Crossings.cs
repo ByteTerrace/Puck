@@ -44,6 +44,7 @@ public static partial class WorldAuthorityCheckpointCodec {
             items: arrival.Leased,
             writeItem: static (w, id) => w.WriteInt32(value: id)
         );
+        writer.WriteBoolean(value: arrival.Guest);
     }
     private static WorldCrossingArrival ReadCrossingArrival(ref WireReader reader) {
         var request = ReadReservationRequest(reader: ref reader);
@@ -74,6 +75,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         var arrival = new WorldCrossingArrival(
             Generations: generations,
+            Guest: reader.ReadBoolean(),
             Leased: leased,
             Members: members,
             Readopted: readopted,
@@ -321,6 +323,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     writer: writer
                 );
                 writer.WriteUInt64(value: lease.Floor);
+                writer.WriteBoolean(value: lease.Guest);
                 break;
             case WorldCrossingRecord.Tombstone tombstone:
                 writer.WriteByte(value: CrossingTombstoneTag);
@@ -332,6 +335,7 @@ public static partial class WorldAuthorityCheckpointCodec {
                     items: tombstone.Burned,
                     writeItem: static (w, slot) => w.WriteInt32(value: slot)
                 );
+                writer.WriteBoolean(value: tombstone.Guest);
                 break;
             case WorldCrossingRecord.Allocation allocation:
                 writer.WriteByte(value: CrossingAllocationTag);
@@ -480,21 +484,25 @@ public static partial class WorldAuthorityCheckpointCodec {
             }
             case CrossingLeaseTag: {
                 var key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
+                var floor = reader.ReadUInt64();
 
                 return new WorldCrossingRecord.Lease(
-                    Floor: reader.ReadUInt64(),
+                    Floor: floor,
+                    Guest: reader.ReadBoolean(),
                     Key: key
                 );
             }
             case CrossingTombstoneTag: {
                 var key = WorldWireLeaves.ReadTransferKey(reader: ref reader);
+                var burned = reader.ReadArray(
+                    field: "tombstone burned slots",
+                    readItem: static (ref WireReader r) => r.ReadInt32(),
+                    maximum: WorldBodiesLimits.IndexLimit
+                );
 
                 return new WorldCrossingRecord.Tombstone(
-                    Burned: reader.ReadArray(
-                        field: "tombstone burned slots",
-                        readItem: static (ref WireReader r) => r.ReadInt32(),
-                        maximum: WorldBodiesLimits.IndexLimit
-                    ),
+                    Burned: burned,
+                    Guest: reader.ReadBoolean(),
                     Key: key
                 );
             }

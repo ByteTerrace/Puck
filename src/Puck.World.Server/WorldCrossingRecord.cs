@@ -14,7 +14,10 @@ namespace Puck.World.Server;
 /// commit has landed it.</param>
 /// <param name="Leased">The request-local ids the lease held when the commit landed only part of them, so the partial
 /// verdict outlives the transaction's receipt; empty for an arrival that landed every leased member.</param>
-public sealed record WorldCrossingArrival(WorldTransferReservationRequest Request, IReadOnlyList<int> Slots, IReadOnlyList<WorldTransferCommitMember> Members, IReadOnlyList<WorldEntityAddress>? Readopted = null, IReadOnlyList<int>? Generations = null, IReadOnlyList<int>? Leased = null) {
+/// <param name="Guest">Whether the destination's door admitted the source as a guest's session of a closed rewind
+/// group. A recovery and a replay land the arrival as that, so the session's rows go when it holds nothing live
+/// whether or not the escrow that lands it has a boundary.</param>
+public sealed record WorldCrossingArrival(WorldTransferReservationRequest Request, IReadOnlyList<int> Slots, IReadOnlyList<WorldTransferCommitMember> Members, IReadOnlyList<WorldEntityAddress>? Readopted = null, IReadOnlyList<int>? Generations = null, IReadOnlyList<int>? Leased = null, bool Guest = false) {
     /// <summary>Gets the companions this arrival re-adopted at their home; empty for one that re-adopts none.</summary>
     public IReadOnlyList<WorldEntityAddress> Readopted { get; init; } = (Readopted ?? []);
     /// <summary>Gets the occupant generation each member took where it landed, in member order.</summary>
@@ -70,7 +73,8 @@ public abstract record WorldCrossingRecord {
     /// <param name="Key">The leased key.</param>
     /// <param name="Floor">The source's settled floor the reservation carried
     /// (<see cref="WorldTransferReservationRequest.SourceFloor"/>).</param>
-    public sealed record Lease(WorldTransferKey Key, ulong Floor) : WorldCrossingRecord;
+    /// <param name="Guest">Whether the door admitted the source as a guest's session of a closed rewind group.</param>
+    public sealed record Lease(WorldTransferKey Key, ulong Floor, bool Guest = false) : WorldCrossingRecord;
     /// <summary>A destination is about to answer <see cref="WorldTransferStatus.Missing"/> for a key: from here no
     /// reservation leases it and no commit lands under it, and a live lease a recovered checkpoint holds for it dies.
     /// A commit that landed members and rolled them back names their slots, whose generations outlive the rollback, so
@@ -78,7 +82,8 @@ public abstract record WorldCrossingRecord {
     /// <param name="Key">The dead key.</param>
     /// <param name="Burned">The body indices the refused commit landed at before it rolled them back; empty for a key
     /// that landed nothing.</param>
-    public sealed record Tombstone(WorldTransferKey Key, IReadOnlyList<int>? Burned = null) : WorldCrossingRecord {
+    /// <param name="Guest">Whether the key's source is a guest's session of a closed rewind group.</param>
+    public sealed record Tombstone(WorldTransferKey Key, IReadOnlyList<int>? Burned = null, bool Guest = false) : WorldCrossingRecord {
         /// <summary>Gets the body indices the refused commit landed at before it rolled them back.</summary>
         public IReadOnlyList<int> Burned { get; init; } = (Burned ?? []);
     }
