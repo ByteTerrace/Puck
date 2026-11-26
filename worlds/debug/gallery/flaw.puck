@@ -8,24 +8,17 @@
 // is a chain of tube lights along the same pieces, each piece cut where it crosses a slab (layout.puck's `flawCuts`)
 // so every light lies in one storey. The sweeps are solid nowhere: a body passes through the flaw.
 
+import "../../standard/paths"
+import "../../standard/colors"
 import "layout"
 import "look"
 
 // The curve's pieces, each { a, b, c, index }: its start, its bend and its end, in the building's frame.
 let flawCount = length(flawControls)
-let flawWrapped = concat([flawControls[(flawCount - 1)]], flawControls, [flawControls[0]])
-let flawPieces = map(
-  range(0, flawCount),
-  i => {
-    a: ((flawWrapped[i] + flawWrapped[(i + 1)]) * 0.5)
-    b: flawWrapped[(i + 1)]
-    c: ((flawWrapped[(i + 1)] + flawWrapped[(i + 2)]) * 0.5)
-    index: i
-  }
-)
+let flawPieces = closedQuadraticSpline(flawControls)
 // A piece's point and its tangent at a parameter t in [0, 1].
-function flawPoint(q, t) = ((q.a * ((1 - t) * (1 - t))) + (q.b * ((2 * t) * (1 - t))) + (q.c * (t * t)))
-function flawTangent(q, t) = (((q.b - q.a) * (2 * (1 - t))) + ((q.c - q.b) * (2 * t)))
+function flawPoint(q, t) = quadraticPoint(q.a, q.b, q.c, t)
+function flawTangent(q, t) = quadraticTangent(q.a, q.b, q.c, t)
 // The parameters in (0, 1) at which a piece's height is `y`: the roots of a t^2 + b t + c = 0 with a = a.y - 2 b.y +
 // c.y, b = 2 (b.y - a.y) and c = a.y - y, or the one root of the line where a vanishes.
 function flawQuadratic(q) = ((q.a[1] - (2 * q.b[1])) + q.c[1])
@@ -65,15 +58,7 @@ let flawStretches = flatMap(
 // one a palette slot, as many as a creation's palette holds beside the sleeve's slot; piece i wears step `flawStep(i)`.
 let flawSteps = ((flawCount < 31) ? flawCount : 31)
 function flawStep(i) = floor(((i * flawSteps) / flawCount))
-let flawTintCount = length(lookFlawTint)
-let flawTintWrapped = concat(lookFlawTint, [lookFlawTint[0]])
-function flawTintAt(f) = ((flawTintWrapped[floor(f)] * (1 - (f - floor(f)))) +
-  (flawTintWrapped[(floor(f) + 1)] * (f - floor(f))))
-function flawTintRgb(step) = flawTintAt(((step * flawTintCount) / flawSteps))
-let flawHexDigits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F"]
-function flawByte(v) = floor(((v < 0) ? 0 : ((v > 255) ? 255 : v)))
-function flawHex(v) = $"{flawHexDigits[floor((flawByte(v) / 16))]}{flawHexDigits[(flawByte(v) - (16 * floor((flawByte(v) / 16))))]}"
-function flawTint(step) = $"#{flawHex(flawTintRgb(step)[0])}{flawHex(flawTintRgb(step)[1])}{flawHex(flawTintRgb(step)[2])}"
+function flawTint(step) = rgbHex(loopGradient(lookFlawTint, (step / flawSteps)))
 
 // A point of the building's frame in the flaw creation's author frame, which is turned 180 degrees about up from its
 // placement's (gallery.puck), the placement standing at the building's origin.

@@ -1,8 +1,26 @@
-// Compile-time quadratic path masks shared by authored paving and scenery placement.
+// Compile-time quadratic curves: a Bezier's point and tangent, a closed smooth curve through a list of control points,
+// and the path masks authored paving and scenery placement share.
+// A quadratic Bezier's point and tangent at t in [0, 1], for controls of any dimension (arrays add element-wise).
+function quadraticPoint(a, b, c, t) = ((a * ((1 - t) * (1 - t))) + (b * ((2 * t) * (1 - t))) + (c * (t * t)))
+function quadraticTangent(a, b, c, t) = (((b - a) * (2 * (1 - t))) + ((c - b) * (2 * t)))
+// The item of a list at index i read round the list as a loop, so -1 is the last and the length is the first.
+function loopItem(items, i) = items[(i - (length(items) * floor((i / length(items)))))]
+// A closed quadratic B-spline as its pieces, each { a, b, c, index }: piece i runs from the midpoint of points i - 1 and
+// i, bent toward point i, to the midpoint of points i and i + 1, so the curve is smooth everywhere and moving one point
+// moves only the two pieces beside it.
+function closedQuadraticSpline(points) = map(
+  range(0, length(points)),
+  i => {
+    a: ((loopItem(points, (i + length(points) - 1)) + points[i]) * 0.5)
+    b: points[i]
+    c: ((points[i] + loopItem(points, (i + 1))) * 0.5)
+    index: i
+  }
+)
 // A path has a/b/c [x, z] controls. Segment distance plus the chord-error bound conservatively excludes its corridor.
 function quadraticPathPoint(path, t) = {
-  x: (1 - t) * (1 - t) * path.a[0] + 2 * t * (1 - t) * path.b[0] + t * t * path.c[0]
-  z: (1 - t) * (1 - t) * path.a[1] + 2 * t * (1 - t) * path.b[1] + t * t * path.c[1]
+  x: quadraticPoint(path.a, path.b, path.c, t)[0]
+  z: quadraticPoint(path.a, path.b, path.c, t)[1]
 }
 function quadraticPathSegments(paths, steps = 40) = flatMap(paths, path => map(
   range(0, steps),
