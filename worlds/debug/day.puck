@@ -111,3 +111,24 @@ dayCycle(
     }
   ]
 )
+
+// The sun's companion (moon-frame.puck's `companionStar`), on its turn about the sun (the `pair` clock, which
+// sun-watch.puck adopts from the sun's world): a second, redder light and a second disc over the day's sky, risen and
+// set with the sun and dimmed by the same horizon.
+render {
+  lighting {
+    lights [
+      starLight(of: companionStar, turns: [sunTurn, companionTurn], illuminance: {
+        clock: altitude
+        keys [
+          { at: 0, value: sunIlluminance("day", companionStar.illuminance) }
+          { at: 300, value: sunIlluminance("day", companionStar.illuminance) }
+          { at: 2250, value: companionStar.illuminance, ease: Step }
+        ]
+      })
+    ]
+  }
+  sky {
+    layers [starDisc(of: companionStar, name: "companion", color: companionStar.color)]
+  }
+}

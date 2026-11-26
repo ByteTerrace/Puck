@@ -25,6 +25,8 @@ import "../standard/visitors"
 import "benchmark-route"
 // The trip to the moon as a route (`world.benchmark run moon`).
 import "moon-route"
+// The trip on past the moon to the star (`world.benchmark run sun`).
+import "sun-route"
 import "shapes"
 import "studio"
 import "controls"

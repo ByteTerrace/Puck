@@ -6155,6 +6155,7 @@ public static partial class WorldModelShape {
                 M("world", typeof(global::System.String), typeof(global::Puck.World.WorldRouteStep.Fly), "World", Read | Write, static value => ((global::Puck.World.WorldRouteStep.Fly)value).World, text: "a route world"),
                 M("enters", typeof(global::System.String), typeof(global::Puck.World.WorldRouteStep.Fly), "Enters", Read | Write, static value => ((global::Puck.World.WorldRouteStep.Fly)value).Enters, text: "a route world"),
                 M("lands", typeof(global::System.Boolean), typeof(global::Puck.World.WorldRouteStep.Fly), "Lands", Read | Write, static value => ((global::Puck.World.WorldRouteStep.Fly)value).Lands),
+                M("until", typeof(global::System.String), typeof(global::Puck.World.WorldRouteStep.Fly), "Until", Read | Write, static value => ((global::Puck.World.WorldRouteStep.Fly)value).Until, text: "a route place or corridor"),
                 M("opcode", typeof(global::System.String), typeof(global::Puck.World.WorldRouteStep), "Opcode", None),
             ],
             []),

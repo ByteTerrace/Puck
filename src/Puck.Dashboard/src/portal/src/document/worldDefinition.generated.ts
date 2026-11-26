@@ -13593,6 +13593,10 @@ export type WorldRouteStepFly = {
    * Whether the step is a landing: it flies at the point, a point of the ground or under it, until the body, or the body it rides, is grounded, and Within ends nothing.
    */
   lands?: boolean;
+  /**
+   * The place, in the world the step is played in, that ends the step, or null for a step the point, the arrival or the landing ends.
+   */
+  until?: string | null;
 };
 
 export type WorldRouteStepGo = {
