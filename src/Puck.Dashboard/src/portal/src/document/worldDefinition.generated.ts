@@ -6401,7 +6401,7 @@ export type WorldBindingOverlay = {
   /**
    * The condition this layer composes under; null always composes it (today's behavior). Reuses StateCondition's field convention rather than a second reading of "compare a state cell" — the same state/key/comparison/value shape a placement's own response facet speaks. Re-evaluated whenever the routed definition changes, never per frame.
    */
-  when?: WorldPlacementResponseConditionStateConditionBare | null;
+  when?: WorldPlacementResponseConditionStateConditionNullable | null;
 };
 
 /**
@@ -10085,6 +10085,10 @@ export type WorldMachine = {
    * Whether the device boots the default its ContentFolders name, when one names a file it can mount, in place of its configuration's authored content. A folder names its default in its own folder.json (SettingsFile), which the folder's owner writes (machine.default) and the boot and every world.reload read, so the default lives beside the content and no document names it. A device with no default set, or whose default is absent or unmountable, boots its authored content. Omitted from the wire when false.
    */
   preferFolderDefault?: boolean;
+  /**
+   * The state condition the host advances this instance under, or null to advance it on every tick Running allows. The tick evaluates it against the arena after the rule frame folds and before the machines step (Server.WorldTick.GateMachines), so a rule's write starts or stops the machine on the tick it lands, and a replay or a restored checkpoint derives the same gate from the same state: the gate is never stored. A gated-off instance keeps its hardware state, as a stopped one does, and costs no emulation while it waits. It reuses StateCondition, the reading placement responses, binding overlays and portals share. Omitted from the wire when null.
+   */
+  runsWhen?: WorldPlacementResponseConditionStateConditionNullable | null;
 };
 
 export type WorldMachineCable = {
@@ -11150,7 +11154,10 @@ export type WorldPlacementResponseConditionStateCondition = {
   comparandKey?: string | null;
 };
 
-export type WorldPlacementResponseConditionStateConditionBare = {
+/**
+ * A state-cell condition: compares State's cell (its slot cell when Key is absent, else the cell at Key) against Value, or — when ComparandState is authored instead — against another declared row's cell, read live at the same evaluation. Exactly one of Value and ComparandState may be present, the same one-comparand rule CompareState already enforces for a rule's own gate — this facet reuses that field convention rather than inventing a second reading of "compare a state cell." Independent of the placement's position, and of whether the document declares a fields section at all.
+ */
+export type WorldPlacementResponseConditionStateConditionNullable = {
   /**
    * The state row compared — any declared state.world row of a numeric kind (never Text).
    */
@@ -12283,7 +12290,7 @@ export type WorldRenderLane = {
 /**
  * One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its kind in SdfLightKind.
  */
-export type WorldRenderLight = WorldRenderLightDirectional | WorldRenderLightRim | WorldRenderLightPoint | WorldRenderLightSpot | WorldRenderLightOccluder | null;
+export type WorldRenderLight = WorldRenderLightDirectional | WorldRenderLightRim | WorldRenderLightPoint | WorldRenderLightSpot | WorldRenderLightOccluder | WorldRenderLightTube | null;
 
 /**
  * A Lambert directional light, such as the sun.
@@ -12520,6 +12527,54 @@ export type WorldRenderLightSpot = {
   intensity?: BindableScalar;
   /**
    * The luminous power, in lumens, emitted alike across the outer cone. Refused beside Intensity.
+   */
+  power?: BindableScalar;
+  /**
+   * The light's colour as a black body's, in kelvin, in [1000, 40000]. Refused beside Color.
+   */
+  temperature?: BindableScalar;
+  /**
+   * The name a section key addresses the light by, unique among the lights.
+   */
+  name?: string | null;
+  lightName?: string | null;
+  /**
+   * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
+   */
+  bounce?: BindableScalar;
+};
+
+/**
+ * A tube light, such as a fluorescent or neon tube: a straight segment from From to To whose every length element emits alike in every direction, so a surface beside it is lit softly and evenly along its length and a glossy one reflects it as a streak. It falls off with the point light's window, measured from the segment's nearest point, and is traced and occluded by the irradiance volume while static as a point light is. A curve is a chain of tubes, end to end; each is one light of the lights table, and the culling keeps only those near what a view shades.
+ */
+export type WorldRenderLightTube = {
+  $type?: "tube";
+  /**
+   * The segment's first end: world space for a static light, an offset in the anchor's frame when an anchor is authored. Absent is the origin.
+   */
+  from?: BindableVector3;
+  /**
+   * The segment's second end, in the same frame as From. Absent is the origin.
+   */
+  to?: BindableVector3;
+  /**
+   * An entity, entity part, or placement frame. A missing live target disables the light.
+   */
+  anchor?: WorldAnchor | null;
+  /**
+   * The tube's radius, in metres, zero or more: the nearest the light's distance is taken as and how far its reflection's lobe widens. Absent is zero, which the point light's nearest distance stands in for.
+   */
+  radius?: number;
+  /**
+   * The light's colour, scaled to unit luminance. Refused beside Temperature.
+   */
+  color?: BindableColor;
+  /**
+   * The luminous intensity of each metre of the tube, in candela per metre. Refused beside Power; absent with it is the engine default point intensity per metre.
+   */
+  intensity?: BindableScalar;
+  /**
+   * The luminous power of the whole segment, in lumens, emitted alike in every direction: a 1.2 m fluorescent tube gives about 3,000. Refused beside Intensity.
    */
   power?: BindableScalar;
   /**

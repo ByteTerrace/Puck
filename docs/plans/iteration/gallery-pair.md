@@ -49,7 +49,11 @@ relit.
   (`worlds/debug/gallery-root.puck`, or the debug world when the view out
   matters) on the slice's commit before the session, lets it bake and settle,
   and keeps that one World for the whole session. A restart is a bake and a
-  settle; an edit is not.
+  settle; an edit is not. When a merged change needs a restart (engine code,
+  shaders, or a document the running build can't execute), the lead restarts
+  without asking (the owner's standing instruction for pair sessions), puts
+  back the session's pins (time, exposure, window, pose and view) and says
+  what changed.
 - **Owner input** on the same World: `ownerPlay` (`--devices all`) when the
   owner wants to walk it.
 - **Bookmarks.** Named camera poses that match each reference panel (the

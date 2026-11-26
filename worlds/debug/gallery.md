@@ -180,6 +180,23 @@ ceiling painting, a portal back to the floor painting, so a body flying up the
 well crosses to the floor rather than into level 1; the bridge is level 1's
 own floor, inside the lattice. The corner stairs are the way in.
 
+**The rentals.** [gallery/rentals.puck](gallery/rentals.puck) stands an
+L-shaped counter round the open corner of each spiral stair (south-east and
+north-west), so the plan reads the same turned half round. Each counter lends
+12 Humble Gaming Bricks on one arm and 12 Advanced Gaming Bricks on the other,
+one colourway each, 48 devices in the world. The context button before a
+device rents it: the device leaves the counter and rides the renter's hip. The
+context button before the counter's outer corner (the returns tray) returns it,
+and leaving level 1 returns it too. `rentalLoan` (keyed by ordinal, 1 to 48)
+holds 0 for a device on the counter and N + 1 while body N holds it;
+`rentalDevice`, `rentalDeviceModel` and `rentalDeviceColour` name each device.
+No device on the counter runs a machine: each seat's body has a pool brick and
+a pool advanced brick (`rental-hgb-<body>`, `rental-agb-<body>`) whose
+`runsWhen` advances it only while that body holds a device of its model, so at
+most one handheld runs per player. `machine.state rental-hgb-0` reads
+`running`. The rented device's picture is not yet shown: a screen cannot follow
+a body, so the pool machine runs with no display (see "What is still open").
+
 ## The central tree
 
 The owner's ruling: a giant, natural tree grows at the hall's exact centre, a
@@ -470,6 +487,17 @@ size below a tenth needs the envelope widened with it.
 
 ## What is still open
 
+- **A rented handheld's picture.** A screen's frame is fixed in the world
+  (`WorldScreen.Origin`), and its `carry` is presentation keyed to one look's
+  pose, with the engage radius left at the authored frame, so the pool machine
+  a renter's device runs has no display that rides the device and cannot be
+  engaged away from where its screen is authored. A screen that follows a body
+  (the device's hip, then its hands when played) is the engine gap; the rentals
+  then give each pool machine that screen. Network visitors already rent
+  (the reach rules cover every seat's body).
+- **Dormant pool runtimes.** A gated-off pool machine is not advanced but its
+  runtime is created at boot, 24 runtimes for 12 seats. Creating a runtime on
+  the first tick its `runsWhen` holds would make an unused pool free.
 - **World-space pieces.** A static creation's paints, a state lattice's origin
   and a table's board are placed in the world's frame. The floor's tiles and
   pads, the tables in the board game room and the fixtures that stand by world

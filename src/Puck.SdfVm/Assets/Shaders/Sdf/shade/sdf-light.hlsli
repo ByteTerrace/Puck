@@ -118,7 +118,8 @@ struct SdfLightSource {
     // A directional's illuminance over pi, a point's intensity over pi, a rim's luminance, an occluder's attenuation, a
     // screen's face area over pi.
     float weight;
-    // A directional's unit direction toward the light; a point's, an occluder's or a screen's world position.
+    // A directional's unit direction toward the light; a point's, an occluder's or a screen's world position; a line's
+    // midpoint.
     float3 position;
     // A rim's exponent, a point's or a screen's range, or an occluder's radius.
     float param;
@@ -284,7 +285,7 @@ SdfLightMasks sdfWaveLightMasks(float3 position) {
             if ((sdfComponent(masks.lights, word) & flag) != 0u) {
                 SdfLight light = sdfLights[index];
 
-                if (((light.Kind != SDF_LIGHT_POINT) && (light.Kind != SDF_LIGHT_OCCLUDER))
+                if (!sdfLightPositional(light.Kind)
                     || sdfLightReachesBox(light, worldPointLightPosition(light), low, high)) {
                     bit = uint4(((word == 0u) ? flag : 0u), ((word == 1u) ? flag : 0u), ((word == 2u) ? flag : 0u), ((word == 3u) ? flag : 0u));
                 }
@@ -352,7 +353,7 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
         light.kind = record.Kind;
         light.color = record.Color;
         light.weight = record.Weight;
-        light.position = (((record.Kind == SDF_LIGHT_POINT) || (record.Kind == SDF_LIGHT_OCCLUDER))
+        light.position = (sdfLightPositional(record.Kind)
             ? worldPointLightPosition(record)
             : record.Direction);
         light.param = record.Param;
@@ -435,7 +436,9 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 // light phase alike (the light phase's door answers no light before it runs a program), which is what lets a views tile
 // leave out a light that reaches none of its points or that none of its pixels' probes see (sdfViewsTileLights). A
 // fixture meant to light through what the volume measured is authored untraced.
-struct SdfLightInputs { float3 direction; float reach; float probeShare; float visibility; bool none; };
+// `specularDirection` and `specularScale` are what the default specular lobe reads: the light's direction and pi times
+// its reach for every kind but a line, whose lobe comes from its representative point (sdfLineSpecular).
+struct SdfLightInputs { float3 direction; float reach; float probeShare; float visibility; bool none; float3 specularDirection; float specularScale; };
 // The share of display white under which a positional light's contribution leaves the shading walk: the share that sizes
 // every light's range at the world's darkest exposure (SdfPhotometry.RangeThreshold, SdfPhotometry.RangeOf), taken at
 // the view's own exposure. A light keeps its whole response where it gives a white surface facing it twice that share of
@@ -447,9 +450,41 @@ float sdfLightCutoffFade(float luminance) {
     return saturate(((luminance * passGroup.exposure) / SDF_LIGHT_RANGE_THRESHOLD) - 1.0);
 }
 // Whether the irradiance volume traces a light of the lights table at `index` for its occlusion (SdfLight.IsTraced): a
-// point or spot light whose record asks for shadows, among the lights a probe's light bits hold.
+// point, spot or line light whose record asks for shadows, among the lights a probe's light bits hold.
 bool sdfLightTraces(SdfLight record, uint index) {
-    return ((record.Kind == SDF_LIGHT_POINT) && (record.Shadows != 0u) && (index < (32u * SDF_MESH_IRRADIANCE_LIGHT_WORDS)));
+    return (sdfLightRanged(record.Kind) && (record.Shadows != 0u) && (index < (32u * SDF_MESH_IRRADIANCE_LIGHT_WORDS)));
+}
+// A line light's specular lobe: the direction toward the segment's point nearest the mirrored ray (Karis 2013's
+// representative point), and the scale its lobe takes in place of pi times the reach: the segment's whole intensity over
+// that point's squared distance, under the line's window, times the energy normalizations that widen a GGX lobe by the
+// tube's radius seen from there (the sphere's, (a / a')^2) and by the half angle the segment subtends (the line's,
+// a / a'), a' = sqrt(a^2 + sin * (3a + sin) / (4 (v . h + 0.001))) for each, as Unreal Engine 4's area lights normalize
+// theirs. `window` is the line's window at its nearest point under the view's cutoff fade, which the diffuse reach shares.
+float sdfLineSpecular(SdfLight light, float3 midpoint, SdfShadeSurface surface, float window, out float3 direction) {
+    float3 halfSegment = light.SpotAxis;
+    float3 toStart = ((midpoint - halfSegment) - surface.position);
+    float3 span = (2.0 * halfSegment);
+    float3 mirrored = reflect(surface.rayDirection, surface.normal);
+    float mirroredSpan = dot(mirrored, span);
+    float along = saturate(((dot(mirrored, toStart) * mirroredSpan) - dot(toStart, span)) / max((dot(span, span) - (mirroredSpan * mirroredSpan)), 1.0e-6));
+    float3 toPoint = (toStart + (span * along));
+    float nearest = sdfLineNearest(light);
+    float pointSquared = max(dot(toPoint, toPoint), (nearest * nearest));
+
+    direction = (toPoint * rsqrt(pointSquared));
+
+    float rough = sqrt(((surface.material.roughness * surface.material.roughness) + SdfRoughnessFloorSquared));
+    float alpha2 = (rough * rough);
+    float vDotH = saturate(dot(-surface.rayDirection, normalize(direction - surface.rayDirection)));
+    float sphereSine = saturate(light.SpotOffset * rsqrt(pointSquared));
+    float sphereAlpha2 = (alpha2 + (((0.25 * sphereSine) * ((3.0 * rough) + sphereSine)) / (vDotH + 0.001)));
+    float3 toEnd = (toStart + span);
+    float subtended = clamp((dot(toStart, toEnd) * rsqrt(max((dot(toStart, toStart) * dot(toEnd, toEnd)), 1.0e-12))), -1.0, 1.0);
+    float lineTangent = sqrt((1.0001 - subtended) / (1.0 + subtended));
+    float lineAlpha2 = (alpha2 + (((0.25 * lineTangent) * ((3.0 * rough) + lineTangent)) / (vDotH + 0.001)));
+    float energy = ((alpha2 / sphereAlpha2) * sqrt(alpha2 / lineAlpha2));
+
+    return ((((SDF_PI * length(span)) * window) / pointSquared) * energy);
 }
 SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, bool authored, bool probeShare) {
     SdfLightInputs inputs;
@@ -457,10 +492,22 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
     inputs.reach = 1.0;
     inputs.probeShare = 1.0;
     inputs.visibility = 1.0;
-    bool positional = ((light.kind == SDF_LIGHT_POINT) || (light.kind == SdfLightScreen));
+    inputs.specularScale = 0.0;
+    bool positional = (sdfLightRanged(light.kind) || (light.kind == SdfLightScreen));
     if (light.kind == SDF_LIGHT_POINT) {
         inputs.reach = sdfPointReach(light.record, light.position, surface.position, inputs.direction);
         inputs.reach *= sdfLightCutoffFade(light.weight * inputs.reach);
+    } else if (light.kind == SDF_LIGHT_LINE) {
+        float3 toNearest = sdfLineNearestOffset(light.record, light.position, surface.position);
+        float window = sdfLightWindow(dot(toNearest, toNearest), light.param);
+        float fade = 0.0;
+
+        inputs.reach = sdfLineReach(light.record, light.position, surface.position, inputs.direction);
+        fade = sdfLightCutoffFade(light.weight * inputs.reach);
+        inputs.reach *= fade;
+        if (inputs.reach > 0.0) {
+            inputs.specularScale = (sdfLineSpecular(light.record, light.position, surface, (window * fade), inputs.specularDirection));
+        }
     } else if (light.kind == SdfLightScreen || (authored && light.kind != SDF_LIGHT_DIRECTIONAL)) {
         float3 delta = light.position - surface.position;
         float distanceSquared = dot(delta, delta);
@@ -479,11 +526,15 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
         inputs.probeShare = sdfLightProbeVisibility(surface.probes, (uint)light.index);
         known = inputs.probeShare;
     }
-    inputs.none = ((positional && !lit) || ((light.kind == SDF_LIGHT_POINT) && (known == 0.0)));
-    if (light.kind == SDF_LIGHT_POINT) {
+    inputs.none = ((positional && !lit) || (sdfLightRanged(light.kind) && (known == 0.0)));
+    if (sdfLightRanged(light.kind)) {
         inputs.visibility = inputs.probeShare * surface.ambientOcclusion;
     } else if (light.kind == SDF_LIGHT_DIRECTIONAL) {
         inputs.visibility = sdfLightVisibility(surface, light.index, (traced && lit), known);
+    }
+    if (light.kind != SDF_LIGHT_LINE) {
+        inputs.specularDirection = inputs.direction;
+        inputs.specularScale = (SDF_PI * inputs.reach);
     }
     return inputs;
 }
@@ -506,7 +557,7 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
 
     float3 normal = surface.normal;
 
-    if ((light.kind == SDF_LIGHT_DIRECTIONAL) || (light.kind == SDF_LIGHT_POINT)) {
+    if ((light.kind == SDF_LIGHT_DIRECTIONAL) || sdfLightRanged(light.kind)) {
         float radiance = (light.weight * inputs.reach);
         float visibility = inputs.visibility;
 
@@ -517,7 +568,7 @@ SdfLightResponse sdfLightResponse(SdfLightSource light, SdfShadeSurface surface,
                 response.diffuse = (light.color * ((radiance * lambert) * visibility));
             }
             if ((replaced & SdfLightReplacesSpecular) == 0u) {
-                response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, inputs.direction, ((SDF_PI * radiance) * visibility)));
+                response.specular = (light.color * sdfMaterialSpecular(surface.material, normal, -surface.rayDirection, inputs.specularDirection, ((light.weight * inputs.specularScale) * visibility)));
             }
         }
     } else if (light.kind == SDF_LIGHT_RIM) {

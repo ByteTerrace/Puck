@@ -198,3 +198,22 @@ let lookShots = [
   { name: "toybox", eye [34.7, 10.65, 29.8], aim [34.7, 6.2, 3.6], fov: 70 }
   { name: "toybox-across", eye [34.7, 6.15, 7.2], aim [34.7, 6.2, 33.2], fov: 70 }
 ]
+
+// The flaw (flaw.puck): the one light that weaves through every floor, a long diffuse emitter like a fluorescent tube
+// that looks like neon, a saturated core glowing through a frosted sleeve. `core` and `sleeve` are the two radii in
+// metres, `frost` the sleeve's roughness, `glass` its tint and `depth` how deep that tint builds, `coreNits` the core's
+// luminance, and `intensity` the light each metre of the tube gives, in candela per metre (a fluorescent tube gives
+// about 200), which a level's switch writes into `hallLamps` for the stretch of the flaw that storey holds.
+let lookFlaw = {
+  core: 0.07
+  sleeve: 0.16
+  frost: 0.42
+  glass: "#EAF4FF"
+  depth: 0.03
+  coreNits: 6500
+  intensity: 200
+}
+// The flaw's tint along its length, as red, green and blue in 0 .. 255: the keys stand evenly round the loop from its
+// start (the nave's west end, under the roof) and the tint eases from each to the next, slowly enough that no stretch
+// reads as a fixture's one colour: ice, violet, orchid, ember, mint, and back to ice where the loop closes.
+let lookFlawTint = [[120, 226, 255], [150, 128, 255], [236, 112, 236], [255, 170, 120], [118, 246, 196]]

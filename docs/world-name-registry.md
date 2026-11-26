@@ -99,6 +99,23 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.lights[][occluder].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
 | `render.lighting.lights[][occluder].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][occluder].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.lights[][tube].from.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.lights[][tube].to.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.lights[][tube].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.lights[][tube].color` | State | Binding | Binding | `WorldRenderLight.Tube.Color` |
+| `render.lighting.lights[][tube].color.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.lights[][tube].intensity` | State | Binding | Binding | `WorldRenderLight.Tube.Intensity` |
+| `render.lighting.lights[][tube].intensity.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.lights[][tube].intensity{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.lights[][tube].power` | State | Binding | Binding | `WorldRenderLight.Tube.Power` |
+| `render.lighting.lights[][tube].power.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.lights[][tube].power{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.lights[][tube].temperature` | State | Binding | Binding | `WorldRenderLight.Tube.Temperature` |
+| `render.lighting.lights[][tube].temperature.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.lights[][tube].temperature{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.lights[][tube].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
+| `render.lighting.lights[][tube].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.lights[][tube].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.curvature.cavity` | State | Binding | Binding | `WorldRenderCurvature.Cavity` |
 | `render.lighting.curvature.cavity.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.curvature.cavity{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -198,6 +215,23 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.keys[].lights{*}[occluder].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
 | `render.lighting.keys[].lights{*}[occluder].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[occluder].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.keys[].lights{*}[tube].from.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.keys[].lights{*}[tube].to.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.keys[].lights{*}[tube].anchor[placement].placementId` | Placement | Names | Read | `WorldAnchor.Placement.PlacementId` |
+| `render.lighting.keys[].lights{*}[tube].color` | State | Binding | Binding | `WorldRenderLight.Tube.Color` |
+| `render.lighting.keys[].lights{*}[tube].color.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.keys[].lights{*}[tube].intensity` | State | Binding | Binding | `WorldRenderLight.Tube.Intensity` |
+| `render.lighting.keys[].lights{*}[tube].intensity.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.keys[].lights{*}[tube].intensity{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.keys[].lights{*}[tube].power` | State | Binding | Binding | `WorldRenderLight.Tube.Power` |
+| `render.lighting.keys[].lights{*}[tube].power.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.keys[].lights{*}[tube].power{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.keys[].lights{*}[tube].temperature` | State | Binding | Binding | `WorldRenderLight.Tube.Temperature` |
+| `render.lighting.keys[].lights{*}[tube].temperature.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.keys[].lights{*}[tube].temperature{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.keys[].lights{*}[tube].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
+| `render.lighting.keys[].lights{*}[tube].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.keys[].lights{*}[tube].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].curvature.cavity` | State | Binding | Binding | `WorldRenderCurvature.Cavity` |
 | `render.lighting.keys[].curvature.cavity.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].curvature.cavity{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -4573,6 +4607,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `machines[].memory[].name` | MachineBinding | Declares |  | `WorldMachineMemory.Name` |
 | `machines[].memory[].row` | State | Names | Read | `WorldMachineMemory.Row` |
 | `machines[].memory[].key` | State | Key | Read | `WorldMachineMemory.Key` |
+| `machines[].runsWhen.state` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.State` |
+| `machines[].runsWhen.key` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.Key` |
+| `machines[].runsWhen.comparandState` | State | Names | Read | `WorldPlacementResponseCondition.StateCondition.ComparandState` |
+| `machines[].runsWhen.comparandKey` | State | Key | Read | `WorldPlacementResponseCondition.StateCondition.ComparandKey` |
 | `ruleGroups[].name` | RuleGroup | Declares |  | `RuleGroupDeclaration.Name` |
 | `ruleGroups[].steps[].rule` | Rule | Names | Read | `RuleGroupStep.Rule` |
 | `ruleGroups[].trigger[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
@@ -4671,6 +4709,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.lights[][occluder].anchor[seat].partId` | `WorldAnchor.Seat.PartId` | a part id local to a creation |
 | `render.lighting.lights[][occluder].anchor[recentSpeaker].partId` | `WorldAnchor.RecentSpeaker.PartId` | a part id local to a creation |
 | `render.lighting.lights[][occluder].name` | `WorldRenderLight.Occluder.Name` | a light name a section key addresses |
+| `render.lighting.lights[][tube].anchor[entityPart].partId` | `WorldAnchor.EntityPart.PartId` | a part id local to a creation |
+| `render.lighting.lights[][tube].anchor[seat].partId` | `WorldAnchor.Seat.PartId` | a part id local to a creation |
+| `render.lighting.lights[][tube].anchor[recentSpeaker].partId` | `WorldAnchor.RecentSpeaker.PartId` | a part id local to a creation |
+| `render.lighting.lights[][tube].name` | `WorldRenderLight.Tube.Name` | a light name a section key addresses |
 | `render.lighting.keys[].lights{*}[directional].name` | `WorldRenderLight.Directional.Name` | a light name a section key addresses |
 | `render.lighting.keys[].lights{*}[rim].name` | `WorldRenderLight.Rim.Name` | a light name a section key addresses |
 | `render.lighting.keys[].lights{*}[point].anchor[entityPart].partId` | `WorldAnchor.EntityPart.PartId` | a part id local to a creation |
@@ -4685,6 +4727,10 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.keys[].lights{*}[occluder].anchor[seat].partId` | `WorldAnchor.Seat.PartId` | a part id local to a creation |
 | `render.lighting.keys[].lights{*}[occluder].anchor[recentSpeaker].partId` | `WorldAnchor.RecentSpeaker.PartId` | a part id local to a creation |
 | `render.lighting.keys[].lights{*}[occluder].name` | `WorldRenderLight.Occluder.Name` | a light name a section key addresses |
+| `render.lighting.keys[].lights{*}[tube].anchor[entityPart].partId` | `WorldAnchor.EntityPart.PartId` | a part id local to a creation |
+| `render.lighting.keys[].lights{*}[tube].anchor[seat].partId` | `WorldAnchor.Seat.PartId` | a part id local to a creation |
+| `render.lighting.keys[].lights{*}[tube].anchor[recentSpeaker].partId` | `WorldAnchor.RecentSpeaker.PartId` | a part id local to a creation |
+| `render.lighting.keys[].lights{*}[tube].name` | `WorldRenderLight.Tube.Name` | a light name a section key addresses |
 | `render.sky.layers[][gradient].name` | `WorldRenderSkyLayer.Gradient.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][sunDisc].name` | `WorldRenderSkyLayer.SunDisc.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][sunDisc].follows` | `WorldRenderSkyLayer.SunDisc.Follows` | a light name a section key addresses |

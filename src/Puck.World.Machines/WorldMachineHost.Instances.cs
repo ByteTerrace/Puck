@@ -41,7 +41,7 @@ public sealed partial class WorldMachineHost {
             name,
             lease.Generation,
             instance.Declaration.Engine,
-            instance.Declaration.Running,
+            Runs(instance: instance),
             lease.Runtime.Status,
             (queued?.CompletedSteps ?? CompletedSteps(lease: lease)),
             (queued?.PendingSteps ?? 0),
@@ -462,7 +462,7 @@ public sealed partial class WorldMachineHost {
 
     private WaitReason? AdvanceInstance(MachineInstance instance, ulong stepTicks, ReadOnlySpan<ScreenPadSnapshot> pads, WaitDeadline deadline) {
         if (
-            !instance.Declaration.Running ||
+            !Runs(instance: instance) ||
             (instance.Lease is not MachineLease.Running lease) ||
             m_linkedInstances.Contains(item: instance.Declaration.Name)
         ) {
