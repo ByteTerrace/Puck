@@ -133,6 +133,9 @@ let courtWest = 30
 let courtFin = 44.3
 let courtFinLength = 4.2
 let fallPlan = [52.5, 6.2]
+// The paintings that hang on the painting wing's south wall, as the centre of each along it (paintings.puck hangs them;
+// the floor's furniture keeps clear of their doors).
+let courtWallDoors = [34.4, 38, 41.6, 48.5, 52.5]
 let fallHole = 1
 // The same axis in the debug world, for the paintings' and the exhibits' documents.
 let fallX = (gallerySite[0] + fallPlan[0])

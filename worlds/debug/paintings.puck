@@ -86,23 +86,23 @@ let brass = { lip: paintBlack, lipWidth: 0.03, mat: paintMat, matWidth: 0, borde
 // arrives out of.
 let wallPaintings = [
   {
-    name: "garden", x: 34.4, z: courtWall, yaw: 180, frame: ornate, destination: "garden", counterpart: "arrival/glass", fallback: fallbackGarden
+    name: "garden", x: courtWallDoors[0], z: courtWall, yaw: 180, frame: ornate, destination: "garden", counterpart: "arrival/glass", fallback: fallbackGarden
     title: "THE GARDEN", note: "A sunset plot beyond the glass. Walk or jump in; the frame behind you leads back."
   }
   {
-    name: "night", x: 38, z: courtWall, yaw: 180, frame: modern, destination: "night", counterpart: "arrival/glass", fallback: fallbackNight
+    name: "night", x: courtWallDoors[1], z: courtWall, yaw: 180, frame: modern, destination: "night", counterpart: "arrival/glass", fallback: fallbackNight
     title: "THE NIGHT FIELD", note: "A snowfield under the stars. Step in; turn round to come back."
   }
   {
-    name: "city", x: 41.6, z: courtWall, yaw: 180, frame: ornate, destination: "city", counterpart: "arrival/glass", fallback: fallbackCity
+    name: "city", x: courtWallDoors[2], z: courtWall, yaw: 180, frame: ornate, destination: "city", counterpart: "arrival/glass", fallback: fallbackCity
     title: "THE CITY", note: "A town on a river bend, its market, terraces, works and quay. Step in; the frame behind you leads back."
   }
   {
-    name: "moon", x: 48.5, z: courtWall, yaw: 180, frame: modern, destination: "moon", counterpart: "moon-socket/glass", fallback: fallbackMoon
+    name: "moon", x: courtWallDoors[3], z: courtWall, yaw: 180, frame: modern, destination: "moon", counterpart: "moon-socket/glass", fallback: fallbackMoon
     title: "THE MOON", note: "The pale moon over the valley, the same one a ship from the launch field lands on. Knock and wait for the moon to answer; the frame it opens leads back."
   }
   {
-    name: "galaxy", x: 52.5, z: courtWall, yaw: 180, frame: brass, destination: "galaxy", counterpart: "arrival/glass", fallback: fallbackGalaxy
+    name: "galaxy", x: courtWallDoors[4], z: courtWall, yaw: 180, frame: brass, destination: "galaxy", counterpart: "arrival/glass", fallback: fallbackGalaxy
     title: "THE PLANETOIDS", note: "Six small worlds in open space, each with gravity of its own shape. Step in; the glowing pads launch you from one to the next."
   }
   {

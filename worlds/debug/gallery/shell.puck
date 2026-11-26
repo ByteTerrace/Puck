@@ -600,26 +600,34 @@ let shellRails = concat(
     { id: "rail-fall-west", x: ((fallPlan[0] - fallHole) - 0.08), y: galleryFloor[1], z: fallPlan[1], yaw: 270, short: 1 }
     { id: "rail-fall-east", x: ((fallPlan[0] + fallHole) + 0.08), y: galleryFloor[1], z: fallPlan[1], yaw: 90, short: 1 }
   ],
-  map(range(0, 3), i => { id: $"rail-terrace-south-{i}", x: (2.2 + (4 * i)), y: galleryFloor[3], z: 0.15, yaw: 0, short: 0 }),
-  map(range(0, 2), i => { id: $"rail-terrace-west-{i}", x: 0.15, y: galleryFloor[3], z: (2.3 + (4 * i)), yaw: 90, short: 0 })
+  map(range(0, 4), i => { id: $"rail-terrace-south-{i}", x: ((galleryWestOut + 2.2) + (4 * i)), y: galleryFloor[3], z: 0.15, yaw: 0, short: 0 }),
+  map(range(0, 2), i => { id: $"rail-terrace-west-{i}", x: (galleryWestOut + 0.15), y: galleryFloor[3], z: (2.3 + (4 * i)), yaw: 90, short: 0 })
 )
 // The piers of the nave's end wall stand between its tall bays and either side of them.
 let naveEndSpan = ((tallBayZs[1] - tallBayZs[0]) / 2)
 let naveEndPiers = map(range(0, 4), i => ((tallBayZs[0] - naveEndSpan) + ((2 * naveEndSpan) * i)))
-// The planters: either side of each pier between the end wall's bays and at the nave's corners, along its edges, and
-// about the aisles, the bridge and the galleries.
+// The planters keep the benches' rhythm on the tile grid: each is two tiles long, centred on a tile, against a long wall
+// in the first tile row. On level 0 one stands against each wall in every bay a pair of displays fills, so walking an
+// aisle meets a planter across from each display and a bench in each bay between them; a south bay stays bare where
+// the stairs, the entrance, the lift's door, a fin of the painting wing or a painting's door stands. The upper levels
+// keep a planter at each end of the bridge's middle, one at each storey's south-west corner, and the terrace's along its
+// parapet.
+let shellPlanterBays = map(range(0, 6), i => (naveWest + (arcadePitch * ((2 * i) - 1.5))))
+let shellPlanterBlocked = concat(
+  shellBenchBlocked,
+  [[stairWest, stairEast], [entranceWest, entranceEast], [(courtFin + galleryWall), ((courtFin + galleryWall) + 1)]],
+  map(courtWallDoors, door => [(door - 0.6), (door + 0.6)])
+)
+function shellPlanterClear(x) = (length(filter(shellPlanterBlocked, span => (((x + galleryTile) > span[0]) and ((x - galleryTile) < span[1])))) == 0)
 let shellPlanters = concat(
-  map(range(0, 2), i => { x: (galleryEast - 1.45), y: 0, z: ((tallBayZs[i] + tallBayZs[(i + 1)]) / 2), yaw: 90 }),
-  [
-    { x: (galleryEast - 2.8), y: 0, z: (naveSouth + 0.75), yaw: 0 }, { x: (galleryEast - 2.8), y: 0, z: (naveNorth - 0.75), yaw: 0 }
-    { x: 42, y: 0, z: (naveSouth + 0.6), yaw: 0 }, { x: 42, y: 0, z: (naveNorth - 0.6), yaw: 0 }
-    { x: 22.2, y: 0, z: (arcadeSouth - 0.35), yaw: 0 }, { x: 29, y: 0, z: (arcadeSouth - 0.35), yaw: 0 }
-    { x: 10.6, y: 0, z: 1.1, yaw: 0 }, { x: (galleryWestIn + 0.9), y: 0, z: (galleryNorth - 1.1), yaw: 90 }, { x: 15.3, y: 0, z: 4.6, yaw: 90 }
-    { x: 6, y: 1, z: 1.1, yaw: 0 }, { x: 10.5, y: 1, z: (naveMid - 0.1), yaw: 90 }, { x: 24.5, y: 1, z: (arcadeSouth + 0.15), yaw: 0 }, { x: (galleryEast - 1.3), y: 1, z: 1.4, yaw: 90 }
-    { x: 6, y: 2, z: 1.1, yaw: 0 }, { x: 10.5, y: 2, z: (naveMid - 0.1), yaw: 90 }, { x: 22, y: 2, z: (arcadeSouth + 0.15), yaw: 0 }, { x: 40, y: 2, z: (arcadeSouth + 0.15), yaw: 0 }, { x: (galleryEast - 2.2), y: 2, z: (arcadeSouth + 0.15), yaw: 0 }
-    { x: 2, y: 3, z: 1, yaw: 0 }, { x: 6, y: 3, z: 1, yaw: 0 }, { x: 10, y: 3, z: 1, yaw: 0 }, { x: 0.9, y: 3, z: 4.6, yaw: 90 }
-    { x: 10.5, y: 3, z: (naveMid - 0.1), yaw: 90 }, { x: 24, y: 3, z: (arcadeSouth + 0.15), yaw: 0 }, { x: (galleryEast - 4.2), y: 3, z: (arcadeSouth + 0.15), yaw: 0 }
-  ]
+  map(filter(shellPlanterBays, x => shellPlanterClear(x)), x => { x: x, y: 0, z: (galleryWall + (galleryTile / 2)), yaw: 0 }),
+  map(shellPlanterBays, x => { x: x, y: 0, z: (galleryNorth - (galleryTile / 2)), yaw: 0 }),
+  flatMap(range(1, 3), k => [
+    { x: (naveWest - (galleryTile * 1.5)), y: k, z: (naveMid - (galleryTile * 3)), yaw: 90 }
+    { x: (naveWest - (galleryTile * 1.5)), y: k, z: (naveMid + (galleryTile * 3)), yaw: 90 }
+  ]),
+  map(range(1, 2), k => { x: (galleryWestIn + (galleryTile * 1.5)), y: k, z: (galleryWall + (galleryTile / 2)), yaw: 0 }),
+  map(range(0, 4), i => { x: ((galleryWestOut + 2) + (4 * i)), y: 3, z: (galleryWall + (galleryTile / 2)), yaw: 0 })
 )
 // The benches stand in the floor's empty bays, each two tiles long and centred on a tile, so its ends lie on the
 // centres of the tiles either side (the placements snap each to its nearest tile centre). On level 0 they keep the
@@ -859,7 +867,7 @@ template shellPrototypes() {
       name: "gallery-planter"
       schema: "puck.creation.v1"
       palette: shellKit
-      planter(base: 0)
+      planter(base: 0, length: (2 * galleryTile))
     }
   }
   prototype "gallery-bench" {
@@ -1035,7 +1043,7 @@ template shellPlacements() {
     placement $"gallery-planter-{n}" {
       prototype: "gallery-planter"
       parent: "gallery"
-      position [planter.x, galleryFloor[planter.y], planter.z]
+      position [galleryTileX(planter.x), galleryFloor[planter.y], galleryTileZ(planter.z)]
       yawDegrees: planter.yaw
       solid
     }
