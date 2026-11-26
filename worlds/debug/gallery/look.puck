@@ -115,22 +115,30 @@ function lookTelevisionPalette(t) = [
   { color: t.beanbagAlt, roughness: 0.7, specular: 0.03 }
 ]
 // The central tree (tree.puck): an old broadleaf's bark, a warm grey-brown streaked along the grain, with a darker
-// under-tone in its furrows and moss settling where it faces up; its treads wear paler where feet have polished them.
-// The canopy's three greens run dark underneath to sunlit on top, leaning a breath toward the toybox's mint, and a few
-// tufts of blossom in the toybox's candy pink hang among the branches' leaves. `relief` is the bark's lumpy relief in
-// metres and `grain` its features a metre; `clump` and `clumpGrain` are the same for the canopy's leaf masses.
+// under-tone in its furrows and moss settling where it faces up; its shelves wear paler where feet have polished them,
+// its branches a shade warmer than the trunk, and shelf fungus in ochre to cream (dark underneath, pale on top) grows
+// along the climb. The canopy's three greens run dark underneath to sunlit on top, leaning a breath toward the toybox's
+// mint, and a few sprays of blossom in the toybox's candy pink hang among the branches' leaves. `relief` is the bark's
+// lumpy relief in metres and `grain` its features a metre; `clump` and `clumpGrain` are the same for the canopy's leaf
+// masses. `streak` is the bark grain's frequency along and across it (fine across, long along), and `twist` how many
+// radians a metre the trunk's grain turns as it climbs.
 let lookTree = {
   bark: "#76604B"
   barkUnder: "#4A3A2C"
   tread: "#937A60"
   treadUnder: "#6A5440"
   moss: "#6E7D45"
+  branch: "#7E664E"
+  branchUnder: "#4F3E2F"
+  fungus ["#9C6B38", "#D9A866", "#F2DDB0"]
   leaves ["#2E5A3E", "#4F8A4A", "#8DBB5A"]
   blossom: "#FFB3C8"
   relief: 0.035
   grain: 1.6
   clump: 0.15
   clumpGrain: 0.9
+  streak [0.7, 14, 14]
+  twist: 0.09
 }
 // A tile's joint's width, in metres (the tile's side is the plan's module, layout.puck's galleryTile), and how smooth
 // the glaze is.

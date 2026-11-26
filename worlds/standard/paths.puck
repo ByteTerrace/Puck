@@ -10,6 +10,10 @@ function indexed(items) = map(range(0, length(items)), k => (items[k] with { ind
 function vectorDot(u, v) = reduce(range(0, length(u)), 0, (sum, k) => (sum + (u[k] * v[k])))
 function vectorLength(v) = squareRoot(vectorDot(v, v))
 function vectorUnit(v) = (v * (1 / maximum(vectorLength(v), 0.000000001)))
+// A share in [0, 1) for item `i` of a scatter that never repeats: the fractional part of `i * ratio + salt`, a Weyl
+// sequence. The golden ratio's conjugate (the default) spreads the first items most evenly; the plastic number's
+// reciprocal, 0.7548776662, gives a second sequence that does not line up with the first or with a golden-angle spiral.
+function weylShare(i, ratio = 0.6180339887, salt = 0) = (((i * ratio) + salt) - floor(((i * ratio) + salt)))
 
 // A closed polyline: its corners `points` read round as a loop. Segment i runs from corner i to corner i + 1; the
 // distance along the loop is measured from corner 0.

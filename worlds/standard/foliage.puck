@@ -2,6 +2,7 @@
 // World positions in scatter tables are translated by origin; creation shapes keep the author frame.
 import "shading"
 import "rig"
+import "paths"
 let landscapeExponent = 2.05
 let meadowSpacing = 0.075
 let meadowHeight = 0.55
@@ -29,7 +30,9 @@ let meadowBlades = map(range(0, 144), i => {
 let landscapeTurn = [0.2, -0.4, -0.4, 0.8]
 function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, settle = 0.3, edge = 0, reach = 0.35, threshold = 0.16, noise = 0, patternScale = [
   1, 1, 1
-], softness = 0, octaves = 2, octaveRatio = 2.03, octaveGain = 0.534, turn = landscapeTurn, settleThreshold = 0.5, settleWidth = 0, settleScale = 1, settleOwn = 0) = base with {
+], softness = 0, octaves = 2, octaveRatio = 2.03, octaveGain = 0.534, turn = landscapeTurn, settleThreshold = 0.5, settleWidth = 0, settleScale = 1, settleOwn = 0, grain = 0, frame = [
+  0, 0, 0, 1
+], origin = [0, 0, 0], twist = 0) = base with {
   shade: weathered(
     under,
     deposit,
@@ -50,11 +53,17 @@ function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, se
     settleWidth: settleWidth,
     settleScale: settleScale,
     settleOwn: settleOwn,
-    octaves: octaves
+    octaves: octaves,
+    grain: grain,
+    frame: frame,
+    origin: origin,
+    twist: twist
   )
+  // The weathering block draws its reveal in the layer's axes on top of the shade's, and has no grain frame, so a
+  // grained surface keeps the block inert (no noise reveal, no deposit) and lets the shade draw both.
   weathering {
     floor: 1
-    noise: noise
+    noise: ((grain > 0) ? 0 : noise)
     softness: softness
     patternScale: patternScale
     octaves: octaves
@@ -64,7 +73,7 @@ function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, se
     seed: seed
     scale: scale
     lines: lines
-    settle: settle
+    settle: ((grain > 0) ? 0 : settle)
     edge: edge
     reach: reach
     under [{ threshold: threshold, surface { color: under, roughness: 0.98, metal: 0 } }]
@@ -205,6 +214,49 @@ function canopySurface(leaves, seed) = {
 // frame, which rides the shape's converted pose: author +X and +Z are local -X and -Z.
 function leanTurn(lean) = rotate([0, 0, 1], lean * 1rad)
 function leanLocal(p, lean) = rotatePoint(leanTurn(lean), p) * [-1, 1, -1]
+
+// A crown of separate leaf clusters rather than one blob: `count` lobes on a dome `radius` metres across and `height`
+// metres tall over `centre`, laid in a sunflower spiral (each the golden angle round from the last, at a radius that
+// grows with the square root of its index), so they cover the dome evenly with sky between them. Each lobe is `size`
+// metres (x, y, z radii), shrinking toward the rim and wandering in size and height by a weylShare sequence that does not
+// line up with the spiral, and blends into the
+// lobes it touches by `smooth`, so touching lobes clump and the rest stand apart.
+// leafClusterAt is where lobe `i` stands, for limbs that reach into it.
+function leafClusterShare(count, i) = squareRoot(((i + 0.5) / count))
+function leafClusterAt(centre, radius, height, count, i, turn = 0) = (centre + polarPoint(
+  (radius * leafClusterShare(count, i)),
+  ((i * 137.50776) + turn),
+  ((height * (1 - (leafClusterShare(count, i) * leafClusterShare(count, i)))) + ((weylShare((i + 1), 0.7548776662) - 0.5) * 0.7))
+))
+template leafClusters(label, centre, radius, height, count, size, material, smooth = 0.3, turn = 0) {
+  for i in range(0, count) {
+    let t = leafClusterShare(count, i)
+    let wander = weylShare((i + 1), 0.7548776662)
+    shape Superellipsoid $"{label}-{i}" {
+      exponent: landscapeExponent
+      position: leafClusterAt(centre, radius, height, count, i, turn)
+      scale: (size * ((1.15 - (0.4 * t)) * (0.8 + (0.4 * wander))))
+      material: material
+      blend: SmoothUnion
+      smooth: smooth
+    }
+  }
+}
+
+// A spray of leaves at a twig's end, not a ball on a stick: three flattened lobes strung along the twig's level heading
+// `ahead` (a unit vector) past its tip, the outer ones smaller and dipping, `size` the middle lobe's radii.
+template leafSpray(label, tip, ahead, size, material, smooth = 0.25) {
+  for (lobe, i) in [{ along: -0.35, rise: 0.15, share: 0.8 }, { along: 0.45, rise: 0.3, share: 1 }, { along: 1.25, rise: 0.05, share: 0.7 }] {
+    shape Superellipsoid $"{label}-{i}" {
+      exponent: landscapeExponent
+      position: ((tip + (ahead * (lobe.along * size[0]))) + [0, (lobe.rise * size[1]), 0])
+      scale: (size * lobe.share)
+      material: material
+      blend: SmoothUnion
+      smooth: smooth
+    }
+  }
+}
 
 // One grouped-shape tree: a tapered, gently bowed trunk flaring into a few buttress roots, tapering limbs whose ends are
 // buried inside the canopy, and overlapping crown masses blended wide into one canopy and coloured as one mass. Rows
@@ -592,7 +644,6 @@ let meadowWind = {
 // the update-rate lever's reduced tiers unless the importer passes reducedRateAtDistance: false. `feather` thins the
 // patch toward its rim: a blade at ellipse value e stands only where e < 1 - feather * h, h its well-spread hash in
 // [0, 1), so density falls linearly over the outer band instead of stopping at a line or the tile's square edge.
-function fringeHash(n) = n * 0.61803398875 - floor(n * 0.61803398875)
 template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.2, 3.2], feather = 0.6, clearing = [
   6.5, 9.8, 2.1
 ], reducedRateAtDistance = true, wind = meadowWind) {
@@ -636,7 +687,7 @@ template windMeadowTile(id, tile, origin = [0, 0, 0], fringe = [5.5, 6.7, 3.2, 3
       ]
       for blade in filter(
         filter(meadowBlades, b => (tile[0] + b["x"] - fringe[0]) * (tile[0] + b["x"] - fringe[0]) / fringe[2] +
-          (tile[1] + b["z"] - fringe[1]) * (tile[1] + b["z"] - fringe[1]) / fringe[3] < 1 - feather * fringeHash(
+          (tile[1] + b["z"] - fringe[1]) * (tile[1] + b["z"] - fringe[1]) / fringe[3] < 1 - feather * weylShare(
           b["id"] * 7 + tile[0] * 13 + tile[1] * 29
         )),
         b => (tile[0] + b["x"] - clearing[0]) * (tile[0] + b["x"] - clearing[0]) +

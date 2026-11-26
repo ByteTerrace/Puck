@@ -203,21 +203,34 @@ on tile (26, 14), bay 6 on the nave's centre row (layout.puck's `treeX`,
 `treeZ`), as two creations on one spot:
 
 - `gallery-tree`, solid: a tapering trunk 4.2 m across at the floor with a
-  flare and six buttress roots, a spiral of treads round it, and six walkable
-  branches. Everything a body stands on or will climb is built from shapes
-  contact admits, the standard's [limbs.puck](../standard/limbs.puck): a
-  branch is a chain of flattened superellipsoids along a curve (`limb`), the
-  treads are shelves round the trunk's taper (`spiralTreads`). Smooth blends
-  and one bark relief (creation `noise`) join them, so the tree collides as
-  drawn, through one field collider.
-- `gallery-tree-canopy`, not solid: the crown's leaf masses high in the void
-  under the skylights, the limbs carrying them, and a leafy twig off each
-  branch, one tuft in three blossoming in the toybox's candy pink.
+  flare and six buttress fins that arch from high on the trunk down to the
+  floor, a spiral of bark shelves round it with shelf fungus on every fifth
+  and burls between the turns, and six walkable branches that swell from
+  collars at the trunk, taper, fork and carry knots. Everything a body stands
+  on or will climb is built from shapes contact admits, the standard's
+  [limbs.puck](../standard/limbs.puck): a branch or a root is a chain of
+  flattened superellipsoids along a curve (`limb`), the shelves stand round the
+  trunk's taper and wander in reach and width (`spiralTreads`), and the trunk
+  collides as a stack of cylinders inside the drawn cone (`trunkCore`). The
+  creation sets `contact: Shapes`, so those masses collide as analytic
+  primitives under the smooth blends that draw them as one grown surface, and
+  a body walking the tree runs no field solve; the cone, the forks, knots,
+  burls and fungus brackets are drawn only. Its bark carries no creation
+  relief, which would collide as drawn; its texture is a grain that runs along
+  each limb's own axis (foliage.puck's `landscapeSurface` with `grain`), and
+  twists as the trunk climbs.
+- `gallery-tree-canopy`, not solid: a crown of separate leaf clusters on a
+  dome high in the void under the skylights, laid in a sunflower spiral so sky
+  shows between them (foliage.puck's `leafClusters`), the limbs carrying them,
+  and a spray of leaves at each branch's fork, one in three blossoming in the
+  toybox's candy pink.
 
-**Climbing it.** The treads start on the trunk's east side, just south of
+**Climbing it.** The shelves start on the trunk's east side, just south of
 east, and climb a storey a turn: one every 18 degrees, each 0.225 m above the
 last, under the Moth's 0.3 m step (`treeTreadStart`, `treeTreadStep`,
-`treeTreadRise`). `debug.go` has no stop yet; in the gallery root,
+`treeTreadRise`). Each reaches about 1.4 m past the bark; a body pressed
+against the bark itself does not step up, so the walking line runs a little
+out from it. `debug.go` has no stop yet; in the gallery root,
 `body.pose spawn:tree 0` stands her at their foot.
 
 **The branches.** Two reach each of levels 1 to 3, one to each balcony edge in

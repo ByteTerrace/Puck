@@ -1547,6 +1547,8 @@ export type CreationClipTurnDocument = {
   angle: number;
 };
 
+export type CreationContact = "Drawn" | "Shapes";
+
 export type CreationDocument = {
   /**
    * The document version tag (puck.creation.v1).
@@ -1612,6 +1614,10 @@ export type CreationDocument = {
    * The pose clips (null = none), each key poses on joints played by one of Drivers — see CreationClipDocument. Presentation-only, like the drivers.
    */
   clips?: (CreationClipDocument | null)[] | null;
+  /**
+   * What a solid placement of this creation collides as (null = Drawn); see CreationContact.
+   */
+  contact?: CreationContact | null;
   [k: string]: unknown;
 };
 

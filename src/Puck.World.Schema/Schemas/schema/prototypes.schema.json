@@ -1992,6 +1992,20 @@
               "title": "CreationClipDocument"
             },
             "default": null
+          },
+          "contact": {
+            "description": "What a solid placement of this creation collides as (null = Drawn); see CreationContact.",
+            "enum": [
+              "Drawn",
+              "Shapes",
+              null
+            ],
+            "default": null,
+            "title": "CreationContact",
+            "x-enumDescriptions": {
+              "Drawn": "The solid it draws: its contact shapes under their authored blends and any relief, one field collider per copy wherever they do not meet as a plain union of primitives.",
+              "Shapes": "Its contact shapes\u0027 hard union: a smooth union collides as a hard one, so shapes joined only by unions and smooth unions compile to analytic primitive colliders instead of a field solve. A smooth union only adds to the drawn solid, so the fillet it draws is left to the drawing and every collider stays inside it. Relief, a deformation and any other blend still collide as drawn, since they can carry the surface inside the shapes. For a large organic creation (a tree a body walks up) whose smooth blends are the look, not the footing."
+            }
           }
         },
         "additionalProperties": false,

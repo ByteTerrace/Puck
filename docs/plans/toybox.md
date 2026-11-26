@@ -61,10 +61,16 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
   `needs` does (worlds/standard/station.puck), so a small body cannot rent.
 - The flaw: the light tube, then its hollow interior, its openings and exits, and the imprint (light lane in
   progress; the interior and puzzle follow).
-- The central tree's look: the tree stands, walkable (gallery.md, "The central tree"), but its sculpt is not yet at
-  the visual bar. The trunk is a plain cone, the treads read as a built stair rather than grown root and bark, the
-  branches are even-thickness limbs without knots or forks, and the canopy is a few broad leaf masses. A look pass
-  owes it a gnarled, fluted trunk, treads grown into the bark, branches that fork and taper, and a broken, layered
-  crown, judged live from every level.
+- The central tree's look: the tree has buttress fins, wandering bark shelves with shelf fungus and burls, branches
+  with collars, forks and knots, bark grain that runs along each branch, and a crown of separate clusters, and it
+  collides analytically (gallery.md, "The central tree"). It still misses the visual bar: the trunk is a perfect cone
+  whose grain reads as fine speckle rather than twisting streaks; the crown's clusters read as smooth cartoon lobes
+  rather than foliage (no leaf-level breakup or skylight through them); each branch's fork ends in a bare point with
+  its leaf spray standing apart from it (the fork sweep's author-to-local carry wants checking); and the branch tips
+  on the balconies end blunt. Judge it on captures from all three levels at noon and night.
+- The tree's shelves: a body pressed against the bark does not step up them (the step-up beside the trunk core's
+  cylinders), so the walking line runs a little out from the bark; a look from the physics side.
+- The tree's level-1 branches shrink: a size field along each of `treeShrinkLimbs` (layout.puck), part of the size
+  field work above. Until then the bay-6 gate lets a full-size body into the toybox.
 - Climbing: a real climbing mechanic at Breath of the Wild / Tears of the Kingdom quality or better, preceded by a
   research round (the climb's states, stamina, ledge and mantle, the camera, animation and authored surfaces).

@@ -5,6 +5,17 @@ namespace Puck.World.Authoring;
 public static partial class CreationStampEmitter {
     /// <summary>Whether a creation's noise displaces its contact union.</summary>
     public static bool HasRelief(CreationDocument document) => document.Noise is { Amplitude: not 0f };
+    /// <summary>The blend a contact shape collides with: its authored blend, except that a smooth union collides as a hard
+    /// one under <see cref="CreationContact.Shapes"/>. Every reader of a contact shape's blend (the contact field's
+    /// emission and the collider set's choice between primitives and a field) asks here, so the two never disagree.</summary>
+    /// <param name="document">The creation.</param>
+    /// <param name="shape">One of its contact shapes.</param>
+    /// <returns>The blend contact composes the shape with.</returns>
+    public static SdfBlendOp ContactBlend(CreationDocument document, ShapeDocument shape) {
+        var blend = (shape.Blend ?? SdfBlendOp.Union);
+
+        return (((blend == SdfBlendOp.SmoothUnion) && (document.Contact == CreationContact.Shapes)) ? SdfBlendOp.Union : blend);
+    }
 
     /// <summary>Emits one creation's contact field, including authored blends, per-shape margin and optional relief.
     /// The same scoped union is used by whole-world queries, individual colliders and static surface placement.</summary>

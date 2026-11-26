@@ -19,7 +19,7 @@ function forestInBelt(x, z, margin = 0) = x * x + z * z >
   x * 0.07 + z * 0.03
 )) and z < -96 and x < -z * 1.14 and -x < -z * 1.14
 function forestThicket(x, z) = sine(x * 0.19 + z * 0.06) + cosine(z * 0.17 - x * 0.045)
-function forestVariation(i, salt = 0) = i * 0.61803398875 + salt - floor(i * 0.61803398875 + salt)
+function forestVariation(i, salt = 0) = weylShare(i, salt: salt)
 function forestCore(x, z) = x > 25 and x < 79 and z < -123 and z > -173
 function forestHeroClear(x, z, radius) = (x - 43) * (x - 43) + (z + 144) * (z + 144) > radius * radius
 
