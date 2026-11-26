@@ -122,7 +122,7 @@ let galleryDisplayRows = [
   }
   {
     id: "extruded", title: "EXTRUDED", level: 0, names: extrudeRow, what: "each prism profile, extruded"
-    x: displayNaveXs[0], z: displayNaveNorth, yaw: 0
+    x: (displayNaveXs[0] - galleryTile), z: displayNaveNorth, yaw: 0
   }
   {
     id: "revolved", title: "REVOLVED", level: 0, names: revolveRow, what: "each prism profile, revolved"
