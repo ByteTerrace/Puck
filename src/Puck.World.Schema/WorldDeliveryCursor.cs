@@ -1,7 +1,6 @@
 using Puck.Abstractions.Memory;
 using Puck.Assets;
 using Puck.World.Protocol;
-using Puck.Maths;
 
 namespace Puck.World;
 
@@ -21,7 +20,8 @@ public enum WorldReplicaCompletion : byte {
 /// <summary>One delivery stream's history. Definition and row delivery seed the same hashes; reads cannot move
 /// them. Versions count observable deliveries in this stream, never authority installs.</summary>
 /// <remarks><para>The cursor is the one place that knows what its stream was delivered, so it is the one place that
-/// decides a cut and the one writer of the stream's generation (<see cref="Stamp"/>). A cut is the loss of something the
+/// decides a cut, and while it serves the stream it is the one writer of the stream's generation
+/// (<see cref="Stamp"/>, over the stream's <see cref="WorldStreamLineage"/>). A cut is the loss of something the
 /// stream was delivered from a part of the world that can withhold from it, decided from two things the recipient itself
 /// sees: what the stream last delivered and what its view discloses now. It happens when a cell held in a row that can
 /// withhold (by its own policy, a cell policy or a containing zone) is missing from the row's image now (a row the stream
@@ -64,24 +64,34 @@ public sealed class WorldDeliveryCursor {
     private bool m_attachDocument;
     private bool m_admitted;
     private bool m_operator;
-    // The stream's opaque identity, its span and the last record it stamped. The identity is random so that it says
-    // nothing about the recipient, its policies or the table.
-    private readonly ulong m_stream = SecureRandom.NextUInt<ulong>(maximum: ulong.MaxValue, minimum: 1UL);
-    private long m_generation;
-    private long m_ordinal;
+    // The stream's identity, its span and the last record it stamped, which this cursor stamps from while it is the
+    // segment that last opened them.
+    private readonly WorldStreamLineage m_lineage;
     private bool m_seeded;
     private bool m_cutOwed;
     private WorldObserverDisclosureMode? m_bodyMode;
     private float? m_bodyRadius;
 
+    /// <summary>Initializes a new instance of the <see cref="WorldDeliveryCursor"/> class, as the segment that stamps
+    /// <paramref name="lineage"/> from now on.</summary>
+    /// <param name="lineage">The stream this cursor delivers a segment of, or <see langword="null"/> for a stream of
+    /// its own. A stream another segment has stamped opens a new generation here, so the cursor owes its reader the
+    /// cut record and the whole disclosed document first (<see cref="CutOwed"/>).</param>
+    public WorldDeliveryCursor(WorldStreamLineage? lineage = null) {
+        m_lineage = (lineage ?? new WorldStreamLineage());
+        m_cutOwed = m_lineage.Open(owner: this);
+    }
+
     /// <summary>The sequence this stream has delivered.</summary>
     public long Sequence { get; private set; }
     /// <summary>Gets the stream's current span: zero at admission, one more at each cut.</summary>
-    public long Generation => m_generation;
+    public long Generation => m_lineage.Generation;
     /// <summary>Stamps the stream's next record: the stream's identity, its current generation and the next ordinal.
     /// Every record a stream sends takes exactly one stamp, so the ordinals a reader receives rise by one.</summary>
     /// <returns>The record's stamp.</returns>
-    public WorldStreamStamp Stamp() => new(Generation: m_generation, Ordinal: (m_ordinal = checked(m_ordinal + 1)), Stream: m_stream);
+    /// <exception cref="InvalidOperationException">Another segment has opened the stream since this cursor
+    /// did.</exception>
+    public WorldStreamStamp Stamp() => m_lineage.Stamp(owner: this);
     /// <summary>Whether the replica's current disclosed document equals the one this stream delivered, including
     /// subsequent row snapshots. Used at a traveller's install boundary, never against the authority identity.</summary>
     public bool Holds(WorldRecipientView view) => m_definition is null || m_definition == view.Images.DefinitionIdentity(view);
@@ -216,9 +226,12 @@ public sealed class WorldDeliveryCursor {
     /// them, so nothing the reader holds is known to be whole. The stream owes the cut record, the whole disclosed
     /// document and a primer under the new generation, as after any cut (<see cref="TakeCut"/>).</summary>
     public void Lapse() => Cut();
+    // A cursor whose stream another segment has opened decides nothing for it: the next segment's cut already ended
+    // everything this one delivered.
     private void Cut() {
-        m_generation = checked(m_generation + 1);
-        m_cutOwed = true;
+        if (m_lineage.Cut(owner: this)) {
+            m_cutOwed = true;
+        }
     }
     private void Seed(WorldRecipientView view) {
         m_operator = view.IsAuthority;

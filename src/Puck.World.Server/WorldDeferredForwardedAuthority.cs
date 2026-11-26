@@ -37,15 +37,16 @@ internal sealed class WorldDeferredForwardedAuthority(WorldForwardingDestination
     }
     public ValueTask<byte[]?> FetchPrototypeAsync(Puck.Assets.ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
         Volatile.Read(location: ref m_current)?.FetchPrototypeAsync(ceiling: ceiling, pin: pin, remainingHops: remainingHops) ?? default;
-    public Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
+    // A destination that is not admitted yet is a wait, as a crossing in flight is: the route stands and will bind.
+    public Task<WorldProjectionOutcome> StreamProjectionAsync(WorldProjectionSession session, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
         ((Volatile.Read(location: ref m_current) is { } current)
             ? current.StreamProjectionAsync(
                 ceiling: ceiling,
                 ct: ct,
-                output: output,
-                remainingHops: remainingHops
+                remainingHops: remainingHops,
+                session: session
             )
-            : Task.FromResult<string?>(result: Unavailable)
+            : Task.FromResult(result: WorldProjectionOutcome.InFlight(reason: Unavailable))
         );
     public bool TryBind(IWorldForwardedAuthority current) {
         lock (m_gate) {

@@ -51,7 +51,9 @@ public static partial class BenchmarkCommand {
     /// <param name="IssuerFile">The issuer configuration an issuing pair's authority runs, or empty when the client
     /// shares the authority's key instead.</param>
     /// <param name="AuthenticationFile">The sign-in configuration an issuing pair's client joins with, or empty.</param>
-    private sealed record RemotePair(string Document, string KeyFile, string Endpoint, string IssuerFile = "", string AuthenticationFile = "") : IDisposable {
+    /// <param name="Namespace">The authority namespace a pair's authority proves at its handshake, which its client
+    /// names beside the endpoint, or empty for a leg with no pair.</param>
+    private sealed record RemotePair(string Document, string KeyFile, string Endpoint, string IssuerFile = "", string AuthenticationFile = "", string Namespace = "") : IDisposable {
         /// <summary>Removes the staged delta.</summary>
         public void Dispose() {
             if (!FileRemoval.TryDelete(failure: out var failure, path: Document)) {
@@ -88,6 +90,9 @@ public static partial class BenchmarkCommand {
                 ["basis"] = basis,
             };
             var bodies = new JsonObject();
+            var authoredNamespace = ((basisDefinition.Host.AuthorityNamespace is { Length: > 0 } declared) ? declared : null);
+            // The namespace a pair's authority proves at its handshake: the world's own, or the pair's when it authors none.
+            var proved = (pair ? (authoredNamespace ?? PairNamespace) : string.Empty);
 
             if (networkPlayers > basisDefinition.Population.NetworkPlayers) {
                 bodies["networkPlayers"] = networkPlayers;
@@ -109,10 +114,9 @@ public static partial class BenchmarkCommand {
                             : "OnDemand"))))]);
             }
 
-            if (pair) {
-                var authoredNamespace = ((basisDefinition.Host.AuthorityNamespace is { Length: > 0 } declared) ? declared : null);
-                var subject = (authoredNamespace ?? PairNamespace);
+            var subject = string.Empty;
 
+            if (pair) {
                 if (authoredNamespace is null) {
                     delta["host"] = new JsonObject { ["authorityNamespace"] = PairNamespace };
                 }
@@ -147,7 +151,7 @@ public static partial class BenchmarkCommand {
                         Domain: identity.Domain,
                         Mode: WorldAdmissionTrustMode.SignsDirectly,
                         Grants: [],
-                        Subject: subject,
+                        Subject: proved,
                         Algorithm: "ecdsa-p256-sha256",
                         PublicKey: identity.PublicKeyBase64));
                 }
@@ -166,9 +170,9 @@ public static partial class BenchmarkCommand {
             if (pair && issued) {
                 var (issuerFile, authenticationFile) = StageIssuer(directory: directory, transportKey: identity.PublicKeyBase64);
 
-                return new RemotePair(Document: document, Endpoint: endpoint, KeyFile: key, IssuerFile: issuerFile, AuthenticationFile: authenticationFile);
+                return new RemotePair(Document: document, Endpoint: endpoint, KeyFile: key, IssuerFile: issuerFile, AuthenticationFile: authenticationFile, Namespace: proved);
             }
-            return new RemotePair(Document: document, Endpoint: (pair ? endpoint : string.Empty), KeyFile: (pair ? key : string.Empty));
+            return new RemotePair(Document: document, Endpoint: (pair ? endpoint : string.Empty), KeyFile: (pair ? key : string.Empty), Namespace: proved);
         }
         // Writes the issuing pair's two configurations: the authority's issuer (a fresh root and one account the engine's
         // account sign-in lists) and the client's sign-in as that account, pinned to the authority's transport key.

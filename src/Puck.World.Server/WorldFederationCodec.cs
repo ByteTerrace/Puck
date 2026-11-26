@@ -130,6 +130,11 @@ public enum WorldFederationResponse : byte {
     PresentationRows = 21,
     /// <summary>The issuer's two bindings vouching for the client's key (<see cref="WorldFederationCodec.EncodeIssued"/>).</summary>
     Issued = 22,
+    /// <summary>The end of a segment that served a stream another authority's process started
+    /// (<see cref="WorldTravelerObservation.Continuation"/>): the traveler moved on from here, and the authority that
+    /// asked serves the stream's next segment. It carries no body, is read by that authority and never reaches the
+    /// stream's recipient.</summary>
+    ProjectionMoved = 23,
 }
 /// <summary>The stable names a federation authority refuses under. A refusal frame's text always opens with one of
 /// these, so a peer and a read-back can both count refusals by name rather than by sentence.</summary>

@@ -35,9 +35,11 @@ public sealed partial class WorldInstanceHost {
     // Local seats whose traveler ended at a remote authority while a departure in doubt still covers them: the
     // departure's own resolution restores the body they left with, so the seat waits for it.
     private readonly List<(int Slot, WorldRemoteAuthority Route)> m_deferredEndedSeats = [];
-    // Travelers whose body an authority of this host retired where it stood, queued under that authority's gate and
-    // retired at every authority that forwards to them on the host loop (RetireEndedTravelers).
-    private readonly System.Collections.Concurrent.ConcurrentQueue<Protocol.WorldEntityAddress> m_endedTravelers = new();
+    // Travelers gone for good, retired at every authority that forwards to them on the host loop (RetireEndedTravelers):
+    // a body an authority of this host retired where it stood, queued under that authority's gate, and a traveler whose
+    // leave a forwarded route answered, queued on whatever thread answered with the hop that answered (Told), which
+    // already knows.
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(Protocol.WorldEntityAddress Incarnation, Server.IWorldForwardedAuthority? Told)> m_endedTravelers = new();
     // Whether the source of a traveler an authority of this host forwards still attends to it, queued under that
     // authority's gate and passed to the authority the traveler stands at on the host loop.
     private readonly System.Collections.Concurrent.ConcurrentQueue<(Server.WorldServer Source, Protocol.WorldEntityAddress Incarnation, bool Present)> m_travelerPresence = new();

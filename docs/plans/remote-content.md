@@ -66,6 +66,11 @@ Four words are used throughout.
   arriving bodies. The engine keeps no default that admits anyone.
 - **A client simulates only what it presents.** Its own copy of the world stops
   stepping once its seat has left for the remote authority.
+- **A traveler's observation is one stream across the authorities it walks
+  through.** The authority the client entered through keeps the stream open,
+  cuts it to the next authority's relay when the traveler crosses, and takes
+  the traveler back as the peer it left as
+  ([decision 7](#decision-7-one-stream-across-a-travelers-authorities)).
 - **A machine's author chooses how viewers are shown it.** A client that runs a
   machine holds its whole memory, not only its picture. A machine's declaration
   says whether viewers run it, are sent its pictures, or see nothing
@@ -746,10 +751,115 @@ cut of the stream discards the machine host and the atlas with the residency.
 Until that holder exists they are owned by the screen binder's per-session
 objects, which the existing withdrawal releases.
 
+## Decision 7: one stream across a traveler's authorities
+
+**What must be decided.** What a client's observation does when its traveler
+walks from the authority it entered through to another one, and back.
+
+**What ran.** On the headless pair over the debug world with 500 ms of jitter,
+the traveler walked through a painting into another instance of the
+authority's host and came back. Each crossing ended the client's observation
+by name (`world.observation.invalidated`). The client then opened a new one
+over a new connection, with a handshake and a proof ahead of its first record,
+and held no document until that record arrived, twice for each round trip. The
+return also landed the traveler as a new peer generation, so its grants were
+minted again and its input owner started over.
+
+With the design below, the same pair shows each crossing as
+`world.observation.moved` on the authority and nothing on the client: one
+observation for the run, and the traveler back as the peer generation it left
+as.
+
+| Option | Fails at |
+|---|---|
+| The client opens a new observation at each crossing, as the run above did | Every crossing costs a connection, a handshake and a proof before the first record; the client shows nothing meanwhile |
+| The returning traveler keeps its peer generation, and nothing else changes | The observation still ends twice for each round trip |
+| The client is told the next authority and observes it directly | The client must be admitted by every authority its traveler reaches, which is the stranger's admission [decision 3](#decision-3-a-windows-world-is-relayed-by-the-authority-that-owns-the-screen) refuses for windows |
+| **The entry authority keeps the stream open and cuts to the next authority's relay** | The entry authority carries the relayed bytes |
+
+**Favoured: the entry authority keeps the stream.** The authority that holds
+the client's connection never ends the stream because the traveler moved. It
+serves the stream in segments, one authority at a time
+(`WorldTravelerProjection.StreamAsync`): its own view while the traveler
+stands there, and otherwise the view of the authority the traveler stands at,
+relayed along the route the crossing committed
+(`IWorldForwardedAuthority.StreamProjectionAsync`). When a segment's traveler
+moves on, its sink ends as moved
+(`WorldFederationProjectionSink.MovedDetachReason`), and the door resolves the
+credential again and opens the next segment. While the crossing is in flight
+(a reservation holds the traveler's arrival, `WorldTransferEscrow.AwaitsTraveler`,
+or the onward route is not published yet) the door waits on the authority's
+own tick boundary and writes nothing.
+
+- **One stream identity, stamped by whoever serves.** The stream's identity,
+  generation and ordinal live in one lineage (`WorldStreamLineage`) that every
+  segment's cursor stamps from. A segment opens the lineage, which moves the
+  generation, so its first record is a cut record, then the route, the whole
+  document and a primer, under ordinals that go on from the last segment's. The
+  client's ingress (`WorldStreamIngress`) needs no new rule: a handoff is a cut
+  of the stream it is bound to, and a record of the segment before it carries an
+  earlier generation or an ordinal not ahead, which the ingress already drops.
+- **A cut, never a close.** The client drops what it held of the world the
+  traveler left when it reads the cut, and the document of the world the
+  traveler stands in follows in the same burst of records. The span is never
+  closed, so the client never reconnects.
+- **Across a socket.** An authority in another process serves a segment of a
+  stream it was handed (`WorldTravelerObservation.Continuation`): it takes the
+  lineage up from the counters the asking authority lends it
+  (`WorldStreamLineage.Lend`), stamps its records itself, and hands the stream
+  back with `WorldFederationResponse.ProjectionMoved` when the traveler moves
+  on. The relaying authority follows each relayed stamp
+  (`WorldStreamLineage.Follow`) and ends the relay on one out of order.
+- **One reader of the connection.** The entry authority alone reads the
+  client's acknowledgements and hands each to the segment that is serving
+  (`WorldProjectionSession.AcknowledgeAsync`), so no acknowledgement is lost to
+  a reader that was ending.
+- **A route stands until the traveler lands at its own authority again.** A
+  landing tells the host (`IWorldTransferForwarder.TravelerLanded`), which
+  drops the route that authority kept from the traveler's last departure.
+  Otherwise the door would follow it, between the next departure's detach and
+  its publication, around a loop that ends where it began.
+- **The returning traveler is the peer it was.** A traveler that lands on the
+  body index it left an authority from, while no one was admitted there since,
+  lands at the generation it left with (`WorldGrants.AdmitTransferredPeer`), so
+  its principal is unchanged and its admission mints the rows it held. The
+  reservation gives a returning traveler that index, and gives it to another
+  arrival only when no other index is free.
+
+**The invariant.** Every record of a traveler's stream carries the stream's one
+identity, a generation no lower than any earlier record's and an ordinal above
+every earlier record's, whichever authority composed it, and a segment's first
+record opens a generation no earlier segment stamped. **What enforces it:** the
+counters live in `WorldStreamLineage` and nowhere else;
+`WorldStreamLineage.Open` is the only way to become the segment that stamps
+and moves the generation as it does; a segment another has replaced cannot
+stamp or cut. Only `WorldTravelerProjection` opens a traveler's segments, one
+after the last has written its final record. **Where it stops:** an authority
+in another process is trusted to stop writing before it hands the stream back;
+the relaying authority checks each stamp it relays. A relayed segment costs
+the entry authority the bytes it relays, as decision 3's relay does.
+
+**Attacks it closes.** A late record of the world the traveler left cannot
+reach the client's picture after the cut, because its stamp is behind the
+stream. An authority on the path cannot make the client take another stream's
+records, because the client stays bound to the identity the entry authority
+minted. A returning traveler cannot gain rows it did not hold: its admission
+mints from the same verdict a first arrival's does.
+
+**At MMO scale.** A hub's connection count is its players, whatever they walk
+through. A player's stream follows its traveler through every world the hub's
+host runs with no new connection, and through worlds on other hosts for one
+relayed connection each.
+
+**Ruling it rests on.** Cross-world interaction is built out fully, and a
+structural answer comes before tuning.
+
 ## Invariants and what enforces each
 
 | Invariant | Enforced by | A new caller that forgets |
 |---|---|---|
+| A traveler's stream is ordered across the authorities that serve it | `WorldStreamLineage` holds the stream's only counters, and `WorldTravelerProjection` alone opens a segment | Has no counters to stamp with, and a replaced segment's stamp throws |
+| A traveler that returns to the index it left lands as the peer it left as | The one landing asks the escrow's own credential table for the generation | Lands at the index's next generation, as any arrival does |
 | No path from the wire is opened | A delivered document has no directory, and the loaders take the resolver | Has no directory to join a path to |
 | Fetched bytes are the pinned bytes | The resolver hashes before it uses or stores | Is handed nothing |
 | A pin grants no access | The fetch door recomposes the recipient's current delivery | Is refused |
@@ -1030,6 +1140,19 @@ Searched and read before proposing a mechanism. Each is cited by symbol.
   then as deltas), `WorldDeliveryCursor`, `WorldDefinitionValidator.Partitions`.
 - **Streams and cuts.** `WorldStreamStamp`, `WorldStreamIngress`,
   `IClientSink.CloseSpan`, `WorldRecipientView`.
+- **A stream across authorities.** The cut a slow observer catches up by
+  (`WorldDeliveryCursor.Lapse`, `WorldDeliveryCursor.TakeCut`, and the sink's
+  cut record, route, document and primer behind it) is the handoff's whole
+  wire form, so no record kind was added for the client. The forwarding
+  routes (`IWorldTransferForwarder.HasOnwardRoute`,
+  `IWorldForwardedAuthority.StreamProjectionAsync`, the host's route table)
+  already led a credential to where its traveler stands. The landing that
+  restores a rolled-back departure as the same peer
+  (`WorldPopulation.RestoreDetachedPeer`) and the slot a companion's custody
+  holds for its return (`WorldCompanionCustody.HeldPlacement`) are the
+  precedents for a returning traveler's generation and index. What did not
+  exist was a stream identity that outlives the authority stamping it, which
+  is `WorldStreamLineage`.
 - **Lifetime.** `WorldInstanceHost.ReapIfEmpty` and the depth walk that decides
   which worlds observe.
 - **Admission.** `WorldAdmissionEntry`, `WorldAdmissionGrant`, `WorldAdmissionDoor`,

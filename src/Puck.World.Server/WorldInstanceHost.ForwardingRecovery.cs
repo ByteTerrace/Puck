@@ -10,20 +10,21 @@ public sealed partial class WorldInstanceHost {
             ? route.Authority.FetchPrototypeAsync(pin: pin, ceiling: request.Ceiling, remainingHops: ((byte)(request.RemainingHops - 1)))
             : default);
     /// <inheritdoc/>
-    public Task<string?> StreamForwardedProjectionAsync(WorldServer source, WorldTravelerObservation request, Stream output, CancellationToken ct) {
-        if (request.RemainingHops <= 1) { return Task.FromResult<string?>(result: "traveler projection exceeded its forwarding hop limit"); }
+    public Task<WorldProjectionOutcome> StreamForwardedProjectionAsync(WorldServer source, WorldTravelerObservation request, WorldProjectionSession session, CancellationToken ct) {
+        if (request.RemainingHops <= 1) { return Task.FromResult(result: WorldProjectionOutcome.Refused(reason: "traveler projection exceeded its forwarding hop limit")); }
         return (m_forwardedBodies.TryGetValue(
             left: source,
             right: request.Mobility.Incarnation,
             value: out var route
         )
             ? route.Authority.StreamProjectionAsync(
-                output,
+                session,
                 request.Ceiling,
                 ((byte)(request.RemainingHops - 1)),
                 ct
             )
-            : Task.FromResult<string?>(result: "traveler has no committed onward projection route")
+            // The route went between the caller's check and this read: the traveler landed back at the source.
+            : Task.FromResult(result: WorldProjectionOutcome.InFlight(reason: "traveler has no committed onward projection route"))
         );
     }
 
@@ -179,11 +180,37 @@ public sealed partial class WorldInstanceHost {
     /// <inheritdoc/>
     /// <remarks>Queued for the host loop (<see cref="DrainPendingTransfers"/>): the authority that retired the body
     /// calls this under its own gate, and no authority's gate is held while another authority is entered.</remarks>
-    public void RetireTraveler(WorldEntityAddress incarnation) => m_endedTravelers.Enqueue(item: incarnation);
+    public void RetireTraveler(WorldEntityAddress incarnation) => m_endedTravelers.Enqueue(item: (incarnation, null));
     /// <inheritdoc/>
     /// <remarks>Queued for the host loop, as <see cref="RetireTraveler"/> is.</remarks>
     public void SetTravelerPresence(WorldServer source, in WorldMobilityIdentity mobility, bool present) =>
         m_travelerPresence.Enqueue(item: (source, mobility.Incarnation, present));
+    /// <inheritdoc/>
+    /// <remarks>Queued for the host loop, as <see cref="RetireTraveler"/> is.</remarks>
+    public void TravelerLanded(WorldServer destination, in WorldMobilityIdentity mobility) =>
+        m_landedTravelers.Enqueue(item: (destination, mobility));
+
+    // The travelers that landed at an authority of this host since the last drain, each with the ownership epoch it
+    // landed with. Written under the landing authority's gate and drained on the host loop (RetireReturnedRoutes).
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(WorldServer Destination, WorldMobilityIdentity Mobility)> m_landedTravelers = new();
+
+    // A route an authority kept for a traveler stands until the traveler lands at that authority again: from then on
+    // the traveler is served where it stands, and when it next leaves, the route it leaves by replaces this one. Left
+    // in place, the old route would be followed in the interval between that departure's detach and its publication,
+    // around a loop that ends at this authority. The epoch a route's credential carries is one past the epoch the
+    // traveler held when it left, so a route at or below the landing's epoch is from before the landing, and one
+    // above it was published since and stays.
+    private void RetireReturnedRoutes() {
+        while (m_landedTravelers.TryDequeue(result: out var landed)) {
+            if (
+                m_forwardedBodies.TryGetValue(left: landed.Destination, right: landed.Mobility.Incarnation, value: out var route) &&
+                (route.Authority.DescribeForCheckpoint().Mobility.Epoch <= landed.Mobility.Epoch) &&
+                m_forwardedBodies.TryRemove(left: landed.Destination, right: landed.Mobility.Incarnation, removed: out var returned)
+            ) {
+                (returned.Authority as IDisposable)?.Dispose();
+            }
+        }
+    }
 
     // The routes a recovery bound to a colocated destination since the last drain, each checked against its
     // destination on the drain that follows (RetireUnheldRecoveries).
@@ -261,6 +288,7 @@ public sealed partial class WorldInstanceHost {
     // travelers they forward: whether each one's source still attends to it, passed to the authority it stands at, and
     // each one whose body was retired where it stood. Runs on the host loop.
     private void RetireEndedTravelers() {
+        RetireReturnedRoutes();
         RetireUnheldRecoveries();
         RetireUnheldRoutes();
         while (m_travelerPresence.TryDequeue(result: out var presence)) {
@@ -268,8 +296,8 @@ public sealed partial class WorldInstanceHost {
                 route.Authority.SetPresence(present: presence.Present);
             }
         }
-        while (m_endedTravelers.TryDequeue(result: out var incarnation)) {
-            RetireForwardedTraveler(incarnation: incarnation);
+        while (m_endedTravelers.TryDequeue(result: out var ended)) {
+            RetireForwardedTraveler(incarnation: ended.Incarnation, told: ended.Told);
         }
     }
     // The one retirement of a traveler that is gone for good: every authority of this host that still forwards to it

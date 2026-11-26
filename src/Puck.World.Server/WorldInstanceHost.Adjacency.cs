@@ -399,40 +399,15 @@ public sealed partial class WorldInstanceHost {
         // Every door's closure is read first, since a door that opened or closed since the last scan moves what a body
         // standing still in it answers. Indexed loops: this runs every tick, and enumerating the lists through their
         // interfaces allocates.
-        var placements = definition.Placements;
+        var doors = catalog.PortalDoors(definition: definition);
 
-        for (var row = 0; (row < placements.Count); row++) {
-            var placement = placements[row];
+        for (var index = 0; (index < doors.Count); index++) {
+            var (row, face, portal, aperture) = doors[index];
+            var placement = definition.Placements[row];
+            var closed = ((portal.Open is WorldPlacementResponseCondition.StateCondition open) && !open.Holds(arena: server.Arena, definition: server.Configuration, engineTick: server.CompletedEngineTicks, tick: server.CompletedTick));
 
-            if (
-                (placement is null) ||
-                (placement.FaceSources is not { Count: > 0 } faces)
-            ) {
-                continue;
-            }
-
-            for (var index = 0; (index < faces.Count); index++) {
-                var face = faces[index];
-
-                if (
-                    (face.Portal is not { } portal) ||
-                    !catalog.TryFindAperture(
-                    aperture: out var aperture,
-                    definition: definition,
-                    faceName: face.Face,
-                    placementId: placement.Id
-                )
-                ) {
-                    // A face with no aperture mapping is refused by name at validation, so reaching here means the
-                    // document never declared the face at all — nothing to scan.
-                    continue;
-                }
-
-                var closed = ((portal.Open is WorldPlacementResponseCondition.StateCondition open) && !open.Holds(arena: server.Arena, definition: server.Configuration, engineTick: server.CompletedEngineTicks, tick: server.CompletedTick));
-
-                population.PortalClosures.Set(closed: closed, face: face.Face, placementId: placement.Id);
-                portalFaces.Add(item: new PortalFace(Aperture: aperture!, Closed: closed, Face: face, Placement: placement, Portal: portal));
-            }
+            population.PortalClosures.Set(closed: closed, face: face.Face, placementId: placement.Id);
+            portalFaces.Add(item: new PortalFace(Aperture: aperture, Closed: closed, Face: face, Placement: placement, Portal: portal));
         }
         if (portalFaces.Count != 0) {
             instance.PortalClosures = population.PortalClosures;
@@ -743,12 +718,13 @@ public sealed partial class WorldInstanceHost {
         return route.Authority.TryForwardSubmission(
             completion: result => {
                 // An accepted leave retires the forwarded traveler once its answer arrives. The hop that answered it
-                // retired the traveler before it answered.
+                // retired the traveler before it answered. The answer can arrive on any thread, the destination's gate
+                // held, and retiring enters each source's gate, so the retirement is queued for the host loop.
                 if (
                     (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
                     (result is WorldSubmissionResult.Session { Reply.Accepted: true })
                 ) {
-                    RetireForwardedTraveler(incarnation: traveler.Incarnation, told: answering);
+                    m_endedTravelers.Enqueue(item: (traveler.Incarnation, answering));
                 }
 
                 completion(obj: result);

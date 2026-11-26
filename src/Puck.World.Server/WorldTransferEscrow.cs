@@ -635,6 +635,60 @@ public sealed partial class WorldTransferEscrow {
     // and the source that drives it, never the destination body a refusal considered for it.
     private static string DescribeTraveler(int index, in WorldTransferReservationMember member, WorldTransferReservationRequest request) =>
         $"traveler {(index + 1)} (body:{member.PreferredSlot} of '{request.SourceAuthority}', {member.Source})";
+    // The peer principal a traveler left this authority as, while the body index it left from stands as it left it:
+    // free, and at the generation the traveler held, so no one has been admitted there since. Every credential this
+    // authority keeps for a traveler names the principal of its last landing here (CommitLease refreshes them
+    // together), so any one of them answers.
+    private bool TryKeptPrincipal(WorldEntityAddress incarnation, out Principal principal) {
+        if (
+            m_incarnationSources.TryGetValue(key: incarnation, value: out var sources) &&
+            (sources.Count > 0) &&
+            (m_mobilityAdmissions[(sources[0], incarnation)].Principal is { Kind: PrincipalKind.Peer } left) &&
+            (((uint)left.Index) < ((uint)m_server.Population.Capacity)) &&
+            !m_server.Population.IsActive(index: left.Index) &&
+            (m_server.Population.Generation(index: left.Index) == left.Generation)
+        ) {
+            principal = left;
+            return true;
+        }
+        principal = default;
+        return false;
+    }
+    // The traveler each free body index is kept for, by index; null where none is, and null altogether when this
+    // authority keeps no index for anyone.
+    private WorldEntityAddress?[]? KeptSlots() {
+        WorldEntityAddress?[]? kept = null;
+
+        foreach (var incarnation in m_peerIncarnations.Values) {
+            if (TryKeptPrincipal(incarnation: incarnation, principal: out var left)) {
+                (kept ??= new WorldEntityAddress?[m_server.Population.Capacity])[left.Index] = incarnation;
+            }
+        }
+        return kept;
+    }
+    // An arriving traveler's body index. A traveler that left this authority takes the index it left from while that
+    // index is kept for it, so it lands as the peer it left as (LandMember). Any other arrival takes its preferred
+    // index or the lowest free one, and takes an index kept for another traveler only when no other is free: a full
+    // world admits the arrival, and the traveler whose index it took lands as a new peer if it comes back.
+    private int ArrivalSlot(bool[] consumed, WorldEntityAddress?[]? kept, WorldEntityAddress? incarnation, int preferred, int first, int limit) {
+        if (kept is null) {
+            return PreferredOrLowestFree(consumed: consumed, first: first, limit: limit, preferred: preferred);
+        }
+        if ((incarnation is { } returning) && TryKeptPrincipal(incarnation: returning, principal: out var left) && (left.Index >= first) && (left.Index < limit) && !consumed[left.Index]) {
+            return left.Index;
+        }
+        bool Free(int slot) => ((slot >= first) && (slot < limit) && (slot < consumed.Length) && !consumed[slot]);
+
+        if (Free(slot: preferred) && (kept[preferred] is null)) {
+            return preferred;
+        }
+        for (var slot = first; ((slot < limit) && (slot < consumed.Length)); slot++) {
+            if (!consumed[slot] && (kept[slot] is null)) {
+                return slot;
+            }
+        }
+        return PreferredOrLowestFree(consumed: consumed, first: first, limit: limit, preferred: preferred);
+    }
     private static int PreferredOrLowestFree(bool[] consumed, int preferred, int first, int limit) {
         if (
             (preferred >= first) &&
@@ -1335,6 +1389,8 @@ public sealed partial class WorldTransferEscrow {
                 }
             }
             SetCredential(admission: landed, incarnation: mobility.Incarnation, sourceAuthority: lease.Request.SourceAuthority);
+            // The route this authority kept from the traveler's last departure, if any, is behind the traveler now.
+            m_server.TransferForwarder?.TravelerLanded(destination: m_server, mobility: in mobility);
         }
         m_committedIncarnations[key] = committedIncarnations;
         var adopted = AdoptHomeProfiles(arrival: arrival);
@@ -1396,8 +1452,16 @@ public sealed partial class WorldTransferEscrow {
                 TravelTurn: member.TravelTurn
             );
 
+            // A traveler that lands on the index it left this authority from, kept as it left it, is the same peer: it
+            // lands at the generation it left with, so its principal, and every row a verdict mints for it, is the one
+            // it held before.
+            int? returning = ((reservationMember.Mobility is { } landing && TryKeptPrincipal(incarnation: landing.Incarnation, principal: out var left) && (left.Index == slot))
+                ? left.Generation
+                : null);
+
             reply = (reservationMember.LandsHuman
                 ? m_server.GrantTable.AdmitTransferredPeer(
+                    generation: returning,
                     occupant: occupant,
                     slot: slot,
                     source: reservationMember.Source,
@@ -1958,6 +2022,7 @@ public sealed partial class WorldTransferEscrow {
         var slotList = new List<int>(capacity: request.Members.Count);
         var acceptedOrdinals = new List<int>(capacity: request.Members.Count);
         var refusals = new List<WorldMemberRefusal>();
+        var kept = (request.PeerAdmission ? KeptSlots() : null);
 
         for (var index = 0; (index < request.Members.Count); index++) {
             var member = request.Members[index];
@@ -1984,11 +2049,13 @@ public sealed partial class WorldTransferEscrow {
                 continue;
             }
 
-            var slot = PreferredOrLowestFree(
+            var slot = ArrivalSlot(
                 consumed: consumed,
-                preferred: member.PreferredSlot,
                 first: firstSlot,
-                limit: seatLimit
+                incarnation: ((request.PeerAdmission && member.LandsHuman) ? member.Mobility?.Incarnation : null),
+                kept: kept,
+                limit: seatLimit,
+                preferred: member.PreferredSlot
             );
 
             if (slot < 0) {
@@ -2800,6 +2867,11 @@ public sealed partial class WorldTransferEscrow {
     /// <param name="incarnation">The traveler's incarnation.</param>
     /// <returns><see langword="true"/> when a credential stands.</returns>
     public bool HoldsTraveler(string sourceAuthority, WorldEntityAddress incarnation) => m_mobilityAdmissions.ContainsKey(key: (sourceAuthority, incarnation));
+    /// <summary>Returns whether a reservation holds a traveler's arrival here: its body is on its way to this authority
+    /// and has not landed. The caller holds the authority gate.</summary>
+    /// <param name="incarnation">The traveler's incarnation.</param>
+    /// <returns><see langword="true"/> while a lease for the traveler stands.</returns>
+    public bool AwaitsTraveler(WorldEntityAddress incarnation) => m_mobilityLeases.ContainsKey(key: incarnation);
     public bool TryMobilityPrincipal(string sourceAuthority, in WorldMobilityIdentity mobility, out Principal principal) {
         if (
             m_mobilityAdmissions.TryGetValue(

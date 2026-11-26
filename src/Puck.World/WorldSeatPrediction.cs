@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Maths;
 using Puck.World.Client;
 using Puck.World.Protocol;
@@ -25,6 +26,10 @@ namespace Puck.World;
 /// predicted, and show as a correction at the next delivery. A seat riding another body is not predicted, and neither is
 /// one whose predicted steps pass through a portal's glass (<see cref="WorldFaceRegion.Sweep"/>): the crossing is the
 /// authority's, so the seat steers from what was delivered until the crossing is delivered.</para>
+/// <para>Timing is on the authority's clock alone: each sent batch carries the authority tick it was sent at, as the
+/// seat's clock maps it from the deliveries seen (<see cref="WorldAuthorityClock"/>), and the lead from that tick to the
+/// tick that took it is a difference of two authority ticks, the link's delay. The client's own steps never stand in for
+/// the authority's over more than the clock's window, since each process drops the steps it cannot keep up with.</para>
 /// <para>Nothing a prediction does reaches an authority or the delivered mirror: its population and arena are its own.
 /// Every member runs on the host pump.</para>
 /// </remarks>
@@ -43,20 +48,18 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         public WorldPopulationEntryCheckpoint Entry;
         public WorldAttachedSolidCheckpoint[] Attached = [];
         public bool Decoded;
-        // The authority tick an input sent at seat clock tick zero lands at: an answered batch's answer tick less the seat
-        // clock tick it was sent at, the latest one answered.
         public WorldAuthorityEndpoint? Endpoint;
         // The tip of each prediction by the authority tick it reached, and the distance by which the authority last missed one.
         public readonly (ulong Tick, FixedVector3 Position)[] Trail = new (ulong Tick, FixedVector3 Position)[64];
         public ulong ConfirmedAt = ulong.MaxValue;
         public FixedQ4816 Error = FixedQ4816.MaxValue;
-        public long Offset;
-        public readonly long[] Samples = new long[16];
-        public int SampleNext;
-        public int SampleCount;
-        public bool HasOffset;
-        public uint OffsetSequence;
-        public ulong OffsetEpoch;
+        // The ticks from the authority tick a batch is sent at to the one that takes it, each answered batch's answer
+        // tick less its send tick (WorldSeatSentInput.Sent.Tick): the least of the recent ones, since a batch held up in a
+        // burst lands later than the link's own delay, and predicting that far ahead would carry the body past where the
+        // authority takes the next input. Both ticks are the authority's, so the lead is the link's delay alone.
+        public readonly WindowedExtremes Leads = new(length: 16);
+        public uint LeadSequence;
+        public ulong LeadEpoch;
         public double PredictedAt = double.NaN;
         public bool Predicted;
         public string Reason = "no prediction asked";
@@ -97,7 +100,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         var seat = m_seats[slot];
 
         return (seat.Predicted
-            ? string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"predicted {seat.Body.Steps} tick(s) past tick {seat.Body.ContinuationTick}, last missed by {(double)seat.Error:0.###} m; offset {seat.Offset}; {Predictions} prediction(s), {StepsTaken} step(s), {PopulationsBuilt} population(s)")
+            ? string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"predicted {seat.Body.Steps} tick(s) past tick {seat.Body.ContinuationTick}, last missed by {(double)seat.Error:0.###} m; lead {seat.Leads.Minimum} tick(s), the authority's clock moved {client.SeatSentInput(slot: slot).Clock.Moved} tick(s) against the seat's; {Predictions} prediction(s), {StepsTaken} step(s), {PopulationsBuilt} population(s)")
             : $"off({seat.Reason})");
     }
     // Predicts one seat's body, answering null, or why it predicted nothing.
@@ -132,35 +135,32 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         // Every authority numbers its own ticks: a seat that crossed to another times its input against it afresh.
         if (!ReferenceEquals(objA: seat.Endpoint, objB: endpoint)) {
             seat.Endpoint = endpoint;
-            seat.SampleCount = 0;
+            seat.Leads.Clear();
             seat.ConfirmedAt = ulong.MaxValue;
             seat.Error = FixedQ4816.MaxValue;
-            seat.HasOffset = false;
         }
-        if (!ReferenceEquals(objA: sent.Endpoint, objB: endpoint)) {
+        if (!ReferenceEquals(objA: sent.Endpoint, objB: endpoint) || !sent.Clock.IsAnchored) {
             return "no input is sent to the seat's authority yet";
         }
 
-        if (mirror.TryInputAnswer(answer: out var answer, owner: owner) && ((answer.Sequence != seat.OffsetSequence) || (answer.Epoch != seat.OffsetEpoch)) &&
-            sent.TryFindSent(clientTick: out var sentAt, epoch: answer.Epoch, sequence: answer.Sequence)) {
-            // The least of the recent samples: a batch held up in a burst lands later than the link's own delay, and
-            // predicting that far ahead would carry the body past where the authority takes the next input.
-            seat.Samples[seat.SampleNext] = ((long)answer.Tick - (long)sentAt);
-            seat.SampleNext = ((seat.SampleNext + 1) % seat.Samples.Length);
-            seat.SampleCount = Math.Min(val1: (seat.SampleCount + 1), val2: seat.Samples.Length);
-            seat.Offset = long.MaxValue;
-            foreach (var sample in seat.Samples.AsSpan(start: 0, length: seat.SampleCount)) {
-                seat.Offset = Math.Min(val1: seat.Offset, val2: sample);
-            }
-            seat.OffsetSequence = answer.Sequence;
-            seat.OffsetEpoch = answer.Epoch;
-            seat.HasOffset = true;
+        if (mirror.TryInputAnswer(answer: out var answer, owner: owner) && ((answer.Sequence != seat.LeadSequence) || (answer.Epoch != seat.LeadEpoch)) &&
+            sent.TryFindSent(epoch: answer.Epoch, sequence: answer.Sequence, tick: out var sentAt)) {
+            seat.Leads.Add(value: ((long)answer.Tick - sentAt));
+            seat.LeadSequence = answer.Sequence;
+            seat.LeadEpoch = answer.Epoch;
         }
-        if (!seat.HasOffset) {
+        if (seat.Leads.Count == 0) {
             return "no answered input is timed yet";
         }
 
-        var target = ((long)client.SeatClockTicks(rateHz: definition.SimulationRateHz) + seat.Offset);
+        var lead = seat.Leads.Minimum;
+        var now = client.SeatClockTicks(rateHz: definition.SimulationRateHz);
+
+        // A delivery that arrived since the last batch was sent (an authority catching up runs several ticks at once)
+        // anchors the clock too, so the tick an input sent now lands at is never behind the continuation.
+        sent.Clock.Observe(clientTick: now, deliveredTick: Math.Max(val1: mirror.Tick, val2: own.Tick));
+
+        var target = (sent.Clock.TickAt(clientTick: now) + lead);
         var steps = (target - (long)own.Tick);
 
         if ((steps < 0L) || (steps > MaxSteps)) {
@@ -202,23 +202,25 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
 
         var stepTicks = FixedTickConversion.PerRate(ratePerSecond: ((uint)definition.SimulationRateHz));
         var engineTick = own.EngineTick;
-        var previous = predicted.FixedPosition;
+        var position = predicted.FixedPosition;
+        var previous = position;
+        var orientation = predicted.FixedOrientation;
         // The last batch the body has taken, by its position in the sent history: the authority takes a held batch again
         // on every tick no newer one arrives, its relative movement spent, so the prediction does too.
         var applied = -1;
+        var taken = 0L;
 
-        for (var position = 0; (position < sent.Count); position++) {
-            if (((long)sent.At(position: position).ClientTick) > (((long)own.Tick) - seat.Offset)) {
+        for (var held = 0; (held < sent.Count); held++) {
+            if ((sent.At(position: held).Tick + lead) > ((long)own.Tick)) {
                 break;
             }
-            applied = position;
+            applied = held;
         }
         for (var step = 1L; (step <= steps); step++) {
             var tick = (own.Tick + ((ulong)step));
-            var sentBy = (((long)tick) - seat.Offset);
             var fresh = false;
 
-            while (((applied + 1) < sent.Count) && (((long)sent.At(position: (applied + 1)).ClientTick) <= sentBy)) {
+            while (((applied + 1) < sent.Count) && ((sent.At(position: (applied + 1)).Tick + lead) <= ((long)tick))) {
                 applied++;
                 fresh = true;
                 TakeInput(body: predicted, held: false, population: population, submission: sent.At(position: applied).Submission, tick: tick);
@@ -227,7 +229,6 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
                 TakeInput(body: predicted, held: true, population: population, submission: sent.At(position: applied).Submission, tick: tick);
             }
 
-            previous = predicted.FixedPosition;
             m_edges.AsSpan().Clear();
             population.AdvanceSeats(engageEdges: m_edges, engageProbeOrdinals: [], stepStartEngineTick: engineTick, stepTicks: stepTicks, tick: tick);
             population.CompleteStep(tick: tick);
@@ -237,29 +238,33 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
             // counterpart, perhaps resized or into another world), so a prediction past one would steer the seat from a
             // body standing in the wall behind the glass: the seat steers from what was delivered until the crossing is.
             foreach (var door in seat.Doors) {
-                if (WorldFaceRegion.Sweep(aperture: door.Box, from: previous, to: predicted.FixedPosition).Crossed) {
+                if (WorldFaceRegion.Sweep(aperture: door.Box, from: position, to: predicted.FixedPosition).Crossed) {
                     return $"the prediction reaches {door.PlacementId}/{door.Face}, whose crossing the authority makes";
                 }
             }
+            previous = position;
+            position = predicted.FixedPosition;
+            orientation = predicted.FixedOrientation;
+            taken = step;
         }
-        if (steps > 0L) {
-            var tip = (own.Tick + ((ulong)steps));
+        if (taken > 0L) {
+            var tip = (own.Tick + ((ulong)taken));
 
-            seat.Trail[(int)(tip % ((ulong)seat.Trail.Length))] = (tip, predicted.FixedPosition);
+            seat.Trail[(int)(tip % ((ulong)seat.Trail.Length))] = (tip, position);
         }
 
         var rate = FixedQ4816.FromInteger(value: definition.SimulationRateHz);
-        var velocity = ((steps > 0L) ? ((predicted.FixedPosition - previous) * rate) : default);
+        var velocity = ((taken > 0L) ? ((position - previous) * rate) : default);
 
         Predictions++;
-        StepsTaken += steps;
+        StepsTaken += taken;
         body = new WorldPredictedBody(
             ContinuationTick: own.Tick,
             Endpoint: endpoint,
             Index: route.EntityIndex,
-            Orientation: predicted.FixedOrientation,
-            Position: predicted.FixedPosition,
-            Tick: (own.Tick + ((ulong)steps)),
+            Orientation: orientation,
+            Position: position,
+            Tick: (own.Tick + ((ulong)taken)),
             Velocity: velocity,
             Error: seat.Error
         );
@@ -287,6 +292,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         if (ReferenceEquals(objA: seat.Definition, objB: definition)) {
             return ((seat.Population is not null) ? null : seat.PopulationRefusal);
         }
+
         if ((seat.Population is { } built) && (seat.Definition is { } before) &&
             WorldDocumentInputs.Changed(after: definition, before: before).Intersect(other: built.BuiltFrom).IsEmpty) {
             seat.Definition = definition;
