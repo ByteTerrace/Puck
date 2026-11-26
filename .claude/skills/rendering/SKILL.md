@@ -577,8 +577,9 @@ records the options weighed.
   selection of every draw (`OpticalKind`).
 - **Draws that cast no shadow.** A palette slot with `castsShadow: false` (`SdfMaterial.CastsNoShadow`, carried on the
   appearance outline) bakes its shapes into groups of their own (`SdfMeshBakeGroup.CastsNoShadow`), whose records carry
-  `SdfMeshRecord.NoShadowFlag`; the selection kernel filters that flag out of every split-exit staging, which every
-  shadow drawing is (`SdfWorldShadows.Stage`), so a new shadow drawing must stage with `splitExit` or it draws them.
+  `SdfMeshRecord.NoShadowFlag`; the selection kernel filters that flag out of every split-exit staging
+  (`SdfMeshOcclusion.Stage`'s `splitExit`, which the world's shadows pass for every drawing), so a new shadow drawing
+  must stage with `splitExit` or it draws them.
   `NoteMotion` takes whether each side casts (`SdfMeshRegion.CastsShadow`), so such a draw's motion owes the shadows
   nothing. A static one stays in the irradiance volume's scene and the far product.
 - **Block bounds.** A pair of layers carries its block bounds (`Pair.Blocks`, `frame/sdf-shadow-blocks.hlsli`): a

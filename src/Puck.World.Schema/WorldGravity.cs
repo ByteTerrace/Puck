@@ -660,7 +660,7 @@ public readonly record struct FixedWorldGravityOrbit(
     /// phase and one closed-form evaluation, whatever ticks were evaluated before.</summary>
     /// <param name="engineTick">The engine tick.</param>
     /// <returns>The offset from the focus, in world units.</returns>
-    public FixedVector3 OffsetAt(ulong engineTick) => Orbit.PositionAt(phase: unchecked((FixedConicOrbit.Phase(elapsedTicks: engineTick, periodTicks: PeriodTicks) + PhaseOffset)));
+    public FixedVector3 OffsetAt(ulong engineTick) => OffsetAtTurn(turn: FixedConicOrbit.Phase(elapsedTicks: engineTick, periodTicks: PeriodTicks));
     /// <summary>Returns the orbit's position relative to its focus where a clock row's turn stands
     /// (<see cref="WorldGravityOrbit.PhaseBy"/>, read exactly by <see cref="WorldStateReader.TryReadTurn"/>), which the
     /// authored phase offsets.</summary>
