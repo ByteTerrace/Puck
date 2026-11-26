@@ -14,7 +14,8 @@ bool sdfViewsFiltersAmbient(int viewMode) {
 #if defined(SDF_VIEWS_OMIT_FILTER)
     return false;
 #endif
-    return (!worldAoDisabled() && (worldFinalShadingMode(viewMode) || (viewMode == SDF_DEBUG_VIEW_AO)));
+    // The shadow view filters the occlusion too: the probes' answer it shows for a receiver past the cascades carries it.
+    return (!worldAoDisabled() && (worldFinalShadingMode(viewMode) || (viewMode == SDF_DEBUG_VIEW_AO) || (viewMode == SDF_DEBUG_VIEW_SHADOW)));
 }
 bool sdfViewsFiltersShadows(int viewMode) {
 #if defined(SDF_VIEWS_OMIT_FILTER)
