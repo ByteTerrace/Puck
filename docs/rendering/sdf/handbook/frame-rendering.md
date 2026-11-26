@@ -1445,15 +1445,17 @@ the compact GPU decoder cost more mesh and cascade time than that layout. Storag
 does not require paying that decode cost in every vertex stage. Authored non-unit normals retain
 their magnitudes.
 
-The merged mesh then gets two coarser levels (`SdfMeshCollapse`, `SdfMesh.Levels`),
+The merged mesh then gets a chain of coarser levels (`SdfMeshCollapse`, `SdfMesh.Levels`),
 each a triangle list over the merged mesh's own vertices made by half-edge
 collapses. A collapse is taken only where three measured distances stay within
-the level's error, a quarter of the contour cell for the first level and two cells
-for the second: every merged vertex to a level triangle of its material whose
-interpolated normal there is within 2 or 6 degrees of its own, every crease and
-material edge vertex and edge midpoint to that line as the level draws it, and
-every new triangle's centroid and edge midpoints to the surface it replaces. The
-level records the largest (`SdfMeshLevel.Error`). Glyph-bearing groups limit crease and material-edge
+the level's error, one level for each doubling of it from a quarter of the contour
+cell to 32 cells (`SdfMeshCollapse.CellShares`): every merged vertex to a level
+triangle of its material whose interpolated normal there is within the level's
+angle of its own (`SdfMeshCollapse.NormalDegrees`, 2 degrees at a quarter cell to
+30 at 32 cells), every crease and material edge vertex and edge midpoint to that
+line as the level draws it, and every new triangle's centroid and edge midpoints
+to the surface it replaces. The level records the largest (`SdfMeshLevel.Error`),
+and a level saving less than a quarter of the finer level's triangles is not kept. Glyph-bearing groups limit crease and material-edge
 error to the largest bake-cell dimension divided by 8 while face interiors use the ordinary budget,
 preserving counters and thin-stroke outlines even when glyph and housing share a
 material. Without detectable features they retain the merged surface. The region lays each level's
@@ -1465,12 +1467,12 @@ level it drew until that shows past 1.1 pixels; a shadow cascade the coarsest
 within one of its texels. The draw pushes its level above its index and the
 vertex stage starts at the level's first triangle, which the draw's record holds;
 the surface pass reads the pixel's triangle as it does any other. Glass, a draw
-with no host box and the irradiance trace keep the merged mesh, and
-`world.detail 0`, `1` or `2` draws one level everywhere for comparison. On the
-debug world the first level keeps 11% of the stored set's triangles and the
-second 6%, for 9% more bytes in the store and the region; in the lobby the mesh
-pass and the two cascades draw 1.3, 2.1 and 2.0 M triangles where the merged
-mesh drew 4.9, 17.9 and 22.8 M.
+with no host box keep the merged mesh, the irradiance trace reads the coarsest
+level within its error, and `world.detail` with a level number draws that level
+everywhere for comparison. Every copy of a shared mesh chooses its own level, so a
+far copy draws the coarse level its own pixels allow whatever tier the nearest copy
+asked for; `world.residency`'s selection line counts the triangles each pass draws
+at each level.
 
 A body straddling a portal whose counterpart stands in the same world is drawn
 on both sides of it (`WorldPortalStraddle`, `SdfSlotClip`). Each draw riding

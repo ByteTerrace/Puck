@@ -201,18 +201,19 @@ void sdfOcclusionCompact(uint candidate, uint local, bool scatter, bool late) {
     }
 }
 
-// Marks a draw a phase selected for submission: its level plus one in its two bits of the counts' mark words. Every
-// phase of a draw draws the level the early step chose, so two phases' marks OR to that level's.
+// Marks a draw a phase selected for submission: its level plus one in its SDF_MESH_MARK_BITS bits of the counts' mark
+// words. Every phase of a draw draws the level the early step chose, so two phases' marks OR to that level's.
 void sdfOcclusionMark(uint draw, uint level) {
+    const uint perWord = (32u / SDF_MESH_MARK_BITS);
     uint words;
     uint stride;
 
     sdfMeshOcclusionCountsRW.GetDimensions(words, stride);
 
-    uint word = (SDF_MESH_MARK_BASE + (draw >> 4u));
+    uint word = (SDF_MESH_MARK_BASE + (draw / perWord));
 
     if (word < words) {
-        InterlockedOr(sdfMeshOcclusionCountsRW[word], (min((level + 1u), 3u) << ((draw & 15u) * 2u)));
+        InterlockedOr(sdfMeshOcclusionCountsRW[word], (min((level + 1u), ((1u << SDF_MESH_MARK_BITS) - 1u)) << ((draw % perWord) * SDF_MESH_MARK_BITS)));
     }
 }
 

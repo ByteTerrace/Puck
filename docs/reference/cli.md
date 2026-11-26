@@ -4149,6 +4149,10 @@ never writes the store, so it reads a store a running World owns.
   tetrahedral gradient a sample, with taps at least half a millimetre out since
   the evaluator answers in steps of 2⁻¹⁶ m. A bake change is measured this way
   with no device; a group whose field the evaluator refuses is named as such.
+  Its header line counts the collapse's work over every mesh it levelled
+  (`SdfMeshCollapse.ProcessWork`: levels run and kept, passes, places priced,
+  collapses tried and taken), which is how a change to the levels is costed in
+  bake work.
 - `--tier <n>` plans every group at that detail tier (`SdfMeshTier`: tier
   `n`'s cell is 1 mm times two to the `n`), held to the rungs that change each
   group's mesh; zero, the default, is each group's finest, the geometry's own
@@ -4181,7 +4185,9 @@ never writes the store, so it reads a store a running World owns.
   level's offset by its lattice's median slope rather than each sample's own
   (`local`, the default).
 
-Per group it prints the distance off the surface at vertices, triangle
+Per group it prints a `levels:` line, the triangles each level of the mesh's
+collapse chain draws (its pieces' summed) with each coarser level's recorded
+error and the mesh box's extent, and the distance off the surface at vertices, triangle
 centroids and edge midpoints (p50, p99, max, and how many pass a quarter cell);
 the angle between each triangle's face normal, and its corners' shading normals,
 and the field's gradient at its centroid, probed an eighth of the mesh's cell out

@@ -64,6 +64,15 @@ bool sdfSelectionKeeps(float3 center, float3 x, float3 y, float3 z) {
         sdfSelectionBeyond(up.xyz - (lens.y + vertical) * forward.xyz, 0.0, relative, x, y, z) ||
         sdfSelectionBeyond((lens.y - vertical) * forward.xyz - up.xyz, 0.0, relative, x, y, z));
 }
+// The display pixels a view's tangent unit covers where a displacement of a draw's surface projects sharpest: a
+// displacement e at forward depth z and distance r from the eye moves its image by at most e r / z^2 tangent units (the
+// projection's derivative), so a draw reaching no farther than `far` from the eye, its nearest point at `depth`, projects
+// its error at most far / depth times as far as a point on the view's axis at that depth would, and no visible point
+// projects past the frustum's corner (SdfMeshDetail.WriteGpu: detail.z at the corner's stretch, detail.w that stretch).
+float sdfSelectionViewPixels(float4 detail, float far, float depth) {
+    float corner = max(detail.w, 1.0);
+    return (detail.z / corner) * clamp(far / depth, 1.0, corner);
+}
 // Whether a draw's detail band keeps it in this pass (SdfMeshBand, SDF_MESH_BAND_WORD): a draw with no band always, a
 // group's floor where its cell projects to at most half a display pixel over the nearest point of the band's sphere (a
 // view) or to at most half a texel (a cascade), and the group's finer tier everywhere else. Both tiers of a placement
@@ -92,7 +101,7 @@ bool sdfSelectionBandKeeps(uint record, bool unboxed, uint draws) {
             float4 eye = asfloat(sdfMeshOcclusionCandidates[2]);
             float3 forward = asfloat(sdfMeshOcclusionCandidates[3]).xyz;
             float depth = dot(world - eye.xyz, forward) - radius;
-            floorStands = (depth > 0.0) && ((size * detail.z) <= depth);
+            floorStands = (depth > 0.0) && ((size * sdfSelectionViewPixels(detail, length(world - eye.xyz) + radius, depth)) <= depth);
         }
     }
     if (floorDraw) { return floorStands; }
@@ -124,7 +133,8 @@ uint sdfSelectionLevel(uint record, uint4 previous, bool unboxed, float3 center,
     float3 forward = direction.xyz;
     float depth = ((dot(center - eye.xyz, forward) - abs(dot(x, forward))) - abs(dot(y, forward))) - abs(dot(z, forward));
     if (!(depth > 0.0)) { return 0u; }
-    scale = (detail.z * scale) / depth;
+    float reach = max(max(length(x + y + z), length(x + y - z)), max(length(x - y + z), length(y + z - x)));
+    scale = (sdfSelectionViewPixels(detail, length(center - eye.xyz) + reach, depth) * scale) / depth;
     // The same staged generation validates visibility and this level history.
     chosen = (eye.w == 0.0 && previous.z == generation) ? min(previous.y, count) : 0u;
     // Dynamic indices read device storage, never a dynamically indexed local array.
