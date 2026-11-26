@@ -209,7 +209,11 @@ orbit distance; middle click resets distance and angles. The play wheel's hold
 pages bind `mouse.wheel` to `player.wheel.scroll`, replacing the inherited zoom
 source by source, so scrolling steps the open wheel's ring and leaves the boom
 alone until the wheel closes. `world.view.camera 1 full` reports the requested
-distance and bounds, including in a headless World.
+distance and bounds, including in a headless World. `chaseCamera(wall: wallFraming(...))` adds the
+framing of a body on a face it cannot stand on (a climber): the eye draws back and looks up the
+face while the `HoldingUnwalkable` fact holds, eased on the `camera-wall` response, and
+`faceFrame: Body` (the template's default) reads the stick in the body's own frame there, so orbiting
+the camera never changes which push climbs.
 
 `abilities.puck` is a library: `dashAbility(kit, speed, duration, cooldown)`
 authors a kit action over the generic timed planar impulse. The avatar declares
@@ -220,7 +224,8 @@ Run remains Shift while held, with N/left-stick press switching run on and off.
 `climbAbility(kit, ...)` authors climbing into a kit: a `climb` hold row taken by
 walking or falling into a holdable wall, a `stamina` register spent while moving
 on the face and held while hanging, a leap on the jump channel for a chunk of
-it, letting go on the run channel, the winded lock once it empties, and the
+it, letting go on the run channel, the winded lock once it empties, the swing
+round an outside corner onto the face past it, and the
 mantle over a wall's top. The kit's own ground and fall rows author
 `restore: staminaRestore()` so standing on ground refills it. Every number is a
 template parameter; the Moth's [climb document](../debug/avatars/moth-climb.puck)

@@ -638,7 +638,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         // its body holds one: the camera orbits without changing which push climbs, and no travel turns the heading.
         var onFace = (
             (definition.Views.SeatControl.FaceFrame == WorldSeatFaceFrame.Body) &&
-            ((endpoint.Mirror.Facts(index: bodyIndex) & BodyFacts.HoldingUnwalkable) != 0)
+            ((body.Facts & BodyFacts.HoldingUnwalkable) != 0)
         );
 
         if (onFace) {
