@@ -1758,6 +1758,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     b: row.Name,
                     comparisonType: StringComparison.Ordinal
                 ))
+                .OrderBy(keySelector: static pair => pair.Key.Seat)
                 .Select(selector: pair => (pair.Key.Seat, pair.Value))],
             AppliedTransferHighWater: row.DrainedTransfers.HighWater,
             AppliedTransferIds: [.. row.DrainedTransfers.Above],
@@ -1776,6 +1777,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
                     b: row.Name,
                     comparisonType: StringComparison.Ordinal
                 ))
+                .OrderBy(keySelector: static pair => pair.Key.Seat)
                 .Select(selector: pair => (pair.Key.Seat, pair.Value))],
             Stopping: m_stopping.Contains(item: row.Name)
         );

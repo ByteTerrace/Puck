@@ -2612,6 +2612,8 @@ public sealed partial class WorldTransferEscrow {
                     )
         )));
     }
+    /// <summary>Gets the number of arrived bodies whose authenticated source border is retained.</summary>
+    public int ArrivalBorders => m_borderAdmissions.Count;
     /// <summary>Reads the authenticated source-border identity retained for one active arrived body.</summary>
     public bool TryArrivalBorder(int bodyIndex, out string border) =>
         m_borderAdmissions.TryGetValue(
