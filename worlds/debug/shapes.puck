@@ -183,6 +183,8 @@ let galleryCatalog = flatMap(
   i => map(galleryDisplays[i].names, (name, slot) => { name: name, display: i, slot: slot, index: (galleryDisplayFirsts[i] + slot) })
 )
 let galleryLast = (length(galleryCatalog) - 1)
+// Each display's default exhibit, by its catalog index: the one its cells, its list and its turntable hold at boot.
+let galleryDisplayDefaults = map(galleryDisplays, display => filter(galleryCatalog, entry => (entry.name == display.default))[0].index)
 
 // A display's floor height, and `front`, the sign of z its console faces along (1 at yaw 180, -1 at yaw 0).
 function displayFloor(display) = galleryFloor[display.level]
@@ -910,13 +912,13 @@ template displayPlacements() {
   }
   for (display, index) in galleryDisplays {
     placement $"display-{display.id}" {
-      prototype: display.names[0]
+      prototype: galleryCatalog[galleryDisplayDefaults[index]].name
       parent: "gallery"
       position [display.x, (displayFloor(display) + displayExhibitDrop), display.z]
       yawDegrees: display.yaw
       scale: displayExhibitScale
       respond: map(
-        filter(galleryCatalog, entry => (entry.index != galleryDisplayFirsts[index])),
+        filter(galleryCatalog, entry => (entry.index != galleryDisplayDefaults[index])),
         entry => {
           when: state(state: gallerySelect, key: display.id, comparison: Equal, value: entry.index)
           prototypeId: entry.name
@@ -947,17 +949,17 @@ template displayPlacements() {
 // console lines.
 let reachStation = galleryStation("motion-ik")
 let reachPoint = exhibitPoint(reachStation, [-0.35, 1.45, 0.25])
-// A display's first exhibit, which its cells hold at boot, and the scroll its list boots at: that exhibit on the top row,
+// A display's default exhibit, which its cells hold at boot, and the scroll its list boots at: that exhibit on the top row,
 // unless the catalog's end comes first.
-function displayFirst(index) = galleryCatalog[galleryDisplayFirsts[index]]
-function consoleScrollAt(index) = minimum(galleryDisplayFirsts[index], consoleScrollLast)
+function displayFirst(index) = galleryCatalog[galleryDisplayDefaults[index]]
+function consoleScrollAt(index) = minimum(galleryDisplayDefaults[index], consoleScrollLast)
 // Every row of every console's list as it boots: its cells' key, and the catalog entry it shows.
 let consoleSlots = flatMap(
   range(0, length(galleryDisplays)),
   index => map(range(0, consoleRows), row => {
     key: $"{galleryDisplays[index].id}-{row}"
     entry: galleryCatalog[(consoleScrollAt(index) + row)]
-    chosen: ((consoleScrollAt(index) + row) == galleryDisplayFirsts[index])
+    chosen: ((consoleScrollAt(index) + row) == galleryDisplayDefaults[index])
   })
 )
 
@@ -971,15 +973,13 @@ template displayCells(name, values) {
   }
 }
 
-// Each display's default exhibit, by its catalog index.
-let galleryDisplayDefaults = map(galleryDisplays, display => filter(galleryCatalog, entry => (entry.name == display.default))[0].index)
 template displayState() {
   displayCells(name: "gallerySelect", values: galleryDisplayDefaults)
   displayCells(name: "galleryShownAt", values: galleryDisplayDefaults)
   displayCells(name: "galleryPlace", values: map(galleryDisplayDefaults, shown => (shown + 1)))
   displayCells(name: "galleryScroll", values: map(range(0, length(galleryDisplays)), index => consoleScrollAt(index)))
   displayCells(name: "galleryRowsAt", values: map(range(0, length(galleryDisplays)), index => consoleScrollAt(index)))
-  displayCells(name: "galleryRowsChosen", values: galleryDisplayFirsts)
+  displayCells(name: "galleryRowsChosen", values: galleryDisplayDefaults)
   displayCells(name: "galleryPress", values: map(galleryDisplays, display => 0))
   displayCells(name: "galleryPressRow", values: map(galleryDisplays, display => -1))
   displayCells(name: "galleryPressScroll", values: map(range(0, length(galleryDisplays)), index => consoleScrollAt(index)))
