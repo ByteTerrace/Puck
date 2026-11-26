@@ -575,11 +575,7 @@ let shellGateEdges = [
   { edge: "south", z: (naveSouth - balconyInset), bay: bayOf(treeLanding(toyboxLevel, "south")) }
   { edge: "north", z: (naveNorth + balconyInset), bay: bayOf(treeLanding(toyboxLevel, "north")) }
 ]
-let shellLatticeGates = flatMap(shellGateEdges, e => [
-  { id: $"gate-{e.edge}-west", x: (bayX(e.bay) - shellGateSide), y: 0, z: e.z, prototype: "gallery-lattice-gate-side" }
-  { id: $"gate-{e.edge}-east", x: (bayX(e.bay) + shellGateSide), y: 0, z: e.z, prototype: "gallery-lattice-gate-side" }
-  { id: $"gate-{e.edge}-head", x: bayX(e.bay), y: treeGateHeight, z: e.z, prototype: "gallery-lattice-gate-head" }
-])
+let shellLatticeGates = map(shellGateEdges, e => { id: $"sieve-{e.edge}", x: bayX(e.bay), y: 0, z: e.z, prototype: "gallery-lattice-sieve" })
 let shellLattices = concat(
   map(filter(shellLatticeBays, b => (b != shellGateEdges[0].bay)), b => shellLatticeBay(b, "south", (naveSouth - balconyInset))),
   map(filter(shellLatticeBays, b => (b != shellGateEdges[1].bay)), b => shellLatticeBay(b, "north", (naveNorth + balconyInset))),
@@ -903,6 +899,10 @@ template shellPrototypes() {
       id: $"gallery-lattice-open-{n}", n: n, cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0
     }),
     [
+      {
+        id: "gallery-lattice-sieve", n: treeBay, cells: toyLatticeSieveCells, pitch: ((galleryBayTiles * galleryTile) / toyLatticeSieveCells)
+        height: shellLatticeHeight, upright: 1, sieve: 1
+      }
       { id: "gallery-lattice-half", n: galleryBays, cells: (shellLatticeTileCells / 2), pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
       { id: "gallery-lattice-tile", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
       { id: "gallery-lattice-tile-open", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0 }
@@ -928,9 +928,17 @@ template shellPrototypes() {
           rails: shellLatticeRails(kind.height),
           upright: kind.upright,
           sill: kind.upright,
-          net: toyLatticeNet
+          net: ((kind.sieve == 1) ? null : toyLatticeNet)
         )
       }
+    }
+  }
+  prototype "gallery-branch-door" {
+    document {
+      name: "gallery-branch-door"
+      schema: "puck.creation.v1"
+      palette: shellKit
+      edgeDoorway(base: 0)
     }
   }
   prototype "gallery-planter" {
@@ -1118,6 +1126,16 @@ template shellPlacements() {
         ]
         yawDegrees: 270
       }
+    }
+  }
+  // A doorway where each of the tree's level-2 and level-3 branches steps onto its balcony (layout.puck's treeLimbs).
+  for (b, n) in filter(treeLimbs, b => (b.level >= 2)) {
+    placement $"gallery-branch-door-{n}" {
+      prototype: "gallery-branch-door"
+      parent: "gallery"
+      position [b.x, galleryFloor[b.level], ((b.side == "south") ? (naveSouth - balconyInset) : (naveNorth + balconyInset))]
+      yawDegrees: ((b.side == "south") ? 180 : 0)
+      solid
     }
   }
   for rail in shellRails {

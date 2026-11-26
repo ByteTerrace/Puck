@@ -1288,3 +1288,51 @@ template pendantLamp(base, at, drop, shade = 0.2, glow = 0.17) {
     detail: true
   }
 }
+
+// A doorway where a walkway meets a balcony's edge (the kit's palette): two teal posts `width` apart in X with brass
+// caps and a brass inlay down each face, a lintel over the opening with a shallow arched soffit, and a brass threshold
+// plate across the floor, all standing on y 0 and facing ±Z. Posts and lintel collide; the inlays, caps and the plate's
+// bevel are drawn only. `height` is the opening's clear height under the lintel's crown.
+template edgeDoorway(base, width = 1.6, height = 2.7, post = 0.22, lintel = 0.32, depth = 0.3) {
+  for side in [-1, 1] {
+    shape Box $"door-post-{side}" {
+      material: (base + kitTeal)
+      position [(side * ((width / 2) + (post / 2))), ((height + lintel) / 2), 0]
+      scale [(post / 2), ((height + lintel) / 2), (depth / 2)]
+      rounding: (post / 6)
+    }
+    shape Box $"door-inlay-{side}" {
+      detail: true
+      material: (base + kitBrass)
+      position [(side * ((width / 2) + (post / 2))), (height * 0.55), 0]
+      scale [0.018, (height * 0.38), ((depth / 2) + 0.006)]
+    }
+    shape Box $"door-cap-{side}" {
+      detail: true
+      material: (base + kitBrass)
+      position [(side * ((width / 2) + (post / 2))), ((height + lintel) + 0.04), 0]
+      scale [((post / 2) + 0.03), 0.04, ((depth / 2) + 0.03)]
+      rounding: 0.02
+    }
+  }
+  shape Box "door-lintel" {
+    material: (base + kitTeal)
+    position [0, (height + (lintel / 2)), 0]
+    scale [((width / 2) + post), (lintel / 2), (depth / 2)]
+    rounding: 0.03
+  }
+  // The soffit's arch: a wide cylinder across the opening cut out of the lintel's underside.
+  shape Cylinder "door-arch" {
+    blend: Subtraction
+    material: (base + kitTeal)
+    position [0, (height - (width * 0.9)), 0]
+    rotation: rotate([1, 0, 0], 90deg)
+    scale [(width * 0.98), ((depth / 2) + 0.05), (width * 0.98)]
+  }
+  shape Box "door-threshold" {
+    material: (base + kitBrass)
+    position [0, 0.012, 0]
+    scale [((width / 2) + post), 0.012, ((depth / 2) + 0.05)]
+    rounding: 0.008
+  }
+}

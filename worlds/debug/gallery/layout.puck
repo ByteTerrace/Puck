@@ -318,6 +318,10 @@ let toyLatticeBar = 0.025
 // The toybox's net: the lattice's bars and rails give way to a diamond net of rope strands over a clear pane that holds
 // every body (architecture.puck's `lattice` net): a diamond every 18 cm; the strands are off (`strand: 0`) until the bake
 // draws a rotated repeated strand along its whole length.
+// Where a level-1 branch meets the lattice it dead-ends at a sieve: a bay of bars spaced so that a body small enough
+// (about a fifth of the Moth, Alice's size and smaller) slips between them and a larger one cannot, so the branches
+// tempt a full-size climber toward the toybox and only a shrunken one gets in.
+let toyLatticeSieveCells = 36
 let toyLatticeNet = { strand: 0, pitch: 0.18 }
 // The loose panels: one panel on each edge that a rule can open, move or swap (gallery.md, "The lattice"), each named
 // `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: a south and a north bay, and the bridge's middle
