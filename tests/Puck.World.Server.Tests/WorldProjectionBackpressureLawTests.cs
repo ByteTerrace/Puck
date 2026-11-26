@@ -304,7 +304,8 @@ public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output
     // A catch-up rides a delivery, and a paused authority makes none. An observer that fell a whole queue behind a real
     // authority, and whose wire then drained while the host held that authority paused, is sent nothing however many
     // host steps pass over the paused world: it keeps what it held. The first tick after the authority resumes cuts the
-    // stream to a new generation and sends the whole document and a primer snapshot of that tick behind the cut.
+    // stream to a new generation and sends the whole document, whose record carries the cut, and a primer snapshot of
+    // that tick.
     [Fact]
     public async Task ASlowObserverOfAPausedAuthorityCatchesUpWhenItResumes() {
         const string Row = "row-a";
@@ -375,13 +376,13 @@ public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output
             Assert.True(condition: WorldFederationCodec.TryReadStamped(frame.Body.Span, out var stamp, out _, out _));
             generation = Math.Max(val1: generation, val2: stamp.Generation);
         }
-        var cutFrame = await WorldFederationCodec.ReadResponseAsync(ct: ct, stream: decodedWire);
+        // The catch-up opens with the whole document, whose record carries the cut: no cut record goes ahead of it.
+        var opening = await WorldFederationCodec.ReadResponseAsync(ct: ct, stream: decodedWire);
 
-        Assert.Equal(expected: ((byte)WorldFederationResponse.Cut), actual: cutFrame.Kind);
-        Assert.True(condition: WorldFederationCodec.TryDecodeCut(body: cutFrame.Body.Span, stream: out var cut, terminal: out var terminal));
-        Assert.False(condition: terminal);
+        Assert.Equal(expected: ((byte)WorldFederationResponse.Definition), actual: opening.Kind);
+        Assert.True(condition: WorldFederationCodec.TryReadStamped(opening.Body.Span, out var cut, out _, out _));
         Assert.True(condition: (cut.Generation > generation));
-        var documents = 0;
+        var documents = 1;
         var primers = new List<ulong>();
 
         for (var record = (WorldFederationProjectionSink.PendingDeliveryLimit + 1); (record < records); record++) {
