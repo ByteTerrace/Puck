@@ -49,6 +49,17 @@ public readonly record struct RuleResponse(long Judged, long Fired, RuleLatching
         var closure = ((rule.Mode == ActionTriggerMode.Edge) ? Closure.None : Prove(context: context, rule: rule));
         var latching = ((rule.Mode == ActionTriggerMode.Edge) ? RuleLatching.Edge : ((closure != Closure.None) ? RuleLatching.ClosesItself : RuleLatching.None));
 
+        // A sweep of this tick's events binds nothing at rest, and one event, the change the sheet prices, binds one
+        // binding whatever it reads. A maxFirings bound or a host that judges in place keeps the capacity price.
+        if (!inPlace && (rule.MaxFirings <= 0) && (rule.Iteration is { BindsEvents: true })) {
+            return new RuleResponse(
+                Fired: Math.Min(val1: firings, val2: 1L),
+                Judged: Math.Min(val1: multiplier, val2: 1L),
+                Latching: latching,
+                Why: "binds only this tick's events: none at rest, one binding per event"
+            );
+        }
+
         // The lines a due list visits every tick in full (RuleDueList.Classify): a sweep bounded by maxFirings, one
         // over a live row selection, and one whose key set no version names.
         if (

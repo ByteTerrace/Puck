@@ -21,6 +21,10 @@ public abstract record RuleIteration(int Capacity) {
     /// body's key names, reaches that body's binding alone, and only a move of the set itself
     /// (<see cref="TrySchedule"/>) reaches every binding.</summary>
     public virtual bool BindsBodies => false;
+    /// <summary>Gets a value indicating whether the sweep binds only events that arrived this tick, each for the one
+    /// tick that admitted it: the set is empty on a tick at rest, and one event adds one binding, so the work sheet
+    /// prices one binding (<see cref="RuleResponse"/>) rather than the sweep's capacity.</summary>
+    public virtual bool BindsEvents => false;
     /// <summary>Distinguishes successive lifetimes which reuse a bounded key.</summary>
     public abstract long Generation(IEffectHost host, CellKey key);
     /// <summary>Names the rows and host facts whose versions move whenever the set of keys a sweep binds changes, so
