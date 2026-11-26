@@ -304,6 +304,14 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
     /// <summary>Gets whether the coordinator is blocked on the answer of a job it submitted: the volume's background worker
     /// waits for the device, not for host work. Safe to read from any thread.</summary>
     internal bool AwaitsDevice => Volatile.Read(location: ref m_awaitsDevice);
+    /// <summary>Describes what the coordinator waits on while it waits for the device (<see cref="AwaitsDevice"/>), for the
+    /// volume's settling term: the queries pending and in flight, why the latest take refused the head query (the tables
+    /// binding no background work, a scene upload under way, its scene's meshes not resident, the allowance) and the takes
+    /// asked; null while it waits on nothing. It takes no lock, since the volume reads it under its own gate, which a take
+    /// holds this client's gate across, so it reads a moment's state that may be torn. Safe to read from any thread.</summary>
+    internal string? DescribeWait() => (AwaitsDevice
+        ? FormattableString.Invariant($"device:{Volatile.Read(location: ref m_takeRefusal)}:pending={m_pending.Count}:in-flight={Volatile.Read(location: ref m_inFlight)}:asks={Volatile.Read(location: ref m_takeAsks)}")
+        : null);
     // A part submitted while the client stops is answered cancelled, as every pending job is, so its coordinator's window
     // never waits on a job that cannot be taken.
     private Task<Memory<uint>> SubmitAsync(Job job) {
@@ -360,10 +368,13 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
         job = null;
         estimatedSeconds = 0;
         lock (m_gate) {
-            if (m_exclusive || !tables.BindsBackgroundWork) { return false; }
-            if (ServeSceneUpload() || (m_sceneStore?.Carrying ?? false)) { return false; }
+            m_takeAsks++;
+            if (m_exclusive) { return Refused(reason: "exclusive"); }
+            if (!tables.BindsBackgroundWork) { return Refused(reason: "unbound"); }
+            if (ServeSceneUpload()) { return Refused(reason: "scene-upload"); }
+            if (m_sceneStore?.Carrying ?? false) { return Refused(reason: "scene-carry"); }
             if (TryTakeStructures(allowance: (allowance with { Seconds = Math.Min(val1: allowance.Seconds, val2: FrameAllowanceSeconds) }), job: out job, estimatedSeconds: out estimatedSeconds, tables: tables)) { return true; }
-            if (!m_pending.TryPeek(out var pending)) { return false; }
+            if (!m_pending.TryPeek(out var pending)) { return Refused(reason: "none"); }
             if (!((pending.Commits || pending.CameraSample) ? m_volume.KeepsGpuPublication(pending.Scene, pending.Geometry, pending.Window) : m_volume.KeepsGpuScene(pending.Scene)) ||
                 (pending.CameraSample && (m_feedback is null || m_feedbackWords != pending.VolumeWords)) ||
                 (pending.Commits && pending.Batch!.Failed)) {
@@ -372,7 +383,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                 m_feedbackRefusedAt = null;
                 Cancel(job: pending);
                 if (m_pending.Count > 0) { m_tables.GpuWork.Wake(); }
-                return false;
+                return Refused(reason: "cancelled");
             }
             if (!tables.TryProbeScene(pending.Scene, out var placements, out var meshes, out var version)) {
                 m_feedbackRefusedAt = null;
@@ -390,7 +401,7 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                     Cancel(job: pending);
                     if (m_pending.Count > 0) { m_tables.GpuWork.Wake(); }
                 }
-                return false;
+                return Refused(reason: "scene-placement");
             }
             m_waiting = null;
             m_volume.NoteScenePlacement(scene: pending.Scene, placed: true);
@@ -403,35 +414,35 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             // descriptor or region is changed while a query reads it.
             if (!ReferenceEquals(m_scene, pending.Scene) || m_placementVersion != version) {
                 if (m_inFlight == 0) { BeginSceneUpload(scene: pending.Scene, placements: placements, version: version); }
-                return false;
+                return Refused(reason: "scene-replace");
             }
             var exclusive = Exclusive(query: pending);
-            if (exclusive && (m_inFlight != 0)) { return false; }
+            if (exclusive && (m_inFlight != 0)) { return Refused(reason: "exclusive-waits"); }
             // The coordinator cut the query to the whole frame allowance: while work is queued it waits for room, which
             // its price asks the service to hold.
             var price = m_rates[(int)KindOf(pending)].SecondsOf(units: UnitsOf(pending));
 
             if (!allowance.Admits(seconds: price)) {
                 estimatedSeconds = price;
-                return false;
+                return Refused(reason: "allowance");
             }
             pending.Meshes = meshes;
             if (pending.Lighting is not null && !pending.Selection && !pending.CameraSample && (m_feedbackWords != pending.VolumeWords)) {
                 if (m_feedbackRefusedAt is { } refused && m_volume.Time.GetElapsedTime(refused) < SdfGpuWork.DeferralRetry) {
-                    return false;
+                    return Refused(reason: "feedback-refused");
                 }
                 // A relayout gives the old table back before it makes the new one, so the two never stand at once: the old
                 // retires once no job in flight records against it, and the new is made at the first take after the
                 // retirement released it (m_feedbackRetiring).
                 if (m_feedback is { } old) {
-                    if (m_inFlight != 0) { return false; }
+                    if (m_inFlight != 0) { return Refused(reason: "feedback-relayout"); }
                     m_feedback = null;
                     m_feedbackWords = 0;
                     m_feedbackRetiring = true;
                     tables.RetireBackgroundResource(replaced: old, released: m_feedbackReleased ??= () => Volatile.Write(location: ref m_feedbackRetiring, value: false));
-                    return false;
+                    return Refused(reason: "feedback-retiring");
                 }
-                if (Volatile.Read(location: ref m_feedbackRetiring)) { return false; }
+                if (Volatile.Read(location: ref m_feedbackRetiring)) { return Refused(reason: "feedback-retiring"); }
                 // A slot of the service is the region's slot its job flushes through (Record), so a ring block is
                 // rewritten only once the job that last staged through it completed. The region keeps no host copy: each
                 // relight job hands it its own updates (Record).
@@ -440,12 +451,13 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
                     replacement = tables.CreateProbeRegion("probe-feedback", pending.VolumeWords * 4, SdfGpuWork.SlotCount, hostCopyBytes: 0);
                 } catch (GpuMemoryRefusedException) {
                     m_feedbackRefusedAt = m_volume.Time.GetTimestamp();
-                    return false;
+                    return Refused(reason: "feedback-refused");
                 }
                 m_feedback = replacement;
                 m_feedbackWords = pending.VolumeWords;
             }
             m_feedbackRefusedAt = null;
+            m_takeRefusal = "taken";
             m_pending.Dequeue();
             m_inFlight++;
             pending.Serial = Admit();
@@ -456,6 +468,14 @@ internal sealed partial class SdfMeshProbeGpuWork : ISdfGpuWorkClient {
             estimatedSeconds = m_rates[(int)KindOf(pending)].SecondsOf(units: UnitsOf(pending));
             return true;
         }
+    }
+    // Why the latest take refused (TryTake), or "taken", and the takes asked of the client: what DescribeWait prints of a
+    // coordinator whose head query waits. Under the gate.
+    private string m_takeRefusal = "unasked";
+    private long m_takeAsks;
+    private bool Refused(string reason) {
+        m_takeRefusal = reason;
+        return false;
     }
     // Whether a query replaces, clears or fills state every query shares as it records (FitHitCache, the camera-sample cache's
     // fill, the feedback volume's size, the batch output's size), and so runs alone (m_exclusive). Under the gate, as

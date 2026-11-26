@@ -135,7 +135,7 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
 
         if (delivery.Appearance is { } rows && m_hydrated is { } previous && rows.TryApply(previous, out var appearance)) {
             m_hydrated = appearance;
-            m_inner.DeliverPresentation(appearance, rows, version, m_cursor.Stamp());
+            m_inner.DeliverPresentation(rows, version, m_cursor.Stamp());
             return;
         }
 
@@ -432,10 +432,10 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
     public void DeliverSessionLever(WorldSessionLever lever) {
     }
 
-    public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+    public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (!Discloses()) { return; }
         if (m_withheld) {
-            DeliverDefinition(definition, version, in stream);
+            DeliverDefinition(m_server.Definition, version, in stream);
             return;
         }
         try {
@@ -449,9 +449,9 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
                 if (cut) { PrimeSnapshot(); }
                 FollowObserverDetach();
             } else if (!m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
-                DeliverDefinition(definition, version, in stream);
+                DeliverDefinition(m_server.Definition, version, in stream);
             } else if (moved) {
-                m_inner.DeliverPresentation(m_view.Definition, rows, Version, m_cursor.Stamp());
+                m_inner.DeliverPresentation(rows, Version, m_cursor.Stamp());
                 WorldOutputHub.CountPresentationRows(rows);
                 m_observation.SettleSceneProof(m_server.DeliveryTime.Tick);
                 FollowObserverDetach();
@@ -577,7 +577,13 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
             // observer's state stands, so it is handed the same section again, never a state exported and loaded
             // whole.
             if (stamp.ArenaValues && !m_cursor.FrameMoved(view: m_view)) { return; }
-            if (DiscloseToReplica(definition: definition) is { } delivered) {
+            // A frame that values moved in its placements alone owes the placement rows that moved, never the document.
+            if (stamp.ArenaValues && m_cursor.TryDeliverPlacements(view: m_view, rows: out var placements)) {
+                if (placements.Count != 0) {
+                    m_inner.DeliverPresentation(placements, Version, m_cursor.Stamp());
+                    WorldOutputHub.CountPresentationRows(placements);
+                }
+            } else if (DiscloseToReplica(definition: definition) is { } delivered) {
                 var cut = AnnounceCut();
                 m_inner.DeliverState(delivered, Version, stamp with { Everything = true, MovedRows = default, ArenaValues = false }, m_cursor.Stamp());
                 CompleteReplica(cut: cut, replaced: false);

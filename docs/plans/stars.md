@@ -50,58 +50,50 @@ answers.
 ## What is built
 
 - **Engine.** A directional light's `source` and its orbits; a sun disc's
-  `follows` and its derived radius; a gravity orbit's `phaseBy`; the
-  projection carries a source's clocks.
+  `follows` and its derived radius; a gravity orbit's `phaseBy`, read at the
+  clock row's exact turn (`StateAdvance.TurnAt`); the projection carries a
+  source's clocks. A palette slot that casts no shadow (`castsShadow: false`,
+  `SdfMaterial.CastsNoShadow`), which no shadow drawing selects, so a star's
+  ball lights what it stands over. A view stores its light at a scale near its
+  exposure (`SdfPhotometry.StoredLightScale`), so a star's surface and the pad
+  beside it fit the frame's half-float images, and an exposure reaches EV 30.
 - **Standard.** `worlds/standard/stars.puck`: `sunlight`, `star`, `dayTurn`,
   `pairTurn`, `starLight`, `starDisc`, `starRail`, `starTide`, `starPull`,
   `starSurface`, `starHeat`. `dayCycle` is built on it.
-- **The debug system.** One star (`moon-frame.puck`'s `sunStar`) lights the
-  valley (`day.puck`), the moon (`moon.puck`) and its own world (`sun.puck`).
-  The gallery hall authors no sun. The worlds that stand alone (garden,
-  hearth, night, galaxy, the Moth basis) take `sunlight`; the city's sun is
-  its own day cycle's.
+- **The debug system.** A binary (`moon-frame.puck`'s `sunStar` and
+  `companionStar`, the companion on `companionTurn` about the sun, in the day's
+  plane) lights the valley (`day.puck`), the moon (`moon.puck`) and its own
+  world (`sun.puck`), which owns the pair's clock (`pair`) that the valley
+  (`sun-watch.puck`) and the moon follow. The gallery hall authors no sun. The
+  worlds that stand alone (garden, hearth, night, galaxy, the Moth basis) take
+  `sunlight`; the city's sun is its own day cycle's.
 - **The proving place.** Perihelion, a rock in `sun.puck` the star passes once
-  a day, reached through the `PERIHELION` painting in the painting wing.
+  a day, reached through the `PERIHELION` painting in the painting wing, or by
+  the launch field's ship through the seam over the moon (`sunSeamHeight`);
+  `world.benchmark run sun` flies that trip until the star's heat burns the
+  ship back onto the pad (`sun-route.puck`).
 
 ## What is left
 
 In the order it matters. Each names the check that closes it.
 
-1. **A ship flies to the star.** The moon's world ends at its own reach; a
-   seam above it into the sun's world carries the ship on, as the sky seam
-   carries it to the moon. *Check:* `world.benchmark run` of a route that
-   climbs from the launch field through both seams and is burned at the star.
-2. **A second star in the debug sky.** A companion on a `pairTurn`, with the
-   pair's row owned by `sun.puck` and followed by the valley and the moon.
-   *Check:* a capture of two discs and two shadow directions in the valley,
-   and an eclipse where one star's disc crosses the other's.
-3. **A clock row's phase at full resolution.** `phaseBy` reads a `Fixed`
-   row's sixteen fractional bits, so a body on a 15 km rail moves in steps of
-   about 1.4 m. The exact phase is the row's base and epoch under its advance
-   (`StateAdvance`), which the orbit can read once the reader exposes them.
-   *Check:* the star's speed between ticks is constant in `body.where`.
-4. **A body that does not shadow its own light.** A star's ball stands on the
-   line from every surface toward its light, and it shadowed everything on
-   the outpost at every distance tried, 2.4 km and 14 km. No draw can opt out
-   of casting, so the star's light casts no shadows in `sun.puck`
-   (`shadow: never`). The fix is a draw that the cascades' selection leaves
-   out, authored on the creation or the placement. *Check:* with
-   `shadow: always` on the star's light, the pad is lit and the frame's posts
-   shadow it.
-5. **Scene light past the frame's range.** Within about 3 km of the star
-   the lit rock and the star's surface show as one flat grey: a surface 520 m
-   from the star takes 83 million lux, and both it and the star pass what the
-   frame's scene light holds, so the exposure meter reads them alike. Past
-   3 km the star is white against a correctly exposed pad. The frame needs a
-   range a star fits in (light stored against the view's exposure, or a wider
-   format). *Check:* a capture at the pass shows a lit grey pad under a white
-   star.
-6. **A moving seam.** A star-centred system, where planets orbit, needs an
+1. **The light derived per view.** The sourced light is placed once per
+   world a frame, from the frame's first view, so a second view far from the
+   first (another player, a window's camera) is lit and shadowed from the
+   first's direction. Deriving it per view means a light record per view
+   (each view's light mask selecting its own) and, for the shadows, a light
+   direction per shadow anchor (`SdfWorldShadows`), since a world's cascades
+   are drawn once for every view. *Check:* two seats on either side of the
+   star at the pass are each lit from the star.
+2. **Indirect light beside a star.** The irradiance volume's shared-exponent
+   cubes top out near 65,000 nits, so the bounce light beside the star
+   saturates; the direct light, stored at the view's scale, does not.
+3. **A moving seam.** A star-centred system, where planets orbit, needs an
    adjacency whose frame relation rides a clock; `WorldFrameIsometry` is
    fixed. The debug system avoids it by letting the star circle the planet.
-7. **The planet from the star.** A sky view's draw distance is capped below
+4. **The planet from the star.** A sky view's draw distance is capped below
    the 15 km between Perihelion and the valley, so the outpost's sky shows no
    planet.
-8. **The valley's sun dims with the switch.**
+5. **The valley's sun dims with the switch.**
    [Cross-world, left open 1](cross-world.md#left-open): the valley follows
    `sunLight` and its key light does not read it.

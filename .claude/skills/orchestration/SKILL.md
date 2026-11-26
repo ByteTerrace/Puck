@@ -471,6 +471,11 @@ narrow invariant classes above (a cache and its invalidation, a concurrency
 primitive, a trust boundary), and then as a page the build lane writes for
 itself, not a memo that waits on a round.
 
+While the owner pairs with the lead, a lane's finish line is code that builds (the owner's ruling: "Have the lanes
+focus on getting the code implemented, we will do build and testing ourselves in the pair session/merge"). It runs no
+boot, test or windowed leg of its own, except a reading only its machine can take, and names what the lead should
+run at merge under **Needs you**.
+
 A continuation whose cause a lane already traced is an implementation lane
 (the owner's correction, after a campaign lane spent three passes reading and
 landed no code, and its continuation was briefed to Fable: "should be Opus,
@@ -559,7 +564,10 @@ lighting retune, a palette or treatment pass) does not land on relative
 improvement alone. Landing the creation and putting its gap first are separate
 decisions, and the second is made in the same landing. The lead reads a lane's captures at landing and sends a milestone
 or a doubtful case to the `look-critic` agent when fresh eyes pay for
-themselves, not every pass, and at most twice per creation per wave. A change is judged on what
+themselves, not every pass, and at most twice per creation per wave. While the owner pairs on a place's looks,
+the owner is its critic and no `look-critic` round is run for it (the owner's ruling during the gallery overhaul:
+"No need for the independent critic in the looks right now, I am that critic"); the pair loop is
+[gallery pair sessions](../../../docs/plans/iteration/gallery-pair.md). A change is judged on what
 it owns: a failure the critic attributes to a filed world-wide item (the night
 lighting, a backend colour defect, the world's cel treatment, another
 creation's defect) holds that item, not the change, once the lead has checked

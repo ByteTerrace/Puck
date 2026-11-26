@@ -28,9 +28,16 @@ public static class SdfPhotometry {
     /// <summary>The saturation-based exposure's headroom (ISO 12232): a view at <c>EV100</c> maps the luminance
     /// <c>1.2 · 2^EV100</c> to display white.</summary>
     public const float SaturationHeadroom = 1.2f;
-    /// <summary>The highest luminance a view stores, in nits: below the half-float images' largest finite value, so a
-    /// sun's glint on a mirror clips rather than overflowing to infinity.</summary>
+    /// <summary>The largest value a view's half-float images hold: below their largest finite value, so a glint past
+    /// it clips rather than overflowing to infinity. A view stores its luminance times its stored-light scale
+    /// (<see cref="StoredLightScale"/>), so the ceiling stands some twelve stops above the view's display white whatever
+    /// its exposure.</summary>
     public const float LuminanceCeiling = 65000f;
+    /// <summary>The stops a view's stored-light scale may stand from its exposure before the scale is chosen again
+    /// (<see cref="StoredLightScale"/>): a half-float image holds about sixteen stops above the scale and fourteen at full
+    /// precision below it, so a scale within this band of the exposure keeps display white twelve stops under the
+    /// ceiling and ten above the precision floor.</summary>
+    public const float StoredLightBand = 4f;
     /// <summary>The lowest colour temperature <see cref="Blackbody"/> spans, in kelvin.</summary>
     public const float MinimumTemperature = 1000f;
     /// <summary>The highest colour temperature <see cref="Blackbody"/> spans, in kelvin.</summary>
@@ -45,9 +52,9 @@ public static class SdfPhotometry {
     public const float WindowAdaptation = 0.75f;
     /// <summary>The lowest <c>EV100</c> an exposure admits: starlight.</summary>
     public const float MinimumEv100 = -6f;
-    /// <summary>The highest <c>EV100</c> an exposure admits: a surface lit from beside a star, some ten stops past
-    /// sunlit snow.</summary>
-    public const float MaximumEv100 = 26f;
+    /// <summary>The highest <c>EV100</c> an exposure admits: a star's own surface seen from beside it, some fourteen stops
+    /// past sunlit snow.</summary>
+    public const float MaximumEv100 = 30f;
 
     /// <summary>The red primary's share of a linear Rec. 709 colour's luminance (ITU-R BT.709).</summary>
     public const float LuminanceRed = (float)Puck.Abstractions.Sources.ImageSourceConversion.Bt709Kr;
@@ -111,6 +118,24 @@ public static class SdfPhotometry {
     /// <param name="ev100">The exposure value at ISO 100.</param>
     /// <returns>The multiplier, per nit.</returns>
     public static float ExposureOf(float ev100) => (1f / (SaturationHeadroom * MathF.Pow(x: 2f, y: ev100)));
+    /// <summary>Returns the scale a view's stored light carries: the views, glass and resolve passes store luminance in
+    /// nits times it in their half-float images, and the composite divides it out before the exposure, so a star's
+    /// surface and the noon sky both fit the same images. It is a power of two near the view's exposure, which it keeps
+    /// while the exposure stands within <see cref="StoredLightBand"/> stops of it, so it changes only when the exposure
+    /// moves far, and the temporal history it scales restarts then (<c>SdfTemporalEpoch.LightScale</c>).</summary>
+    /// <param name="multiplier">The view's exposure multiplier (<see cref="ExposureOf"/>), positive.</param>
+    /// <param name="held">The scale the view held, or zero for none.</param>
+    /// <returns><paramref name="held"/> while the exposure stands within the band of it; otherwise the power of two nearest
+    /// the multiplier, or one for a multiplier that is not a positive finite number.</returns>
+    public static float StoredLightScale(float multiplier, float held) {
+        if (!(multiplier > 0f) || !float.IsFinite(f: multiplier)) {
+            return ((held > 0f) ? held : 1f);
+        }
+
+        var stops = MathF.Log2(x: multiplier);
+
+        return (((held > 0f) && (MathF.Abs(x: (stops - MathF.Log2(x: held))) <= StoredLightBand)) ? held : MathF.ScaleB(x: 1f, n: ((int)MathF.Round(x: stops))));
+    }
     /// <summary>Returns the <c>EV100</c> a reflected-light meter reads for an average scene luminance.</summary>
     /// <param name="luminance">The average luminance, in nits; at least a millionth of a nit is read.</param>
     /// <returns>The exposure value at ISO 100.</returns>

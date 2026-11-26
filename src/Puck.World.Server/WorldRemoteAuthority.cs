@@ -845,7 +845,7 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         replica = changed!;
                         replicaVersion = rowVersion;
                         Volatile.Write(ref m_definition, replica);
-                        sink.DeliverPresentation(replica, rows!, rowVersion, rowStream);
+                        sink.DeliverPresentation(rows!, rowVersion, rowStream);
                         break;
                     }
                 case WorldFederationResponse.ProjectionDelta: {

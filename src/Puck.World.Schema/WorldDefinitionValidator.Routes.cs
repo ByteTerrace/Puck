@@ -185,11 +185,12 @@ public static partial class WorldDefinitionValidator {
                             if (!(fly.Within > 0f)) {
                                 errors.Add(item: $"{at}.within must be above zero.");
                             }
-                            if (fly.Lands && (fly.Enters is not null)) {
-                                errors.Add(item: $"{at} names at most one of lands and enters.");
+                            if ((fly.Lands ? 1 : 0) + ((fly.Enters is null) ? 0 : 1) + ((fly.Until is null) ? 0 : 1) > 1) {
+                                errors.Add(item: $"{at} names at most one of lands, enters and until.");
                             }
                             World(world: fly.World);
                             World(world: fly.Enters);
+                            Place(member: "until", place: fly.Until, world: fly.World);
                             break;
                         case WorldRouteStep.Rest rest:
                             if (!(rest.Seconds > 0f)) {

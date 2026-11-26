@@ -37,25 +37,11 @@ public sealed class WorldOrbitField {
         (value != 0L)
     );
 
-    // Where an orbit stands, relative to its focus, as of an engine tick: at its clock row's value then, or at the
+    // Where an orbit stands, relative to its focus, as of an engine tick: at its clock row's exact turn then, or at the
     // tick's own phase for an orbit that names no row or whose row does not read.
     private static FixedVector3 OffsetOf(in FixedWorldGravityOrbit orbit, WorldDefinition definition, ulong tick, ulong engineTick) => (
-        (
-            (orbit.PhaseRow is { } row) &&
-            WorldStateReader.TryRead(
-                definition: definition,
-                engineTick: engineTick,
-                key: null,
-                rawValue: out var raw,
-                row: out var read,
-                rowName: row,
-                text: out _,
-                tick: tick
-            ) &&
-            (read.Kind == Puck.State.CellKind.Fixed) &&
-            (raw is { } value)
-        )
-        ? orbit.OffsetAt(clock: FixedQ4816.FromRawBits(value: value))
+        ((orbit.PhaseRow is { } row) && WorldStateReader.TryReadTurn(definition: definition, engineTick: engineTick, rowName: row, tick: tick, turn: out var turn))
+        ? orbit.OffsetAtTurn(turn: turn)
         : orbit.OffsetAt(engineTick: engineTick)
     );
 

@@ -128,8 +128,14 @@ public sealed partial record SdfMesh {
     private static long ReleasedNow;
 
     // The parts one NativeCopy of a store-published mesh may let go, shared by its chunks and every renumbered variant,
-    // which view the same buffers, and the store entry that restores them.
-    private sealed class Restorable(SdfMeshLibrary library, UInt128 identity, SdfMeshGeometry geometry) {
+    // which view the same buffers, the store entry that restores them, and the material ids, by place, its triangle
+    // materials were first written in (SdfMeshStorage.WritesMaterialsIn; null for the entry's own ids).
+    // Invariant: a restored plane holds the words it held before it was let go. The entry's triangle materials are in its
+    // canonical ids, which a decode for a taking group and a bake's published copy both renumber, so a restore writes them
+    // in `materials` again (SdfMeshStoreDecoder.TryDecode's restoring mode, SdfMeshMaterials.RemapOf), or every reader of the restored planes (the
+    // region's landing, the irradiance scene's copies) reads the entry's place numbers as program material ids. Enforced
+    // here, the one place a restore decodes.
+    private sealed class Restorable(SdfMeshLibrary library, UInt128 identity, SdfMeshGeometry geometry, int[]? materials) {
         private readonly Lock m_gate = new();
         // Each block with its plane, the piece and level it holds, the payload that owns it and the length it holds while
         // resident, which a restore must find again. A block leaves its list when its payload's last claim goes
@@ -303,7 +309,7 @@ public sealed partial record SdfMesh {
                 }
                 if (library.Disk is { } disk) {
                     // A declined entry says why: its parts no longer fit these blocks, or the read found no workspace memory.
-                    filled = disk.TryReadInto(declined: out _, geometry: geometry, identity: identity, materials: out _, mesh: out _, refusal: out var refusal, storage: refill, taking: null);
+                    filled = disk.TryReadInto(declined: out _, geometry: geometry, identity: identity, materials: out _, mesh: out _, refusal: out var refusal, storage: refill, taking: materials, restoring: true);
                     failure = (filled ? null : (refusal ?? "the store holds no entry"));
                 } else {
                     failure = "the store holds no entry";

@@ -237,6 +237,9 @@ public sealed partial class WorldServer {
             dropped: out dropped,
             staleTicks: out staleTicks
         );
+    /// <summary>Gets the number of arrived bodies whose authenticated source border this authority retains
+    /// (<see cref="TryTransferArrivalBorder"/>).</summary>
+    public int TransferArrivalBorders => TransferEscrow.ArrivalBorders;
     /// <inheritdoc cref="WorldTick.TryTransferArrivalBorder"/>
     public bool TryTransferArrivalBorder(int bodyIndex, out string border) =>
         m_tick.TryTransferArrivalBorder(

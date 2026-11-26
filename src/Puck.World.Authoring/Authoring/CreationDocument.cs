@@ -45,6 +45,9 @@ namespace Puck.World.Authoring;
 /// <param name="Flow">The slot's flow layer (<see cref="PaletteFlowDocument"/>): shading that moves along an authored
 /// flow over still geometry; null moves nothing.</param>
 /// <param name="Shade">The slot's shade program (<see cref="ShadeReference"/>), or null for the world's default.</param>
+/// <param name="CastsShadow">Whether the slot's shapes cast shadows (null = true). A shape whose every slot says false
+/// casts none (<see cref="SdfMaterial.CastsNoShadow"/>): a body that stands between the surfaces and its own light, a
+/// star's ball or a lamp's bulb, lights them instead of shadowing them.</param>
 public sealed record PaletteEntryDocument(
     [property: DocumentText("a color literal")] string Color,
     float? Emissive,
@@ -68,7 +71,8 @@ public sealed record PaletteEntryDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ToonStyleDocument? Toon = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteToonSelectDocument? ToonSelect = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteFlowDocument? Flow = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShadeReference? Shade = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShadeReference? Shade = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? CastsShadow = null
 ) {
     /// <summary>Gets up to <see cref="CreationDocument.MaxPalettePaints"/> paints, each drawn over the one before; null or
     /// empty paints none. The list is owned (a lattice field's material sits in a cached state row).</summary>

@@ -164,6 +164,7 @@
 #define SDF_MESH_ABSENT_FLAG            8u
 #define SDF_MESH_DYNAMIC_FLAG           16u
 #define SDF_MESH_SLOT_BOX_FLAG          32u
+#define SDF_MESH_NO_SHADOW_FLAG         64u
 #define SDF_MESH_AUDIENCE_SHIFT         8u
 #define SDF_MESH_AUDIENCE_CONTROL_SHIFT 24u
 #define SDF_MESH_VERTEX_WORDS           6u

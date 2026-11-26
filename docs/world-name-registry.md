@@ -7392,6 +7392,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `routes[].chapters[].steps[][fly].pace` | `WorldRouteStep.Fly.Pace` | a route pace |
 | `routes[].chapters[].steps[][fly].world` | `WorldRouteStep.Fly.World` | a route world |
 | `routes[].chapters[].steps[][fly].enters` | `WorldRouteStep.Fly.Enters` | a route world |
+| `routes[].chapters[].steps[][fly].until` | `WorldRouteStep.Fly.Until` | a route place or corridor |
 | `routes[].chapters[].steps[][press].action` | `WorldRouteStep.PressAction.Action` | a seat program action |
 | `routes[].chapters[].steps[][press].until` | `WorldRouteStep.PressAction.Until` | a route place or corridor |
 | `routes[].chapters[].steps[][press].world` | `WorldRouteStep.PressAction.World` | a route world |

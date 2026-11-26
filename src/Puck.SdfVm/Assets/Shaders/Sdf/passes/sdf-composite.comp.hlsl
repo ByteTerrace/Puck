@@ -87,7 +87,8 @@ bool sdfCompositePixel(uint3 id, uint2 volumes, out float exposed, out float cov
         float coverage = litColor.a;
         float3 weights;
         float t;
-        float3 surface = litColor.rgb;
+        // The lit image holds its light at the view's light scale; the composite works in nits.
+        float3 surface = (litColor.rgb / sdfStoredLightScale(passGroup.debugMode, passGroup.lightScale));
         float3 sky = float3(0.0, 0.0, 0.0);
         SdfAir skyAir;
 

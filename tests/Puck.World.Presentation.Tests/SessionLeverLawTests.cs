@@ -388,6 +388,7 @@ public sealed class SessionLeverLawTests {
         }
         public void DeliverComposition(WorldComposition composition) {
         }
+        public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) { }
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) {
         }
         public void DeliverSessionLever(WorldSessionLever lever) => Levers.Add(item: lever);

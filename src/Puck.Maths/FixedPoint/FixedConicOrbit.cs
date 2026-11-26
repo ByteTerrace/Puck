@@ -4,7 +4,7 @@ namespace Puck.Maths;
 /// is computed directly, never by stepping from an earlier one.</summary>
 /// <remarks>
 /// <para>Phase is the mean anomaly as a binary fraction of one turn scaled by 2^64, so whole turns wrap for free and
-/// <see cref="Phase"/> derives it from an elapsed tick count and a period by one exact integer division: the same
+/// <see cref="Phase(ulong, ulong)"/> derives it from an elapsed tick count and a period by one exact integer division: the same
 /// tick gives the same phase however many ticks were evaluated before it.</para>
 /// <para>Kepler's equation is solved by a fixed number of Newton steps in turns at 60 fraction bits
 /// (<see cref="EccentricAnomaly"/>), over the sine and cosine <see cref="FixedQ4816.SinCosCore"/> answers from a
@@ -113,10 +113,20 @@ public readonly record struct FixedConicOrbit(FixedQ4816 SemiMajorAxis, FixedQ48
     /// <param name="periodTicks">The positive period in the same ticks.</param>
     /// <returns>The fraction of one turn scaled by 2^64, rounded toward zero.</returns>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="periodTicks"/> is zero.</exception>
-    public static ulong Phase(ulong elapsedTicks, ulong periodTicks) {
+    public static ulong Phase(ulong elapsedTicks, ulong periodTicks) => Phase(elapsedTicks: elapsedTicks, periodTicks: periodTicks, turns: 1UL);
+    /// <summary>Returns the phase reached after an elapsed tick count at a rate of <paramref name="turns"/> turns every
+    /// <paramref name="periodTicks"/> ticks: the fractional part of <c>elapsed · turns / period</c>, by one exact
+    /// 128-bit product, remainder and division, so a clock running at any rational rate keeps its phase to a 2^-64 of a
+    /// turn however long it has run.</summary>
+    /// <param name="elapsedTicks">The ticks elapsed since the phase was zero.</param>
+    /// <param name="turns">The turns the phase makes in <paramref name="periodTicks"/>.</param>
+    /// <param name="periodTicks">The positive tick count <paramref name="turns"/> are made in.</param>
+    /// <returns>The fraction of one turn scaled by 2^64, rounded toward zero.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="periodTicks"/> is zero.</exception>
+    public static ulong Phase(ulong elapsedTicks, ulong periodTicks, ulong turns) {
         ArgumentOutOfRangeException.ThrowIfZero(value: periodTicks);
 
-        return ((ulong)((((UInt128)(elapsedTicks % periodTicks)) << 64) / periodTicks));
+        return ((ulong)(((((UInt128)elapsedTicks) * turns) % periodTicks << 64) / periodTicks));
     }
     /// <summary>Returns the period of an orbit whose semi-major axis is a ratio of a reference orbit's about the
     /// same focus: the reference period times the ratio raised to three halves, Kepler's third law.</summary>

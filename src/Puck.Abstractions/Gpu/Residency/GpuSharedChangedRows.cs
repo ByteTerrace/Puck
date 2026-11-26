@@ -37,6 +37,24 @@ public sealed class GpuSharedChangedRows {
             return m_rows.Serial;
         }
     }
+    /// <summary>Collects the rows the frames after <paramref name="since"/> through <paramref name="through"/> changed,
+    /// for a consumer that keeps its own endpoint beside what it copied (an image filled through a frame) instead of a
+    /// <see cref="GpuRowCursor"/>.</summary>
+    /// <param name="since">The frame the consumer's copy is current through.</param>
+    /// <param name="through">The frame to collect through.</param>
+    /// <param name="rows">The table's row count at <paramref name="through"/>.</param>
+    /// <param name="into">The runs, cleared first; a superset of the changed rows when the window coarsens.</param>
+    /// <returns><see langword="true"/> for an incremental answer, possibly empty; <see langword="false"/> when the
+    /// retained history cannot prove the window, a frame in it owed every row, or the extent at
+    /// <paramref name="through"/> differs, after which the consumer refreshes every row.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="into"/> is <see langword="null"/>.</exception>
+    public bool TryCollect(long since, long through, int rows, GpuUploadRuns into) {
+        ArgumentNullException.ThrowIfNull(argument: into);
+
+        lock (m_gate) {
+            return m_rows.TryCollect(since: since, through: through, rows: rows, into: into);
+        }
+    }
     /// <summary>Collects the rows changed since a cursor's last commit through a frame, as
     /// <see cref="GpuRowCursor.Collect"/> does with this journal as the table; the caller commits the cursor once it has
     /// consumed the runs.</summary>

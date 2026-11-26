@@ -32,6 +32,7 @@ public sealed class OutboxLawTests {
                 $"snapshot {Stamp(stream)} tick={snapshot.Tick} full={snapshot.FieldsFull} revision={snapshot.Revision} cells=[{cells}] bodies=[{bodies}] scales={snapshot.SolidScales.Length} cues={snapshot.Cues.Length}"));
         }
         public void DeliverAnswer(in QueryAnswer answer) => Records.Add($"answer {answer.Text}");
+        public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) { }
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) =>
             Records.Add($"definition {Stamp(stream)} rows={definition.State.Count()}");
         public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) =>

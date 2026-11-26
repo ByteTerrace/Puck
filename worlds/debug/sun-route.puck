@@ -1,0 +1,48 @@
+// The trip to the sun as a route: `world.benchmark run sun` flies it, the standard's `pilot` seat program
+// (moon-route.puck declares it) working seat 1's own controls as a player does. The seat boards the ship on the launch
+// field's pad, climbs through the sky seam into the moon's world beside the moon's reach, on through the seam over the
+// moon into the sun's world (moon-frame.puck's `sunSeamHeight`), and flies at the star until its heat burns the ship
+// and stands it back on Perihelion's pad (sun.puck's `starHeat`), which ends the trip. sun.md describes the flight.
+//
+// The star circles the planet once a day, so the route holds the day at the star's pass over Perihelion while it flies
+// and lets the day run again at the end: the star then stands where the route flies. Points are each world's own
+// coordinates: the debug world's until the sky seam, the moon's to the seam over it, the sun's past that.
+
+import "moon-frame"
+
+// A debug-world point in the moon's coordinates.
+function overMoon(point) = [(point[0] - moonCentre[0]), (point[1] - moonCentre[1]), (point[2] - moonCentre[2])]
+
+// Straight up over the pad, past the seam over the moon: the climb stays outside the moon's reach, beside it.
+let sunwardClimb = [launchPad[0], (moonCentre[1] + sunSeamHeight + 400), launchPad[1]]
+// Where the star stands at its pass, in the sun's coordinates: `sunPassGap` metres from the pad along the star's
+// heading at `sunPassHour`.
+let starAtPass = map(sunDirection(sunPassHour, sharedSunHeading, sharedNoonElevation), axis => axis * sunPassGap)
+
+routes [
+  {
+    name: "sun"
+    program: "pilot"
+    chapters [
+      {
+        name: "the pad to the star"
+        timeoutSeconds: 420
+        steps [
+          { $type: "line", text: $"world.state.cell.set day $value {sunPassHour / 24}" }
+          { $type: "line", text: """world.row.set state day advance {"perSecondNumerator":0,"perSecondDenominator":1}""" }
+          { $type: "pose", point [(launchPad[0] - 3), (launchPadTop + 0.1), (launchPad[1] - 3)], yawDegrees: launchHeading }
+          { $type: "rest", seconds: 1 }
+          { $type: "press", action: "interact", seconds: 2 }
+          // Up through the sky seam into the moon's world.
+          { $type: "fly", point: sunwardClimb, pace: "boost", within: 80, world: "debug", enters: "moon" }
+          // On up past the moon's reach, through the seam over it into the sun's world.
+          { $type: "fly", point: overMoon(sunwardClimb), pace: "boost", within: 80, world: "moon", enters: "sun" }
+          // At the star, until its heat stands the ship back on Perihelion's pad.
+          { $type: "fly", point: starAtPass, pace: "boost", within: 10, world: "sun", until: "place-perihelion" }
+          { $type: "rest", seconds: 2 }
+          { $type: "line", text: $"world.row.set state day advance {{\"perSecondNumerator\":1,\"perSecondDenominator\":{sharedDaySeconds}}}" }
+        ]
+      }
+    ]
+  }
+]

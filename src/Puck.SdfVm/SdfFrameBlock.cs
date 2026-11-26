@@ -59,6 +59,7 @@ public static partial class SdfFrameBlock {
     private static readonly int LightCount = Offset(member: SdfWorldPackage.LightCount);
     private static readonly int LightMask = Offset(member: SdfWorldPackage.LightMask);
     private static readonly int Exposure = Offset(member: SdfWorldPackage.Exposure);
+    private static readonly int LightScale = Offset(member: SdfWorldPackage.LightScale);
     private static readonly int ToonMode = Offset(member: SdfWorldPackage.ToonMode);
     private static readonly int DisplayPixels = Offset(member: SdfWorldPackage.DisplayPixels);
     private static readonly int InkEdges = Offset(member: SdfWorldPackage.InkEdges);
@@ -252,6 +253,7 @@ public static partial class SdfFrameBlock {
             WriteUInt32(block: block, offset: (LightMask + (word * sizeof(uint))), value: ((uint)(mask >> (32 * word))));
         }
         WriteSingle(block: block, offset: Exposure, value: (tables.Exposures?.MultiplierOf(view: view) ?? 1f));
+        WriteSingle(block: block, offset: LightScale, value: (tables.Exposures?.LightScaleOf(view: view) ?? 1f));
         WriteFlag(block, Offset(SdfWorldPackage.ShadePrograms), frame.ShadePrograms);
         WriteShadeDefault(block, tables.ShadeDefaultFirst, frame.ShadeDefault);
         WriteSingle(block: block, offset: ToonMode, value: frame.Toon.Mode);

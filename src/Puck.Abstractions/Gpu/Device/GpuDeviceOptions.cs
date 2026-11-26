@@ -11,9 +11,10 @@ public sealed class GpuDeviceOptions {
     /// cost too; on some Direct3D 12 configurations the layer makes device creation fail, and it cannot be turned off
     /// once a process has enabled it. The World sets it from its <c>--debug-layers [basic|full]</c> flag.</summary>
     public GpuValidation Validation { get; init; }
-    /// <summary>Gets whether the device names its objects (<see cref="GpuObjectNaming"/>), so a validation message, a
-    /// device-removal report or a GPU capture shows each object's name. The World turns it on with any validation level
-    /// and with a capture tool (<c>--capture-tool</c>); off, naming formats nothing.</summary>
+    /// <summary>Gets whether the device names its objects (<see cref="GpuObjectNaming"/>) and labels the command scopes
+    /// its recorder opens (<see cref="IGpuRecorder.BeginDebugGroup"/>), so a validation message, a device-removal report
+    /// or a GPU capture shows each object's name and each pass's scope. The World turns it on with any validation level
+    /// and with a capture tool (<c>--capture-tool</c>); off, naming formats nothing and no label is recorded.</summary>
     public bool NameObjects { get; init; }
     /// <summary>Gets whether the device is created on the platform's software rasterizer rather than a hardware adapter:
     /// WARP on Direct3D 12, which runs on the CPU on a host with or without a GPU. Vulkan has no software device here and

@@ -37,9 +37,12 @@ internal static class SdfMeshStoreDecoder {
     // Decodes an entry into a storage, which keeps each plane where the mesh will live. `taking` is the taking group's
     // material ids: the triangle ids are written renumbered to them when the mesh can be held in them and renumbered back
     // by place (SdfMeshMaterials.Remap), and as the entry stores them otherwise; `materials` answers the ids the written
-    // mesh carries. `declined` marks an entry that is sound but whose shape the storage did not take.
+    // mesh carries, which the storage is told before it is sized (SdfMeshStorage.WritesMaterialsIn). A restore
+    // (`restoring`) passes as `taking` the ids the mesh already carries and writes every plane in them, so a plane a
+    // published mesh let go comes back as it was first written. `declined` marks an entry that is sound but whose shape
+    // the storage did not take.
     internal static bool TryDecode(ReadOnlySpan<byte> bytes, UInt128 key, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh,
-        out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal, out bool declined, in SdfMeshStoreWorkspace workspace, Puck.Hosting.Jobs.MemoryAccount.Owner owner, IAllocator? allocator = null) {
+        out int[] materials, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? refusal, out bool declined, in SdfMeshStoreWorkspace workspace, Puck.Hosting.Jobs.MemoryAccount.Owner owner, IAllocator? allocator = null, bool restoring = false) {
         mesh = null;
         materials = [];
         declined = false;
@@ -80,10 +83,11 @@ internal static class SdfMeshStoreDecoder {
             for (var index = 0; (index < pieces.Length); index++) { pieces[index] = Walk(cursor: ref cursor, piece: index, remap: null, storage: null); }
             if (cursor.Position != cursor.Length) { return false; }
             var shape = Shaped(chunked: chunked, pieces: pieces);
-            var remap = SdfMeshMaterials.RemapOf(from: palette, to: taking);
+            var remap = SdfMeshMaterials.RemapOf(from: palette, restoring: restoring, to: taking);
 
             try {
                 while (true) {
+                    storage.WritesMaterialsIn(materials: ((remap is null) ? palette : taking!));
                     if (!storage.Begin(shape: shape)) {
                         declined = true;
                         refusal = "holds a mesh whose parts no longer fit the storage that restores them";
@@ -92,7 +96,8 @@ internal static class SdfMeshStoreDecoder {
                     cursor.Position = planes;
                     for (var index = 0; (index < pieces.Length); index++) { _ = Walk(cursor: ref cursor, piece: index, remap: remap, storage: storage); }
                     // An id outside the palette that the taking group names: the mesh is held in the entry's ids, and the group renumbers it by place.
-                    if (remap is not { Collided: true }) { break; }
+                    // A restore writes the ids the mesh carries, whatever they collide with.
+                    if (restoring || (remap is not { Collided: true })) { break; }
                     storage.Abandon();
                     remap = null;
                 }

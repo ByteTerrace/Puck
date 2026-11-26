@@ -201,10 +201,34 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
 
         return change;
     }
+    /// <summary>Classifies what a row delivery moved in a definition's placement rows, as
+    /// <see cref="ComparePlacements"/> does for a whole definition, reading only the rows the delivery names.</summary>
+    /// <param name="before">The definition the reader held.</param>
+    /// <param name="after">The definition the rows brought it to (<see cref="WorldPresentationRows.TryApply"/>).</param>
+    /// <param name="rows">The applied rows.</param>
+    /// <param name="solid">Set to whether a moved row is solid before or after.</param>
+    /// <param name="holdings">Set to whether every moved row moved only its holding and the change is an
+    /// <see cref="WorldPlacementChange.Appearance"/>.</param>
+    /// <returns>The kind of change; <see cref="WorldPlacementChange.None"/> when the rows move no placement.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    public static WorldPlacementChange CompareRows(WorldDefinition before, WorldDefinition after, WorldPresentationRows rows, out bool solid, out bool holdings) {
+        ArgumentNullException.ThrowIfNull(argument: before);
+        ArgumentNullException.ThrowIfNull(argument: after);
+        ArgumentNullException.ThrowIfNull(argument: rows);
+
+        solid = false;
+        var change = WorldPlacementChange.None;
+        var (held, next) = (before.Placements, after.Placements);
+        foreach (var (ordinal, _) in rows.Holdings) { change = Moved(change: change, definitions: (before, after), next: next[ordinal], previous: held[ordinal], solid: ref solid); }
+        foreach (var (ordinal, _) in rows.Placements) { change = Moved(change: change, definitions: (before, after), next: next[ordinal], previous: held[ordinal], solid: ref solid); }
+        holdings = ((rows.Placements.Length == 0) && (change == WorldPlacementChange.Appearance));
+
+        return change;
+    }
     // Whether two rows differ in nothing but their holding. A row the response sweep installed keeps every other member
     // as the same object, which the record's own equality proves at once; a row a remote reader decoded holds equal
     // members as other objects, so it is judged by the document form both serialize to.
-    private static bool SameBesidesHolding(WorldPlacement previous, WorldPlacement next) {
+    internal static bool SameBesidesHolding(WorldPlacement previous, WorldPlacement next) {
         var held = (previous with { Holding = next.Holding });
 
         if (held.Equals(obj: next)) { return true; }

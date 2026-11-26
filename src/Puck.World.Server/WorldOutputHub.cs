@@ -191,15 +191,15 @@ public sealed partial class WorldOutputHub {
         Deliver(
             callSite: nameof(DeliverPresentation),
             deliver: static (route, payload) => {
-                route.DeliverPresentation(payload.Definition, payload.Rows, payload.Version, WorldStreamStamp.Unspanned);
+                route.DeliverPresentation(payload.Rows, payload.Version, WorldStreamStamp.Unspanned);
                 if (!route.Detachable) { CountPresentationRows(payload.Rows); }
             },
-            payload: (Definition: after, Rows: rows, Version: version)
+            payload: (Rows: rows, Version: version)
         );
     }
     internal static void CountPresentationRows(WorldPresentationRows rows) {
         WorldBootWork.Count(WorldBootWork.PresentationDeliveries);
-        WorldBootWork.Count(WorldBootWork.PresentationRowsDelivered, rows.Creations.Length + rows.Shades.Length);
+        WorldBootWork.Count(WorldBootWork.PresentationRowsDelivered, rows.Count);
         WorldBootWork.Count(WorldBootWork.PresentationBytesDelivered, rows.Payload.Length);
     }
     /// <summary>Fans the live world definition out to every typed subscriber after a value-only mutation (see

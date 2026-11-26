@@ -426,6 +426,7 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_ABSENT_FLAG", value: SdfMeshRecord.AbsentFlag);
         declarations.Count(name: "SDF_MESH_DYNAMIC_FLAG", value: SdfMeshRecord.DynamicFlag);
         declarations.Count(name: "SDF_MESH_SLOT_BOX_FLAG", value: SdfMeshRecord.SlotBoxFlag);
+        declarations.Count(name: "SDF_MESH_NO_SHADOW_FLAG", value: SdfMeshRecord.NoShadowFlag);
         declarations.Count(name: "SDF_MESH_AUDIENCE_SHIFT", value: SdfMeshRecord.AudienceShift);
         declarations.Count(name: "SDF_MESH_AUDIENCE_CONTROL_SHIFT", value: SdfMeshAudience.ControlShift);
         declarations.Count(name: "SDF_MESH_VERTEX_WORDS", value: SdfMeshRecord.VertexWords);

@@ -430,7 +430,7 @@ public sealed class WorldSeatDriver {
         WorldRouteStep.Line line => $"line {line.Text}",
         WorldRouteStep.Go go => $"go {(go.Place ?? Vector(go.Point))}{((go.World is { } world) ? $" in {world}" : string.Empty)} pace {go.Pace}{(go.Direct ? " direct" : string.Empty)} within {Number(go.Within)}{((go.Corridor is { Count: > 0 } corridor) ? $" corridor {string.Join(separator: ',', values: corridor)}" : string.Empty)}",
         WorldRouteStep.Cross cross => $"cross {Number(cross.HeadingDegrees)}{(cross.Relative ? " relative" : string.Empty)}{((cross.Until is { } until) ? $" until {until}" : string.Empty)} pace {cross.Pace} metres {Number(cross.Metres)}",
-        WorldRouteStep.Fly fly => $"fly {Vector(fly.Point)}{((fly.World is { } world) ? $" in {world}" : string.Empty)}{((fly.Enters is { } enters) ? $" enters {enters}" : string.Empty)}{(fly.Lands ? " lands" : string.Empty)} pace {fly.Pace} within {Number(fly.Within)}",
+        WorldRouteStep.Fly fly => $"fly {Vector(fly.Point)}{((fly.World is { } world) ? $" in {world}" : string.Empty)}{((fly.Enters is { } enters) ? $" enters {enters}" : string.Empty)}{(fly.Lands ? " lands" : string.Empty)}{((fly.Until is { } until) ? $" until {until}" : string.Empty)} pace {fly.Pace} within {Number(fly.Within)}",
         WorldRouteStep.Rest rest => $"rest {Number(rest.Seconds)}{((rest.FaceDegrees is { } face) ? $" face {Number(face)}" : string.Empty)}{((rest.LookAt is { } look) ? $" look {Vector(look)}" : string.Empty)}",
         WorldRouteStep.PressAction press => $"press {press.Action}{((press.Until is { } until) ? $" until {until}" : string.Empty)}{((press.World is { } world) ? $" in {world}" : string.Empty)} seconds {Number(press.Seconds)}",
         _ => "unknown",
@@ -821,10 +821,15 @@ public sealed class WorldSeatDriver {
             Fail(kind: "route", place: read.Place, reason: $"step {m_step} ({Describe(step: fly)}) is played in the world '{fly.World}', and the seat stands in '{here}' ({read.World})", tick: tick);
             return still;
         }
+        if ((fly.Until is { } until) && read.Places.Contains(value: until)) {
+            NextStep(tick: tick, rateHz: rateHz);
+            return still;
+        }
 
         var offset = (Point(fly.Point) - read.Position);
 
-        if (fly.Lands) {
+        // A step that ends in a place holds at its point until something carries the body there; its point ends nothing.
+        if (fly.Lands && (fly.Until is null)) {
             // A rider's own body stands on nothing; the body it rides is the one that lands.
             var mirror = read.Endpoint.Mirror;
             var craft = ((mirror.Mount(index: read.Index) is var ridden and >= 0) ? ridden : read.Index);
@@ -833,7 +838,7 @@ public sealed class WorldSeatDriver {
                 NextStep(tick: tick, rateHz: rateHz);
                 return still;
             }
-        } else if (offset.IsWithin(radius: FixedQ4816.FromDouble(value: fly.Within))) {
+        } else if ((fly.Until is null) && offset.IsWithin(radius: FixedQ4816.FromDouble(value: fly.Within))) {
             if (fly.Enters is null) {
                 NextStep(tick: tick, rateHz: rateHz);
             } else {

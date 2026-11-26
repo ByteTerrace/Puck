@@ -61,6 +61,9 @@ public sealed partial class SdfWorldTables {
         public DynamicTransform Pose;
         public bool HasPose;
         public bool Glass;
+        // Whether any member casts a shadow (SdfMeshRegion.CastsShadow): a slot none of whose members does owes the
+        // shadows nothing as it moves.
+        public bool Caster;
         public bool Dirty;
         public long Staging;
         // Previous was left at an earlier pose while the slot moved unplaced: it is placed again at Pose before it is
@@ -90,11 +93,13 @@ public sealed partial class SdfWorldTables {
         motion.Carried.Clear();
         motion.Fixed = default;
         motion.Glass = false;
+        motion.Caster = false;
         var carries = motion.Carried;
 
         for (var row = m_rowsByFrameSlot.First(slot); row >= 0; row = m_rowsByFrameSlot.Next(row)) {
             var record = m_meshDrawWords.AsSpan(row * SdfMeshRecord.DrawWords, SdfMeshRecord.DrawWords);
 
+            motion.Caster |= SdfMeshRegion.CastsShadow(record: record);
             if (SdfMeshRegion.TryReadSlotBox(record, out var local)) {
                 var bound = new CarriedBound(local.Carry, in local);
                 var index = 0;
@@ -130,6 +135,8 @@ public sealed partial class SdfWorldTables {
         public bool Dirty;
         public bool Rigid;
         public bool Spared;
+        public bool WasCaster;
+        public bool IsCaster;
     }
 
     private SlotJudgement[] m_judgements = [];
@@ -206,11 +213,12 @@ public sealed partial class SdfWorldTables {
         // With every scope met only the shadows read the change, and a rigid slot's box (one carried box, no fixed
         // member) is a function of its pose alone. An unmoved one is the box it was; a moved one whose pose change
         // bounds its box's displacement from the box the shadows last judged it by under their finest texel is a
-        // change Moved would take as costing nothing, so neither is placed. Moved measures against its judged box,
+        // change Moved would take as costing nothing, so neither is placed, nor a slot none of whose members casts a
+        // shadow, which the shadows never judge. Moved measures against its judged box,
         // never the previous placement, so the drift gathers until it passes the texel. The open scope count is read as
         // the staging's judgements began, so a scope that a settle meets spares nothing more until the next staging.
         if (!dirty && (m_motionOpen == 0) && hasPose && motion.HasPose && !motion.Fixed.Live && (motion.Carried.Count == 1)) {
-            var spared = !poseChanged || (m_shadows is null) ||
+            var spared = !poseChanged || (m_shadows is null) || !motion.Caster ||
                 (motion.HasJudgedPose && m_shadows.TryJudged(key: slot, box: out _) &&
                 (motion.Carried[0].Displacement(from: in motion.JudgedPose, to: in pose) < StillMargin(m_shadows.StillDisplacement, in pose)));
 
@@ -227,7 +235,9 @@ public sealed partial class SdfWorldTables {
             motion.Previous = default;
             motion.Previous.Include(motion.Carried[0].At(in motion.Pose), motion.Glass);
         }
+        judgement.WasCaster = motion.Caster;
         if (dirty) { RebuildMotionSlot(slot, motion); }
+        judgement.IsCaster = motion.Caster;
         var before = motion.Previous;
         var after = motion.Fixed;
 
@@ -255,7 +265,8 @@ public sealed partial class SdfWorldTables {
 
         SdfResidencyWork.ProcessWork.Count(kind: SdfResidencyWork.MotionRows);
         NoteMotion(cause: SdfMotionCause.Slot, row: slot, wasLive: before.Live, before: in before.Box, wasGlass: before.Glass,
-            isLive: after.Live, after: in after.Box, isGlass: after.Glass, affectsShadows: judgement.Dirty || judgement.PoseChanged, rigid: judgement.Rigid);
+            isLive: after.Live, after: in after.Box, isGlass: after.Glass, affectsShadows: judgement.Dirty || judgement.PoseChanged, rigid: judgement.Rigid,
+            wasCaster: judgement.WasCaster, isCaster: judgement.IsCaster);
 
         // The judged pose follows the shadows' judged box: taken when Moved judged this one carried box, kept while
         // Moved left an earlier one standing (it measured within a texel of it), and dropped when the shadows hold none

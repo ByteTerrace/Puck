@@ -1183,12 +1183,38 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         );
     }
     /// <inheritdoc/>
-    public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
-        if (!rows.TryApply(Definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the client's creation roster."); }
-        _ = m_stateView.Adopt(delivered: changed, valuesFollow: true);
+    /// <remarks>Rows that move placements alone are judged as a state delivery that moved them is
+    /// (<see cref="WorldPlacementResponse.CompareRows"/>), reading only the rows they name; creation and shade rows move
+    /// <see cref="DefinitionRevision"/>.</remarks>
+    public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+        var previous = Definition;
+        if (!rows.TryApply(previous, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the client's creation roster and placement rows."); }
+        var adopted = m_stateView.Adopt(delivered: changed, valuesFollow: true);
         m_lastDelivered = changed;
+        if ((rows.Creations.Length != 0) || (rows.Shades.Length != 0) || !rows.MovesPlacements) {
+            m_definitionRevision++;
+        } else {
+            var change = WorldPlacementResponse.CompareRows(after: adopted, before: previous, holdings: out var holdings, rows: rows, solid: out var solid);
+            NotePlacementChange(change: change, holdings: holdings, solid: solid);
+        }
         BeginVersion(version);
-        m_definitionRevision++;
+    }
+    // Moves the revision a placement change asks for: a sweep that moved only holdings leaves the composition to the
+    // scene, which presents a row whose every response it keeps at hand by its copies and composes again only for the
+    // rest (WorldSceneEmitter); any other moved row composes again, and a row showing a facet creation reconciles the
+    // presentation (DefinitionRevision).
+    private void NotePlacementChange(WorldPlacementChange change, bool holdings, bool solid) {
+        switch (change) {
+            case WorldPlacementChange.Appearance:
+                if (holdings) { m_holdingRevision++; } else { m_responseRevision++; }
+                if (solid && holdings) { m_solidHoldingRevision++; } else if (solid) { m_solidResponseRevision++; }
+
+                break;
+            case WorldPlacementChange.Facets:
+                m_definitionRevision++;
+
+                break;
+        }
     }
     /// <inheritdoc/>
     /// <remarks>A client is fed its own authority's fan-out (<see cref="WorldStreamStamp.Unspanned"/>), whose one span
@@ -1383,22 +1409,13 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         var adopted = m_stateView.Adopt(delivered: definition, valuesFollow: (stamp.ArenaValues && (version.Activation == m_documentVersion.Activation)));
 
         m_lastDelivered = definition;
-        switch (WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, holdings: out _, solid: out var solid)) {
-            case WorldPlacementChange.Appearance:
-                // A sweep that moved only holdings leaves the composition to the scene, which presents a row whose every
-                // response it keeps at hand by its copies and composes again only for the rest (WorldSceneEmitter). The
-                // delivered rows are judged, since binding live state values rebuilds an adopted row's state references.
-                var holdings = ((WorldPlacementResponse.ComparePlacements(after: definition, before: previousDelivered, holdings: out var held, solid: out _) == WorldPlacementChange.Appearance) && held);
+        var change = WorldPlacementResponse.ComparePlacements(after: adopted, before: previous, holdings: out _, solid: out var solid);
+        // The delivered rows are judged for holdings, since binding live state values rebuilds an adopted row's state
+        // references.
+        var holdings = ((change == WorldPlacementChange.Appearance) &&
+            (WorldPlacementResponse.ComparePlacements(after: definition, before: previousDelivered, holdings: out var held, solid: out _) == WorldPlacementChange.Appearance) && held);
 
-                if (holdings) { m_holdingRevision++; } else { m_responseRevision++; }
-                if (solid && holdings) { m_solidHoldingRevision++; } else if (solid) { m_solidResponseRevision++; }
-
-                break;
-            case WorldPlacementChange.Facets:
-                m_definitionRevision++;
-
-                break;
-        }
+        NotePlacementChange(change: change, holdings: holdings, solid: solid);
 
         BeginVersion(version: version);
         m_stateMirror.Refresh(notifyDelivery: false, stamp: in stamp);

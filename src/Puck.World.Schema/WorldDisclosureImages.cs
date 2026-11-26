@@ -100,6 +100,8 @@ public sealed partial class WorldDisclosureImages {
         }
         // The frame slot is written once, by FillFrame: rows refresh only their own slots.
         public ContentPin Frame { get; private set; }
+        // The frame's digest less its placements section: two frames that agree here differ in their placements alone.
+        public ContentPin Rest { get; private set; }
         public ContentPin? BeforeAppearance { get; private set; }
         public Sha256Digest? BeforeAppearanceIdentity { get; private set; }
         public WorldDefinition? Disclosed { get; set; }
@@ -184,9 +186,10 @@ public sealed partial class WorldDisclosureImages {
             digest.CopyTo(destination: Digests.AsSpan(slot, SHA256.HashSizeInBytes));
             Dirty = true;
         }
-        public void FillFrame(ReadOnlySpan<byte> digest) {
+        public void FillFrame(ReadOnlySpan<byte> digest, ReadOnlySpan<byte> rest) {
             digest.CopyTo(Digests.AsSpan(0, SHA256.HashSizeInBytes));
             Frame = ContentPin.FromDigest(Digests.AsSpan(0, SHA256.HashSizeInBytes));
+            Rest = ContentPin.FromDigest(rest);
             FrameDocument = null;
             m_identityStale = true;
         }
@@ -450,9 +453,73 @@ public sealed partial class WorldDisclosureImages {
             StateDigest(frame.StateRaw).CopyTo(parts[(2 * SHA256.HashSizeInBytes)..]);
             RowsDigest(frame.CreationsRaw, m_creationDigests, m_creationLists).CopyTo(parts[(3 * SHA256.HashSizeInBytes)..]);
             ShadeDigest(frame.ShadesRaw).CopyTo(parts[(4 * SHA256.HashSizeInBytes)..]);
-            entry.FillFrame(SHA256.HashData(parts));
+            Span<byte> digest = stackalloc byte[SHA256.HashSizeInBytes];
+            Span<byte> rest = stackalloc byte[SHA256.HashSizeInBytes];
+            _ = SHA256.HashData(parts, digest);
+            // The rest is the same parts with the placements' digest zeroed, so it moves with every part but that one.
+            parts.Slice(SHA256.HashSizeInBytes, SHA256.HashSizeInBytes).Clear();
+            _ = SHA256.HashData(parts, rest);
+            entry.FillFrame(digest, rest);
         }
         return entry.Frame;
+    }
+    /// <summary>Gets the placement rows of a replica audience's disclosed document.</summary>
+    internal IReadOnlyList<WorldPlacement> DisclosedPlacements(WorldRecipientView view) => Current(view).Composed.Placements;
+    /// <summary>Gets the frame of a replica audience's disclosed document (<see cref="FrameIdentity"/>) and its digest
+    /// less the placements section.</summary>
+    internal (ContentPin Frame, ContentPin Remainder) FramePins(WorldRecipientView view) {
+        var entry = Framed(Audience(view));
+        return (entry.Frame, entry.Rest);
+    }
+    /// <summary>Finds the placement rows that moved between those a replica stream holds and its audience's disclosed
+    /// document, when the frame moved in its placements alone. The rows come from the audience's own composition
+    /// (<see cref="WorldStateDisclosure.DiscloseDocument"/>, which removes every withheld cell and deals every dealt
+    /// placement again from what remains), the document the whole-document door would hand the stream, so a row
+    /// delivery carries nothing that document withholds; the holding of a responsive placement is the one its disclosure
+    /// left. A row whose holding alone moved travels as the holding, a row whose content moved as the row, and a row
+    /// rebuilt with the content it had travels not at all.</summary>
+    /// <param name="view">The stream's view.</param>
+    /// <param name="heldRest">The frame digest less placements the stream holds.</param>
+    /// <param name="held">The placement rows the stream holds.</param>
+    /// <param name="rows">The rows owed, possibly none, when the method returns <see langword="true"/>.</param>
+    /// <param name="placements">The disclosed placement rows the stream holds once the rows apply.</param>
+    /// <param name="frame">The frame the stream holds once the rows apply.</param>
+    /// <param name="identity">The disclosed document's identity.</param>
+    /// <returns><see langword="false"/> when the frame moved in another section or the placements changed shape (a row
+    /// added, removed or moved to another ordinal), which only the whole document carries.</returns>
+    internal bool TryAdvancePlacements(WorldRecipientView view, ContentPin heldRest, IReadOnlyList<WorldPlacement> held,
+        [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out WorldPresentationRows? rows, out IReadOnlyList<WorldPlacement> placements, out ContentPin frame, out Sha256Digest identity) {
+        var entry = Current(view);
+        frame = FrameOf(entry);
+        identity = entry.Identity;
+        placements = entry.Composed.Placements;
+        rows = null;
+        if ((entry.Rest != heldRest) || (placements.Count != held.Count)) { return false; }
+        List<WorldPresentationHolding>? holdings = null;
+        List<WorldPresentationPlacement>? replaced = null;
+        for (var ordinal = 0; ordinal < placements.Count; ordinal++) {
+            var (before, after) = (held[ordinal], placements[ordinal]);
+            if (ReferenceEquals(before, after)) { continue; }
+            if (!string.Equals(before.Id, after.Id, StringComparison.Ordinal)) { return false; }
+            if ((before.Holding != after.Holding) && WorldPlacementResponse.SameBesidesHolding(previous: before, next: after)) {
+                (holdings ??= []).Add(new(ordinal, after.Holding));
+            } else if (!LeafDigest(before, m_placementDigests).AsSpan().SequenceEqual(LeafDigest(after, m_placementDigests))) {
+                (replaced ??= []).Add(new(ordinal, after));
+            }
+        }
+        rows = new([], [], HasCreations: (entry.Composed.CreationsRaw is not null), HasShades: (entry.Composed.ShadesRaw is not null)) {
+            Holdings = ((holdings is null) ? [] : [.. holdings]),
+            Placements = ((replaced is null) ? [] : [.. replaced]),
+        };
+        return true;
+    }
+    // One row's canonical digest, kept per row object: a section's leaf, and what a row delivery compares.
+    private byte[] LeafDigest<T>(T row, Puck.Abstractions.CodeDerivedTable<T, byte[]> digests) where T : class {
+        if (!digests.TryGetValue(row, out var digest)) {
+            digest = DigestSection(row);
+            digests.AddOrUpdate(row, digest);
+        }
+        return digest;
     }
     private static readonly byte[] AbsentSection = SHA256.HashData(ReadOnlySpan<byte>.Empty);
     private readonly Puck.Abstractions.CodeDerivedTable<WorldPlacement, byte[]> m_placementDigests = new();
@@ -491,14 +558,7 @@ public sealed partial class WorldDisclosureImages {
 
     private void WriteRowDigests<T>(IReadOnlyList<T>? rows, Puck.Abstractions.CodeDerivedTable<T, byte[]> digests) where T : class {
         if (rows is null) { return; }
-        for (var index = 0; index < rows.Count; index++) {
-            var row = rows[index];
-            if (!digests.TryGetValue(row, out var digest)) {
-                digest = DigestSection(row);
-                digests.AddOrUpdate(row, digest);
-            }
-            m_frameLeaves.Write(digest);
-        }
+        for (var index = 0; index < rows.Count; index++) { m_frameLeaves.Write(LeafDigest(rows[index], digests)); }
     }
 
     private byte[] ShadeDigest(IReadOnlyDictionary<string, Puck.SignedDistance.SdfShadeDefinition>? shades) {
@@ -508,11 +568,7 @@ public sealed partial class WorldDisclosureImages {
         m_frameLeaves.Write<byte>([0]);
         foreach (var (name, shade) in shades.OrderBy(static pair => pair.Key, StringComparer.Ordinal)) {
             m_frameLeaves.Write(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(name)));
-            if (!m_shadeDigests.TryGetValue(shade, out var leaf)) {
-                leaf = DigestSection(shade);
-                m_shadeDigests.AddOrUpdate(shade, leaf);
-            }
-            m_frameLeaves.Write(leaf);
+            m_frameLeaves.Write(LeafDigest(shade, m_shadeDigests));
         }
         digest = SHA256.HashData(m_frameLeaves.WrittenSpan);
         m_shadeTables.AddOrUpdate(shades, digest);
@@ -553,9 +609,10 @@ public sealed partial class WorldDisclosureImages {
         _ = FrameOf(entry);
         return entry;
     }
-    internal bool TryAdvanceAppearance(WorldRecipientView view, ContentPin? held, Sha256Digest? heldIdentity, out ContentPin next, out Sha256Digest identity) {
+    internal bool TryAdvanceAppearance(WorldRecipientView view, ContentPin? held, Sha256Digest? heldIdentity, out ContentPin next, out ContentPin rest, out Sha256Digest identity) {
         var entry = Current(view);
         next = FrameOf(entry);
+        rest = entry.Rest;
         identity = entry.Identity;
         return (held == next && heldIdentity == identity) ||
             (held is not null && held == entry.BeforeAppearance && heldIdentity == entry.BeforeAppearanceIdentity);

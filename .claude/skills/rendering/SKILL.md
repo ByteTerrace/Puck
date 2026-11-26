@@ -405,7 +405,11 @@ bakes; the lead measures frame times and edit-to-running on a quiet machine.
 A table the host writes each frame is a `GpuRegion` (`Puck.Abstractions/Gpu/Residency`). Create it with the
 profile constructor so it chooses ring, in place or staged by `GpuResidency.Select`, and grow it only through
 `Grow`, which chooses again and restages a region past a ring's share of the aperture; never select a policy or
-replace a region in the owner. A fixed policy (the always-staged mesh region, uniform frame blocks) uses the policy
+replace a region in the owner. A write owes and copies into the host copy only the words that differ, and a flush
+writes only owed words (`GpuRegion.LastFlushedBytes`): `world.residency`'s `region-flushes` line names what the latest
+upload flushed of each residency table, and a render node's regions count under its `region copies` pass
+(`world.counters gpu counter gpu.uploads`). A ring writes each change into every slot's buffer, so a table whose rows
+move every frame (the animated bodies' transforms) flushes about twice its changed rows. A fixed policy (the always-staged mesh region, uniform frame blocks) uses the policy
 constructor. Round a constant-buffer block with `IGpuBindings.ConstantBufferBytes`. What `Grow` returns retires
 after the submissions that read the old buffers (`SdfWorldTables.Retire`).
 The mesh region is the presentation's, never a residency's: every residency on a device names its meshes in one
@@ -575,6 +579,13 @@ records the options weighed.
   back (`Entry.Move`). A new layer is cleared before anything binds it.
 - **Glass.** An entry's glass extinction (`Optical`) is drawn with each whole redraw, against the front depth, from a
   selection of every draw (`OpticalKind`).
+- **Draws that cast no shadow.** A palette slot with `castsShadow: false` (`SdfMaterial.CastsNoShadow`, carried on the
+  appearance outline) bakes its shapes into groups of their own (`SdfMeshBakeGroup.CastsNoShadow`), whose records carry
+  `SdfMeshRecord.NoShadowFlag`; the selection kernel filters that flag out of every split-exit staging
+  (`SdfMeshOcclusion.Stage`'s `splitExit`, which the world's shadows pass for every drawing), so a new shadow drawing
+  must stage with `splitExit` or it draws them.
+  `NoteMotion` takes whether each side casts (`SdfMeshRegion.CastsShadow`), so such a draw's motion owes the shadows
+  nothing. A static one stays in the irradiance volume's scene and the far product.
 - **Block bounds.** A pair of layers carries its block bounds (`Pair.Blocks`, `frame/sdf-shadow-blocks.hlsli`): a
   fitted plane and the depth range off it for each block of `SdfWorldPackage.ShadowBlockEdge` texels and the filter's
   reach about it, which the surface pass classifies a receiver by before any tap (`sdfMeshShadowClass`: lit, umbra
@@ -1072,6 +1083,19 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   exposure for any before/after comparison. A view with no camera sample reads the
   open sky, so a closed room meters as daylight and a display in it reads black:
   `camera=none` names its `wait=` ([mesh GI](references/mesh-gi.md)).
+- **A view stores its light at a scale near its exposure** (the pass block's
+  `lightScale`, `SdfPhotometry.StoredLightScale`, a power of two kept within
+  `StoredLightBand` stops of the exposure), so a star's surface and the noon sky
+  fit the same half-float images. The views pass multiplies the nits it writes
+  into the lit image by `sdfStoredLightScale`, the glass pass divides it out as
+  it reads the lit image and multiplies again as it writes `glassLit`, the resolve
+  works on stored values throughout, and the composite divides it out before the
+  exposure; a debug image that is its own picture is stored unscaled. A new reader
+  or writer of a view's lit image goes through `sdfStoredLightScale` or it reads
+  the light thousands of times too dim or too bright. The temporal history holds
+  one scale (`SdfTemporalEpoch.LightScale`), so a scale step restarts it.
+  `world.exposure` prints each view's `stored=2^n`. The irradiance volume's
+  shared-exponent cubes are not scaled and top out near 65,000 nits.
 - **Temporal views can share shading in smooth interiors.** The device table's
   `viewsRate` chooses the coarsest spacing and classification tile. The resolve
   publishes smooth axes in the existing history surface. `sdfRateTile` checks
@@ -1341,7 +1365,11 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   beside each client's prefix, whose first two words are its root words. A traced dispatch pushes the published
   export's root word base, and the kernels read the root through `sdfProbeRootWord`, never `sdfProbeScene[0]`. Chunks
   ride whichever residency's upload opens next (`SdfWorldTables.OpenUpload`, after the mesh region's owed copies), and a
-  client publishes only once the upload carrying its root words has completed (`SdfMeshProbeScenes.Upload.Rooted`). The
+  client publishes only once the upload carrying its root words has completed (`SdfMeshProbeScenes.Upload.Rooted`).
+  Nothing a view's signature reads moves while those copies wait, so a frame whose views all stand opens an upload for
+  them anyway (`SdfWorldPasses.StageOwedCopies`, counted in `sdf.captures.copies-staged`); without it a still view left
+  the volume `settling=worker` for good. A volume's `settling=worker-device:<why>` names why its head query was last
+  refused (`SdfMeshProbeGpuWork.DescribeWait`). The
   region unmaps every chunk no live allocation touches (`SdfMeshProbeScenes.Cover`). `world.residency`'s mesh-store line
   ends with the `probe-scenes` reading (`live-bytes`, `geometries-shared`, `unmapped-bytes`).
 - **Mesh words go through one door.** `frame/sdf-mesh-words.hlsli` reads a draw's record through
@@ -1638,7 +1666,9 @@ paired arithmetic. Carry author-facing parameters through
   library published from its store lets every plane go once it has stood unneeded for
   `SdfMesh.IdleSeconds` (`SdfMesh.ReleaseIdle`, run by each residency's store service, every unneeded one
   at a trim) and brings them back from the store when next held (`SdfMesh.Restore.cs`); the members,
-  vertex members and influences stay. So read the planes under a hold and keep no view past it: a long-lived
+  vertex members and influences stay. The entry numbers triangle materials by place, so a restore writes them in the
+  ids the mesh carries (the `Restorable`'s materials, from `SdfMeshStorage.WritesMaterialsIn`), never the entry's: a
+  restore in the entry's ids gave a released floor program material 0 in the irradiance trace, an orange gallery. So read the planes under a hold and keep no view past it: a long-lived
   reader copies what it keeps, as the irradiance scene copies each traced level's triangles over the
   vertices they reach and each draw mesh's traced materials (`SdfMeshIrradianceScene.Geometry`), and a
   count comes from the mesh (`VertexCount`, `IndexCount`, `HasNormals`, `HasTriangleMaterials`), never a

@@ -64,6 +64,11 @@ internal abstract class SdfMeshStorage {
     /// <param name="shape">The counts of every plane, in the entry's order.</param>
     /// <returns><see langword="true"/> when the storage takes the shape.</returns>
     public abstract bool Begin(SdfMeshShape shape);
+    /// <summary>Tells the storage the material ids, by place, the triangle materials are written in, before it is sized
+    /// (<see cref="Begin"/>): a storage whose mesh may let its planes go and restore them keeps them, so a restore writes
+    /// the planes in the ids the mesh carries rather than the entry's canonical ones.</summary>
+    /// <param name="materials">The ids by material place.</param>
+    public virtual void WritesMaterialsIn(int[] materials) { }
     /// <summary>Hands out the span a piece's positions are written to.</summary>
     public abstract bool Positions(int piece, out Span<Vector3> destination);
     /// <summary>Hands out the span a piece's normals are written to.</summary>

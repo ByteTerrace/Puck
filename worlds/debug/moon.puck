@@ -93,7 +93,8 @@ views {
 }
 
 // The seam under the moon, the debug world's `sky` seen from above: a body that sinks through it is the debug
-// world's again.
+// world's again. The seam over it (moon-frame.puck's `sunSeamHeight`): a body that climbs through it is the sun's
+// world's, at the same point of the system's frame, so a ship flies on toward the star.
 adjacencies [
   {
     name: "sky"
@@ -106,6 +107,19 @@ adjacencies [
       outwardPitchDegrees: -90
       width: skySeamSpan
       height: skySeamSpan
+    }
+  }
+  {
+    name: "sun"
+    destination: "sun"
+    counterpart: "moon"
+    presentation: Apart
+    boundary {
+      center [0, sunSeamHeight, 0]
+      outwardYawDegrees: 0
+      outwardPitchDegrees: 90
+      width: sunSeamSpan
+      height: sunSeamSpan
     }
   }
 ]
@@ -412,6 +426,8 @@ prototypes {
 timeline {
   clocks [
     { name: day, state: day, spanSeconds: 24h }
+    // The pair's turn, which the sun's world owns (moon-frame.puck's `companionTurn`).
+    { name: pair, state: pair, spanSeconds: pairSeconds }
     // The sun's light as received, on a dial whose half turn spans dark to full (a clock wraps at its whole span), which
     // the key light's strength keys on.
     { name: sun, state: sunDial, spanSeconds: 1s }
@@ -426,6 +442,14 @@ state {
       value: $"{sharedDayStart / 24}"
       advance { perSecondNumerator: 1, perSecondDenominator: sharedDaySeconds }
       follows { destination: "debug" }
+    }
+    // The pair's turn, adopted from the sun's world, which owns it.
+    {
+      name: "pair"
+      kind: "Fixed"
+      value: "0"
+      advance { perSecondNumerator: 1, perSecondDenominator: pairSeconds }
+      follows { destination: "sun" }
     }
     // The sun's light and mass as they reach the moon (sun.puck): each read `sunDelayMoon` seconds after the sun wrote
     // it. The key light below burns at the light received, and the sun's tide is scaled by the mass received.
@@ -491,6 +515,8 @@ render {
         },
         softness: 0.0046
       )
+      // The sun's companion, on its turn about the sun.
+      starLight(of: companionStar, turns: [sunTurn, companionTurn], focus: debugOrigin)
       point(
         name: "beacon",
         position: [0, (moonRadius + padTop + beaconHeight), (0 - padRadius)],
@@ -513,6 +539,7 @@ render {
         seed: spaceStarSeed
       )
       starDisc(of: sunStar)
+      starDisc(of: companionStar, name: "companion", color: companionStar.color)
       // The planet below: the debug world, seen from where the viewer stands in the frame the two worlds share, so the
       // valley a ship climbed out of lies under the seam it crossed and shrinks as the ship nears the moon. It draws the
       // debug world's far product (its render.farProduct), never a residency of that world: the seam is the hand-over,

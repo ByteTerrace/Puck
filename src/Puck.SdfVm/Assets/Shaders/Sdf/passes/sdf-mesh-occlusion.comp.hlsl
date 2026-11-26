@@ -521,8 +521,10 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         bool absent = (a.w & SDF_MESH_ABSENT_FLAG) != 0u;
         bool dynamicDraw = (a.w & SDF_MESH_DYNAMIC_FLAG) != 0u;
         uint drawAudience = ((a.w >> SDF_MESH_AUDIENCE_SHIFT) & 0xFFu);
+        // Every shadow drawing is a split-exit staging (SdfWorldShadows.Stage), and none of them selects a draw that casts
+        // no shadow (SdfMeshRecord.NoShadowFlag); it keeps its history as a filtered draw does.
         bool filtered = (staticOnly && dynamicDraw) || (dynamicOnly && !dynamicDraw && ((a.w & 2u) == 0u)) ||
-            ((drawAudience != 0u) && (drawAudience != audience));
+            ((drawAudience != 0u) && (drawAudience != audience)) || (splitExit && ((a.w & SDF_MESH_NO_SHADOW_FLAG) != 0u));
         if (absent || filtered) {
             if (absent) { sdfMeshOcclusionVisibleRW[draw] = uint4(0u, 0u, 0u, 0u); }
             sdfOcclusionEmit(entryPhase, draw, draw, 0u, false);

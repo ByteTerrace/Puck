@@ -544,6 +544,7 @@ public sealed class SdfMeshDresser : IDisposable {
                     Audience = copy.Audience,
                     FrameSlot = copy.FrameSlot,
                     Glass = (m_group?.Glass ?? false),
+                    CastsNoShadow = (m_group?.CastsNoShadow ?? false),
                     IsDynamic = copy.IsDynamic,
                     MotionIdentity = m_motionIdentity,
                     // Every group and piece of one placed copy is one object.
@@ -558,7 +559,8 @@ public sealed class SdfMeshDresser : IDisposable {
             }
             var scale = (((m_group!.Dynamic) && (m_group.Slot < frame.DynamicTransforms.Count)) ? SdfMeshGeometryBuilder.UnitsOf(transform: frame.DynamicTransforms[m_group.Slot]) : m_scale);
 
-            if (m_posed && (m_scale == scale) && (m_draw.FrameSlot == (m_group.Dynamic ? m_group.Slot : null)) && (m_draw.Glass == m_group.Glass) && (m_draw.Displacement == m_group.Displacement)) {
+            if (m_posed && (m_scale == scale) && (m_draw.FrameSlot == (m_group.Dynamic ? m_group.Slot : null)) && (m_draw.Glass == m_group.Glass) &&
+                (m_draw.CastsNoShadow == m_group.CastsNoShadow) && (m_draw.Displacement == m_group.Displacement)) {
                 return false;
             }
             m_scale = scale;
@@ -569,6 +571,7 @@ public sealed class SdfMeshDresser : IDisposable {
                 objectToWorld: (m_group.Dynamic ? Matrix4x4.CreateScale(scale: scale) : Matrix4x4.Identity)) {
                 FrameSlot = (m_group.Dynamic ? m_group.Slot : null),
                 Glass = m_group.Glass,
+                CastsNoShadow = m_group.CastsNoShadow,
                 // A displaced surface is never static (SdfMeshDraw.IsStatic), whatever its placement does.
                 Displacement = m_group.Displacement,
                 IsDynamic = m_group.Dynamic,

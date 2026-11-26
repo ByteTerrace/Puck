@@ -26,6 +26,11 @@ internal sealed class SessionReplica : IClientSink {
         Definitions++;
         Hold(definition, version);
     }
+    public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+        Definitions++;
+        Assert.True(rows.TryApply(m_definition, out var changed));
+        Hold(changed, version);
+    }
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         States++;
         Hold(definition, version);

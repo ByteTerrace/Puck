@@ -68,6 +68,7 @@ public sealed class ReplayStartRestoreLawTests {
     private sealed class SeedSink(Func<ulong> seed) : IClientSink {
         public List<ulong> Seeds { get; } = [];
 
+        public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) { }
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => Seeds.Add(item: seed());
         public void DeliverAnswer(in QueryAnswer answer) { }
         public void DeliverComposition(WorldComposition composition) { }

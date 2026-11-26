@@ -53,14 +53,26 @@ public sealed unsafe partial class DirectXGpuRecorder(DirectXDeviceContext devic
         }
     }
     /// <inheritdoc/>
-    public void BeginDebugGroup(nint commandBufferHandle, string label) =>
+    /// <remarks>A PIX event is recorded only while the device context names objects
+    /// (<see cref="DirectXDeviceContext.NameObjects"/>); a removal record's breadcrumbs need none.</remarks>
+    public void BeginDebugGroup(nint commandBufferHandle, string label) {
+        if (!deviceContext.NameObjects) {
+            return;
+        }
+
         DirectXDebugLabel.Begin(
             commandList: ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList),
             label: label
         );
+    }
     /// <inheritdoc/>
-    public void EndDebugGroup(nint commandBufferHandle) =>
+    public void EndDebugGroup(nint commandBufferHandle) {
+        if (!deviceContext.NameObjects) {
+            return;
+        }
+
         DirectXDebugLabel.End(commandList: ((ID3D12GraphicsCommandList*)DecodeState(commandBufferHandle: commandBufferHandle).CommandList));
+    }
     /// <inheritdoc/>
     public void BindPipeline(nint commandBufferHandle, GpuBindPoint bindPoint, nint pipelineHandle) {
         var state = DecodeState(commandBufferHandle: commandBufferHandle);

@@ -336,7 +336,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
         }
 
         var owned = (written
-            ? mesh.NativeCopy(Allocator, Account, restore: (this, identity, geometry), stored: stored)
+            ? mesh.NativeCopy(Allocator, Account, restore: (this, identity, geometry, materials), stored: stored)
             : CopyUnstored(mesh));
 
         try {

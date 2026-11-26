@@ -504,7 +504,10 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         var residency = m_view.Residency;
         var tables = residency.Staged(context: recording.Context);
 
-        m_decided = new Decided { Tables = tables };
+        // Cleared in place and given its one reference, rather than assigned a new struct, which copies every field with a
+        // write barrier.
+        m_decided = default;
+        m_decided.Tables = tables;
 
         if (m_part == SdfWorldPackage.Parts.Mesh) {
             m_previousMeshRows = m_owner.NoteMeshRows(instance: m_context.Instance, stamp: tables.RowStamp);

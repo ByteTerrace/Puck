@@ -245,10 +245,11 @@ public sealed class SdfMeshStore {
 
     // Reads a geometry's entry into a storage as TryRead does: the entry is stamped when it is sound, and deleted when its
     // bytes are refused. `taking` is the taking group's ids, which the decode writes the triangle materials in when the mesh
-    // can be renumbered back by place (SdfMeshStoreDecoder.TryDecode); `declined` is set for a sound entry the storage did not take.
-    internal bool TryReadInto(UInt128 identity, SdfMeshGeometry geometry, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool declined, string extension = Extension) {
+    // can be renumbered back by place (SdfMeshStoreDecoder.TryDecode), or for a restore (`restoring`) the ids the mesh
+    // carries, which it writes every plane in; `declined` is set for a sound entry the storage did not take.
+    internal bool TryReadInto(UInt128 identity, SdfMeshGeometry geometry, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool declined, string extension = Extension, bool restoring = false) {
         var path = PathOf(identity: identity, key: KeyOf(geometry: geometry, identity: identity), extension: extension);
-        var read = TryReadEntry(damaged: out var damaged, declined: out declined, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal, storage: storage, taking: taking, extension: extension);
+        var read = TryReadEntry(damaged: out var damaged, declined: out declined, geometry: geometry, identity: identity, materials: out materials, mesh: out mesh, refusal: out refusal, storage: storage, taking: taking, extension: extension, restoring: restoring);
 
         if (!read && damaged) {
             Delete(path: path);
@@ -396,7 +397,7 @@ public sealed class SdfMeshStore {
     // Reads an entry into a storage, answering whether a held entry's bytes were refused (damaged) rather than unreadable
     // or sound but not taken by the storage (declined). The entry's bytes are read into owned scratch, as its inflated planes
     // are, and nothing of them outlives the decode.
-    private bool TryReadEntry(UInt128 identity, SdfMeshGeometry geometry, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool damaged, out bool declined, string extension = Extension) {
+    private bool TryReadEntry(UInt128 identity, SdfMeshGeometry geometry, SdfMeshStorage storage, int[]? taking, out SdfMesh? mesh, out int[] materials, out string? refusal, out bool damaged, out bool declined, string extension = Extension, bool restoring = false) {
         var key = KeyOf(geometry: geometry, identity: identity);
         var path = PathOf(identity: identity, key: key, extension: extension);
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -429,7 +430,7 @@ public sealed class SdfMeshStore {
         }
 
         var read = System.Diagnostics.Stopwatch.GetTimestamp();
-        var decoded = SdfMeshStoreDecoder.TryDecode(allocator: m_allocator, bytes: entry.GetSpan(), declined: out declined, key: key, materials: out materials, mesh: out mesh, refusal: out var why, storage: storage, taking: taking, owner: owner, workspace: in workspace);
+        var decoded = SdfMeshStoreDecoder.TryDecode(allocator: m_allocator, bytes: entry.GetSpan(), declined: out declined, key: key, materials: out materials, mesh: out mesh, refusal: out var why, storage: storage, taking: taking, owner: owner, workspace: in workspace, restoring: restoring);
 
         _ = Interlocked.Increment(location: ref m_reads);
         _ = Interlocked.Add(location1: ref m_readBytes, value: entry.Length);
