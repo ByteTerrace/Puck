@@ -609,11 +609,8 @@ template sectionSign(name, title, what) {
   }
 }
 
-// A display's board names its group; it faces the way its display's console does.
+// The gallery's boards: the map in the lobby. A display names its group on its own screen.
 template signPrototypes() {
-  for display in galleryDisplays {
-    sectionSign(name: $"gallery-sign-{display.id}", title: display.title, what: display.what)
-  }
   // The map board in the lobby: how to get around, then each level and the rows it holds, in walking order.
   prototype "gallery-map" {
     document {
@@ -733,18 +730,8 @@ template signPrototypes() {
   }
 }
 
-// The map hangs in the lobby facing the entrance; a display's board hangs beside it, on the console's right, facing the
-// way the console does.
-let displaySign = [2.3, 0, -0.2]
+// The map hangs in the lobby facing the entrance.
 template gallerySignPlacements() {
-  for display in galleryDisplays {
-    placement $"gallery-sign-{display.id}" {
-      prototype: $"gallery-sign-{display.id}"
-      parent: "gallery"
-      position: displayPoint(display, displaySign)
-      yawDegrees: display.yaw
-    }
-  }
   placement "gallery-map" {
     prototype: "gallery-map"
     parent: "gallery"
