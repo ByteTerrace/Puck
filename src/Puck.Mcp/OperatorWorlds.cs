@@ -167,6 +167,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         var ownerPlay = false;
         var paused = false;
         var lockstep = false;
+        var pins = false;
         var seconds = 900;
         var windowed = false;
         string? listen = null;
@@ -197,6 +198,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 paused = value.GetBoolean();
             } else if ((key == "lockstep") && (value.ValueKind is JsonValueKind.True or JsonValueKind.False)) {
                 lockstep = value.GetBoolean();
+            } else if ((key == "pins") && (value.ValueKind is JsonValueKind.True or JsonValueKind.False)) {
+                pins = value.GetBoolean();
             } else if ((key == "holder") && (value.ValueKind == JsonValueKind.String) && !string.IsNullOrWhiteSpace(value: value.GetString()) && (value.GetString()!.IndexOfAny(anyOf: ['\r', '\n']) < 0)) {
                 holder = value.GetString()!;
             } else if ((key == "lane") && (value.ValueKind == JsonValueKind.String) && !string.IsNullOrWhiteSpace(value: value.GetString()) && (value.GetString()!.IndexOfAny(anyOf: ['\r', '\n']) < 0)) {
@@ -276,7 +279,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 CallToolResult result;
 
                 try {
-                    result = await StartWorldAsync(checkout, path, backend, cacheDirectory, captureTool, holder, lane, windowed, ownerPlay, paused, lockstep, listen, connect, federationKeyFile, width, height, frameBar, withheldGpu, debugLayers, seconds, attachment, progress, deadline.Token).ConfigureAwait(continueOnCapturedContext: false);
+                    result = await StartWorldAsync(checkout, path, backend, cacheDirectory, captureTool, holder, lane, windowed, ownerPlay, paused, lockstep, listen, connect, federationKeyFile, width, height, frameBar, withheldGpu, debugLayers, pins, seconds, attachment, progress, deadline.Token).ConfigureAwait(continueOnCapturedContext: false);
                 } catch (OperationCanceledException) {
                     result = Refuse($"Start {id} was cancelled or reached its {seconds}-second deadline; any World it launched was stopped.");
                 } catch (Exception error) {
@@ -319,7 +322,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
     }
     private async Task<CallToolResult> StartWorldAsync(string checkout, string path, Puck.World.WorldBackendPreference? backend, string? cacheDirectory, string? captureTool, string holder, string? lane,
         bool windowed, bool ownerPlay, bool paused, bool lockstep, string? listen, string? connect, string? federationKeyFile, int? width, int? height, string? frameBar,
-        string[]? withheldGpu, Puck.Abstractions.Gpu.GpuValidation debugLayers, int seconds, OperatorAttachment attachment, StartProgress progress, CancellationToken cancellationToken) {
+        string[]? withheldGpu, Puck.Abstractions.Gpu.GpuValidation debugLayers, bool pins, int seconds, OperatorAttachment attachment, StartProgress progress, CancellationToken cancellationToken) {
         var budget = TimeSpan.FromSeconds(seconds: seconds);
         var runDirectory = Path.Combine(
             path1: attachment.Target,
@@ -384,7 +387,10 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 if (world is { } reached) {
                     started.AttachmentId = reached.AttachmentId;
 
-                    return Result(metadata: Metadata(output: null, started: started, status: "started", world: reached));
+                    // The World accepts an attachment once it runs, so the restored lines reach the seats it booted.
+                    var restored = (pins ? await PinsAsync(attachment: attachment, cancellationToken: cancellationToken, started: started, verb: "restore").ConfigureAwait(continueOnCapturedContext: false) : null);
+
+                    return Result(metadata: Metadata(output: restored, started: started, status: "started", world: reached));
                 }
                 if (clock.GetElapsedTime(startingTimestamp: begun) >= budget) {
                     _ = Stop(grace: TimeSpan.Zero, started: started);
@@ -406,19 +412,23 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         }
     }
 
-    /// <summary>Stops a World this adapter started.</summary>
+    /// <summary>Stops a World this adapter started, saving its operator pins first when the arguments ask.</summary>
     /// <param name="arguments">The tool's arguments.</param>
+    /// <param name="attachment">The adapter's attachments, through which the pins are saved.</param>
     /// <param name="cancellationToken">Cancels waiting for the World to quit; its process tree is then killed.</param>
     /// <returns>The World's exit, or a refusal that touched nothing.</returns>
-    public async Task<CallToolResult> StopAsync(IDictionary<string, JsonElement>? arguments, CancellationToken cancellationToken) {
+    public async Task<CallToolResult> StopAsync(IDictionary<string, JsonElement>? arguments, OperatorAttachment attachment, CancellationToken cancellationToken) {
         string? selector = null;
         var timeout = 30_000;
+        var pins = false;
 
         foreach (var (key, value) in (arguments ?? new Dictionary<string, JsonElement>())) {
             if ((key == "world") && (value.ValueKind == JsonValueKind.String) && !string.IsNullOrWhiteSpace(value: value.GetString())) {
                 selector = value.GetString()!.Trim();
             } else if ((key == "timeoutMs") && (value.ValueKind == JsonValueKind.Number) && value.TryGetInt32(value: out var parsed) && (parsed is >= 1 and <= ControlLimits.TimeoutMilliseconds)) {
                 timeout = parsed;
+            } else if ((key == "pins") && (value.ValueKind is JsonValueKind.True or JsonValueKind.False)) {
+                pins = value.GetBoolean();
             } else {
                 return Refuse(output: $"Invalid argument: {key}.");
             }
@@ -436,16 +446,48 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             return Refuse(output: $"Refused: '{selector}' names no World this adapter started with puck_world_start, so nothing was stopped; a World it did not start is never touched.");
         }
 
+        // The pins are saved before quit reaches the World, while every home they are read from still stands.
+        var saved = ((pins && !started.Process.HasExited) ? await PinsAsync(attachment: attachment, cancellationToken: cancellationToken, started: started, verb: "save").ConfigureAwait(continueOnCapturedContext: false) : null);
         var stopped = await Task.Run(function: () => Stop(started: started, grace: TimeSpan.FromMilliseconds(milliseconds: timeout)), cancellationToken: CancellationToken.None).WaitAsync(cancellationToken: cancellationToken).ConfigureAwait(continueOnCapturedContext: false);
 
         return Result(metadata: Metadata(
-            output: null,
+            output: saved,
             started: started,
             status: "stopped",
             stop: stopped
         ));
     }
 
+    // Runs world.pins save or restore on a World this adapter started, through the adapter's attachment, and answers what
+    // the World said, or why the line did not run; a refused or failed line never stops the start or the stop it rides.
+    // The World keys the pins file by its own source, so a stop and the next start of the same document share it.
+    private async Task<string> PinsAsync(OperatorAttachment attachment, Started started, string verb, CancellationToken cancellationToken) {
+        var command = $"world.pins {verb}";
+        var parameters = new CallToolRequestParams {
+            // A restore answers once every line it runs has settled, which a booting windowed World may take a while to tick.
+            Arguments = new Dictionary<string, JsonElement> {
+                ["command"] = JsonSerializer.SerializeToElement(value: command, jsonTypeInfo: OperatorMcpJson.Default.String),
+                ["timeoutMs"] = JsonSerializer.SerializeToElement(value: ControlLimits.TimeoutMilliseconds, jsonTypeInfo: OperatorMcpJson.Default.Int32),
+            },
+            Name = "puck_exec",
+        };
+
+        try {
+            var result = await attachment.RunAsync(
+                call: (client, token) => OperatorMcpServer.CallAsync(client: client, clock: clock, parameters: parameters, token: token).AsTask(),
+                cancellationToken: cancellationToken,
+                refuse: static refusal => new CallToolResult { Content = [new TextContentBlock { Text = refusal }], IsError = true },
+                world: started.Process.Id.ToString(provider: CultureInfo.InvariantCulture)
+            ).ConfigureAwait(continueOnCapturedContext: false);
+            var output = (((result.StructuredContent is { } data) && data.TryGetProperty(propertyName: "output", value: out var said) && (said.ValueKind == JsonValueKind.String))
+                ? said.GetString()
+                : result.Content.OfType<TextContentBlock>().FirstOrDefault()?.Text);
+
+            return $"{command}: {((result.IsError == true) ? "refused: " : string.Empty)}{output}";
+        } catch (Exception error) when ((error is IOException or InvalidDataException or System.Net.Sockets.SocketException or ObjectDisposedException or JsonException)) {
+            return $"{command}: not run ({error.Message.TrimEnd('.')})";
+        }
+    }
     private static string Normalize(string path) => Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: path));
     private static CallToolResult Refuse(string output, Started? started = null) => Result(metadata: Metadata(output: output, started: started, status: "refused"));
     private static OperatorMcpWorldRun Metadata(string? output, Started? started, string status, OperatorMcpWorld? world = null, (int? ExitCode, bool Killed, bool LeaseReleased)? stop = null, string? startId = null) {
@@ -474,8 +516,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         var element = JsonSerializer.SerializeToElement(value: metadata, jsonTypeInfo: OperatorMcpJson.Default.OperatorMcpWorldRun);
         var text = metadata.Status switch {
             "pending" => $"pending {metadata.StartId} {metadata.Stage} {metadata.ElapsedSeconds}s",
-            "started" => $"started {metadata.ProcessId} {metadata.World?.AttachmentId}",
-            "stopped" => $"stopped {metadata.ProcessId} exit={metadata.ExitCode}",
+            "started" => $"started {metadata.ProcessId} {metadata.World?.AttachmentId}{((metadata.Output is { } restored) ? $" {restored}" : string.Empty)}",
+            "stopped" => $"stopped {metadata.ProcessId} exit={metadata.ExitCode}{((metadata.Output is { } saved) ? $" {saved}" : string.Empty)}",
             _ => (metadata.Output ?? metadata.Status),
         };
 
