@@ -8,7 +8,7 @@ timeline {
 state {
   world [
     {
-      name: "fiber"
+      name: fiber
       kind: "Fixed"
       value: "0"
       advance { perSecondNumerator: 1, perSecondDenominator: 6 }
