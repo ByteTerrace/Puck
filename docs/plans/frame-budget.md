@@ -38,6 +38,8 @@ the debug world does not hold.
 
 The main view's rows are `world.gpu-timing` at the stage with the camera
 standing and the route's chapter means moving; the others are the route's.
+The `views-probes`, `surface` and `resolve` rows are readings of the kernels
+before steps 1, 3 and 5 changed them, and none has been read since.
 
 Ink's share is taken from shading, where the outline it replaced read its
 neighbours. Its row is the difference `SDF_VIEWS_OMIT_INK` makes
@@ -77,12 +79,13 @@ against the same frame:
 - **`surface`**: about half is the cascade shadows (`world.shadows off`), a
   quarter the ambient occlusion (`world.ao off`), and a fifth the record's
   load, normal and store.
-- **`views-probes`**: a third remains with `world.indirect off`, which is the
-  classification of each cell's four pixels and the state it writes. The rest
-  resolves each gather into a slot: sixteen corners of 25 words each, for the
-  representative and for each pixel that gathers for itself. Moving through
-  foliage, where many pixels gather for themselves, it is the largest pass
-  after views.
+- **`views-probes`**, as read before the coarser lookup of step 1, when a
+  cell was two pixels a side: a third remains with `world.indirect off`, which
+  is the classification of each cell's four pixels and the state it writes.
+  The rest resolves each gather into a slot: sixteen corners of 25 words each,
+  for the representative and for each pixel that gathers for itself. Moving
+  through foliage, where many pixels gather for themselves, it is the largest
+  pass after views.
 - **`views-filter`**: two fifths is the tiles' light masks
   (`SDF_VIEWS_OMIT_LIGHTS`), the rest the occlusion and shadow filter, and in
   a view that inks the edge search beside them (`SDF_VIEWS_OMIT_INK`).

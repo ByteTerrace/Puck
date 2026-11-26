@@ -841,13 +841,15 @@ internal sealed class SdfWorldShadows : IDisposable {
     // keeps it, the entry's recording (Entry.Record, through Entry.Reduce): the bounds are zeroed before anything else
     // touches a new pair, so no record says anything; the upload that completes a whole redraw into the pair reduces
     // every block after its last drawing; and an upload that redraws a rectangle of a standing pair, or its glass
-    // extinction, reduces the blocks that drawing can change before the layers rest. A pair a redraw is still drawing
-    // into is bound by no view (ReadPair), so the bounds it holds meanwhile are never read.
+    // extinction, reduces the blocks that drawing can change before the layers rest. A redraw spread over several
+    // uploads draws into a borrowed pair no view binds (ReadPair), whose bounds are never read meanwhile, or, for an
+    // entry that does not stand, over the entry's own pair, whose bounds each share before the last zeroes first.
     private sealed class Pair(Layer depth, Layer exit, IGpuBuffer blocks) : IDisposable {
         public Layer Depth { get; } = depth;
         public Layer Exit { get; } = exit;
         public IGpuBuffer Blocks { get; } = blocks;
-        // Whether an upload has zeroed the bounds, which a new buffer does not hold.
+        // Whether the bounds are zeroed or reduced. False for a new buffer, which holds whatever its memory held, and for
+        // a pair whose layers a redraw is part way through drawing in place; the upload that finds it false zeroes them.
         public bool BlocksZeroed { get; set; }
         public int Texels => (int)Depth.Image.Width;
         public long Bytes => PairBytes(texels: Texels);
@@ -1557,6 +1559,12 @@ internal sealed class SdfWorldShadows : IDisposable {
                     Clear(commandBuffer: commandBuffer, layer: layer);
                 }
             }
+            // A whole redraw spread over several uploads draws over the pair readers bind when its entry does not stand
+            // (Admit borrows a pair only for one that does), and that pair's layers are part drawn until its last share:
+            // each share before the last zeroes the bounds again, so they say nothing of layers the next share changes.
+            if (m_admitted && !m_work.Completes && ReferenceEquals(objA: target, objB: read)) {
+                target.BlocksZeroed = false;
+            }
             ZeroBlocks(commandBuffer: commandBuffer, pair: front);
             ZeroBlocks(commandBuffer: commandBuffer, pair: target);
 
@@ -1613,8 +1621,8 @@ internal sealed class SdfWorldShadows : IDisposable {
                     destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
             }
         }
-        // Zeroes a pair's block bounds once, before anything reads or reduces them: a new buffer holds whatever its memory
-        // held, and a zero record says nothing (frame/sdf-shadow-blocks.hlsli). Leaves them shader-readable.
+        // Zeroes a pair's block bounds where they owe it (Pair.BlocksZeroed), before anything reads or reduces them: a zero
+        // record says nothing (frame/sdf-shadow-blocks.hlsli). Leaves them shader-readable.
         private void ZeroBlocks(nint commandBuffer, Pair pair) {
             if (pair.BlocksZeroed) { return; }
 

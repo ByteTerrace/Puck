@@ -429,7 +429,7 @@ packet; these are the ones owed now, most valuable first.
      far wall, `world.screenshot <path>.png presented 16`) on both backends:
      the resolve reads each sample's air from views, so the haze along a
      silhouette holds as it did.
-3. **Three render-graph laws to read before calling them stale or real.**
+10. **Three render-graph laws to read before calling them stale or real.**
    Each fails in `SdfWorldPassesLawTests` on the head after the plan changes
    of the GPU leap:
    - `CadenceRunsExactlyTheChangedClass(palette, both)`: the cadence
@@ -443,6 +443,22 @@ packet; these are the ones owed now, most valuable first.
    `CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift` look stale (the probe
    history port and the cascades' move out of the plan); update or delete
    them when the class is next touched.
+11. **`SdfWorldPassesLawTests` run whole: about fifty laws wait out a volume
+    that never settles, and the process holds about 15 GB.** On the fake
+    device about fifty of the class's 104 laws fail with "The irradiance
+    volume's lighting never settled within 200000 frames", most from the
+    rig's constructor, with the volume describing an empty scene
+    (`triangles=0 lights=0 traced=0 relit=0`) while
+    `SdfMeshIrradiance.Settling` stays true;
+    `CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift` above is one of them.
+    The integration head fails them without the `gpu-frame` changes. It may
+    be the stop the gallery's lighting showed
+    ([lighting](#lighting-and-gi)), reproduced without a device, which would
+    make one such law the cheapest witness of that fix. Unread: which of
+    `Settling`'s terms holds, and whether a rig whose constructor throws
+    leaves its volume's native storage held, which fifty failures would
+    multiply into the process's size. Until then run one law by
+    `--filter-method`, and the class only under `puck lease heavy`.
 
 ### Tooling caveats
 
