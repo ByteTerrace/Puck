@@ -124,3 +124,6 @@ let displaySouth = 4.4
 // frame (0.75 m) meets the turntable: a 0.5 m sphere stands 2 m across.
 let displayScale = 1.4
 let displayExhibitScale = 2
+// How far, in metres, an exhibit floats clear of its turntable: the exhibits were authored resting on the old plinths'
+// cap, some dipping a little under it, so each stands this much higher and reads as a specimen held over the light.
+let displayExhibitLift = 0.3

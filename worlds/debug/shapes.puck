@@ -222,7 +222,7 @@ let displayReachDepth = [0.9, 1.9]
 let displayStand = [0, 0, 1.75]
 // The exhibit on the turntable stands this far over the display's floor (layout.puck's displayExhibitScale): the
 // exhibits' own frame puts the plinth's cap at 0.75, and the display's cap stands at plinthCapTop times displayScale.
-let displayExhibitDrop = ((plinthCapTop * displayScale) - (0.75 * displayExhibitScale))
+let displayExhibitDrop = (((plinthCapTop * displayScale) - (0.75 * displayExhibitScale)) + displayExhibitLift)
 
 // Every exhibit's station: its name, its catalog index and slot, and its display's place (the turntable's centre, its
 // level and floor height, the yaw it stands at and `front`).

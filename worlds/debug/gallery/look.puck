@@ -74,9 +74,9 @@ let lookAfternoon = 0.62
 // four displays either side ahead, and `hall-side` its second angle; the rest face what a kit sheet draws: a display,
 // the arcade, the end wall's wide bays, a balcony edge, the floor and the ceiling, the furniture, and the two concept
 // paintings' views of the entrance and the outside.
-// The station view every display shares (gallery.station): the eye and aim in the turntable placement's own axes
+// The station view every display shares (gallery.station): the eye and aim in the plinth placement's own axes
 // (+Y up, -Z toward a viewer before the console), framing the exhibit and the console's base with a little room.
-let lookStation = { eye [0, 2.755, -4.06], aim [0, 2.2, -1.8], fov: 55 }
+let lookStation = { eye [0, 2.305, -4.06], aim [0, 1.75, -1.8], fov: 55 }
 
 let lookShots = [
   { name: "hall", eye [30, 1.6, 19], aim [60, 3.9, 19], fov: 70 }
