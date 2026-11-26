@@ -1003,6 +1003,12 @@ Coverage stays in the color's
 alpha. The sky, the atmosphere's glow and the bounded media never enter the
 history: they composite after the resolve. The atmosphere's transmittance does,
 inside the lit color and the transport, as a property of each sample's surface.
+In a view that resolves, views also stores each sample's **air**
+(`SdfWorldPackage.SampleAir`): the atmosphere's in-scatter weights and the
+scaled inverse ray distance along the sample's own ray, from the one evaluation
+it makes for the transmittance. The resolve scales a sample's air by its
+coverage for the sample's transport, so it evaluates no atmosphere for a sample
+it gathers; only a pixel it copies whole from its one sample evaluates its own.
 
 The temporal resolve takes, for each output pixel, the 3x3 render samples
 nearest its center, each weighted by a Gaussian of its distance in output

@@ -1,8 +1,9 @@
 // The view's one path from its render extent to its output extent (SdfWorldPackage.Resolve), one invocation an output
 // pixel. It resolves the lit image, color premultiplied by coverage and fog transmittance with coverage in alpha, which
 // views wrote for every render sample.
-// Beside it, it resolves each sample's surface transport (shade/sdf-transport.hlsli), computed from the sample's coverage
-// and its surface's air along its own jittered ray, the ray its color's transmittance was taken along, with exactly the color's weights, so the
+// Beside it, it resolves each sample's surface transport (shade/sdf-transport.hlsli): the sample's coverage times its
+// surface's air along its own jittered ray, the ray its color's transmittance was taken along, which views stored from
+// that same evaluation (SdfWorldPackage.SampleAir), with exactly the color's weights, so the
 // composite's atmosphere and media see the coverage the color has. Spatial, it reconstructs the active render grid without sampling unrendered ceiling pixels
 // (reconstruction.hlsli), reading both quantities' taps over one footprint. Temporal (passGroup.temporal, with no debug
 // view), the history holds, per output pixel, the weighted mean of every jittered sample the pixel has gathered,
@@ -201,10 +202,10 @@ SdfResolveSample sdfResolveSampleLoad(int2 position, uint2 render) {
         float3 normal = sdfVisibilityUnpackNormal(sdfVisibilityRecordBuffer[record + SdfVisibilityNormalWord]);
 
         sample.plane = float4(normal, (sample.t * dot(normal, direction)));
+        // The sample's air is views' (sdfPackSampleAir), from the atmosphere it evaluated along this same ray for the
+        // color's transmittance, so gathering a sample evaluates none.
         if ((sample.t > 0.0) && (sample.color.a > 0.0)) {
-            SdfAir air = sdfAirAlong(passGroup.viewPosition, direction, sample.t, true);
-
-            sample.transport = (sample.color.a * float4(air.weights.x, (SDF_TRANSPORT_INVERSE_DISTANCE_SCALE / sample.t), air.weights.y, air.weights.z));
+            sample.transport = (sample.color.a * sdfUnpackTransport(sampleAir[sdfReactivityIndex(pixel, 0u, render)]));
         }
     }
     return sample;
@@ -755,7 +756,6 @@ void sdfResolveTemporal(uint3 id, uint2 extent, uint2 render, float2 jitter, flo
         }
     }
     if (!complete) {
-        // The weighted mean of every sample the pixel has gathered: history clipped to this frame's neighbourhood, widened    } else {
         // The weighted mean of every sample the pixel has gathered: history clipped to this frame's neighbourhood, widened
         // to the feature the pixel remembers while its surface stands still, and weighed down by reactivity, then this
         // frame's samples, the transport with the color's weights. While less than one sample's full weight is gathered,

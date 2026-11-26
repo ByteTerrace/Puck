@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/b6e690c5cc0042d1d2749e61057f65c806cb0c1ff123aff9b72a2787fdca0f8f). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/72d0c38b4e6746c5f945f6b5e6f463eb365dd460889fea24b26cd760bff1d824). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -252,37 +252,38 @@ struct SdfWorldPass {
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);
-[[vk::binding(4, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u4, space3);
-[[vk::binding(5, 3)]] Texture2D<float4> screenSources[128] : register(t5, space3);
-[[vk::binding(133, 3)]] Texture2D<float4> meshVisibility : register(t133, space3);
-[[vk::binding(134, 3)]] Texture2D<float4> meshShadowNear : register(t134, space3);
-[[vk::binding(135, 3)]] Texture2D<float4> meshShadowFar : register(t135, space3);
-[[vk::binding(136, 3)]] Texture2D<float4> meshShadowSecond : register(t136, space3);
-[[vk::binding(137, 3)]] Texture2D<float4> meshShadowNearExit : register(t137, space3);
-[[vk::binding(138, 3)]] Texture2D<float4> meshShadowFarExit : register(t138, space3);
-[[vk::binding(139, 3)]] Texture2D<float4> meshShadowSecondExit : register(t139, space3);
-[[vk::binding(140, 3)]] Texture2D<float4> meshShadowDistant : register(t140, space3);
-[[vk::binding(141, 3)]] Texture2D<float4> meshShadowDistantExit : register(t141, space3);
-[[vk::binding(142, 3)]] RWStructuredBuffer<uint> workCounters : register(u142, space3);
-[[vk::binding(143, 3)]] StructuredBuffer<uint> meshShadowNearOptical : register(t143, space3);
-[[vk::binding(144, 3)]] StructuredBuffer<uint> meshShadowFarOptical : register(t144, space3);
-[[vk::binding(145, 3)]] StructuredBuffer<uint> meshShadowSecondOptical : register(t145, space3);
-[[vk::binding(146, 3)]] StructuredBuffer<uint> meshShadowNearBlocks : register(t146, space3);
-[[vk::binding(147, 3)]] StructuredBuffer<uint> meshShadowFarBlocks : register(t147, space3);
-[[vk::binding(148, 3)]] StructuredBuffer<uint> meshShadowSecondBlocks : register(t148, space3);
-[[vk::binding(149, 3)]] StructuredBuffer<uint> meshShadowDistantBlocks : register(t149, space3);
-[[vk::binding(150, 3)]] StructuredBuffer<uint> sdfMeshPyramid : register(t150, space3);
-[[vk::binding(151, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u151, space3);
-[[vk::binding(152, 3)]] StructuredBuffer<uint> sdfViewsFilterRecords : register(t152, space3);
-[[vk::binding(153, 3)]] RWStructuredBuffer<uint> sdfViewsFilterRecordsRW : register(u153, space3);
-[[vk::binding(154, 3)]] StructuredBuffer<uint> sdfViewsProbeRecords : register(t154, space3);
-[[vk::binding(155, 3)]] RWStructuredBuffer<uint> sdfViewsProbeRecordsRW : register(u155, space3);
-[[vk::binding(156, 3)]] StructuredBuffer<uint> sdfShadeTiles : register(t156, space3);
-[[vk::binding(157, 3)]] RWStructuredBuffer<uint> sdfShadeTilesRW : register(u157, space3);
-[[vk::binding(158, 3)]] RWStructuredBuffer<uint> sdfShadeArgumentsRW : register(u158, space3);
-[[vk::binding(159, 3)]] StructuredBuffer<uint> historySurface : register(t159, space3);
-[[vk::binding(160, 3)]] StructuredBuffer<uint> sdfViewsProbeHistory : register(t160, space3);
-[[vk::binding(161, 3)]] RWStructuredBuffer<uint> sdfViewsProbeHistoryRW : register(u161, space3);
+[[vk::binding(4, 3)]] RWStructuredBuffer<uint2> sampleAirRW : register(u4, space3);
+[[vk::binding(5, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u5, space3);
+[[vk::binding(6, 3)]] Texture2D<float4> screenSources[128] : register(t6, space3);
+[[vk::binding(134, 3)]] Texture2D<float4> meshVisibility : register(t134, space3);
+[[vk::binding(135, 3)]] Texture2D<float4> meshShadowNear : register(t135, space3);
+[[vk::binding(136, 3)]] Texture2D<float4> meshShadowFar : register(t136, space3);
+[[vk::binding(137, 3)]] Texture2D<float4> meshShadowSecond : register(t137, space3);
+[[vk::binding(138, 3)]] Texture2D<float4> meshShadowNearExit : register(t138, space3);
+[[vk::binding(139, 3)]] Texture2D<float4> meshShadowFarExit : register(t139, space3);
+[[vk::binding(140, 3)]] Texture2D<float4> meshShadowSecondExit : register(t140, space3);
+[[vk::binding(141, 3)]] Texture2D<float4> meshShadowDistant : register(t141, space3);
+[[vk::binding(142, 3)]] Texture2D<float4> meshShadowDistantExit : register(t142, space3);
+[[vk::binding(143, 3)]] RWStructuredBuffer<uint> workCounters : register(u143, space3);
+[[vk::binding(144, 3)]] StructuredBuffer<uint> meshShadowNearOptical : register(t144, space3);
+[[vk::binding(145, 3)]] StructuredBuffer<uint> meshShadowFarOptical : register(t145, space3);
+[[vk::binding(146, 3)]] StructuredBuffer<uint> meshShadowSecondOptical : register(t146, space3);
+[[vk::binding(147, 3)]] StructuredBuffer<uint> meshShadowNearBlocks : register(t147, space3);
+[[vk::binding(148, 3)]] StructuredBuffer<uint> meshShadowFarBlocks : register(t148, space3);
+[[vk::binding(149, 3)]] StructuredBuffer<uint> meshShadowSecondBlocks : register(t149, space3);
+[[vk::binding(150, 3)]] StructuredBuffer<uint> meshShadowDistantBlocks : register(t150, space3);
+[[vk::binding(151, 3)]] StructuredBuffer<uint> sdfMeshPyramid : register(t151, space3);
+[[vk::binding(152, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u152, space3);
+[[vk::binding(153, 3)]] StructuredBuffer<uint> sdfViewsFilterRecords : register(t153, space3);
+[[vk::binding(154, 3)]] RWStructuredBuffer<uint> sdfViewsFilterRecordsRW : register(u154, space3);
+[[vk::binding(155, 3)]] StructuredBuffer<uint> sdfViewsProbeRecords : register(t155, space3);
+[[vk::binding(156, 3)]] RWStructuredBuffer<uint> sdfViewsProbeRecordsRW : register(u156, space3);
+[[vk::binding(157, 3)]] StructuredBuffer<uint> sdfShadeTiles : register(t157, space3);
+[[vk::binding(158, 3)]] RWStructuredBuffer<uint> sdfShadeTilesRW : register(u158, space3);
+[[vk::binding(159, 3)]] RWStructuredBuffer<uint> sdfShadeArgumentsRW : register(u159, space3);
+[[vk::binding(160, 3)]] StructuredBuffer<uint> historySurface : register(t160, space3);
+[[vk::binding(161, 3)]] StructuredBuffer<uint> sdfViewsProbeHistory : register(t161, space3);
+[[vk::binding(162, 3)]] RWStructuredBuffer<uint> sdfViewsProbeHistoryRW : register(u162, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfWorldPushedIndex {

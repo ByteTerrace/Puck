@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-resolve' (sha256/f87a17303fdf951be0d5580628621f72163d5265a5c27449704b506b8e147d64). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-resolve' (sha256/22657510641318b24b748a2b91a144e6ae669654f5ac0afd2d2ab149246313c1). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_RESOLVE
 #define PUCK_SHADER_INTERFACE_SDF_RESOLVE
 
@@ -252,14 +252,15 @@ struct SdfResolvePass {
 [[vk::binding(1, 3)]] Texture2D<float4> currentColor : register(t1, space3);
 [[vk::binding(2, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output : register(u2, space3);
 [[vk::binding(3, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t3, space3);
-[[vk::binding(4, 3)]] RWStructuredBuffer<uint2> transportRW : register(u4, space3);
-[[vk::binding(5, 3)]] StructuredBuffer<float> reactivity : register(t5, space3);
-[[vk::binding(6, 3)]] Texture2D<float4> historyColor : register(t6, space3);
-[[vk::binding(7, 3)]] StructuredBuffer<uint> historySurface : register(t7, space3);
-[[vk::binding(8, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> historyColorRW : register(u8, space3);
-[[vk::binding(9, 3)]] RWStructuredBuffer<uint> historySurfaceRW : register(u9, space3);
-[[vk::binding(10, 3)]] RWStructuredBuffer<uint> historyWindowRW : register(u10, space3);
-[[vk::binding(11, 3)]] RWStructuredBuffer<uint> workCounters : register(u11, space3);
+[[vk::binding(4, 3)]] StructuredBuffer<uint2> sampleAir : register(t4, space3);
+[[vk::binding(5, 3)]] RWStructuredBuffer<uint2> transportRW : register(u5, space3);
+[[vk::binding(6, 3)]] StructuredBuffer<float> reactivity : register(t6, space3);
+[[vk::binding(7, 3)]] Texture2D<float4> historyColor : register(t7, space3);
+[[vk::binding(8, 3)]] StructuredBuffer<uint> historySurface : register(t8, space3);
+[[vk::binding(9, 3)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> historyColorRW : register(u9, space3);
+[[vk::binding(10, 3)]] RWStructuredBuffer<uint> historySurfaceRW : register(u10, space3);
+[[vk::binding(11, 3)]] RWStructuredBuffer<uint> historyWindowRW : register(u11, space3);
+[[vk::binding(12, 3)]] RWStructuredBuffer<uint> workCounters : register(u12, space3);
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,

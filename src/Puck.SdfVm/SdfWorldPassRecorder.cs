@@ -39,6 +39,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.ReactivityWritten,
+        SdfWorldPackage.SampleAirWritten,
         SdfWorldPackage.MeshPyramid,
         SdfWorldPackage.MeshPyramidWritten,
         SdfWorldPackage.MeshShadowNearOptical,
@@ -1126,6 +1127,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     private static string? WrittenMemberOf(string version) => version switch {
         SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.Parts.Reactivity => SdfWorldPackage.ReactivityWritten,
+        SdfWorldPackage.Parts.SampleAir => SdfWorldPackage.SampleAirWritten,
         SdfWorldPackage.Parts.MeshPyramid => SdfWorldPackage.MeshPyramidWritten,
         SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecordsWritten,
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecordsWritten,

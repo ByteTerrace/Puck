@@ -64,7 +64,7 @@ Per-pixel storage of the main view at 2560 by 1440 (`host.memory families 0`):
 | Glass sums, target, depth and lit image | 340 | 40 | Allocated for the tiles glass covers |
 | History surface and colour | 227 | 120 | Motion and identity in the sample record |
 | Visibility records, mesh target and depth | 186 | 150 | A draw and triangle in one word of the target |
-| Lit images, sky runs, transport, reactivity, filter | 330 | 200 | Sky runs at half size; transport from the sample record |
+| Lit images, sky runs, transport, reactivity, filter | 330, and by arithmetic 28 for the samples' air (two words a render pixel, unread) | 200 | Sky runs at half size; transport from the sample record |
 | The root's frame (`main`) | 230 | 60 | The stages are gone with the one placement pass; what is left is one published image a frame in flight |
 | **Total** | **about 2,200** | **under 1,000** | |
 
@@ -196,7 +196,7 @@ only some pixels need lies in a pool, not in every pixel's record.
 | Lights that reach a sample | `views-filter`, by cluster | A list of light indices a cluster, any count |
 | Shadow visibility | `surface`, after a classification by each layer's block bounds, which the shadow upload reduces (`sdfMeshShadowClass`) | The record's shadow word |
 | The reflected environment | The environment node | A prefiltered map, one lookup a roughness |
-| Reconstruction's sample (motion, identity, air) | The views pass's epilogue | One record a render pixel |
+| Reconstruction's sample (motion, identity, air) | The views pass's epilogue | One record a render pixel; the air is built (`SdfWorldPackage.SampleAir`), motion and identity are step 5 |
 
 Indirect light is the first input built this way. Before it, 1.6 ms of the
 views pass at the stage was the code that read a gather's sixteen corners,
@@ -360,10 +360,15 @@ pass's cost. Then the time:
 4. **A prefiltered environment.** The environment node writes the reflected
    sky, its panels included, at a few roughness levels; views takes one lookup.
    Check: `SDF_VIEWS_OMIT_REFLECTION` removes under 0.4 ms.
-5. **A sample record for the resolve.** Views writes each render pixel's luma
-   and chroma, reactivity, identity, distance, motion and air; the resolve
-   reads nine records and no mesh. Check: `resolve` under 1.2 ms moving, and
-   the history surface holds four words.
+5. **A sample record for the resolve.** The air is built: views stores each
+   render sample's air (`SdfWorldPackage.SampleAir`, two words) from the
+   atmosphere it evaluates once a pixel for the transmittance, and the resolve
+   scales it by the sample's coverage, where it evaluated the atmosphere again
+   for each of the 169 samples a group of 64 pixels gathers. What is left:
+   views writes each render pixel's motion and identity beside it, so the
+   resolve reprojects through no mesh table (`sdfPreviousPoint`) and the
+   history surface drops to four words. Check: `resolve` under 1.2 ms moving,
+   and the history surface holds four words.
 6. **One probe cache a residency.** The hashed table above. Check: no view
    holds a probe history; a nested view rated to five frames a second gathers
    only what entered it.
