@@ -1674,8 +1674,11 @@ template surfacePrototypes() {
             color: "#8A3F2C"
             roughness: 0.85
             paints [
+              // World space on a static placement: the lattice repeats along x and y, and the box's depth stands
+              // about the row's z, where the panel is.
               {
                 type: "Box"
+                position [0, 0, styleZ]
                 scale [0.145, 0.145, 1]
                 color: "#B4553A"
                 repeat { cell [0.3, 0.3, 0], tone: "#C86E48", seed: 7 }
