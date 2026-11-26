@@ -259,6 +259,11 @@ public sealed partial class WorldBody {
             outputs.Designations.RemoveRange(index: start.DesignationOutputCount, count: (outputs.Designations.Count - start.DesignationOutputCount));
             outputs.Generators.RemoveRange(index: start.GeneratorInvocationCount, count: (outputs.Generators.Count - start.GeneratorInvocationCount));
         } else {
+            // The step is accepted, so nothing it writes from here on can be put back: the restore point closes before
+            // the settlement's writes, which would otherwise each copy a whole section aside for a restore that cannot
+            // come. The refusal above is the one place a step's restore is decided.
+            m_action.Binding.EndRestore();
+            scratch.HeldByRestorePoint = false;
             // A firing may have installed a different bank. Never write old-slot bits over its continuing baseline.
             if (InputEpoch != start.InputEpoch) { intent = InputReadbacks.EngagedIntent; }
             // The previous-bit image is written once after action evaluation; timed presses drain even under capture.

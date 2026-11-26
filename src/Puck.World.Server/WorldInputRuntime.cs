@@ -751,6 +751,9 @@ public sealed partial class WorldInputRuntime {
             if (target.Kind == GrantSubjectKind.Screen) { return (m_host.Machines.HasMachine(index: target.Value) ? "machine" : "screen"); }
             if ((target.Kind == GrantSubjectKind.Body) && (target.Value != body)) { return "body"; }
         }
-        return "none";
+        return NoEngagement;
     }
+    // The engagement of a principal that routes nothing: the one answer that reads no machine, so a kept copy of it
+    // stands with the grant table's version alone.
+    private const string NoEngagement = "none";
 }

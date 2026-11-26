@@ -90,7 +90,8 @@ public sealed partial class WorldBody {
             RigidRestingHoldTicks: m_restingHoldTicks,
             RigidSleepRootPlusOne: m_rigidSleepRootPlusOne,
             SleepIdleTicks: m_sleepIdleTicks,
-            UpNeedsReseat: m_upNeedsReseat
+            UpNeedsReseat: m_upNeedsReseat,
+            ProducerRests: m_producerRests
         );
         program = new(
             BodyMotionProgramName: m_bodyMotionProgram.Name,
@@ -351,6 +352,7 @@ public sealed partial class WorldBody {
         m_asleepSinceTick = clocks.AsleepSinceTick;
         IdleSleepGravity = clocks.IdleSleepGravity;
         m_sleepIdleTicks = clocks.SleepIdleTicks;
+        m_producerRests = clocks.ProducerRests;
         // The island root is not written here: the population parks the restored body under it
         // (WorldPopulation.RestoreSleepingIslands, AdoptRestoredIsland), the one writer of island membership.
         m_ordinaryAdvanceAdmitted = clocks.OrdinaryAdvanceAdmitted;

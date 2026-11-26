@@ -113,8 +113,14 @@ public sealed partial class WorldBody {
         InputImagesEdit.Held = input.HeldChannels;
     }
     internal void TakeDurableStateOutputs(ulong tick, int entityIndex, List<DurableStateOutput> outputs) {
+        // A register write is marked through the holder's write side, which moves its version: while the version
+        // stands as the last drain left it, no slot is marked and the drain has nothing to read.
+        if (m_registerWrites.Version == m_registerWritesDrained) {
+            return;
+        }
         if (Profile is null) {
             for (var slot = 0; (slot < m_registerWrites.Count); slot++) { ClearRegisterWrite(slot: slot); }
+            m_registerWritesDrained = m_registerWrites.Version;
             return;
         }
 
@@ -144,7 +150,12 @@ public sealed partial class WorldBody {
             ));
             ClearRegisterWrite(slot: slot);
         }
+        m_registerWritesDrained = m_registerWrites.Version;
     }
+    // The version of the register writes' holder as the last drain left it (TakeDurableStateOutputs): a memo of this
+    // process, never state. Zero is no holder's version, so a body drains at least once, and new register definitions
+    // resize the holder, which moves its version.
+    private ulong m_registerWritesDrained;
 
     public WorldSubmittedInput TakeSubmittedInput() {
         var input = new WorldSubmittedInput(

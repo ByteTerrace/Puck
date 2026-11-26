@@ -79,17 +79,21 @@ public sealed partial class WorldPopulation {
     /// <param name="reach">The distance searched, at least zero.</param>
     /// <returns>The squared distance, or <see langword="null"/> when no occupied body stood within
     /// <paramref name="reach"/> of the point or the image holds none.</returns>
-    public FixedQ4816? NearestOccupiedSquared(in FixedVector3 point, FixedQ4816 reach) {
+    public FixedQ4816? NearestOccupiedSquared(in FixedVector3 point, FixedQ4816 reach) =>
+        NearestOccupiedWith(candidates: m_occupiedCandidates, point: in point, reach: reach);
+    // The same query over a caller's scratch, at least as long as the image holds occupied bodies, so the partitions of
+    // a plan fork ask side by side: the image is read-only between two reads.
+    private FixedQ4816? NearestOccupiedWith(in FixedVector3 point, FixedQ4816 reach, int[] candidates) {
         if ((m_occupiedGrid is not { } grid) || (m_occupiedCount == 0)) {
             return null;
         }
 
-        var count = grid.Query(box: FixedAabb.Around(center: point, radius: reach), destination: m_occupiedCandidates);
+        var count = grid.Query(box: FixedAabb.Around(center: point, radius: reach), destination: candidates);
         var limit = (reach * reach);
         FixedQ4816? nearest = null;
 
         for (var candidate = 0; (candidate < count); candidate++) {
-            var squared = (m_occupiedCenters[m_occupiedCandidates[candidate]] - point).LengthSquared;
+            var squared = (m_occupiedCenters[candidates[candidate]] - point).LengthSquared;
 
             // The box holds its corners, which lie past the reach.
             if ((squared <= limit) && ((nearest is not { } least) || (squared < least))) {

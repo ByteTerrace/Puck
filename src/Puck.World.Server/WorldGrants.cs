@@ -125,6 +125,18 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     // reach (unlike ownership, which only adds), so it must gate at the ingress, never inside Allows, or it would
     // corrupt every capability query.
     private readonly Dictionary<int, string> m_driveGates = new();
+    // Moves whenever the drive gates, a session's liveness or a principal's application set may have changed: the three
+    // answers of this table a reader may keep (TryGetDriveGate, IsLiveSession, Applications) stand while it does not
+    // move. Every write of m_driveGates, m_sessions and m_applications passes NoteInputFactsMoved; the three are
+    // private to this class, so the writers are the ones below and in its Checkpoint and Sessions parts.
+    private ulong m_inputFactsVersion;
+
+    /// <summary>Gets a version that moves whenever a drive gate, a session's liveness or a principal's application set
+    /// may have changed. A reader that kept what <see cref="TryGetDriveGate"/>, <see cref="IsLiveSession"/> or
+    /// <see cref="Applications"/> answered may keep it while this stands.</summary>
+    internal ulong InputFactsVersion => m_inputFactsVersion;
+
+    private void NoteInputFactsMoved() => m_inputFactsVersion++;
     // WorldCapability's own declaration order (Drive, Observe, Control, Mutate, Edit) — Held and Describe
     // enumerate in this order rather than Enum.GetValues (which happens to agree today, but naming the order
     // explicitly here means a future capability's declaration position can never silently reorder either report).
@@ -1199,6 +1211,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         }
 
         _ = m_applications.Remove(key: principal);
+        NoteInputFactsMoved();
 
         if (!m_proposal) { m_host?.Input.ResetRoute(principal: principal); }
 
@@ -1601,6 +1614,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         }
 
         m_applications.Clear();
+        NoteInputFactsMoved();
         m_byGrantee.Clear();
         m_exclusive.Clear();
         m_budgets.Clear();
@@ -1736,6 +1750,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
         } else {
             m_applications[principal] = composed;
         }
+        NoteInputFactsMoved();
 
         if (!previous.SequenceEqual(second: composed)) { if (!m_proposal) { m_host?.Input.ResetRoute(principal: principal); } }
 
@@ -1806,6 +1821,7 @@ public sealed partial class WorldGrants : IWorldGrantsView {
     internal void SyncState(WorldDefinition definition, StateArena? arena = null) {
         arena ??= WorldStateReader.Seed(definition: definition);
         m_driveGates.Clear();
+        NoteInputFactsMoved();
         var time = ArenaTime.Origin;
 
         for (var ordinal = 0; (ordinal < arena.Rows.Count); ordinal++) {

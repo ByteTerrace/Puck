@@ -69,6 +69,8 @@ public sealed partial class WorldGrants {
     private void RestoreRaw(WorldGrantsCheckpoint checkpoint, bool resetSessionEpochs = false) {
         ArgumentNullException.ThrowIfNull(argument: checkpoint);
 
+        // The restore replaces the applications, the drive gates and the sessions below.
+        NoteInputFactsMoved();
         m_applications.Clear();
         m_byGrantee.Clear();
         m_exclusive.Clear();

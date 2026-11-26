@@ -25,6 +25,8 @@ public static class SdfWorldInterfaces {
     /// <summary>The ray-query relight's and camera sample's resources: <see cref="ProbeRelightLayout"/>'s at the same
     /// bindings, and the scene's top level.</summary>
     public static ShaderInterfaceLayout ProbeRelightRaysLayout { get; } = new(Recorded.ProbeRelightRays);
+    /// <summary>The shadow block reduction's resources.</summary>
+    public static ShaderInterfaceLayout ShadowBlocksLayout { get; } = new(Recorded.ShadowBlocks);
 
     /// <summary>Gets the stamp the SDF kernels' interfaces carry for this build's instruction set:
     /// <see cref="SdfIsaHlsl.StampOf"/> of <see cref="SdfIsaFingerprint.Value"/>.</summary>

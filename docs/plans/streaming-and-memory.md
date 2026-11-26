@@ -333,10 +333,12 @@ conditions and its figures belong in the commit that lands this page
   on a bar device.
 
 The CLI's host admission once refused a windowed World on this machine: it
-expected a 64 GB machine's peak. An unmeasured start's expected peak is now
-held to the budget the World's own account derives
-(`HostLoadThresholds.DefaultPeakGb`, `MemoryAccount.DefaultBudgetOf`: three
-quarters of installed memory, 12 GB on 16 GB). The 2060's own quality table
+expected a 64 GB machine's peak. An unmeasured start's expected peak is held
+to what the World's own account lets it reach
+(`HostLoadThresholds.DefaultPeakGb`: `MemoryAccount.DefaultBudgetOf` less
+`MemoryAccount.AuthoringMarginOf`, 10 GB on 16 GB), a start alone is judged
+by its lone need so the machine measures it on its first boot, and peaks are
+learned per world document. The 2060's own quality table
 (`worlds/standard/quality.puck`) now applies at boot and draws at a 0.75
 render scale with the medium irradiance tier, whose volume, hit cache and
 tables are two thirds of the high tier's.

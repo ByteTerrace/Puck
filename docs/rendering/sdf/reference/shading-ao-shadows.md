@@ -65,6 +65,22 @@ bounds the shadow's resolution, and a constant bias
 (`SdfMeshShadowCascades.NormalOffsetTexels`) bound the rest of its acne; a body
 thinner than a texel can miss its own shadow.
 
+Only a receiver near a shadow's edge pays for those taps. Each layer pair keeps
+bounds for every block of its texels (`SdfWorldPackage.ShadowBlockEdge` a side):
+a plane fitted to the block, and the least and greatest depth the block's
+texels, and those within the filter's reach of it, stand off that plane. The
+world's shadows reduce them after each drawing into a pair
+(`SdfWorldShadows`, `passes/sdf-shadow-blocks.comp.hlsl`), over the blocks the
+drawing can change. The surface pass reads the record of the block its
+receiver's texel lies in (`sdfMeshShadowClass`): where every caster a tap could
+meet stands behind the receiver's own plane it is lit, where every one stands
+in front of it by the filter's clearances and inside the light's cone it is in
+umbra, and it filters otherwise. Both answers are the value the taps would sum
+to, to the bit, so the bounds change no image; the plane is what lets open
+ground under a slanted light classify, since its depth changes across a block
+by more than any caster stands off it. A block within reach of glass
+extinction proves nothing lit.
+
 ## Curvature and stylization
 
 Curvature shading and edge weathering read the record's mean curvature,
