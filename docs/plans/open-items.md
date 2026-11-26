@@ -1134,16 +1134,7 @@ open.
     traveler's origin, which no law runs. Check: the probe hops the guest
     before its capture and both restored rows hold no guest and no forwarding
     route.
-  - A world that retires a traveler's body tells its host, which drops the
-    routes and credentials of the worlds that forwarded to it on its next loop
-    (`IWorldTransferForwarder.RetireTraveler`). A process that dies between
-    the two leaves the forwarding world with a route to a traveler its
-    neighbour no longer holds, and the player's client is answered
-    `RouteUnknown` there until the next restore. Check: when a recovered route
-    binds its colocated destination (`WorldInstanceHost.ResolveForwardedRecoveries`),
-    retire it if the destination holds no credential for the traveler, and
-    show a crash between the retirement and the drain recovers to no route.
-  - The same word stops at a socket. A traveler retired by a world in another
+  - A retirement's word stops at a socket. A traveler retired by a world in another
     process is retired upstream only when an accepted leave's answer comes
     back, and a player's absence reaches a remote hop only as the streams to
     it ending. Closed groups run in one process, so this is an open-world

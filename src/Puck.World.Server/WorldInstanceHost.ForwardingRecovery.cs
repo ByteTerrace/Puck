@@ -124,12 +124,14 @@ public sealed partial class WorldInstanceHost {
             var description = deferred.DescribeForCheckpoint();
 
             if (FindRecoveryDestination(authority: description.DestinationAuthority) is { } destination) {
-                deferred.TryBind(current: new WorldLocalForwardedAuthority(
+                if (deferred.TryBind(current: new WorldLocalForwardedAuthority(
                     destination.Server,
                     (destination.Server.Definition.Host.Authority ?? EndpointFor(instance: destination).Identity),
                     description.SourceAuthority,
                     description.Mobility
-                ));
+                ))) {
+                    m_recoveredRoutes.Add(item: pair.Key);
+                }
             } else if (
                 (description.Endpoint is { } endpoint) &&
                 (description.Definition is { } definition)
@@ -175,10 +177,50 @@ public sealed partial class WorldInstanceHost {
     public void SetTravelerPresence(WorldServer source, in WorldMobilityIdentity mobility, bool present) =>
         m_travelerPresence.Enqueue(item: (source, mobility.Incarnation, present));
 
+    // The routes a recovery bound to a colocated destination since the last drain, each checked against its
+    // destination on the drain that follows (RetireUnheldRecoveries).
+    private readonly List<(WorldServer Source, WorldEntityAddress Incarnation)> m_recoveredRoutes = [];
+
+    // A recovered route stands only while its destination holds a credential for its traveler. A destination that
+    // retires a traveler tells this host under its own gate, and the host drops the routes on its next loop
+    // (RetireTraveler); a process that stopped between the two recovers the forwarding row's route and a destination
+    // that holds no credential for it. Such a route is retired here as the destination's word would have retired it.
+    // The check waits for the drain because a destination is bound as it is admitted, before its own checkpoint and
+    // crossing log are redone, and every row has recovered by the first drain after its admission (RecoverCrossings).
+    private void RetireUnheldRecoveries() {
+        if (m_recoveredRoutes.Count == 0) {
+            return;
+        }
+        foreach (var (source, incarnation) in m_recoveredRoutes) {
+            if (
+                !m_forwardedBodies.TryGetValue(left: source, right: incarnation, value: out var route) ||
+                (route.Authority is not WorldDeferredForwardedAuthority { IsBound: true } bound)
+            ) {
+                continue;
+            }
+            var description = bound.DescribeForCheckpoint();
+
+            if (
+                (FindRecoveryDestination(authority: description.DestinationAuthority) is not { } destination) ||
+                destination.Server.TryTransferredPrincipal(mobility: description.Mobility, principal: out _, sourceAuthority: description.SourceAuthority)
+            ) {
+                continue;
+            }
+            if (m_narration.HasNarrationSink) {
+                m_narration.Narrate(
+                    channel: "world.transfer",
+                    text: $"[world.transfer: recovered route of traveler {incarnation} from '{description.SourceAuthority}' retired: '{description.DestinationAuthority}' holds no credential for it]"
+                );
+            }
+            RetireForwardedTraveler(incarnation: incarnation);
+        }
+        m_recoveredRoutes.Clear();
+    }
     // Applies, in the order they were queued, what the authorities of this host learned since the last drain about
     // travelers they forward: whether each one's source still attends to it, passed to the authority it stands at, and
     // each one whose body was retired where it stood. Runs on the host loop.
     private void RetireEndedTravelers() {
+        RetireUnheldRecoveries();
         while (m_travelerPresence.TryDequeue(result: out var presence)) {
             if (m_forwardedBodies.TryGetValue(left: presence.Source, right: presence.Incarnation, value: out var route)) {
                 route.Authority.SetPresence(present: presence.Present);

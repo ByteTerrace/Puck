@@ -175,7 +175,14 @@ route. Two things travel along the route so the session can end.
   then holds nothing live at the first world either, and is reclaimed there.
 
 Both are queued under the calling world's gate and applied on the host loop,
-because no world's gate is held while another world is entered.
+because no world's gate is held while another world is entered. A process that
+stops between a retirement and that loop recovers the forwarding world's route
+and a neighbour that no longer holds the traveller. So a recovered route
+stands only while its destination holds a credential for its traveller: the
+first drain after a recovery asks each route's destination, once every row has
+redone its own checkpoint and crossing log, and retires a route the
+destination does not answer for, as the lost word would have
+(`WorldInstanceHost.RetireUnheldRecoveries`).
 
 A guest's ledger is bounded on its own terms.
 
