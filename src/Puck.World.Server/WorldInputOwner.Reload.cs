@@ -8,6 +8,7 @@ public sealed partial class WorldInputOwner {
     /// definition's history; surviving names are translated before the new epoch barrier is installed.</remarks>
     public void InheritDefinition(WorldInputOwner previous, WorldDefinition oldDefinition, WorldDefinition definition,
         WorldInputInterval interval, ReadOnlySpan<ulong> consumedActivations = default) {
+        TouchRetained();
         var oldCatalog = previous.m_catalog;
         var channels = new int[oldCatalog.Channels.Length];
 
