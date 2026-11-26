@@ -1008,6 +1008,25 @@ client authorities rejoin cleanly, and departed travellers release after
 `bodies.reconnectGraceSeconds`. Machine content is the part of step 3 still
 open.
 
+- [high, M1] **The hosted silo refuses every player's party.** A release deploys
+  its silo with `ClosedGroupRewind` (`AzureWorld`), and an activation then
+  installs `ContainsRewindAuthority` as the transfer boundary
+  (`WorldSiloHost.ActivationWiring`). A `--connect` client joins by
+  transferring its party from its own session-qualified authority, which is
+  never in the rewind inventory, so `WorldTick.ReserveTransfer` refuses it:
+  `transfer=0 refused ('remote-boot' refused reservation (closed rewind group
+  refuses an external transfer; terminal refusal …))`. The client signs in and
+  is vouched for, its sessions are granted the world's screens, and its seat
+  never leaves its own boot world. [The issuer decision](../decisions/worlds-and-federation.md#players-are-admitted-through-their-hosts-issuer)
+  says a closed group "keeps admitting players while it refuses every other
+  authority", but the boundary checks only the source authority's name, which
+  for a player is its traveller namespace. Decide what a player's party is to a
+  closed group (an issuer-vouched traveller whose body the group owns once it
+  commits, so a group rewind does not reach back into the client), then admit it
+  at the boundary. `puck benchmark --remote local` and `--remote issued` never
+  reach this: neither starts a silo. Check: the RTX 2060's player install
+  joins the hosted authority (play.puck.byteterrace.com, port 7825) and its seat's body arrives in the
+  hosted world.
 - [medium] A manifest's member is fetched whole and the whole manifest is sent
   each time ([decision 4](remote-content.md#decision-4-the-document-travels-as-a-manifest)).
   A recipient with another version of the package fetches each differing

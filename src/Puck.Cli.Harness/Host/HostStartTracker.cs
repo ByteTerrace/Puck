@@ -28,12 +28,18 @@ namespace Puck.Cli.Host;
 /// <param name="Kind">The start's kind.</param>
 /// <param name="WorkingSetOwnGb">The start's own expected whole working-set peak, in gigabytes, which admission reports and
 /// never judges; NaN before the profile has an observation.</param>
-/// <param name="LoneOwnGb">The lesser of the start's expected commit peak and the kind's fallback, in gigabytes:
-/// <paramref name="OwnGb"/> is this when the expected peak exceeds what the machine could hold with no admitted start
-/// running, and a start whose lone need the machine could never hold is refused by name.</param>
+/// <param name="LoneOwnGb">The least commit, in gigabytes, the start is admitted at on an idle machine: for a measured
+/// profile the lesser of its expected commit peak and the kind's fallback, which <paramref name="OwnGb"/> is when the
+/// expected peak exceeds what the machine could hold with no admitted start running; for a profile this machine has not
+/// measured, its expected private working set, which a start alone is admitted at. A start whose lone need the machine
+/// could never hold is refused by name (<see cref="HostLoadThresholds.NeverFits"/>).</param>
 /// <param name="LoneResidentOwnGb">The lone need in private working set, in gigabytes.</param>
 /// <param name="Profile">The profile the start was judged by, or <see langword="null"/> for its kind alone.</param>
-public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalCovered, double HeadroomGb, double FreeRamGb, double NeedGb, double OwnGb, double GrowthGb, double ResidentNeedGb, double ResidentOwnGb, double ResidentGrowthGb, int Growing, HostStartKind Kind, double WorkingSetOwnGb = double.NaN, double LoneOwnGb = double.NaN, double LoneResidentOwnGb = double.NaN, HostStartProfile? Profile = null) {
+/// <param name="Measured">Whether this machine has observed a start of the profile, its document included; an unmeasured
+/// start is judged by what any World of its kind reached here, else by the fallback.</param>
+/// <param name="ExpectedOwnGb">The start's expected commit peak, in gigabytes, before any lone figure replaces it:
+/// <paramref name="OwnGb"/> is less than this when the start is judged by a lone figure.</param>
+public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalCovered, double HeadroomGb, double FreeRamGb, double NeedGb, double OwnGb, double GrowthGb, double ResidentNeedGb, double ResidentOwnGb, double ResidentGrowthGb, int Growing, HostStartKind Kind, double WorkingSetOwnGb = double.NaN, double LoneOwnGb = double.NaN, double LoneResidentOwnGb = double.NaN, HostStartProfile? Profile = null, bool Measured = true, double ExpectedOwnGb = double.NaN) {
     /// <summary>Gets whether the machine can hold the start: both the commit headroom and free physical memory cover it.</summary>
     public bool Covered => (CommitCovered && PhysicalCovered);
 }
@@ -46,8 +52,11 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 /// reclaimed under pressure); so commit is judged by private bytes and free memory by the private working set
 /// (<see cref="HostRunningStart.ResidentGb"/>).
 /// A start is judged by its own profile (<see cref="HostStartProfile"/>): its kind and, for a windowed World, the backend it
-/// boots on and whether its mesh store is warm or cold, so the cold bakes' far larger peak never sets what a warm session
-/// must find free. The profile of a running process is the one its launch recorded (<see cref="StartProfiles"/>).
+/// boots on, whether its mesh store is warm or cold and the world document it boots, so the cold bakes' far larger peak never
+/// sets what a warm session must find free and a small world is never judged by the debug world. The profile of a running
+/// process is the one its launch recorded (<see cref="StartProfiles"/>). Every observation of a document's start is also one
+/// of its kind, backend and store with no document (<see cref="HostStartProfile.AnyDocument"/>), which judges a document this
+/// machine has not measured and a start that names none.
 /// Before a profile has an observation it uses <see cref="HostLoadThresholds.DefaultPeakGb"/> and, for its private working set,
 /// <see cref="HostLoadThresholds.ResidentFraction"/> of its expected commit peak. After, a profile's expected peak in each
 /// quantity is the high percentile of its recent distribution (<see cref="HostPeakWindow"/>: the last ten processes of the
@@ -67,9 +76,12 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 /// memory plus theirs) judges the start by the lesser of itself and the kind's fallback instead
 /// (<see cref="HostStartDemand.LoneOwnGb"/>): no wait for an admitted start would admit it, and a refused kind runs nothing
 /// that could lower the estimate, so one outlier session would otherwise lock its kind out for good. A profile with no
-/// observation at all is held to the same rule in private working set: its fallback is a guess, so it is also held to the
-/// free memory the idle machine leaves above the pressure floor (<see cref="HostLoadThresholds.PhysicalRoomGb"/>), and the
-/// first start of the profile on a small machine runs and records what it reached when it stops (<see cref="Finish(Process, WorldReadiness)"/>).
+/// observation of its own is held to the same rule: its figure is a guess, so its private working set is also held to the
+/// free memory the idle machine leaves above the pressure floor (<see cref="HostLoadThresholds.PhysicalRoomGb"/>), and a start
+/// of it alone (no other Puck process holding commit, admitted or still growing) is judged in commit by its expected private
+/// working set, the least commit it can need, and reserves its whole guess; so the first start of the profile runs and records
+/// what it reached when it stops (<see cref="Finish(Process, WorldReadiness)"/>), and only a machine whose commit limit could
+/// not hold even that is refused.
 /// <para>Admitted starts come from the live processes each reading lists (<see cref="HostSample.Starts"/>, classified by
 /// <see cref="HostProcesses.RunningStart"/>) with their current private bytes, so a process that exits stops counting at
 /// once and nothing is read from a record that can go stale. The one thing a reading cannot show is a start admitted a
@@ -129,34 +141,45 @@ public sealed class HostStartTracker {
 
         return window;
     }
-    // The one expected-peak door: the recent observations' high percentile once the profile has any, else its fallbacks (the
-    // profile's default commit peak, a fixed share of it as the private working set, and no whole working set, which is
+    // Whether this machine has observed a start of the profile itself (its own class, document and all).
+    private bool Measured(HostStartProfile kind) => (m_windows.TryGetValue(kind.Class, out var window) && (window.Count > 0));
+    // The one expected-peak door: the recent observations' high percentile once the profile has any; for a document this
+    // machine has not measured, what any World of its kind, backend and store reached here (AnyDocument); else its fallbacks
+    // (the profile's default commit peak, a fixed share of it as the private working set, and no whole working set, which is
     // reported only and has nothing to stand in for it).
     // The fallbacks are held to the machine's size (installedRamGb, the judging thresholds' InstalledRamGb).
-    private HostPeaks Expected(HostStartProfile kind, double? installedRamGb) => ((m_windows.TryGetValue(kind.Class, out var window) && (window.Count > 0))
-        ? new HostPeaks(PrivateGb: window.PrivateGb, ResidentGb: window.ResidentGb, WorkingSetGb: window.WorkingSetGb)
-        : Fallback(installedRamGb: installedRamGb, kind: kind));
+    private HostPeaks Expected(HostStartProfile kind, double? installedRamGb) {
+        if ((m_windows.TryGetValue(kind.Class, out var window) && (window.Count > 0)) || ((kind.Class.Document is not null) && m_windows.TryGetValue(kind.AnyDocument, out window) && (window.Count > 0))) {
+            return new HostPeaks(PrivateGb: window.PrivateGb, ResidentGb: window.ResidentGb, WorkingSetGb: window.WorkingSetGb);
+        }
+
+        return Fallback(installedRamGb: installedRamGb, kind: kind);
+    }
     private static HostPeaks Fallback(HostStartProfile kind, double? installedRamGb) {
         var peak = HostLoadThresholds.DefaultPeakGb(installedRamGb: installedRamGb, kind: kind);
 
         return new(PrivateGb: peak, ResidentGb: (HostLoadThresholds.ResidentFraction * peak), WorkingSetGb: double.NaN);
     }
-    // What a start is judged by when its learned expectation exceeds what the machine could hold with no admitted start
-    // running: the lesser of that expectation and the fallback an unmeasured profile gets. Such an expectation could otherwise
-    // refuse every start of its profile however long it waits, and a refused profile runs nothing that could teach the window
-    // a lower figure.
-    // A profile this machine has never measured is a guess scaled from the account budget, and the idle machine's free memory
-    // is a bound the guess must not exceed: a guess refused for physical memory with nothing else running would never run,
-    // and so never be measured. Its private working set is held to what the idle reading leaves above the pressure floor.
-    // Commit is the hard limit and is judged by the guess itself, so a start that would exhaust commit is still refused. A
-    // measured profile is never clamped: its own record says what it needs.
-    private HostPeaks Lone(HostStartProfile kind, HostLoadThresholds thresholds, HostSample idle) {
+    // What a start is judged by when its expectation exceeds what the machine could hold with no admitted start running: the
+    // lesser of that expectation and the fallback an unmeasured profile gets. Such an expectation could otherwise refuse every
+    // start of its profile however long it waits, and a refused profile runs nothing that could teach the window a lower
+    // figure.
+    // A profile this machine has never measured is a guess, and a guess refused with nothing else running would never run, so
+    // never be measured. Its private working set is held to what the idle reading leaves above the pressure floor. Alone
+    // (no other Puck process holding commit or still growing), its commit is held to its least possible figure, its expected
+    // private working set: every privately resident page is committed, so no start of it can need less, and the first start
+    // runs and records what it reached. Beside other work commit judges the whole guess, so admitted work never grows into a
+    // start that guessed low. A step is never tracked once it runs, so no start of it teaches a lower figure, and commit
+    // judges its whole guess alone too. A measured profile is never clamped: its own record says what it needs.
+    private HostPeaks Lone(HostStartProfile kind, HostLoadThresholds thresholds, HostSample idle, bool alone) {
         var learned = Expected(installedRamGb: thresholds.InstalledRamGb, kind: kind);
         var fallback = Fallback(installedRamGb: thresholds.InstalledRamGb, kind: kind);
-        var measured = (m_windows.TryGetValue(kind.Class, out var window) && (window.Count > 0));
         var resident = Math.Min(learned.ResidentGb, fallback.ResidentGb);
+        var commit = Math.Min(learned.PrivateGb, fallback.PrivateGb);
 
-        return new HostPeaks(PrivateGb: Math.Min(learned.PrivateGb, fallback.PrivateGb), ResidentGb: (measured ? resident : Math.Min(resident, thresholds.PhysicalRoomGb(reading: idle))), WorkingSetGb: learned.WorkingSetGb);
+        if (Measured(kind: kind)) { return new HostPeaks(PrivateGb: commit, ResidentGb: resident, WorkingSetGb: learned.WorkingSetGb); }
+
+        return new HostPeaks(PrivateGb: ((alone && (kind.Kind != HostStartKind.Step)) ? Math.Min(commit, resident) : commit), ResidentGb: Math.Min(resident, thresholds.PhysicalRoomGb(reading: idle)), WorkingSetGb: learned.WorkingSetGb);
     }
     // A live process's peaks as one reading shows them.
     private static HostPeaks Reading(HostRunningStart start) => new(PrivateGb: start.PrivateGb, ResidentGb: start.ResidentGb, WorkingSetGb: start.HeldGb);
@@ -192,12 +215,15 @@ public sealed class HostStartTracker {
     // A process is an observation of its profile once it has been seen for a full plateau (live: its growth stopped for one;
     // exited: it was watched for one). Before that it counts only to raise a profile that already has observations, since a
     // short focused check says nothing of an ordinary start's peak. A process already in the window keeps its entry current.
+    // A start of a named document is also an observation of any World of its kind, backend and store (AnyDocument).
     private void Record(HostStartProfile kind, (int Id, long StartTicks) id, HostPeaks peaks, bool settled) {
-        var window = Window(profile: kind);
+        foreach (var profile in ((kind.Class.Document is null) ? [kind.Class] : (HostStartProfile[])[kind.Class, kind.AnyDocument])) {
+            var window = Window(profile: profile);
 
-        // Only the judged quantities raise a kind early: a reported working set alone never brings a short run in.
-        if (window.Contains(id: id.Id, startTicks: id.StartTicks) || settled || ((window.Count > 0) && (Expected(installedRamGb: null, kind: kind) is var expected) && ((peaks.PrivateGb > expected.PrivateGb) || (peaks.ResidentGb > expected.ResidentGb)))) {
-            window.Observe(id: id.Id, startTicks: id.StartTicks, peaks: peaks);
+            // Only the judged quantities raise a kind early: a reported working set alone never brings a short run in.
+            if (window.Contains(id: id.Id, startTicks: id.StartTicks) || settled || ((window.Count > 0) && ((peaks.PrivateGb > window.PrivateGb) || (peaks.ResidentGb > window.ResidentGb)))) {
+                window.Observe(id: id.Id, startTicks: id.StartTicks, peaks: peaks);
+            }
         }
     }
 
@@ -213,9 +239,10 @@ public sealed class HostStartTracker {
         if ((text.Length > 0) && (text != stored)) { AtomicFile.WriteAllText(path, text); }
         window.Written();
     }
-    // Every profile a file names or this process has observed: the files are the machine's windows, so a profile another CLI
-    // measured is read before this process has met one of its own.
-    private void Measurements() {
+    // Every profile asked about or this process has observed, each with the profile of any document it falls back to, and
+    // every bare kind: the files are the machine's windows, so a profile another CLI measured is read before this process has
+    // met one of its own. Only those files are read, so a window per document costs a reading nothing until it is asked for.
+    private void Measurements(params IEnumerable<HostStartProfile> asked) {
         if (m_root is null) { return; }
         var directory = Path.Combine(m_root, ObservationDirectory);
         Directory.CreateDirectory(directory);
@@ -223,8 +250,9 @@ public sealed class HostStartTracker {
         var known = new HashSet<HostStartProfile>(collection: m_windows.Keys);
 
         foreach (var kind in Enum.GetValues<HostStartKind>()) { _ = known.Add(item: new HostStartProfile(Kind: kind)); }
-        foreach (var file in Directory.EnumerateFiles(directory)) {
-            if (!file.EndsWith(GuardSuffix, StringComparison.Ordinal) && HostStartProfile.TryParse(name: Path.GetFileName(file), profile: out var stored)) { _ = known.Add(item: stored); }
+        foreach (var profile in asked) {
+            _ = known.Add(item: profile.Class);
+            _ = known.Add(item: profile.AnyDocument);
         }
         foreach (var profile in known) {
             Synchronize(Window(profile: profile), Path.Combine(directory, profile.Name));
@@ -232,8 +260,23 @@ public sealed class HostStartTracker {
     }
     private const string GuardSuffix = ".guard";
 
+    /// <summary>Returns every profile this machine has a window of observed peaks for, read from the lease root: each kind,
+    /// backend, store and document a start of which has been measured here.</summary>
+    /// <returns>The profiles, by name; empty for a tracker that keeps its observations local.</returns>
+    public IReadOnlyList<HostStartProfile> MeasuredProfiles() {
+        if ((m_root is null) || !Directory.Exists(Path.Combine(m_root, ObservationDirectory))) { return []; }
+
+        return [.. Directory.EnumerateFiles(Path.Combine(m_root, ObservationDirectory))
+            .Select(static file => Path.GetFileName(file))
+            .Where(static name => !name.EndsWith(GuardSuffix, StringComparison.Ordinal))
+            .Select(static name => (HostStartProfile.TryParse(name: name, profile: out var profile) ? profile : (HostStartProfile?)null))
+            .OfType<HostStartProfile>()
+            .OrderBy(static profile => profile.Name, StringComparer.Ordinal)];
+    }
+
     /// <summary>Returns the profile's expected peaks, each the high percentile of its recent observations, read from the
-    /// shared window first. Before the profile has an observation the private bytes are
+    /// shared window first. A document this machine has not measured takes the window of its kind, backend and store
+    /// (<see cref="HostStartProfile.AnyDocument"/>). Before either has an observation the private bytes are
     /// <see cref="HostLoadThresholds.DefaultPeakGb"/>, the private working set <see cref="HostLoadThresholds.ResidentFraction"/>
     /// of that, and the whole working set, which admission reports and never judges, NaN.</summary>
     /// <param name="kind">The start's profile.</param>
@@ -242,7 +285,7 @@ public sealed class HostStartTracker {
     /// <returns>The expected peaks, in gigabytes.</returns>
     public HostPeaks ExpectedPeaks(HostStartProfile kind, HostLoadThresholds? thresholds = null) {
         lock (m_gate) {
-            Measurements();
+            Measurements(kind);
             return Expected(installedRamGb: thresholds?.InstalledRamGb, kind: kind);
         }
     }
@@ -254,10 +297,10 @@ public sealed class HostStartTracker {
     /// <param name="peaks">What the process reached (<see cref="HostProbe.PeaksOf"/>); an invalid reading records nothing.</param>
     public void Finish(HostStartProfile profile, (int Id, long StartTicks) process, HostPeaks peaks) {
         lock (m_gate) {
-            Measurements();
+            Measurements(profile);
             if (m_seen.Remove(key: process, value: out var seen) && seen.Peaks.Valid) { peaks = seen.Peaks.Max(other: peaks); }
             Record(profile, process, peaks, settled: true);
-            Measurements();
+            Measurements(profile);
         }
     }
     /// <summary>Records what a World that reported ready has reached, as it is about to stop, read from its own process. A
@@ -286,8 +329,10 @@ public sealed class HostStartTracker {
     /// <returns>The start's demand.</returns>
     public HostStartDemand Judge(HostSample reading, HostStartProfile kind, HostLoadThresholds thresholds, TimeProvider clock, bool reserve) {
         lock (m_gate) {
-            Measurements();
             var live = (reading.Starts ?? []);
+            HostStartProfile[] asked = [kind, .. live.Select(static start => start.Profile), .. (reading.Holds ?? []).Select(static hold => hold.Profile)];
+
+            Measurements(asked);
             var liveIds = new HashSet<(int Id, long StartTicks)>(collection: live.Select(selector: static start => (start.Id, start.StartTicks)));
 
             // Records, machine-wide, that a start or a hold's tree has gone idle, or has used CPU again after another observer
@@ -318,7 +363,7 @@ public sealed class HostStartTracker {
                 Record(seen.Profile, id, seen.Peaks, settled: (clock.GetElapsedTime(seen.FirstAt) >= Plateau));
                 _ = m_seen.Remove(key: id);
             }
-            Measurements();
+            Measurements(asked);
 
             // A reservation ends when its hold passes or a live process of its kind it did not know of appears; each new
             // process answers one reservation.
@@ -395,13 +440,19 @@ public sealed class HostStartTracker {
             }
 
             // Each quantity is judged by the learned estimate unless the machine with every admitted start gone could not hold
-            // it either: then no wait for an admitted start changes the answer, and the lone figure judges instead.
+            // it either: then no wait for an admitted start changes the answer, and the lone figure judges instead. A start is
+            // alone when no other Puck process holds commit or is admitted and still to appear (a live start, another
+            // process's hold, a reservation of this one's).
             var learned = Expected(installedRamGb: thresholds.InstalledRamGb, kind: kind);
             var idle = reading with {
                 CommitChargeGb = (reading.CommitChargeGb - live.Sum(selector: static start => start.PrivateGb)),
                 FreeRamGb = (reading.FreeRamGb + live.Sum(selector: static start => start.ResidentGb)),
             };
-            var lone = Lone(idle: idle, kind: kind, thresholds: thresholds);
+            var alone = ((live.Count == 0) && ((reading.Holds ?? []).Count == 0) && (m_reservations.Count == 0));
+            var lone = Lone(alone: alone, idle: idle, kind: kind, thresholds: thresholds);
+            // What the idle machine is asked to hold of the start at least, which NeverFits refuses against: the idle machine
+            // is alone.
+            var least = (alone ? lone : Lone(alone: true, idle: idle, kind: kind, thresholds: thresholds));
             var expectedOwn = new HostPeaks(
                 PrivateGb: (thresholds.CommitCovers(reading: idle, needGb: learned.PrivateGb) ? learned.PrivateGb : lone.PrivateGb),
                 ResidentGb: (thresholds.PhysicalCovers(reading: idle, needGb: learned.ResidentGb) ? learned.ResidentGb : lone.ResidentGb),
@@ -414,8 +465,10 @@ public sealed class HostStartTracker {
             var commitCovered = thresholds.CommitCovers(reading: reading, needGb: need);
             var physicalCovered = thresholds.PhysicalCovers(reading: reading, needGb: residentNeed);
 
+            // A start admitted below its expectation reserves the whole expectation: a start asked after it in this process
+            // is judged beside what it may yet reach, not what it was let in at.
             if (reserve && commitCovered && physicalCovered && (kind.Kind != HostStartKind.Step)) {
-                m_reservations.Add(item: new Reservation(Kind: kind.Kind, At: clock.GetTimestamp(), Gb: own, ResidentGb: residentOwn, Known: liveIds));
+                m_reservations.Add(item: new Reservation(Kind: kind.Kind, At: clock.GetTimestamp(), Gb: Math.Max(own, learned.PrivateGb), ResidentGb: Math.Max(residentOwn, learned.ResidentGb), Known: liveIds));
             }
 
             return new HostStartDemand(
@@ -425,8 +478,10 @@ public sealed class HostStartTracker {
                 GrowthGb: growth,
                 HeadroomGb: (reading.CommitLimitGb - reading.CommitChargeGb),
                 Kind: kind.Kind,
-                LoneOwnGb: lone.PrivateGb,
-                LoneResidentOwnGb: lone.ResidentGb,
+                LoneOwnGb: least.PrivateGb,
+                LoneResidentOwnGb: least.ResidentGb,
+                ExpectedOwnGb: learned.PrivateGb,
+                Measured: Measured(kind: kind),
                 NeedGb: need,
                 OwnGb: own,
                 PhysicalCovered: physicalCovered,

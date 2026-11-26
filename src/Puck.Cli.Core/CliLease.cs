@@ -240,7 +240,7 @@ public sealed class CliLease : IDisposable {
     /// (<c>HostProcesses</c>), and the measured peaks it admits by (<c>HostStartTracker.ObservationDirectory</c>). Raise it in
     /// any change to one of those meanings: a copy built before the change then refuses by name instead of deadlocking
     /// against, or overcommitting beside, a newer one.</summary>
-    public const int Protocol = 6;
+    public const int Protocol = 7;
 
     private const string ProtocolFile = "protocol";
 
