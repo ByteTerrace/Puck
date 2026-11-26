@@ -242,7 +242,7 @@ public static class FixedAffineForms {
         // Any slope α in [−1, 1] leaves g(v) = |v| − α·v convex, zero at zero and largest at an end of [low, high]; the
         // secant's (high + low) / (high − low) only keeps that largest value small, so its rounding costs nothing.
         var alpha = Int128.Clamp(value: FixedDirectedRounding.FloorQuotient(denominator: (high - low), numerator: ((high + low) << FractionBitCount)), min: -One, max: One);
-        var top = CeilShift(shift: FractionBitCount, value: Int128.Max(x: (-low * (One + alpha)), y: (high * (One - alpha))));
+        var top = FixedDirectedRounding.CeilingShift(shift: FractionBitCount, value: Int128.Max(x: (-low * (One + alpha)), y: (high * (One - alpha))));
 
         return Offset(form: Scale(a: a, denominator: One, numerator: alpha, pad: 0L), high: top, low: 0);
     }
@@ -403,7 +403,7 @@ public static class FixedAffineForms {
         var highRoot = FusedArithmetic.CeilingSquareRoot(radicand: (((UInt128)high) << FractionBitCount));
         var alpha = (((Int128)1) << ((2 * FractionBitCount) - 1)) / ((Int128)highRoot);
         var lowRoot = ((Int128)(((UInt128)low) << FractionBitCount).SquareRoot());
-        var bottom = (lowRoot - CeilShift(shift: FractionBitCount, value: (alpha * low)));
+        var bottom = (lowRoot - FixedDirectedRounding.CeilingShift(shift: FractionBitCount, value: (alpha * low)));
         var top = (((Int128)highRoot) - (alpha * high >> FractionBitCount));
 
         return AddError(form: Offset(form: Scale(a: a, denominator: One, numerator: alpha, pad: 0L), high: top, low: bottom), raws: 1);
@@ -700,7 +700,7 @@ public static class FixedAffineForms {
         // Σ over i ≠ j of |aᵢbⱼ| is the whole product of the absolute sums less its diagonal.
         var cross = ((absoluteA * absoluteB) - diagonal);
         var twice = ((2 * ((((((Int128.Abs(value: ca) * eb) + (Int128.Abs(value: cb) * ea)) + cross) + (absoluteA * eb)) + (ea * absoluteB)) + (ea * eb))) + diagonal);
-        var error = ((CeilShift(shift: (FractionBitCount + 1), value: twice) + ((inexact + 1) >> 1)) + pad);
+        var error = ((FixedDirectedRounding.CeilingShift(shift: (FractionBitCount + 1), value: twice) + ((inexact + 1) >> 1)) + pad);
 
         return FixedAffineForm.Make(center: center, error: error, symbol0: symbol0, symbol1: symbol1, symbol2: symbol2);
     }
@@ -828,7 +828,6 @@ public static class FixedAffineForms {
 
         return rounded;
     }
-    private static Int128 CeilShift(Int128 value, int shift) => -((-value) >> shift);
     private static Int128 CeilDivide(Int128 numerator, Int128 denominator) => FixedDirectedRounding.CeilingQuotient(denominator: denominator, numerator: numerator);
-    private static int BitLength(Int128 value) => (128 - ((int)Int128.LeadingZeroCount(value: value)));
+    private static int BitLength(Int128 value) => ((int)value.BitLength());
 }
