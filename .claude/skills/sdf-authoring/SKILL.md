@@ -131,6 +131,7 @@ from what you want the surface to *do*:
 | Fine even relief: dimples, corrugation, a hammered skin | `displace` | a sine product added to the field, real geometry |
 | A rounded slab, a stadium, a capsule from any primitive | `elongate` | the cross-section swept over a box of half-extents, 1-Lipschitz |
 | Scattered, tumbled, recoloured copies | a `jitter` fold | a hashed repeat; render only |
+| A form clothed in small parts: a leafy clump, a tuft | a `for` over points on it, in a creation placed many times | whole parts posed to the surface, one bake however many copies; a jitter clipped to a hull cuts its copies flush ([composition](references/composition.md#domain-folds)) |
 | Self-similar shells, a Droste zoom | a `logSphere` fold | render only |
 | Softened edges | `rounding` (curved) or `chamfer` (45° bevel) | never both on one shape |
 | A hollow shell | `onion` | |
@@ -225,7 +226,7 @@ Derived faces follow the world's highest authored screen index.
 
 The palette (up to 32 slots) carries far more than a colour: `specular`,
 `roughness`, `metal`, `coat`, `sheen`, `emissive` (switched by a render lane
-with `emissiveLane`), `wrap` and `soften` for skin, `fill` for a warm interior
+with `emissiveLane`), `wrap` for skin (`soften` is read by nothing), a soft volume's shading (`softVolume`, a shade program that lights a mass of small parts as one round form), `fill` for a warm interior
 fill, `weathering` for chips and scratches over a revealed `under` substrate,
 `inset` for a refracted layer beneath the surface (how an eye is authored: a
 radial paint ramp of pupil, iris, limbus and sclera stops under a cornea, not a

@@ -92,6 +92,22 @@ sliver between them is thinner than any bake cell, so the contour folds it into
 a crease the audit reports as hundreds of turned triangles on the wall (the
 gallery's hex wallpapers and clipped beads).
 
+A fold is for repetition a view reads as one pattern (ribs, studs, a
+lattice), not for clothing a form in small parts. A `jitter` lattice clipped to
+a hull by an intersection cuts every copy that crosses the hull flush with it,
+so the outline stays the hull's, and its copies fill the hull's whole depth. A
+clump of 150 clipped leaf plates measured 343,000 triangles at its finest
+level: the contour refines every thin plate, cut and crease toward the bake's
+fine spacing whatever its size. Clothe a form in whole parts instead: a `for`
+over points on it, each a shape posed to the surface (the standard's
+`leafyClump`, `worlds/standard/foliage.puck`), in a creation of its own placed
+once for each copy, so every copy draws the one baked mesh
+([bake work and bytes](#bake-work-and-bytes)). A tilted flat plate still costs
+its whole lattice at the finest level (the planar merge joins only faces whose
+normals agree bit for bit, which a tilted face's do not), about five thousand
+triangles a leaf of 0.25 by 0.4 m, and its coarser levels fall by half or so a
+level, so count the parts: the triangles a view draws go with their number.
+
 Mirror a part with a `symmetry` fold, never with a negative scale — negative
 scale components are refused by name because emission reads magnitudes.
 
@@ -222,6 +238,6 @@ follow live state ([render lanes](surface.md#render-lanes)).
 
 ## Bake work and bytes
 
-Rigid creation copies share one local bake and palette. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screens are unbounded (a residency holds `SdfProgramBuilder.MaxScreenSurfaces` slots for the resident ones) and bounded volumes 64; representation overflow refuses explicitly.
+Rigid creation copies share one local bake and palette, static placements of one prototype included: the gallery tree's canopy bakes one leafy clump for each colour family and draws it once a placement, each copy at the level of detail its own distance asks. Each live copy owns one root transform and one draw; articulated creations add only independently moving part slots. Storage grows from the live world, without a fixed registration or per-creation shape budget. Catalog geometry emits only for looks in use, with detail chosen by projected size. The actual render envelope, GPU draw/vertex counters, baked groups and resident bytes describe the cost. Scope depth is 4, screens are unbounded (a residency holds `SdfProgramBuilder.MaxScreenSurfaces` slots for the resident ones) and bounded volumes 64; representation overflow refuses explicitly.
 
 Panels expand to two field shapes, trims add two operands each, and glyphs add one per visible character. These are bake work, reported by creation stats alongside program bytes. Actual mesh bytes are read from the running bake, never guessed from shape count.

@@ -4338,7 +4338,7 @@ export type ShapeDomainOpRepeat = {
    */
   limit?: DocumentVector3;
   /**
-   * The point the lattice folds around, creation units (null = the creation origin, the fold this op has always used). Cell selection centres on this point instead of the creation root — the lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.
+   * The point the lattice's cell walls are laid about, creation units (null = the creation origin): a wall at half a spacing either side of it and every spacing on. The fold centres on the cell of that lattice the shape's own position lies in (CentreOf), so the copies sit at whole spacings from the shape wherever the origin lies, in render as in contact.
    */
   origin?: DocumentVector3;
   /**
