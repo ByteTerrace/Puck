@@ -8,8 +8,8 @@ namespace Puck.World;
 /// pump.
 /// </summary>
 public interface IWorldIterationReadiness {
-    /// <summary>Gets the count of loops begun over the World's life, the boot's included, which is also the latest loop's
-    /// number: the mark a wait arms from.</summary>
+    /// <summary>Gets the number of the latest loop, skipping any withdrawn because it made no edit (every loop begun over
+    /// the World's life is numbered, the boot's included): the mark a wait arms from.</summary>
     long Loops { get; }
 
     /// <summary>Returns whether the latest loop is the one numbered <paramref name="mark"/> or a later one, and has
