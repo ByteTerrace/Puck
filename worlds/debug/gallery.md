@@ -38,7 +38,7 @@ at `gallerySite`, with the entrance in the south wall facing the spawn.
 | Storeys | level k's floor top at 4.5k + 0.05 | slab 0.3 m, ceiling 4.2 m over the floor, roof at 18.05 |
 | Nave | x 12 to the east wall, z 9 to 29 | 20 m wide, 47.7 m long, open from level 0 to three skylights |
 | Arcades | piers every 5 m, 0.4 m behind each balcony edge | a branched pier on every level, 4.2 m tall, one wide bay between each pair |
-| Balcony edges | round the nave's void on levels 1 to 3 | glass balustrade, brass rail 1.1 m up |
+| Balcony edges | round the nave's void on levels 1 to 3 | level 1: a toy lattice from floor to fascia ([the lattice](#the-lattice)); level 2: glass balustrade, brass rail 1.1 m up |
 | Stairs | x 12.4 to 16.2, against the south wall | two 1.8 m flights a storey, eighteen 0.25 m risers, treads 0.4 m |
 | Lift | car centre (18.8, -1.65), in a glass tower outside the south wall | car 2.8 by 3.1 m, door 1.8 m wide in the wall |
 | Entrance | x 24 to 28 in the south wall | 4 m wide, 3.3 m high, under the first arch |
@@ -102,6 +102,53 @@ Read them with `machine.state` (each machine's frames advance) and
 level 2's north balcony down across the void at the south cabinets, and
 `gallery.shot toybox-across` from level 1's south balcony edge at the north
 ones.
+
+### The lattice
+
+The owner's ruling: every floor can be reached by jetpack except the
+Wonderland floor, which is walled off, so its puzzles can turn on size without
+a way to cheat. A body enters level 1 shrunk, by its corner stairs, and no
+other way.
+
+So every edge level 1 shares with the nave's void stands behind a toy
+construction lattice (the standard's `lattice`,
+[architecture.puck](../standard/architecture.puck)): pastel frames stepping
+with the piers, thin uprights in the complementary pastel, and sunflower
+crossbars. A panel stands in each arcade bay along the south and north edges,
+a half-tile panel closes each to the east wall, and five panels run along the
+bridge's edge. Each stands on level 1's floor and reaches into the fascia under
+level 2's edge, and neighbouring posts overlap at every joint and corner. Its
+uprights stand a sixteenth of a tile apart (layout.puck's `toyLatticePitch` and
+`toyLatticeBar`), a gap of about 5 cm: narrower than the smallest body the
+world sizes (a tenth of the Moth's 0.7 m capsule, size.puck's envelope), so no
+body flies or jumps in from the void and none drops out, while most of each
+panel stays open to the eye. The panels are solid boxes, so a body meets each
+bar as drawn.
+
+Two more panels stand either side of the core stairs' head on level 1, between
+the stair well's glass and the void's lattice, so a body climbing the core
+stairs turns there between flights without stepping onto level 1.
+
+**Hooks for puzzles.** Three panels are loose: `gallery-lattice-loose-south`
+and `gallery-lattice-loose-north` (bay 8, layout.puck's `toyLatticeLooseBay`)
+and `gallery-lattice-loose-bridge` (the bridge's middle tile, on the nave's
+axis). Each follows its cell of the `toyboxSlats` table (`south`, `north`,
+`bridge`, all 0): at 1 the panel swaps to its open form, which keeps its frame
+and crossbars and drops its uprights and sill, so only a body small enough to
+pass between two crossbars (about 0.6 m apart) slips through. No rule sets them
+yet; `world.state.cell.set toyboxSlats south 1` opens one by hand.
+
+**The lift.** `toyboxLift` (0) decides whether the lift serves level 1. At 0
+the rule `lift-toybox-calls` drops every call to level 1 as it arrives (a
+landing's plate, a car button, `gallery.lift 1`), so the car passes level 1
+without stopping, and `lift-toybox-doors` keeps a car standing there shut. A
+rule that sets `toyboxLift` to 1 serves level 1 as any other level.
+
+The other ways in, checked: the window bays and skylights are solid glass;
+the endless fall's hole in level 1's floor is covered from below by its
+ceiling painting, a portal back to the floor painting, so a body flying up the
+well crosses to the floor rather than into level 1; the bridge is level 1's
+own floor, inside the lattice. The corner stairs are the way in.
 
 ## The displays
 
@@ -247,7 +294,7 @@ The pieces that repeat are the standard's
 ([`architecture.puck`](../standard/architecture.puck)), built to the
 [gallery kit pack](../../docs/game/art/gallery-kit-pack/README.md)'s sheets and
 stamped by the shell and the displays: the display plinth, the branched pier, the window bay,
-the fan shade, the balustrade, the planter, the bench and the banner.
+the fan shade, the balustrade, the lattice, the planter, the bench and the banner.
 [`gallery-kit.puck`](gallery-kit.puck) holds one of each for
 `puck mesh preview`. A piece bakes once however many times the plan stamps it.
 

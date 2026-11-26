@@ -382,6 +382,64 @@ template balustrade(base, length = 4, posts = 3, height = 1.1) {
   }
 }
 
+// A construction lattice that runs along X, a toy building set's panel: a frame of square members `frame` thick round a
+// panel `cells × pitch` long and `height` tall standing on y 0, an upright bar `bar` square every `pitch` between its two
+// posts, and crossbars `rail` square that divide its height into `rails` equal courses. Its palette slots from `base`
+// are the frame, the uprights and the crossbars (`latticePalette` gives three plain ones from their colours). The
+// uprights are one bar folded by a repeat and the crossbars another, so `cells` and `rails` are even (an odd number of
+// copies centres a fold) and `cells` is at most 64, the copies a solid's fold expands to for contact. Every shape is a
+// box joined by union, so the panel collides as drawn: no body wider than the gap between two uprights, `pitch - bar`,
+// passes it, while the gaps leave most of the panel open to the eye. `upright: 0` leaves the uprights out and `sill: 0`
+// the frame's bottom member: an open panel whose courses pass only what fits between its crossbars.
+let latticeFrame = 0
+let latticeBar = 1
+let latticeRail = 2
+function latticePalette(frame, bar, rail) = [
+  { color: frame, roughness: 0.4, specular: 0.05 }
+  { color: bar, roughness: 0.4, specular: 0.05 }
+  { color: rail, roughness: 0.4, specular: 0.05 }
+]
+template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0.05, rails = 6, upright = 1, sill = 1) {
+  let length = (cells * pitch)
+  for side in [-1, 1] {
+    shape Box $"lattice-post-{side}" {
+      material: (base + latticeFrame)
+      position [((side * length) / 2), (height / 2), 0]
+      scale [(frame / 2), (height / 2), (frame / 2)]
+      rounding: (frame / 6)
+    }
+  }
+  shape Box "lattice-head" {
+    material: (base + latticeFrame)
+    position [0, (height - (frame / 2)), 0]
+    scale [(length / 2), (frame / 2), (frame / 2)]
+    rounding: (frame / 6)
+  }
+  if sill == 1 {
+    shape Box "lattice-sill" {
+      material: (base + latticeFrame)
+      position [0, (frame / 2), 0]
+      scale [(length / 2), (frame / 2), (frame / 2)]
+      rounding: (frame / 6)
+    }
+  }
+  if upright == 1 {
+    shape Box "lattice-upright" {
+      material: (base + latticeBar)
+      position [0, (height / 2), 0]
+      scale [(bar / 2), (height / 2), (bar / 2)]
+      domain [repeat(spacing: [pitch, 1, 1], limit: [((cells / 2) - 1), 0, 0])]
+    }
+  }
+  shape Box "lattice-rail" {
+    material: (base + latticeRail)
+    position [0, (height / 2), 0]
+    scale [(length / 2), (rail / 2), (rail / 2)]
+    rounding: (rail / 4)
+    domain [repeat(spacing: [1, (height / rails), 1], limit: [0, ((rails / 2) - 1), 0], origin: [0, (height / 2), 0])]
+  }
+}
+
 // A planter that faces +Z (the sheet's furniture-and-planting.png): a terracotta trough under a thick cream lip, its
 // soil just below the lip, and three groups of planting: a spiky crown of upright blades, broad leaves on stems, and a
 // low mound of pale growth. `length` runs along X; the trough is 0.7 m deep and its lip stands 0.62 m up.

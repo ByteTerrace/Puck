@@ -183,6 +183,8 @@ let entranceDoorway = { a0: entranceWest, a1: entranceEast, y0: 0, y1: (entrance
 
 // A wall's two skins: ochre cladding outside and the hall's cream inside, `skin` of the wall's thickness the cladding.
 let shellSkin = 0.12
+// How far under an upper level's floor the fascia round its balcony edges hangs, in metres.
+let shellFascia = 0.6
 
 // One storey's walls. The south face holds the core's openings; on the projecting wing's storeys it stops at the wing,
 // whose own south face stands 4 m out, and on the top storey it starts at the stairs, where the terrace begins.
@@ -589,14 +591,15 @@ let shellPiers = flatMap(range(0, 4), k => flatMap(range(0, length(arcadeXs)), b
   { id: $"pier-south-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeSouth, yaw: 180, prototype: shellPierPrototype(k, b) }
   { id: $"pier-north-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeNorth, yaw: 0, prototype: shellPierPrototype(k, b) }
 ]))
-// A length of balustrade: its centre, the yaw that turns its drop side to the void, and whether it is the 2 m piece.
+// A length of balustrade: its centre, the yaw that turns its drop side to the void, and whether it is the 2 m piece. Level
+// 2's balcony edges take them; level 1's are its lattice (below).
 let shellRails = concat(
-  flatMap(range(1, 3), k => concat(
+  flatMap([2], k => concat(
     flatMap(range(0, floor(((galleryEast - naveWest) / 4))), i => [
-      { id: $"rail-south-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveSouth - 0.08), yaw: 180, short: 0 }
-      { id: $"rail-north-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveNorth + 0.08), yaw: 0, short: 0 }
+      { id: $"rail-south-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveSouth - balconyInset), yaw: 180, short: 0 }
+      { id: $"rail-north-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveNorth + balconyInset), yaw: 0, short: 0 }
     ]),
-    map(range(0, 5), i => { id: $"rail-bridge-{k}-{i}", x: (naveWest - 0.08), y: galleryFloor[k], z: (naveSouth + 2 + (4 * i)), yaw: 270, short: 0 })
+    map(range(0, 5), i => { id: $"rail-bridge-{k}-{i}", x: (naveWest - balconyInset), y: galleryFloor[k], z: (naveSouth + 2 + (4 * i)), yaw: 270, short: 0 })
   )),
   [
     { id: "rail-fall-south", x: fallPlan[0], y: galleryFloor[1], z: ((fallPlan[1] - fallHole) - 0.08), yaw: 180, short: 1 }
@@ -606,6 +609,43 @@ let shellRails = concat(
   ],
   map(range(0, 4), i => { id: $"rail-terrace-south-{i}", x: ((galleryWestOut + 2.2) + (4 * i)), y: galleryFloor[3], z: 0.15, yaw: 0, short: 0 }),
   map(range(0, 2), i => { id: $"rail-terrace-west-{i}", x: (galleryWestOut + 0.15), y: galleryFloor[3], z: (2.3 + (4 * i)), yaw: 90, short: 0 })
+)
+// Level 1's lattice (layout.puck's toyLattice values): a four-tile panel in each arcade bay along the void's south and
+// north edges, from pier to pier, and a half-tile one from the last pier to the east wall; the bridge's edge in four-tile
+// panels about one tile on the nave's axis; and a panel either side of the stairs' head, between the stair well's glass
+// and the void's lattice, so a body climbing the core stairs turns at level 1 without stepping onto it. Each panel stands
+// on level 1's floor and reaches into the fascia hanging under level 2's balcony edge (or into level 2's slab, over the
+// stairs' head), and neighbouring panels' posts overlap at every joint and corner. A loose panel (`slat`, its
+// `toyboxSlats` cell) shows its `open` prototype while its cell is 1.
+let shellLatticeHeight = ((((galleryStorey * 2) - shellFascia) - galleryFloor[1]) + 0.05)
+let shellLatticeStairHeight = ((((galleryStorey * 2) - 0.25) - galleryFloor[1]) + 0.05)
+let shellLatticeTileCells = (galleryTile / toyLatticePitch)
+let shellLatticeBayCells = (galleryBayTiles * shellLatticeTileCells)
+let shellLatticeStairLength = (naveSouth - stairFoot)
+let shellLatticeStairCells = (2 * (floor((shellLatticeStairLength / (2 * toyLatticePitch))) + 1))
+let shellLatticeBays = range(arcadeWestBays, (galleryBays - arcadeWestBays))
+let shellBridgeMid = ((galleryNaveTiles - 1) / 2)
+function shellBridgeZ(tile, tiles) = (tileEdgeZ((galleryAisleTiles + tile)) + ((tiles * galleryTile) / 2))
+function shellLatticeBay(b, edge, z) = ((b == toyLatticeLooseBay) ? {
+  id: $"loose-{edge}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: edge, open: $"gallery-lattice-open-{(b % 6)}"
+} : { id: $"{edge}-{b}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: "", open: "" })
+let shellLattices = concat(
+  flatMap(shellLatticeBays, b => [shellLatticeBay(b, "south", (naveSouth - balconyInset)), shellLatticeBay(b, "north", (naveNorth + balconyInset))]),
+  [
+    { id: "east-south", x: ((pierX(galleryBays) + galleryEast) / 2), z: (naveSouth - balconyInset), yaw: 0, prototype: "gallery-lattice-half", slat: "", open: "" }
+    { id: "east-north", x: ((pierX(galleryBays) + galleryEast) / 2), z: (naveNorth + balconyInset), yaw: 0, prototype: "gallery-lattice-half", slat: "", open: "" }
+  ],
+  map([0, 4, (shellBridgeMid + 1), (shellBridgeMid + 5)], tile => {
+    id: $"bridge-{tile}", x: (naveWest - balconyInset), z: shellBridgeZ(tile, 4), yaw: 90, prototype: $"gallery-lattice-{(tile % 6)}", slat: "", open: ""
+  }),
+  [
+    {
+      id: "loose-bridge", x: (naveWest - balconyInset), z: shellBridgeZ(shellBridgeMid, 1), yaw: 90, prototype: "gallery-lattice-tile", slat: "bridge"
+      open: "gallery-lattice-tile-open"
+    }
+    { id: "stair-west", x: (stairWest - 0.1), z: ((stairFoot + naveSouth) / 2), yaw: 90, prototype: "gallery-lattice-stair", slat: "", open: "" }
+    { id: "stair-east", x: (stairEast + 0.1), z: ((stairFoot + naveSouth) / 2), yaw: 90, prototype: "gallery-lattice-stair", slat: "", open: "" }
+  ]
 )
 // The piers of the nave's end wall stand between its tall bays and either side of them.
 let naveEndSpan = ((tallBayZs[1] - tallBayZs[0]) / 2)
@@ -713,9 +753,9 @@ template shellPrototypes() {
             z1: galleryWall,
             slot: shellTrim
           )
-          boundsBox(label: "fascia-south", x0: naveWest, x1: galleryEast, y0: ((galleryStorey * k) - 0.6), y1: galleryFloor[k], z0: (naveSouth - 0.2), z1: naveSouth, slot: shellCream)
-          boundsBox(label: "fascia-north", x0: naveWest, x1: galleryEast, y0: ((galleryStorey * k) - 0.6), y1: galleryFloor[k], z0: naveNorth, z1: (naveNorth + 0.2), slot: shellCream)
-          boundsBox(label: "fascia-bridge", x0: (naveWest - 0.2), x1: naveWest, y0: ((galleryStorey * k) - 0.6), y1: galleryFloor[k], z0: naveSouth, z1: naveNorth, slot: shellCream)
+          boundsBox(label: "fascia-south", x0: naveWest, x1: galleryEast, y0: ((galleryStorey * k) - shellFascia), y1: galleryFloor[k], z0: (naveSouth - 0.2), z1: naveSouth, slot: shellCream)
+          boundsBox(label: "fascia-north", x0: naveWest, x1: galleryEast, y0: ((galleryStorey * k) - shellFascia), y1: galleryFloor[k], z0: naveNorth, z1: (naveNorth + 0.2), slot: shellCream)
+          boundsBox(label: "fascia-bridge", x0: (naveWest - 0.2), x1: naveWest, y0: ((galleryStorey * k) - shellFascia), y1: galleryFloor[k], z0: naveSouth, z1: naveNorth, slot: shellCream)
           shellStripBoxes(top: ((galleryStorey * k) - 0.25), wing: ((k > wingLevel) ? 1 : 0))
           // The underside of the wing's first floor is the forecourt's soffit, and carries its own strip.
           for soffit in ((k == wingLevel) ? [1] : []) {
@@ -874,6 +914,38 @@ template shellPrototypes() {
       schema: "puck.creation.v1"
       palette: shellKit
       balustrade(base: 0, length: 2, posts: 2)
+    }
+  }
+  // Level 1's lattice panels, each in the colours of a pastel `n` (look.puck's lookToyLattice): a bay's four tiles, the
+  // half tile at each east end, the bridge's middle tile, the stairs' head, and the open panels a loose one swaps to.
+  let latticeKinds = concat(
+    map(range(0, length(lookToyPiers)), n => {
+      id: $"gallery-lattice-{n}", n: n, cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1
+    }),
+    map(distinct([(toyLatticeLooseBay % 6)]), n => {
+      id: $"gallery-lattice-open-{n}", n: n, cells: shellLatticeBayCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0
+    }),
+    [
+      { id: "gallery-lattice-half", n: galleryBays, cells: (shellLatticeTileCells / 2), pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
+      { id: "gallery-lattice-tile", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
+      { id: "gallery-lattice-tile-open", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0 }
+      {
+        id: "gallery-lattice-stair", n: 2, cells: shellLatticeStairCells, pitch: (shellLatticeStairLength / shellLatticeStairCells)
+        height: shellLatticeStairHeight, upright: 1
+      }
+    ]
+  )
+  for kind in latticeKinds {
+    prototype $"{kind.id}" {
+      document {
+        name: kind.id
+        schema: "puck.creation.v1"
+        palette: map(
+          latticePalette(lookToyLattice(kind.n).frame, lookToyLattice(kind.n).bar, lookToyLattice(kind.n).rail),
+          entry => shellBrushed(entry, lookBrushStructure)
+        )
+        lattice(base: 0, cells: kind.cells, pitch: kind.pitch, height: kind.height, bar: toyLatticeBar, upright: kind.upright, sill: kind.upright)
+      }
     }
   }
   prototype "gallery-planter" {
@@ -1051,6 +1123,27 @@ template shellPlacements() {
       position [rail.x, rail.y, rail.z]
       yawDegrees: rail.yaw
       solid
+    }
+  }
+  for panel in filter(shellLattices, p => (p.slat == "")) {
+    placement $"gallery-lattice-{panel.id}" {
+      prototype: panel.prototype
+      parent: "gallery"
+      position [panel.x, galleryFloor[1], panel.z]
+      yawDegrees: panel.yaw
+      solid
+    }
+  }
+  for panel in filter(shellLattices, p => (p.slat != "")) {
+    placement $"gallery-lattice-{panel.id}" {
+      prototype: panel.prototype
+      parent: "gallery"
+      position [panel.x, galleryFloor[1], panel.z]
+      yawDegrees: panel.yaw
+      solid
+      respond [
+        { when: state(state: toyboxSlats, key: $"{panel.slat}", comparison: Equal, value: 1), prototypeId: panel.open }
+      ]
     }
   }
   for (planter, n) in shellPlanters {
