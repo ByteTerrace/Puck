@@ -131,12 +131,19 @@ template stationPlay(stations, radius = 1.6, height = 2, margin = 0.25, near = 0
         capacity: capacity
         cells: map(range(0, seats), seat => { key: $"{seat}", value: 0 })
       }
+      row {
+        name: "stationPosed"
+        kind: Int
+        capacity: capacity
+        cells: map(range(0, seats), seat => { key: $"{seat}", value: 0 })
+      }
     }
   }
 
   // Which station's reach each player's body stands in: a body leaves a station's reach `margin` past its radius, and
   // takes the first station whose reach it then stands in. A station's `needs` fold into `fit{i}n{k}`: whether the body
-  // holds the first k of them.
+  // holds the first k of them. The answer is computed once (`target`) and written only when it differs, so the rule is
+  // judged as bodies move but fires, and writes, only when a body crosses a reach.
   rule "station-near" {
     forEach: $players
     local near = stationNear[$each]
@@ -149,31 +156,44 @@ template stationPlay(stations, radius = 1.6, height = 2, margin = 0.25, near = 0
         local $"fit{i}n{k + 1}" = $"fit{i}n{k}" and (bodyState(each, need.register) >= need.atLeast)
       }
     }
-    mode: Level
+    // Whether the body still stands in the reach of the station it is near, and the first station it would enter.
+    local kept0 = 0
     for (station, i) in gated {
-      if near == i + 1 and not (stationReach(station, px, py, pz, radius + margin, height) and $"fit{i}n{length(station.needs)}") {
-        stationNear[$each] = 0
-      }
-      if near == 0 and stationReach(station, px, py, pz, radius, height) and $"fit{i}n{length(station.needs)}" {
-        stationNear[$each] = i + 1
-      }
+      local $"kept{i + 1}" = $"kept{i}" or (near == i + 1 and stationReach(station, px, py, pz, radius + margin, height) and $"fit{i}n{length(station.needs)}")
     }
+    local $"first{count}" = 0
+    for j in range(0, count) {
+      local $"first{count - 1 - j}" = (stationReach(gated[count - 1 - j], px, py, pz, radius, height) and $"fit{count - 1 - j}n{length(gated[count - 1 - j].needs)}") ? (count - j) : $"first{count - j}"
+    }
+    local target = $"kept{count}" ? near : first0
+    when stationNear[$each] != target
+    mode: Level
+    stationNear[$each] = target
   }
 
-  // The context button engages the station in reach, standing the body at its spawn point, and leaves the one engaged.
+  // The context button engages the station in reach and leaves the one engaged: one answer, written once.
+  // `station-pose` carries the change to the body.
   rule "station-use" {
     forEach: $players
-    local at = stationAt[$each]
-    local near = stationNear[$each]
+    local target = (stationAt[$each] != 0) ? 0 : stationNear[$each]
     when channel(each, interact) >= 1
     mode: Edge
-    if at != 0 {
-      stationAt[$each] = 0
-      setBodyState(key: $each, state: "station", expression: 0)
+    stationAt[$each] = target
+  }
+  // Carries a change of `stationAt` to the body, once per change: its `station` register, and onto the station's spawn
+  // point when it engages one. `stationPosed` follows `stationAt`, so the gate closes as it fires; the rules that write
+  // `stationAt` write nothing else.
+  rule "station-pose" {
+    forEach: $players
+    local at = stationAt[$each]
+    when stationPosed[$each] != at
+    mode: Level
+    stationPosed[$each] = at
+    if at == 0 {
+      setBodyState(key: $each, state: "station", expression: 0.0)
     }
     for (station, i) in stations {
-      if at == 0 and near == i + 1 {
-        stationAt[$each] = i + 1
+      if at == i + 1 {
         setBodyState(key: $each, state: "station", expression: i + 1)
         pose(key: $each, spawnPoint: station.spawn)
       }
@@ -186,14 +206,12 @@ template stationPlay(stations, radius = 1.6, height = 2, margin = 0.25, near = 0
     when channel(each, cancel) >= 1 and stationAt[$each] != 0
     mode: Edge
     stationAt[$each] = 0
-    setBodyState(key: $each, state: "station", expression: 0.0)
   }
   rule "station-drift" {
     forEach: $players
     when stationAt[$each] != 0 and stationNear[$each] != stationAt[$each]
     mode: Level
     stationAt[$each] = 0
-    setBodyState(key: $each, state: "station", expression: 0.0)
   }
 
   // An engaged seat's camera eases to its station's camera: one framing whose program picks the station's camera by the

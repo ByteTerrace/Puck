@@ -936,8 +936,8 @@ template displayPlacements() {
 // gallery.show write an exhibit's name to (`gallery`, the entrance, stands at no display).
 //
 // A console's list: `galleryScroll` is the catalog index its top row shows, and the row cells (keyed `<display>-<row>`)
-// hold each row's catalog index, title, group and ink, the chosen row lit; `galleryRowsAt` and `galleryRowsChosen` are
-// the scroll and the choice the rows were last written for. A press on the list records the row it landed on, the
+// hold each row's catalog index, title, group and ink, the chosen row lit; `galleryRowsView` is the scroll and the
+// choice the rows were last written for, packed as one number (consoleView). A press on the list records the row it landed on, the
 // scroll it started from and the last row it passed (`galleryPress`, `galleryPressRow`, `galleryPressScroll`,
 // `galleryDragRow`), and `galleryDragged` whether it moved; `galleryStepAt` is the mailbox gallery.step writes a step to.
 //
@@ -952,6 +952,9 @@ let reachPoint = exhibitPoint(reachStation, [-0.35, 1.45, 0.25])
 // A display's default exhibit, which its cells hold at boot, and the scroll its list boots at: that exhibit on the top row,
 // unless the catalog's end comes first.
 function displayFirst(index) = galleryCatalog[galleryDisplayDefaults[index]]
+// A console's scroll and choice packed as one number, so one cell says what its rows were written for.
+let consoleViewStride = 4096
+function consoleView(scroll, chosen) = ((scroll * consoleViewStride) + chosen)
 function consoleScrollAt(index) = minimum(galleryDisplayDefaults[index], consoleScrollLast)
 // Every row of every console's list as it boots: its cells' key, and the catalog entry it shows.
 let consoleSlots = flatMap(
@@ -978,8 +981,7 @@ template displayState() {
   displayCells(name: "galleryShownAt", values: galleryDisplayDefaults)
   displayCells(name: "galleryPlace", values: map(galleryDisplayDefaults, shown => (shown + 1)))
   displayCells(name: "galleryScroll", values: map(range(0, length(galleryDisplays)), index => consoleScrollAt(index)))
-  displayCells(name: "galleryRowsAt", values: map(range(0, length(galleryDisplays)), index => consoleScrollAt(index)))
-  displayCells(name: "galleryRowsChosen", values: galleryDisplayDefaults)
+  displayCells(name: "galleryRowsView", values: map(range(0, length(galleryDisplays)), index => consoleView(consoleScrollAt(index), galleryDisplayDefaults[index])))
   displayCells(name: "galleryPress", values: map(galleryDisplays, display => 0))
   displayCells(name: "galleryPressRow", values: map(galleryDisplays, display => -1))
   displayCells(name: "galleryPressScroll", values: map(range(0, length(galleryDisplays)), index => consoleScrollAt(index)))
