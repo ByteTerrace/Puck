@@ -111,7 +111,14 @@ is corrected in the same change.
 - `inputHistory` sizes retention, ring capacity, events per step, lateness,
   calibration and the judged clock (`Capture` or `Admission`). An overflowing
   batch is refused whole and resets the owner into a new epoch; history is
-  never truncated. Size it for the rate and sample density
+  never truncated. A remote seat's packets that arrive bunched (a stalled link
+  delivering a burst) are not overflow: `WorldTick.ApplyFederatedIntents`
+  admits what the owner has room for (`WorldInputOwner.Room`) and holds the
+  rest, in order, for later ticks (`world.tick.federated-carried`). A client
+  seat adopts a new owner at its authority (a re-admitted traveller is a new
+  peer generation, numbering epochs from one) by its publication's owner,
+  body and generation (`WorldSeatInput.OwnerIncarnation`), never refusing it
+  as older. Size it for the rate and sample density
   ([bindings.md](references/bindings.md)). A `forEach: $inputEvents:<owner>`
   rule binds only the step's events and is priced at `maximumEventsPerStep`
   plus the terminal cancellations (`WorldInputIteration.StepCapacity`); a read

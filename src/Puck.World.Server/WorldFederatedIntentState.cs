@@ -11,7 +11,12 @@ namespace Puck.World.Server;
 /// <param name="Active">Whether the slot currently holds a live stream.</param>
 /// <param name="Pending">Ordered, owned packets awaiting the next authoritative interval.</param>
 public readonly record struct WorldFederatedIntentState(long LeaseId, Principal Principal, IntentSubmission? Submission, bool Active,
-    ReadOnlyMemory<IntentSubmission> Pending = default);
+    ReadOnlyMemory<IntentSubmission> Pending = default) {
+    /// <summary>The most packets one slot queues: a delivery delayed and then bunched by a loaded host or a wide-area link
+    /// is held and admitted over the ticks after it, so the bound is a sender this far behind (about half a minute at
+    /// thirty ticks a second), past which its episode is cancelled. Checkpoints and their wire refuse a longer queue.</summary>
+    public const int MaximumPending = 1024;
+}
 /// <summary>Replay/checkpoint state for one federated owner. Socket lease identities remain transport-local.</summary>
 public readonly record struct WorldFederatedIntentCheckpoint(int Index, Principal Principal, IntentSubmission? Submission,
     ReadOnlyMemory<IntentSubmission> Pending);

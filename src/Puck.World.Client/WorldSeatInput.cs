@@ -152,15 +152,26 @@ public sealed class WorldSeatInput {
     private ulong m_admittedTick;
     // The admissions sent and not yet answered. An answer arrives on whichever thread the link completes on.
     private int m_admissionsUnanswered;
-    /// <summary>Installs a matching publication and rebuilds the controller's kept physical/latch image.</summary>
+    /// <summary>Gets which owner at its authority this seat's input last reconciled with: it moves whenever a publication
+    /// names another principal, body or body generation (a re-admitted traveller is a new peer generation), whose input
+    /// epochs and event sequences count afresh. A sent batch is timed only against answers of its own incarnation
+    /// (<see cref="WorldSeatSentInput.Record"/>). Unique across every seat of the process; zero before any.</summary>
+    public long OwnerIncarnation { get; private set; }
+    private static long OwnerIncarnations;
+    private (Principal Owner, int Body, int Generation) m_owner;
+
+    /// <summary>Installs a matching publication and rebuilds the controller's kept physical/latch image. Within one
+    /// owner's stream a publication older than the one installed is refused; another owner's publication starts a new
+    /// incarnation whatever its numbers, since the owner it names counts its revisions and epochs from one.</summary>
     public bool Reconcile(in WorldInputPublication publication, SeatController seat, InputRouter? router = null, int slot = 0) {
         var sources = publication.Sources.Span;
+        var restart = ((OwnerIncarnation == 0) || (m_owner != (publication.Owner, publication.Body, publication.Generation)));
 
         if (
             (sources.Length != m_contracts.Length) ||
             (publication.Mapping >= m_catalog.Mappings.Length) ||
-            (publication.Revision < m_producer.Revision) ||
-            ((publication.Revision == m_producer.Revision) && (publication.Epoch < m_producer.Epoch))
+            (!restart && ((publication.Revision < m_producer.Revision) ||
+                ((publication.Revision == m_producer.Revision) && (publication.Epoch < m_producer.Epoch))))
         ) {
             m_admitted = false;
             return false;
@@ -171,8 +182,12 @@ public sealed class WorldSeatInput {
                 return false;
             }
         }
-        if (m_admitted && (publication.Revision == m_producer.Revision) && (publication.Epoch == m_producer.Epoch)) { return true; }
-        m_producer.Reconcile(publication.Revision, publication.Epoch, m_catalog.Mappings[publication.Mapping], publication.Baseline, sources);
+        if (!restart && m_admitted && (publication.Revision == m_producer.Revision) && (publication.Epoch == m_producer.Epoch)) { return true; }
+        m_producer.Reconcile(publication.Revision, publication.Epoch, m_catalog.Mappings[publication.Mapping], publication.Baseline, sources, restart);
+        if (restart) {
+            m_owner = (publication.Owner, publication.Body, publication.Generation);
+            OwnerIncarnation = Interlocked.Increment(location: ref OwnerIncarnations);
+        }
         // A new epoch ends every guess: its edges belong to the epoch the authority closed.
         Array.Clear(array: m_edgeSequence);
         Array.Clear(array: m_answeredSequence);
