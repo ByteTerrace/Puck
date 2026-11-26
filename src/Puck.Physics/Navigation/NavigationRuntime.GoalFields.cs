@@ -318,21 +318,21 @@ public sealed partial class NavigationRuntime {
         public Task<NavigationGoalField>? Task { get; set; }
     }
 
-    // Freezes one derivation's inputs: bakes and joins the goal's network, and takes each member's route graph.
-    private GoalFieldJob Freeze(int goalDomain, int goalCell, NavigationCostProfile profile) {
-        var members = NetworkOf(goalDomain: goalDomain);
+    // The junctions among each network's cells as a derivation reads them, by the network's first domain, with the
+    // members and the junction table's revision they were taken at. Invariant: a snapshot is never written after it is
+    // made, so every derivation of a network shares one, on whichever thread it runs; it is a function of the junction
+    // table, which only Link writes (m_junctionRevision), and of the network's members, and FrozenJunctions, the one
+    // door a job takes it by, makes another when either has moved.
+    private readonly Dictionary<int, (Domain[] Members, long Revision, Dictionary<int, int[]> Junctions)> m_frozenJunctions = [];
 
-        JoinNetwork(members: members);
+    private Dictionary<int, int[]> FrozenJunctions(Domain[] members, int[] memberOf) {
+        var network = Array.IndexOf(array: m_domains, value: members[0]);
 
-        var memberOf = new int[m_domains.Length];
-        var graphs = new RouteGraph[members.Length];
-        var areas = new byte[]?[members.Length];
+        if (m_frozenJunctions.TryGetValue(key: network, value: out var frozen) && (frozen.Revision == m_junctionRevision) && (frozen.Members.Length == members.Length)) {
+            var same = true;
 
-        Array.Fill(array: memberOf, value: -1);
-        for (var member = 0; (member < members.Length); member++) {
-            memberOf[Array.IndexOf(array: m_domains, value: members[member])] = member;
-            graphs[member] = members[member].GoalGraph();
-            areas[member] = (profile.IsNeutral ? null : members[member].GoalAreas());
+            for (var member = 0; (same && (member < members.Length)); member++) { same = ReferenceEquals(objA: frozen.Members[member], objB: members[member]); }
+            if (same) { return frozen.Junctions; }
         }
 
         var junctions = new Dictionary<int, int[]>();
@@ -352,6 +352,25 @@ public sealed partial class NavigationRuntime {
             partners.CopyTo(array: kept);
             junctions[node] = kept;
         }
+        m_frozenJunctions[network] = (members, m_junctionRevision, junctions);
+        return junctions;
+    }
+    // Freezes one derivation's inputs: bakes and joins the goal's network, and takes each member's route graph.
+    private GoalFieldJob Freeze(int goalDomain, int goalCell, NavigationCostProfile profile) {
+        var members = NetworkOf(goalDomain: goalDomain);
+
+        JoinNetwork(members: members);
+
+        var memberOf = new int[m_domains.Length];
+        var graphs = new RouteGraph[members.Length];
+        var areas = new byte[]?[members.Length];
+
+        Array.Fill(array: memberOf, value: -1);
+        for (var member = 0; (member < members.Length); member++) {
+            memberOf[Array.IndexOf(array: m_domains, value: members[member])] = member;
+            graphs[member] = members[member].GoalGraph();
+            areas[member] = (profile.IsNeutral ? null : members[member].GoalAreas());
+        }
 
         return new GoalFieldJob {
             Areas = areas,
@@ -359,7 +378,7 @@ public sealed partial class NavigationRuntime {
             GoalDomain = goalDomain,
             GoalNode = (m_offsets[goalDomain] + goalCell),
             Graphs = graphs,
-            Junctions = junctions,
+            Junctions = FrozenJunctions(memberOf: memberOf, members: members),
             MediumRevisions = members.Select(selector: static domain => domain.MediumValueRevision).ToArray(),
             MemberOf = memberOf,
             Members = members,

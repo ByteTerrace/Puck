@@ -258,7 +258,9 @@ or one adds a field the other forgets.
   `SdfVm` test helpers and `MeshCpuBake`, now one `SdfMeshBakeRequest.SampleAt`
   (`src/Puck.SdfVm/SdfMeshPathBake.cs`).
 - The test copies of a `NativeMemory`-backed `IAllocator` named
-  `HeapAllocator`, now one `tests/Shared/HeapAllocator.cs`.
+  `HeapAllocator`, now the engine's own `SystemAllocator`
+  (`src/Puck.Abstractions/Memory/SystemAllocator.cs`), which owned storage
+  falls back to when no host installed an allocator.
 - The box cull is written in C# and HLSL (`SdfMeshCull.Keeps`,
   `sdf-mesh-selection.hlsli`).
 - Every primitive and blend the fixed-point evaluator and the kernels both

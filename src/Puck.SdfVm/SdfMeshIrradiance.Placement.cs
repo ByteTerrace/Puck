@@ -32,7 +32,7 @@ public sealed partial class SdfMeshIrradiance {
         var next = new int[count];
         // A probe's saved words are written in Place before the result loop reads them, so the scratch keeps stale words
         // only for probes that read none. Rented for the batch alone and returned once its results are read.
-        using var savedLease = RentedArrays.Rent<uint>(minimumLength: (count * SdfMeshProbeDepth.HitWords), array: out var savedHits);
+        using var savedHits = OwnedBuffer<uint>.OfLength(allocator: m_allocator, clear: false, length: (count * SdfMeshProbeDepth.HitWords));
         var indices = new List<int>(count);
         var clearance = SdfMeshIrradianceProbe.Clearance;
         var trace = GpuTrace;
@@ -71,7 +71,7 @@ public sealed partial class SdfMeshIrradiance {
         for (var i = 0; i < count; i++) {
             if (!candidates[first + i].Trace) { continue; }
             if (!valid[i]) {
-                savedHits.AsSpan(i * SdfMeshProbeDepth.HitWords, SdfMeshProbeDepth.HitWords).CopyTo(block.Hits(i));
+                savedHits.GetSpan().Slice(i * SdfMeshProbeDepth.HitWords, SdfMeshProbeDepth.HitWords).CopyTo(block.Hits(i));
                 SummarizeHits(block.Hits(i), block.Sky(i), out inside[i]);
                 offsets[i] = Vector3.Zero;
             }
@@ -87,7 +87,7 @@ public sealed partial class SdfMeshIrradiance {
 
         void Place() {
             foreach (var i in indices) {
-                block.Hits(i).CopyTo(savedHits.AsSpan(i * SdfMeshProbeDepth.HitWords));
+                block.Hits(i).CopyTo(savedHits.GetSpan().Slice(i * SdfMeshProbeDepth.HitWords));
                 near[i] = scene.TryNearestSurface(centres[i], clearance, out var surface, out var normal, out _);
                 valid[i] = inside[i] <= SdfMeshIrradianceProbe.InsideShare && !near[i];
                 if (valid[i]) { continue; }
@@ -127,11 +127,10 @@ public sealed partial class SdfMeshIrradiance {
                 for (var j = 0; j < slots.Length; j++) {
                     slots[j] = fresh[indices[j]] = AllocateGpuHits(layout: layout, lows: lows);
                 }
-                var hits = trace.Trace(scene, origins, slots, GpuHitCapacity, reuse: m_gpuAnswer);
-                m_gpuAnswer = hits;
+                var hits = trace.Trace(scene, origins, slots, GpuHitCapacity, answer: GpuAnswer);
                 for (var j = 0; j < indices.Count; j++) {
                     var i = indices[j];
-                    hits.AsSpan(j * SdfMeshProbeDepth.HitWords, SdfMeshProbeDepth.HitWords).CopyTo(block.Hits(i));
+                    hits.Slice(j * SdfMeshProbeDepth.HitWords, SdfMeshProbeDepth.HitWords).CopyTo(block.Hits(i));
                     SummarizeHits(block.Hits(i), block.Sky(i), out inside[i]);
                 }
             } else {
@@ -161,11 +160,10 @@ public sealed partial class SdfMeshIrradiance {
                 origins[j] = new Vector4(centres[trialProbes[j]] + trialOffsets[j], layout.Reach);
                 roundSlots.Add(AllocateGpuHits(layout: layout, lows: lows));
             }
-            var hits = trace.Trace(scene, origins, roundSlots.ToArray(), GpuHitCapacity, reuse: m_gpuAnswer);
-            m_gpuAnswer = hits;
+            var hits = trace.Trace(scene, origins, roundSlots.ToArray(), GpuHitCapacity, answer: GpuAnswer);
             for (var j = 0; j < origins.Length; j++) {
                 var i = trialProbes[j];
-                var answer = hits.AsSpan(j * SdfMeshProbeDepth.HitWords, SdfMeshProbeDepth.HitWords);
+                var answer = hits.Slice(j * SdfMeshProbeDepth.HitWords, SdfMeshProbeDepth.HitWords);
                 if (!valid[i]) {
                     _ = SummarizeHits(answer, trialSky, out var trialInside);
                     if (trialInside <= SdfMeshIrradianceProbe.InsideShare) {

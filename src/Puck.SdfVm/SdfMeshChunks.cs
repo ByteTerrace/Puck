@@ -43,7 +43,7 @@ public static class SdfMeshChunks {
         using var scope = new RentedScope(allocator: allocator, owner: owner);
         var triangleCount = mesh.TriangleCount;
         var bins = new Dictionary<(int X, int Y, int Z), int>();
-        var binOf = scope.Rent<int>(minimumLength: triangleCount);
+        var binOf = scope.Buffer<int>(length: triangleCount);
         var indices = held.Indices.Span;
         var normals = held.Normals.Span;
         var materials = held.TriangleMaterials.Span;
@@ -76,13 +76,13 @@ public static class SdfMeshChunks {
 
         // Each bin's triangles, in triangle order: its first triangle's place in `order` is starts[bin].
         var parts = bins.Count;
-        var starts = scope.Rent<int>(minimumLength: (parts + 1), clear: true);
-        var order = scope.Rent<int>(minimumLength: triangleCount);
+        var starts = scope.Buffer<int>(length: (parts + 1), clear: true);
+        var order = scope.Buffer<int>(length: triangleCount);
 
         for (var triangle = 0; (triangle < triangleCount); triangle++) { starts[(binOf[triangle] + 1)]++; }
         for (var part = 0; (part < parts); part++) { starts[(part + 1)] += starts[part]; }
 
-        var filledTo = scope.Rent<int>(minimumLength: parts, clear: true);
+        var filledTo = scope.Buffer<int>(length: parts, clear: true);
 
         for (var triangle = 0; (triangle < triangleCount); triangle++) {
             var part = binOf[triangle];
@@ -91,11 +91,12 @@ public static class SdfMeshChunks {
         }
 
         var vertexCounts = new int[parts];
-        var seen = scope.Rent<int>(minimumLength: positions.Length, clear: true);
+        var seen = scope.Buffer<int>(length: positions.Length, clear: true);
         var vertexCount = 0;
         for (var part = 0; part < parts; part++) {
             for (var at = starts[part]; (at < starts[(part + 1)]); at++) {
-                foreach (var source in indices.Slice(3 * order[at], 3)) {
+                foreach (var index in indices.Slice(3 * order[at], 3)) {
+                    var source = (int)index;
                     if (seen[source] == part + 1) { continue; }
                     seen[source] = part + 1;
                     vertexCounts[part]++;
@@ -109,11 +110,11 @@ public static class SdfMeshChunks {
         var joinedIndices = new uint[indices.Length];
         var joinedMaterials = new uint[materials.Length];
         var chunks = new SdfMesh[parts];
-        var localOf = scope.Rent<int>(minimumLength: positions.Length);
+        var localOf = scope.Buffer<int>(length: positions.Length);
         var sourceSites = mesh.Sites();
-        var siteOf = scope.Rent<int>(minimumLength: positions.Length);
-        siteOf.AsSpan(start: 0, length: positions.Length).Fill(value: -1);
-        seen.AsSpan(start: 0, length: positions.Length).Clear();
+        var siteOf = scope.Buffer<int>(length: positions.Length);
+        siteOf.GetSpan().Fill(value: -1);
+        seen.GetSpan().Clear();
         var vertexBase = 0;
         var triangleBase = 0;
         for (var part = 0; part < parts; part++) {
@@ -125,7 +126,7 @@ public static class SdfMeshChunks {
                 var triangle = order[(starts[part] + at)];
                 if (joinedMaterials.Length > 0) { joinedMaterials[triangleBase + at] = materials[triangle]; }
                 for (var corner = 0; corner < 3; corner++) {
-                    var source = indices[3 * triangle + corner];
+                    var source = (int)indices[3 * triangle + corner];
                     if (seen[source] != part + 1) {
                         seen[source] = part + 1;
                         localOf[source] = count;

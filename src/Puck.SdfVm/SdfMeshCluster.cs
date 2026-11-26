@@ -1,4 +1,6 @@
 using System.Numerics;
+using Puck.Abstractions.Memory;
+using Puck.Maths;
 
 namespace Puck.SdfVm;
 
@@ -11,9 +13,10 @@ namespace Puck.SdfVm;
 /// and stops at its error bound, cannot bound the count. Opposite faces of a part thinner than the cell stay apart,
 /// since they face into different bins. Vertices and triangles stream in (<see cref="Add"/>,
 /// <see cref="AddTriangle"/>), so no merged copy of the input is ever held. The result is a pure function of what was
-/// added, in the order it was added, and the cell; presentation alone. One instance is used from one thread.
+/// added, in the order it was added, and the cell; presentation alone. One instance is used from one thread. Its
+/// tables are native storage charged to its owner, released when it is disposed.
 /// </summary>
-public sealed class SdfMeshCluster {
+public sealed class SdfMeshCluster : IDisposable {
     /// <summary>The directions a vertex's normal is binned by: the six axes and the eight diagonals.</summary>
     public const int NormalBins = 14;
 
@@ -27,23 +30,41 @@ public sealed class SdfMeshCluster {
 
     private readonly float m_cell;
     private readonly float m_inverse;
-    private readonly Dictionary<(int X, int Y, int Z, int Bin), int> m_clusters = [];
-    private readonly List<(Vector3 Position, Vector3 Normal, int Count)> m_sums = [];
-    private readonly HashSet<(int A, int B, int C, uint Material)> m_triangles = [];
-    private readonly List<uint> m_indices = [];
-    private readonly List<uint> m_materials = [];
+    // A key wider than a word is found by a chain of exact pair lookups, each numbering the pairs it has met from zero:
+    // a cluster's cell and bin by (x, y), then (that, z), then (that, bin); a kept triangle by (a, b), then (that, c),
+    // then (that, material).
+    private readonly OwnedLongMap<int> m_columns;
+    private readonly OwnedLongMap<int> m_cells;
+    private readonly OwnedLongMap<int> m_clusters;
+    private readonly OwnedLongMap<int> m_edges;
+    private readonly OwnedLongMap<int> m_faces;
+    private readonly OwnedLongMap<byte> m_triangles;
+    private readonly OwnedBuffer<Sum> m_sums;
+    private readonly OwnedBuffer<uint> m_indices;
+    private readonly OwnedBuffer<uint> m_materials;
 
     /// <summary>Initializes a new instance of the <see cref="SdfMeshCluster"/> class.</summary>
     /// <param name="cell">The grid's cell, in the positions' units, positive and finite.</param>
+    /// <param name="allocator">The native allocator the tables come from, or <see langword="null"/> for the process's.</param>
+    /// <param name="owner">The workspace owner charged for the tables, or <see langword="null"/> for none.</param>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="cell"/> is not positive and finite.</exception>
-    public SdfMeshCluster(float cell) {
+    public SdfMeshCluster(float cell, IAllocator? allocator = null, IAllocationObserver? owner = null) {
         if (!(float.IsFinite(f: cell) && (cell > 0f))) { throw new ArgumentOutOfRangeException(paramName: nameof(cell), actualValue: cell, message: "A cell is positive and finite."); }
         m_cell = cell;
         m_inverse = (1f / cell);
+        m_columns = new OwnedLongMap<int>(allocator: allocator, observer: owner);
+        m_cells = new OwnedLongMap<int>(allocator: allocator, observer: owner);
+        m_clusters = new OwnedLongMap<int>(allocator: allocator, observer: owner);
+        m_edges = new OwnedLongMap<int>(allocator: allocator, observer: owner);
+        m_faces = new OwnedLongMap<int>(allocator: allocator, observer: owner);
+        m_triangles = new OwnedLongMap<byte>(allocator: allocator, observer: owner);
+        m_sums = new OwnedBuffer<Sum>(allocator: allocator, observer: owner);
+        m_indices = new OwnedBuffer<uint>(allocator: allocator, observer: owner);
+        m_materials = new OwnedBuffer<uint>(allocator: allocator, observer: owner);
     }
 
     /// <summary>Gets the triangles kept so far.</summary>
-    public int TriangleCount => m_materials.Count;
+    public int TriangleCount => m_materials.Length;
 
     /// <summary>Adds a vertex and returns the cluster it falls in.</summary>
     /// <param name="position">The vertex's position.</param>
@@ -51,17 +72,15 @@ public sealed class SdfMeshCluster {
     /// <returns>The cluster, which <see cref="AddTriangle"/> takes.</returns>
     public int Add(Vector3 position, Vector3 normal) {
         var scaled = (position * m_inverse);
-        var key = (((int)MathF.Floor(x: scaled.X)), ((int)MathF.Floor(x: scaled.Y)), ((int)MathF.Floor(x: scaled.Z)), BinOf(normal: normal));
+        var column = Numbered(map: m_columns, high: ((int)MathF.Floor(x: scaled.X)), low: ((int)MathF.Floor(x: scaled.Y)));
+        var cell = Numbered(map: m_cells, high: column, low: ((int)MathF.Floor(x: scaled.Z)));
+        var cluster = Numbered(map: m_clusters, high: cell, low: BinOf(normal: normal));
 
-        if (!m_clusters.TryGetValue(key: key, value: out var cluster)) {
-            cluster = m_sums.Count;
-            m_clusters.Add(key: key, value: cluster);
-            m_sums.Add(item: default);
-        }
+        if (cluster == m_sums.Length) { m_sums.Add(item: default); }
 
-        var sum = m_sums[cluster];
+        ref var sum = ref m_sums[cluster];
 
-        m_sums[cluster] = ((sum.Position + position), (sum.Normal + normal), (sum.Count + 1));
+        sum = new Sum(Count: (sum.Count + 1), Normal: (sum.Normal + normal), Position: (sum.Position + position));
         return cluster;
     }
     /// <summary>Adds a triangle over three clusters: one whose corners share a cluster is dropped, and one over the same
@@ -72,7 +91,12 @@ public sealed class SdfMeshCluster {
     /// <param name="material">The triangle's material.</param>
     public void AddTriangle(int a, int b, int c, uint material) {
         if ((a == b) || (b == c) || (a == c)) { return; }
-        if (!m_triangles.Add(item: Rotated(a: a, b: b, c: c, material: material))) { return; }
+
+        // The triangle's corners turned so the least comes first, keeping its winding.
+        var (first, second, third) = (((a < b) && (a < c)) ? (a, b, c) : ((b < c) ? (b, c, a) : (c, a, b)));
+        var face = Numbered(map: m_faces, high: Numbered(map: m_edges, high: first, low: second), low: third);
+
+        if (!m_triangles.TryAdd(key: PackedIntPair.Pack(high: face, low: unchecked((int)material)), value: 0)) { return; }
         m_indices.Add(item: ((uint)a));
         m_indices.Add(item: ((uint)b));
         m_indices.Add(item: ((uint)c));
@@ -80,13 +104,14 @@ public sealed class SdfMeshCluster {
     }
     /// <summary>Returns the clustered mesh: each cluster's mean position and normal, the triangles kept and their
     /// materials, its <see cref="SdfMesh.BakeCell"/> the cell, with no levels.</summary>
-    /// <returns>The mesh; one of no triangles when every triangle collapsed.</returns>
+    /// <returns>The mesh, in arrays of its own; one of no triangles when every triangle collapsed.</returns>
     public SdfMesh Build() {
-        var positions = new Vector3[m_sums.Count];
-        var normals = new Vector3[m_sums.Count];
+        var sums = m_sums.GetSpan();
+        var positions = new Vector3[sums.Length];
+        var normals = new Vector3[sums.Length];
 
-        for (var cluster = 0; (cluster < m_sums.Count); cluster++) {
-            var (position, normal, count) = m_sums[cluster];
+        for (var cluster = 0; (cluster < sums.Length); cluster++) {
+            var (position, normal, count) = sums[cluster];
             var length = normal.Length();
 
             positions[cluster] = (position / count);
@@ -96,7 +121,21 @@ public sealed class SdfMeshCluster {
             BakeCell = new Vector3(value: m_cell),
         };
     }
+    /// <summary>Releases the tables.</summary>
+    public void Dispose() {
+        m_columns.Dispose();
+        m_cells.Dispose();
+        m_clusters.Dispose();
+        m_edges.Dispose();
+        m_faces.Dispose();
+        m_triangles.Dispose();
+        m_sums.Dispose();
+        m_indices.Dispose();
+        m_materials.Dispose();
+    }
 
+    // The number of a pair in a map that numbers each pair it meets (OwnedLongMapNumbering.NumberOf).
+    private static int Numbered(OwnedLongMap<int> map, int high, int low) => map.NumberOf(key: PackedIntPair.Pack(high: high, low: low));
     private static int BinOf(Vector3 normal) {
         var best = 0;
         var most = float.NegativeInfinity;
@@ -111,8 +150,6 @@ public sealed class SdfMeshCluster {
         }
         return best;
     }
-    // The triangle's corners turned so the least comes first, keeping its winding.
-    private static (int, int, int, uint) Rotated(int a, int b, int c, uint material) => ((a < b) && (a < c))
-        ? (a, b, c, material)
-        : ((b < c) ? (b, c, a, material) : (c, a, b, material));
+
+    private readonly record struct Sum(Vector3 Position, Vector3 Normal, int Count);
 }
