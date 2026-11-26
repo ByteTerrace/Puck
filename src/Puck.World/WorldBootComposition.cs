@@ -1117,14 +1117,10 @@ public static class WorldBootComposition {
         // delivered document describes, compiled in this process from that document alone whichever process runs its
         // authority.
         // A remote seat's own body is predicted with the authority's own body step, which this process can reach.
-        services.AddSingleton(implementationFactory: static sp => {
-            var boot = sp.GetRequiredService<WorldDefinitionSource>().Definition;
-
-            return new WorldSeatPrediction(
-                client: sp.GetRequiredService<Puck.World.Client.WorldClient>(),
-                packageDocument: documentId => (string.Equals(a: documentId, b: boot.DocumentId, comparisonType: StringComparison.Ordinal) ? boot : null)
-            );
-        });
+        services.AddSingleton(implementationFactory: static sp => new WorldSeatPrediction(
+            client: sp.GetRequiredService<Puck.World.Client.WorldClient>(),
+            packageDocument: new WorldPackageDocuments(boot: sp.GetRequiredService<WorldDefinitionSource>()).Find
+        ));
         services.AddSingleton(implementationFactory: static sp => new Puck.World.Client.WorldSeatSenses(
             client: sp.GetRequiredService<Puck.World.Client.WorldClient>(),
             navigation: static (definition, previous) => WorldDocumentNavigation.Compile(definition: definition, previous: (previous as WorldDocumentNavigation)),
