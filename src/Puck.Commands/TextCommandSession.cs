@@ -53,6 +53,30 @@ public sealed class TextCommandSession : ITextCommandSink, IDisposable {
         DueNextTick = dueNextTick;
     }
 
+    /// <summary>Creates a session that acts exactly as this one does (its principal, slot, command guard, ambient
+    /// scope, simulation sink and due-tick rule) and reports each line it runs to <paramref name="onSettled"/> rather
+    /// than to this session's caller: the way a handler runs lines of its own as its caller and gathers their answers
+    /// into its one answer, so they never reach this session's caller as answers to lines it did not send. The child
+    /// shares no hold or barrier with this session; the caller disposes it once its lines have settled.</summary>
+    /// <param name="onSettled">The callback each line's settled result reaches, with the line.</param>
+    /// <returns>The child session.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="onSettled"/> is <see langword="null"/>.</exception>
+    public TextCommandSession CreateChild(Action<string, CommandResult> onSettled) {
+        ArgumentNullException.ThrowIfNull(argument: onSettled);
+
+        return new TextCommandSession(
+            authorize: Authorize,
+            dueNextTick: DueNextTick,
+            onResult: null,
+            onSettled: onSettled,
+            principal: Principal,
+            scope: Scope,
+            simulationSink: SimulationSink,
+            slot: Slot,
+            source: m_source
+        );
+    }
+
     internal Func<CommandMetadata, bool>? Authorize { get; }
     internal TextSubmissionBarrier Barrier => m_barrier;
     internal bool HasPendingSimulationSubmission => m_barrier.HasPending;

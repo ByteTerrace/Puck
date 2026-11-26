@@ -133,12 +133,17 @@ public abstract record WorldCommand(Principal Principal, int EntityIndex) {
         Principal,
         EntityIndex
     );
-    /// <summary>Stages player-owned durable action state for one explicit simulation tick.</summary>
+    /// <summary>Stages body register values for one explicit simulation tick: the <c>body.state-load</c> and
+    /// <c>body.register</c> wire path. A player's write (<see cref="Operator"/> false) reaches only the player-writable
+    /// durable registers of a body with an identity, inside their envelopes; an operator's write reaches any declared
+    /// register of any body, ephemeral ones included, inside its envelope, and the server refuses it unless
+    /// <see cref="Principal"/> is an operator.</summary>
     /// <param name="Principal">The acting identity.</param>
     /// <param name="EntityIndex">The 0-based entity index.</param>
     /// <param name="Tick">The simulation tick at whose boundary the values enter.</param>
     /// <param name="Values">Named fixed-point counter or exact timer values.</param>
-    public sealed record LoadDurableState(Principal Principal, int EntityIndex, ulong Tick, IReadOnlyList<DurableStateValue> Values) : WorldCommand(
+    /// <param name="Operator">Whether this is an operator's write, which the server admits only from an operator.</param>
+    public sealed record StageRegisters(Principal Principal, int EntityIndex, ulong Tick, IReadOnlyList<DurableStateValue> Values, bool Operator) : WorldCommand(
         Principal,
         EntityIndex
     );

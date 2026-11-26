@@ -23,6 +23,7 @@
     { "name": "body.press", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "body.reconcile", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "body.reel", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "body.register", "bindable": false, "audience": "operator", "valueKind": "digital", "wireArgs": true },
     { "name": "body.release", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "body.rig", "bindable": true, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "body.state", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
