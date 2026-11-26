@@ -7,13 +7,14 @@
 // the motion exhibits' console controls) inside its `state.world` block. The displays stand inside the gallery
 // (gallery/gallery.puck), where its plan puts them (gallery/layout.puck, gallery.md):
 //
-//   level 0  shape and surface, in the nave's five pairs from the west: cel styles with palette channels and wear,
+//   level 0  shape and surface, in six pairs from the west: glass and warps II under the bridge, cel styles with palette
+//            channels and wear,
 //            sweeps and facets with parameter forms, primitives at a uniform scale and extruded profiles, stretched
 //            primitives and revolved profiles, every shape blend and the domain folds
 //   level 1  open: its balconies hold no displays yet
-//   level 2  motion: the stamp pool's rotation, swings, slides, moving blends, paints, IK and frames, and warps II; the
+//   level 2  motion: the stamp pool's rotation, swings, slides, moving blends, paints, IK and frames; the
 //            board game room fills its south gallery (gallery.md)
-//   level 3  glass
+//   level 3  open: its galleries hold no displays yet
 //
 // A sign hangs beside each display naming its group, a map board in the lobby by the entrance lists the levels and
 // groups, and a board over the lift door names each level. Each display has a spawn point before its console, named
@@ -104,10 +105,10 @@ let surfaceLevel = 3
 
 // The levels, in walking order: the board over each lift door names its level and what it shows.
 let galleryLevels = [
-  { level: 0, title: "LEVEL 0  SHAPE AND SURFACE", what: "styles, surfaces, facets, forms, primitives, profiles, blends, folds" }
+  { level: 0, title: "LEVEL 0  SHAPE AND SURFACE", what: "glass, warps, styles, surfaces, facets, forms, primitives, profiles, blends, folds" }
   { level: 1, title: "LEVEL 1  BALCONIES", what: "open galleries over the nave" }
-  { level: 2, title: "LEVEL 2  MOTION AND GAMES", what: "the stamp pool's motion, warps II, the board game room" }
-  { level: 3, title: "LEVEL 3  GLASS", what: "glass over the opaque image" }
+  { level: 2, title: "LEVEL 2  MOTION AND GAMES", what: "the stamp pool's motion, the board game room" }
+  { level: 3, title: "LEVEL 3  GALLERIES", what: "open galleries over the nave" }
 ]
 
 // The display stations in walking order, each showing one group of the gallery's exhibits: its id (the key of its state
@@ -151,8 +152,8 @@ let galleryDisplayRows = [
     x: 34, z: displayNorth, yaw: 0
   }
   {
-    id: "warps", title: "WARPS II", level: motionLevel, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph"
-    x: 48, z: displayNorth, yaw: 0
+    id: "warps", title: "WARPS II", level: 0, names: warpRow, what: "domain warp, sine relief, lattices, stairs, morph"
+    x: (displayNaveXs[0] - (25 * galleryTile)), z: displayNaveNorth, yaw: 0
   }
   {
     id: "forms", title: "FORMS", level: 0, names: formRow, what: "exponents, tapers, paths, a braid"
@@ -168,9 +169,9 @@ let galleryDisplayRows = [
     x: (displayNaveXs[0] - (17 * galleryTile)), z: displayNaveSouth, yaw: 180
   }
   {
-    id: "glass", title: "GLASS", level: surfaceLevel, names: glassRow
+    id: "glass", title: "GLASS", level: 0, names: glassRow
     what: "glass over the opaque image: tint, depth, refraction, frost"
-    x: 44, z: displaySouth, yaw: 180
+    x: (displayNaveXs[0] - (25 * galleryTile)), z: displayNaveSouth, yaw: 180
   }
 ]
 // Every display stands on a floor tile's centre (layout.puck's module), so its pad lies square on the tiles.

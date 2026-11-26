@@ -17,9 +17,11 @@
 //
 // A body's size is its `size` register (bodies.scale, size.puck): a crossing multiplies it by the pair's scale and
 // refuses one that would leave the register's 0.25 .. 1. The register crosses with her to the garden and the night
-// field, which declare it too. Every value in this file is a world coordinate, except inside
+// field, which declare it too. Every value in this file is a world coordinate as authored against the lobby's west wall at x 10.3, which the
+// placements and spawn points move with the wall by layout.puck's `galleryWestShift`, except inside
 // the two paintings, which are authored in their own frame (x across the canvas, y up, z out of the wall).
 import "../standard/bounds"
+import "gallery/layout"
 import "painting-kit"
 
 let wonderWall = "#6FA6A8"
@@ -103,9 +105,9 @@ destinations [
 
 spawnPoints [
   // Three metres in front of the big painting in the gallery lobby, facing it; walk ahead to go through.
-  { id: "wonderland", position [13.3, wonderFloorTop, wonderZ], yawDegrees: 90 }
+  { id: "wonderland", position [(13.3 + galleryWestShift), wonderFloorTop, wonderZ], yawDegrees: 90 }
   // Outside the room's own doorway, facing in: walk in at whatever size she is.
-  { id: "wonderland-room", position [4.5, 0, 21.5], yawDegrees: 180 }
+  { id: "wonderland-room", position [(4.5 + galleryWestShift), 0, 21.5], yawDegrees: 180 }
 ]
 
 // A door onto its twin and a window showing what lies past it, rippling as the painting wing's do.
@@ -116,33 +118,33 @@ template wonderFace(counterpart) {
 placements {
   placement "wonderland-door" {
     prototype: "wonderland-door"
-    position [bigDoorX, wonderFloorTop, wonderZ]
+    position [(bigDoorX + galleryWestShift), wonderFloorTop, wonderZ]
     yawDegrees: 270
     wonderFace(counterpart: "wonderland-mouse-hole/glass")
   }
 
   placement "wonderland-mouse-hole" {
     prototype: "wonderland-mouse-hole"
-    position [smallDoorX, wonderFloorTop, wonderZ]
+    position [(smallDoorX + galleryWestShift), wonderFloorTop, wonderZ]
     yawDegrees: 90
     wonderFace(counterpart: "wonderland-door/glass")
   }
 
   placement "wonderland-room" {
     prototype: "wonderland-room"
-    position [0, 0, 0]
+    position [galleryWestShift, 0, 0]
     solid
   }
 
   placement "wonderland-stairs" {
     prototype: "wonderland-stairs"
-    position [0, 0, 0]
+    position [galleryWestShift, 0, 0]
     solid
   }
 
   placement "wonderland-cable" {
     prototype: "wonderland-cable"
-    position [0, 0, 0]
+    position [galleryWestShift, 0, 0]
   }
 }
 

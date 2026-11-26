@@ -1,7 +1,7 @@
 // The gallery's plan, every dimension the building and what stands in it are placed by (gallery.md beside this file
 // draws it). A module library: it hands its importers lets and functions and emits no document.
 //
-// Positions are in the building's own frame, metres: x runs east from the west wall's outer face (0 .. 63.1), z north
+// Positions are in the building's own frame, metres: x runs east from the hall's old west face (the west wall now stands at `galleryWestOut`, -3.75), z north
 // from the south wall's outer face (0 .. 36.85), y up from the ground. The building's rows are placed under one root
 // placement, `gallery` (gallery.puck), so a world stands the building by giving that row a position and a turn; the
 // yaw of a row here is the row's own, with yaw 0 facing -z (south) and yaw 180 facing +z, as a placement's does.
@@ -42,7 +42,18 @@ let naveMid = ((naveSouth + naveNorth) / 2)
 let arcadeSouth = (naveSouth - (galleryTile / 2))
 let arcadeNorth = (naveNorth + (galleryTile / 2))
 let arcadePitch = 5
-let arcadeXs = map(range(0, 11), i => (naveWest + (arcadePitch * i)))
+// The arcades run on under the bridge three bays west of the nave's void, so the west hall is arcaded as the nave is
+// and holds a pair of displays of its own; the westmost pier stands against the west wall, as the eastmost does the
+// east wall.
+let arcadeWestBays = 3
+let arcadeXs = map(range(0, 14), i => (naveWest + (arcadePitch * (i - arcadeWestBays))))
+// The west wall: its inner face lies on the tile edge the westmost pier's foot ends at. The hall grew west past the
+// plan's x 0 (the old outer face), so the wall stands at negative x and the plan's other dimensions keep their values.
+let galleryWestIn = (arcadeXs[0] - (galleryTile / 2))
+let galleryWestOut = (galleryWestIn - galleryWall)
+// How far east, in metres, the west wall's inner face now stands of world x 10.3, where the rooms against it were
+// authored: Wonderland's room and its devices behind it, the desktop and the press before it.
+let galleryWestShift = ((22 - naveWest) + galleryWestIn - 10.3)
 // The footprint's east end: the arcades' last pier stands against the east wall, whose inner face lies on the tile edge
 // that pier's foot ends at, so the room ends at a full tile and the arcades' last arches close on that pier.
 let galleryEast = ((arcadeXs[(length(arcadeXs) - 1)] + (galleryTile / 2)))

@@ -30,6 +30,7 @@
 // engage, reset and eject each one, and the camera lines that frame each device.
 
 import "../standard/kits"
+import "gallery/layout"
 
 // The room's floor top (wonderland.puck).
 let deviceFloor = 0.05
@@ -39,9 +40,9 @@ let plinthTop = 0.8
 // Where each device stands on the floor. Every placement turns -90 degrees about up, so a device's front, -Z in its
 // own frame, faces +X: a prototype offset (dx, dy, dz) at no yaw lands at (-dz, dy, dx) from its placement, and a
 // screen's axes turn the same way (the screens below).
-let deckAt = [1.4, deviceFloor, 30.5]
-let advancedAt = [5, deviceFloor, 31.6]
-let brickAt = [6.6, deviceFloor, 29.4]
+let deckAt = [(1.4 + galleryWestShift), deviceFloor, 30.5]
+let advancedAt = [(5 + galleryWestShift), deviceFloor, 31.6]
+let brickAt = [(6.6 + galleryWestShift), deviceFloor, 29.4]
 let deviceYaw = -90
 
 let devicePlinth = { color: "#3A3F47", roughness: 0.85 }

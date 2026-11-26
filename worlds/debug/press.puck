@@ -13,8 +13,8 @@ import "score"
 // Where the bench stands (its creation's floor, against the lobby's west wall whose inner face is x = 10.3, between
 // the hanging map board and the desktop computer), and where the seat stands to work it: square in front of the bed,
 // an arm's length out from its foot. The bench faces +X into the room, so its own +Z is the world's +X.
-let pressAt = [11.15, galleryFloor[0], 20.2]
-let pressStand = [12.6, galleryFloor[0], 20.2]
+let pressAt = [(11.15 + galleryWestShift), galleryFloor[0], 20.2]
+let pressStand = [(12.6 + galleryWestShift), galleryFloor[0], 20.2]
 
 // The seated view: an eye over the seat's shoulder looking down the bed, so a slug's word reads upright and the
 // proof stands behind it. `pressNear` stops short of the bed, so the seated body draws nothing between the two.
