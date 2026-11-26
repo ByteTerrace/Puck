@@ -109,8 +109,8 @@ public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Dat
     }
 }
 /// <summary>A paint: a <see cref="SdfPaintShape"/> placed in a frame, whose inside gives the surface of its material
-/// <see cref="Color"/>, with an edge antialiased over the pixel's footprint. The views pass evaluates it at the hit
-/// alone, so it never changes the field or the bake and its edge is as sharp as the pixel. With
+/// <see cref="Color"/>, with an edge antialiased over the pixel's footprint, or feathered over <see cref="Softness"/>
+/// where that is wider. The views pass evaluates it at the hit alone, so it never changes the field or the bake. With
 /// <see cref="Stroke"/> zero the paint fills the shape; with a positive stroke it paints the band within that distance
 /// of the shape's surface (a plane stroked at a half-width is a stripe, an ellipse prism stroked is a ring).</summary>
 /// <param name="Shape">The shape the paint covers, in its own frame.</param>
@@ -125,7 +125,9 @@ public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Dat
 /// shape and a glyph, the glyphs laid out in the shape's bound box on its local XY plane and projected along local Z;
 /// a slot the host supplies no glyphs for draws nothing. Its shape must be bounded.</param>
 /// <param name="Repeat">The lattice the paint repeats on, or <see langword="null"/> for a paint drawn once.</param>
-public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Rotation, float Stroke, Vector3 Color, int Slot = SdfPaint.WinningFrame, int Text = SdfPaint.NoText, SdfPaintRepeat? Repeat = null) {
+/// <param name="Softness">The width, in the paint frame's units, its edge feathers over, centred on the shape's surface
+/// (or the stroke's edge); zero for an edge antialiased over the pixel alone.</param>
+public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Rotation, float Stroke, Vector3 Color, int Slot = SdfPaint.WinningFrame, int Text = SdfPaint.NoText, SdfPaintRepeat? Repeat = null, float Softness = 0f) {
     /// <summary>The <see cref="Slot"/> of a paint in the frame of the slot that owns the hit.</summary>
     public const int WinningFrame = -1;
     /// <summary>The <see cref="Text"/> of a paint that covers its whole shape.</summary>
@@ -153,6 +155,7 @@ public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Ro
         float.IsFinite(f: paint.Rotation.LengthSquared()) &&
         (paint.Rotation.LengthSquared() >= 1e-12f) &&
         float.IsFinite(f: paint.Stroke) && (paint.Stroke >= 0f) &&
+        float.IsFinite(f: paint.Softness) && (paint.Softness >= 0f) &&
         VectorFunctions.IsFinite(vector: paint.Color) &&
         (paint.Color.X >= 0f) && (paint.Color.Y >= 0f) && (paint.Color.Z >= 0f) &&
         (paint.Slot >= WinningFrame) &&

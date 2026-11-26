@@ -265,7 +265,8 @@ public sealed class WorldRigReads {
     }
     /// <summary>Probes the presentation query field for a surface (<see cref="WorldEffectorSolver.TryProbeSurface"/>).</summary>
     /// <param name="read">One of the rig's <see cref="CreationRigReadKind.Probe"/> reads.</param>
-    /// <param name="answer">The probe's held answer, which a bit-identical next question reuses.</param>
+    /// <param name="answer">The probe's held answer, which a bit-identical next question reuses and a nearby one over
+    /// the same smooth surface is carried from.</param>
     /// <param name="origin">The probe's world origin.</param>
     /// <param name="towards">The probe direction, in the creation's frame.</param>
     /// <param name="rootRotation">The creation root's world attitude.</param>

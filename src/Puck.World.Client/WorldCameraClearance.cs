@@ -183,6 +183,12 @@ public sealed class WorldCameraClearance {
             // see: a few grid steps along the origin and along the boom's length are charged against the margin.
             return ((drift + ((4f + (8f * Length)) / 65536f)) <= Margin);
         }
+        // A room is a bound on a whole swept path, which nothing carries to another path short of sweeping it.
+        public bool TryProject(in ClearanceQuery asked, in float held, out float answer) {
+            answer = held;
+
+            return false;
+        }
         public float March() => WorldCameraClearance.March(field: Field, targetObstructed: TargetObstructed, target: Target, direction: Direction, length: Length,
             radius: (FixedQ4816.FromRawBits(value: Radius) + FixedQ4816.FromDouble(value: Margin)), scale: Scale, retractionSkin: RetractionSkin, obstructedSkin: ObstructedSkin);
 

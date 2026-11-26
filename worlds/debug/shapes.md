@@ -206,8 +206,8 @@ state is ordinary world state, so it replicates, journals, undoes and reads back
 
 `galleryCopy` in `shapes.puck` holds each exhibit's title and note, which
 `galleryTitles` and `galleryNotes` carry by catalog index for the screen rule to
-copy. A screen line draws at most 64 glyphs (`SdfSurfaceTextLayout.MaxGlyphs`),
-so a note stays under that.
+copy. The note strip wraps over two lines, so a note of up to about 180
+characters reads at its full size.
 
 ## Coverage
 
