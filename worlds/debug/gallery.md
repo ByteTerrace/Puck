@@ -159,12 +159,12 @@ and crossbars and drops its uprights and sill, so only a body small enough to
 pass between two crossbars (about 0.6 m apart) slips through. No rule sets them
 yet; `world.state.cell.set toyboxSlats south 1` opens one by hand.
 
-**The tree's sieves.** Each level-1 branch ([the central tree](#the-central-tree))
-dead-ends at a sieve: the lattice bay where it lands is barred 36 to the bay
-(layout.puck's `toyLatticeSieveCells`), so only a body already about a fifth of
-full size slips through. A full-size climber sees the toybox from the branch's
-tip and has to shrink or take the stairs or lift to reach it. Levels 2 and 3
-meet their branches through doorways (architecture.puck's `edgeDoorway`).
+**The tree's barriers.** Each level-1 branch ([the central tree](#the-central-tree))
+ends at a magic barrier filling the arch behind its bay: nested rainbow neon
+arches over a clear pane (architecture.puck's `rainbowArch`, the gallery's
+`gallery-barrier`), a dead end that tells a player there is a way across.
+Levels 2 and 3 meet their branches through doorways (architecture.puck's
+`edgeDoorway`).
 
 The other ways in, checked: the window bays and skylights are solid glass;
 the endless fall's hole in level 1's floor is covered from below by its
@@ -285,7 +285,7 @@ level 2's through a 1.5 m gap in the balustrade (`treeRailGap`), and level 3's
 step onto its open edge. Each branch's tip lies on the floor's edge, a few
 centimetres proud of it (`treeLandingLift`).
 
-**Level 1's branches give no size.** The owner's design: a level-1 branch is a dead end at a sieve that only a small body passes, so the branches lure a full-size climber toward the toybox without letting them in.
+**Level 1's branches give no size.** The owner's design: a level-1 branch ends at a magic barrier, so the branches lure a climber toward the toybox without letting them in; a carried pass is the way across.
 
 The tree's colours, bark relief and leaf clumping are look.puck's `lookTree`.
 `gallery.shot hall` stands just east of the roots.
@@ -559,7 +559,7 @@ first match winning:
 
 Outside these zones a body keeps the size it last took (the owner's design):
 only the stairs and the lift are the intended routes, so a small body that
-leaves level 1 another way, through a branch's sieve onto the tree, stays small.
+leaves level 1 another way, past a branch's barrier onto the tree, stays small.
 
 **The pass.** A body holding the `wonderPass` body register nonzero takes its
 full size in every zone, so level 1, its stairs and its lift keep its size. A

@@ -1256,6 +1256,55 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
   }
 }
 
+// A magic barrier filling an arch: a clear pane in the arch's shape (a half disc `radius` across over a rectangle down to
+// the floor from the spring line `spring` metres up), the part that collides, and nested inside its edge `hues` neon
+// arches, a rainbow, each a half circle on two legs, the outermost a hair inside the opening and each next `band` metres
+// inside it, drawn only. It stands on y 0, centred on x 0, facing ±Z. Its palette from `base`: the pane, then a neon a
+// hue, outermost first (rainbowArchPalette).
+function rainbowArchPalette(colors, glow = 300, pane = "#F4F8FF") = concat(
+  [{ color: pane, roughness: 0.02, glass { depth: 0.02, ior: 1.2 } }],
+  map(colors, c => { color: c, roughness: 0.3, emissive: glow })
+)
+// The point on a half circle `radius` about the spring line's middle at `degrees` from +X toward +Y.
+function rainbowArchPoint(radius, spring, degrees) = [(radius * cosine(degrees * 1deg)), (spring + (radius * sine(degrees * 1deg))), 0]
+template rainbowArch(base, radius, spring, hues, band = 0.2, tube = 0.035, segments = 6) {
+  shape Cylinder "rainbow-pane-disc" {
+    material: base
+    position [0, spring, 0]
+    rotation [0.7071068, 0, 0, 0.7071068]
+    scale [radius, 0.005, radius]
+  }
+  shape Box "rainbow-pane-legs" {
+    material: base
+    position [0, (spring / 2), 0]
+    scale [radius, (spring / 2), 0.005]
+  }
+  for k in range(0, hues) {
+    let r = ((radius - 0.06) - (k * band))
+    for n in range(0, segments) {
+      shape Sweep $"rainbow-arc-{k}-{n}" {
+        detail: true
+        material: ((base + 1) + k)
+        curve {
+          a: rainbowArchPoint(r, spring, ((180 * n) / segments))
+          b: rainbowArchPoint((r / cosine((90 / segments) * 1deg)), spring, ((180 * (n + 0.5)) / segments))
+          c: rainbowArchPoint(r, spring, ((180 * (n + 1)) / segments))
+          radiusStart: tube
+          radiusEnd: tube
+        }
+      }
+    }
+    for side in [-1, 1] {
+      shape Cylinder $"rainbow-leg-{k}-{side}" {
+        detail: true
+        material: ((base + 1) + k)
+        position [(side * r), (spring / 2), 0]
+        scale [tube, (spring / 2), tube]
+      }
+    }
+  }
+}
+
 // A pendant lamp hung from a ceiling at `at` (the ceiling point, +Y up): a rose against the ceiling, a cord down to a
 // drum shade `shade` in radius and `pendantShadeHeight` tall whose foot is `drop` metres under the ceiling, and across
 // the drum's foot a frosted diffuser `glow` in radius, the emitter, whose face's centre is `pendantGlowAt(at, drop)`:

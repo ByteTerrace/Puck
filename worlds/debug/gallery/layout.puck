@@ -357,10 +357,6 @@ let toyLatticeBar = 0.025
 // that holds every body (architecture.puck's `lattice` net): 3.5 cm rope, knot to knot every 30 cm, a climbing net's
 // mesh rather than a fence's.
 let toyLatticeNet = { strand: 0.035, pitch: 0.3 }
-// Where a level-1 branch meets the lattice it dead-ends at a sieve: a bay of bars spaced so that a body small enough
-// (about a fifth of the Moth, Alice's size and smaller) slips between them and a larger one cannot, so the branches
-// tempt a full-size climber toward the toybox and only a shrunken one gets in.
-let toyLatticeSieveCells = 36
 // The loose panels: one panel on each edge that a rule can open, move or swap (gallery.md, "The lattice"), each named
 // `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: a south and a north bay, and the bridge's middle
 // tile on the nave's axis.
@@ -403,7 +399,7 @@ let treeLimbs = [
 function treeLanding(level, side) = filter(treeLimbs, b => ((b.level == level) and (b.side == side)))[0].x
 function bayOf(x) = floor(((x - pierX(0)) / arcadePitch))
 // Every branch lands at a bay's centre, midway between two piers, so it never meets a pier and its doorway (levels 2 and
-// 3) or sieve (level 1) fills the bay. A doorway's clear opening, metres, and the balustrade either side of it.
+// 3) or magic barrier (level 1) fills the bay. A doorway's clear opening, metres, and the balustrade either side of it.
 let treeDoorWidth = 2
 let treeDoorPost = 0.22
 let treeDoorSide = (((arcadePitch - 1) - (treeDoorWidth + (2 * treeDoorPost))) / 2)

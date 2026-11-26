@@ -73,7 +73,7 @@ let wonderFloorLow = (galleryFloor[toyboxLevel] - wonderShaftMargin)
 let wonderFloorHigh = (galleryCeiling[toyboxLevel] - 0.5)
 // Only the intended routes in and out (the stairs and the lift) change a body's size. Anywhere outside the zones a body
 // keeps the size it last took (the owner's design): a small body that leaves level 1 another way, through a level-1
-// branch's sieve (shell.puck) onto the tree, stays small, a puzzle left to the player to discover.
+// branch's barrier (shell.puck) onto the tree, stays small, a puzzle left to the player to discover.
 let wonderZones = concat(
   flatMap(galleryStairs, stair => wonderShaft(stair.well.x0, stair.well.x1, stair.well.z0, stair.well.z1)),
   wonderShaft(towerWest, towerEast, towerSouth, 0),
