@@ -148,6 +148,28 @@ public static partial class CreationStampEmitter {
         public int MaterialOf(ShapeDocument shape, int paletteSlot) => ((paletteIds is { } palette)
             ? palette[Math.Clamp(value: paletteSlot, max: (palette.Length - 1), min: 0)]
             : materialFor!(arg: (shape with { Material = paletteSlot })));
+        public void EmitterFace(SdfProgramBuilder builder, ShapeDocument shape, int material) => StampEmitterFace(builder: builder, frame: frame, material: material, shape: shape);
+    }
+    // A static stamp's emitter face: the box's front face (+Z in its own frame, the author's front) carried into world
+    // space by the shape's pose and the stamp's. A stamp riding a transform slot, or a mirrored one, declares none: its
+    // face's world pose is not fixed when the program is built.
+    private static void StampEmitterFace(SdfProgramBuilder builder, in StampFrame frame, ShapeDocument shape, int material) {
+        if ((frame.DynamicSlot is not null) || (frame.ReflectionAlignment is not null)) {
+            return;
+        }
+        var scale = (float)frame.Scale;
+        var turn = Quaternion.Normalize(value: (frame.Rotation.ToQuaternion() * Quaternion.Normalize(value: (Quaternion)shape.Rotation)));
+        var half = (Vector3)shape.Scale;
+        var center = (frame.Origin.ToVector3() + Vector3.Transform(value: (((Vector3)shape.Position + Vector3.Transform(value: new Vector3(x: 0f, y: 0f, z: MathF.Abs(x: half.Z)), rotation: Quaternion.Normalize(value: (Quaternion)shape.Rotation))) * scale), rotation: frame.Rotation.ToQuaternion()));
+
+        _ = builder.EmitterFace(
+            halfHeight: (MathF.Abs(x: half.Y) * scale),
+            halfWidth: (MathF.Abs(x: half.X) * scale),
+            material: material,
+            worldOrigin: center,
+            worldRight: Vector3.Transform(value: Vector3.UnitX, rotation: turn),
+            worldUp: Vector3.Transform(value: Vector3.UnitY, rotation: turn)
+        );
     }
     // A relief's own chain: the shape's rigid frame under the stamp, in world units, independently of the primitive's
     // residual scale or panel offset. A mirrored copy samples the relief through the stamp's reflection, like the shape

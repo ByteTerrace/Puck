@@ -2142,6 +2142,7 @@ public static partial class WorldModelShape {
                 M("elongate", typeof(global::Puck.Assets.Documents.DocumentVector3), typeof(global::Puck.World.Authoring.ShapeDocument), "Elongate", Read | Write, static value => ((global::Puck.World.Authoring.ShapeDocument)value).Elongate, kind: WorldNameKind.State, role: WorldNameRole.Binding, facet: WorldExportFacet.Binding),
                 M("steps", typeof(global::System.Nullable<global::System.Int32>), typeof(global::Puck.World.Authoring.ShapeDocument), "Steps", Read | Write, static value => ((global::Puck.World.Authoring.ShapeDocument)value).Steps),
                 M("morph", typeof(global::Puck.World.Authoring.ShapeMorphDocument), typeof(global::Puck.World.Authoring.ShapeDocument), "Morph", Read | Write, static value => ((global::Puck.World.Authoring.ShapeDocument)value).Morph),
+                M("lightsAs", typeof(global::System.Nullable<global::Puck.World.Authoring.ShapeLightForm>), typeof(global::Puck.World.Authoring.ShapeDocument), "LightsAs", Read | Write, static value => ((global::Puck.World.Authoring.ShapeDocument)value).LightsAs),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.ShapeDomainOp), true, JsonTypeInfoKind.Object, null,

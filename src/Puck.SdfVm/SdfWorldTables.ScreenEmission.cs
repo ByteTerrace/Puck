@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
@@ -23,7 +24,7 @@ public sealed partial class SdfWorldTables {
     public SdfEnvironmentSubmission? SubmittedScreenEmission => m_screenEmission.Publication.Submitted;
 
     internal bool ScreenEmissionOwes => (m_screenEmission.Owes || m_screenEmission.Forced);
-    internal bool ScreenEmissionHasImages => (m_screenBound != UInt128.Zero);
+    internal bool ScreenEmissionHasImages => ((m_screenBound | m_screenEmitters) != UInt128.Zero);
     internal UInt128 ScreenEmissionScreens => m_screenEmission.Screens;
 
     internal ulong? ScreenEmissionSignature(SdfWorldResidency residency, int view, RenderGraphExternalReads? reads, in DeliveryLatch latch) =>
@@ -100,6 +101,17 @@ public sealed partial class SdfWorldTables {
                     if (!input.TryRead(latch: in latch, read: out var resolved) || (resolved.ImageViewHandle == 0) || !resolved.Publication.IsPublished()) { continue; }
                     m_watch.Read(screen: slot);
                     m_watch.Observe(publication: resolved.Publication, screen: slot, tainted: input.Label.External);
+                }
+            }
+            // An emitter face reduces its material's paints and surface text, which change with the program and the text
+            // the host supplies, and with no image publication: its reading is the live program and the decal table's
+            // revision, which every surface text write moves.
+            if (m_tables.m_screenEmitters != UInt128.Zero) {
+                var reading = new ReferenceRevision(Owner: new ByReference<object>(value: (object?)m_tables.m_liveProgram ?? m_tables), Revision: unchecked((long)m_tables.m_decalRevision));
+
+                foreach (var slot in BitWords.Members(mask: m_tables.m_screenEmitters)) {
+                    m_watch.Read(screen: slot);
+                    m_watch.Observe(publication: reading, screen: slot, tainted: false);
                 }
             }
             Owes = ((Publication.Submitted is null) || (m_watch.ChangedScreens() != UInt128.Zero) || Forced);

@@ -569,33 +569,50 @@ public sealed partial class SdfProgramBuilder {
         return this;
     }
 
+    /// <summary>Declares an emitter face: a rectangle on a surface the program draws in an ordinary material, which lights
+    /// what stands before it as a screen's face does, with what that material shows over the rectangle (its painted
+    /// albedo times its emissive, reduced on the GPU in the screens' emission pass). It replaces nothing the surface
+    /// draws: the face's own shape keeps its material and paints, and the face is light alone. It names no screen
+    /// material; a residency gives it a slot while it is among the nearest of the screens it holds, and it lights
+    /// nothing while it holds none.</summary>
+    /// <param name="worldOrigin">The face's world-space center.</param>
+    /// <param name="worldRight">A unit world-space axis along the face.</param>
+    /// <param name="worldUp">A unit world-space axis along the face, orthogonal to <paramref name="worldRight"/>; the face
+    /// lights toward their cross product, right × up.</param>
+    /// <param name="halfWidth">The face's half-extent along <paramref name="worldRight"/>, in world units.</param>
+    /// <param name="halfHeight">The face's half-extent along <paramref name="worldUp"/>, in world units.</param>
+    /// <param name="material">The material whose paints and emission the face lights with, a palette id this program
+    /// declares.</param>
+    /// <returns>This builder.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">A half-extent is not positive and finite, the frame is refused as
+    /// <see cref="ScreenSurface"/> refuses it, or <paramref name="material"/> names no material of the palette.</exception>
+    public SdfProgramBuilder EmitterFace(Vector3 worldOrigin, Vector3 worldRight, Vector3 worldUp, float halfWidth, float halfHeight, int material) {
+        if (!float.IsFinite(f: halfWidth) || !float.IsFinite(f: halfHeight) || !(halfWidth > 0f) || !(halfHeight > 0f)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(halfWidth),
+                message: $"An emitter face's half-width and half-height must be positive and finite; got {halfWidth} and {halfHeight}.");
+        }
+        if ((material < 0) || (material >= m_materials.Count)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(material),
+                message: $"An emitter face's material must name one of the program's {m_materials.Count} materials; got {material}.");
+        }
+        RequireScreenFrame(worldOrigin: worldOrigin, worldRight: worldRight, worldUp: worldUp);
+        m_emitterFaces.Add(item: new SdfScreenSurface(
+            HalfHeight: halfHeight,
+            HalfWidth: halfWidth,
+            Origin: worldOrigin,
+            Right: Vector3.Normalize(value: worldRight),
+            ScreenIndex: m_emitterFaces.Count,
+            Up: Vector3.Normalize(value: worldUp),
+            EmitterMaterial: material
+        ));
+
+        return this;
+    }
+
     // The surface half of a sampled screen: its frame, refused unless finite, unit-normalizable and orthogonal, and its
     // index, refused outside the screen table or past its capacity.
     private void AddScreenSurface(Vector3 worldOrigin, Vector3 worldRight, Vector3 worldUp, float halfWidth, float halfHeight, int screenIndex) {
-        RequireFinite(
-            value: worldOrigin,
-            paramName: nameof(worldOrigin),
-            subject: "A screen-slab world origin"
-        );
-        RequireDirection(
-            value: worldRight,
-            paramName: nameof(worldRight),
-            subject: "A screen-slab world right axis"
-        );
-        RequireDirection(
-            value: worldUp,
-            paramName: nameof(worldUp),
-            subject: "A screen-slab world up axis"
-        );
-
-        // Orthogonality subsumes the parallel case (a parallel pair has |dot| = 1) and is what the packed frame needs:
-        // the UV projects onto these axes while the slab's geometry rides the rotation derived from them.
-        RequireOrthogonalBasis(
-            paramName: nameof(worldUp),
-            right: worldRight,
-            subject: "A screen-slab world right and up axis",
-            up: worldUp
-        );
+        RequireScreenFrame(worldOrigin: worldOrigin, worldRight: worldRight, worldUp: worldUp);
 
         if (
             (screenIndex < 0) ||
@@ -622,6 +639,34 @@ public sealed partial class SdfProgramBuilder {
             ScreenIndex: screenIndex,
             Up: Vector3.Normalize(value: worldUp)
         ));
+    }
+    // A screen surface's frame, a sampled screen's or an emitter face's: refused unless finite, unit-normalizable and
+    // orthogonal.
+    private static void RequireScreenFrame(Vector3 worldOrigin, Vector3 worldRight, Vector3 worldUp) {
+        RequireFinite(
+            value: worldOrigin,
+            paramName: nameof(worldOrigin),
+            subject: "A screen-slab world origin"
+        );
+        RequireDirection(
+            value: worldRight,
+            paramName: nameof(worldRight),
+            subject: "A screen-slab world right axis"
+        );
+        RequireDirection(
+            value: worldUp,
+            paramName: nameof(worldUp),
+            subject: "A screen-slab world up axis"
+        );
+
+        // Orthogonality subsumes the parallel case (a parallel pair has |dot| = 1) and is what the packed frame needs:
+        // the UV projects onto these axes while the slab's geometry rides the rotation derived from them.
+        RequireOrthogonalBasis(
+            paramName: nameof(worldUp),
+            right: worldRight,
+            subject: "A screen-slab world right and up axis",
+            up: worldUp
+        );
     }
 
     /// <summary>Adds a <see cref="ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/>

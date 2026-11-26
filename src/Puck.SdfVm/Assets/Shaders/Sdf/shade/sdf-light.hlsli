@@ -383,7 +383,9 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
             walk.screenWord = screenWords;
             break;
         }
-        if (!screenSourceBound(screenIndex)) {
+        // A slot lights while it shows a bound source or is an emitter face (SdfScreenFace.Emitter, the state row's face),
+        // whose light its material's reduction gives.
+        if (!screenSourceBound(screenIndex) && !sdfScreenIsEmitter(worldScreenMapping(screenIndex))) {
             continue;
         }
 

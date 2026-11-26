@@ -520,8 +520,9 @@ public sealed partial class SdfWorldTables {
         _ = m_screenSurfaceRegion.Write(bytes: MemoryMarshal.AsBytes(span: floats), offset: (slot * ScreenSurfaceByteLength));
     }
 
-    // One past the highest screen whose source is bound, or zero when none is.
-    internal uint BoundScreenCount() => (uint)BitWords.Span(mask: m_screenBound);
+    // One past the highest screen slot that lights (a bound source or an emitter face), or zero when none does: the
+    // screens shading's light walk and the emission reduction run to.
+    internal uint BoundScreenCount() => (uint)BitWords.Span(mask: (m_screenBound | m_screenEmitters));
 
     // The decal table as the descriptor band + cell region's words.
     private ReadOnlySpan<uint> DecalWords => MemoryMarshal.Cast<byte, uint>(span: m_decalRegion.Contents);
