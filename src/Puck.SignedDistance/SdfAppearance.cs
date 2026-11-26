@@ -19,10 +19,10 @@ public sealed class SdfAppearance {
     /// <summary>The paint table's float4 stride, read by the views pass's paint layer (<c>SDF_PAINT_VECTORS_PER_ENTRY</c>):
     /// the frame origin and shape, the rotation, the residual scale, the shape's two data vectors, the color and stroke,
     /// the slot and bound center, the bound half-extents and surface text slot, the primitive rotation, the repetition's
-    /// cell and seed, and its tone, with variable side tables stored after the fixed paint entries.</summary>
+    /// cell and seed, and its tone and the edge softness, with variable side tables stored after the fixed paint entries.</summary>
     public const int PaintVectorsPerEntry = 11;
     /// <summary>The most paints one material carries (<c>SDF_MAX_PAINTS_PER_MATERIAL</c>).</summary>
-    public const int MaxPaintsPerMaterial = 8;
+    public const int MaxPaintsPerMaterial = 32;
     /// <summary>The dynamic slot word of a paint in the frame of the slot that owns the hit
     /// (<c>SDF_PAINT_WINNING_FRAME</c>).</summary>
     public const uint PaintWinningFrame = uint.MaxValue;
@@ -496,7 +496,7 @@ public sealed class SdfAppearance {
     // 6 (dynamic slot as uint bits, bound center); 7 (bound half-extents, infinite when unbounded, the surface text
     // slot plus one as uint bits, zero for a paint that covers its whole shape);
     // 8 primitive rotation; 9 the repetition's cell (zero for an axis it does not repeat along, all zero for a paint
-    // drawn once), its seed as uint bits; 10 its tone, the paint's colour for a paint drawn once.
+    // drawn once), its seed as uint bits; 10 its tone, the paint's colour for a paint drawn once, and its softness.
     // Side tables follow all fixed paint entries.
     // `section` begins at the stream's vector `origin`; the vectors the rows record stay absolute.
     private static void PackPaint(SdfPaint paint, int paintVector, int tableVector, Span<uint> section, int origin) {
@@ -528,7 +528,7 @@ public sealed class SdfAppearance {
         Row(words: section, row: 7, value: new(value: (shape.Bound.IsUnbounded ? new Vector3(value: float.PositiveInfinity) : shape.Bound.HalfExtents), w: BitConverter.UInt32BitsToSingle(value: ((uint)(paint.Text + 1)))));
         Row(words: section, row: 8, value: new(shape.Rotation.X, shape.Rotation.Y, shape.Rotation.Z, shape.Rotation.W));
         Row(words: section, row: 9, value: new(value: (paint.Repeat?.Cell ?? Vector3.Zero), w: BitConverter.UInt32BitsToSingle(value: (paint.Repeat?.Seed ?? 0u))));
-        Row(words: section, row: 10, value: new(value: (paint.Repeat?.Tone ?? paint.Color), w: 0f));
+        Row(words: section, row: 10, value: new(value: (paint.Repeat?.Tone ?? paint.Color), w: paint.Softness));
         for (var index = 0; (index < shape.Table.Count); index++) {
             section[(((tableVector - origin) * WordsPerVector) + index)] = BitConverter.SingleToUInt32Bits(value: shape.Table[index]);
         }
