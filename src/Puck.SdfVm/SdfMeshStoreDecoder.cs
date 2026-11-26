@@ -83,7 +83,7 @@ internal static class SdfMeshStoreDecoder {
             for (var index = 0; (index < pieces.Length); index++) { pieces[index] = Walk(cursor: ref cursor, piece: index, remap: null, storage: null); }
             if (cursor.Position != cursor.Length) { return false; }
             var shape = Shaped(chunked: chunked, pieces: pieces);
-            var remap = (restoring ? SdfMeshMaterials.ForwardOf(from: palette, to: taking) : SdfMeshMaterials.RemapOf(from: palette, to: taking));
+            var remap = SdfMeshMaterials.RemapOf(from: palette, restoring: restoring, to: taking);
 
             try {
                 while (true) {

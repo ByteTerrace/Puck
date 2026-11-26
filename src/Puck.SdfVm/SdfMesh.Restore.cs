@@ -132,7 +132,7 @@ public sealed partial record SdfMesh {
     // materials were first written in (SdfMeshStorage.WritesMaterialsIn; null for the entry's own ids).
     // Invariant: a restored plane holds the words it held before it was let go. The entry's triangle materials are in its
     // canonical ids, which a decode for a taking group and a bake's published copy both renumber, so a restore writes them
-    // in `materials` again (SdfMeshStoreDecoder.TryDecode's restoring mode), or every reader of the restored planes (the
+    // in `materials` again (SdfMeshStoreDecoder.TryDecode's restoring mode, SdfMeshMaterials.RemapOf), or every reader of the restored planes (the
     // region's landing, the irradiance scene's copies) reads the entry's place numbers as program material ids. Enforced
     // here, the one place a restore decodes.
     private sealed class Restorable(SdfMeshLibrary library, UInt128 identity, SdfMeshGeometry geometry, int[]? materials) {
