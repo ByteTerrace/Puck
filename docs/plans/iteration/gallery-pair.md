@@ -1,7 +1,8 @@
 # Gallery pair sessions
 
 How the owner and the lead iterate on the gallery together in real time, at
-minutes per sweep, once the overhaul's vertical slice is in. The owner is the
+minutes per sweep (rapid iteration is the gallery work's primary goal, the
+owner's ruling), once the overhaul's vertical slice is in. The owner is the
 critic, watching the live window; the lead edits the source and reads the
 World. Every edit lands in the running World through the loops
 [iteration](../iteration.md) times, with no restart and no cold bake.
@@ -64,7 +65,10 @@ relit.
 - Hardware-ray probe hits read material 0 from released mesh words, which
   tints interiors orange (open items, Lighting and GI). The fix is in
   progress.
-- Glossy floors have no reflection of the room: the prefiltered environment
-  and reflections aren't built ([the frame budget](../frame-budget.md)).
+- Glossy floors reflect the room through the screen-space `views-reflections`
+  pass, with the probes behind it. It is over its frame-budget share
+  ([the frame budget](../frame-budget.md), step 5) and is being optimized
+  rather than trimmed: the owner's ruling is that it must perform well, with
+  no corners cut.
 - The gallery root has no valley around it, so its windows show white. View-out
   judgements happen in the debug world.

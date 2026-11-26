@@ -175,9 +175,9 @@ a still. Everything that makes it slow and static follows from that:
   over the held frame, which hides what changes from frame to frame".
   Authority is paused between the coordinator's calls (`SweepRun`).
 - **Routes built for stills.** The route segments in
-  `worlds/debug/walkthrough-tests.puck` strafe along a gallery row facing one
-  way and rest 26 ticks in front of each exhibit, so a still can be taken at
-  the rest. They are controller programs, and they are not play.
+  `worlds/debug/walkthrough-tests.puck` stand at a gallery display's console
+  and rest 26 ticks after each step of its list, so a still can be taken at the
+  rest. They are controller programs, and they are not play.
 - **No frame reading at all.** The CLI reference says a route stop's
   `host.frames` is one "which lockstep and the held captures make no
   frame-time reading".
@@ -1093,7 +1093,7 @@ streaming and seams break, in about four minutes of simulation; each chapter is
 | Valley | From the hero spawn down the valley floor toward the gallery, turning to look up both walls | Sun shadows on terrain, cascade transitions under a turning camera, the far field and haze |
 | Meadow | A run through the grass and under the trees, then five seconds standing | Foliage shimmer, tree shadows on a moving body, change-proportional work at rest |
 | Entrance | Across the forecourt and through the gallery's doors into the hall | Open sky into an interior: exposure, indirect light, occlusion |
-| Glass | Along the gallery's glass and the blend row at a walk, looking through and along it | Refraction and glass shading under motion, indirect light on the floor |
+| Glass | Along the gallery's glass and blends displays at a walk, looking through and past them | Refraction and glass shading under motion, indirect light on the floor |
 | Lift | The ride between levels, entered at a run | Demand led along velocity, the shaft's lighting, floors behind slabs |
 | Painting | Through the garden painting, eight metres in, and back | The portal's first frame, a second residency, sound and input across worlds |
 | Water | Past the pool, the falls and the lake | Water shading and its reflections under a moving camera |

@@ -347,15 +347,6 @@ void sdfHistoryAt(float2 position, uint2 dims, out float4 color, out float4 tran
         }
     }
 }
-// The view's own camera rows, unjittered, as sdfProjectView reads a view.
-void sdfCurrentViewRows(out float4 rows[6]) {
-    rows[0] = float4(passGroup.viewPosition, 1.0);
-    rows[1] = float4(passGroup.viewRight, passGroup.tanHalfFieldOfView);
-    rows[2] = float4(passGroup.viewUp, passGroup.aspectRatio);
-    rows[3] = float4(passGroup.viewForward, 0.0);
-    rows[4] = float4((float2)passGroup.imageExtent, 0.0, 0.0);
-    rows[5] = float4(passGroup.nearDistance, passGroup.frustumOffset, 0.0);
-}
 // The output pixel's unjittered ray, as the composite's sdfSkyPassDirection takes it: the ray each tap's receiver plane is
 // measured along, and an exact copy's transport.
 float3 sdfResolveAirDirection(uint2 pixel, uint2 extent) {

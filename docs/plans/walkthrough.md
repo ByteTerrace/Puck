@@ -18,7 +18,7 @@ motion`'s studio scenarios, none of which walks anything.
 
 The mechanism is built (`SweepRoute`, `puck sweep --tour`;
 [the CLI reference](../reference/cli.md#puck-sweepthe-debug-worlds-sweep)) and
-proved on gallery level 1's blend row and an inspection stop at the avatar
+proved on gallery level 1's blends display and an inspection stop at the avatar
 studio. This page keeps its invariant and how it scales to the whole world.
 
 ## The design
@@ -38,7 +38,7 @@ The one block is played by existing verbs:
 | Run | Verb | What it shows |
 |---|---|---|
 | Headless | `puck test worlds/debug/walkthrough-tests.puck --reproduce` (and the sweep's scenarios, whose `*-tests.puck` glob includes it) | The segment arrives, and its input reproduces every authority tick from the checkpoint. |
-| Windowed | `puck sweep --tour`, a tour stop naming the block as its `route` | A settled still square in front of each exhibit the walk passes, beside the text the exhibit's creation authors (its plaque says what to look for); `off course` when the walker stood off the exhibit's spawn point or missed the arrival; the mesh audit's topology defects for each exhibit's prototype; `host.frames` over the segment. |
+| Windowed | `puck sweep --tour`, a tour stop naming the block as its `route` | A settled still of each exhibit the walk shows on a display's turntable, its console's screen below it (the copy says what to look for); `off course` when the walker stood off the exhibit's spawn point or missed the arrival; the mesh audit's topology defects for each exhibit's prototype; `host.frames` over the segment. |
 | Windowed, as a player takes it | `puck bench frames --window`, the same stop | The stop's timeline display-paced with nothing settled first, its slowest frame, the counters' change and a presented burst across it. The streaming plan's [seam walk](streaming-and-memory.md#the-seam-walk) is the debug world's `seams` route, which `puck benchmark` plays. |
 
 No new runner or record directory exists: the program lives in the
@@ -80,36 +80,37 @@ caught, not enforced:
 | Defect | Caught by | How |
 |---|---|---|
 | Sawtooth and slivers on `shape-pipe-subtraction` and `shape-groove-subtraction` | Mechanical | The stop's mesh audit (`puck mesh audit --cpu --prototype …` over the row's prototypes) finds folds and flipped triangles in both prototypes' surfaces, and the tour's audit rules (`worlds/debug/sweep.json`: red for a flipped triangle, an open or non-manifold edge or an uncovered crossing, amber for a fold) turn both stills red with the counts beside them. The same rules turn the xor, subtraction, intersection, groove union and the chamfered subtraction and intersection red too: the audit finds the same defect class there, which the owner's walk did not name. |
-| A plaque whose text overflows its plinth face | A reviewer | The still beside the plaque's authored text: the reviewer reads the rendered lines against the text and names a lost glyph or a line broken inside a word. No mechanical check exists yet (step 6 below). |
-| The floor's triangular light patches | A reviewer | Each still shows the floor in front of the plinth under the walker's view; nothing reads the floor's lighting mechanically (step 6). |
+| A screen line whose copy overflows its pane | A reviewer | The still beside the exhibit's copy: the reviewer reads the screen's lines against the copy and names a lost glyph or a line shrunk past reading. No mechanical check exists yet (step 6 below). |
+| The floor's triangular light patches | A reviewer | Each still shows the floor in front of the display under the walker's view; nothing reads the floor's lighting mechanically (step 6). |
 | A walker off its route | Mechanical | `off course` per still and at the arrival. |
 
 What a reviewer, or the look-critic agent, needs for each still is in the
-report beside it: the image, the exhibit's id and authored text (label, then
-plaque), the body's pose at the still's tick and the audit's line for its
-prototype. The plaque says what the exhibit should show; the judgement is
-whether the image shows it and whether the plaque itself reads whole.
+report beside it: the image, the exhibit's id and copy (its title, then its
+note), the body's pose at the still's tick and the audit's line for its
+prototype. The note says what the exhibit should show; the judgement is
+whether the image shows it and whether the screen itself reads whole.
 
 ## Scaling to the whole world
 
 Each step names the check that shows it worked.
 
-1. **Coverage from the document.** The exhibits are the placements that have a
-   spawn point named after them (the gallery's convention, `gallerySpawns` in
-   `worlds/debug/shapes.puck`) and the places in `places.puck`. The sweep reads
+1. **Coverage from the document.** The exhibits are the spawn points named
+   after the gallery's catalog entries (`gallerySpawns` in
+   `worlds/debug/shapes.puck`, beside its displays' own) and the places in
+   `places.puck`. The sweep reads
    both lists from the live World (`world.row spawnPoints`, `world.row
    placements`) and reports every exhibit no route stop captured, by name, as
    a signal of its own (`walkthrough-coverage`, amber per unvisited exhibit).
-   Check: adding an exhibit to a row turns that signal amber with the new
+   Check: adding an exhibit to a display turns that signal amber with the new
    exhibit's name until a segment captures it.
 2. **Capture offsets from the program.** A stop names `"captures": "rests"`
    instead of offsets: a still at the last tick of every rest the program
    holds (the left stick back at zero for at least a settle's ticks), framed on
    the nearest spawn point's exhibit. Check: retiming a segment moves its
    stills with it and leaves `sweep.json` unchanged.
-3. **One segment a row or a place, chained by spawn points.** The gallery's
-   fourteen rows (141 exhibits) as fourteen blocks, each starting at its row's
-   first spawn point and walking the row; then the stairs and the lift as
+3. **One segment a display or a place, chained by spawn points.** The
+   gallery's fourteen displays (149 exhibits) as fourteen blocks, each starting
+   at its console and stepping its list; then the stairs and the lift as
    segments that cross levels by walking (the traversal bot's goals in
    `traversal.puck` are their arrival boxes); then each outdoor place from
    `places.puck`. Check: every segment arrives under `puck test --reproduce`,
@@ -119,17 +120,17 @@ Each step names the check that shows it worked.
    platform, idle then walking, under the studio's layouts, and each static
    creation from the gallery's own framing. Check: a still per creation, and
    the coverage signal counts creations as well as places.
-5. **The run's length.** The blend row's segment is 623 ticks, about 21
+5. **The run's length.** The blends display's segment is 407 ticks, about 14
    seconds of simulation, with fourteen stills. At that pace the gallery is
    about 4 minutes of simulation and the world under 10, plus each still's
    settle under lockstep; the target is the whole walkthrough inside one
    windowed batch of 20 minutes. Check: the tour's wall time per segment, read
    by the lead in a quiet window (`puck measure request … -- sweep --plan …`).
-6. **More defects made mechanical.** A plaque fits its face: lay each text run
-   out as the bake does (`CreationStampEmitter.LayoutTextRuns`) and report a
-   line wider than its `maxWidth`, a break inside a word, or a glyph whose
-   footprint leaves the shape it embosses. Light leaks on a floor: the
-   indirect debug view's still of the floor in front of each plinth, compared
+6. **More defects made mechanical.** A screen line fits its pane: lay each
+   exhibit's copy out as the surface text does (`WorldSurfaceTexts`) and report
+   one its paint's `fit` shrinks below a readable em, or one past the glyphs a
+   text draws (`SdfSurfaceTextLayout.MaxGlyphs`). Light leaks on a floor: the
+   indirect debug view's still of the floor in front of each display, compared
    between neighbouring stills of one floor, where a patch brighter than its
    neighbours by more than a set ratio is flagged. Check: each lights on today's
    build at the stills the owner flagged by hand, and goes out when the defect

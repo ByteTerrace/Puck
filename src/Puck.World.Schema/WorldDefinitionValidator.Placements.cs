@@ -937,7 +937,7 @@ public static partial class WorldDefinitionValidator {
                     errors.Add(item: $"{facePath}.portal sits on a placement that ATTACHES to a live body — a portal's frame is derived once per document revision from the row's own authored transform, which an attached row does not have; move the door onto a static placement.");
                 } else if (placement.Inhabit is not null) {
                     errors.Add(item: $"{facePath}.portal sits on an INHABITED placement — its stamp rides a live body's pose rather than the row's authored transform, so the door's frame would be stale every tick; move the door onto a static placement.");
-                } else if (creation is { Document.Frames.Count: > 0 } or { Document.Drivers.Count: > 0 }) {
+                } else if (CarriesMotion(creation: creation)) {
                     errors.Add(item: $"{facePath}.portal sits on an ANIMATED placement (creation '{placement.PrototypeId}' carries timeline frames or drivers) — a replaying stamp's surface moves on the render clock while the derived frame does not; move the door onto a static placement.");
                 }
 
@@ -1733,7 +1733,7 @@ public static partial class WorldDefinitionValidator {
                 row: out var animatedCreation
             );
 
-            var isAnimated = (animatedCreation is { Document.Frames.Count: > 0 } or { Document.Drivers.Count: > 0 });
+            var isAnimated = CarriesMotion(creation: animatedCreation);
 
             if (isAnimated) {
 

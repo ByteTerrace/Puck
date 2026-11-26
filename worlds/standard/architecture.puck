@@ -43,6 +43,8 @@ function plinthOnFace(across, up, out) = [
 // knobs and a round reset button. About 1.8 m wide and 1.6 m deep with its console; an exhibit stands on the cap from
 // y 0.75. Every shape is a union, so a creation that holds it keeps panels and trims.
 let plinthCapTop = 0.75
+// The cap's half-extents across (x) and front to back (z), the plinth's widest.
+let plinthCapHalf = [0.9, 0.68]
 template exhibitPlinth(base) {
   shape Box "plinth-foot" {
     material: (base + plinthTeal)
@@ -78,7 +80,7 @@ template exhibitPlinth(base) {
   shape Box "plinth-cap" {
     material: (base + plinthCream)
     position [0, 0.685, 0]
-    scale [0.9, 0.065, 0.68]
+    scale [plinthCapHalf[0], 0.065, plinthCapHalf[1]]
     chamfer: 0.045
   }
   shape Cylinder "plinth-ring" {

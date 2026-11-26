@@ -220,7 +220,12 @@ the floor where its cell projects under half a pixel (a view) or half a texel (a
 cascade) and the finer tier everywhere else, deciding from the shared words and the
 draw's pose alone, so exactly one tier of a placement draws; a finer tier yields only
 while every floor row it names stands. Floor rows stay out of the irradiance volume's
-static scene (`SdfMeshDraw.InStaticScene`). Below the floor, the collapse's last two
+static scene (`SdfMeshDraw.InStaticScene`), which traces the kept floor through the
+group's row instead (`SdfMeshDraw.Trace`). A shape names its materials by place, so a
+floor kept across a replan or a renumbering can match the group's shape while carrying
+another program's material ids. A kept floor changes only through `Group.SetFloor`, which `KeepFloorOf` and
+`Renumber` hand the library's copy in the group's own ids (`Group.FloorIn`), or no
+floor where the library holds none. Below the floor, the collapse's last two
 levels (`SdfMeshCollapse.CellShares`) serve views far smaller than the tier was
 demanded for. The selection marks clamp a level past the second to it, so
 `drawn.*.level2` counts the second level's triangles for those draws.
@@ -243,7 +248,15 @@ reuse the ordinary static emitter in prototype-local ranges (`SdfMeshTemplateRan
 including its per-shape bounds, detail regions and separate groups. The largest
 occurrence bakes at ordinary authored scale; copies use relative matrices. Do not
 replace that partition with one dynamic whole-object range or promote the default
-bake spacing into explicit detail: both increase tessellation. `IsDynamic` selects
+bake spacing into explicit detail: both increase tessellation. A template draws
+only through the copies that name it: an emitter publishes its fixed template ranges
+(`ISdfSceneEmitter.MeshTemplateRanges`) as it publishes its dynamic template slots,
+and the bake's one copy index (`SdfMeshPathBake.CopiesOf`) answers no copies, not
+"the group once", for a template group no copy names. A responding row keeps a
+template for every creation it can show; a template that drew itself once would put
+the creations it does not show at their templates' frame, on top of the shown one, and
+the irradiance volume would trace two coincident surfaces with two materials, whichever
+the CPU and the GPU walks each meet first. `IsDynamic` selects
 static lighting membership; `UsesRootMaterialFrame` independently selects material
 coordinates while retaining the root slot for skinning and portals. Dressing retains
 group/copy topology and immutable per-surface picking metadata across pose changes.
@@ -761,7 +774,8 @@ phases with the occlusion kernel between them, `SdfMeshOcclusion`) → `pyramid`
 depth pyramid from the mesh target) → `surface` (each pixel's visibility record from the mesh
 target: normal, screen-space AO, the world's shared cascades' soft shadows into K;
 `passes/sdf-surface-stage.hlsli`) → `views-probes` (the irradiance volume's
-gather once a cell, `passes/sdf-views-probes.hlsli`) → `views` (materials and lighting) →
+gather once a cell, `passes/sdf-views-probes.hlsli`) → `views-reflections` (temporal views only,
+the screen-space reflections) → `views` (materials and lighting) →
 `resolve` (reduced or temporal views) → `sky` → `composite`. A view of a
 program with a glass shape (`SdfProgram.HasGlass`) inserts `glass-clear` →
 `glass` (graphics, the glass draws alone) → `glass-shade` after `views`
@@ -1215,6 +1229,22 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   Local adaptation consumes this same gather, so an irradiance error also
   changes exposure. See [mesh GI](references/mesh-gi.md) for sampling, storage,
   boundary behavior and the fixed-camera checks on both backends.
+- **A glossy surface reflects the screen first, then the volume.** In a temporal
+  view the reflection pass (`passes/sdf-world-views-reflections.comp.hlsl`,
+  `SdfWorldPackage.WithReflections`) marches each glossy pixel's mirror ray
+  through the mesh target's forward depth and reads what it reaches from the
+  preceding frame's history colour (a `PreviousFrame` port, bound through
+  `SdfHistoryPorts` like the other histories) at the hit's previous position
+  (`sdfPreviousPoint`); views blends its record over `sdfViewsReflectionSeen` in
+  `sdfViewsScreenReflection`, so the volume still answers what leaves the screen,
+  hides behind a nearer face or lies on a rough surface, and every view without the
+  pass (`passGroup.screenReflections` zero) reflects the volume alone. The history
+  holds light at the epoch's stored scale, which a scale step restarts, so the pass
+  reads nothing while `historyFrames` is zero; a new reader of the history colour
+  keeps that rule. The record is the colour at the stored scale and two shares
+  (screen and open sky); views divides the scale out (`sdfStoredLightScale`).
+  `world.counters gpu pass sdf.world$views-reflections` counts the pixels it marched
+  (texels) and the depths it read (steps).
 - **Glass is a material, a group and a pass, never a blend.** A palette slot's
   `glass` (`SdfGlass`, material row 21) makes its shapes bake into groups of
   their own (`SdfMeshBakeGroup.Glass`; the stampers emit them as instances
@@ -2001,7 +2031,8 @@ counts in `sdf.transforms`, never in `records.posed`.
   holds a template for every creation it can show (`WorldRigidAssets.ReconcileStatic`), so the sweep moves its copies'
   template range and pose alone (`WorldRigidAssets.PresentHoldings`, `PlaceStaticCopies`, `PackRiding`). The program
   composes again only through `HoldingComposeRevision` (a responding row the catalog refuses: glass, a pattern of
-  riding occurrences, a riding creation with volumes) or `StaticTemplateRevision` (a template set the latest emission did not write); a new path that
+  riding occurrences, a riding creation with volumes, or a row while it shows an animated creation, which the stamp
+  pool registers by the creation it shows, `WorldCreationInstances.PoolOwns`) or `StaticTemplateRevision` (a template set the latest emission did not write); a new path that
   presents a response goes through one of the two. A solid row's response still rebuilds the presentation query field
   whole (`WorldFramePresenter.RebuildStaticField`).
 - **A pack visits only what woke.** The stamp pool, its rigid bodies (`WorldRigidAssets.Pack`) and the catalog

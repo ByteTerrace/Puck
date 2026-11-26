@@ -1,0 +1,60 @@
+// A small fir grove in the open meadow: plain firs, one strung with classic bulbs, and two fibre-optic firs whose tips
+// wheel through their colours on the `fiber` clock, a minute of clock time every six seconds.
+import "../standard/conifer"
+
+timeline {
+  clocks [{ name: fiber, state: fiber, spanSeconds: 60 }]
+}
+state {
+  world [
+    {
+      name: "fiber"
+      kind: "Fixed"
+      value: "0"
+      advance { perSecondNumerator: 1, perSecondDenominator: 6 }
+    }
+  ]
+}
+// The fibre groups glow on world lanes 5 to 7, which debug.puck binds with `firFiberLane`.
+
+prototypes {
+  firTree(id: "fir")
+  firTree(id: "fir-tall", height: 1.3, spread: 0.9)
+  firTree(id: "fir-lit", lights: true)
+  firTree(id: "fir-fiber", fiber: true, height: 0.85, spread: 0.85)
+}
+
+placements {
+  placement "fir-0" {
+    prototype: "fir"
+    position [124, 0, -66]
+    yawDegrees: 20
+  }
+  placement "fir-1" {
+    prototype: "fir-tall"
+    position [127.5, 0, -70]
+    yawDegrees: 140
+  }
+  placement "fir-2" {
+    prototype: "fir"
+    position [121, 0, -70.5]
+    scale: 0.8
+    yawDegrees: 260
+  }
+  placement "fir-lit-0" {
+    prototype: "fir-lit"
+    position [130, 0, -63.5]
+    yawDegrees: 0
+  }
+  placement "fir-fiber-0" {
+    prototype: "fir-fiber"
+    position [133.5, 0, -66.5]
+    yawDegrees: 70
+  }
+  placement "fir-fiber-1" {
+    prototype: "fir-fiber"
+    position [134.5, 0, -61.5]
+    scale: 0.8
+    yawDegrees: 200
+  }
+}

@@ -107,11 +107,15 @@ rule "companion-senses" {
   companionNeighbour.body = nearest(body, 42, companionBodies)
 }
 
-// Actual exhibit positions come from the gallery layout, shared with its plinths and guide regions. Inspection is
-// bounded to the Moth's neighbourhood; the guest gives following and collision avoidance priority over curiosity.
+// Each display's exhibit, the middle of the one its turntable shows, comes from the gallery layout, shared with its
+// plinth and guide region. Inspection is bounded to the Moth's neighbourhood; the guest gives following and collision
+// avoidance priority over curiosity.
 let companionAttractions = concat(
-  map(galleryStations, station => {
-    x: gallerySite[0] + station.x, y: station.y + 1.35, z: gallerySite[2] + station.z + 0.85 * station.front, kind: 1
+  map(galleryDisplays, display => {
+    x: gallerySite[0] + display.x
+    y: displayFloor(display) + displayExhibitDrop + (1.2 * displayExhibitScale)
+    z: gallerySite[2] + display.z
+    kind: 1
   }),
   [
     { x: 7, y: 0.17, z: 29.4, kind: 2 }

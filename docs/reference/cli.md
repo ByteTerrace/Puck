@@ -3886,8 +3886,8 @@ of each sample is a fresh process, so a window reads the first crossing after
 boot:
 
 ```sh
-puck bench frames --plan worlds/debug/sweep.json --stop route-blend-row --window --backend directx
-puck bench frames --plan worlds/debug/sweep.json --stop route-blend-row --window --headless
+puck bench frames --plan worlds/debug/sweep.json --stop route-blends-display --window --backend directx
+puck bench frames --plan worlds/debug/sweep.json --stop route-blends-display --window --headless
 ```
 
 `--backend`, `--width` and `--height` select the renderer and window (2560×1440

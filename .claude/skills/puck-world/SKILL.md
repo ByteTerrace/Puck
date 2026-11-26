@@ -1097,6 +1097,11 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
 - An attached placement can also `respond` to state: the shown prototype and
   its colliders swap while its attachment stays intact. The lift's car doors
   and indicator use this; `inhabit` and `faceSources` still refuse `respond`.
+  A response holds up to `WorldResponseCapacity.MaxEntries` entries and may
+  show an animated creation, which the stamp pool draws while it shows; a row
+  that can show one carries no distribution or mirror. The gallery's display
+  stations swap each group's exhibits, motion ones included, this way
+  (`displayPlacements` in `worlds/debug/shapes.puck`).
 - A moving carrier, a solid response swap or a field lattice's step wakes only
   the parked rigid bodies whose bounds, grown by the contact reach (two contact
   skins) and the rigid support probe's travel, meet the box its changed

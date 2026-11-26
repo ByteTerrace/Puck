@@ -55,6 +55,8 @@ import "companion"
 import "exposure"
 import "gallery/gallery"
 import "chess"
+import "firs"
+import "../standard/conifer"
 // The board game room's hidden-information tables, which hold no bodies: the sealed-bid auction, the shedding card game,
 // social deduction and the fog-of-war skirmish (auction.puck, shedding.puck, deduction.puck, skirmish.puck).
 import "auction"
@@ -93,6 +95,13 @@ import "water-scenery"
 import "forest"
 // The time of day: the sun and the sky on one clock (day.puck).
 import "day"
+
+// The world lanes, restated here because two imports author them: lane 4 is the falls' discharge (water-scenery.puck),
+// lanes 5 to 7 the fir grove's fibre groups (firs.puck).
+render {
+  lanes ["state.fallsFlow", firFiberLane("fiber", 0), firFiberLane("fiber", 1), firFiberLane("fiber", 2)]
+}
+
 
 // The test room's palette slots.
 let roomWhite = 0 // #E6E2DA

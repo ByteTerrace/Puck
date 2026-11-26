@@ -62,6 +62,8 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.HistorySurface,
         SdfWorldPackage.ViewsProbeHistory,
         SdfWorldPackage.ViewsProbeHistoryWritten,
+        SdfWorldPackage.ViewsReflections,
+        SdfWorldPackage.ViewsReflectionsWritten,
     ];
     // Each layer of the world's shared shadows (SdfWorldShadows) a compute pass samples: its entry, whether it is the exit
     // layer, and the binding.
@@ -91,12 +93,17 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
     private static readonly uint ScreenSourcesBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.ScreenSources);
+    private static readonly uint ReflectionHistoryBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.ReflectionHistory);
 
     private readonly RenderGraphPackageRecorderContext m_context;
     private readonly string[] m_inputs;
     private readonly string[] m_outputs;
-    // Whether the part reads the preceding resolve's history surface (SdfWorldPackage.RateFragment's probe lookup).
+    // Whether the part reads the preceding resolve's history surface (SdfWorldPackage.RateFragment's probe lookup, the
+    // reflection pass), whose planes follow the output extent, which its pass block then carries in viewsRate.zw.
     private readonly bool m_readsRateHistory;
+    // Whether the part reads the reflection pass's records (SdfWorldPackage.WithReflections's views pass), which its pass
+    // block then tells the kernel to read (SdfWorldPackage.ScreenReflections).
+    private readonly bool m_readsReflections;
     // The history buffers the part reads or writes through members (SdfHistoryPorts).
     private readonly SdfHistoryPorts m_history;
     private readonly SdfWorldPasses m_owner;
@@ -214,6 +221,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         m_inputs = LocalNames(pass: context.Pass, part: m_part, ports: context.Inputs);
         m_outputs = LocalNames(pass: context.Pass, part: m_part, ports: context.Outputs);
         m_readsRateHistory = m_inputs.Contains(value: SdfWorldPackage.Parts.HistorySurface);
+        m_readsReflections = m_inputs.Contains(value: SdfWorldPackage.Parts.Reflections);
         m_history = new SdfHistoryPorts(inputs: m_inputs, outputs: m_outputs, slots: context.InFlightFrames);
 
         m_resolved = m_outputs.Contains(value: SdfWorldPackage.CurrentColor);
@@ -574,6 +582,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfFrameBlock.WriteScreenWindows(block: recording.PassBlock, windows: windows);
         SdfFrameBlock.WriteTemporal(block: recording.PassBlock, jitter: temporal.Jitter, historyFrames: temporal.Frames, temporal: m_temporal);
         SdfFrameBlock.WritePreviousView(block: recording.PassBlock, view: temporal.PreviousView, valid: temporal.HasPreviousView);
+        SdfFrameBlock.WriteScreenReflections(block: recording.PassBlock, reads: m_readsReflections);
 
         if (m_readsRateHistory) {
             // The history planes follow the output extent. The visibility and probe cells follow the render grid.
@@ -826,6 +835,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                     var pipeline = tables.Pipeline(kernel: m_part switch {
                         SdfWorldPackage.Parts.Pyramid => SdfKernel.MeshPyramid,
                         SdfWorldPackage.Parts.ViewsProbes => SdfKernel.ViewsProbes,
+                        SdfWorldPackage.Parts.ViewsReflections => SdfKernel.ViewsReflections,
                         _ => SdfKernel.Surface,
                     });
 
@@ -1106,6 +1116,9 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             descriptorSetHandle: set,
             imageViewHandle: meshVisibility
         );
+        // The reflection pass's history colour is a history port (SdfHistoryPorts), bound after this; every other part
+        // samples nothing there.
+        bindings.WriteSampledImage(arrayElement: 0, binding: ReflectionHistoryBinding, descriptorSetHandle: set, imageViewHandle: tables.SampledFiller.ImageViewHandle);
         foreach (var (entry, exit, binding) in CascadeBindings) {
             bindings.WriteSampledImage(arrayElement: 0, binding: binding, descriptorSetHandle: set,
                 imageViewHandle: (shadows?.ViewOf(view: view, entry: entry, exit: exit, filler: tables.SampledFiller.ImageViewHandle) ?? tables.SampledFiller.ImageViewHandle));
@@ -1126,6 +1139,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.Parts.MeshPyramid => SdfWorldPackage.MeshPyramid,
         SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecords,
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecords,
+        SdfWorldPackage.Parts.Reflections => SdfWorldPackage.ViewsReflections,
         SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTiles,
         _ => null,
     };
@@ -1137,6 +1151,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.Parts.MeshPyramid => SdfWorldPackage.MeshPyramidWritten,
         SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecordsWritten,
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecordsWritten,
+        SdfWorldPackage.Parts.Reflections => SdfWorldPackage.ViewsReflectionsWritten,
         SdfWorldPackage.Parts.ShadeTiles or SdfWorldPackage.Parts.ShadeBinned => SdfWorldPackage.ShadeTilesWritten,
         SdfWorldPackage.Parts.ShadeArguments => SdfWorldPackage.ShadeArgumentsWritten,
         _ => null,

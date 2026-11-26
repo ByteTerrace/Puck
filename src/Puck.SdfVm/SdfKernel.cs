@@ -46,6 +46,10 @@ public enum SdfKernel {
     /// <summary>The probe lookup: the irradiance volume's gather once a cell of the render extent, into the probe records
     /// views reads.</summary>
     ViewsProbes,
+    /// <summary>The reflection pass: each glossy pixel's mirror ray marched through the mesh target's depth, its hit read
+    /// from the preceding frame's history colour, into the reflection records views reads. Acquired only by a temporal
+    /// view.</summary>
+    ViewsReflections,
     /// <summary>Shading the visibility records into the lit image, with no field query.</summary>
     Views,
     /// <summary>The views kernel with authored interpretation absent, for frames with no active program.</summary>
