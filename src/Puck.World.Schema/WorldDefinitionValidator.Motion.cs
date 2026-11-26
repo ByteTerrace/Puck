@@ -796,6 +796,22 @@ public static partial class WorldDefinitionValidator {
                     }
                 }
             }
+            if (hold.Corner is { } corner) {
+                if (hold.Hold != BodyHoldKind.Pull) {
+                    errors.Add(item: $"{rowPath}.corner is refused for a {hold.Hold} hold — only a Pull row traverses a face that has a corner to get round.");
+                }
+
+                RequirePositiveFixed(
+                    errors: errors,
+                    name: new Subject(Member: ".corner.depth", Path: rowPath),
+                    value: corner.Depth
+                );
+                RequirePositive(
+                    errors: errors,
+                    name: new Subject(Member: ".corner.seconds", Path: rowPath),
+                    value: corner.Seconds
+                );
+            }
         }
     }
     // The world motion defaults: positive speeds and correction smoothing distance.
