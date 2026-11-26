@@ -14,6 +14,7 @@ public sealed partial record SdfMesh {
         BakeCell = source.BakeCell;
         BakedSites = source.BakedSites;
         Chunks = source.Chunks;
+        Clusters = source.Clusters;
         Encloses = source.Encloses;
         m_positions = source.m_positions;
         PositionLow = source.PositionLow;
@@ -323,6 +324,7 @@ public sealed partial record SdfMesh {
                             normals: part.Normals,
                             triangleMaterials: part.Materials) {
                             BakeCell = shape.Pieces[index].BakeCell,
+                            Clusters = shape.Pieces[index].Clusters,
                             Levels = LevelsOf(part: part, shape: shape.Pieces[index]),
                             m_payload = part.Owner.Seal(),
                             m_restorable = m_restorable,
@@ -337,6 +339,7 @@ public sealed partial record SdfMesh {
                         members: part.Members, normals: part.Normals,
                         positions: part.Positions, triangleMaterials: part.Materials, vertexMembers: part.VertexMembers) {
                         BakeCell = shape.Pieces[0].BakeCell,
+                        Clusters = shape.Pieces[0].Clusters,
                         Encloses = shape.Encloses,
                         Levels = LevelsOf(part: part, shape: shape.Pieces[0]),
                         m_payload = payload.Seal(),
@@ -384,6 +387,7 @@ public sealed partial record SdfMesh {
     private SdfMesh(SdfMesh source, ReadOnlyMemory<uint> materials, SdfMeshLevel[] levels, SdfMesh[] chunks, Payload payload) {
         BakeCell = source.BakeCell;
         Chunks = chunks;
+        Clusters = source.Clusters;
         Encloses = source.Encloses;
         m_positions = source.m_positions;
         PositionLow = source.PositionLow;

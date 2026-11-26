@@ -131,7 +131,10 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   only for a link refusal, and the level's budget only for a measured one, so a
   shape or link refusal stands into the next level. Every other check reads the
   place's own fan, its tracked and line samples and the neighbour's fixed
-  position; a new check that reads the neighbour's fan returns `RefusedLinks`.
+  position; a new check that reads the neighbour's fan returns `RefusedLinks`. A
+  corner's third face mapped to a neighbour's vertex (`CopyAt`) reads the neighbour's
+  fan too, so a refusal measured after such a mapping is kept by no revision
+  (`Collapser.Refusal`, `RefusedUnkept`) and is tried again.
   `Commit` is the one mutation door for topology, surface and line samples, and
   inherited bounds; it stamps every endpoint of the old fan, including deleted
   triangles. The cache only skips failed attempts; every accepted collapse still

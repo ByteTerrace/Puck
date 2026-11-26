@@ -23,6 +23,20 @@ void sdfSelectionBox(uint record, uint4 a, uint4 b, uint4 c, uint4 d, out float3
         z = sdfMeshCarryDirection(record, mul(z, pose.basis)) * carryScale;
     }
 }
+// A cluster's world box (SdfMeshClusters): its object-space box in the draw's cluster table through the pose and carry
+// the draw's vertices go through, as sdfSelectionBox places a slot-frame box, so it holds every vertex of the cluster's
+// triangles at every clustered level.
+void sdfSelectionClusterBox(uint record, uint clusterTable, uint cluster, out float3 center, out float3 x, out float3 y, out float3 z) {
+    uint at = clusterTable + SDF_MESH_CLUSTER_HEADER_WORDS + SDF_MESH_CLUSTER_BOX_WORDS * cluster;
+    float3 middle = asfloat(uint3(sdfMeshWord(at), sdfMeshWord(at + 1u), sdfMeshWord(at + 2u)));
+    float3 extent = asfloat(uint3(sdfMeshWord(at + 3u), sdfMeshWord(at + 4u), sdfMeshWord(at + 5u)));
+    SdfMeshPose pose = sdfMeshPoseOf(record);
+    float carryScale = asfloat(sdfMeshRecordWord(record + SDF_MESH_CARRY_SCALE_WORD));
+    center = sdfMeshCarryPoint(record, mul(middle, pose.basis) + pose.origin);
+    x = sdfMeshCarryDirection(record, mul(float3(extent.x, 0.0, 0.0), pose.basis)) * carryScale;
+    y = sdfMeshCarryDirection(record, mul(float3(0.0, extent.y, 0.0), pose.basis)) * carryScale;
+    z = sdfMeshCarryDirection(record, mul(float3(0.0, 0.0, extent.z), pose.basis)) * carryScale;
+}
 float sdfSelectionRadius(float3 axis, float3 x, float3 y, float3 z) {
     return (abs(dot(axis, x)) + abs(dot(axis, y))) + abs(dot(axis, z));
 }

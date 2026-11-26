@@ -324,6 +324,7 @@ public sealed class SdfMeshDresser : IDisposable {
         var placements = (copies?.Count ?? 1);
         var chunked = ((copies is null) && (mesh.Chunks.Count > 0));
         var band = ((floor is null) ? SdfMeshBand.None : SdfMeshBand.Of(
+            floor: floor,
             floorTier: access.FloorTierOf(group: group),
             high: Vector3.Max(value1: mesh.PositionHigh, value2: floor.PositionHigh),
             low: Vector3.Min(value1: mesh.PositionLow, value2: floor.PositionLow)

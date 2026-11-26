@@ -4187,7 +4187,9 @@ never writes the store, so it reads a store a running World owns.
 
 Per group it prints a `levels:` line, the triangles each level of the mesh's
 collapse chain draws (its pieces' summed) with each coarser level's recorded
-error and the mesh box's extent, and the distance off the surface at vertices, triangle
+error, the mesh box's extent, the bytes it takes in the mesh region and, for a
+mesh drawn in clusters, how many clusters and through which level they draw apart;
+and the distance off the surface at vertices, triangle
 centroids and edge midpoints (p50, p99, max, and how many pass a quarter cell);
 the angle between each triangle's face normal, and its corners' shading normals,
 and the field's gradient at its centroid, probed an eighth of the mesh's cell out

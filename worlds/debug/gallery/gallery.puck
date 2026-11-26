@@ -1294,19 +1294,19 @@ rule "gallery-inspect-off" {
 
 // One camera per bookmarked viewpoint (look.puck's lookShots), its eye and aim placed from the building's site when the
 // document compiles; `gallery.shot` selects one.
-// The station view: one camera per display, anchored on its turntable placement (`display-<id>`) and offset in that
+// The station view: one camera per display, anchored on its plinth placement (`display-<id>-plinth`, which stays put while an exhibit is lifted or swapped) and offset in that
 // placement's own axes, so it frames the exhibit and the whole console from the same vantage whichever way the display
 // faces and wherever it stands, and follows the display when it moves. The vantage is look.puck's lookStation: the eye
-// and aim in the turntable's axes (+Y up, -Z toward a viewer before the console).
+// and aim in the plinth's axes (+Y up, -Z toward a viewer before the console).
 cameras: concat(map(galleryDisplays, display => {
   name: $"gallery-station-{display.id}"
   rig {
     name: $"gallery-station-{display.id}"
     version: "puck.camera.program.v1"
     operations [
-      { $type: "anchor", subject { $type: "placement", placementId: $"display-{display.id}" } }
+      { $type: "anchor", subject { $type: "placement", placementId: $"display-{display.id}-plinth" } }
       { $type: "offset", value: lookStation.eye }
-      { $type: "lookAt", subject { $type: "placement", placementId: $"display-{display.id}" }, targetOffset: lookStation.aim }
+      { $type: "lookAt", subject { $type: "placement", placementId: $"display-{display.id}-plinth" }, targetOffset: lookStation.aim }
       { $type: "fieldOfView", fieldOfViewRadians: (lookStation.fov * 0.017453293) }
     ]
   }

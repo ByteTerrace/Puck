@@ -62,8 +62,23 @@ public static class SdfMeshRecord {
     /// (<see cref="SdfMeshAudience"/>, eight bits): the views that may select the draw.</summary>
     public const int AudienceShift = 8;
     /// <summary>The first of two words: the absolute word of the mesh's shared level table, then its coarser level count.
-    /// Each level, zero included, stores its first triangle, vertex count and error as three words.</summary>
+    /// Each level, zero included, stores its first triangle, vertex count and error as three words, and the mesh's cluster
+    /// table follows the last (<see cref="ClusterHeaderWords"/>).</summary>
     public const int LevelTableWord = 32;
+    /// <summary>The words of a mesh's cluster table header, after its level table: the clusters it is drawn in inside its
+    /// draw (zero for a mesh drawn whole), then the levels they draw apart, level zero included. Each cluster's box
+    /// follows (<see cref="ClusterBoxWords"/>), then each clustered level's runs, cluster by cluster
+    /// (<see cref="ClusterRunWords"/>).</summary>
+    public const int ClusterHeaderWords = 2;
+    /// <summary>The words of one cluster's box: its object-space center, then its half extent, as floats.</summary>
+    public const int ClusterBoxWords = 6;
+    /// <summary>The words of one cluster's run at one level: its first triangle among the mesh's levelled triangles, then
+    /// its triangle count.</summary>
+    public const int ClusterRunWords = 2;
+    /// <summary>The most clusters one mesh is drawn in: one bit each of a draw's selection state.</summary>
+    public const int MostClusters = 16;
+    /// <summary>The most levels clusters draw apart, level zero included: two bits each of a draw's selection state.</summary>
+    public const int MostClusterLevels = 4;
     /// <summary>The first of the carry rotation's four words (x, y, z, w).</summary>
     public const int CarryRotationWord = 20;
     /// <summary>The first of the carry translation's three words.</summary>

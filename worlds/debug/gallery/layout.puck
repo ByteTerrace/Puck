@@ -1,14 +1,15 @@
 // The gallery's plan, every dimension the building and what stands in it are placed by (gallery.md beside this file
 // draws it). A module library: it hands its importers lets and functions and emits no document.
 //
-// Positions are in the building's own frame, metres: x runs east from the west wall's outer face (0 .. 60), z north
-// from the south wall's outer face (0 .. 38), y up from the ground. The building's rows are placed under one root
+// Positions are in the building's own frame, metres: x runs east from the west wall's outer face (0 .. 63.1), z north
+// from the south wall's outer face (0 .. 36.85), y up from the ground. The building's rows are placed under one root
 // placement, `gallery` (gallery.puck), so a world stands the building by giving that row a position and a turn; the
 // yaw of a row here is the row's own, with yaw 0 facing -z (south) and yaw 180 facing +z, as a placement's does.
 
 // Where the debug world stands the building: its root placement's position. A document that stands something in the
 // building by world coordinates (a table's lattice, a painting's door) adds it to a plan position with `galleryWorld`.
-let gallerySite = [10, 0, 12]
+// The site keeps the nave's west arcade at world x 22 and its south edge at world z 20.375 however the aisles are sized.
+let gallerySite = [(22 - naveWest), 0, (20.375 - naveSouth)]
 function galleryWorld(x, y, z) = [(gallerySite[0] + x), (gallerySite[1] + y), (gallerySite[2] + z)]
 
 // Four storeys 4.5 m apart: level k's floor top stands at 4.5k + 0.05, on a slab 0.3 m thick, under a ceiling 4.2 m up.
@@ -18,25 +19,38 @@ let galleryCeiling = map(range(0, 4), k => ((galleryStorey * (k + 1)) - 0.25))
 let galleryRoof = 18.05
 let galleryParapet = 19.1
 
-// The footprint and its walls, 0.3 m thick.
-let galleryWidth = 60
-let galleryDepth = 38
+// The footprint's walls, 0.3 m thick; its depth follows the nave (below).
 let galleryWall = 0.3
-let galleryEast = (galleryWidth - galleryWall)
-let galleryNorth = (galleryDepth - galleryWall)
 
-// The nave runs east from x 12 to the east wall, 20 m wide: a void from level 0's floor to the roof between the two
+// The nave runs east from the west arcade to the east wall, 21.25 m wide (seventeen tiles): a void from level 0's floor to the roof between the two
 // balcony edges, a hall about as deep from its viewpoint as it is wide (the kit pack's level-zero hall). The aisles
-// either side of it, and the bridge west of it, are floors on every level. The arcades' piers stand 0.4 m behind each
-// balcony edge, one wide bay apart.
-let naveSouth = 9
-let naveNorth = 29
-let naveWest = 12
+// either side of it, and the bridge west of it, are floors on every level. The arcades' piers stand half a floor tile
+// behind each balcony edge, one wide bay apart, so every pier stands on a tile's centre.
+// The floor tile, the module the floor, the ceiling's coffers, the piers and the displays share: a pier's pitch is
+// four tiles, and a pier and a display each stand on a tile's centre.
+let galleryTile = 1.25
+// The nave's edges, seventeen tiles apart, with six tiles of aisle either side between them and the south and north
+// walls' inner faces, so the room ends at a full tile against both walls.
+let naveSouth = (galleryWall + (6 * galleryTile))
+let naveNorth = (naveSouth + (17 * galleryTile))
+let galleryNorth = (naveNorth + (6 * galleryTile))
+let galleryDepth = (galleryNorth + galleryWall)
+// The west arcade stands nine and a half tiles east of the west wall's inner face, so the tile grid its piers centre
+// meets that wall at a tile's edge.
+let naveWest = (galleryWall + (9.5 * galleryTile))
 let naveMid = ((naveSouth + naveNorth) / 2)
-let arcadeSouth = (naveSouth - 0.4)
-let arcadeNorth = (naveNorth + 0.4)
+let arcadeSouth = (naveSouth - (galleryTile / 2))
+let arcadeNorth = (naveNorth + (galleryTile / 2))
 let arcadePitch = 5
-let arcadeXs = map(range(0, 10), i => (naveWest + (arcadePitch * i)))
+let arcadeXs = map(range(0, 11), i => (naveWest + (arcadePitch * i)))
+// The footprint's east end: the arcades' last pier stands against the east wall, whose inner face lies on the tile edge
+// that pier's foot ends at, so the room ends at a full tile and the arcades' last arches close on that pier.
+let galleryEast = ((arcadeXs[(length(arcadeXs) - 1)] + (galleryTile / 2)))
+let galleryWidth = (galleryEast + galleryWall)
+// The centre of the tile nearest a plan position, along x or z: tile centres stand on the west arcade's line and the
+// south arcade's row, a tile apart.
+function galleryTileX(x) = (naveWest + (galleryTile * floor((((x - naveWest) / galleryTile) + 0.5))))
+function galleryTileZ(z) = (arcadeSouth + (galleryTile * floor((((z - arcadeSouth) / galleryTile) + 0.5))))
 // The north aisle's middle, where its ceiling strip, its downlights and its galleries' displays stand.
 let northAisleMid = ((naveNorth + galleryNorth) / 2)
 
@@ -70,7 +84,7 @@ let archZ = -3.4
 let archSpan = 3.75
 let archXs = map(range(0, 6), i => (22.5 + ((2 * archSpan) * i)))
 let terraceEast = stairWest
-let terraceNorth = 8.7
+let terraceNorth = (naveSouth - galleryWall)
 
 // A window bay's opening: 3.2 m wide and 3.1 m tall, from 0.6 m over its floor, one every 4 m along a face.
 let bayWidth = 3.2
@@ -79,7 +93,10 @@ let baySill = 0.6
 // The nave's end wall holds one tier of three wide, tall bays through levels 0 and 1, a pier between each pair.
 let tallBayWidth = 5
 let tallBayHeight = 7.3
-let tallBayZs = [(naveMid - 6), naveMid, (naveMid + 6)]
+// The end wall is an arcade of its own: three bays of six tiles span it exactly from the south arcade's row to the
+// north's, the centre one on the nave's axis, so its corner piers are the side arcades' last.
+let tallBayPitch = ((arcadeNorth - arcadeSouth) / 3)
+let tallBayZs = [(naveMid - tallBayPitch), naveMid, (naveMid + tallBayPitch)]
 
 // The bays of each face by level, as the centre of each along its face. The south face's are the west wing's (the
 // terrace takes level 3's), level 1's over the entrance and along the painting wing, and the projecting wing's on
@@ -124,3 +141,6 @@ let displaySouth = 4.4
 // frame (0.75 m) meets the turntable: a 0.5 m sphere stands 2 m across.
 let displayScale = 1.4
 let displayExhibitScale = 2
+// How far, in metres, an exhibit floats clear of its turntable: the exhibits were authored resting on the old plinths'
+// cap, some dipping a little under it, so each stands this much higher and reads as a specimen held over the light.
+let displayExhibitLift = 0.3

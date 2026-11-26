@@ -102,8 +102,8 @@ let surfaceLevel = 3
 
 // The levels, in walking order: the board over each lift door names its level and what it shows.
 let galleryLevels = [
-  { level: 0, title: "LEVEL 0  SHAPE", what: "primitives, stretched, extruded, revolved" }
-  { level: 1, title: "LEVEL 1  COMPOSITION", what: "sweeps and facets, blends, folds" }
+  { level: 0, title: "LEVEL 0  SHAPE", what: "primitives, stretched, extruded, revolved, blends, folds" }
+  { level: 1, title: "LEVEL 1  COMPOSITION", what: "sweeps and facets" }
   { level: 2, title: "LEVEL 2  MOTION AND GAMES", what: "the stamp pool's motion, warps II, the board game room" }
   { level: 3, title: "LEVEL 3  FORM AND SURFACE", what: "forms, surfaces, styles, glass" }
 ]
@@ -111,34 +111,34 @@ let galleryLevels = [
 // The display stations in walking order, each showing one group of the gallery's exhibits: its id (the key of its state
 // cells and the stem of its placements' names), its sign's title and what the group shows, its level, where it stands
 // in the building's frame and the yaw its console faces (layout.puck's display lines), and its exhibits in order.
-let galleryDisplays = [
+let galleryDisplayRows = [
   {
     id: "primitives", title: "PRIMITIVES", level: 0, names: uniformRow, what: "each primitive at a uniform scale"
-    x: displayNaveXs[0], z: displayNaveSouth, yaw: 180
+    x: (displayNaveXs[0] - galleryTile), z: displayNaveSouth, yaw: 180
   }
   {
     id: "stretched", title: "STRETCHED", level: 0, names: stretchedRow, what: "each primitive scaled unevenly"
-    x: displayNaveXs[1], z: displayNaveSouth, yaw: 180
+    x: (displayNaveXs[1] - (3 * galleryTile)), z: displayNaveSouth, yaw: 180
   }
   {
     id: "extruded", title: "EXTRUDED", level: 0, names: extrudeRow, what: "each prism profile, extruded"
-    x: displayNaveXs[0], z: displayNaveNorth, yaw: 0
+    x: (displayNaveXs[0] - galleryTile), z: displayNaveNorth, yaw: 0
   }
   {
     id: "revolved", title: "REVOLVED", level: 0, names: revolveRow, what: "each prism profile, revolved"
-    x: displayNaveXs[1], z: displayNaveNorth, yaw: 0
+    x: (displayNaveXs[1] - (3 * galleryTile)), z: displayNaveNorth, yaw: 0
   }
   {
     id: "facets", title: "SWEEPS AND FACETS", level: 1, names: facetRow, what: "sweeps, rounding, shells, warps, relief"
     x: 32, z: displaySouth, yaw: 180
   }
   {
-    id: "blends", title: "BLENDS", level: 1, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere"
-    x: 24, z: displayNorth, yaw: 0
+    id: "blends", title: "BLENDS", level: 0, names: map(blendExhibits, entry => entry.id), what: "every blend of a box and a sphere"
+    x: (displayNaveXs[1] + (5 * galleryTile)), z: displayNaveSouth, yaw: 180
   }
   {
-    id: "folds", title: "FOLDS", level: 1, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds"
-    x: 40, z: displayNorth, yaw: 0
+    id: "folds", title: "FOLDS", level: 0, names: foldRow, what: "symmetry, repeats, polar and wallpaper folds"
+    x: (displayNaveXs[1] + (5 * galleryTile)), z: displayNaveNorth, yaw: 0
   }
   {
     id: "motion", title: "MOTION", level: motionLevel, names: motionRow, what: "the stamp pool: swings, slides, moving blends"
@@ -171,6 +171,8 @@ let galleryDisplays = [
     x: 44, z: displaySouth, yaw: 180
   }
 ]
+// Every display stands on a floor tile's centre (layout.puck's module), so its pad lies square on the tiles.
+let galleryDisplays = map(galleryDisplayRows, display => (display with { x: galleryTileX(display.x), z: galleryTileZ(display.z) }))
 
 // Where each display's list starts in the catalog, and every exhibit in walking order, display by display: its name,
 // the display that shows it (its index in galleryDisplays), its place in that display's list (`slot`) and in the
@@ -222,7 +224,7 @@ let displayReachDepth = [0.9, 1.9]
 let displayStand = [0, 0, 1.75]
 // The exhibit on the turntable stands this far over the display's floor (layout.puck's displayExhibitScale): the
 // exhibits' own frame puts the plinth's cap at 0.75, and the display's cap stands at plinthCapTop times displayScale.
-let displayExhibitDrop = ((plinthCapTop * displayScale) - (0.75 * displayExhibitScale))
+let displayExhibitDrop = (((plinthCapTop * displayScale) - (0.75 * displayExhibitScale)) + displayExhibitLift)
 
 // Every exhibit's station: its name, its catalog index and slot, and its display's place (the turntable's centre, its
 // level and floor height, the yaw it stands at and `front`).
@@ -607,11 +609,8 @@ template sectionSign(name, title, what) {
   }
 }
 
-// A display's board names its group; it faces the way its display's console does.
+// The gallery's boards: the map in the lobby. A display names its group on its own screen.
 template signPrototypes() {
-  for display in galleryDisplays {
-    sectionSign(name: $"gallery-sign-{display.id}", title: display.title, what: display.what)
-  }
   // The map board in the lobby: how to get around, then each level and the rows it holds, in walking order.
   prototype "gallery-map" {
     document {
@@ -731,18 +730,8 @@ template signPrototypes() {
   }
 }
 
-// The map hangs in the lobby facing the entrance; a display's board hangs beside it, on the console's right, facing the
-// way the console does.
-let displaySign = [2.3, 0, -0.2]
+// The map hangs in the lobby facing the entrance.
 template gallerySignPlacements() {
-  for display in galleryDisplays {
-    placement $"gallery-sign-{display.id}" {
-      prototype: $"gallery-sign-{display.id}"
-      parent: "gallery"
-      position: displayPoint(display, displaySign)
-      yawDegrees: display.yaw
-    }
-  }
   placement "gallery-map" {
     prototype: "gallery-map"
     parent: "gallery"

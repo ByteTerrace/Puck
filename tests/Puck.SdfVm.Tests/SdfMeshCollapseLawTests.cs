@@ -171,22 +171,76 @@ public sealed class SdfMeshCollapseLawTests {
         HoldsChain(levelled: levelled, mesh: sphere);
     }
     [Fact]
-    public void ACubesCreasesSlideAndItsCornersStay() {
+    public void ACubesCreasesSlideAndItsCornersStayUntilALevelsErrorSpansItsFaces() {
         var cube = Cube(cells: 6);
         var levelled = SdfMeshCollapse.Levels(mesh: cube);
-        var level = Assert.Single(collection: levelled.Levels);
+        var level = levelled.Levels[0];
 
         Holds(degrees: SdfMeshCollapse.NormalDegrees[0], number: 1, levelled: levelled, mesh: cube, share: SdfMeshCollapse.CellShares[0]);
-        // Its faces are flat and its edges straight, so the level loses nothing and keeps little more than its corners.
+        // Its faces are flat and its edges straight, so the first level loses nothing and keeps little more than its corners.
         Assert.True(condition: (level.Error < 1e-6f));
         Assert.True(condition: (level.TriangleCount <= 24));
 
-        var cubePositions = cube.Positions;
-        var kept = new HashSet<Vector3>(collection: levelled.LevelIndices(level: 1).ToArray().Select(selector: index => cubePositions.Span[((int)index)]));
+        var levelledPositions = levelled.Positions;
+        var kept = new HashSet<Vector3>(collection: levelled.LevelIndices(level: 1).ToArray().Select(selector: index => levelledPositions.Span[((int)index)]));
 
         foreach (var corner in Corners()) {
             Assert.Contains(collection: kept, expected: corner);
         }
+        // A coarser level, whose error spans the faces, may close a corner within it; so may a tetrahedron's.
+        HoldsChain(levelled: levelled, mesh: cube);
+        var tetrahedron = Tetrahedron();
+
+        HoldsChain(levelled: SdfMeshCollapse.Levels(mesh: tetrahedron), mesh: tetrahedron);
+    }
+    [Fact]
+    public void ALargeMeshsClustersPartitionItsClusteredLevelsAndKeepTheirSeams() {
+        var sphere = Sphere(cells: 80);
+        var large = new SdfMesh(indices: sphere.Indices, normals: sphere.Normals, positions: sphere.Positions.ToArray().Select(selector: static point => (3f * point)).ToArray()) { BakeCell = (3f * sphere.BakeCell) };
+        var levelled = SdfMeshCollapse.Levels(mesh: large);
+        var clusters = Assert.IsType<SdfMeshClusters>(@object: levelled.Clusters);
+        var positions = levelled.Positions.Span;
+
+        Assert.InRange(actual: clusters.Count, low: 2, high: SdfMeshClusters.MostClusters);
+        Assert.InRange(actual: clusters.Levels, low: 2, high: Math.Min(val1: SdfMeshClusters.MostLevels, val2: (levelled.Levels.Count + 1)));
+        HoldsChain(levelled: levelled, mesh: large);
+
+        // Each clustered level's triangles are its clusters' runs, each run within its cluster's box; and every position
+        // two clusters share at level zero is a vertex of both at every clustered level.
+        HashSet<Vector3>[] Runs(int level) {
+            var indices = levelled.LevelIndices(level: level).Span;
+            var sets = new HashSet<Vector3>[clusters.Count];
+            var first = 0;
+
+            Assert.Equal(expected: (indices.Length / 3), actual: Enumerable.Range(start: 0, count: clusters.Count).Sum(selector: cluster => clusters.Triangles(cluster: cluster, level: level)));
+            for (var cluster = 0; (cluster < clusters.Count); cluster++) {
+                sets[cluster] = [];
+                Assert.Equal(expected: first, actual: clusters.FirstTriangle(cluster: cluster, level: level));
+                for (var corner = (3 * first); (corner < (3 * (first + clusters.Triangles(cluster: cluster, level: level)))); corner++) {
+                    var point = levelled.Positions.Span[((int)indices[corner])];
+
+                    Assert.True(condition: (Vector3.Min(value1: point, value2: clusters.Low(cluster: cluster)) == clusters.Low(cluster: cluster)) && (Vector3.Max(value1: point, value2: clusters.High(cluster: cluster)) == clusters.High(cluster: cluster)));
+                    sets[cluster].Add(item: point);
+                }
+                first += clusters.Triangles(cluster: cluster, level: level);
+            }
+            return sets;
+        }
+        var own = Runs(level: 0);
+
+        for (var level = 1; (level < clusters.Levels); level++) {
+            var sets = Runs(level: level);
+
+            for (var a = 0; (a < clusters.Count); a++) {
+                for (var b = (a + 1); (b < clusters.Count); b++) {
+                    foreach (var seam in own[a].Intersect(second: own[b])) {
+                        Assert.Contains(collection: sets[a], expected: seam);
+                        Assert.Contains(collection: sets[b], expected: seam);
+                    }
+                }
+            }
+        }
+        Assert.True(condition: (positions.Length >= large.VertexCount));
     }
     [Fact]
     public void AMaterialsEdgeAndAnOpenEdgeStay() {
@@ -211,11 +265,9 @@ public sealed class SdfMeshCollapseLawTests {
     }
     [Fact]
     public void AMeshNoLevelSavesOnReturnsItself() {
-        // Without normals, a cell or a fourth triangle, with members, or where every place is a corner, nothing collapses.
+        // Without normals, a cell or a fourth triangle, or with members, nothing collapses.
         var sphere = Sphere(cells: 4);
-        var tetrahedron = Tetrahedron();
 
-        Assert.Same(expected: tetrahedron, actual: SdfMeshCollapse.Levels(mesh: tetrahedron));
         Assert.Empty(collection: SdfMeshCollapse.Levels(mesh: new SdfMesh(indices: sphere.Indices, positions: sphere.Positions) { BakeCell = sphere.BakeCell }).Levels);
         Assert.Empty(collection: SdfMeshCollapse.Levels(mesh: (sphere with { BakeCell = Vector3.Zero })).Levels);
         Assert.Empty(collection: SdfMeshCollapse.Levels(mesh: new SdfMesh(indices: sphere.Indices.Slice(length: 9, start: 0), normals: sphere.Normals, positions: sphere.Positions) { BakeCell = sphere.BakeCell }).Levels);
@@ -306,19 +358,27 @@ public sealed class SdfMeshCollapseLawTests {
     }
     // A level's whole contract against its mesh, measured by brute force: its error within the level's bound and at least
     // every vertex's distance to the level's nearest triangle of its material, some such triangle within the error and the
-    // angle, no edge opened, and no triangle turned against its normals. Fails the test at the first breach.
+    // angle (the angle waived for a vertex within the error of a sharp turn, SdfMeshCollapse.SharpDegrees, measured here
+    // in a straight line, which is never farther than along the mesh, so the check is looser than the collapse's), no edge
+    // opened, and no triangle turned against its normals. Every level vertex, made ones included, sits at one of the mesh's
+    // own positions. Fails the test at the first breach.
     private static void Holds(SdfMesh mesh, SdfMesh levelled, int number, float share, float degrees) =>
         Assert.Null(@object: Violation(degrees: degrees, levelled: levelled, mesh: mesh, number: number, share: share));
     // The first breach of a level's contract (Holds), or null where it holds.
     private static string? Violation(SdfMesh mesh, SdfMesh levelled, int number, float share, float degrees) {
         var level = levelled.Levels[(number - 1)];
         var cell = mesh.BakeCell.X;
-        var positions = mesh.Positions.Span;
-        var normals = mesh.Normals.Span;
+        var ownPositions = mesh.Positions.Span;
+        var positions = levelled.Positions.Span;
+        var normals = levelled.Normals.Span;
         var indices = levelled.LevelIndices(level: number).Span;
         var cosine = Math.Cos(d: ((degrees * Math.PI) / 180.0));
+        var places = new HashSet<Vector3>(collection: ownPositions.ToArray());
 
         if (level.Error > (share * cell)) { return $"error {level.Error} past the bound {share * cell}"; }
+        foreach (var index in indices) {
+            if (!places.Contains(item: positions[((int)index)])) { return $"vertex {index} sits at none of the mesh's own positions"; }
+        }
         if (OpenEdges(positions: positions, indices: mesh.Indices.Span) != OpenEdges(indices: indices, positions: positions)) { return "an edge opened"; }
         for (var triangle = 0; (triangle < level.TriangleCount); triangle++) {
             var (a, b, c) = (((int)indices[(3 * triangle)]), ((int)indices[((3 * triangle) + 1)]), ((int)indices[((3 * triangle) + 2)]));
@@ -329,11 +389,15 @@ public sealed class SdfMeshCollapseLawTests {
         var materials = mesh.TriangleMaterials.Span;
         var levelMaterials = levelled.LevelMaterials(level: number).Span;
         var own = mesh.Indices.Span;
+        var sharp = Sharp(mesh: mesh);
 
         for (var corner = 0; (corner < own.Length); corner++) {
             var vertex = ((int)own[corner]);
             var material = (materials.IsEmpty ? 0u : materials[(corner / 3)]);
             var nearest = double.PositiveInfinity;
+            var sample = positions[vertex];
+            var error = level.Error;
+            var waived = sharp.Any(predicate: point => (Vector3.Distance(value1: point, value2: sample) < error));
             var within = false;
 
             for (var triangle = 0; (triangle < level.TriangleCount); triangle++) {
@@ -344,7 +408,7 @@ public sealed class SdfMeshCollapseLawTests {
                 var normal = Vector3.Normalize(value: (((weights.X * normals[a]) + (weights.Y * normals[b])) + (weights.Z * normals[c])));
 
                 nearest = Math.Min(val1: nearest, val2: distance);
-                within |= ((distance <= (level.Error + 1e-6)) && (Vector3.Dot(vector1: normal, vector2: Vector3.Normalize(value: normals[vertex])) >= (cosine - 1e-6)));
+                within |= ((distance <= (level.Error + 1e-6)) && (waived || (Vector3.Dot(vector1: normal, vector2: Vector3.Normalize(value: normals[vertex])) >= (cosine - 1e-6))));
             }
 
             if (!(nearest <= (level.Error + 1e-6))) { return $"vertex {vertex} lies {nearest} from the level, past its error {level.Error}"; }
@@ -370,6 +434,29 @@ public sealed class SdfMeshCollapseLawTests {
             }
         }
         return null;
+    }
+    // The positions where a mesh's surface turns sharply: copies at one position whose normals part by more than
+    // SdfMeshCollapse.SharpDegrees, and both ends of an edge whose normals do.
+    private static List<Vector3> Sharp(SdfMesh mesh) {
+        var positions = mesh.Positions.Span;
+        var normals = mesh.Normals.Span;
+        var indices = mesh.Indices.Span;
+        var sharp = Math.Cos(d: ((SdfMeshCollapse.SharpDegrees * Math.PI) / 180.0));
+        var points = new List<Vector3>();
+        bool Parts(Vector3 a, Vector3 b) => (Vector3.Dot(vector1: Vector3.Normalize(value: a), vector2: Vector3.Normalize(value: b)) < sharp);
+
+        for (var a = 0; (a < positions.Length); a++) {
+            for (var b = (a + 1); (b < positions.Length); b++) {
+                if ((positions[a] == positions[b]) && Parts(a: normals[a], b: normals[b])) { points.Add(item: positions[a]); }
+            }
+        }
+        for (var corner = 0; (corner < indices.Length); corner++) {
+            var a = ((int)indices[corner]);
+            var b = ((int)indices[(((corner % 3) == 2) ? (corner - 2) : (corner + 1))]);
+
+            if (Parts(a: normals[a], b: normals[b])) { points.Add(item: positions[a]); points.Add(item: positions[b]); }
+        }
+        return points;
     }
     private static int OpenEdges(ReadOnlySpan<Vector3> positions, ReadOnlySpan<uint> indices) {
         var edges = new Dictionary<(Vector3, Vector3), int>();

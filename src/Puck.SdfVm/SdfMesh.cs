@@ -25,6 +25,9 @@ public sealed partial record SdfMesh {
     public IReadOnlyList<SdfMesh> Chunks { get; init; } = [];
     /// <summary>Gets how many independently drawn meshes the mesh is: its <see cref="Chunks"/>, or one, itself.</summary>
     public int PieceCount => Math.Max(val1: 1, val2: Chunks.Count);
+    /// <summary>Gets the clusters the mesh is drawn in inside its draw, whose triangles its own and its first levels lie
+    /// cluster by cluster in (<see cref="SdfMeshClusters"/>); <see langword="null"/> for a mesh drawn whole.</summary>
+    public SdfMeshClusters? Clusters { get; init; }
 
     /// <summary>Returns one independently drawn mesh of the mesh: a chunk, or the mesh itself when it has none.</summary>
     /// <param name="index">The piece, below <see cref="PieceCount"/>.</param>
@@ -944,14 +947,15 @@ public static class SdfMeshRegion {
         return (words * sizeof(uint));
     }
     /// <summary>The index section's words: all levelled triangles' indices, then one three-word row per level, including
-    /// zero, holding its first triangle, vertex count and error.</summary>
+    /// zero, holding its first triangle, vertex count and error, then the clusters' table (<see cref="SdfMeshClusters"/>),
+    /// whose header alone, a zero cluster count, stands for a mesh drawn whole.</summary>
     /// <param name="mesh">The mesh.</param>
     /// <returns>Its index words.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
     public static int IndexWordsOf(SdfMesh mesh) {
         ArgumentNullException.ThrowIfNull(mesh);
 
-        return checked(((3 * mesh.LevelledTriangleCount) + (3 * (mesh.Levels.Count + 1))));
+        return checked((((3 * mesh.LevelledTriangleCount) + (3 * (mesh.Levels.Count + 1))) + (mesh.Clusters?.TableWords ?? SdfMeshClusters.HeaderWords)));
     }
     /// <summary>The triangle-material words a mesh takes: one a triangle of every level, laid out as its indices are, or
     /// none for a mesh without them.</summary>
@@ -1314,16 +1318,25 @@ public static class SdfMeshRegion {
             materialWord += levelMaterials.Length;
             indexWord += levelIndices.Length;
         }
-        // A shared table after this mesh's indices, independent of draw count and of the baker's current two levels.
+        // A shared table after this mesh's indices, independent of draw count, then the clusters' table.
         var firstTriangle = 0;
+        Span<int> levelFirst = stackalloc int[SdfMeshClusters.MostLevels];
 
         for (var level = 0; (level <= mesh.Levels.Count); level++) {
             var triangles = ((level == 0) ? mesh.TriangleCount : mesh.Levels[(level - 1)].TriangleCount);
 
+            if (level < levelFirst.Length) { levelFirst[level] = firstTriangle; }
             destination[indexWord++] = ((uint)firstTriangle);
             destination[indexWord++] = ((uint)(3 * triangles));
             destination[indexWord++] = BitConverter.SingleToUInt32Bits(value: ((level == 0) ? 0f : mesh.Levels[(level - 1)].Error));
             firstTriangle += triangles;
+        }
+        if (mesh.Clusters is { } clusters) {
+            clusters.Write(destination: destination.Slice(start: indexWord, length: clusters.TableWords), levelFirst: levelFirst);
+            indexWord += clusters.TableWords;
+        } else {
+            destination[indexWord++] = 0u;
+            destination[indexWord++] = 0u;
         }
         if (mesh.VertexMembers.IsEmpty) { return; }
 

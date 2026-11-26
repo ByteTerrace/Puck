@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Runtime.InteropServices;
+using Puck.Abstractions.Collections;
 using Puck.Abstractions.Counting;
 using Puck.Abstractions.Memory;
 using Puck.Maths;
@@ -9,7 +10,8 @@ namespace Puck.SdfVm;
 /// <summary>
 /// The bake's coarser levels of detail (<see cref="SdfMesh.Levels"/>): a merged mesh (<see cref="SdfMeshPlanarMerge"/>)
 /// simplified by half-edge collapse, each collapse moving one place's vertices onto a neighbouring place's, so every
-/// level draws a subset of the mesh's own vertices with their own normals and no vertex is made or moved.
+/// level draws vertices at the mesh's own places, each with a normal one of the mesh's own vertices has, and no position
+/// is made or moved.
 /// <para>Collapses are tried cheapest first by the quadric of the planes about each place, with the planes along creases
 /// and material edges weighted so those simplify last, and are taken only where every vertex of the mesh's own triangles
 /// stays within the level's error of a triangle of its own material whose interpolated normal there is within the level's
@@ -17,12 +19,24 @@ namespace Puck.SdfVm;
 /// level draws it, and every new triangle's centroid and edge midpoints stay within it of the surface of their material
 /// it replaces (with what that surface had strayed already), so a triangle no vertex needs, one cutting through a thin
 /// rod, is measured too. Those distances are measured, never estimated, and the level records the largest
-/// (<see cref="SdfMeshLevel.Error"/>), which the draws' level choice projects (<see cref="SdfMeshDetail"/>). A place on a
-/// crease slides only along it, with each side keeping its own vertices, and a place on material edges only along them; a
-/// corner where three or more faces meet, a place on the mesh's open edge, and one whose triangles do not close one ring
-/// about it never move, so neighbouring meshes keep meeting edge for edge and a corner stays where it was. No collapse
-/// turns a triangle to face away from its vertices' normals, which the opaque pass's back-face cull would show as a hole.
-/// The levels are a pure function of the mesh, and presentation alone.</para>
+/// (<see cref="SdfMeshLevel.Error"/>), which the draws' level choice projects (<see cref="SdfMeshDetail"/>). A vertex whose
+/// distance along the mesh to a sharp turn of its surface (a crease, or an edge whose ends' normals part by more than
+/// <see cref="SharpDegrees"/>) is under the level's error keeps only the distance bound: where the level is drawn that
+/// error is under a pixel, so the vertex's normal shades no pixel of its own (the side wall of a plate thinner than the
+/// error, the rim of a leaf). A place on one crease slides only along it, with each side keeping its own vertices, and a
+/// place on material edges only along them; a corner where three or more faces meet slides along any of its creases, each
+/// side of the crease keeping its own vertices and each other face taking the neighbour's vertex whose normal lies within
+/// the level's angle of its own, or, where the neighbour has none, a vertex made at the neighbour's place with its own
+/// normal (<see cref="SdfMesh.VertexCount"/> grows by those; the mesh's own triangles name none of them). So a plate whose
+/// thickness is under a level's error closes to a card whose two faces keep their own normals, and a box's corner stays
+/// where it was until its faces' samples allow it to move. A place on the mesh's open edge, and one whose triangles do
+/// not close one ring about it, never move, so neighbouring meshes keep meeting edge for edge. No collapse turns a
+/// triangle to face away from its vertices' normals, which the opaque pass's back-face cull would show as a hole.</para>
+/// <para>A mesh at least <see cref="ClusterExtent"/> long with enough triangles is drawn in clusters
+/// (<see cref="SdfMesh.Clusters"/>): its own triangles are reordered cluster by cluster, every place two clusters share is
+/// held for the first <see cref="ClusteredRuns"/> runs (one door, the collapser's kind of a place), so each of those levels
+/// lies cluster by cluster too and any mix of them meets edge for edge, and the later runs collapse the mesh whole. The
+/// levels and clusters are a pure function of the mesh, and presentation alone.</para>
 /// </summary>
 public static class SdfMeshCollapse {
     /// <summary>The share of a mesh's contour cell (<see cref="SdfMesh.BakeCell"/>, its largest side) each coarser level's
@@ -54,9 +68,14 @@ public static class SdfMeshCollapse {
     // The least cosine between a collapsed triangle's normal and its own before: a collapse that turns a triangle further
     // is refused, so no triangle folds over.
     private const double FlipCosine = 0.2;
-    // The most passes a level takes, and the least share of its places a pass must collapse for another to follow.
+    // The most passes a level takes, and the least share of the places it still holds a pass must collapse for another to
+    // follow.
     private const int MaxPasses = 48;
     private const int TailShare = 512;
+    /// <summary>The angle, in degrees, by which the normals at a crease's copies or at an edge's two ends must part for the
+    /// surface to turn sharply there: a vertex nearer such a turn, along the mesh, than a level's error keeps that level's
+    /// distance bound but not its normal bound (<see cref="SdfMeshCollapse"/>).</summary>
+    public const float SharpDegrees = 45f;
 
     /// <summary>Counts the levels the collapse ran, one an error budget a mesh was collapsed to.</summary>
     public static readonly WorkKind Runs = new(name: "sdf.collapse.runs", unit: "levels", workClass: WorkClass.Pacing);
@@ -77,9 +96,10 @@ public static class SdfMeshCollapse {
     /// <param name="mesh">The merged mesh.</param>
     /// <param name="preserveFeatures">Limits crease and material-edge error to the largest bake-cell dimension divided
     /// by 8, while face interiors use the ordinary level budget. A mesh without detectable features retains its base surface.</param>
-    /// <returns>The mesh with <see cref="SdfMesh.Levels"/> set; <paramref name="mesh"/> itself when it carries no vertex
-    /// normals, no contour cell, members (whose draws no host box bounds, so none chooses a level), or no level saves
-    /// enough (<see cref="KeptShare"/>).</returns>
+    /// <returns>The mesh with <see cref="SdfMesh.Levels"/> set, its vertices followed by those its levels made (its own
+    /// triangles and indices unchanged); <paramref name="mesh"/> itself when it carries no vertex normals, no contour cell,
+    /// members (whose draws no host box bounds, so none chooses a level), or no level saves enough
+    /// (<see cref="KeptShare"/>).</returns>
     /// <param name="owner">The workspace owner charged for the collapse's tables, or <see langword="null"/> for none.</param>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
     /// <param name="allocator">The native allocator the collapse's lists come from, so a background bake's scratch never reaches the collector, or <see langword="null"/> to rent them.</param>
@@ -103,14 +123,27 @@ public static class SdfMeshCollapse {
             cosines[level] = Math.Cos(d: ((NormalDegrees[level] * Math.PI) / 180.0));
         }
 
+        // A mesh large enough to stand partly near and partly far is drawn in clusters: its own triangles reordered cluster
+        // by cluster, which every clustered level keeps (Collapser.Run lists alive triangles in their order).
         using var scope = new RentedScope(allocator: allocator, owner: owner);
-        var collapser = new Collapser(cosines: cosines, errors: errors, mesh: mesh, preserveFeatures: preserveFeatures, scope: scope);
+        var clusterCount = 0;
+        int[]? order = null;
+        var clusterOf = (preserveFeatures ? null : Partition(clusters: out clusterCount, mesh: mesh, order: out order, scope: scope));
+
+        if ((clusterOf is not null) && (order is not null)) { mesh = Reordered(mesh: mesh, order: order); }
+
+        var collapser = new Collapser(clusterOf: clusterOf, cosines: cosines, errors: errors, mesh: mesh, preserveFeatures: preserveFeatures, scope: scope);
 
         if (preserveFeatures && !collapser.HasFeatures) { return mesh; }
         var levels = new List<SdfMeshLevel>(capacity: CellShares.Length);
         var kept = mesh.TriangleCount;
+        var runs = new List<int>();
 
+        if (clusterOf is not null) { collapser.CountClusters(into: runs); }
         for (var level = 0; (level < levelCount); level++) {
+            // Past the clustered runs the seams the clusters share move too: those levels are drawn whole.
+            if ((clusterOf is not null) && (level == ClusteredRuns)) { collapser.ReleaseSeams(); }
+
             var made = collapser.Run(level: level);
 
             ProcessWork.Count(kind: Runs);
@@ -123,9 +156,156 @@ public static class SdfMeshCollapse {
             // holds, and the larger holds for both.
             levels.Add(item: ((levels.Count == 0) ? made : (made with { Error = MathF.Max(x: made.Error, y: levels[^1].Error) })));
             kept = made.TriangleCount;
+            if ((clusterOf is not null) && (level < ClusteredRuns)) { collapser.CountClusters(into: runs); }
         }
 
-        return ((levels.Count == 0) ? mesh : (mesh with { Levels = levels }));
+        if (levels.Count == 0) { return mesh; }
+
+        var clusters = ((clusterOf is null) ? null : collapser.Clusters(clusters: clusterCount, runs: runs));
+
+        if (collapser.MadeVertices == 0) { return (mesh with { Clusters = clusters, Levels = levels }); }
+
+        // Every made vertex is kept, whichever levels name it, past the mesh's own vertices, which alone its own triangles name.
+        using var held = mesh.Hold();
+        var positions = new Vector3[(mesh.VertexCount + collapser.MadeVertices)];
+        var normals = new Vector3[positions.Length];
+
+        held.Positions.Span.CopyTo(destination: positions);
+        held.Normals.Span.CopyTo(destination: normals);
+        collapser.WriteMade(positions: positions.AsSpan(start: mesh.VertexCount), normals: normals.AsSpan(start: mesh.VertexCount));
+
+        return new SdfMesh(positions: positions, indices: held.Indices.ToArray(), normals: normals, triangleMaterials: held.TriangleMaterials.ToArray()) {
+            BakeCell = mesh.BakeCell,
+            Clusters = clusters,
+            Encloses = mesh.Encloses,
+            Levels = levels,
+        };
+    }
+
+    /// <summary>The collapse runs whose levels a clustered mesh draws cluster by cluster, from the finest (a quarter and
+    /// half a cell, <see cref="CellShares"/>): the levels a draw near enough to hold some of its triangles near and some
+    /// far takes. Their seams stay where they are, which costs those levels the seam's vertices (a few percent of a tree's
+    /// at eight clusters; a third run, at one cell, cost the forest more than its clusters saved); past them a mesh is
+    /// collapsed and drawn whole.</summary>
+    public const int ClusteredRuns = 2;
+    /// <summary>The longest extent, in object units, past which a mesh is drawn in clusters: a mesh shorter than it
+    /// spans too little depth from any eye far enough to need no level finer than another part of it.</summary>
+    public const float ClusterExtent = 4f;
+    /// <summary>The fewest triangles of its own a cluster holds: a mesh is split while its largest cluster holds twice
+    /// this many and is longer than <see cref="ClusterSide"/>, up to <see cref="SdfMeshClusters.MostClusters"/>, which
+    /// gives a forest tree of about 300,000 triangles eight.</summary>
+    public const int ClusterTriangles = 32768;
+    /// <summary>The shortest a cluster's longest extent is split at, in object units.</summary>
+    public const float ClusterSide = 1.5f;
+
+    // A mesh's clusters: its triangles split at the median of their centroids along the longest extent of the largest
+    // cluster, again and again, while that cluster holds at least twice ClusterTriangles and is longer than ClusterSide;
+    // null for a mesh shorter than ClusterExtent or too small to split. order lists the triangles cluster by cluster, each
+    // cluster's in their own order, and the result names each reordered triangle's cluster.
+    private static int[]? Partition(SdfMesh mesh, RentedScope scope, out int clusters, out int[]? order) {
+        clusters = 0;
+        order = null;
+
+        var extent = (mesh.PositionHigh - mesh.PositionLow);
+
+        if ((MathF.Max(x: extent.X, y: MathF.Max(x: extent.Y, y: extent.Z)) < ClusterExtent) || (mesh.TriangleCount < (2 * ClusterTriangles))) { return null; }
+        using var held = mesh.Hold();
+        var positions = held.Positions.Span;
+        var indices = held.Indices.Span;
+        var triangles = mesh.TriangleCount;
+        var centroids = scope.Buffer<Vector3>(length: triangles).GetSpan()[..triangles];
+        var sorted = new int[triangles];
+        var keys = scope.Buffer<float>(length: triangles).GetSpan();
+        var places = scope.Buffer<int>(length: triangles).GetSpan();
+        var split = scope.Buffer<int>(length: triangles).GetSpan();
+
+        for (var triangle = 0; (triangle < triangles); triangle++) {
+            centroids[triangle] = (((positions[((int)indices[(3 * triangle)])] + positions[((int)indices[((3 * triangle) + 1)])]) + positions[((int)indices[((3 * triangle) + 2)])]) / 3f);
+            sorted[triangle] = triangle;
+        }
+
+        // Each cluster a run of `sorted` between consecutive starts, split in place.
+        Span<int> starts = stackalloc int[(SdfMeshClusters.MostClusters + 1)];
+        var count = 1;
+
+        starts[0] = 0;
+        starts[1] = triangles;
+        while (count < SdfMeshClusters.MostClusters) {
+            var largest = -1;
+            var axis = 0;
+
+            for (var cluster = 0; (cluster < count); cluster++) {
+                var holds = (starts[(cluster + 1)] - starts[cluster]);
+
+                if ((holds < (2 * ClusterTriangles)) || ((largest >= 0) && (holds <= (starts[(largest + 1)] - starts[largest])))) { continue; }
+                var low = new Vector3(value: float.PositiveInfinity);
+                var high = new Vector3(value: float.NegativeInfinity);
+
+                for (var at = starts[cluster]; (at < starts[(cluster + 1)]); at++) {
+                    low = Vector3.Min(value1: low, value2: centroids[sorted[at]]);
+                    high = Vector3.Max(value1: high, value2: centroids[sorted[at]]);
+                }
+                var size = (high - low);
+                var longest = MathF.Max(x: size.X, y: MathF.Max(x: size.Y, y: size.Z));
+
+                if (longest < ClusterSide) { continue; }
+                largest = cluster;
+                axis = ((size.X == longest) ? 0 : ((size.Y == longest) ? 1 : 2));
+            }
+            if (largest < 0) { break; }
+
+            var start = starts[largest];
+            var length = (starts[(largest + 1)] - start);
+            var run = sorted.AsSpan(start: start, length: length);
+
+            // The median by the axis (the sort draws on no randomness, so a run splits the same way every time); each half
+            // then keeps its triangles in their own order.
+            for (var at = 0; (at < length); at++) {
+                keys[at] = centroids[run[at]][axis];
+                places[at] = at;
+            }
+            keys[..length].Sort(items: places[..length]);
+            var middle = (length / 2);
+
+            places[..middle].Sort();
+            places[middle..length].Sort();
+            for (var at = 0; (at < length); at++) { split[at] = run[places[at]]; }
+            split[..length].CopyTo(destination: run);
+            for (var after = (count + 1); (after > (largest + 1)); after--) { starts[after] = starts[(after - 1)]; }
+            starts[(largest + 1)] = (start + middle);
+            count++;
+        }
+        if (count < 2) { return null; }
+
+        clusters = count;
+        order = sorted;
+        var clusterOf = new int[triangles];
+
+        for (var cluster = 0; (cluster < clusters); cluster++) {
+            for (var at = starts[cluster]; (at < starts[(cluster + 1)]); at++) { clusterOf[at] = cluster; }
+        }
+        return clusterOf;
+    }
+    // A mesh with its own triangles (indices and triangle materials) in a new order, every other plane as it was.
+    private static SdfMesh Reordered(SdfMesh mesh, int[] order) {
+        using var held = mesh.Hold();
+        var indices = held.Indices.Span;
+        var materials = held.TriangleMaterials.Span;
+        var reordered = new uint[indices.Length];
+        var reorderedMaterials = new uint[materials.Length];
+
+        for (var at = 0; (at < order.Length); at++) {
+            var triangle = order[at];
+
+            indices.Slice(start: (3 * triangle), length: 3).CopyTo(destination: reordered.AsSpan(start: (3 * at)));
+            if (!materials.IsEmpty) { reorderedMaterials[at] = materials[triangle]; }
+        }
+
+        return new SdfMesh(positions: held.Positions.ToArray(), indices: reordered, normals: held.Normals.ToArray(), triangleMaterials: reorderedMaterials) {
+            BakeCell = mesh.BakeCell,
+            BakedSites = mesh.BakedSites,
+            Encloses = mesh.Encloses,
+        };
     }
 
     // One mesh's collapses. A place is a position some vertices share (a crease's copies, one per face about it); a
@@ -143,7 +323,22 @@ public static class SdfMeshCollapse {
         private readonly OwnedBuffer<int> m_placeOf;
         // Each place's position, in doubles.
         private readonly OwnedBuffer<Point> m_point;
+        // The mesh's own vertices' normals; past them, each vertex a collapse made, at its place with its normal; past
+        // those, the vertices the collapse being measured would make (Normal reads all three).
         private readonly OwnedBuffer<Vector3> m_normals;
+        private readonly int m_ownVertices;
+        private readonly List<(int Place, Vector3 Normal)> m_madeVertices = [];
+        private readonly List<Vector3> m_making = [];
+        // Each own vertex's distance along the mesh to the nearest sharp turn of its surface (FeatureDistances).
+        private readonly OwnedBuffer<double> m_feature;
+        private readonly bool m_waivesNormals;
+        // The collapse being measured: the copies on each side of its edge at the place and the neighbour, and the place's
+        // other copies with the neighbour's vertices they take (Map).
+        private int m_fromFirst;
+        private int m_toFirst;
+        private int m_fromSecond;
+        private int m_toSecond;
+        private readonly List<(int From, int To)> m_otherCopies = [];
         private readonly OwnedBuffer<int> m_corners;
         // Each corner's place, m_placeOf of its vertex, which Commit keeps beside m_corners.
         private readonly OwnedBuffer<int> m_cornerPlace;
@@ -261,9 +456,38 @@ public static class SdfMeshCollapse {
 
         public bool HasFeatures => (m_kind.GetSpan().Contains(value: Locked) || m_kind.GetSpan().Contains(value: Slides));
 
+        // Each triangle's cluster (null for a mesh drawn whole), the clusters' count and boxes, which places their
+        // triangles share, and whether those places are held: every clustered run holds them, and ReleaseSeams lets go.
+        private readonly int[]? m_clusterOf;
+        private readonly int m_clusters;
+        private readonly Vector3[] m_clusterLow = [];
+        private readonly Vector3[] m_clusterHigh = [];
+        private readonly OwnedBuffer<bool> m_seam;
+        private bool m_seamsHeld;
+
+        // Appends each cluster's triangles the latest level draws (its own, before the first run), cluster by cluster.
+        public void CountClusters(List<int> into) {
+            var start = into.Count;
+
+            for (var cluster = 0; (cluster < m_clusters); cluster++) { into.Add(item: 0); }
+            for (var triangle = 0; (triangle < m_triangles); triangle++) {
+                if ((m_pass == 0) || m_alive[triangle]) { into[(start + m_clusterOf![triangle])]++; }
+            }
+        }
+        // The clusters' boxes, from the mesh's own triangles, and the runs CountClusters appended.
+        public SdfMeshClusters Clusters(int clusters, List<int> runs) => new(high: m_clusterHigh[..clusters], low: m_clusterLow[..clusters], triangles: [.. runs]);
+        // Lets the seams the clusters share move: the levels after are collapsed and drawn whole.
+        public void ReleaseSeams() {
+            m_seamsHeld = false;
+            Fans();
+            for (var place = 0; (place < m_places); place++) {
+                if (m_seam[place]) { m_kind[place] = KindOf(penalize: false, place: place); }
+            }
+        }
+
         // Every table is rented through the scope, which the caller disposes: a rented array can be longer than asked for, so
         // each read is bounded by the place, triangle or sample count, never the array's length.
-        public Collapser(SdfMesh mesh, bool preserveFeatures, RentedScope scope, double[] errors, double[] cosines) {
+        public Collapser(SdfMesh mesh, bool preserveFeatures, RentedScope scope, double[] errors, double[] cosines, int[]? clusterOf) {
             m_errors = errors;
             m_cosines = cosines;
             m_lineLimit = (preserveFeatures ? (Math.Max(val1: mesh.BakeCell.X, val2: Math.Max(val1: mesh.BakeCell.Y, val2: mesh.BakeCell.Z)) / 8.0) : double.PositiveInfinity);
@@ -285,6 +509,9 @@ public static class SdfMeshCollapse {
 
             m_normals = scope.Buffer<Vector3>(length: normals.Length);
             normals.CopyTo(destination: m_normals.GetSpan());
+            m_ownVertices = normals.Length;
+            // Lettering's strokes are as narrow as the levels it makes, so its normals keep their bound everywhere.
+            m_waivesNormals = !preserveFeatures;
             m_carriesMaterials = !materials.IsEmpty;
             m_triangles = mesh.TriangleCount;
             m_corners = scope.Buffer<int>(length: (3 * m_triangles));
@@ -299,6 +526,29 @@ public static class SdfMeshCollapse {
                 m_materials[triangle] = (materials.IsEmpty ? 0u : materials[triangle]);
                 m_alive[triangle] = Distinct(triangle: triangle);
                 m_aliveTriangles += (m_alive[triangle] ? 1 : 0);
+            }
+            m_seam = scope.Buffer<bool>(length: m_places, clear: true);
+            if (clusterOf is not null) {
+                // A place the triangles of two clusters share is a seam, which stays put while the levels are clustered.
+                var first = scope.Buffer<int>(length: m_places);
+
+                first.GetSpan()[..m_places].Fill(value: -1);
+                m_clusterOf = clusterOf;
+                foreach (var cluster in clusterOf) { m_clusters = Math.Max(val1: m_clusters, val2: (cluster + 1)); }
+                m_clusterLow = new Vector3[m_clusters];
+                m_clusterHigh = new Vector3[m_clusters];
+                Array.Fill(array: m_clusterLow, value: new Vector3(value: float.PositiveInfinity));
+                Array.Fill(array: m_clusterHigh, value: new Vector3(value: float.NegativeInfinity));
+                for (var corner = 0; (corner < (3 * m_triangles)); corner++) {
+                    var cluster = clusterOf[(corner / 3)];
+                    var place = m_cornerPlace[corner];
+                    var point = positions[m_corners[corner]];
+
+                    m_clusterLow[cluster] = Vector3.Min(value1: m_clusterLow[cluster], value2: point);
+                    m_clusterHigh[cluster] = Vector3.Max(value1: m_clusterHigh[cluster], value2: point);
+                    if (first[place] < 0) { first[place] = cluster; } else if (first[place] != cluster) { m_seam[place] = true; }
+                }
+                m_seamsHeld = true;
             }
 
             m_fanStart = scope.Buffer<int>(length: (m_places + 1));
@@ -385,7 +635,78 @@ public static class SdfMeshCollapse {
             for (var triangle = 0; (triangle < m_triangles); triangle++) {
                 if (m_alive[triangle]) { AddFace(triangle: triangle); }
             }
+            m_feature = scope.Buffer<double>(length: m_places);
+            if (m_waivesNormals) { FeatureDistances(scope: scope); }
         }
+
+        /// <summary>Gets the vertices the collapses made past the mesh's own.</summary>
+        public int MadeVertices => m_madeVertices.Count;
+
+        // Writes each made vertex's position (its place's) and normal, in the order the vertex ids past the mesh's own name them.
+        public void WriteMade(Span<Vector3> positions, Span<Vector3> normals) {
+            for (var at = 0; (at < m_madeVertices.Count); at++) {
+                var (place, normal) = m_madeVertices[at];
+
+                positions[at] = new Vector3(x: ((float)m_point[place].X), y: ((float)m_point[place].Y), z: ((float)m_point[place].Z));
+                normals[at] = normal;
+            }
+        }
+
+        // Each place's distance along the mesh's edges to the nearest place where its surface turns sharply: one whose copies'
+        // normals part by more than SharpDegrees, or an end of an edge whose two ends' normals do. Dijkstra from every such
+        // place over the mesh's own edges, the places finalized in order of distance.
+        private void FeatureDistances(RentedScope scope) {
+            var sharp = Math.Cos(d: ((SharpDegrees * Math.PI) / 180.0));
+            var distances = m_feature.GetSpan()[..m_places];
+            var heap = scope.Buffer<(double Distance, int Place)>(length: ((6 * m_triangles) + m_places)).GetSpan();
+            var count = 0;
+
+            distances.Fill(value: double.PositiveInfinity);
+            for (var place = 0; (place < m_places); place++) {
+                var first = -1;
+
+                foreach (var triangle in Alive(fan: m_from, place: place)) {
+                    var copy = m_corners[CornerAt(place: place, triangle: triangle)];
+
+                    if (first < 0) { first = copy; continue; }
+                    if ((copy != first) && Parts(a: m_normals[first], b: m_normals[copy], sharp: sharp)) {
+                        distances[place] = 0.0;
+                        BinaryHeap.Push(count: ref count, heap: heap, item: (0.0, place), order: default(ItemThenIndexOrder<double>));
+                        break;
+                    }
+                }
+            }
+            for (var corner = 0; (corner < (3 * m_triangles)); corner++) {
+                var other = NextCorner(corner: corner);
+
+                if (!m_alive[(corner / 3)] || !Parts(a: m_normals[m_corners[corner]], b: m_normals[m_corners[other]], sharp: sharp)) { continue; }
+                foreach (var place in (ReadOnlySpan<int>)[m_cornerPlace[corner], m_cornerPlace[other]]) {
+                    if (distances[place] == 0.0) { continue; }
+                    distances[place] = 0.0;
+                    BinaryHeap.Push(count: ref count, heap: heap, item: (0.0, place), order: default(ItemThenIndexOrder<double>));
+                }
+            }
+            while (count > 0) {
+                var (distance, place) = BinaryHeap.Pop(count: ref count, heap: heap, order: default(ItemThenIndexOrder<double>));
+
+                if (distance > distances[place]) { continue; }
+                foreach (var triangle in Alive(fan: m_from, place: place)) {
+                    var (_, next, after) = Around(place: place, triangle: triangle);
+
+                    foreach (var other in (ReadOnlySpan<int>)[next, after]) {
+                        var (dx, dy, dz) = ((m_point[place].X - m_point[other].X), (m_point[place].Y - m_point[other].Y), (m_point[place].Z - m_point[other].Z));
+                        var through = (distance + Math.Sqrt(d: (((dx * dx) + (dy * dy)) + (dz * dz))));
+
+                        if (through < distances[other]) {
+                            distances[other] = through;
+                            BinaryHeap.Push(count: ref count, heap: heap, item: (through, other), order: default(ItemThenIndexOrder<double>));
+                        }
+                    }
+                }
+            }
+        }
+        // Whether two normals part by more than the angle whose cosine is sharp.
+        private static bool Parts(Vector3 a, Vector3 b, double sharp) => (Vector3.Dot(vector1: a, vector2: b) < (sharp * a.Length() * b.Length()));
 
         // Collapses until no pass takes enough within the level's bounds, then returns the level the alive triangles make.
         // Levels run in order, each from the state the finer one left: the budget a refusal is keyed by is the level plus one.
@@ -408,7 +729,7 @@ public static class SdfMeshCollapse {
 
                 var taken = Pass(cosine: cosine, error: error);
 
-                if ((taken == 0) || (taken < (m_places / TailShare))) { break; }
+                if ((taken == 0) || (taken < (m_aliveTriangles / (2 * TailShare)))) { break; }
             }
 
             var indices = new uint[(3 * m_aliveTriangles)];
@@ -477,6 +798,9 @@ public static class SdfMeshCollapse {
                         taken++;
                         break;
                     }
+                    // A refusal that read the neighbour's vertices (a corner's third face matched to one) is kept by no
+                    // revision; it is tried again.
+                    if (outcome == Outcome.RefusedUnkept) { continue; }
                     // Only the link test reads the neighbour's fan; every other refusal reads the place's own fan, its
                     // samples and lines, and the neighbour's fixed position, so it stands until the place's revision moves.
                     m_rejected[PackedIntPair.Pack(high: place, low: target)] = PackedIntPair.Pack(high: m_revisions[place], low: outcome switch {
@@ -530,7 +854,11 @@ public static class SdfMeshCollapse {
         // The neighbour revision a refusal that never read the neighbour's fan records; no revision is negative.
         private const int AnyRevision = -1;
 
-        private enum Outcome : byte { Taken, Refused, RefusedLinks, RefusedMeasure }
+        private enum Outcome : byte { Taken, Refused, RefusedLinks, RefusedMeasure, RefusedUnkept }
+
+        // A refusal after the place's vertices were mapped: one whose mapping read the neighbour's vertices (a corner's
+        // other faces, CopyAt) depends on the neighbour's fan, which no revision of the place guards, so it is not kept.
+        private Outcome Refusal(Outcome outcome) => ((m_otherCopies.Count > 0) ? Outcome.RefusedUnkept : outcome);
 
         // Lists a place's alive triangles: the pass's list less those a collapse this pass removed.
         private List<int> Alive(int place, List<int> fan) {
@@ -617,11 +945,18 @@ public static class SdfMeshCollapse {
                 }
             }
         }
+        // A place's kind (KindOf), and locked wherever it is a seam the clusters share while the seams are held: the one
+        // door every kind passes, so no clustered run moves a seam.
+        private byte Kind(int place, bool penalize) {
+            var kind = KindOf(penalize: penalize, place: place);
+
+            return ((m_seamsHeld && m_seam[place]) ? Locked : kind);
+        }
         // Sorts a place into free (on at most one crease or material edge, which ends there), sliding along its creases
         // and material edges, or locked where its triangles do not close one ring of edges two triangles share; lists the
         // far places of those edges (m_features) and, with `penalize`, adds the planes along them to its quadric. Which
         // slide keeps every side's vertices is the collapse's to judge.
-        private byte Kind(int place, bool penalize) {
+        private byte KindOf(int place, bool penalize) {
             var fan = Alive(fan: m_from, place: place);
             var count = fan.Count;
             var seams = m_seams;
@@ -678,8 +1013,8 @@ public static class SdfMeshCollapse {
             }
             if (!OneRing(count: count)) { return Locked; }
 
-            // A collapse maps each of the place's vertices to the neighbour's vertex on its side of the collapsed edge, so
-            // a place with three or more never moves, and one with two moves only along the crease between them.
+            // A place with several vertices slides only along its creases (its seams, two or more about a ring): each side of
+            // the collapsed edge keeps its own vertices, and any other vertex takes a neighbour's by normal (Map).
             var copies = 1;
 
             for (var at = 1; (at < count); at++) {
@@ -689,8 +1024,6 @@ public static class SdfMeshCollapse {
                 }
             }
             if (copies > 1) {
-                if (seams.Count != 2) { return Locked; }
-
                 m_features.Clear();
                 m_features.AddRange(collection: seams);
 
@@ -755,6 +1088,12 @@ public static class SdfMeshCollapse {
 
             var (tx, ty, tz) = (m_point[to].X, m_point[to].Y, m_point[to].Z);
 
+            m_fromFirst = fromFirst;
+            m_toFirst = toFirst;
+            m_fromSecond = fromSecond;
+            m_toSecond = toSecond;
+            m_otherCopies.Clear();
+            m_making.Clear();
             for (var index = 0; (index < fan.Count); index++) {
                 if ((index == firstAt) || (index == secondAt)) { continue; }
 
@@ -763,7 +1102,9 @@ public static class SdfMeshCollapse {
                 var corner = original.Corner;
                 var vertex = m_corners[corner];
 
-                if ((vertex != fromFirst) && (vertex != fromSecond)) { return Outcome.Refused; }
+                if ((vertex != fromFirst) && (vertex != fromSecond) && (OtherCopy(vertex: vertex) < 0)) {
+                    m_otherCopies.Add(item: (vertex, CopyAt(cosine: cosine, place: to, vertex: vertex)));
+                }
 
                 ref readonly var old = ref original.Surface;
 
@@ -785,16 +1126,16 @@ public static class SdfMeshCollapse {
                 var after = Vector3.Zero;
 
                 for (var other = (3 * triangle); (other < ((3 * triangle) + 3)); other++) {
-                    after += m_normals[((other == corner) ? Mapped(fromFirst: fromFirst, toFirst: toFirst, toSecond: toSecond, vertex: vertex) : m_corners[other])];
+                    after += Normal(vertex: ((other == corner) ? Map(vertex: vertex) : m_corners[other]));
                 }
-                if (((((ox * before.X) + (oy * before.Y)) + (oz * before.Z)) > 0.0) != ((((nx * after.X) + (ny * after.Y)) + (nz * after.Z)) > 0.0)) { return Outcome.Refused; }
+                if (((((ox * before.X) + (oy * before.Y)) + (oz * before.Z)) > 0.0) != ((((nx * after.X) + (ny * after.Y)) + (nz * after.Z)) > 0.0)) { return Refusal(outcome: Outcome.Refused); }
             }
 
             // Each measure that refuses names the budget its refusal stands through (m_refusedThrough).
-            if (!Measure(cosine: cosine, error: error, fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond)) { return Outcome.RefusedMeasure; }
+            if (!Measure(cosine: cosine, error: error, fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond)) { return Refusal(outcome: Outcome.RefusedMeasure); }
             // The line check is the cheaper of the two, and neither changes what the other measures.
-            if (!MeasureLines(error: Math.Min(val1: error, val2: m_lineLimit), from: from, to: to)) { return Outcome.RefusedMeasure; }
-            if (!MeasureReverse(error: error, fan: fan)) { return Outcome.RefusedMeasure; }
+            if (!MeasureLines(error: Math.Min(val1: error, val2: m_lineLimit), from: from, to: to)) { return Refusal(outcome: Outcome.RefusedMeasure); }
+            if (!MeasureReverse(error: error, fan: fan)) { return Refusal(outcome: Outcome.RefusedMeasure); }
 
             Commit(fan: fan, first: first, from: from, fromFirst: fromFirst, second: second, to: to, toFirst: toFirst, toSecond: toSecond);
 
@@ -829,7 +1170,7 @@ public static class SdfMeshCollapse {
 
                 m_stamp[next] = m_stampValue;
                 m_stamp[after] = m_stampValue;
-                for (var at = (3 * triangle); (at < ((3 * triangle) + 3)); at++) { sum += m_normals[m_corners[at]]; }
+                for (var at = (3 * triangle); (at < ((3 * triangle) + 3)); at++) { sum += Normal(vertex: m_corners[at]); }
                 m_previous[index] = new OriginalTriangle {
                     Surface = new Candidate { Ax = ax, Ay = ay, Az = az, Bx = bx, By = by, Bz = bz, Ex = ex, Ey = ey, Ez = ez, Material = m_materials[triangle], Triangle = triangle },
                     Face = face,
@@ -868,6 +1209,7 @@ public static class SdfMeshCollapse {
                             Own = own,
                             OwnLength = Math.Sqrt(d: (((own.X * ((double)own.X)) + (own.Y * ((double)own.Y))) + (own.Z * ((double)own.Z)))),
                             Material = m_sampleMaterial[sample],
+                            Feature = (m_waivesNormals ? m_feature[at] : double.PositiveInfinity),
                         });
                     }
                 }
@@ -1089,9 +1431,55 @@ public static class SdfMeshCollapse {
 
             return true;
         }
-        // The vertex a triangle about the collapsing place takes at the neighbour.
-        private static int Mapped(int vertex, int fromFirst, int toFirst, int toSecond) =>
-            ((vertex == fromFirst) ? toFirst : toSecond);
+        // The vertex a triangle about the collapsing place takes at the neighbour: the one on its side of the collapsed edge,
+        // or for a vertex on neither side, the one TryCollapse chose for it (CopyAt). The one door every remapped corner,
+        // laid-out triangle and facing check reads.
+        private int Map(int vertex) {
+            if (vertex == m_fromFirst) { return m_toFirst; }
+            if (vertex == m_fromSecond) { return m_toSecond; }
+
+            var copy = OtherCopy(vertex: vertex);
+
+            return ((copy < 0) ? m_toSecond : copy);
+        }
+        private int OtherCopy(int vertex) {
+            foreach (var (from, to) in m_otherCopies) {
+                if (from == vertex) { return to; }
+            }
+            return -1;
+        }
+        // The neighbour's vertex a corner's third face takes: the one at the place whose normal lies nearest the vertex's
+        // within the level's angle, or else a vertex made at the place with the vertex's own normal, which Commit keeps
+        // (m_making). Either way the face's shading there turns by no more than the level allows before Measure checks it.
+        private int CopyAt(int place, int vertex, double cosine) {
+            var own = Normal(vertex: vertex);
+            var ownLength = own.Length();
+            var best = -1;
+            var bestCosine = cosine;
+
+            foreach (var triangle in Alive(fan: m_to, place: place)) {
+                var copy = m_corners[CornerAt(place: place, triangle: triangle)];
+                var normal = Normal(vertex: copy);
+                var length = (((double)ownLength) * normal.Length());
+                var cos = ((length > 0.0) ? (Vector3.Dot(vector1: own, vector2: normal) / length) : -1.0);
+
+                if (cos >= bestCosine) {
+                    best = copy;
+                    bestCosine = cos;
+                }
+            }
+            if (best >= 0) { return best; }
+            m_making.Add(item: own);
+            return ((m_ownVertices + m_madeVertices.Count + m_making.Count) - 1);
+        }
+        // A vertex's normal: one of the mesh's own, one a collapse made, or one the collapse being measured would make.
+        private Vector3 Normal(int vertex) {
+            if (vertex < m_ownVertices) { return m_normals[vertex]; }
+
+            var made = (vertex - m_ownVertices);
+
+            return ((made < m_madeVertices.Count) ? m_madeVertices[made].Normal : m_making[(made - m_madeVertices.Count)]);
+        }
         // Measures every sample tracked to a triangle about the collapsing place against the triangles that stay, as they
         // will be, choosing for each the nearest of its material within the bounds; false when one has none.
         private bool Measure(List<int> fan, int from, int to, int first, int second, int fromFirst, int toFirst, int toSecond, double error, double cosine) {
@@ -1152,12 +1540,15 @@ public static class SdfMeshCollapse {
         // neighbour's fixed position, which the refusal's place revision guards; only the level's bounds vary, and they
         // loosen level by level. A level's budget is its index plus one, so a refusal standing through budget k stands at
         // every level before level k.
-        private int NeededLevel(double distance, double limit, double cosine = 1.0) {
+        private int NeededLevel(double distance, double limit, double cosine = 1.0, double feature = double.PositiveInfinity) {
             for (var level = m_budget; (level < m_errors.Length); level++) {
-                if ((distance <= Math.Min(val1: m_errors[level], val2: limit)) && (cosine >= m_cosines[level])) { return level; }
+                if ((distance <= Math.Min(val1: m_errors[level], val2: limit)) && Shades(cosine: cosine, error: m_errors[level], feature: feature, least: m_cosines[level])) { return level; }
             }
             return m_errors.Length;
         }
+        // Whether a sample's normal meets a level's bound: within its angle, or waived where the sample lies nearer a sharp
+        // turn of the surface than the level's error (FeatureDistances).
+        private static bool Shades(double cosine, double least, double feature, double error) => ((cosine >= least) || (feature < error));
         // NeededLevel of a surface sample no laid-out triangle took: the earliest level any triangle of its material meets,
         // each measured to the whole triangle (Offer's test with no bound to stop at).
         private int NeededLevel(int candidates, in Source source) {
@@ -1170,15 +1561,16 @@ public static class SdfMeshCollapse {
 
                 var (distance, cos) = Nearest(candidate: in candidate, limit: double.PositiveInfinity, own: source.Own, ownLength: source.OwnLength, px: source.Px, py: source.Py, pz: source.Pz);
 
-                needed = Math.Min(val1: needed, val2: NeededLevel(cosine: cos, distance: distance, limit: double.PositiveInfinity));
+                needed = Math.Min(val1: needed, val2: NeededLevel(cosine: cos, distance: distance, feature: source.Feature, limit: double.PositiveInfinity));
             }
             return needed;
         }
         // A sample tracked to a triangle of the source fan, laid out for Measure: the fan index of its triangle, its vertex
-        // and place's position, its normal and that normal's length, and its material.
+        // and place's position, its normal and that normal's length, its material, and its place's distance along the mesh
+        // to a sharp turn (infinite where no level waives a normal).
         private struct Source {
             public int Sample, Index, Vertex;
-            public double Px, Py, Pz, OwnLength;
+            public double Px, Py, Pz, OwnLength, Feature;
             public Vector3 Own;
             public uint Material;
         }
@@ -1201,7 +1593,7 @@ public static class SdfMeshCollapse {
 
             var (distance, cos) = Nearest(candidate: in candidate, limit: Math.Min(val1: error, val2: bestDistance), own: source.Own, ownLength: source.OwnLength, px: px, py: py, pz: pz);
 
-            if ((distance <= error) && (cos >= cosine) && ((distance < bestDistance) || ((distance == bestDistance) && (cos > bestCosine)))) {
+            if ((distance <= error) && Shades(cosine: cos, error: error, feature: source.Feature, least: cosine) && ((distance < bestDistance) || ((distance == bestDistance) && (cos > bestCosine)))) {
                 best = at;
                 bestDistance = distance;
                 bestCosine = cos;
@@ -1224,9 +1616,9 @@ public static class SdfMeshCollapse {
                 var (pa, pb, pc) = (m_cornerPlace[corner], m_cornerPlace[(corner + 1)], m_cornerPlace[(corner + 2)]);
 
                 // A mapped vertex is the neighbour's, at its place.
-                if (pa == from) { (a, pa) = (Mapped(fromFirst: fromFirst, toFirst: toFirst, toSecond: toSecond, vertex: a), to); }
-                if (pb == from) { (b, pb) = (Mapped(fromFirst: fromFirst, toFirst: toFirst, toSecond: toSecond, vertex: b), to); }
-                if (pc == from) { (c, pc) = (Mapped(fromFirst: fromFirst, toFirst: toFirst, toSecond: toSecond, vertex: c), to); }
+                if (pa == from) { (a, pa) = (Map(vertex: a), to); }
+                if (pb == from) { (b, pb) = (Map(vertex: b), to); }
+                if (pc == from) { (c, pc) = (Map(vertex: c), to); }
 
                 var (cx, cy, cz) = ((((m_point[pa].X + m_point[pb].X) + m_point[pc].X) / 3.0), (((m_point[pa].Y + m_point[pb].Y) + m_point[pc].Y) / 3.0), (((m_point[pa].Z + m_point[pb].Z) + m_point[pc].Z) / 3.0));
                 var radius = 0.0;
@@ -1259,9 +1651,9 @@ public static class SdfMeshCollapse {
                     Va = a,
                     Vb = b,
                     Vc = c,
-                    Na = m_normals[a],
-                    Nb = m_normals[b],
-                    Nc = m_normals[c],
+                    Na = Normal(vertex: a),
+                    Nb = Normal(vertex: b),
+                    Nc = Normal(vertex: c),
                     Material = m_materials[triangle],
                     Triangle = triangle,
                 };
@@ -1330,6 +1722,8 @@ public static class SdfMeshCollapse {
                 m_tracked[triangle] = -1;
             }
 
+            foreach (var normal in m_making) { m_madeVertices.Add(item: (to, normal)); }
+            m_making.Clear();
             m_alive[first] = false;
             m_alive[second] = false;
             m_aliveTriangles -= 2;
@@ -1340,7 +1734,7 @@ public static class SdfMeshCollapse {
 
                 var corner = CornerAt(place: from, triangle: triangle);
 
-                m_corners[corner] = Mapped(fromFirst: fromFirst, toFirst: toFirst, toSecond: toSecond, vertex: m_corners[corner]);
+                m_corners[corner] = Map(vertex: m_corners[corner]);
                 m_cornerPlace[corner] = to;
 
                 var (_, next, after) = Around(place: to, triangle: triangle);
