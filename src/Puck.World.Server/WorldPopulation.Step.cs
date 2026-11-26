@@ -1467,19 +1467,23 @@ public sealed partial class WorldPopulation {
         m_outputs.Effects.Clear();
 
         m_durableStateOutputs.Clear();
+        // One pass over the slots: each body's durable writes are taken in slot order, the order the outputs list them
+        // in, and what a slot narrates reads nothing another slot's pass writes.
         for (var index = 0; (index < m_entries.Length); index++) {
-            m_entries[index].Body?.TakeDurableStateOutputs(
+            if (m_entries[index].Body is not { } body) {
+                // A slot whose body left holds no fault to recover from.
+                _ = m_producerFaults.Clear(key: index);
+                continue;
+            }
+            body.TakeDurableStateOutputs(
                 entityIndex: index,
                 outputs: m_durableStateOutputs,
                 tick: tick
             );
-        }
 
-        // A body whose sweep is refused stays put; it is never silent. Each transition, refused or recovered, is
-        // narrated once, after every body has moved this tick, and body.where carries the refusal while it holds.
-        for (var index = 0; (index < m_entries.Length); index++) {
+            // A body whose sweep is refused stays put; it is never silent. Each transition, refused or recovered, is
+            // narrated once, after every body has moved this tick, and body.where carries the refusal while it holds.
             if (
-                (m_entries[index].Body is { } body) &&
                 body.TryTakeSweepTransition(refusal: out var refusal) &&
                 (NarrationHub is { HasNarrationSink: true })
             ) {
@@ -1491,9 +1495,9 @@ public sealed partial class WorldPopulation {
                 );
             }
 
-            m_entries[index].Body?.EndSweepTick();
+            body.EndSweepTick();
 
-            if (m_entries[index].Body?.ProducerFault is { } fault) {
+            if (body.ProducerFault is { } fault) {
                 if (m_producerFaults.Set(key: index, reason: fault) && (NarrationHub is { HasNarrationSink: true })) {
                     NarrationHub.Narrate(
                         channel: "body.producer",
@@ -1502,7 +1506,6 @@ public sealed partial class WorldPopulation {
                 }
             } else if (
                 m_producerFaults.Clear(key: index) &&
-                (m_entries[index].Body is not null) &&
                 (NarrationHub is { HasNarrationSink: true })
             ) {
                 NarrationHub.Narrate(
