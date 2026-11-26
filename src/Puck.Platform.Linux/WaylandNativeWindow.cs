@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Options;
+using Puck.Commands;
 using Puck.Input;
 using Puck.Platform.Linux.Interop;
 
@@ -8,25 +9,41 @@ namespace Puck.Platform.Linux;
 
 /// <summary>A Wayland toplevel window (the native Steam Deck / Gamescope path) backed by
 /// libwayland-client + xdg-shell. Handles the lifecycle, the xdg-shell configure/close
-/// handshake, and surface resize. Keyboard/pointer input would require binding a
-/// <c>wl_seat</c> + xkb and is out of scope; Vulkan WSI owns the buffers, so this backend
-/// only drives the surface role and event pump.</summary>
+/// handshake, surface resize and touch: the first <c>wl_seat</c> advertising the touch
+/// capability gives its <c>wl_touch</c>, whose contacts enter the shared
+/// <see cref="WindowInputQueue"/>. Keyboard and pointer input would require <c>wl_keyboard</c>
+/// + xkb and <c>wl_pointer</c> and are out of scope; Vulkan WSI owns the buffers, so this
+/// backend otherwise only drives the surface role and event pump.</summary>
 /// <remarks>Unverified off-device — the protocol glue (hand-built xdg-shell tables, the
-/// non-blocking dispatch in <see cref="PollEvents"/>) is expected to need on-device
-/// iteration.</remarks>
+/// non-blocking dispatch in <see cref="PollEvents"/>, the seat and touch listeners) is expected
+/// to need on-device iteration. The touch events follow the core protocol's <c>wl_touch</c>:
+/// <c>down</c>, <c>up</c>, <c>motion</c>, <c>frame</c>, <c>cancel</c>, then <c>shape</c> and
+/// <c>orientation</c> since version 6, with surface-local <c>wl_fixed</c> (24.8) coordinates in
+/// the same logical space the toplevel's configured size is in; a <c>cancel</c> ends every live
+/// contact.</remarks>
 internal sealed unsafe class WaylandNativeWindow : INativeWindow, IWindowInputSource {
     private const uint WlCompositorMaxVersion = 4;
+    private const uint WlSeatMaxVersion = 7;
+    private const uint WlSeatCapabilityTouch = 4;
     private const uint XdgWmBaseMaxVersion = 1;
 
     private static readonly Lock ListenerLock = new();
 
     private static bool ListenersBuilt;
     private static nint RegistryListener;
+    private static nint SeatListener;
     private static nint ToplevelListener;
+    private static nint TouchListener;
     private static nint WmBaseListener;
     private static nint XdgSurfaceListener;
 
     private readonly NativeWindowOptions m_options;
+    private readonly WindowInputQueue m_pendingInput = new();
+
+    private nint m_seat;
+    private uint m_seatName;
+    private nint m_touch;
+    private InputDeviceId m_touchDevice;
 
     private nint m_compositor;
     private nint m_display;
@@ -149,6 +166,16 @@ internal sealed unsafe class WaylandNativeWindow : INativeWindow, IWindowInputSo
         return block;
     }
     private void DisposeInternal() {
+        if (m_touch != 0) {
+            WaylandClient.ReleaseTouch(touch: m_touch);
+            m_touch = 0;
+        }
+
+        if (m_seat != 0) {
+            WaylandClient.ReleaseSeat(seat: m_seat);
+            m_seat = 0;
+        }
+
         if (m_toplevel != 0) {
             WaylandClient.DestroyToplevel(toplevel: m_toplevel);
             m_toplevel = 0;
@@ -203,6 +230,19 @@ internal sealed unsafe class WaylandNativeWindow : INativeWindow, IWindowInputSo
                 ((nint)((delegate* unmanaged[Cdecl]<nint, nint, int, int, nint, void>)&ToplevelConfigure)),
                 ((nint)((delegate* unmanaged[Cdecl]<nint, nint, void>)&ToplevelClose))
             ]);
+            SeatListener = BuildListener(functionPointers: [
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, void>)&SeatCapabilities)),
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, nint, void>)&SeatName))
+            ]);
+            TouchListener = BuildListener(functionPointers: [
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, nint, int, int, int, void>)&TouchDown)),
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, uint, int, void>)&TouchUp)),
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, uint, int, int, int, void>)&TouchMotion)),
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, void>)&TouchFrame)),
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, void>)&TouchCancel)),
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, int, int, int, void>)&TouchShape)),
+                ((nint)((delegate* unmanaged[Cdecl]<nint, nint, int, int, void>)&TouchOrientation))
+            ]);
             ListenersBuilt = true;
         }
     }
@@ -244,8 +284,64 @@ internal sealed unsafe class WaylandNativeWindow : INativeWindow, IWindowInputSo
                     val2: XdgWmBaseMaxVersion
                 )
             );
+            return;
+        }
+
+        // The first seat is the one whose touch the window reads; a second seat's touchscreen is not this window's.
+        if ((interfaceText == "wl_seat") && (m_seat == 0)) {
+            m_seat = WaylandClient.Bind(
+                interfacePointer: WaylandClient.SeatInterface,
+                name: name,
+                registry: m_registry,
+                version: Math.Min(
+                    val1: version,
+                    val2: WlSeatMaxVersion
+                )
+            );
+            m_seatName = name;
+            _ = WaylandClient.wl_proxy_add_listener(
+                data: GCHandle.ToIntPtr(value: m_selfHandle),
+                implementation: SeatListener,
+                proxy: m_seat
+            );
         }
     }
+    private void OnSeatCapabilities(uint capabilities) {
+        var hasTouch = ((capabilities & WlSeatCapabilityTouch) != 0);
+
+        if (hasTouch && (m_touch == 0)) {
+            m_touch = WaylandClient.GetTouch(seat: m_seat);
+            m_touchDevice = InputDeviceId.FromConnectionKey(key: $"wayland-touch-{m_seatName}");
+            _ = WaylandClient.wl_proxy_add_listener(
+                data: GCHandle.ToIntPtr(value: m_selfHandle),
+                implementation: TouchListener,
+                proxy: m_touch
+            );
+        } else if (!hasTouch && (m_touch != 0)) {
+            // The touchscreen went away: every contact it held ends.
+            _ = m_pendingInput.CancelContacts();
+            WaylandClient.ReleaseTouch(touch: m_touch);
+            m_touch = 0;
+        }
+    }
+    private void OnTouchUp(int id) => _ = m_pendingInput.EnqueueContact(
+        device: ContactDevice.Touch,
+        deviceId: m_touchDevice,
+        osId: unchecked((uint)id),
+        phase: CommandPhase.Completed,
+        position: null,
+        pressure: float.NaN
+    );
+    private void OnTouch(int id, CommandPhase phase, int x, int y) => _ = m_pendingInput.EnqueueContact(
+        device: ContactDevice.Touch,
+        deviceId: m_touchDevice,
+        osId: unchecked((uint)id),
+        phase: phase,
+        position: new System.Numerics.Vector2(x: (x / WlFixedScale), y: (y / WlFixedScale)),
+        pressure: float.NaN
+    );
+    // wl_fixed_t is a signed 24.8 fixed-point number.
+    private const float WlFixedScale = 256f;
     private void OnToplevelClose() {
         m_isOpen = false;
         m_isVisible = false;
@@ -292,6 +388,39 @@ internal sealed unsafe class WaylandNativeWindow : INativeWindow, IWindowInputSo
     }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void RegistryGlobalRemove(nint data, nint registry, uint name) {
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void SeatCapabilities(nint data, nint seat, uint capabilities) {
+        FromData(data: data)?.OnSeatCapabilities(capabilities: capabilities);
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void SeatName(nint data, nint seat, nint name) {
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void TouchDown(nint data, nint touch, uint serial, uint time, nint surface, int id, int x, int y) {
+        FromData(data: data)?.OnTouch(id: id, phase: CommandPhase.Started, x: x, y: y);
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void TouchUp(nint data, nint touch, uint serial, uint time, int id) {
+        // A lift carries no point; the contact lifts where it last moved to.
+        FromData(data: data)?.OnTouchUp(id: id);
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void TouchMotion(nint data, nint touch, uint time, int id, int x, int y) {
+        FromData(data: data)?.OnTouch(id: id, phase: CommandPhase.Active, x: x, y: y);
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void TouchFrame(nint data, nint touch) {
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void TouchCancel(nint data, nint touch) {
+        _ = FromData(data: data)?.m_pendingInput.CancelContacts();
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void TouchShape(nint data, nint touch, int id, int major, int minor) {
+    }
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
+    private static void TouchOrientation(nint data, nint touch, int id, int orientation) {
     }
     [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
     private static void ToplevelClose(nint data, nint toplevel) {
@@ -373,7 +502,6 @@ internal sealed unsafe class WaylandNativeWindow : INativeWindow, IWindowInputSo
             instance: this
         );
 
-        inputEvent = default;
-        return false;
+        return m_pendingInput.TryDequeue(inputEvent: out inputEvent);
     }
 }

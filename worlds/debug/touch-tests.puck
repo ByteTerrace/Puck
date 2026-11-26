@@ -1,0 +1,187 @@
+// Touch through the one surface door (docs/decisions/input-channels.md#touch-is-diegetic). A finger, a pen tip and
+// the mouse's primary button each reach a Simulation screen as contact events: a device, a contact number, a phase and
+// the ray the point casts through the seat's view, which the authority maps onto the screen in fixed point. A screen's
+// rules sweep them with `forEach: $contacts:<screen>` and read `contact(each, …)`. The same finger also reaches the
+// router as `touch.contact<n>`, so a binding and an input pattern tell its tap from its hold.
+//
+// `source.contact` queues a contact as a world ray, so these scenarios run headless; a windowed World's
+// `world.view.touch <id> down|move|up <x> <y>` casts the same events from client pixels through the seat's camera.
+// `puck test worlds/debug/touch-tests.puck --reproduce` replays the taped contacts to the same state.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "touch-tests"
+
+channels [
+  { name: "finger", shape: Binary, composition: true }
+]
+inputHistory {
+  eventCapacity: 8
+  maximumEventsPerStep: 8
+}
+// A tap is a touch and a lift within a fifth of a second; a longer press is a hold, which no tap matches.
+inputPatterns [
+  {
+    name: "tap"
+    maximumDurationSeconds: 0.2
+    steps [
+      { channel: "finger" }
+      { channel: "finger", kind: Release }
+    ]
+  }
+]
+bindingOverlays [{
+    id: "touch-fixture"
+    document {
+      version: "puck.input.bindings.v1"
+      modifiers []
+      chords [{chord [], group: "play", page {id: "base", entries [
+              { id: "finger", channel: "finger", sources ["touch.contact1"] }
+            ]
+          }
+        }
+      ]
+    }
+  }
+]
+
+state {
+  world {
+    row { name: "taps", kind: Int, value: 0 }
+    row { name: "tapX", kind: Fixed, value: "0" }
+    row { name: "tapY", kind: Fixed, value: "0" }
+    row { name: "tapDevice", kind: Int, value: 0 }
+    row { name: "tapContact", kind: Int, value: 0 }
+    row { name: "tapSeat", kind: Int, value: 0 }
+    row { name: "cancels", kind: Int, value: 0 }
+    row { name: "fingerTaps", kind: Int, value: 0 }
+  }
+}
+
+// The font the screen's label draws in.
+text {
+  defaultFont: "inter"
+  fonts [
+    {
+      name: "inter"
+      source: "fonts/inter-regular.ttf"
+      hash: "sha256/40d692fce188e4471e2b3cba937be967878f631ad3ebbbdcd587687c7ebe0c82"
+      codePointRanges ["U+0020-U+007E"]
+    }
+  ]
+}
+
+// A two-metre square facing +z, twenty metres in front of the spawn: a ray down -z from (x, y, 0) lands on it at
+// ((x + 1) / 2, (2 - y) / 2) for x in [-1, 1) and y in (0, 2].
+screens [
+  {
+    index: 40
+    origin [0, 1, -20]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 1
+    halfHeight: 1
+    halfDepth: 0.01
+    round: 0
+    route { input: Simulation, engageable: false }
+    source { $type: "text", lines ["TOUCH"] }
+  }
+]
+
+rule "screen-tap" {
+  forEach: $contacts:40
+  when contact(each, phase) == 3
+  mode: Level
+  taps += 1
+  tapX = contact(each, x)
+  tapY = contact(each, y)
+  tapDevice = contact(each, device)
+  tapContact = contact(each, id)
+  tapSeat = contact(each, seat)
+}
+rule "screen-cancel" {
+  forEach: $contacts:40
+  when contact(each, phase) == 4
+  mode: Level
+  cancels += 1
+}
+rule "finger-tap" {
+  when inputMatch(1, tap)
+  mode: Level
+  fingerTaps += 1
+  consumeInput(owner: "1", pattern: "tap")
+}
+
+// A finger touches, moves and lifts over the screen's upper right; a second touches and lifts inside one tick, and
+// both events of that tick reach the sweep.
+test "a finger's lift taps the screen where it lifted" {
+  when {
+    ticks 10
+    seat1: source.contact 1 down 0.2 1.2 0 0 0 -1
+    ticks 2
+    seat1: source.contact 1 move 0.4 1.4 0 0 0 -1
+    ticks 2
+    seat1: source.contact 1 up 0.5 1.5 0 0 0 -1
+    ticks 2
+    seat1: source.contact 2 down 0.5 1.5 0 0 0 -1
+    seat1: source.contact 2 up 0.5 1.5 0 0 0 -1
+    ticks 2
+  }
+  expect {
+    taps == 2
+    tapDevice == 2
+    tapContact == 2
+    tapSeat == 1
+    tapX > 0.749
+    tapX < 0.751
+    tapY > 0.249
+    tapY < 0.251
+  }
+}
+
+// The mouse takes the same door as contact 0; a lift off the face and a cancelled contact are not taps.
+test "a mouse click taps through the same door; a miss and a cancel do not" {
+  when {
+    ticks 10
+    seat1: source.contact 0 down -0.5 0.5 0 0 0 -1 mouse
+    ticks 1
+    seat1: source.contact 0 up -0.5 0.5 0 0 0 -1 mouse
+    ticks 1
+    seat1: source.contact 3 down 5 5 0 0 0 -1
+    ticks 1
+    seat1: source.contact 3 up 5 5 0 0 0 -1
+    ticks 1
+    seat1: source.contact 4 down 0 1 0 0 0 -1
+    ticks 1
+    seat1: source.contact 4 cancel 0 1 0 0 0 -1
+    ticks 2
+  }
+  expect {
+    taps == 1
+    tapDevice == 1
+    tapContact == 0
+    tapX > 0.249
+    tapX < 0.251
+    tapY > 0.749
+    tapY < 0.751
+    cancels == 1
+  }
+}
+
+// The finger bound as touch.contact1: a touch lifted within the pattern's window is a tap, one held for a second is
+// not, so a screen can tell a tap from a hold with sub-tick timing.
+test "a bound finger's quick lift is a tap and a long press is not" {
+  when {
+    ticks 10
+    seat1: player.signal touch.contact1 press at:0.001
+    ticks 2
+    seat1: player.signal touch.contact1 release at:0.001
+    ticks 2
+    seat1: player.signal touch.contact1 press at:0.001
+    ticks 30
+    seat1: player.signal touch.contact1 release at:0.001
+    ticks 2
+  }
+  expect {
+    fingerTaps == 1
+  }
+}

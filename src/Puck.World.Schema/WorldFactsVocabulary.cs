@@ -64,6 +64,18 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
             Needs.Add(facet: FacetRef.Of<IWorldPlayers>());
             return WorldPlayerIteration.For(definition: Definition);
         }
+        if (reference.Call is { Channel: WorldContactIteration.Channel } contacts) {
+            if ((contacts.Count != 1) || !int.TryParse(s: contacts.Text(index: 0), style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var screenIndex)) {
+                throw new RuleException(WorldRuleRefusal.PointerMalformed, ruleName, $"'forEach' sweeps '{reference.Spelling}', which does not spell '$contacts:<screenIndex>'");
+            }
+
+            Needs.Add(facet: FacetRef.Of<IWorldSurfaceContacts>());
+            return new WorldContactIteration(
+                Mapping: WorldFactsVocabulary.SimulationScreenMapping(definition: Definition, name: reference.Spelling, ruleName: ruleName, screenIndex: screenIndex),
+                Participants: Math.Max(val1: 1, val2: (Definition.Population.LocalSeats + Definition.Population.NetworkPlayers)),
+                ScreenIndex: screenIndex
+            );
+        }
         if (reference.Call is not { Channel: "inputEvents" } call) { return null; }
         if (call.Count < 1) { throw new RuleException(WorldRuleRefusal.ChannelMalformed, ruleName, "inputEvents expects one input owner"); }
         var owner = WorldFactsVocabulary.CompileInputOwner(string.Join(':', call.Texts()), this, ruleName);

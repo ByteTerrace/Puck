@@ -115,6 +115,7 @@ public static class WorldBootComposition {
     // window observer or overlay; its console override supplies the point and its HUD store stays empty.
     private static void AddWorldInspection(IServiceCollection services) {
         services.AddSingleton<WorldPointer>();
+        services.AddSingleton<WorldContacts>();
         services.AddSingleton<WorldSeatViewInput>();
         services.AddSingleton<WorldSeatViewports>();
         services.AddSingleton<HudStore>();
@@ -1100,6 +1101,12 @@ public static class WorldBootComposition {
         services.AddSingleton<WorldSeatMotionTrace>();
         services.AddSingleton<WorldPresentationProbe>();
         services.AddSingleton<ICommandModule, WorldViewCommandModule>();
+        // world.view.touch: the console's touchscreen, core-registered so every shape knows the verb; the contact store
+        // is presentation-only, so a boot with no GPU presentation refuses it by name.
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldTouchCommandModule(
+            contacts: sp.GetService<WorldContacts>(),
+            router: sp.GetRequiredService<Func<InputRouter>>()
+        ));
         services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldPatrolCommandModule(
             script: sp.GetRequiredService<WorldTickScript>(),
             timeline: sp.GetService<Puck.Launcher.HostFrameTimeline>(),
@@ -1836,6 +1843,7 @@ public static class WorldBootComposition {
         // frame through the pointer seat's published camera and sustained on that seat's lane ahead of the frame's
         // snapshots, so the seat verbs quantize it into the seat's intent on every tick.
         services.AddSingleton<ISnapshotInputCapture>(implementationFactory: static sp => new WorldPointerRayCapture(
+            contacts: sp.GetRequiredService<WorldContacts>(),
             definition: () => sp.GetRequiredService<WorldClient>().Definition,
             pointer: sp.GetRequiredService<WorldPointer>(),
             roster: sp.GetRequiredService<PlayerRoster>(),

@@ -436,6 +436,42 @@ public sealed class SeatController {
     public void SetPointerOrigin(FixedVector3 origin) {
         m_pointerOrigin = origin;
     }
+
+    // The seat's pointing-contact events since its last submission, in the order they happened.
+    private readonly SurfaceContact[] m_contacts = new SurfaceContact[SurfaceContact.MaximumPerTick];
+    private int m_contactCount;
+
+    /// <summary>Gets whether the seat holds contact events its next submission carries.</summary>
+    public bool HoldsContacts => (m_contactCount > 0);
+    /// <summary>Gets the contact events the seat holds for its next submission, oldest first.</summary>
+    public ReadOnlySpan<SurfaceContact> PendingContacts => m_contacts.AsSpan(start: 0, length: m_contactCount);
+
+    /// <summary>Queues one pointing-contact event for the seat's next submission. A seat already holding
+    /// <see cref="SurfaceContact.MaximumPerTick"/> events drops it.</summary>
+    /// <param name="contact">The contact event, its ray already in fixed point.</param>
+    /// <returns><see langword="true"/> when the event was queued.</returns>
+    public bool AddContact(SurfaceContact contact) {
+        if (m_contactCount == m_contacts.Length) {
+            return false;
+        }
+
+        m_contacts[m_contactCount++] = contact;
+
+        return true;
+    }
+    /// <summary>Takes the contact events the seat holds, for the submission that carries them, and empties the queue.</summary>
+    /// <returns>The events, oldest first, in an array the caller owns; empty when the seat holds none.</returns>
+    public SurfaceContact[] TakeContacts() {
+        if (m_contactCount == 0) {
+            return [];
+        }
+
+        var taken = m_contacts.AsSpan(start: 0, length: m_contactCount).ToArray();
+
+        m_contactCount = 0;
+
+        return taken;
+    }
     /// <summary>Sets the held right-stick free-look modifier.</summary>
     /// <param name="held">Whether free look is active.</param>
     public void SetFreeLook(bool held) {

@@ -21,6 +21,11 @@ internal static unsafe partial class WaylandClient {
     private const uint WlRegistryBindOpcode = 0;
     private const uint WlSurfaceCommitOpcode = 6;
     private const uint WlSurfaceDestroyOpcode = 0;
+    // wl_seat requests: get_pointer 0, get_keyboard 1, get_touch 2, release 3 (since 5); wl_touch requests: release 0
+    // (since 3). Order from the core protocol's wayland.xml.
+    private const uint WlSeatGetTouchOpcode = 2;
+    private const uint WlSeatReleaseOpcode = 3;
+    private const uint WlTouchReleaseOpcode = 0;
     // xdg-shell opcodes (stable v1).
     private const uint XdgWmBaseDestroyOpcode = 0;
     private const uint XdgSurfaceAckConfigureOpcode = 4;
@@ -38,6 +43,8 @@ internal static unsafe partial class WaylandClient {
     private static nint RegistryInterfaceHandle;
     private static nint CompositorInterfaceHandle;
     private static nint SurfaceInterfaceHandle;
+    private static nint SeatInterfaceHandle;
+    private static nint TouchInterfaceHandle;
     private static nint XdgWmBaseInterfaceHandle;
     private static nint XdgSurfaceInterfaceHandle;
     private static nint XdgToplevelInterfaceHandle;
@@ -239,6 +246,51 @@ internal static unsafe partial class WaylandClient {
             return SurfaceInterfaceHandle;
         }
     }
+    public static nint SeatInterface {
+        get {
+            EnsureInitialized();
+            return SeatInterfaceHandle;
+        }
+    }
+    public static nint TouchInterface {
+        get {
+            EnsureInitialized();
+            return TouchInterfaceHandle;
+        }
+    }
+    // wl_seat.get_touch: the seat's touch device, a new wl_touch proxy.
+    public static nint GetTouch(nint seat) {
+        return wl_proxy_marshal_flags(
+            seat,
+            WlSeatGetTouchOpcode,
+            TouchInterface,
+            wl_proxy_get_version(proxy: seat),
+            0,
+            __arglist(((nint)0))
+        );
+    }
+    // wl_touch.release (a destructor since version 3); an older touch proxy is only destroyed client-side.
+    public static void ReleaseTouch(nint touch) {
+        if (wl_proxy_get_version(proxy: touch) >= 3) {
+            Destroy(
+                opcode: WlTouchReleaseOpcode,
+                proxy: touch
+            );
+        } else {
+            wl_proxy_destroy(proxy: touch);
+        }
+    }
+    // wl_seat.release (a destructor since version 5); an older seat proxy is only destroyed client-side.
+    public static void ReleaseSeat(nint seat) {
+        if (wl_proxy_get_version(proxy: seat) >= 5) {
+            Destroy(
+                opcode: WlSeatReleaseOpcode,
+                proxy: seat
+            );
+        } else {
+            wl_proxy_destroy(proxy: seat);
+        }
+    }
     public static nint XdgSurfaceInterface {
         get {
             EnsureInitialized();
@@ -276,6 +328,14 @@ internal static unsafe partial class WaylandClient {
             SurfaceInterfaceHandle = NativeLibrary.GetExport(
                 handle: LibraryHandle,
                 name: "wl_surface_interface"
+            );
+            SeatInterfaceHandle = NativeLibrary.GetExport(
+                handle: LibraryHandle,
+                name: "wl_seat_interface"
+            );
+            TouchInterfaceHandle = NativeLibrary.GetExport(
+                handle: LibraryHandle,
+                name: "wl_touch_interface"
             );
 
             // Build order respects cross-references: toplevel <- surface <- wm_base.

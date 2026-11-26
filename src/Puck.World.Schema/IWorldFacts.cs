@@ -80,6 +80,10 @@ public interface IWorldFacts : IFacet {
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>
     Fact Read(PointerOperand operand);
+    /// <summary>Returns one facet of the contact event a <c>$contacts:</c> sweep bound to <c>$each</c>.</summary>
+    /// <param name="operand">The operand.</param>
+    /// <returns>The fact; absent when no contact event is bound.</returns>
+    Fact Read(ContactOperand operand);
     /// <summary>Returns the nearest body carrying a tag-row cell.</summary>
     /// <param name="operand">The operand.</param>
     /// <returns>The fact.</returns>

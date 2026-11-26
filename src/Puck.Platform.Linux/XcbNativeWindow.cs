@@ -16,7 +16,7 @@ namespace Puck.Platform.Linux;
 /// under XWayland, while the native Gamescope path is <see cref="WaylandNativeWindow"/>. No pointer
 /// capture equivalent to Win32's <c>SetCapture</c> is implemented (XCB's is <c>xcb_grab_pointer</c>): a drag
 /// that leaves the client area on this path stops receiving motion until the pointer re-enters.</summary>
-internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
+internal sealed partial class XcbNativeWindow : INativeWindow, IWindowInputSource {
     // XCB reports no per-device identity for key or pointer events (unlike Win32 Raw Input's per-hDevice
     // resolution) — every physical keyboard and every physical mouse collapses onto these two fixed ids.
     private static readonly InputDeviceId CollapsedKeyboardDevice = InputDeviceId.FromKey(key: "keyboard");
@@ -175,6 +175,7 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
 
         ApplyTitle();
         m_deleteWindowAtom = RegisterDeleteWindowProtocol();
+        SelectTouch();
         _ = Xcb.xcb_flush(connection: m_connection);
     }
 
@@ -314,6 +315,10 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
             responseType: responseType
         );
 
+        if (TryHandleTouch(eventPointer: eventPointer, responseType: responseType)) {
+            return;
+        }
+
         switch (responseType) {
             case XcbExpose:
                 m_hasPainted = true;
@@ -385,6 +390,7 @@ internal sealed class XcbNativeWindow : INativeWindow, IWindowInputSource {
             return;
         }
 
+        _ = m_pendingInput.CancelContacts();
         m_pendingInput.Enqueue(item: WindowInputEvent.FocusLost());
     }
     private void HandleKeyPress(nint eventPointer) {

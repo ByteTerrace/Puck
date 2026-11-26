@@ -317,6 +317,32 @@ public static class InputSources {
         public const string TouchpadLeft = "gamepad.touchpadLeft";
     }
     /// <summary>
+    /// Touchscreen contacts. Each finger on the glass is a numbered contact, the lowest number free when it touched,
+    /// kept until it lifts, so a binding can name one finger (<c>touch.contact1</c>) and an input pattern can tell its
+    /// tap from its hold. The contact's point also reaches the world as a surface contact through its seat's view.
+    /// </summary>
+    public static class Touch {
+        /// <summary>Gets the source id for a numbered touch contact.</summary>
+        /// <param name="number">The contact number, from 1 through <see cref="SurfaceContact.MaximumContacts"/>.</param>
+        /// <returns>The source id <c>touch.contact&lt;number&gt;</c>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="number"/> is outside 1 through
+        /// <see cref="SurfaceContact.MaximumContacts"/>.</exception>
+        public static string Contact(int number) {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value: number, other: 1);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(value: number, other: SurfaceContact.MaximumContacts);
+
+            return $"touch.contact{number}";
+        }
+    }
+    /// <summary>
+    /// Pen digitizer controls: the tip's contact with the glass.
+    /// </summary>
+    public static class Pen {
+        /// <summary>The pen tip touching the glass.</summary>
+        [InputSourceValue(kind: CommandValueKind.Digital)]
+        public const string Tip = "pen.tip";
+    }
+    /// <summary>
     /// Camera-probes axes — an open-ended family minted by a world document's own <c>probes.bindings[].source</c>
     /// row rather than a fixed constant set. Every id resolves to <see cref="CommandValueKind.Axis1D"/>, non-relative
     /// (a deflection about a neutral, like a stick, never a delta).

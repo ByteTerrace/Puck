@@ -112,6 +112,8 @@ public static class WorldScheduleCommands {
             "player.signal",
             "player.state.cell.set",
             "player.state.cell.toggle",
+            // A seat's own finger, pen tip or mouse click on a screen, as the contact's world ray.
+            "source.contact",
             "source.pointer.clear",
             "source.pointer.direction",
             "source.pointer.origin",

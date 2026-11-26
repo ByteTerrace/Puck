@@ -52,6 +52,7 @@ public interface IWorldWheelConsumer : IWorldPointerConsumer {
 /// </remarks>
 public sealed class WorldPointerSink : IWindowInputObserver {
     private readonly IWorldPointerConsumer[] m_consumers;
+    private readonly WorldContacts m_contacts;
     private readonly bool m_hasWheelConsumer;
     private readonly WorldPointer m_pointer;
     private readonly PlayerRoster m_roster;
@@ -60,12 +61,15 @@ public sealed class WorldPointerSink : IWindowInputObserver {
     /// <param name="pointer">The store this sink is the sole writer of.</param>
     /// <param name="roster">The roster this sink resolves the mouse's seat against.</param>
     /// <param name="consumers">The consumers to drive after each pointer event.</param>
+    /// <param name="contacts">The contact store a finger, a pen tip and the mouse's primary button write.</param>
     /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
-    public WorldPointerSink(WorldPointer pointer, PlayerRoster roster, IEnumerable<IWorldPointerConsumer> consumers) {
+    public WorldPointerSink(WorldPointer pointer, PlayerRoster roster, IEnumerable<IWorldPointerConsumer> consumers, WorldContacts contacts) {
         ArgumentNullException.ThrowIfNull(argument: pointer);
         ArgumentNullException.ThrowIfNull(argument: roster);
         ArgumentNullException.ThrowIfNull(argument: consumers);
+        ArgumentNullException.ThrowIfNull(argument: contacts);
 
+        m_contacts = contacts;
         m_pointer = pointer;
         m_roster = roster;
         m_consumers = consumers.ToArray();
@@ -84,7 +88,37 @@ public sealed class WorldPointerSink : IWindowInputObserver {
     private void OnDeviceSlotChanging(InputDeviceId _) {
         m_pointer.ReleaseAllButtons();
         m_pointer.ForgetPosition();
+        m_contacts.CancelAll();
     }
+    // A finger or pen tip enters the contact store on the seat its digitizer rides; its touch and lift also reach the
+    // router as touch.contact<n> or pen.tip through the window pump's mapping.
+    private void ObserveContact(in WindowInputEvent inputEvent) => _ = m_contacts.Record(
+        device: inputEvent.Contact,
+        deviceId: inputEvent.DeviceId,
+        id: inputEvent.ContactId,
+        phase: inputEvent.Phase switch {
+            CommandPhase.Started => ContactPhase.Down,
+            CommandPhase.Active => ContactPhase.Move,
+            CommandPhase.Completed => ContactPhase.Up,
+            _ => ContactPhase.Cancel,
+        },
+        position: inputEvent.Vector,
+        pressure: inputEvent.Pressure,
+        slot: ResolveSlot(device: inputEvent.DeviceId),
+        timestamp: inputEvent.Timestamp
+    );
+    // The mouse is contact 0 while its primary button is held: the same surface door a finger takes, so a screen's
+    // rules answer a click as they answer a tap.
+    private void ObserveMouseContact(int slot, ContactPhase phase) => _ = m_contacts.Record(
+        device: ContactDevice.Mouse,
+        deviceId: default,
+        id: 0,
+        phase: phase,
+        position: m_pointer.Position(slot: slot),
+        pressure: float.NaN,
+        slot: slot,
+        timestamp: System.Diagnostics.Stopwatch.GetTimestamp()
+    );
     // Each mouse resolves its OWN seat from its OWN device id (see the class remarks); a device the roster cannot
     // yet place falls back to WorldPointerSlot's fixed seat.
     private int ResolveSlot(InputDeviceId device) {
@@ -95,8 +129,15 @@ public sealed class WorldPointerSink : IWindowInputObserver {
     public void Observe(in WindowInputEvent inputEvent) {
         if (inputEvent.Kind == WindowInputKind.FocusLost) {
             m_pointer.ReleaseAllButtons();
+            m_contacts.CancelAll();
 
             // Not a pointer act — nothing downstream should react to it as one.
+            return;
+        }
+        if (inputEvent.Kind == WindowInputKind.Contact) {
+            // A touch is not the mouse: it moves no cursor and orbits no camera, so no pointer consumer sees it.
+            ObserveContact(inputEvent: in inputEvent);
+
             return;
         }
         if (inputEvent.Kind == WindowInputKind.PointerLeft) {
@@ -123,13 +164,23 @@ public sealed class WorldPointerSink : IWindowInputObserver {
                     slot: slot
                 );
 
+                if (m_pointer.IsButtonDown(button: 0, slot: slot)) {
+                    ObserveMouseContact(phase: ContactPhase.Move, slot: slot);
+                }
+
                 break;
             case WindowInputKind.PointerButton:
+                var wasDown = m_pointer.IsButtonDown(button: inputEvent.ButtonIndex, slot: slot);
+
                 m_pointer.SetButton(
                     slot: slot,
                     button: inputEvent.ButtonIndex,
                     down: (inputEvent.Phase == CommandPhase.Started)
                 );
+
+                if ((inputEvent.ButtonIndex == 0) && (wasDown != m_pointer.IsButtonDown(button: 0, slot: slot))) {
+                    ObserveMouseContact(phase: (wasDown ? ContactPhase.Up : ContactPhase.Down), slot: slot);
+                }
 
                 break;
             case WindowInputKind.PointerWheel:

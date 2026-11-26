@@ -592,8 +592,23 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
         if (ShouldSuppressBackgroundErase(message: message)) {
             return 1;
         }
+        // A pen or touch contact is read as the contact itself (HandleContact); the mouse message the system makes of
+        // it would fire the same act twice.
+        if (IsMouseFromContact(message: message)) {
+            return 0;
+        }
 
         switch (message) {
+            case WmPointerDown:
+            case WmPointerUpdate:
+            case WmPointerUp:
+            case WmPointerCaptureChanged:
+                return HandleContact(
+                    lParam: lParam,
+                    message: message,
+                    wParam: wParam,
+                    windowHandle: windowHandle
+                );
             case WmKeyDown:
             case WmSysKeyDown:
                 return HandleKeyDown(
@@ -635,7 +650,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
                 // a slot's chord tracker mid-page (the pre-existing lt/rt trigger modifiers self-heal because an
                 // analog trigger re-reports its value every tick; a keyboard modifier is edge-only and never
                 // re-asserts). Surfaced through the same TryDequeueInput path as every other window event so the
-                // pump can release every held command AND every slot's chord state in one place.
+                // pump can release every held command AND every slot's chord state in one place. A contact still down
+                // is cancelled first, since its lift may now go elsewhere too.
+                _ = m_pendingInput.CancelContacts();
                 m_pendingInput.Enqueue(item: WindowInputEvent.FocusLost());
                 return 0;
             case WmCancelMode:
@@ -1061,6 +1078,11 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
         return state;
     }
     private void HandleRawMouse(nint deviceHandle, in RawMouse mouse) {
+        // A packet synthesized from a pen or touch contact (see Win32NativeWindow.Contacts) is not mouse motion.
+        if (IsFromContact(extraInformation: mouse.ExtraInformation)) {
+            return;
+        }
+
         var state = GetOrCreateRawMouseState(deviceHandle: deviceHandle);
 
         if (

@@ -5850,6 +5850,24 @@ Owner: input lane · ordinary · Next: the chat exhibit, the press's follow-ups
 and live hardware. The [input channel decision](../decisions/input-channels.md) owns
 the model.
 
+- [high] Touch on real hardware is unrun. The owner's touchscreen monitor
+  (`WM_POINTER` touch, through `world.view.touch` first and then a real finger
+  on a debug-world Simulation screen) is the first run; the Steam Deck's panel
+  (Wayland `wl_touch` under Gamescope) and an X11 touchscreen (XInput 2.2) have
+  never met the backends in `WaylandNativeWindow` and `XcbNativeWindow.Touch`.
+- [medium] A session screen (a screen showing another world) forwards its seat's
+  pointer ray into that world (`WorldInstanceHost.TryMapForward`), but not its
+  contacts, so a `$contacts:` rule in the shown world sees no finger. Forward each
+  contact's ray through the portal face as the pointer ray is forwarded, and carry
+  them in the destination's batch (`WorldPortalInputProducer`).
+- [medium] A passthrough pane (`WorldSourcePassthrough`) forwards no touch to its
+  captured window: `SourcePassthroughRouter` delivers keys and pointer events only.
+  Deliver a contact as the window's own touch input (`InjectTouchInput` or a
+  synthetic pointer) at the client point `SourcePassthrough.ToClient` maps.
+- [low] A contact event reaches the authority on the tick that takes the seat's
+  submission, in order but without a sub-tick offset; only its binding source
+  (`touch.contact<n>`) carries sub-tick time. Stamp each contact with the offset
+  its capture tick quantizes to, as `WorldSeatInput.Stamp` does for a bound source.
 - [low] A rule that reads `$inputEvents` runs on idle ticks too, at a cost
   nobody has counted, and a rule cannot read every press of a channel in a
   step in one expression: the rhythm judge wanted an

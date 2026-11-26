@@ -222,6 +222,54 @@ edge verb.
 Bindings, chord pages, toggles, sequences, interactive rebinding, and the
 binding document format belong to [Commands and input](commands.md).
 
+## Touch and pen contacts
+
+A touchscreen or pen digitizer is a `touch` device in the roster (`touch1`,
+`touch2`, …), seated like a mouse. Each window backend decodes its platform's
+contacts and hands them to `WindowInputQueue.EnqueueContact`, the one contact model
+every backend shares: each live contact holds a number from 1 to 10 within its
+device kind, the lowest free when it touched, until it lifts or is cancelled, and a
+move or lift no live contact explains is dropped. A contact event
+(`WindowInputKind.Contact`) carries the device kind, the number, the phase (touch,
+move, lift, cancel), the client position in pixels, the pressure where the device
+reports one, and the decode time.
+
+| Backend | Reads | Cancels every contact on |
+|---|---|---|
+| Windows | `WM_POINTERDOWN`, `WM_POINTERUPDATE`, `WM_POINTERUP` and `WM_POINTERCAPTURECHANGED` for `PT_TOUCH` and `PT_PEN`, pressure from `GetPointerTouchInfo` and `GetPointerPenInfo` | focus loss |
+| Wayland | the first `wl_seat`'s `wl_touch` | `wl_touch.cancel`, and the seat losing its touch capability |
+| X11 | XInput 2.2 touch begin, update and end on the window | focus loss |
+
+The windowed host answers the touch and pen messages itself, so Windows never
+promotes them to mouse input, and it drops mouse messages and raw mouse packets
+that still carry the pen-or-touch signature (`MI_WP_SIGNATURE`). A touch moves no
+cursor and orbits no camera.
+
+A contact reaches the game through two doors:
+
+- **Bindings.** Its touch and lift are the sources `touch.contact1` through
+  `touch.contact10` and `pen.tip`, so a binding names one finger and an input
+  pattern tells its tap from its hold with sub-tick timing. A move binds nothing.
+- **Surfaces.** The window input observer writes it into the seat's contact store
+  (`WorldContacts`), with the mouse as contact 0 while its primary button is held.
+  Each host frame the capture (`WorldPointerRayCapture`) casts every transition
+  through the seat's view and queues it on the seat, which carries it in its next
+  input batch. A rule reads it on a `Simulation` screen with
+  `forEach: $contacts:<screen>` and `contact(each, seat|device|id|phase|x|y)`
+  (device: mouse 1, touch 2, pen 3; phase: down 1, move 2, up 3, cancel 4). A
+  contact that touches outside its seat's view is not sent; one that touched inside
+  keeps sending until it lifts.
+
+`world.view.touch <id> down|move|up|cancel <x> <y>` lays a synthetic finger on the
+acting seat's view at a client-pixel point through both doors; with no arguments it
+echoes each seat's live contacts. It needs a GPU presentation.
+`source.contact <id> down|move|up|cancel <origin> <direction> [touch|pen|mouse]`
+queues a contact as a world ray, so a headless World and a `puck test` scenario
+drive the authority's half (`worlds/debug/touch-tests.puck`). An agent's World
+passes `--devices none`, which drops every OS contact, so these two verbs are how
+agents exercise touch. The [decision](../decisions/input-channels.md#touch-is-diegetic)
+holds the reasoning.
+
 ## Keyboard focus and passthrough sources
 
 A window captured into a pane, such as an editor, can take the keyboard.

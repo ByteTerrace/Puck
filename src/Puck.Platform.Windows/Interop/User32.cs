@@ -173,6 +173,17 @@ internal static partial class User32 {
     public static partial bool ScreenToClient(nint windowHandle, ref Point point);
     [LibraryImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetPointerType(uint pointerId, out uint pointerType);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetPointerTouchInfo(uint pointerId, out PointerTouchInfo touchInfo);
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetPointerPenInfo(uint pointerId, out PointerPenInfo penInfo);
+    [LibraryImport("user32.dll")]
+    public static partial nint GetMessageExtraInfo();
+    [LibraryImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetCursorPos(out Point point);
     [LibraryImport("user32.dll")]
     public static partial nint GetForegroundWindow();

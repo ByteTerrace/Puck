@@ -380,7 +380,9 @@ public sealed partial class WorldServer {
                             ? $" forEach region({occupants.PlacementId})"
                             : ((rule.Iteration is WorldPlayerIteration)
                                 ? $" forEach {WorldPlayerIteration.Spelling}"
-                                : string.Empty)))
+                                : ((rule.Iteration is WorldContactIteration contacts)
+                                    ? $" forEach $contacts:{contacts.ScreenIndex}"
+                                    : string.Empty))))
             ));
 
             lines.Add(item: $"{rule.Name} mode={rule.Mode.ToString().ToLowerInvariant()}{scope}{boundValues} latch={(held

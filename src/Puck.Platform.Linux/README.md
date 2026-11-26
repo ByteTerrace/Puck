@@ -8,7 +8,11 @@ The Linux concrete backends behind `Puck.Platform`'s contracts.
   `INativeWindowBackend` wrappers), over `Interop/Libc.cs`,
   `Interop/WaylandClient.cs`, `Interop/Xcb.cs`. `AddLinuxPlatformWindowing`
   also registers `Puck.Platform.NullClipboardService`—there is no Linux
-  clipboard backend.
+  clipboard backend. The only input either window reads besides XCB's keyboard
+  and pointer is touch: the first `wl_seat`'s `wl_touch` on Wayland, and XInput
+  2.2 touch events on X11 (`XcbNativeWindow.Touch`, through `libxcb-xinput`,
+  which a system without it simply lacks), both into
+  `WindowInputQueue.EnqueueContact`. Neither has met a touchscreen yet.
 - **Precise waiting**—`LinuxPrecisionWaiter`, a `clock_nanosleep` on
   `CLOCK_MONOTONIC` behind `Puck.Abstractions.Pacing.IPrecisionWaiter`
   (`AddLinuxPrecisionWaiter`), which the host loop's pacer sleeps on.

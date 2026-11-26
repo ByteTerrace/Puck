@@ -343,7 +343,7 @@ public sealed class WorldSeatInput {
 
     /// <summary>Freezes the tick's ordered input and the separately composed presentation-facing motion request.</summary>
     public IntentSubmission Publish(Principal owner, int body, ulong tick, SeatController seat, PlayerIntent motion) {
-        var batch = m_producer.Publish(tick, seat.PointerRay);
+        var batch = m_producer.Publish(tick, seat.PointerRay, seat.TakeContacts());
         var forwardChannel = ((m_moveForward >= 0) ? m_contracts[m_moveForward].Channel : ushort.MaxValue);
         var strafeChannel = ((m_moveStrafe >= 0) ? m_contracts[m_moveStrafe].Channel : ushort.MaxValue);
 
