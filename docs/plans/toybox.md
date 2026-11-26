@@ -49,13 +49,13 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
 
 ## Open work
 
-- The size field on the stairs, lift and branches; the full-size pass and its shortcuts; engagement that needs full
-  size (lane in progress).
+- A shrinking body cannot climb the corner stairs (gallery.md, "What is still open"): its step height falls with its
+  size and the risers do not. The stairs need to shrink with the body along the flight.
 - The rental stalls stand (worlds/debug/gallery/rentals.puck, worlds/debug/gallery.md "The rentals"): a rented
   device rides its renter's hip and its seat's pool machine runs, but nothing shows its picture. Open: a screen that
   follows a body, so the carried device shows its game and engages wherever its holder stands; creating a pool
-  machine's runtime only when its `runsWhen` first holds; adopting the full-size engage condition in
-  `rentalCanRent` once it lands.
+  machine's runtime only when its `runsWhen` first holds; reading the body's size in `rentalCanRent`, as a station's
+  `needs` does (worlds/standard/station.puck), so a small body cannot rent.
 - The flaw: the light tube, then its hollow interior, its openings and exits, and the imprint (light lane in
   progress; the interior and puzzle follow).
 - The central tree's look: the tree stands, walkable (gallery.md, "The central tree"), but its sculpt is not yet at
@@ -63,7 +63,5 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
   branches are even-thickness limbs without knots or forks, and the canopy is a few broad leaf masses. A look pass
   owes it a gnarled, fluted trunk, treads grown into the bark, branches that fork and taper, and a broken, layered
   crown, judged live from every level.
-- The tree's level-1 branches shrink: a size field along each of `treeShrinkLimbs` (layout.puck), part of the size
-  field work above. Until then the bay-6 gate lets a full-size body into the toybox.
 - Climbing: a real climbing mechanic at Breath of the Wild / Tears of the Kingdom quality or better, preceded by a
   research round (the climb's states, stamina, ledge and mantle, the camera, animation and authored surfaces).

@@ -13,8 +13,11 @@
 //     and a spiral's helix
 //   the lift's shaft, the same two storeys: the car's ride between level 0 (or 2) and level 1 is the transition, so a
 //     body riding it shrinks or grows with the car's height, and an observer outside sees it through the car's glass
+//   the central tree's two level-1 branches (layout.puck's `treeShrinkLimbs`): a body's size follows its progress along
+//     the branch, full at the trunk and Alice's at the tip, where the branch passes the lattice's gate
 //   level 1's floor, the two aisles and the bridge (never the nave's void, which the lattice walls off): Alice's size
 //     throughout
+//   the trunk's column, last: full size, so a body on the trunk's treads stands at its full size
 //
 // A body holding the pass takes its full size in every zone. The pass is a body register, so it belongs to the body and
 // crosses with it, and does not persist with the player: an identity fact would, but `setIdentityFact` refuses a seat
@@ -70,15 +73,28 @@ function wonderShaft(x0, x1, z0, z1) = [
 // Level 1's floor zone: from just under its floor's top to well short of level 2's slab.
 let wonderFloorLow = (galleryFloor[toyboxLevel] - wonderShaftMargin)
 let wonderFloorHigh = (galleryCeiling[toyboxLevel] - 0.5)
+// The central tree's two level-1 branches (layout.puck's `treeShrinkLimbs`): a capsule along each branch's walking line,
+// from its start over its tread (full size) to its tip on level 1's balcony (Alice's), reaching `wonderLimbReach` metres
+// either side of the straight line between them, enough to hold the arched, bending branch and a body on it. The trunk's
+// column, listed after every other zone, gives full size, so a body that brushed a branch's start while climbing the
+// trunk's treads past it, or walked back off a branch onto the trunk, stands on the trunk at its full size.
+let wonderLimbReach = 3
+let wonderTrunkReach = (treeTrunk.base + 2.5)
+function wonderLimb(b) = { from: galleryWorld(treeBranchFrom(b)[0], treeBranchFrom(b)[1], treeBranchFrom(b)[2]), to: galleryWorld(treeBranchTo(b)[0], treeBranchTo(b)[1], treeBranchTo(b)[2]), reach: wonderLimbReach, start: "full", end: "small" }
 let wonderZones = concat(
   flatMap(galleryStairs, stair => wonderShaft(stair.well.x0, stair.well.x1, stair.well.z0, stair.well.z1)),
   wonderShaft(towerWest, towerEast, towerSouth, 0),
+  map(treeShrinkLimbs, b => wonderLimb(b)),
   [
     // The south aisle, from the south wall's outer face (its lift door) to the lattice on the nave's edge; the north
     // aisle, from the lattice to the north wall; and the bridge across the nave's west end.
     { box: wonderBox(galleryWestOut, galleryWidth, wonderFloorLow, wonderFloorHigh, 0, naveSouth), start: "small" }
     { box: wonderBox(galleryWestOut, galleryWidth, wonderFloorLow, wonderFloorHigh, naveNorth, galleryDepth), start: "small" }
     { box: wonderBox(galleryWestOut, naveWest, wonderFloorLow, wonderFloorHigh, naveSouth, naveNorth), start: "small" }
+    {
+      box: wonderBox((treeX - wonderTrunkReach), (treeX + wonderTrunkReach), galleryFloor[0], galleryRoof, (treeZ - wonderTrunkReach), (treeZ + wonderTrunkReach))
+      start: "full"
+    }
   ]
 )
 
