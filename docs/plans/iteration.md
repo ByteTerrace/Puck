@@ -457,6 +457,14 @@ rows, [the checks](#checks) below are owed.
   the newest such source (`WorldBuildCurrency`). A document using a rule
   function or vocabulary member a later build added is refused as a document
   fault by the older build; the line says what to do about it.
+- **Pins outlive the edit.** What the operator holds for the session (a
+  presentation lever such as `world.exposure pin`, a `view.override`, a held
+  clock or a scrubbed cell, a seat's pose) lives outside the source revision, so
+  a reload keeps it. `world.pins` writes those pins as console lines;
+  `world.pins save` before a restart and `world.pins restore` after it carry
+  them into the new process (`WorldPinsCommandModule`). A seat's ephemeral body
+  registers (the debug world's noclip, which a rule keeps) have no operator write
+  and are not carried.
 - **Undo follows the accepted edit.** A local file reload appends the overlay
   that actually installed to the same journal as console mutations
   (`WorldJournalEntry.TryCompose`). An unchanged reload advances the source
