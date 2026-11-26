@@ -1128,15 +1128,7 @@ public sealed partial class WorldBody {
 
         var start = m_position;
         var still = FixedVector3.Zero;
-        var step = new BodyContactStep(
-            entityIndex: scratch.EntityIndex,
-            field: field,
-            memo: ref scratch.SupportMemo,
-            orientation: scratch.Orientation,
-            up: scratch.Up,
-            volumes: ScaledColliderVolumes(),
-            volumesRevision: BroadphaseRadiusComputations
-        );
+        var step = ContactStep(field: field, scratch: ref scratch);
         var corner = (start + (traverse * outDistance));
         var around = corner;
         var outward = step.Sweep(position: ref around, previousPosition: in start, velocity: ref still);
@@ -1214,8 +1206,9 @@ public sealed partial class WorldBody {
     }
     // Begins a mantle over the edge above the body, when the body's own sweep proves one: raised by `raise`, stepped
     // the mantle's depth into the face, and lowered onto walkable support (FixedStepUp.TryStep, the step a kerb
-    // takes). The landing it proves is the only place a mantle carries a body, which is what keeps a mantle from
-    // putting one inside geometry. The body lets go of its row and travels as an exclusive timed move: a parabola
+    // takes) that it stands on rather than rolls off (FixedStepUp.Stands: a top too narrow for the landing leaves its
+    // axis over the drop beyond, and she hangs instead). The landing it proves is the only place a mantle carries a
+    // body, which is what keeps a mantle from putting one inside geometry or on an edge. The body lets go of its row and travels as an exclusive timed move: a parabola
     // through the top of the raise at its middle, so it rises beside the face before it moves in over the edge.
     private bool TryBeginMantle(in FixedBodyHold hold, FixedQ4816 raise, ref BodyMotionScratch scratch) {
         if (
@@ -1234,15 +1227,7 @@ public sealed partial class WorldBody {
 
         var start = m_position;
         var still = FixedVector3.Zero;
-        var step = new BodyContactStep(
-            entityIndex: scratch.EntityIndex,
-            field: field,
-            memo: ref scratch.SupportMemo,
-            orientation: scratch.Orientation,
-            up: scratch.Up,
-            volumes: ScaledColliderVolumes(),
-            volumesRevision: BroadphaseRadiusComputations
-        );
+        var step = ContactStep(field: field, scratch: ref scratch);
 
         if (!FixedStepUp.TryStep(
             blocked: in start,
@@ -1253,6 +1238,13 @@ public sealed partial class WorldBody {
             stepHeight: raise,
             up: in scratch.Up,
             velocity: in still
+        ) || !FixedStepUp.Stands(
+            field: field,
+            groundNormal: landing.Resolution.GroundNormal,
+            orientation: scratch.Orientation,
+            position: landing.Position,
+            up: scratch.Up,
+            volumes: ScaledColliderVolumes()
         )) {
             return false;
         }

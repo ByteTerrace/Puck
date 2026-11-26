@@ -51,7 +51,9 @@ press's lanes in `worlds/debug/press.puck`). A panel's marked-up text may add
 unstyled. The compiled markup is cached by resolved text, so a frame that only advances the effects' clock
 parses nothing. Absent `markup`, brackets are ordinary text.
 
-`WorldHudSection(Defaults, Panels)`; `WorldHudDefaults(Enabled, Cursor?)` is
+`WorldHudSection(Defaults?, Panels?)`: either member may be left out, so a document that only adds panels (the
+standard's `staminaGauge`) composes over the defaults its basis or another import authors and, alone, reads
+`WorldHudSection.InertDefaults` (disabled, no cursor). `WorldHudDefaults(Enabled, Cursor?)` is
 a world-level kill switch plus the drawn pointer cursor's per-world policy —
 `WorldHudCursor(HoverRadius, SizePx, Role, Visible?)` (hover reach in world
 units, ring radius in px, the bare cursor's core theme role (`WorldThemeRole`), an

@@ -3,8 +3,9 @@
 // The west wall is 30 m tall, more than one wheel of stamina climbs. Both face along X, which a camera-framed walker
 // reads as her strafe axis, so each climb also proves the command is laid onto the face. She is posed facing the wall
 // (yaw 270 faces +X, 90 faces -X) and the keys are hers: W drives where she faces, D to her right, Space jumps, Left
-// Shift runs. A square pillar to the north, holdable all round, is the outside corner she swings round; a thin fin to
-// the east, 4 m tall with nothing behind it, is a top that cannot be stood on.
+// Shift runs. A square pillar to the north, holdable all round, is the outside corner she swings round. Two walls to
+// the north-east stand 4 m tall with nothing behind them: a 0.4 m fin, a top narrower than she is, which a mantle would
+// leave her balanced on its far edge, so it cannot be stood on; and a 3 m ledge whose top she pulls up onto.
 // `puck test worlds/debug/climb-tests.puck --reproduce`.
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
@@ -68,7 +69,19 @@ prototypes {
       palette [{ color: "#8A7F72" }]
       shape Box {
         position [0, 0, 0]
-        scale [0.05, 2, 2]
+        scale [0.2, 2, 2]
+        material: 0
+      }
+    }
+  }
+  prototype "climb-ledge" {
+    document {
+      schema: "puck.creation.v1"
+      name: "climb-ledge"
+      palette [{ color: "#8A7F72" }]
+      shape Box {
+        position [0, 0, 0]
+        scale [1.5, 2, 2]
         material: 0
       }
     }
@@ -108,11 +121,20 @@ placements {
     }
     solid
   }
-  // The fin's west face stands at x 11.95, 4 m tall and 0.1 m thick, from z -12 to -8: thinner than her body, so a step
-  // in over its top finds nothing under her.
+  // The fin stands from x 11.8 to 12.2 and z -12 to -8, 4 m tall: narrower than her 0.7 m body, so a step in over its
+  // top lands her with her middle past its far edge, resting on that edge alone.
   placement "climb-fin" {
     prototype: "climb-fin"
     position [12, 2, -10]
+    grip {
+      holdable: true
+    }
+    solid
+  }
+  // The ledge stands from x 11.8 to 14.8 and z -18 to -14, as tall as the fin and deep enough to stand on.
+  placement "climb-ledge" {
+    prototype: "climb-ledge"
+    position [13.3, 2, -16]
     grip {
       holdable: true
     }
@@ -360,6 +382,45 @@ test "the stick climbs whichever way the camera looks" {
   expect {
     bodyPosition(body, 0, y) > 3.3
     bodyPosition(body, 0, x) > 5.5
+  }
+}
+
+// Driving on up the fin, she reaches its top and stays on the face: a mantle would land her middle past the far edge,
+// on the edge alone, which is no landing.
+test "a top narrower than she is is not a mantle: she hangs under it" {
+  when {
+    ticks 15
+    seat1: body.pose 11.2 0.05 -10 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 120
+    seat1: player.signal keyboard.w release
+    ticks 30
+  }
+  expect {
+    bodyPosition(body, 0, y) > 2.4
+    bodyPosition(body, 0, y) < 3.1
+    bodyPosition(body, 0, x) < 11.8
+    fact(body, 0, HoldingUnwalkable) == 1
+  }
+}
+
+// The same climb up the ledge, as tall as the fin and deep enough to stand on, ends on its top.
+test "a top she can stand on is a mantle" {
+  when {
+    ticks 15
+    seat1: body.pose 11.2 0.05 -16 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 75
+    seat1: player.signal keyboard.w release
+    ticks 40
+  }
+  expect {
+    bodyPosition(body, 0, y) > 3.9
+    bodyPosition(body, 0, y) < 4.2
+    bodyPosition(body, 0, x) > 11.9
+    bodyPosition(body, 0, x) < 14.8
+    fact(body, 0, Grounded) == 1
+    fact(body, 0, HoldingUnwalkable) == 0
   }
 }
 
