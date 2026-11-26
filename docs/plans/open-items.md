@@ -2717,7 +2717,17 @@ What the light gets wrong:
   faces as area sources in the relight's local part and, for their near
   field, in the views pass. A design lane with review; it owns the interiors'
   floor blotches and the stair treads' stains where `world.probe` names an
-  emitter.
+  emitter. An authored face can already light its near field as a screen
+  does (a box's `lightsAs: Face`, `SdfProgramBuilder.EmitterFace`): the
+  ceiling strips are candidates once their count fits the screen slots.
+- [high] Emitter faces cover a static box's front face only. Still owed: a
+  tube form for a sweep's core (the flaw's neon, `worlds/debug/gallery/flaw.puck`,
+  which lights nothing), a face on a stamp that rides a slot (a pooled or
+  attached creation declares none, `PoolShapeFrame.EmitterFace`), a glyph-decal
+  screen's light (its slot holds no source, so the light walk skips it), the
+  irradiance trace's emission reading paints at the hit, and a lane-driven
+  emissive's reduction re-running as the world's lanes move (the emission
+  signature folds the program and the decal revision only).
 - [high] The wrapped side's self-shadow term has failed three reviews, each
   in a new mesh-topology case (grazing self-shadowing from the receiver-plane
   clamp, multi-shell meshes oriented by one signed volume, T-junctions
