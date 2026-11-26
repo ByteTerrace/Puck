@@ -1,16 +1,17 @@
 // Limbs: the parts of a tree a body walks and climbs, a library. A sweep draws a tapering limb beautifully but contact
-// omits it, so every piece here is built from shapes contact admits (superellipsoids, which bake their own radii): a
-// limb is a chain of flattened masses along a curve, broad and flat enough on top to walk, and a trunk's treads are
-// shelves round its taper that climb at a riser a body steps up. Detail a body never touches (twigs, leaves) stays a
-// sweep or a crown in a separate, non-solid creation (foliage.puck's groupedTree and canopySurface).
+// omits it, so every piece a body stands on is built from shapes contact admits (superellipsoids, which bake their own
+// radii): a limb is a chain of flattened masses along a curve, broad and flat enough on top to walk, and a trunk's treads
+// are shelves round its taper that climb at a riser a body steps up. A creation built from them that sets
+// `contact: Shapes` collides as those masses' hard union, analytic primitives under its smooth blends, so a body walking
+// a whole tree runs no field solve. Detail a body never touches (a fork, a knot, twigs, leaves) is a sweep or a detail
+// shape, and leaf masses stay in a separate, non-solid creation (foliage.puck's groupedTree, leafClusters and
+// canopySurface).
 //
 // Every point is in the creation's author frame (sdf-authoring: +Z the front, +X the subject's left), the frame shape
 // rows are written in.
 
 import "rig"
 import "paths"
-
-// The point a share `t` along the quadratic Bezier `a`, `b`, `c`.
 
 // The turn that lays a shape's local +X along the direction `d` and keeps its local +Z level: a yaw about +Y, then a
 // pitch about the yawed +Z. `d` must not be vertical.
@@ -20,18 +21,26 @@ function turnAfterLevel(d, level) = compose(
   turnByCosine([0, 0, 1], clamp((level / vectorLength(d)), -1, 1), ((d[1] < 0) ? -1 : 1))
 )
 
+// A limb's full width or thickness a share `s` along it: `span[0]` at its root tapering to `span[1]` at its tip, swelled
+// at the root by a collar that adds `collar` of the span where the limb leaves its parent and fades as (1 - s)^4.
+function limbTaper(span, collar, s) = ((span[0] + ((span[1] - span[0]) * s)) * (1 + (collar * ((((1 - s) * (1 - s)) * (1 - s)) * (1 - s)))))
+// A limb's level heading a share `t` along the quadratic Bezier `a`, `b`, `c` (a unit vector, its y zero), and the level
+// direction to its left, round +Y from the heading.
+function limbHeading(a, b, c, t) = vectorUnit(((quadraticPoint(a, b, c, minimum((t + 0.02), 1)) - quadraticPoint(a, b, c, maximum((t - 0.02), 0))) * [1, 0, 1]))
+function limbLeft(a, b, c, t) = [limbHeading(a, b, c, t)[2], 0, (0 - limbHeading(a, b, c, t)[0])]
+
 // A walkable limb: `segments` flattened superellipsoids whose tops follow the quadratic Bezier `a`, `b`, `c` (the line a
 // foot walks), tapering from `width[0]` and `thickness[0]` (full widths, metres) at `a` to `width[1]` and `thickness[1]`
-// at `c`. Each mass reaches `overlap` times its share of the curve, so neighbours merge with only a shallow dip between
-// them, and joins its neighbours by a `smooth` blend. `exponent` squares the cross-section: 2 is an ellipse, and above it
-// the top flattens to walk on.
-template limb(label, a, b, c, width, thickness, material, segments = 7, exponent = 2.6, overlap = 1.6, smooth = 0.25) {
+// at `c`, with `collar` swelling its root (limbTaper). Each mass reaches `overlap` times its share of the curve, so
+// neighbours merge with only a shallow dip between them, and joins its neighbours by a `smooth` blend. `exponent`
+// squares the cross-section: 2 is an ellipse, and above it the top flattens to walk on.
+template limb(label, a, b, c, width, thickness, material, segments = 7, exponent = 2.6, overlap = 1.6, smooth = 0.25, collar = 0) {
   for i in range(0, segments) {
     let p0 = quadraticPoint(a, b, c, (i / segments))
     let p1 = quadraticPoint(a, b, c, ((i + 1) / segments))
     let s = ((i + 0.5) / segments)
-    let w = (width[0] + ((width[1] - width[0]) * s))
-    let th = (thickness[0] + ((thickness[1] - thickness[0]) * s))
+    let w = limbTaper(width, collar, s)
+    let th = limbTaper(thickness, collar, s)
     let turn = turnAlong((p1 - p0))
     shape Superellipsoid $"{label}-{i}" {
       exponent: exponent
@@ -45,24 +54,85 @@ template limb(label, a, b, c, width, thickness, material, segments = 7, exponent
   }
 }
 
+// Where a fork leaves limb `a`, `b`, `c`: a share `at` along it, `drop` metres under its walking line, and where it ends,
+// `reach` metres out to the limb's left (`side` 1) or right (`side` -1) and `rise` metres up.
+function limbForkBase(a, b, c, at, drop) = (quadraticPoint(a, b, c, at) - [0, drop, 0])
+function limbForkTip(a, b, c, at, side, reach, rise, drop) = ((limbForkBase(a, b, c, at, drop) + (limbLeft(a, b, c, at) * (side * reach))) + [0, rise, 0])
+
+// A fork off a limb: a sweep from inside the limb, under its walking line, out to one side and up, tapering from
+// `radius[0]` to `radius[1]`, smooth-blended into the limb so it reads as grown from it. A sweep never collides, and the
+// fork leaves the limb's flank sideways, so it stands clear of the line a foot walks. Its curve is local to the shape,
+// whose pose crosses the author frame (sdf-authoring), so its points are carried there by `* [-1, 1, -1]`.
+template limbFork(label, a, b, c, at, side, reach, rise, radius, material, drop = 0.35, smooth = 0.22) {
+  let base = limbForkBase(a, b, c, at, drop)
+  let tip = limbForkTip(a, b, c, at, side, reach, rise, drop)
+  let left = (limbLeft(a, b, c, at) * side)
+  shape Sweep $"{label}" {
+    material: material
+    blend: SmoothUnion
+    smooth: smooth
+    curve {
+      a: (base * [-1, 1, -1])
+      b: (((base + (left * (0.6 * reach))) + [0, (0.25 * rise), 0]) * [-1, 1, -1])
+      c: (tip * [-1, 1, -1])
+      radiusStart: radius[0]
+      radiusEnd: radius[1]
+    }
+  }
+}
+
+// A knot on a limb's flank: a low swelling `size` metres across a share `at` along it, on its left (`side` 1) or right
+// (`side` -1), set into the flank `depth` under the walking line so its top stays below the walking face. A detail shape:
+// drawn, never collided.
+template limbKnot(label, a, b, c, at, side, width, size, material, depth = 0.35) {
+  shape Superellipsoid $"{label}" {
+    detail: true
+    exponent: 2.2
+    position: ((quadraticPoint(a, b, c, at) - [0, depth, 0]) + (limbLeft(a, b, c, at) * (side * ((width / 2) - (0.25 * size)))))
+    scale [(0.5 * size), (0.42 * size), (0.5 * size)]
+    material: material
+    blend: SmoothUnion
+    smooth: (0.3 * size)
+  }
+}
+
 // The radius of a conical trunk `base` wide at the foot whose taper would close at `apex` metres up, at height `y`.
 function trunkRadius(base, apex, y) = (base * (1 - (y / apex)))
 
+// A conical trunk's contact core: `count` stacked cylinders from the foot to `top`, each as wide as the taper at its own
+// top less `inset`, so the stack stands inside the drawn cone (its ledges, a twentieth of a step at most, are under the
+// bark) and collides as analytic cylinders. Drawn inside the cone, it shows nowhere.
+template trunkCore(label, base, apex, top, count, material, inset = 0.02) {
+  for i in range(0, count) {
+    let y0 = ((top * i) / count)
+    let y1 = ((top * (i + 1)) / count)
+    shape Cylinder $"{label}-{i}" {
+      position [0, ((y0 + y1) / 2), 0]
+      scale [(trunkRadius(base, apex, y1) - inset), ((y1 - y0) / 2), (trunkRadius(base, apex, y1) - inset)]
+      material: material
+    }
+  }
+}
+
 // Treads climbing round a conical trunk (`base`, `apex`, as trunkRadius): tread k stands at `start + k * step` degrees
 // round the trunk (polarPoint's sense, from author +X toward +Z) with its top `rise * (k + 1)` metres up, a shelf
-// `depth` metres out from the bark and `across` metres wide that reaches `inset` metres into the trunk so it grows out
-// of it. A step of 18 degrees and a rise of 0.225 m climb one 4.5 m storey a turn in twenty risers, under a 0.3 m step.
-template spiralTreads(label, count, start, step, rise, base, apex, material, depth = 1.3, across = 0.96, thickness = 0.6, inset = 0.3, exponent = 3, smooth = 0.15) {
+// reaching `depth` metres out from the bark and `across` metres wide that reaches `inset` metres into the trunk so it
+// grows out of it. Each shelf's reach and width wander by `wander` of themselves (paths.puck's weylShare), so the spiral reads grown
+// rather than built; every `accentEvery`-th tread (none at 0) takes `accent` as its material. A step of 18 degrees and a
+// rise of 0.225 m climb one 4.5 m storey a turn in twenty risers, under a 0.3 m step.
+template spiralTreads(label, count, start, step, rise, base, apex, material, depth = 1.3, across = 0.96, thickness = 0.6, inset = 0.3, exponent = 3, smooth = 0.15, wander = 0, accent = 0, accentEvery = 0) {
   for k in range(0, count) {
     let top = (rise * (k + 1))
     let r = trunkRadius(base, apex, top)
     let angle = (start + (step * k))
+    let reach = (depth * (1 + (wander * (weylShare(k) - 0.5))))
+    let wide = (across * (1 + (wander * (weylShare(k, 0.7548776662) - 0.5))))
     shape Superellipsoid $"{label}-{k}" {
       exponent: exponent
-      position: polarPoint((r + ((depth - inset) / 2)), angle, (top - (thickness / 2)))
+      position: polarPoint((r + ((reach - inset) / 2)), angle, (top - (thickness / 2)))
       rotation: rotate([0, 1, 0], (0 - angle))
-      scale [((depth + inset) / 2), (thickness / 2), (across / 2)]
-      material: material
+      scale [((reach + inset) / 2), (thickness / 2), (wide / 2)]
+      material: (((accentEvery > 0) and ((k % accentEvery) == (accentEvery - 1))) ? accent : material)
       blend: SmoothUnion
       smooth: smooth
     }
@@ -77,3 +147,9 @@ function treadPoint(start, step, rise, base, apex, k, out) = polarPoint(
   (start + (step * k)),
   treadTop(rise, k)
 )
+
+// Bark grain frames for foliage.puck's landscapeSurface (`grain: 1`): the turn whose local +X runs along a direction.
+// A static placement's surface pattern stands in the world, a half turn about up from the author frame, so a direction
+// `d` authored in the creation's frame is carried there first; `barkUpright` is the frame of grain that climbs.
+function barkAlong(d) = turnAlong((d * [-1, 1, -1]))
+let barkUpright = rotate([0, 0, 1], 90)

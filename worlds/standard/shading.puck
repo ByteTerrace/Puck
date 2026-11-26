@@ -176,6 +176,11 @@ function flowed(base, layer, world = 1, velocityLane = -1, coverageLane = -1, gl
 // the pattern's frequency, instead of the one the revealed `under` colour reads, so a surface shows the deposit's
 // patches (dry ground) and the under colour's (lush ground) in different places; with 0 both read one noise and cost
 // one lattice less.
+// With `grain` 1 the pattern stands in a frame of its own instead of the layer's axes: the point is taken about
+// `origin` (layer units, which for a static placement are the world's), turned by the inverse of `frame` so the frame's
+// local +X becomes the pattern's x axis, and swirled about that axis by `twist` radians a unit along it. A `patternScale`
+// that is fine across and long along x then draws grain that runs along whatever `frame` names (a limb's axis, a trunk
+// twisting as it climbs) on any orientation of surface, where the layer's axes would draw streaks along world y only.
 // Painterly variation over a large surface: the colour's value drifts by `amount` (a share of it, either way) over soft
 // patches about `scale` metres across with a finer stroke inside them, and leans toward `lean` where it drifts up, as a
 // brush loaded twice lays a wall. The patches stand in the world, so every copy of a stamped piece takes its own. The
@@ -190,10 +195,13 @@ shade template brushed(amount, scale, lean, seed) {
     albedo: mix(material.albedo, lean, saturate(drift) * amount) * (1 + amount * drift)
   }
 }
-shade template weathered(under, deposit, seed, scale, linesAmount, settle, edgeAmount, reach, threshold, noiseAmount, patternScale, softness, octaveRatio, octaveGain, turn, settleThreshold = 0.5, settleWidth = 0, settleScale = 1, structural octaves = 2, structural settleOwn = 0) {
+shade template weathered(under, deposit, seed, scale, linesAmount, settle, edgeAmount, reach, threshold, noiseAmount, patternScale, softness, octaveRatio, octaveGain, turn, settleThreshold = 0.5, settleWidth = 0, settleScale = 1, frame = [0, 0, 0, 1], origin = [0, 0, 0], twist = 0, structural octaves = 2, structural settleOwn = 0, structural grain = 0) {
   surface {
     let frequency = scale * patternScale
-    let p = surface.layerPosition * frequency
+    let local = grain > 0 ? inverseRotate(surface.layerPosition - origin, frame) : surface.layerPosition
+    let swirl = local.x * twist
+    let local = grain > 0 ? [local.x, local.y * cos(swirl) - local.z * sin(swirl), local.y * sin(swirl) + local.z * cos(swirl)] : local
+    let p = local * frequency
     let rate = surface.footprint * max(frequency.x, max(frequency.y, frequency.z))
     let q = rotate(p, turn)
     let coarse = lattice(q, seed) * shadeFade(rate)
@@ -201,7 +209,7 @@ shade template weathered(under, deposit, seed, scale, linesAmount, settle, edgeA
     let noise = octaves > 1 ? 0.5 +
       0.5 * shadeClamp((coarse + octaveGain * fine) / sqrt(1 + octaveGain * octaveGain), -1, 1) : 0.5 + 0.5 * coarse
     let edge = saturate(max(surface.curvature, 0) * reach) * noise
-    let n = toLayer(surface.normal)
+    let n = grain > 0 ? inverseRotate(toLayer(surface.normal), frame) : toLayer(surface.normal)
     let weights = pow(abs(n), 4)
     let weights = weights / max(dot(weights, [1, 1, 1]), 0.000001)
     let line = dot(weights, [lines([p.y, p.z], seed, surface.footprint * max(frequency.y, frequency.z)),

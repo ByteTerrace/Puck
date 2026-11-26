@@ -286,6 +286,20 @@ public sealed record CreationPartDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Shapes = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Except = null
 );
+/// <summary>What a solid placement of a creation collides as (<see cref="CreationDocument.Contact"/>). Either way the
+/// collider never lies outside the drawn solid (docs/decisions/engine-design.md, "A collider follows the drawn solid").</summary>
+[JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<CreationContact>))]
+public enum CreationContact {
+    /// <summary>The solid it draws: its contact shapes under their authored blends and any relief, one field collider per
+    /// copy wherever they do not meet as a plain union of primitives.</summary>
+    Drawn,
+    /// <summary>Its contact shapes' hard union: a smooth union collides as a hard one, so shapes joined only by unions
+    /// and smooth unions compile to analytic primitive colliders instead of a field solve. A smooth union only adds to
+    /// the drawn solid, so the fillet it draws is left to the drawing and every collider stays inside it. Relief, a
+    /// deformation and any other blend still collide as drawn, since they can carry the surface inside the shapes.
+    /// For a large organic creation (a tree a body walks up) whose smooth blends are the look, not the footing.</summary>
+    Shapes,
+}
 /// <summary>The creation-level noise-relief facet: bounded hash-lattice fBm displacement
 /// (<see cref="SdfProgramBuilder.NoiseDisplace"/>) applied to the creation's whole composed field inside its stamp
 /// scope — irregular rock, terrain, bark. A solid placement collides with the relieved surface: the analytic provider
@@ -699,6 +713,8 @@ public sealed record CreationBehaviorDocument(
 /// contact sampled before body motion, published with that tick's snapshot; presentation easing never drives contact.</param>
 /// <param name="Clips">The pose clips (null = none), each key poses on joints played by one of <see cref="Drivers"/> —
 /// see <see cref="CreationClipDocument"/>. Presentation-only, like the drivers.</param>
+/// <param name="Contact">What a solid placement of this creation collides as (null = <see cref="CreationContact.Drawn"/>);
+/// see <see cref="CreationContact"/>.</param>
 public sealed record CreationDocument(
     string? Schema,
     DocumentIdentifier? Name,
@@ -721,7 +737,8 @@ public sealed record CreationDocument(
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     IReadOnlyList<VolumeDocument>? Volumes = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? SizeBy = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CreationClipDocument>? Clips = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<CreationClipDocument>? Clips = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CreationContact? Contact = null
 ) {
     /// <summary>The version tag every saved document carries.</summary>
     public const string CurrentSchema = "puck.creation.v1";

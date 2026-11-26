@@ -24,7 +24,8 @@ public sealed partial class WorldColliderSet {
     /// <returns><see langword="true"/> when the creation has a noise facet of nonzero amplitude.</returns>
     internal static bool Relieves(CreationDocument document) => CreationStampEmitter.HasRelief(document: document);
     /// <summary>Returns whether a creation's solid collides as its composed field rather than as its primitives: it
-    /// carries relief or point deformation, or a shape contact keeps joins the others by any blend but a hard union, whose surface the
+    /// carries relief or point deformation, or a shape contact keeps joins the others by any blend but a hard union
+    /// (CreationStampEmitter.ContactBlend, under which a Shapes creation's smooth union is a hard one), whose surface the
     /// independent primitives do not draw.</summary>
     /// <param name="document">The creation.</param>
     /// <returns><see langword="true"/> when the creation is relieved, deformed, or a contact shape blends other than by union.</returns>
@@ -35,7 +36,7 @@ public sealed partial class WorldColliderSet {
 
         foreach (var shape in (document.Shapes ?? [])) {
             if (CreationStampEmitter.EmitsContact(shape: shape) &&
-                (((shape.Blend ?? SdfBlendOp.Union) != SdfBlendOp.Union) || ShapePointOps.DeformsContact(shape: shape))) {
+                ((CreationStampEmitter.ContactBlend(document: document, shape: shape) != SdfBlendOp.Union) || ShapePointOps.DeformsContact(shape: shape))) {
                 return true;
             }
         }
@@ -72,7 +73,7 @@ public sealed partial class WorldColliderSet {
                 if (pieces is not null) {
                     var copyReach = CopyReach(copy: in copy, dilation: margin);
 
-                    switch (copy.Shape.Blend ?? SdfBlendOp.Union) {
+                    switch (CreationStampEmitter.ContactBlend(document: document, shape: copy.Shape)) {
                         case SdfBlendOp.Union: {
                                 pieces.Add(item: new FixedFieldPiece(Exact: ExactCollider(collider: in witness, copy: in copy, margin: margin), Reach: copyReach));
                                 break;
