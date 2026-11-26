@@ -92,7 +92,7 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint3 lane : SV_GroupThreadID, uint3
                 uint2 texel = (id.xy >> (level - 1u));
 
                 sdfReflectDepthShared[(lane.y * 8u) + lane.x] = nearest;
-                if (all(texel < sdfReflectDepthExtent(dims, level))) {
+                if (all(texel < sdfMeshPyramidExtent(dims, level))) {
                     sdfReflectionDepthRW[sdfReflectDepthWord(sdfReflectDepthBase(dims, level), dims, level, texel)] = asuint(nearest);
                     sdfWorkTexels++;
                 }

@@ -608,6 +608,17 @@ public static partial class SdfWorldPackage {
         Elements: elements,
         Per: per
     );
+    // The count terms of a storage of `elements` a tile of the extent a pixel storage counts `pixels` over: each basis of
+    // pixels as the basis of the tiles that hold them, and without the viewports basis where one storage serves every
+    // viewport of the view.
+    private static ShaderPipelineCountTerm[] PerTile(IReadOnlyList<ShaderPipelineCountTerm> pixels, ulong elements, bool perViewport = true) => [.. pixels.Select(selector: term => term with {
+        Elements = elements,
+        Per = [.. term.Per.Where(predicate: basis => (perViewport || (basis != ShaderPipelineCountBasis.Viewports))).Select(selector: static basis => basis switch {
+            ShaderPipelineCountBasis.Extent => ShaderPipelineCountBasis.ExtentTiles,
+            ShaderPipelineCountBasis.RenderExtent => ShaderPipelineCountBasis.RenderExtentTiles,
+            _ => basis,
+        })],
+    })];
     private static ShaderPipelineResource Image(string name, GpuPixelFormat format, string? from, bool retained) => new(
         Dimensions: ShaderPipelineDimensions.Relative(),
         Format: format.ToString(),

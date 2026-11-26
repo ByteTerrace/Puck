@@ -10,6 +10,7 @@
 #ifndef FRAME_SDF_REFLECTION_DEPTH_HLSLI
 #define FRAME_SDF_REFLECTION_DEPTH_HLSLI
 #include "../field/sdf-component.hlsli"
+#include "sdf-mesh-pyramid.hlsli"
 
 #if SDF_REFLECTION_DEPTH_LEVELS > 8
 #error A march reads a level's base from two four-lane vectors (sdfReflectDepthBases).
@@ -22,13 +23,10 @@
 // texels with atomics.
 static const uint SdfReflectDepthGroupLevel = SDF_REFLECTION_DEPTH_GROUP_LEVEL;
 
-// A level's extent: the view's extent halved per level, rounded up.
-uint2 sdfReflectDepthExtent(uint2 dims, uint level) {
-    return ((dims + ((1u << level) - 1u)) >> level);
-}
-// The texels of one level.
+// The texels of one level, whose extent is the view's halved per level and rounded up, as the occlusion's pyramid's
+// levels are (sdfMeshPyramidExtent).
 uint sdfReflectDepthTexels(uint2 dims, uint level) {
-    uint2 extent = sdfReflectDepthExtent(dims, level);
+    uint2 extent = sdfMeshPyramidExtent(dims, level);
 
     return (extent.x * extent.y);
 }
@@ -71,7 +69,7 @@ uint sdfReflectDepthBaseOf(SdfReflectDepthBases bases, uint level) {
 }
 // The word of a level's texel, from the level's base.
 uint sdfReflectDepthWord(uint base, uint2 dims, uint level, uint2 texel) {
-    return (base + ((texel.y * sdfReflectDepthExtent(dims, level).x) + texel.x));
+    return (base + ((texel.y * sdfMeshPyramidExtent(dims, level).x) + texel.x));
 }
 // Level zero, which no buffer holds: a render pixel's own surface as the mesh target holds it, its inverse forward depth,
 // or zero where no mesh covers it. The includer reads the world interface's mesh target.

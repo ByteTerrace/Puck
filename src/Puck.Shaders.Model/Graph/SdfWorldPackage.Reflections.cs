@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.Shaders;
 
 public static partial class SdfWorldPackage {
@@ -52,7 +54,7 @@ public static partial class SdfWorldPackage {
         var words = 0UL;
 
         for (var below = 1; (below < level); below++) {
-            words += ((((ulong)width + (1UL << below)) - 1UL) >> below) * ((((ulong)height + (1UL << below)) - 1UL) >> below);
+            words += (((ulong)width).CeilingDivide(divisor: (1UL << below)) * ((ulong)height).CeilingDivide(divisor: (1UL << below)));
         }
         return words;
     }
@@ -154,26 +156,12 @@ public static partial class SdfWorldPackage {
             Passes = passes,
             Resources = [
                 .. fragment.Resources,
-                visibility with {
-                    Name = Parts.Reflections,
-                    StrideBytes = sizeof(uint),
-                    Count = [.. visibility.Count!.Select(selector: term => new ShaderPipelineCountTerm(Elements: ReflectionWordsPerTile(cell: cell), Per: [.. term.Per.Select(selector: PerTile)]))],
-                },
-                visibility with {
-                    Name = Parts.ReflectionDepth,
-                    StrideBytes = sizeof(uint),
-                    Count = [.. visibility.Count!.Select(selector: static term => new ShaderPipelineCountTerm(Elements: ReflectionDepthWordsPerTile, Per: [.. term.Per.Where(predicate: static basis => (basis != ShaderPipelineCountBasis.Viewports)).Select(selector: PerTile)]))],
-                },
+                visibility with { Name = Parts.Reflections, StrideBytes = sizeof(uint), Count = PerTile(pixels: visibility.Count!, elements: ReflectionWordsPerTile(cell: cell)) },
+                // One pyramid serves the view's every viewport, as the occlusion's pyramid does.
+                visibility with { Name = Parts.ReflectionDepth, StrideBytes = sizeof(uint), Count = PerTile(pixels: visibility.Count!, elements: ReflectionDepthWordsPerTile, perViewport: false) },
             ],
         };
     }
-
-    // A count basis of pixels as the basis of the tiles that hold them.
-    private static ShaderPipelineCountBasis PerTile(ShaderPipelineCountBasis basis) => basis switch {
-        ShaderPipelineCountBasis.Extent => ShaderPipelineCountBasis.ExtentTiles,
-        ShaderPipelineCountBasis.RenderExtent => ShaderPipelineCountBasis.RenderExtentTiles,
-        _ => basis,
-    };
 
     public static partial class Parts {
         /// <summary>The reflection pass: a mirror ray a cell, marched through the reflection pyramid, its hit read from

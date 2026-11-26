@@ -2062,6 +2062,11 @@ Remaining detailed findings and smaller cuts in this area:
   values the report words (`SdfMeshBakeReport`), with a scratch-edit check
   that each no longer moves the identity; the `m_restarts`, `m_loads*` and
   `m_planMilliseconds` counters belong in `SdfMeshBakeReport.Accounts` too.
+  The bake names `SdfFrame`, so the layout of `SdfFrameSettings` is in its
+  closure: a presentation-only setting added there (the reflections' row) moved
+  the identity (`Puck.SdfVm.SdfFrameSettings [layout]` on the miss line) and
+  rebaked every mesh. Fold only the members the bake reads, or keep the
+  settings it never reads in a type the bake does not name.
 - [low] The audit counts a chunked mesh's seam edges as open edges: weld the
   joined query view's coincident seam vertices, or skip edges two chunks
   share.
