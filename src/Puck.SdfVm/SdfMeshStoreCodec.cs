@@ -253,6 +253,20 @@ internal static class SdfMeshStoreCodec {
             WritePlane(writer, held.LevelIndices(level: level).Span, ((positions.Length <= 65536) ? 2 : 4));
             WriteMaterials(writer, held.LevelMaterials(level: level).Span, map);
         }
+        // The clusters: their count (zero for a mesh drawn whole), their clustered levels, each one's box, then each
+        // clustered level's triangles cluster by cluster.
+        var clusters = mesh.Clusters;
+
+        writer.Write(value: (clusters?.Count ?? 0));
+        if (clusters is null) { return; }
+        writer.Write(value: clusters.Levels);
+        for (var cluster = 0; (cluster < clusters.Count); cluster++) {
+            WriteVector(writer, clusters.Low(cluster: cluster));
+            WriteVector(writer, clusters.High(cluster: cluster));
+        }
+        for (var level = 0; (level < clusters.Levels); level++) {
+            for (var cluster = 0; (cluster < clusters.Count); cluster++) { writer.Write(value: clusters.Triangles(cluster: cluster, level: level)); }
+        }
     }
     // The largest quantized value of a position width, which spans its axis's low to high.
     internal static double Steps(int width) => ((1u << (width * 8)) - 1);

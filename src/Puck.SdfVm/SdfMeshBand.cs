@@ -32,19 +32,29 @@ public readonly record struct SdfMeshBand(SdfMeshBandRole Role, Vector3 Center, 
     public static SdfMeshBand None => default;
 
     /// <summary>Returns the band both tiers of one placement share, before each takes its role: the sphere about the box
-    /// holding both meshes, and the floor's cell as the pixel it stands at.</summary>
+    /// holding both meshes, and the floor's cell as the pixel it stands at: the cell of the lattice its contour was
+    /// actually drawn on (<see cref="SdfMesh.BakeCell"/>, its largest side), which a floor whose lattice is capped at
+    /// its samples holds finer than its tier's rung, or the rung's cell for a floor that records none.</summary>
     /// <param name="low">The least corner of the box holding both tiers' meshes, in object space.</param>
     /// <param name="high">The greatest corner of that box.</param>
+    /// <param name="floor">The floor's mesh.</param>
     /// <param name="floorTier">The floor's tier (<see cref="SdfMeshTier"/>).</param>
     /// <returns>The band, its role <see cref="SdfMeshBandRole.None"/>.</returns>
-    public static SdfMeshBand Of(Vector3 low, Vector3 high, int floorTier) => new(
-        Center: ((low + high) * 0.5f),
-        FloorRow: 0,
-        FloorRows: 0,
-        Pixel: (SdfMeshTier.Cell(tier: floorTier) / SdfMeshTier.PixelShare),
-        Radius: (0.5f * Vector3.Distance(value1: low, value2: high)),
-        Role: SdfMeshBandRole.None
-    );
+    /// <exception cref="ArgumentNullException"><paramref name="floor"/> is <see langword="null"/>.</exception>
+    public static SdfMeshBand Of(Vector3 low, Vector3 high, SdfMesh floor, int floorTier) {
+        ArgumentNullException.ThrowIfNull(argument: floor);
+
+        var cell = MathF.Max(x: floor.BakeCell.X, y: MathF.Max(x: floor.BakeCell.Y, y: floor.BakeCell.Z));
+
+        return new(
+            Center: ((low + high) * 0.5f),
+            FloorRow: 0,
+            FloorRows: 0,
+            Pixel: (((cell > 0f) ? cell : SdfMeshTier.Cell(tier: floorTier)) / SdfMeshTier.PixelShare),
+            Radius: (0.5f * Vector3.Distance(value1: low, value2: high)),
+            Role: SdfMeshBandRole.None
+        );
+    }
 
     /// <summary>Gets whether the draw stands for a group's floor, which only a pass that can take the floor draws: no
     /// static scene, trace or other consumer of the placement's surface counts it beside the finer tier.</summary>

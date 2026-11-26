@@ -64,7 +64,10 @@ public sealed partial class SdfWorldTables {
     /// <param name="epoch">The row epoch the marks were staged under (<see cref="MeshRowEpoch"/>).</param>
     /// <param name="draws">The draws the pass selected among.</param>
     /// <param name="marks">The mark words, the lowest draw in the lowest bits.</param>
-    internal void ObserveSelectionMarks(SdfMeshOcclusion source, long epoch, uint draws, ReadOnlySpan<uint> marks) {
+    /// <param name="levelTriangles">The triangles a view's compaction counted it drew at each level, a cluster's at its
+    /// own (<see cref="SdfKernelInterfaces.MeshLevelTriangleBase"/>), which the triangles by level are read from; empty
+    /// for a cascade, whose marks name each draw's level.</param>
+    internal void ObserveSelectionMarks(SdfMeshOcclusion source, long epoch, uint draws, ReadOnlySpan<uint> marks, ReadOnlySpan<uint> levelTriangles) {
         if (m_disposed) { return; }
         if ((epoch != m_meshRowEpoch) || (draws != ((uint)m_stagedCount))) {
             m_marksStale++;
@@ -92,11 +95,16 @@ public sealed partial class SdfWorldTables {
                 selected++;
                 if ((levels is null) || (tiers is null)) { continue; }
 
+                // A draw a view drew in clusters is marked at its finest cluster's level and counted in its tier at that
+                // level's whole mesh, an upper bound; its level sums come from the view's own counts below.
                 var triangles = mesh.LevelOf(level: level).TriangleCount;
 
-                levels[level] += triangles;
+                if (levelTriangles.IsEmpty) { levels[level] += triangles; }
                 tiers[Math.Clamp(value: (m_stagedDraws[draw].Tier + 1), min: 0, max: (tiers.Length - 1))] += triangles;
             }
+        }
+        if ((levels is not null) && !levelTriangles.IsEmpty) {
+            for (var level = 0; (level < Math.Min(val1: levels.Length, val2: levelTriangles.Length)); level++) { levels[level] = levelTriangles[level]; }
         }
         if ((levels is not null) && (tiers is not null)) { m_selections[source] = new SelectionSummary(Draws: selected, Levels: levels, Part: source.Part, Tiers: tiers); }
         CountUnselected();

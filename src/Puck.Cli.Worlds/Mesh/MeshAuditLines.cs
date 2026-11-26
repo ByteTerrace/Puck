@@ -75,8 +75,10 @@ public static partial class MeshAuditLines {
 
     /// <summary>Returns a mesh's levels line, without its line end: the triangles each level draws, its pieces' summed, and
     /// each coarser level's recorded error (<see cref="SdfMeshLevel.Error"/>, the largest any piece records), level zero
-    /// first, then the extent of the mesh's box, which a raster pass's level choice measures depth to. A piece with fewer
-    /// levels draws its coarsest at every level past it, as a raster pass's selection clamps.</summary>
+    /// first, then the extent of the mesh's box, which a raster pass's level choice measures depth to, the bytes the mesh
+    /// takes in the mesh region (<see cref="SdfMeshRegion.PlacedBytesOf"/>) and, for a mesh drawn in clusters
+    /// (<see cref="SdfMesh.Clusters"/>), how many and through which level. A piece with fewer levels draws its coarsest at
+    /// every level past it, as a raster pass's selection clamps.</summary>
     /// <param name="mesh">The mesh, whole or chunked.</param>
     /// <returns>The line.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="mesh"/> is <see langword="null"/>.</exception>
@@ -104,7 +106,17 @@ public static partial class MeshAuditLines {
         }
         var extent = (mesh.PositionHigh - mesh.PositionLow);
 
-        line.Append(provider: CultureInfo.InvariantCulture, handler: $"; extent {extent.X:0.###}x{extent.Y:0.###}x{extent.Z:0.###} m");
+        line.Append(provider: CultureInfo.InvariantCulture, handler: $"; extent {extent.X:0.###}x{extent.Y:0.###}x{extent.Z:0.###} m; region {SdfMeshRegion.PlacedBytesOf(mesh: mesh)} B");
+
+        var clusters = 0;
+        var clustered = 0;
+
+        for (var piece = 0; (piece < mesh.PieceCount); piece++) {
+            if (mesh.Piece(index: piece).Clusters is not { } own) { continue; }
+            clusters += own.Count;
+            clustered = Math.Max(val1: clustered, val2: own.Levels);
+        }
+        if (clusters > 0) { line.Append(provider: CultureInfo.InvariantCulture, handler: $"; {clusters} clusters drawn apart through L{(clustered - 1)}"); }
         return line.ToString();
     }
 

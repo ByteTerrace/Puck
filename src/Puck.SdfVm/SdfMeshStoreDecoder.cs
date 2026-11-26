@@ -207,7 +207,41 @@ internal static class SdfMeshStoreDecoder {
             levels[level] = new SdfMeshLevelShape(Error: error, Indices: levelIndices.Count, Materials: levelMaterials.Count);
         }
 
-        return new SdfMeshPieceShape(BakeCell: cell, Indices: indices.Count, Influences: blends.Count, Levels: levels, Materials: materials.Count, Members: members, Normals: normals, VertexMembers: vertexMembers, Vertices: vertices);
+        return new SdfMeshPieceShape(BakeCell: cell, Clusters: ReadClusters(cursor: ref cursor, levels: levels, triangles: (indices.Count / 3)), Indices: indices.Count, Influences: blends.Count, Levels: levels, Materials: materials.Count, Members: members, Normals: normals, VertexMembers: vertexMembers, Vertices: vertices);
+    }
+    // A piece's clusters, after its levels (SdfMeshStoreCodec.WriteMesh): none for a count of zero; each clustered level's
+    // runs must cover that level's triangles exactly.
+    private static SdfMeshClusters? ReadClusters(ref Cursor cursor, SdfMeshLevelShape[] levels, int triangles) {
+        var count = cursor.Count(itemBytes: 24);
+
+        if (count == 0) { return null; }
+        var clustered = cursor.ReadInt32();
+
+        if ((count < 2) || (count > SdfMeshClusters.MostClusters) || (clustered < 1) || (clustered > Math.Min(val1: SdfMeshClusters.MostLevels, val2: (levels.Length + 1)))) {
+            throw new InvalidDataException(message: "Invalid clusters.");
+        }
+        var low = new Vector3[count];
+        var high = new Vector3[count];
+
+        for (var cluster = 0; (cluster < count); cluster++) {
+            low[cluster] = cursor.ReadVector();
+            high[cluster] = cursor.ReadVector();
+        }
+        var runs = new int[(count * clustered)];
+
+        for (var level = 0; (level < clustered); level++) {
+            var sum = 0L;
+
+            for (var cluster = 0; (cluster < count); cluster++) {
+                var run = cursor.ReadInt32();
+
+                if (run < 0) { throw new InvalidDataException(message: "Invalid cluster run."); }
+                runs[((level * count) + cluster)] = run;
+                sum += run;
+            }
+            if (sum != ((level == 0) ? triangles : (levels[(level - 1)].Indices / 3))) { throw new InvalidDataException(message: "Cluster runs disagree with their level."); }
+        }
+        return new SdfMeshClusters(high: high, low: low, triangles: runs);
     }
     private static void RequireVectorPlanes(int width, Plane x, Plane y, Plane z) {
         if ((x.Count != y.Count) || (x.Count != z.Count) || (x.Width != width) || (y.Width != width) || (z.Width != width)) { throw new InvalidDataException(message: "Invalid vector planes."); }

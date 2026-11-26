@@ -585,17 +585,28 @@ coarse triangle can stay within a pixel of a bumpy surface while its interpolate
 normal smooths the bumps away, so a collapse also keeps each vertex's normal within
 an angle of the level's normal there that widens with the level's budget: 2 degrees
 at a quarter cell, 6 at two cells, 15 at eight and 30 at 32
-(`SdfMeshCollapse.NormalDegrees`). A crease
-place slides only along its crease with each side keeping its own vertices, a
-corner where three faces meet and a mesh's open edge never move, and no collapse
-turns a triangle against its normals, which the back-face cull would show as a
-hole. A level saving less than a quarter of the finer level's triangles is not
-kept. The projection of the error is conservative: the error times the draw's
+(`SdfMeshCollapse.NormalDegrees`). That angle is waived only for a vertex nearer
+than the level's error, along the mesh, to a sharp turn of its surface
+(`SdfMeshCollapse.SharpDegrees`): where the level is drawn the error is under a
+pixel, so such a vertex's normal shades no pixel of its own. Without the waiver a
+thin part kept its side wall's normals at every level, and with corners locked
+the fern's sixteen thin fronds stopped collapsing at 17,342 triangles at 26 mm,
+the leaf litter at 14,048 at 171 mm; with both changes they fall to 1,648 and 956
+at the same errors. A crease place slides only along its crease with each side
+keeping its own vertices; a corner where three faces meet slides along any of its
+creases, its other faces taking the neighbour's vertex whose normal lies within the
+level's angle, or a vertex made there with their own normal, so a plate thinner
+than a level's error closes to a card whose faces keep their normals and a box's
+corner stays until its faces' samples let it move. A mesh's open edge never moves,
+and no collapse turns a triangle against its normals, which the back-face cull
+would show as a hole. A level saving less than a quarter of the finer level's
+triangles is not kept. The projection of the error is conservative: the error times the draw's
 largest stretch, over the nearest forward depth of the draw's box, at the
 sharpest projection of a displacement any point of the box can have (a point's
 distance from the eye over its forward depth, bounded for the box by its farthest
 reach over its nearest depth, and never past the frustum corner's); a box
-reaching the eye's plane draws the merged mesh. Taking the frustum corner's
+reaching the eye's plane draws the merged mesh, or, for a mesh drawn in clusters,
+each cluster the level its own box asks (below). Taking the frustum corner's
 projection for every draw held a draw at the middle of the view about a third
 finer than its pixels need. Glass draws its merged mesh, since its thickness is
 the sums of its own triangles' distances, and a frame held for a settled capture
@@ -610,6 +621,28 @@ so adjacent chunks keep identical seam edges at independently chosen levels, wit
 a stitch or a T-junction. The existing pixel and texel rules choose each chunk's
 level. The store keeps the pieces; whole-group queries read their combined merged
 surface, and the irradiance trace reads the pieces' merged surfaces.
+
+A mesh at least four metres long with enough triangles is drawn in clusters inside
+its one draw (`SdfMesh.Clusters`, `SdfMeshClusters`): its triangles split at the
+median of their centroids along the largest cluster's longest extent, up to eight
+for a tree, each with its box. The collapse holds the places clusters share for its
+first two runs (`SdfMeshCollapse.ClusteredRuns`) and collapses the rest whole, so
+the mesh's own triangles and its first levels lie cluster by cluster and any mix of
+those levels meets edge for edge. A view's selection draws such a draw cluster by
+cluster wherever the draw's own box asks a clustered level: each cluster is kept by
+the frustum, takes the level its own box asks, and in an occluding view is drawn in
+the first phase where it was visible and tested against the pyramid in the second,
+each one command of the phase's compact list (`sdf-mesh-occlusion.comp.hlsl`). It is
+the one selection path, levels and boxes as every draw has them; a cascade draws the
+mesh whole. Options weighed: a chunk per cluster (a draw each, as `SdfMeshChunks`
+makes, whose seams stay locked at every level, so a far tree's coarse levels would
+carry them), seams locked through every clustered level (sixteen clusters through
+three runs: the seams cost the forest stop more than the clusters saved, 17.25
+against 17.36 million triangles counted offline), and a cluster hierarchy over each
+level (Nanite's group-lock-simplify-recluster, a second builder beside the collapse).
+Eight clusters through two runs took the forest stop's main view from 17.36 to
+15.26 million triangles selected, counted offline with no occlusion, at a cost of a
+few percent more triangles at the two clustered levels.
 
 The lights follow the same rule: each view shades only the lights that can
 reach a surface it shows (`SdfLightSelection`), tested with the same
