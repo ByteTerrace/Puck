@@ -315,6 +315,9 @@ public sealed partial class SdfWorldTables {
                 if (part == SdfWorldPackage.Resolve) {
                     hash.AddBits(value: frame.Views[view].UpscaleSharpness);
                 }
+                if (part == SdfWorldPackage.Parts.ViewsReflections) {
+                    hash.Add(value: (uint)(frame.Settings.Reflections?.Steps ?? 0));
+                }
                 break;
             case SdfWorldPackage.Parts.Sky:
             case SdfWorldPackage.Parts.Composite:

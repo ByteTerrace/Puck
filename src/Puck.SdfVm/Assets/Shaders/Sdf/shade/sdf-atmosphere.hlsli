@@ -157,4 +157,20 @@ float3 sdfAirBodies(float3 direction, float anisotropy) {
 bool sdfAirFogReadsSky() {
     return ((sdfSky[0].AirFlags & SDF_AIR_FOG_COLOR_AUTHORED) == 0u);
 }
+// Whether the in-scatter of the kinds whose weights are positive (fog in x, haze in y, medium in z) reads the sky the
+// lighting sees: the haze always does, the fog unless its colour is authored.
+bool sdfAirInScatterReadsSky(float3 kinds) {
+    return ((kinds.y > 0.0) || ((kinds.x > 0.0) && sdfAirFogReadsSky()));
+}
+// The colours the kinds in-scatter toward the eye along `direction`, which their weights scale: the fog's, the sky the
+// lighting sees there (`ambient`, already lit by the air light) or its authored colour; the haze's, that sky and the
+// light-casting bodies' light by its phase, lit by `airLight`, the share of the air about the camera that sees them open;
+// the medium's authored colour. The composite adds them to every pixel by its transport and the reflection pass to a hit
+// it reads from the preceding frame's history, which holds the light before them.
+float3 sdfAirFogColor(float3 ambient) {
+    return (sdfAirFogReadsSky() ? ambient : sdfSky[0].FogColor);
+}
+float3 sdfAirHazeColor(float3 ambient, float3 direction, float airLight) {
+    return (ambient + (sdfAirBodies(direction, sdfSky[0].HazeAnisotropy) * airLight));
+}
 #endif

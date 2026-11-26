@@ -32,6 +32,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
     private static readonly CommandForms WorldShadowsForms = CommandForms.Of(verb: "world.shadows", "[off|low|medium|high]");
     private static readonly CommandForms WorldAoForms = CommandForms.Of(verb: "world.ao", "[on|off]");
     private static readonly CommandForms WorldRaysForms = CommandForms.Of(verb: "world.rays", "[on|off]");
+    private static readonly CommandForms WorldReflectionsForms = CommandForms.Of(verb: "world.reflections", "[off|half|full] [<steps>]");
     private static readonly CommandForms WorldCadenceForms = CommandForms.Of(verb: "world.cadence", "[on|off|status]");
     private static readonly CommandForms WorldCullForms = CommandForms.Of(verb: "world.cull", "[occlusion|camera|frustum|off|status]");
     private static readonly CommandForms WorldDetailForms = CommandForms.Of(verb: "world.detail", "[auto|0|1|2|status]");
@@ -57,8 +58,12 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
             ? "on"
             : "off")} dynamic-resolution={(settings.DynamicResolution
             ? "on"
-            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()} distant-shadows={DistantShadowsName(map: settings.DistantShadows)} far-shadows={FarShadowsName(rate: settings.FarShadows)} shadow-texels={WorldRenderSettings.ResolveShadowTexels(row: settings.ShadowTexels)} indirect-budget={IndirectBudgetName(budget: settings.IndirectBudget)} views-rate={(settings.ViewsRate ?? SdfViewsRate.Full).MaxRate} tile-size={(settings.ViewsRate ?? SdfViewsRate.Full).TileSize}]";
+            : "off")} render-scale={RenderScaleName(scale: settings.RenderScale)} upscale={UpscaleSharpnessName(sharpness: settings.UpscaleSharpness)} sky={SkyQualityName(tier: settings.SkyQuality)} sky-field-scale={settings.SkyFieldScale.ToString(format: "0.###", provider: CultureInfo.InvariantCulture)} indirect={settings.IndirectTier.ToString().ToLowerInvariant()} distant-shadows={DistantShadowsName(map: settings.DistantShadows)} far-shadows={FarShadowsName(rate: settings.FarShadows)} shadow-texels={WorldRenderSettings.ResolveShadowTexels(row: settings.ShadowTexels)} indirect-budget={IndirectBudgetName(budget: settings.IndirectBudget)} views-rate={(settings.ViewsRate ?? SdfViewsRate.Full).MaxRate} tile-size={(settings.ViewsRate ?? SdfViewsRate.Full).TileSize} reflections={ReflectionsName(reflections: settings.Reflections)}]";
     }
+    // The screen-space reflections' spelling in an echo: off, or the cell's name and the step budget.
+    private static string ReflectionsName(SdfScreenReflections? reflections) => ((reflections is { } value)
+        ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"{((value.Cell == 1) ? "full" : "half")}/{value.Steps}steps")
+        : "off");
     // The distant shadow map's spelling in an echo: off, or its reach, texels, light tolerance and the frames a redraw spans.
     private static string DistantShadowsName(WorldDistantShadows? map) => ((map is { } value)
         ? string.Create(provider: CultureInfo.InvariantCulture, handler: $"{value.Reach:0.#}m/{value.Texels}/{value.TurnDegrees:0.###}deg/{value.Frames}f")
@@ -370,6 +375,7 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
         link.SubmitSessionLever(lever: WorldSessionLevers.DistantShadowPolicy(preset: preset), principal: principal);
         link.SubmitSessionLever(lever: WorldSessionLevers.FarShadowPolicy(preset: preset), principal: principal);
         link.SubmitSessionLever(lever: WorldSessionLevers.ShadowTexelsPolicy(preset: preset), principal: principal);
+        link.SubmitSessionLever(lever: WorldSessionLevers.ReflectionsPolicy(reflections: preset.Reflections), principal: principal);
         link.SubmitSessionLever(lever: WorldSessionLevers.IndirectBudgetPolicy(preset: preset), principal: principal);
         link.SubmitSessionLever(lever: new WorldSessionLever(Section: WorldSection.Render, Name: WorldSessionLevers.NestedTable, A: 0d, View: table), principal: principal);
         SubmitLever(
@@ -513,6 +519,32 @@ public sealed partial class WorldRenderLeverCommandModule(WorldRenderSettings se
                     a: (resolved ? 1.0 : 0.0),
                     formatEcho: () => new CommandResult(Output: $"[world.rays: {(settings.RayQueries ? "on" : "off")}]")
                 );
+            }
+        );
+        yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Anyone,
+            bindability: CommandBindability.Bindable,
+            name: "world.reflections",
+            forms: WorldReflectionsForms,
+            description: $"Sets the screen-space reflections the temporal views trace, live: {WorldReflectionsForms.Spelling} — no argument echoes the setting. Full traces a mirror ray from every glossy pixel, half one from each 2 by 2 block a frame, its pixels taking turns, and off leaves every glossy surface the irradiance volume's reflection; a change of cell rebuilds each view's graph once. The steps bound the reads of the reflection pyramid one ray's march takes (1 to {SdfScreenReflections.MaxSteps}), kept from the current setting when omitted. The device table's row (render.devices, world.quality) sets it too. world.counters gpu pass sdf.world$views-reflections counts the rays (texels) and the reads (steps).",
+            handler: (context, args) => {
+                CommandResult Echo() => new(Output: $"[world.reflections: {ReflectionsName(reflections: settings.Reflections)}]");
+                if (args.Count == 0) { return Echo(); }
+                if (args.Count > 2) { return WorldReflectionsForms.Refuse(); }
+
+                var cell = args[0] switch {
+                    "off" => 0,
+                    "full" => 1,
+                    "half" => 2,
+                    _ => -1,
+                };
+                var steps = (settings.Reflections?.Steps ?? new SdfScreenReflections().Steps);
+
+                if ((cell < 0) || ((cell == 0) && (args.Count == 2)) ||
+                    ((args.Count == 2) && (!int.TryParse(args[1], NumberStyles.None, CultureInfo.InvariantCulture, out steps) || (steps < 1) || (steps > SdfScreenReflections.MaxSteps)))) {
+                    return WorldReflectionsForms.Refuse(args: in args, got: args[(args.Count - 1)].ToString());
+                }
+                return SubmitLever(link: link, principal: context.Principal, name: WorldSessionLevers.Reflections, a: cell, b: steps, formatEcho: Echo);
             }
         );
         yield return CommandDefinition.WithWireArgs(

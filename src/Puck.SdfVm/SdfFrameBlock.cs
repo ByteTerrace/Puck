@@ -36,6 +36,7 @@ public static partial class SdfFrameBlock {
     private static readonly int GeometryOnly = Offset(member: SdfWorldPackage.GeometryOnly);
     private static readonly int ScreenFidelity = Offset(member: SdfWorldPackage.ScreenFidelity);
     private static readonly int ScreenReflections = Offset(member: SdfWorldPackage.ScreenReflections);
+    private static readonly int ReflectionSteps = Offset(member: SdfWorldPackage.ReflectionSteps);
     private static readonly int ScreenWindows = Offset(member: SdfWorldPackage.ScreenWindows);
     private static readonly int DisableScreenLights = Offset(member: SdfWorldPackage.DisableScreenLights);
     private static readonly int DisableSoftShadows = Offset(member: SdfWorldPackage.DisableSoftShadows);
@@ -155,13 +156,19 @@ public static partial class SdfFrameBlock {
         rows[21] = camera.FrustumOffset.X;
         rows[22] = camera.FrustumOffset.Y;
     }
-    /// <summary>Writes whether the pass reads the reflection pass's records (<see cref="SdfWorldPackage.ScreenReflections"/>),
-    /// which <see cref="Write"/> leaves alone: it follows the pass's fragment, never what the view renders from, so a view's
-    /// signature never reads it.</summary>
+    /// <summary>Writes the cell edge of the reflection records the pass reads or writes
+    /// (<see cref="SdfWorldPackage.ScreenReflections"/>) and a mirror ray's step budget
+    /// (<see cref="SdfWorldPackage.ReflectionSteps"/>), which <see cref="Write"/> leaves alone: the edge follows the pass's
+    /// fragment, never what the view renders from, so a view's signature never reads it, and the reflection pass's own
+    /// signature folds the budget (<see cref="SdfWorldTables.PassSignature"/>).</summary>
     /// <param name="block">The pass block, at least <see cref="SizeBytes"/> bytes.</param>
-    /// <param name="reads">Whether the pass's fragment hands it the records (<see cref="SdfWorldPackage.WithReflections"/>).</param>
-    public static void WriteScreenReflections(Span<byte> block, bool reads) =>
-        WriteUInt32(block: block, offset: ScreenReflections, value: (reads ? 1u : 0u));
+    /// <param name="cell">The records' cell edge in render pixels, as the fragment allocated them
+    /// (<see cref="SdfWorldPackage.ReflectionCellOf"/>), or zero for a pass whose fragment hands it none.</param>
+    /// <param name="steps">The most reads of the reflection pyramid a ray's march takes.</param>
+    public static void WriteScreenReflections(Span<byte> block, uint cell, uint steps) {
+        WriteUInt32(block: block, offset: ScreenReflections, value: cell);
+        WriteUInt32(block: block, offset: ReflectionSteps, value: steps);
+    }
     /// <summary>Writes the pass's row of the work counters into its pass block (<see cref="ShaderWorkCounters.Row"/>),
     /// which <see cref="Write"/> leaves alone: the row names the pass, never what the view renders from, so a view's
     /// signature (<see cref="SdfWorldTables.ViewSignature"/>) never reads it.</summary>

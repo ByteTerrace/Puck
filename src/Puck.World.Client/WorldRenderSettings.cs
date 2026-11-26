@@ -20,6 +20,11 @@ public sealed partial class WorldRenderSettings {
     private SdfViewsRate? m_viewsRate;
     /// <summary>The view shading rate selected by the active quality table.</summary>
     public SdfViewsRate? ViewsRate { get => m_viewsRate; set { m_viewsRate = value; m_revision++; } }
+    private SdfScreenReflections? m_reflections;
+    /// <summary>The screen-space reflections the session's temporal views trace (<see cref="Puck.SdfVm.SdfFrameSettings.Reflections"/>),
+    /// or <see langword="null"/> for none. Boots at <c>render.reflections</c>; a quality preset's row (the device table) and
+    /// the <c>world.reflections</c> verb move it live.</summary>
+    public SdfScreenReflections? Reflections { get => m_reflections; set { m_reflections = value; m_revision++; } }
     private WorldFarShadows? m_farShadows;
     private WorldRenderIndirectBudget? m_indirectBudget;
     private bool m_cadenceGate;
@@ -62,6 +67,7 @@ public sealed partial class WorldRenderSettings {
         RayQueries = defaults.RayQueries;
         DistantShadows = defaults.DistantShadows;
         ViewsRate = defaults.ViewsRate;
+        Reflections = defaults.Reflections;
         FarShadows = defaults.FarShadows;
         DynamicResolution = defaults.DynamicResolution;
         CadenceGate = true;

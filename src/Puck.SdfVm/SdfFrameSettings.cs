@@ -40,6 +40,10 @@ public readonly record struct SdfFrameSettings {
     public SdfFarShadows FarShadows { get; init; } = SdfFarShadows.EveryFrame;
     /// <summary>The device table’s maximum shading footprint and classification tile. Absent shades every pixel.</summary>
     public SdfViewsRate? ViewsRate { get; init; }
+    /// <summary>The device table's screen-space reflections (<c>render.reflections</c> or the device table's row), which a
+    /// temporal view's fragment traces (<c>SdfWorldPackage.WithReflections</c>) at the setting's cell and within its step
+    /// budget. Absent, every view reflects the irradiance volume alone.</summary>
+    public SdfScreenReflections? Reflections { get; init; }
     /// <summary>The display transform every view of the frame that converts for the display puts its exposed light
     /// through before the encode (<c>render.tone</c>, the display pass); the default applies no curve.</summary>
     public SdfToneCurve Tone { get; init; }

@@ -139,7 +139,8 @@ internal sealed partial class WorldViewCommandModule {
         return ((fovRefusal is not null)
             ? OperatorCameraRefusal(reason: fovRefusal)
             : Submit(
-                composition: new WorldComposition.SetOperatorCamera(Pose: pose),
+                // A delta form moves the camera already set on, so the views keep their history across it.
+                composition: new WorldComposition.SetOperatorCamera(Pose: pose, Continues: form is "turn" or "swing" or "move" or "fov"),
                 context: context
             ));
     }

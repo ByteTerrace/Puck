@@ -9,6 +9,9 @@ public sealed partial class SdfWorldPasses {
     private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment> GlassFragments = new();
     // Each fragment with its views pass shading in bins (SdfWorldPackage.WithBins), made once for the same reason.
     private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment> BinnedFragments = new();
+    // Each temporal fragment with the reflection pass (SdfWorldPackage.WithReflections), one per cell edge in
+    // SdfWorldPackage.ReflectionCells' order, made once for the same reason.
+    private static readonly Puck.Abstractions.CodeDerivedTable<RenderGraphPackageFragment, RenderGraphPackageFragment[]> ReflectedFragments = new();
 
     // Each fragment with its display stage (SdfWorldPackage.WithDisplay), one per bloom quality in BloomQuality's order,
     // made once for the same reason.
@@ -81,17 +84,38 @@ public sealed partial class SdfWorldPasses {
         private bool RequestsBins => (View?.Residency.ShadesInBins ?? false);
 
         private bool RequestsViewsRate => RequestsTemporal && View?.Residency.Frame?.Settings.ViewsRate is { MaxRate: > 1 };
+        // The cell edge the view traces its reflections at, or zero for none: only a temporal view keeps the preceding
+        // frame's picture the reflection pass reads.
+        private uint ReflectionCell => ((RequestsTemporal && (View?.Residency.Frame?.Settings.Reflections is { } reflections)) ? (uint)reflections.Cell : 0u);
 
         public RenderGraphPackageFragment Fragment => Glassed(fragment: Binned(fragment: (RequestsTemporal
-            ? (RequestsViewsRate ? SdfWorldPackage.RateFragment : SdfWorldPackage.TemporalFragment)
+            ? Reflected(fragment: (RequestsViewsRate ? SdfWorldPackage.RateFragment : SdfWorldPackage.TemporalFragment))
             : (Snapshot.Reconstructs ? SdfWorldPackage.Fragment : SdfWorldPackage.NativeFragment))));
 
-        // The low bits distinguish temporal reconstruction, the glass passes, the binned views passes and the views rate.
-        // Render ceilings are quantized fractions from zero through one (RenderGraphExtent.Quantize): their binary exponents
-        // share the two high bits shifted out here, and their mantissas' low bits, which these bits land in, are zero.
-        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) | (RequestsViewsRate ? 8L : 0L) | (RequestsBins ? 4L : 0L) |
+        // The low bits distinguish temporal reconstruction, the glass passes, the binned views passes, the views rate and
+        // the reflection cell. Render ceilings are quantized fractions from zero through one (RenderGraphExtent.Quantize):
+        // their binary exponents share the two high bits shifted out here, and their mantissas' low bits, which these bits
+        // land in, are zero.
+        long IShaderPipelineRenderExtent.Revision => (BitConverter.DoubleToInt64Bits(value: Ceiling) << 2) | ((long)ReflectionCell << 4) | (RequestsViewsRate ? 8L : 0L) | (RequestsBins ? 4L : 0L) |
             (RequestsGlass ? 2L : 0L) | (RequestsTemporal ? 1L : 0L);
 
+        private RenderGraphPackageFragment Reflected(RenderGraphPackageFragment fragment) {
+            var cell = ReflectionCell;
+
+            if (cell == 0u) {
+                return fragment;
+            }
+
+            var cells = SdfWorldPackage.ReflectionCells;
+            var variants = ReflectedFragments.GetValue(key: fragment, derive: static source => [.. SdfWorldPackage.ReflectionCells.Select(selector: edge => SdfWorldPackage.WithReflections(fragment: source, cell: edge))]);
+
+            for (var index = 0; (index < cells.Count); index++) {
+                if (cells[index] == cell) {
+                    return variants[index];
+                }
+            }
+            return fragment;
+        }
         private RenderGraphPackageFragment Binned(RenderGraphPackageFragment fragment) =>
             (RequestsBins ? BinnedFragments.GetValue(derive: SdfWorldPackage.WithBins, key: fragment) : fragment);
         private RenderGraphPackageFragment Glassed(RenderGraphPackageFragment fragment) =>

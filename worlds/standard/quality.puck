@@ -55,7 +55,9 @@ render {
   // over four frames, so no frame pays a whole one; its far entry draws moved casters 15 times a second, the medium tier's rate,
   // and spreads a whole redraw over four frames. It relights and traces half
   // the probes a frame the high tier does, over the medium volume's two thirds of the probes, so a frame it fills
-  // takes less of the one background share for lighting and the lighting's age grows before the frame does. Its bloom scatters from the
+  // takes less of the one background share for lighting and the lighting's age grows before the frame does. Its
+  // screen-space reflections trace one ray a 2 by 2 block as the high tier's do, over at most 24 reads of their depth
+  // pyramid, so a ray that runs long answers with the irradiance volume sooner. Its bloom scatters from the
   // low pyramid and its sky field shades at half the grid, each a soft term whose full grid the 2060 cannot afford. It
   // keeps the second shadow slot: that cascade draws only while a second shadowed light (a hearth, a lantern) is in reach,
   // and dropping it would drop that light's shadow. Its cascades draw 1024 texels a side (`shadowTexels`), half the
@@ -80,6 +82,7 @@ render {
       frameBar { width: 1920, height: 1080, hertz: 60 }
       table {
         viewsRate { maxRate: 2, tileSize: 4 }
+        reflections { cell: 2, steps: 24 }
         distantShadows { reach: 1200, texels: 1024, frames: 4 }
         farShadows { hertz: 15 }
         shadowTexels: 1024
@@ -151,7 +154,16 @@ render {
   // than an eighth of the softest edge. A row's `turnDegrees` would hold an entry through a turn of its own instead. A
   // whole redraw is spread over at least the frames of one far period and the distant map's `frames`, and over more where
   // its measured work asks. High draws moved casters 30 times a second; medium 15.
+  //
+  // The screen-space reflections a tier's temporal views trace (`reflections`, `world.reflections`): one mirror ray from
+  // each 2 by 2 block of glossy pixels a frame, the block's pixels taking turns, through a depth pyramid of the view's own
+  // picture, over at most `steps` reads of it; what a ray does not reach answers with the irradiance volume. High marches
+  // 40 steps and medium 24; low resolves no history to reflect and traces none.
   medium {
+    reflections {
+      cell: 2
+      steps: 24
+    }
     distantShadows {
       reach: 1200
       texels: 1024
@@ -180,6 +192,10 @@ render {
     viewsRate {
       maxRate: 1
       tileSize: 4
+    }
+    reflections {
+      cell: 2
+      steps: 40
     }
     distantShadows {
       reach: 1200

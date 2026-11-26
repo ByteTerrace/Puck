@@ -64,6 +64,9 @@ public static partial class WorldSessionLevers {
     public const string IndirectBudget = "indirect-budget";
     /// <summary>The maximum shading footprint in A and the classification tile edge in B.</summary>
     public const string ViewsRate = "views-rate";
+    /// <summary>The screen-space reflections (<c>world.reflections</c>): the cell edge one mirror ray serves in lane A, zero
+    /// for none, and its step budget in lane B.</summary>
+    public const string Reflections = "reflections";
     /// <summary>The quality table whose nested-view table the presentation runs, named in
     /// <see cref="WorldSessionLever.View"/> (<see cref="WorldRenderSettings.NestedTable"/>); no name runs the world's.</summary>
     public const string NestedTable = "nested-table";
@@ -125,6 +128,11 @@ public static partial class WorldSessionLevers {
     /// <returns>The texels a side in one accepted settings write.</returns>
     public static WorldSessionLever ShadowTexelsPolicy(WorldQualityPreset preset) => new(
         Section: WorldSection.Render, Name: ShadowTexels, A: (preset.ShadowTexels ?? 0));
+    /// <summary>Creates the one lever that installs screen-space reflections, or removes them for none.</summary>
+    /// <param name="reflections">The reflections, or <see langword="null"/> for none.</param>
+    /// <returns>The cell edge and step budget in one accepted settings write.</returns>
+    public static WorldSessionLever ReflectionsPolicy(SdfScreenReflections? reflections) => new(
+        Section: WorldSection.Render, Name: Reflections, A: (reflections?.Cell ?? 0), B: (reflections?.Steps ?? 0));
     /// <summary>Creates the one lever that installs a preset's irradiance budget, or hands the volume back to each world's own
     /// for a preset that authors none.</summary>
     /// <param name="preset">The authored quality row.</param>
@@ -328,6 +336,20 @@ public static partial class WorldSessionLevers {
                 return;
             }
             settings.ViewsRate = rate;
+        });
+        sink.Register(name: Reflections, setter: lever => {
+            if (lever.A <= 0d) {
+                settings.Reflections = null;
+                return;
+            }
+            // The values arrive off the wire, so they are judged here as the document validator judges an authored row.
+            var reflections = new SdfScreenReflections(Cell: (int)lever.A, Steps: (int)lever.B);
+
+            if (reflections.Refusal(path: Reflections) is { } refusal) {
+                WorldClientDiagnostics.Report(channel: "world.quality", text: $"{refusal} — lever dropped");
+                return;
+            }
+            settings.Reflections = reflections;
         });
         return sink;
     }
