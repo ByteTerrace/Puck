@@ -12,6 +12,7 @@ import "moth-head"
 import "moth-dash"
 import "moth-jetpack"
 import "moth-camera"
+import "../../standard/stars"
 
 walkMotion()
 
@@ -3914,14 +3915,7 @@ render {
     // The sun, a clear midday's 100,000 lux. The sky fills the shadows: its luminance (each layer's, by default a
     // white surface's under this sun) reaches every surface the irradiance volume finds open to it.
     lights [
-      directional(
-        name: "key",
-        direction: [3, 5, -4],
-        color: "#FFF0DC",
-        illuminance: 100000lx,
-        shadow: always,
-        angularRadius: 0.2
-      )
+      sunlight()
     ]
   }
   // The camera adapts like an eye: it meters each view's own picture and eases there over three quarters of a second,

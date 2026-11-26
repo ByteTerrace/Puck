@@ -45,8 +45,9 @@ public static class SdfPhotometry {
     public const float WindowAdaptation = 0.75f;
     /// <summary>The lowest <c>EV100</c> an exposure admits: starlight.</summary>
     public const float MinimumEv100 = -6f;
-    /// <summary>The highest <c>EV100</c> an exposure admits: beyond the brightest sunlit snow.</summary>
-    public const float MaximumEv100 = 20f;
+    /// <summary>The highest <c>EV100</c> an exposure admits: a surface lit from beside a star, some ten stops past
+    /// sunlit snow.</summary>
+    public const float MaximumEv100 = 26f;
 
     /// <summary>The red primary's share of a linear Rec. 709 colour's luminance (ITU-R BT.709).</summary>
     public const float LuminanceRed = (float)Puck.Abstractions.Sources.ImageSourceConversion.Bt709Kr;

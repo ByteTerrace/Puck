@@ -22,6 +22,7 @@ import "suit"
 import "size"
 import "painting-kit"
 import "../standard/visitors"
+import "../standard/stars"
 
 // The hearth draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -188,14 +189,7 @@ render {
   farDistance: 60
   lighting {
     lights [
-      directional(
-        name: "key",
-        direction: [-2, 3, -4],
-        color: "#FFB27A",
-        illuminance: 250lx,
-        shadow: always,
-        angularRadius: 0.2
-      )
+      sunlight(direction: [-2, 3, -4], color: "#FFB27A", illuminance: 250lx)
       directional(direction: [0.6, 0.3, 0.7], color: "#8C5A4A", illuminance: 90lx)
     ]
   }

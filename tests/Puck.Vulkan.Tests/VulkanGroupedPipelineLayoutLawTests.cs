@@ -53,7 +53,7 @@ public sealed unsafe class VulkanGroupedPipelineLayoutLawTests {
             );
 
             result = VulkanPipelineLayouts.Create(
-                allocator: new HeapAllocator(),
+                allocator: new Puck.Abstractions.Memory.SystemAllocator(),
                 device: device,
                 groups: VulkanGroupLayouts.Plan(description: description),
                 layouts: out layouts

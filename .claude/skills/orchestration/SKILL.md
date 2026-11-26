@@ -471,6 +471,16 @@ narrow invariant classes above (a cache and its invalidation, a concurrency
 primitive, a trust boundary), and then as a page the build lane writes for
 itself, not a memo that waits on a round.
 
+A continuation whose cause a lane already traced is an implementation lane
+(the owner's correction, after a campaign lane spent three passes reading and
+landed no code, and its continuation was briefed to Fable: "should be Opus,
+and it should implement, not waste all context"). Its brief hands over the
+traced cause and the ordered steps, says outright that the lane writes and
+lands code and reads only what each edit needs, and routes it to a writer
+(`specialist` or `implementer`, or Sol) rather than to the strongest
+judgement role. A lane that hands back with only documents changed has
+stalled, whatever it found.
+
 Before briefing a step that decides how a pipeline works (what the renderer
 draws and submits, how the tick schedules, a camera or physics model), ask
 whether a research round has covered that design, even when the step arrives

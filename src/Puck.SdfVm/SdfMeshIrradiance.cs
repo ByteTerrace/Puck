@@ -145,18 +145,18 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     private readonly Puck.Hosting.Jobs.MemoryAccount.Owner m_volumeOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateOwner(
         name: "sdf.mesh-gi.volume", memoryClass: MemoryClass.Elastic);
     // The allocator the volume's slot words, the batches' hit and light blocks and the hit words a batch passes through
-    // take their storage from, so none of them lives on the large object heap; null (offline callers) rents them from
-    // RentedArrays.
+    // take their storage from, so none of them lives on the large object heap; null (offline callers) takes the
+    // process's (ProcessAllocator).
     private readonly IAllocator? m_allocator;
 
     /// <summary>Registers the probe cache's sampled storage in the process account.</summary>
     /// <param name="allocator">The native allocator the volume's large storage comes from (the residency's mesh library's),
-    /// or null to rent it from the managed pool.</param>
+    /// or null for the process's.</param>
     public SdfMeshIrradiance(IAllocator? allocator = null) {
         m_allocator = allocator;
         m_levels = CreateLevels(blocks: m_blocks);
         m_cacheOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: MemoryBacking.Managed, memoryClass: MemoryClass.Cached, name: "sdf.mesh-gi.probe-cache", read: CacheTableBytes);
-        m_blockOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: ((allocator is null) ? MemoryBacking.Managed : MemoryBacking.NativeAllocator), memoryClass: MemoryClass.Cached, name: "sdf.mesh-gi.probe-blocks", read: () => Interlocked.Read(location: ref m_blockBytes));
+        m_blockOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: MemoryBacking.NativeAllocator, memoryClass: MemoryClass.Cached, name: "sdf.mesh-gi.probe-blocks", read: () => Interlocked.Read(location: ref m_blockBytes));
     }
 
     // Drops the geometry the scene retained for a later build. The GPU client still holds the untrimmed scene it uploaded,
@@ -223,6 +223,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             foreach (var level in m_levels) { level.Cache.Clear(); }
             RetireVolume(next: VolumeWords.None);
             m_volumeOwner.Dispose();
+            m_gpuAnswer?.Dispose();
+            m_gpuAnswer = null;
         }
         ReclaimReleased(attempt: 0);
     }
@@ -753,10 +755,39 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     public bool Settling {
         get {
             lock (m_gate) {
-                // A faulted worker, camera sample or scene build settles nothing: the next Stage reports it.
-                return ((m_gpuCameraSampleTask is { IsCompleted: false } or { IsFaulted: true }) || (m_worker is { IsCompleted: false } or { IsFaulted: true }) || (m_build is { IsCompleted: false } or { IsFaulted: true }) || ((m_scene is not null) && m_owed) || m_refillOwed || Dirty || m_wrote);
+                return SettlingTerms(names: null);
             }
         }
+    }
+    // Whether the volume is settling, naming each term that holds into `names` when given; under the gate. A faulted
+    // worker, camera sample or scene build settles nothing: the next Stage reports it.
+    private bool SettlingTerms(List<string>? names) {
+        var settling = false;
+
+        void Term(bool holds, string name) {
+            if (!holds) { return; }
+            settling = true;
+            names?.Add(item: name);
+        }
+        Term(holds: (m_gpuCameraSampleTask is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_gpuCameraSampleTask, name: "camera-sample"));
+        Term(holds: (m_worker is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_worker, name: "worker"));
+        Term(holds: (m_build is { IsCompleted: false } or { IsFaulted: true }), name: Named(task: m_build, name: "build"));
+        Term(holds: ((m_scene is not null) && m_owed), name: "owed");
+        Term(holds: m_refillOwed, name: "refill");
+        Term(holds: Dirty, name: (m_republishOwed ? "unpublished-republish-owed" : "unpublished"));
+        Term(holds: m_wrote, name: "wrote");
+        return settling;
+
+        // A task's term, naming its fault where it faulted; only a description asks.
+        string Named(Task? task, string name) => (((names is not null) && (task is { IsFaulted: true } faulted))
+            ? $"{name}-faulted:{faulted.Exception?.GetBaseException().GetType().Name}:{faulted.Exception?.GetBaseException().Message}"
+            : name);
+    }
+    // The settling terms that hold, by name, or none; under the gate.
+    private string DescribeSettling() {
+        var names = new List<string>();
+
+        return (SettlingTerms(names: names) ? string.Join(separator: ',', values: names) : "none");
     }
 
     /// <summary>Gets whether the volume's background work is computing on the host: a scene build runs, or the worker runs
@@ -1624,7 +1655,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
             foreach (var level in m_levels) { cached += level.Cache.Count; }
 
-            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} measured-from={m_layout.Finest} first-light-owed={(OwesFirstLight ? "yes" : "no")} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={m_volume.Bytes} table-device-bytes={buffers.DeviceLocal}");
+            return string.Create(provider: CultureInfo.InvariantCulture, handler: $"[sdf.mesh-gi] spacing={SpacingText(spacing: m_layout.Spacing)} dims={m_layout.Dims.X}x{m_layout.Dims.Y}x{m_layout.Dims.Z} levels={string.Join(separator: ',', values: m_layout.Levels.Select(selector: static level => SpacingText(spacing: level.Spacing)))} measured-from={m_layout.Finest} first-light-owed={(OwesFirstLight ? "yes" : "no")} settling={DescribeSettling()} rays={SdfMeshProbeDepth.HitCount} bounce={(m_layout.Bounce ? "on" : "off")} triangles={(m_scene?.TriangleCount ?? 0)} lights={(m_lighting?.Points.Length ?? 0)} cached={cached} lighting-version={m_lightingVersion} local-version={m_localVersion} traced={m_traced} relit={m_relit} traced-rays={m_rays} {DescribeAge()} record-bytes={(SdfMeshIrradianceProbe.ProbeWords * sizeof(uint))} volume-bytes={m_volume.Bytes} table-device-bytes={buffers.DeviceLocal}");
         }
     }
 
@@ -2773,8 +2804,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
     // Gives back the GPU answers' array the batch's selections, traces and relights reused.
     private void BatchEnded() {
-        if (m_gpuAnswer.Length > 0) { RentedArrays.Return(array: m_gpuAnswer); }
-        m_gpuAnswer = [];
+        m_gpuAnswer?.Free();
     }
     private void BatchTraced(BatchBlocks blocks, List<Candidate> candidates, int first, int count, Lighting lighting, ParallelOptions parallel, int pass, in Snapshot snapshot,
         ReaderEpochs<Reclaimable>.Hold hold, ProbeData[] results, bool traces, int blockProbes, OwnedBuffer<uint>? rentedHits) {

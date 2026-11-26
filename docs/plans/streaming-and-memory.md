@@ -594,7 +594,8 @@ held, promised and room.
 | The probe cache's blocks and the volume's slot words | Play | Native storage freed through the volume's reader epochs; the blocks a cached owner in bytes (`sdf.mesh-gi.probe-blocks`), trimmed first, read again on the frame thread (`MemoryAccount.ServiceSampledOwners`), the words an elastic owner (`sdf.mesh-gi.volume`) | 9 |
 | The composed-document store | Play | Released after boot where nothing reads it | 6 |
 | Speculative work: bakes, loads and decodes for a predicted demand | As the work it speculates | A share of the workspace class, cancelled when the demand leaves or pressure asks | 3, 10 |
-| Rented arrays the shared pool keeps | Play | `RentedArrays` limits shared buckets by payload size. All element types share one retention limit for larger reference-free arrays. The cache admits each returned array against host room and releases its charge on reuse or trim. | 2, 11 |
+| Rented arrays the shared pool keeps | Play | `RentedArrays` limits shared buckets by payload size. All element types share one retention limit for larger reference-free arrays. The cache admits each returned array against host room and releases its charge on reuse or trim. Owned buffers, lists and maps no longer rent from it: they are native (`OwnedBuffer<T>`), and its large pool goes once its last renters hold their scratch that way | 2, 11 |
+| A world's far product (`far-product` while it is derived; a library mesh once kept) | Authoring for the derivation, play for the product | The derivation's tables are native under one workspace owner, and a refusal waits and asks again; the product is a mesh the library published from its store, whose planes are let go while nothing draws it | 6, 11 |
 | Native allocator slack | Beyond the owners | Named. The allocator's owner thread decommits freed ranges whose purge delay has passed every `MimallocAllocator.PurgePeriod`, and pages past a slice commit as their blocks are used; `host.memory collect` and a reclaim force the rest (`IAllocatorStatistics.Collect`) | 2 |
 | The managed heap's other tenants | Beyond the owners | Named by a heap walk; each one past a stated size becomes an owner with a capacity. No hard limit on the heap: it would turn pressure into an exception where everything else turns it into a coarser picture | 2, then per tenant |
 | Runtime code and loader heaps | Beyond the owners | Named; not controllable at run time | 2 |
@@ -3746,6 +3747,21 @@ kilobytes, too little for the collection counts the RTX 2060 machine showed
 during a cold bake, which points at the bake's workers (an inference). The
 2060 never bakes cold now, but a player's build still derives a mesh it misses,
 so the bake's garbage reaches players on a miss.
+
+**The player's large object heap.** The 2060's player build, with no bake
+running, still ended its route with a large object heap ten times its live
+large objects: the heap is gaps. Its largest source was not a bake. Every
+process derived its boot world's far product at boot, clustering and levelling
+the whole static scene in managed arrays; the product is now kept in the mesh
+store and read from it
+([decision](../decisions/rendering.md#a-far-viewer-draws-a-worlds-far-product)).
+The rule the rest follows is that scratch and tables of reference-free
+elements are native storage, which leaves the collector nothing: an
+`OwnedBuffer<T>` has no managed mode, a `RentedScope`'s buffers and lists are
+native whatever allocator it was given, and the simplifier, the lighting
+batch's answers and the probe service's part answers hold theirs that way.
+[The open item](open-items.md#residency-and-streaming) lists what still
+allocates large arrays, programs and the trace scene's hierarchy first.
 
 **Check.** Collections, the duration of each pause and the allocated bytes in
 the arrival window, set against the presented frames of the same window: a
