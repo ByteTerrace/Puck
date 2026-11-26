@@ -466,6 +466,7 @@ public static partial class SdfWorldPackage {
         Read(element: ShaderValueType.Uint, name: VisibilityRecords),
         Written(element: ShaderValueType.Uint, name: VisibilityRecordsWritten),
         Written(element: ShaderValueType.Float, name: ReactivityWritten),
+        Written(element: ShaderValueType.Uint2, name: SampleAirWritten),
         ShaderInterfaceMember.StorageImage(
             format: RenderGraphPackageCatalog.WorkingFormat,
             group: ShaderInterfaceGroup.Pass,
@@ -495,6 +496,10 @@ public static partial class SdfWorldPackage {
         Read(element: ShaderValueType.Uint, name: MeshShadowNearOptical),
         Read(element: ShaderValueType.Uint, name: MeshShadowFarOptical),
         Read(element: ShaderValueType.Uint, name: MeshShadowSecondOptical),
+        Read(element: ShaderValueType.Uint, name: MeshShadowNearBlocks),
+        Read(element: ShaderValueType.Uint, name: MeshShadowFarBlocks),
+        Read(element: ShaderValueType.Uint, name: MeshShadowSecondBlocks),
+        Read(element: ShaderValueType.Uint, name: MeshShadowDistantBlocks),
         Read(element: ShaderValueType.Uint, name: MeshPyramid),
         Written(element: ShaderValueType.Uint, name: MeshPyramidWritten),
         Read(element: ShaderValueType.Uint, name: ViewsFilterRecords),
@@ -673,6 +678,9 @@ public static partial class SdfWorldPackage {
         public const string Visibility = "visibility";
         /// <summary>The reactivity buffer views writes where it shades and the resolve reads.</summary>
         public const string Reactivity = "reactivity";
+        /// <summary>The render samples' air views writes where it shades and the resolve reads
+        /// (<see cref="SdfWorldPackage.SampleAir"/>).</summary>
+        public const string SampleAir = "sampleAir";
         /// <summary>The history color: the resolved color, one image a frame slot, read by the next frame.</summary>
         public const string HistoryColor = "historyColor";
         /// <summary>The history surface: each output pixel's identity, ray distance, gathered weight and accumulated

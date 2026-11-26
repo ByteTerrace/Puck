@@ -97,9 +97,6 @@ public sealed partial class HostProbe(string checkoutRoot) {
     [LibraryImport(libraryName: "kernel32.dll", SetLastError = true)]
     [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
     private static partial bool GetSystemTimes(out ulong idle, out ulong kernel, out ulong user);
-    [LibraryImport(libraryName: "kernel32.dll", EntryPoint = "GetDiskFreeSpaceExW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
-    [return: MarshalAs(unmanagedType: UnmanagedType.Bool)]
-    private static partial bool GetDiskFreeSpaceEx(string directory, out ulong available, out ulong total, out ulong free);
     /// <summary>Gets the ticks <see cref="CpuTimes"/> counts in one second: 100-nanosecond units on Windows, jiffies on Linux.</summary>
     public static double CpuTicksPerSecond => (OperatingSystem.IsWindows() ? 10_000_000.0 : 100.0);
     /// <summary>Reads the machine's idle and total CPU time, summed over every logical processor, since boot.</summary>
@@ -186,20 +183,10 @@ public sealed partial class HostProbe(string checkoutRoot) {
     public static double FreeDiskGb(string directory, Func<string, ulong> availableBytes) =>
         (availableBytes(arg: directory) / 1073741824.0);
 
-    private static ulong AvailableDiskBytes(string directory) {
-        if (OperatingSystem.IsWindows()) {
-            // DriveInfo rejects UNC shares. The native query accepts a directory, including a share or mount point.
-            var path = (Path.EndsInDirectorySeparator(path: directory) ? directory : (directory + Path.DirectorySeparatorChar));
-
-            if (!GetDiskFreeSpaceEx(available: out var available, directory: path, free: out _, total: out _)) {
-                throw new Win32Exception(error: Marshal.GetLastPInvokeError());
-            }
-
-            return available;
-        }
-
-        return ((ulong)new DriveInfo(driveName: directory).AvailableFreeSpace);
-    }
+    private static ulong AvailableDiskBytes(string directory) =>
+        ((Puck.Hosting.HostVolume.Read(directory: directory) is { } volume)
+            ? ((ulong)volume.AvailableBytes)
+            : throw new IOException(message: $"The volume holding '{directory}' could not be read."));
 
     /// <summary>Takes one reading. The CPU figure covers the time since the previous reading; the first reading waits
     /// <paramref name="firstInterval"/> to have an interval at all.</summary>

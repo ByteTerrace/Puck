@@ -4,7 +4,8 @@ using Puck.Confinement;
 namespace Puck.Abstractions;
 
 /// <summary>How much one cache keeps: at most <paramref name="MaxEntries"/> entries holding at most
-/// <paramref name="MaxBytes"/> bytes between them.</summary>
+/// <paramref name="MaxBytes"/> bytes between them, the <see cref="MinEntries"/> most recently used of them whatever
+/// their bytes.</summary>
 /// <param name="MaxEntries">The most entries kept, at least 1.</param>
 /// <param name="MaxBytes">The most bytes the kept entries hold, at least 0; <see cref="long.MaxValue"/> for no byte
 /// bound.</param>
@@ -14,9 +15,14 @@ public readonly record struct CacheBound(int MaxEntries, long MaxBytes) {
     /// <returns>The bound.</returns>
     public static CacheBound Entries(int maxEntries) => new(MaxBytes: long.MaxValue, MaxEntries: maxEntries);
 
+    /// <summary>Gets the entries the cache keeps whatever their bytes: the most recently used, those in use and pinned
+    /// counted first. <see cref="MaxBytes"/> bounds only the entries past them, so a cache whose entries are large beside
+    /// its byte bound still keeps what its readers used last; zero, the default, for a cache its bytes bound
+    /// alone.</summary>
+    public int MinEntries { get; init; }
     /// <summary>Gets the bound an enforcement on write trims to once the cache passes this one: an eighth below it in
     /// bytes and in entries (at least one entry), so the writes that follow fit the headroom before the next listing.</summary>
-    public CacheBound LowWater => new(MaxBytes: (MaxBytes - (MaxBytes / 8)), MaxEntries: Math.Max(val1: 1, val2: (MaxEntries - (MaxEntries / 8))));
+    public CacheBound LowWater => (this with { MaxBytes = (MaxBytes - (MaxBytes / 8)), MaxEntries = Math.Max(val1: 1, val2: (MaxEntries - (MaxEntries / 8))) });
 }
 /// <summary>One entry a cache holds: a file or a directory, when it was last used, and how many bytes it holds.</summary>
 /// <param name="Path">The entry's full path.</param>
@@ -38,8 +44,9 @@ public readonly record struct CacheRetentionResult(int Removed, long RemovedByte
 /// subdirectory a set kept or removed whole; or <see cref="SelectEvictions"/> where it removes entries its own way): entries are
 /// ordered most recently used first, equal stamps falling to the ordinally lesser path, the entry in use is kept
 /// whatever its stamp and counts against the bound first, and the rest are kept while both the count and the bytes stay
-/// within the bound. From the first entry that does not fit, every older one goes. An entry that cannot be removed
-/// because a reader holds it open is in use, and stays.
+/// within the bound, the bound's <see cref="CacheBound.MinEntries"/> most recent whatever their bytes. From the first
+/// entry that does not fit, every older one goes. An entry that cannot be removed because a reader holds it open is in
+/// use, and stays.
 /// </para>
 /// <para>
 /// An enforcement on write lists the directory only when the bound may have been passed: each process keeps a tally per
@@ -168,7 +175,7 @@ public static class CacheRetention {
             if (kept(arg: entry)) {
                 count++;
                 bytes += entry.Bytes;
-            } else if (!full && (count < bound.MaxEntries) && (entry.Bytes <= (bound.MaxBytes - bytes)) && ((usedSinceUtc is not { } since) || (entry.LastUsedUtc >= since))) {
+            } else if (!full && (count < bound.MaxEntries) && ((count < bound.MinEntries) || (entry.Bytes <= (bound.MaxBytes - bytes))) && ((usedSinceUtc is not { } since) || (entry.LastUsedUtc >= since))) {
                 count++;
                 bytes += entry.Bytes;
             } else {
@@ -225,8 +232,9 @@ public static class CacheRetention {
     /// theirs and its last use its most recently used entry's stamp; a file directly in the directory that
     /// <paramref name="isEntry"/> accepts is a set of its own. The sets are kept and removed as
     /// <see cref="SelectEvictions"/> chooses, the set in use counted first, so a set goes whole, least recently used
-    /// first, and a set one entry of which is in use stays whole. When the set in use alone holds more than the bound, its
-    /// own entries go least recently used first, the entry in use kept, until it fits. A file that cannot be deleted
+    /// first, and a set one entry of which is in use stays whole. When the set in use alone holds more than a bound that
+    /// keeps no set whatever its bytes (<see cref="CacheBound.MinEntries"/> of zero), its own entries go least recently
+    /// used first, the entry in use kept, until it fits. A file that cannot be deleted
     /// because a reader holds it is kept, and its set with it.</summary>
     /// <param name="directory">The cache directory; one that does not exist holds nothing.</param>
     /// <param name="bound">The bound: its count bounds the sets, its bytes their entries' bytes.</param>
@@ -253,24 +261,30 @@ public static class CacheRetention {
     /// <param name="bound">The bound.</param>
     /// <param name="isEntry">Which files are entries, judged by file name; never offered a temporary.</param>
     /// <param name="inUse">The entry the owner just wrote, counted into the tally, or <see langword="null"/>.</param>
+    /// <param name="relieve">The bytes the cache is to give back whatever its bound has room for, as when the volume it
+    /// lies on runs short: a positive value lists the directory now and trims it to that many bytes under what the
+    /// listing finds, where that is below the bound's low water. The sets in use, pinned and within
+    /// <see cref="CacheBound.MinEntries"/> stay, so the cache can give back less than asked.</param>
     /// <returns>Whether the directory was listed.</returns>
     /// <exception cref="ArgumentException"><paramref name="directory"/> is <see langword="null"/>, empty or white
     /// space.</exception>
-    public static bool EnforceSetsOnWrite(string directory, CacheBound bound, Func<string, bool> isEntry, string? inUse = null) {
+    public static bool EnforceSetsOnWrite(string directory, CacheBound bound, Func<string, bool> isEntry, string? inUse = null, long relieve = 0L) {
         ArgumentException.ThrowIfNullOrWhiteSpace(argument: directory);
         ArgumentNullException.ThrowIfNull(argument: isEntry);
 
         var key = Path.GetFullPath(path: directory);
 
-        return OnWrite(bound: bound, key: key, newUnit: false, written: inUse, enforce: () => EnforceSetsCore(bound: bound, directory: key, inUse: inUse, isEntry: isEntry, trimTo: bound.LowWater));
+        return OnWrite(bound: bound, force: (relieve > 0L), key: key, newUnit: false, written: inUse, enforce: () => EnforceSetsCore(bound: bound, directory: key, inUse: inUse, isEntry: isEntry, relieve: relieve, trimTo: bound.LowWater));
     }
 
     // Counts a write into the directory's tally and lists the directory when the tally may have passed the bound, the
-    // interval has gone by, or this process never listed it; the listing resets the tally to what it kept. A written
-    // unit is a new entry (flat) or, for sets, a set the last listing did not hold. Holding the tally's lock across the
-    // listing keeps one process's writers from listing twice for one overflow; an overestimate (a rewritten entry
-    // counted again) only lists earlier.
-    private static bool OnWrite(string key, CacheBound bound, string? written, bool newUnit, Func<Listing> enforce) {
+    // interval has gone by, this process never listed it, or the caller forces it; the listing resets the tally to what
+    // it kept. A written unit is a new entry (flat) or, for sets, a set the last listing did not hold. Holding the
+    // tally's lock across the listing keeps one process's writers from listing twice for one overflow; an overestimate
+    // (a rewritten entry counted again) only lists earlier. A listing can keep more than the bound (its entries in use,
+    // pinned or within CacheBound.MinEntries), which listing again cannot trim, so the tally then lists once it has
+    // grown by the bound's trim margin over what the listing kept, never on every write.
+    private static bool OnWrite(string key, CacheBound bound, string? written, bool newUnit, Func<Listing> enforce, bool force = false) {
         var tally = Tallies.GetOrAdd(key: key, valueFactory: static _ => new Tally());
         var bytes = 0L;
         var path = ((written is null) ? null : Path.GetFullPath(path: written));
@@ -294,15 +308,18 @@ public static class CacheRetention {
                     tally.Units++;
                 }
             }
-            if (tally.Listed && (tally.Bytes <= bound.MaxBytes) && (tally.Units <= bound.MaxEntries) && ((now - tally.ListedAt) < ((long)EnforceInterval.TotalMilliseconds))) {
+            if (!force && tally.Listed && (tally.Bytes <= Math.Max(val1: bound.MaxBytes, val2: tally.ListAboveBytes)) && (tally.Units <= Math.Max(val1: bound.MaxEntries, val2: tally.ListAboveUnits)) && ((now - tally.ListedAt) < ((long)EnforceInterval.TotalMilliseconds))) {
                 return false;
             }
 
             var listing = enforce();
+            var low = bound.LowWater;
 
             tally.Bytes = listing.Result.KeptBytes;
             tally.Units = listing.KeptUnits;
             tally.Sets = listing.KeptSets;
+            tally.ListAboveBytes = (tally.Bytes + (bound.MaxBytes - low.MaxBytes));
+            tally.ListAboveUnits = (tally.Units + (bound.MaxEntries - low.MaxEntries));
             tally.ListedAt = Environment.TickCount64;
             tally.Listed = true;
 
@@ -344,9 +361,10 @@ public static class CacheRetention {
 
         return new Listing(KeptSets: null, KeptUnits: result.Kept, Result: result);
     }
-    // Lists a directory of sets, then removes sets (and, when the set in use alone is over, that set's own entries) down
-    // to trimTo when the listing is over bound. When bound and trimTo are one bound this is the ordinary enforcement.
-    private static Listing EnforceSetsCore(string directory, CacheBound bound, CacheBound trimTo, Func<string, bool> isEntry, string? inUse) {
+    // Lists a directory of sets, then removes sets (and, when the set in use alone is over a bound that keeps no set
+    // whatever its bytes, that set's own entries) down to trimTo when the listing is over bound, or down to `relieve`
+    // bytes under the listing where that is lower. When bound and trimTo are one bound this is the ordinary enforcement.
+    private static Listing EnforceSetsCore(string directory, CacheBound bound, CacheBound trimTo, Func<string, bool> isEntry, string? inUse, long relieve = 0L) {
         var root = Path.TrimEndingDirectorySeparator(path: Path.GetFullPath(path: directory));
         var used = ((inUse is null) ? null : Path.GetFullPath(path: inUse));
         // The set the written entry falls in, which alone keeps its entries' paths from the listing: a store of sets holds
@@ -398,14 +416,16 @@ public static class CacheRetention {
         var gone = new HashSet<string>(comparer: PuckPaths.Comparer);
         var totalBytes = sets.Sum(selector: static set => set.Set.Bytes);
 
-        if ((sets.Count > bound.MaxEntries) || (totalBytes > bound.MaxBytes)) {
+        if (relieve > 0L) { trimTo = (trimTo with { MaxBytes = Math.Min(val1: trimTo.MaxBytes, val2: Math.Max(val1: 0L, val2: (totalBytes - relieve))) }); }
+        if ((relieve > 0L) || (sets.Count > bound.MaxEntries) || (totalBytes > bound.MaxBytes)) {
             var inUseSet = ((used is null) ? -1 : sets.FindIndex(match: set => (set.Entries?.Any(predicate: entry => IsInUse(entry: entry, inUse: used)) ?? false)));
             // Sets a running process holds (HoldSet) are kept whole whatever their stamps.
             var pinned = new HashSet<string>(collection: sets.Where(predicate: static set => (set.IsDirectory && IsPinned(set: set.Set.Path))).Select(selector: static set => set.Set.Path), comparer: PuckPaths.Comparer);
             var inUsePath = ((inUseSet >= 0) ? sets[inUseSet].Set.Path : null);
 
-            // The set in use trims itself first when it alone holds more than the bound, unless a process pins it.
-            if ((inUseSet >= 0) && !pinned.Contains(item: sets[inUseSet].Set.Path) && (sets[inUseSet].Set.Bytes > trimTo.MaxBytes)) {
+            // The set in use trims itself first when it alone holds more than the bound, unless a process pins it or the
+            // bound keeps its most recent sets whole (the set in use is the first of them).
+            if ((inUseSet >= 0) && (trimTo.MinEntries == 0) && !pinned.Contains(item: sets[inUseSet].Set.Path) && (sets[inUseSet].Set.Bytes > trimTo.MaxBytes)) {
                 var listed = sets[inUseSet];
                 var kept = listed.Set.Bytes;
 
@@ -539,6 +559,9 @@ public static class CacheRetention {
     // A process's tally of one directory since its last listing.
     private sealed class Tally {
         public long Bytes;
+        // What the tally must pass before the next listing where the last one kept more than the bound.
+        public long ListAboveBytes;
+        public long ListAboveUnits;
         public bool Listed;
         public long ListedAt;
         public HashSet<string>? Sets;

@@ -40,7 +40,9 @@ public sealed partial class WorldBody {
 
     /// <summary>Ends this body's tick for the sweep refusal: a body refused this tick may be moved again by the next
     /// tick's pair passes.</summary>
-    internal void EndSweepTick() => m_sweepRefusedThisTick = false;
+    internal void EndSweepTick() {
+        if (m_sweepRefusedThisTick) { m_sweepRefusedThisTick = false; }
+    }
 
     // Everything a step writes, captured before it begins and restored when its sweep is refused: the body's own
     // sections into reusable scratch arrays, its register file, and the process-local observation and read-back

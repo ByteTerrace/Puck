@@ -264,7 +264,7 @@ its rows stay absent. `GpuRegion` clips coalesced copy runs to this coverage and
 the proof again at recording, restaging stale requests and retaining unmapped debt.
 Mapping changes re-owe the host-known prefix and stale published meshes; a shrink
 re-lands survivors even without arena relocation. Destination replacements read
-the new buffer's authority. Native sparse mapping remains in the streaming plan.
+the new buffer's authority. A mapped destination changes its chunks' backing behind the same leases.
 Landing stages only its mesh's rows; the draw cursor remains usable while other meshes are owed.
 The staging door maintains the tables' glass row set. `RecordLanding` requires the service's actual
 queue to be the device's frame queue before it owes any words.
@@ -433,8 +433,11 @@ type the bake's closure reaches (`SdfMesh`, `SdfMeshLibrary`, `SdfMeshStore`, `S
 identity, and the next boot bakes the world cold.
 A staged region created `mapped` (the mesh region, the probe scene) asks `IGpuBufferFactory.TryCreateMapped` for a
 destination that reserves `GpuRegion.MaxByteCount` and backs 1 MiB chunks on demand (`IGpuMappedBuffer`; Direct3D 12's
-`DirectXGpuMappedBuffer` at reserved resources tier 2, tile runs from `DirectXHeapArena.PlaceTiles`; Vulkan answers
-none and keeps a contiguous destination). It grows and shrinks in place, with no carry and no second buffer, and the
+`DirectXGpuMappedBuffer` at reserved resources tier 2, tile runs from `DirectXHeapArena.PlaceTiles`; Vulkan's
+`VulkanGpuMappedBuffer`, a sparse buffer whose chunks bind page runs from `VulkanMemoryArena.PlacePages` through
+`VulkanLogicalDevice.BindSparse`). A device created without `GpuOptionalCapabilities.MappedBuffers` (the capability
+missing, or `--withhold-gpu mapped-buffers`, which is how the two paths are compared on one machine) answers none and
+keeps a contiguous destination. It grows and shrinks in place, with no carry and no second buffer, and the
 selector leaves no replacement room for it (`SdfResidencyGrant.Mapped`). Its buffer's length is the reserved range, so
 never map a region a kernel sizes with `GetDimensions` (the irradiance feedback). `SdfMeshRegionStore.Cover` is
 the one place the mesh region's interior backing follows the arena: a chunk no placement covers is
@@ -568,13 +571,24 @@ records the options weighed.
   back (`Entry.Move`). A new layer is cleared before anything binds it.
 - **Glass.** An entry's glass extinction (`Optical`) is drawn with each whole redraw, against the front depth, from a
   selection of every draw (`OpticalKind`).
-- **Memory.** Every layer and extinction buffer is held under one fixed `MemoryAccount` reservation (`Hold`,
-  `TryHold`), counted in `SdfWorldTables.TableBytes`; a trim request gives back the anchors no view reads.
+- **Block bounds.** A pair of layers carries its block bounds (`Pair.Blocks`, `frame/sdf-shadow-blocks.hlsli`): a
+  fitted plane and the depth range off it for each block of `SdfWorldPackage.ShadowBlockEdge` texels and the filter's
+  reach about it, which the surface pass classifies a receiver by before any tap (`sdfMeshShadowClass`: lit, umbra
+  or filter, the first two the taps' own answer to the bit). They must describe the layers whenever a view reads the
+  pair, and one place keeps that: `Entry.Record` reduces them (`Entry.Reduce`, `passes/sdf-shadow-blocks.comp.hlsl`)
+  after the layers rest, over every block in the upload that completes a whole redraw, over the blocks a rectangle
+  can change, and the glass flags alone under a redrawn extinction. A new drawing into a pair that views read owes a
+  reduction there, or the surface pass classifies by bounds of what the layers held before; a change to what a tap
+  reads (the filter's radius `SdfKernelInterfaces.MeshShadowFilterTexels`, the slope or cone clearances, a new term
+  in `sdfMeshShadowGap`) changes `sdfMeshShadowClass`'s bounds in the same change. `SDF_SURFACE_OMIT_SHADOW_CLASSES`
+  compiles the classes out for a reload, which must leave a paused still unchanged.
+- **Memory.** Every layer, block-bounds and extinction buffer is held under one fixed `MemoryAccount` reservation
+  (`Hold`, `TryHold`), counted in `SdfWorldTables.TableBytes`; a trim request gives back the anchors no view reads.
 - **Evidence.** `world.residency`'s `shadows` line prints the uploads, the measured GPU time of the shadow pass
   (timestamps around it, read when the slot completes), moved changes and how many reached the entries, the bytes held
   and the spares, anchors, each view's anchor and each entry's state: its redraw (`2of5lent`), its last whole redraw's
-  measured triangles and shares (`tri…in…`), its rectangles' average triangles and count, and what ended its holds
-  (`ended-turn…-cell…-static…-fit…`); `world.rates` counts `shadow-<entry>.static|share|live|held` per world upload; the selection marks name each
+  measured triangles and shares (`tri…in…`), its rectangles' average triangles and count, what ended its holds
+  (`ended-turn…-cell…-static…-fit…`) and the blocks its bounds reduced in how many dispatches (`blocks…in…`); `world.rates` counts `shadow-<entry>.static|share|live|held` per world upload; the selection marks name each
   drawing (`drawn.shadow-far.a0 rect0.*`). Timings belong to the lead's quiet window.
 
 ### The distant shadow map
@@ -1590,8 +1604,13 @@ paired arithmetic. Carry author-facing parameters through
   then submits a graphics wait before returning. Both signals share the
   device's retirement timeline; a failed bind or join prevents further
   retirement proofs until teardown. `VulkanSubmissionBatchLawTests` covers
-  both queue arrangements and an open batch. This is the binding door only:
-  native sparse buffer ownership and mesh backing selection remain step 7.
+  both queue arrangements and an open batch. `VulkanGpuMappedBuffer` is the
+  one caller: it returns a chunk's pages and destroys the buffer only through
+  the arena's sparse retirement (`VulkanMemoryArena.RetireSparse`), behind the
+  timeline value the door answered, and a bind whose outcome is unknown strands
+  what it covered until the device is torn down. Its unbound chunks are read
+  by no kernel: a mesh word is read only through a record that names a placed
+  mesh.
 - The mesh region keeps no host copy of its meshes. Its host copy is the draw
   records alone (`GpuRegion.Shadow`). A landing job's words are packed from the
   `SdfMesh` buffers on a worker into a buffer of the landing's own and gathered into

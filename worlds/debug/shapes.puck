@@ -241,8 +241,7 @@ let accent = { color: "#D9822B", roughness: 0.45, specular: 0.3 }
 template exhibit(label, extra = [], runs = [], note = "") {
   name: label
   schema: "puck.creation.v1"
-  palette: concat(galleryPalette, extra, plinthPalette)
-  exhibitPlinth(base: (3 + length(extra)))
+  palette: concat(galleryPalette, extra)
   textRuns: concat(
     [
       {
@@ -539,6 +538,10 @@ template galleryPlacements() {
     for (name, index) in row.names {
       placement $"{name}" {
         prototype: name
+        position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], row.z]
+      }
+      placement $"{name}-plinth" {
+        prototype: "gallery-plinth"
         position [(galleryX + (gallerySpacing * index)), galleryFloor[row.level], row.z]
       }
     }
@@ -2712,6 +2715,15 @@ template motionPrototypesB() {
 }
 
 template galleryPrototypes() {
+  // The display plinth every exhibit stands on (architecture.puck), one creation every exhibit's placement stamps.
+  prototype "gallery-plinth" {
+    document {
+      name: "gallery-plinth"
+      schema: "puck.creation.v1"
+      palette: plinthPalette
+      exhibitPlinth(base: 0)
+    }
+  }
   // Each primitive at a uniform scale.
   prototype "shape-sphere" {
     document {

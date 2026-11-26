@@ -56,16 +56,22 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 #else
     float coverage;
     float reactivity;
-    float3 color = sdfViewsStage(p, shadesPixel, coverage, reactivity);
+    uint2 sampleAir;
+    float3 color = sdfViewsStage(p, shadesPixel, coverage, reactivity, sampleAir);
 
     if (p.active && shadesPixel) {
         // The lit image: the float working color premultiplied by the pixel's coverage, the coverage in its alpha, which
         // the composite puts over the sky.
         float4 lit = float4((color * coverage), coverage);
+        bool storesAir = sdfViewsStoresAir(viewIndex);
+
         output[p.pixel] = lit;
         sdfWorkTexels = 1u;
         if (passGroup.temporal != 0u) {
             reactivityRW[sdfReactivityIndex(p.pixel, viewIndex, passGroup.imageExtent)] = reactivity;
+        }
+        if (storesAir) {
+            sampleAirRW[sdfReactivityIndex(p.pixel, viewIndex, passGroup.imageExtent)] = sampleAir;
         }
         if (rate != 0u) {
             // Qualification covered the entire cell, including its extent, coverage and ink.
@@ -75,6 +81,16 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
                 if ((offset & rate) == offset && any(dest != p.pixel)) {
                     output[dest] = lit;
                     reactivityRW[sdfReactivityIndex(dest, viewIndex, passGroup.imageExtent)] = reactivity;
+                }
+            }
+            // A pixel that takes the cell's shading keeps its own air, which follows its own ray distance. The loop is
+            // rolled so the kernel holds one copy of the atmosphere for it.
+            if (storesAir) {
+                [loop] for (uint copy = 0u; copy < 4u; copy++) {
+                    uint2 dest = origin + uint2(copy % 2u, copy / 2u);
+                    if ((copy & rate) == copy && any(dest != p.pixel)) {
+                        sampleAirRW[sdfReactivityIndex(dest, viewIndex, passGroup.imageExtent)] = sdfViewsSampleAirAt(p.view, dest, viewIndex);
+                    }
                 }
             }
             sdfWorkTexels = 1u << countbits(rate);

@@ -109,14 +109,16 @@ lanes, [the release](#the-release), the
     are captured almost every frame whether or not a view renders them
     ([the frame-production plan](frame-production.md)).
   - **City simulation** (`worlds/debug/city.puck`, 1,920 citizens and 100
-    vehicles, quiet RTX 2060, headless): about 22.5 Hz against 30, up from
-    10. The step thread's largest costs now: the input runtime per body
-    (`RefreshPermissions`, `TryAdmit`, `TrySynchronize`, `TrySelect`, about
-    20%), copies and clears (`MemmoveNative` 11%, `ZeroMemoryNative` 4%),
-    fork and plan (`JobPool.Fork` plus `PlanKitStep`, about 16%),
-    `CaptureMotion` 8%. The source watch's polling costs a fifth of a core.
-    Rules are now evaluated by change (the city's sheet 3.25M → 0.5M of
-    4.25M), collision events only for listeners, kit bodies in partitions.
+    vehicles, headless): the quiet RTX 2060 read about 22.5 Hz against 30
+    before the `cpu` campaign's first pass, which has not been read there
+    since. That pass made a citizen at rest sleep, moved the kit plan into its
+    partitions, and cut the per-body walks of the input standings and the
+    step's end ([the CPU frame](#the-cpu-frame), item 6, holds what is built
+    and what is left). The source watch reads on the host's change
+    notification, not on a timer: on the lead machine
+    `world.boot.watch-stamp-reads` stood still over 300 ticks. Rules are
+    evaluated by change, collision events only for listeners, kit bodies in
+    partitions.
   - **The moon:** `world.benchmark run moon` flies the round trip from the
     launch pad through the sky seam to a landing at the moon's pole and
     back, on the ship's own camera, and the painting reaches the pole. The
@@ -167,13 +169,18 @@ defects, not looks.
 
 1. **`gpu-frame`: the GPU frame to 8 ms at 2560 by 1440 on the RTX 4070.**
    Build [the frame budget](frame-budget.md)'s architecture end to end in one
-   lane: each lighting input resolved once into a compact record; the coarse
-   probe lookup (start from `wip/gpu-architecture`); light lists replacing
-   the 128-light masks; shadow classification before filtering; the
-   prefiltered environment; pass merges; windows allocated by octave; main
-   view storage under 1,000 MiB; ink's edge search inside its share. Success
-   line: the whole route at or under 10 ms in the quiet window, the look held
-   in motion on both backends; 8 ms is the budget it keeps going toward.
+   lane. Built and unread (the `gpu-frame` readings under
+   [verification debts](#verification-debts)): the coarse probe lookup, the
+   shadow classes ahead of the filter, the samples' air for the resolve, and
+   the counts of what the probe slots give up. Left, in
+   [the budget's order](frame-budget.md#the-steps): light lists replacing the
+   128-light masks; the rest of the resolve's sample record (motion and
+   identity); windows allocated by octave; main view storage under 1,000 MiB
+   (the stationary window, glass by coverage, the history surface); the
+   prefiltered environment and ink's edge search, each after the reading that
+   says its share is still over. Success line: the whole route at or under
+   10 ms in the quiet window, the look held in motion on both backends; 8 ms
+   is the budget it keeps going toward.
    It owns, first, the diagnosis of the gallery's near-black exhibits and the
    8-frame still shimmer ([verification debts](#verification-debts), item 1),
    since its rewrite is judged against the gallery, with the 2060's captures
@@ -195,16 +202,23 @@ defects, not looks.
    resident once however many views show it.
 3. **`cpu`: the frame thread under 3 ms and the city's authority at 30 Hz
    with headroom.** One lane over both, since both are the same discipline
-   (work proportional to change, off the one thread): capture only what a
-   view reads and capture routed scenes side by side (start from
-   `wip/frame-production`); the input runtime proportional to seated or
-   possessed bodies
-   and grant changes; the step thread's copies and clears; fork and plan
-   cost; `CaptureMotion`; the source watch on OS change notification instead
-   of polling. Success line: the frame thread under 3 ms on the route at
-   2560 by 1440 and in the city through its painting; the city's headless
-   authority at 30 Hz on the quiet RTX 2060 with the step thread under 60%
-   busy.
+   (work proportional to change, off the one thread). Its first pass took the
+   authority's half without a GPU grant: [the CPU frame](#the-cpu-frame)'s
+   item 6 lists what it built and what is left there, most to least. The
+   frame thread's half is untouched and needs a windowed leg to choose and to
+   check each step: [the frame-production plan](frame-production.md#what-is-left-of-the-architecture)
+   orders it, and `world.counters sdf.captures` over a route chapter says
+   which of capture, pack, pump and record a step moves. It leads the
+   authority's half: on the RTX 2060's player build the frame thread binds
+   the frame, Record and Capture first, and stepping the worlds is a small
+   share. Its first step is a frame-thread trace of a settled route on each
+   backend (`puck host samples --pid <World> --focus RecordWave --depth 5`,
+   the same with `--leaves 3`, and both again for `CaptureFrame`), which any
+   session that holds a windowed World can take.
+   Success line: the
+   frame thread under 3 ms on the route at 2560 by 1440 and in the city
+   through its painting; the city's headless authority at 30 Hz on the quiet
+   RTX 2060 with the step thread under 60% busy.
    It owns [a multi-seat client](#a-multi-seat-client) (M2), since it
    rewrites the input runtime around seated bodies: four seats on one
    client, each admitted to one remote authority under its own identity,
@@ -398,7 +412,33 @@ packet; these are the ones owed now, most valuable first.
      reference the next cache sets are checked against, and the 24 tour
      exhibits' stored meshes are audited from it
      ([bake detail](#bake-detail)).
-3. **Three render-graph laws to read before calling them stale or real.**
+9. **`gpu-frame`: the frame budget's built steps, unread.** One windowed World
+   a backend at 2560 by 1440 with `--debug-layers`, bakes and lighting
+   settled, `world.cadence off`, `world.rates off`, `world.gpu-timing on`:
+   - `world.gpu-timing` at the stage standing, at the hall's level 0 and on
+     the lawn, then over `world.benchmark run debug`: `sdf.world$surface`
+     (under 1.2 ms), `sdf.world$views-probes` (under 0.8 ms), and
+     `sdf.world$resolve` moving and standing, each beside the frame's total.
+   - The shadow classes change no image: `world.rate pause`,
+     `world.exposure pin`, `world.debug-view shadow`, a settled capture at the
+     hall's east wall and one on the lawn at a tree's shadow edge; then
+     `world.shaders.reload` of a scratch copy of the kernel tree with
+     `#define SDF_SURFACE_OMIT_SHADOW_CLASSES` at the head of
+     `passes/sdf-surface-stage.hlsli`, and the same two captures. The pairs
+     are equal, and the reload's `sdf.world$surface` reading is the classes'
+     share.
+   - `world.residency`'s `shadows` line under the turning day, read twice a
+     minute apart: each entry's `blocks…in…` counts rise with its redraws and
+     rectangles, and the pass's `recent=` time stays where it was before the
+     bounds (the reduction reads 62 by 62 texels a block).
+   - `world.counters gpu pass sdf.world$views-probes` over the route:
+     `lights-rounded` and `groups-without-extras` read zero, or the frame
+     budget's step 10 grows the list and the pool.
+   - A presented burst of a fogged silhouette (the valley rim against the
+     far wall, `world.screenshot <path>.png presented 16`) on both backends:
+     the resolve reads each sample's air from views, so the haze along a
+     silhouette holds as it did.
+10. **Three render-graph laws to read before calling them stale or real.**
    Each fails in `SdfWorldPassesLawTests` on the head after the plan changes
    of the GPU leap:
    - `CadenceRunsExactlyTheChangedClass(palette, both)`: the cadence
@@ -412,6 +452,22 @@ packet; these are the ones owed now, most valuable first.
    `CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift` look stale (the probe
    history port and the cascades' move out of the plan); update or delete
    them when the class is next touched.
+11. **`SdfWorldPassesLawTests` run whole: about fifty laws wait out a volume
+    that never settles, and the process holds about 15 GB.** On the fake
+    device about fifty of the class's 104 laws fail with "The irradiance
+    volume's lighting never settled within 200000 frames", most from the
+    rig's constructor, with the volume describing an empty scene
+    (`triangles=0 lights=0 traced=0 relit=0`) while
+    `SdfMeshIrradiance.Settling` stays true;
+    `CadenceAtTheFloorLeavesTheSurfaceStandingOnDrift` above is one of them.
+    The integration head fails them without the `gpu-frame` changes. It may
+    be the stop the gallery's lighting showed
+    ([lighting](#lighting-and-gi)), reproduced without a device, which would
+    make one such law the cheapest witness of that fix. Unread: which of
+    `Settling`'s terms holds, and whether a rig whose constructor throws
+    leaves its volume's native storage held, which fifty failures would
+    multiply into the process's size. Until then run one law by
+    `--filter-method`, and the class only under `puck lease heavy`.
 
 ### Tooling caveats
 
@@ -817,8 +873,74 @@ camera latch, and Vulkan's capture copy and record fork.
    verdicts (`StateArena.RowContent`), and a literal seat's channel, pointer
    and board facts and the resting census are versioned by the value they
    answer. `host.frames` prints the tick's named parts, and
-   `world.budget.rules --spent` each rule's `settled=` and `armed=`. Left, in
-   the order the debug world spends them:
+   `world.budget.rules --spent` each rule's `settled=` and `armed=`.
+
+   Built for a crowd: a body whose producer is at rest sleeps
+   (`WorldPopulation`'s `ProducerRests`), so a citizen standing where its
+   errand sent it costs a tick nothing; the kit plan is a fork of its own
+   (`KitPhase.Plan`) with a serial settlement, and a sleeper nothing wakes is
+   passed by; an accepted step closes its restore point before its settlement
+   writes; a program standing asks the grant table by version
+   (`WorldGrants.InputFactsVersion`); the step's end drains a body's register
+   writes only when one was marked. Left for a crowd, largest first as the
+   lead machine's samples attribute the city's tick (never timings):
+   - **Every world's tick still walks its bodies several times.** The rule
+     host's fact derivation compares every awake body about twice a tick and
+     reads every value fact again each time; the debug world's companion asks
+     `nearest` over a row that tags every slot, a walk of every body per
+     derivation (`WorldRuleHost.ResolveNearestBody`, which wants a spatial
+     query), and the walk repeats on every fact derivation, thirteen a tick
+     in the debug world, since a derivation that finds the bodies stale reads
+     every watched value again (`WorldRuleHost.DeriveValues`): a value that
+     reads bodies only by position needs reading again only when a
+     candidate's pose or liveness moved, which the walk of the candidates
+     beneath it already learns. The region pass tests every changed body against every place,
+     and a region that moves tests every slot (`WorldEventFeed.CollectRegions`).
+     A world a painting observes delivers every body to that session each
+     tick (`WorldSessionSink.DeliverSnapshot`). Check: `world.tick.fact-slots`,
+     `world.tick.nearest-cells` and `world.events.region-body-tests` a tick
+     fall toward the bodies that moved.
+   - **The input standings are still walked.** `RefreshPermissions` and
+     `TrySynchronize` visit every producer-driven body's owner about three
+     times a tick, each a handful of reads now. One gate over every source a
+     standing reads would skip the walk while nothing moved: the grant table's
+     version is built; the population's facts (a slot's body, source, kit
+     signature, channel table, generation and human occupancy) need one
+     version moved at their setters, the selector rows the arena's row
+     versions, and the owner's own epoch and producer an invalidation where
+     the runtime changes them. Under the checked hash every standing is
+     verified in full, so a missed door fails a reproduce leg. Check:
+     `world.tick.input-refreshes-standing` and
+     `input-synchronizations-standing` a tick fall to zero in a still town.
+   - **A producer's changed image still passes the whole admission.** About
+     70 to 330 a tick in the city: the producer's batch is built, folded and
+     checked against itself and its axis samples enter a history nothing
+     reads. The history is state, so the answer is a history kept only where
+     a pattern, a crossing or a rule can read it.
+   - **The step still saves its input images.** Every producer-driven step
+     stages and takes its one-tick images under the restore point, which
+     copies the input images aside (`physics.bodies.step-saved-bytes`, about
+     a megabyte a tick in the city). A refused step clears those images
+     anyway, so taking them before the restore point opens saves nothing
+     else; the durable input's own writes of the submitted image need the
+     same order first.
+   - **The host thread still composes every instance's wave from scratch.**
+     Before each step the thread that also runs the frame scans every body
+     slot of every instance against every seam face
+     (`WorldAdjacencyOwnership.Sweep`, which makes its answer's array on
+     every call), builds each mirrored session's body image whole
+     (`WorldSessionMirror.CaptureBodyImage`) and makes the observation
+     tables and the seam projections again
+     (`WorldPresentationCopy.Observations`,
+     `WorldAdjacencyFields.BuildProjections`). Built: the seam scan's
+     selection makes no closure for a slot that crossed nothing, a
+     reference's document path is resolved once, and the site attention
+     reads its faces by index, which halved what that thread allocates an
+     iteration in the headless debug world. Check: `host.frames`' frame
+     thread allocation an iteration, and `puck host allocations` naming no
+     site beneath `WorldInstanceHost.TryStepInstances`.
+
+   Left, in the order the debug world spends them:
    - **An arm that would change nothing.** A Level rule that poses a body every
      tick (`poseCell` holding a cursor or a lift car in place) queues an arm on
      every firing, so it never settles, and each firing makes the host derive
@@ -892,8 +1014,9 @@ stored one tier of each mesh. The replacement is built: the producer fills
 every tier (`SdfMeshCachePolicy.Ladder`), a player's build starts from its
 stored tiers and bakes only what they lack, on its play bar
 (`SdfMeshCachePolicy.Stored`, a warm start by the owner's ruling), and `puck
-world player` refuses a folder whose check boots did not settle with no tier
-missed.
+world player` refuses a folder only when a check boot did not settle: a tier a
+check missed is baked by that boot and listed under the record's
+`cacheMisses`.
 
 - [high] Both backends' fills and all four target checks
   (`rtx2060@1920x1080`, `rtx4070@2560x1440`) have run complete on the RTX
@@ -959,6 +1082,25 @@ client authorities rejoin cleanly, and departed travellers release after
 `bodies.reconnectGraceSeconds`. Machine content is the part of step 3 still
 open.
 
+- [high, M1] **The hosted silo refuses every player's party.** A release deploys
+  its silo with `ClosedGroupRewind` (`AzureWorld`), and an activation then
+  installs `ContainsRewindAuthority` as the transfer boundary
+  (`WorldSiloHost.ActivationWiring`). A `--connect` client joins by
+  transferring its party from its own session-qualified authority, which is
+  never in the rewind inventory, so `WorldTick.ReserveTransfer` refuses it:
+  `transfer=0 refused ('remote-boot' refused reservation (closed rewind group
+  refuses an external transfer; terminal refusal …))`. The client signs in and
+  is vouched for, its sessions are granted the world's screens, and its seat
+  never leaves its own boot world. [The issuer decision](../decisions/worlds-and-federation.md#players-are-admitted-through-their-hosts-issuer)
+  says a closed group "keeps admitting players while it refuses every other
+  authority", but the boundary checks only the source authority's name, which
+  for a player is its traveller namespace. Decide what a player's party is to a
+  closed group (an issuer-vouched traveller whose body the group owns once it
+  commits, so a group rewind does not reach back into the client), then admit it
+  at the boundary. `puck benchmark --remote local` and `--remote issued` never
+  reach this: neither starts a silo. Check: the RTX 2060's player install
+  joins the hosted authority (play.puck.byteterrace.com, port 7825) and its seat's body arrives in the
+  hosted world.
 - [medium] A manifest's member is fetched whole and the whole manifest is sent
   each time ([decision 4](remote-content.md#decision-4-the-document-travels-as-a-manifest)).
   A recipient with another version of the package fetches each differing
@@ -1092,10 +1234,6 @@ inhabitants and many worlds on more than one authority. Each item is a place
 or a tool in the debug world, built on the engine's systems so it loads them
 as real use does (AGENTS.md).
 
-- [medium] **Producer-driven bodies never sleep** (`WorldBody.UpdateSleepEligibility`), so a citizen
-  standing at its anchor still steps at its cadence. It is likely a large share of the occupied
-  city's per-tick cost. The city's producer runs also sit about 11 a tick above what its authored
-  cadences give (`docs/plans/simulation-attention.md`, step 3).
 - [high] **Crowds of players.** Nothing connects many peers to one authority.
   Build a `puck` verb that connects N headless bot peers to an authority, the
   hosted one included, each with scripted movement, reusing the federation
@@ -2059,10 +2197,11 @@ Owner: rendering lane (rendering, verification) · high · Next:
 step 5, the floor and eviction, an engine gap that goes first
 ([rendering research](rendering-research.md#engine-gaps-filled-first)); then
 what is left of [step 7, the backing](streaming-and-memory.md#step-7-the-backing):
-Direct3D 12's mesh region and probe scene grow in chunks of one reserved
-buffer (`IGpuMappedBuffer`), and Vulkan's still use contiguous storage, so
-Vulkan's sparse ownership behind the same interface, page-only reservation
-credit and physical compaction remain. Steps 0 to 3 are built and owe their
+the mesh region and the probe scene grow in chunks of one reserved buffer
+on both backends (`IGpuMappedBuffer`: Direct3D 12's reserved resource,
+Vulkan's sparse buffer), so page-only reservation credit and physical
+compaction remain, and Vulkan's sparse destination owes its first windowed
+boot and the hardware qualification the plan lists. Steps 0 to 3 are built and owe their
 windowed readings, and the indexed-read prototype owes one more window on the
 build its [design for review](streaming-and-memory.md#sparse-backing-design-for-review)
 was frozen at. The plan owns the decisions, the build order and each step's
@@ -2086,14 +2225,15 @@ check; this packet holds the defects beside it.
   the bake's scratch arrays, an unidentified renter of 92–98 MB `ArrayPool.Shared` arrays, and
   about 140 MB of trace-scene storage still rented managed. Check: the 2060's route ends under
   its host bar with the LOH flat across loops.
-- [medium] **mimalloc returns freed native pages only under pressure.** `MimallocAllocator` sets no
-  purge or decommit options, and `mi_collect(force: true)` runs only when the memory account asks
-  for a reclaim, when a thread returns its memory, or from a console command. Moving the GI
-  stores to native memory therefore swapped LOH fragmentation for allocator slack: on the 2060,
-  1.83 GB committed against 810 MB named, with 8.6 GB reserved. Set the purge options at process
-  start, give the large long-lived GPU-side stores their own heap or arena, and collect on a
-  cadence near the bar. Check: committed native memory tracks the named owners within a stated
-  slack on the same route.
+- [medium] **Read the native allocator's slack on the RTX 2060's route.** The 2060 read 1.83 GB
+  committed against 810 MB named, with 8.6 GB reserved, when freed ranges were decommitted only by
+  a later free and every size class committed its whole page. `MimallocAllocator`'s owner thread
+  now decommits expired ranges every `MimallocAllocator.PurgePeriod`, and pages past a slice
+  commit as their blocks are used. Check: committed native memory tracks the named owners within
+  a stated slack on the same route (`host.memory`'s native row and its residual). If the slack
+  that remains is live blocks pinning mostly empty pages, give the large long-lived stores (mesh
+  payloads, the irradiance volume) a heap of their own, apart from the bake's short-lived
+  workspace.
 - [high] Measure the session-residency fix on the RTX 4070. A cold debug-world
   boot built 55 residencies, one for each `self`, `wonderland` and nested
   session screen of the boot world, and the device pool held 15.5 GB, mostly
@@ -2158,6 +2298,25 @@ check; this packet holds the defects beside it.
   feedback volume, the hit and meter caches of `SdfMeshProbeGpuWork`) is still
   fixed storage with no reservation; only a job's slot buffers reserve
   (`SdfGpuWorkHold`).
+- [high] A volume's words stand three times: the host's copy
+  (`SdfMeshIrradiance`'s volume words), the probe service's feedback table,
+  which the relights read and commit into (`SdfMeshProbeGpuWork`), and the
+  published table the views read, which each publication copies from the
+  feedback table on the device (`SdfWorldTables.PublishMeshIrradiance`). The
+  two device tables bind one layout at one binding
+  (`SdfWorldPackage.MeshIrradiance`), and every slot carries the cell it holds,
+  so a view can reject a slot mid-move. On the RTX 2060's route the two read
+  about 230 MB each at the device's peak. Have the views bind the feedback
+  table and make a publication a revision alone, with the barriers the views'
+  stages need on that table. It changes what the passes read, so it is the
+  frame lane's edit with this plan; check that a still view stands until a
+  publication and that the probe history's serials still gate its reuse.
+- [medium] The temporal resolve's window (`historyWindow`,
+  `SdfWorldPackage.HistoryWindowWords` words an output pixel, about 207 MB at
+  1920 by 1080) follows the display and not the device's table, so the RTX
+  2060 holds what the RTX 4070 holds a pixel. A shorter period or narrower
+  words on that card is a reconstruction choice for its table, which the frame
+  budget owns.
 - [low] A mesh region's staging is named for its own owner
   (`SdfResidencySelector.RegionStagingOwner`) and states no class, so a flush
   that stages more than the pool has room for is admitted past the limit and
@@ -2204,18 +2363,42 @@ check; this packet holds the defects beside it.
   hold every column that can ever raise, with displacement closing the dry
   ones, is a design question for the field's owner.
 - One group in the debug world has a mesh no draw names, not yet identified.
-- [medium] The mesh store evicts whole sets when it nears its size limit
-  (`CacheRetention`), and a whole ladder per backend is now several times the
-  bytes of the sets that limit was sized for, so a lead machine that bakes
-  for two backends and several identities loses sets it still needs. A player
-  folder keeps only its build's sets and fails when one was evicted
-  (`puck world player`); the per-user store still needs its limit sized from
-  what a set is, or retirement by identity age, and an owner for the figure.
-- [medium] Step 2's heap walk on a headless debug world names two large-object
-  tenants the plan's [large host owners](streaming-and-memory.md#the-large-host-owners)
-  table bounds by no step: `FieldCellDelta[]` arrays held by
-  `WorldDeliveryRows` (9 objects, 33 MB) and by `WorldDocument` (3.7 MB). They
-  need an owner and a bound, or a reason they stay named only.
+- [low] The mesh store keeps its most recently used sets whole and holds the
+  older ones to a share of its volume (`SdfMeshStore.RetainedSets`,
+  `SdfMeshStore.CapacityOf`), so on a roomy volume the sets of builds no
+  checkout can produce again stand until the bytes ask for them. Retire a set
+  by the age of its last use if a lead machine's store is seen to fill with
+  them. A group that waits to bake takes a finer rung of its shape only when a
+  group of its own bake lands it (`SdfMeshPathBake.TakeLandedRungs`); a rung
+  another residency's bake landed is found at the group's plan alone.
+- [medium] A headless debug world's heap walk (`puck host heap --pid <pid>
+  --min-mib 2 --depth 2`, with the authority in the process) still names
+  three large-object tenants the plan's
+  [large host owners](streaming-and-memory.md#the-large-host-owners) table
+  bounds by no step. The composed documents' bytes
+  (`WorldComposedDocument`, about 36 MB in 5 arrays) and their layers
+  (`ComposedLayer`, about 10 MB) stand for the whole run so that a reload
+  composes only what changed; a player's process, which reloads nothing, could
+  let them go once it has booted. One `FieldCellDelta[]` of about 4 MB is held
+  by `WorldSnapshotStorage`. And for as long as the process runs no two gen2
+  collections half a minute apart, the shared byte pool keeps the arrays a
+  boot rented from it, 2, 4, 8, 16 and 64 MiB, in one thread's slots
+  (`SharedArrayPoolThreadLocalArray`): the jump past 32 MiB is the shape of one
+  `System.Text.Json` write of a string or raw value of about 13 million
+  characters through the serializer's pooled writer, which no site has been
+  matched to yet (`ContentDigest.HashText` was ruled out by bounding it). Find
+  that write with a trace taken from process start, and write it through a
+  stream.
+- [medium] A reload or a boot serializes whole documents into growing byte
+  buffers: `puck host allocations` over one `world.reload` of the headless
+  debug world sampled about 520 MiB, 208 MiB of it large objects, led by
+  `CanonicalJsonDocument.SerializeCompact` (128 MiB of `byte[]`: the
+  writer's own buffer, the `MemoryStream` it is flushed to and the array that
+  is copied out of it), `CreationDocumentJsonConverter.Write` (64 MiB) and
+  `CreationDocumentJson.Read` (57 MiB). A serialization whose reader only
+  hashes or compares the bytes needs no array of them. Owner: the document
+  and state code, with the iteration plan, since this is the edit loop's
+  garbage.
 - [low] Step 2 names the trace scene's current hierarchy only: a scene a job
   still borrows after a rebuild sits in the managed row's residual until its
   last claim ends (`SdfMeshIrradiance`'s sampled owners).
@@ -4999,6 +5182,15 @@ proves itself with `puck compile` lowering to the same document.
 [Code size](code-size.md) holds the measured map, the generator families and
 their lane order; this packet keeps the single duplicates and leads.
 
+- Two mapped buffers keep one chunk table apiece: `DirectXGpuMappedBuffer`
+  and `VulkanGpuMappedBuffer` each hold a backing a chunk, place every missing
+  chunk of a range before binding any, and revoke the chunks wholly inside a
+  range into a release (`Map`, `Unmap`). Their chunk arithmetic is shared
+  (`GpuMappedChunks`); the table, the all-or-none placement and the revoke
+  loop are still written twice. Lift them into one generic chunk table in
+  `Puck.Abstractions` that a backend supplies with its place, bind, unbind and
+  return calls. Do it in the window that first boots the Vulkan path, since
+  the Direct3D 12 half is the one hardware has qualified.
 - Two A* searches over a navigation domain's baked edges: `NavigationRuntime.Domain.FindPath`
   (`SearchPath`, per-domain workspace arrays, step costs in thousandths of a cell, no clearance
   surcharge) for a non-shared domain's followers, and `NavigationRuntime.FindRoute` (`SearchRoute`,

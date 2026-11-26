@@ -760,6 +760,7 @@ public sealed partial class SdfMeshPathBake {
                 Revisit(frame: frame);
             }
             if (m_successors > 0) { Promote(frame: frame); }
+            TakeLandedRungs(frame: frame);
             scope.Continue(site: BakeGate.Retier);
             FinishReplacements();
             if (m_evictions.Count > 0) {
@@ -1722,7 +1723,7 @@ public sealed partial class SdfMeshPathBake {
 
             if (!old.Done || (old.Successor is not { } plan)) { continue; }
             m_promoted++;
-            _ = Succeed(identity: identity, index: index, leaders: (leaders ??= Leaders()), old: old, plan: plan, started: ref started);
+            _ = Succeed(identity: identity, index: index, leaders: (leaders ??= Leaders(indices: m_inputReaders)), old: old, plan: plan, started: ref started);
         }
         if (leaders is null) { return; }
         BeginOrphans(indices: m_inputReaders, started: ref started);
@@ -1744,15 +1745,17 @@ public sealed partial class SdfMeshPathBake {
         group.Successor = null;
         m_successors--;
     }
-    // The readers baking a geometry no other reader waits on. A group sharing geometry with a reader hashed the same
-    // snapshot and operand poses, so it is a reader too: the readers alone hold every leader a replanned group can follow.
-    private Dictionary<SdfMeshGeometry, Group> Leaders() {
+    // The groups, of the listed indices or every one, baking a geometry no other waits on: the leaders a group placed
+    // among them can follow. A group sharing geometry with an input's reader hashed the same snapshot and operand poses,
+    // so it is a reader too, and the readers alone hold every leader a replanned reader can follow.
+    private Dictionary<SdfMeshGeometry, Group> Leaders(IReadOnlyList<int>? indices) {
         var leaders = new Dictionary<SdfMeshGeometry, Group>();
+        var count = (indices?.Count ?? m_groups.Count);
 
-        foreach (var index in m_inputReaders) {
-            var group = m_groups[index];
+        for (var at = 0; (at < count); at++) {
+            var group = m_groups[(indices?[at] ?? at)];
 
-            if (!group.Done && (group.Leader is null) && (group.Replaces is null)) { _ = leaders.TryAdd(key: group.Sealed, value: group); }
+            if (!group.Done && !group.Retired && (group.Leader is null) && (group.Replaces is null)) { _ = leaders.TryAdd(key: group.Sealed, value: group); }
         }
         return leaders;
     }
@@ -3019,6 +3022,8 @@ public sealed partial class SdfMeshPathBake {
         group.Mesh = mesh;
         group.ResidentAt = 0;
         m_allResident = false;
+        // A group of the same shape still waiting to bake takes this rung at the next frame (TakeLandedRungs).
+        if (mesh is not null) { m_landedRungs.Add(item: (group.Shape, group.Tier)); }
         _ = m_retiredGroups.RemoveAll(match: static retired => retired.Released);
     }
     // Records the bake's wall time once its last group finishes, and reports it.

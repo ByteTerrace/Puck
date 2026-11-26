@@ -14,10 +14,21 @@ namespace Puck.Vulkan;
 /// empties it, or by <see cref="FreeAll"/>, which unmaps and frees every block left as the device is torn down, whatever
 /// resources are still bound to it (a device loss leaves them so; freeing memory a lost device's resources are bound to is
 /// valid), and retires the arena, which then binds and maps nothing. Thread-safe.
+/// <para>A sparse buffer's pages (<see cref="PlacePages"/>, <see cref="VulkanGpuMappedBuffer"/>) come from blocks of
+/// their own, of <see cref="PageBlockBytes"/> each, kept apart from bound resources so that a resource that never moves
+/// cannot pin a block whose pages a shrinking buffer gives back. What such a buffer lets go of while the device may
+/// still bind or read it (its pages, and the buffer itself) waits in the arena's sparse retirement
+/// (<see cref="RetireSparse"/>), released once the device's timeline passes the value it was retired behind, and at
+/// the latest by <see cref="FreeAll"/>.</para>
 /// </summary>
 public sealed unsafe class VulkanMemoryArena {
     /// <summary>The bytes of a shared block.</summary>
     public const ulong BlockBytes = (64UL << 20);
+    /// <summary>The bytes of a block kept for a sparse buffer's pages (<see cref="PlacePages"/>): a few of a mapped
+    /// buffer's chunks, so a block empties, and is freed, once those few are unbound. A buffer gives chunks back
+    /// scattered across the blocks that backed them, and a block holding many chunks strands most of what a shrink
+    /// returns.</summary>
+    public const ulong PageBlockBytes = (4UL << 20);
 
     private const uint StructureTypeMemoryAllocateInfo = 5;
     // VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO and VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT (vulkan_core.h, SDK 1.4.363).
@@ -31,6 +42,13 @@ public sealed unsafe class VulkanMemoryArena {
     private readonly Lock m_gate = new();
 
     private readonly GpuMemoryPool<(uint Type, GpuMemoryRole Role, bool Image), (nint Memory, nint Mapped)> m_pool;
+    // The blocks kept for sparse buffers' pages, of PageBlockBytes each.
+    private readonly GpuMemoryPool<(uint Type, GpuMemoryRole Role, bool Image), (nint Memory, nint Mapped)> m_pages;
+    // What sparse buffers let go of behind a binding the queue has yet to run (RetireSparse), by the device timeline's
+    // value, and what could not be given a value because the timeline no longer certifies any, which only FreeAll
+    // releases. Under the gate.
+    private readonly GpuRetirementQueue<Action> m_sparseRetiring = new();
+    private readonly List<Action> m_sparseStranded = [];
 
     // Each bound resource's placement and the name its family holds in the device's counts, by its handle and whether it
     // is an image: a buffer and an image may share a handle value, as a layer that wraps handles (RenderDoc) hands them
@@ -45,11 +63,79 @@ public sealed unsafe class VulkanMemoryArena {
     public VulkanMemoryArena(VulkanDeviceCommands device) {
         m_device = device;
         m_pool = new(allocate: Allocate, blockBytes: BlockBytes, free: Free);
+        m_pages = new(allocate: Allocate, blockBytes: PageBlockBytes, free: Free);
         if (m_device.Memory is not null) { m_device.Memory.TrimRequested += Trim; }
     }
 
     /// <summary>Gets the blocks the arena holds now.</summary>
-    public int Blocks => m_pool.Blocks;
+    public int Blocks => (m_pool.Blocks + m_pages.Blocks);
+
+    // The page blocks of one memory type: device-local buffer memory, which no host mapping reaches.
+    private static (uint Type, GpuMemoryRole Role, bool Image) PageKey(uint memoryTypeIndex) => (memoryTypeIndex, GpuMemoryRole.DeviceLocal, false);
+
+    /// <summary>Gets the bytes of the blocks kept for pages of a memory type that no run of pages holds: device memory
+    /// the arena already holds, which only <see cref="PlacePages"/> takes. A block is freed only once every run in it is
+    /// returned, so pages returned from many blocks leave this room behind them.</summary>
+    /// <param name="memoryTypeIndex">The memory type.</param>
+    /// <returns>The bytes.</returns>
+    public ulong SparePageBytes(uint memoryTypeIndex) {
+        lock (m_gate) { return m_pages.FreeBytes(key: PageKey(memoryTypeIndex: memoryTypeIndex)); }
+    }
+    /// <summary>Places a run of pages a sparse buffer binds (<see cref="VulkanGpuMappedBuffer"/>): a range of a
+    /// device-local block kept for pages alone, admitted and counted as any block is, and named to the family in the
+    /// counts. The caller binds it and gives it back through <see cref="ReturnPages"/> once no queue binds or reads
+    /// it.</summary>
+    /// <param name="bytes">The run's bytes; a whole number of the buffer's pages, at most half of
+    /// <see cref="PageBlockBytes"/> to share a block.</param>
+    /// <param name="alignment">The buffer's page size, which the run's offset in its block is a multiple of.</param>
+    /// <param name="memoryTypeIndex">The memory type the buffer binds.</param>
+    /// <param name="family">The family the run is named to in the counts (<see cref="GpuObjectName.MemoryFamily"/>),
+    /// whose reservation pays for a block the run makes.</param>
+    /// <returns>The run's placement: its block's memory and its offset.</returns>
+    /// <exception cref="GpuMemoryRefusedException">The account or the device refused a new block; nothing was placed.</exception>
+    /// <exception cref="ObjectDisposedException">The arena was retired (<see cref="FreeAll"/>).</exception>
+    public VulkanPagePlacement PlacePages(ulong bytes, ulong alignment, uint memoryTypeIndex, string family) {
+        lock (m_gate) {
+            return m_pages.Place(alignment: alignment, key: PageKey(memoryTypeIndex: memoryTypeIndex), payer: family, size: bytes, bind: placement => new VulkanPagePlacement(
+                Name: (m_device.Memory?.CountPlaced(allocation: placement.Native.Memory, bytes: checked((long)placement.Size), device: m_device.Handle, family: family) ?? 0L),
+                Placement: placement
+            ));
+        }
+    }
+    /// <summary>Gives back a run of pages <see cref="PlacePages"/> placed, once no queue binds or reads it: its name
+    /// leaves the counts and its range returns to its block, which the arena frees when it empties. A retired arena takes
+    /// nothing back.</summary>
+    /// <param name="pages">The run's placement.</param>
+    public void ReturnPages(VulkanPagePlacement pages) {
+        lock (m_gate) {
+            if (pages.Name != 0) { _ = m_device.Memory?.CountUnplaced(token: pages.Name); }
+            m_pages.Return(placement: pages.Placement);
+        }
+    }
+    /// <summary>Holds what a sparse buffer let go of until the device's timeline passes a value: the pages a binding
+    /// took out of the buffer, or the buffer itself. Called on the device's submission thread, with values in the order
+    /// the timeline gave them.</summary>
+    /// <param name="after">The timeline value the release waits for, or <see langword="null"/> when the timeline could
+    /// give none (a binding of unknown outcome, a lost device): the release then runs at <see cref="FreeAll"/>.</param>
+    /// <param name="release">What releases it.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="release"/> is <see langword="null"/>.</exception>
+    public void RetireSparse(ulong? after, Action release) {
+        ArgumentNullException.ThrowIfNull(argument: release);
+
+        lock (m_gate) {
+            if (after is { } value) { m_sparseRetiring.Retire(after: value, item: release); } else { m_sparseStranded.Add(item: release); }
+        }
+    }
+    /// <summary>Releases what <see cref="RetireSparse"/> holds behind values the device's timeline has passed. Called on
+    /// the device's submission thread.</summary>
+    /// <param name="completed">The timeline's completed value.</param>
+    public void ReleaseSparse(ulong completed) {
+        List<Action>? ready = null;
+
+        lock (m_gate) { m_sparseRetiring.Release(completed: completed, release: item => (ready ??= []).Add(item: item)); }
+        // Outside the gate's first entry: a release returns pages, which takes the gate again.
+        foreach (var release in (ready ?? [])) { release(); }
+    }
 
     /// <summary>Binds a buffer or an image to memory of a type: at an offset of a block with room, or of a new block.</summary>
     /// <param name="resource">The buffer or image, created unbound.</param>
@@ -130,7 +216,17 @@ public sealed unsafe class VulkanMemoryArena {
     /// <summary>Unmaps and frees every block once, as the device is torn down, and retires the arena. A second call
     /// does nothing.</summary>
     public void FreeAll() {
+        List<Action> held = [];
+
         lock (m_gate) {
+            // Everything a sparse buffer still waits to let go of goes now: the device runs nothing more.
+            m_sparseRetiring.Release(completed: ulong.MaxValue, release: held.Add);
+            held.AddRange(collection: m_sparseStranded);
+            m_sparseStranded.Clear();
+        }
+        foreach (var release in held) { release(); }
+        lock (m_gate) {
+            _ = m_pages.FreeAll();
             if (m_pool.FreeAll()) { m_slices.Clear(); }
             if (m_device.Memory is not null) { m_device.Memory.TrimRequested -= Trim; }
         }
@@ -138,7 +234,10 @@ public sealed unsafe class VulkanMemoryArena {
     /// <summary>Releases empty blocks and marks held blocks for release after their last fenced placement returns.</summary>
     public void Trim() {
         // Pool callbacks mutate m_blocks, so pressure uses the same outer lock as Bind and Release.
-        lock (m_gate) { m_pool.Trim(); }
+        lock (m_gate) {
+            m_pool.Trim();
+            m_pages.Trim();
+        }
     }
 
     // Asks the ledger for a block at its size, allocates it, counts it, and maps it for its life when its memory is

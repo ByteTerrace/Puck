@@ -43,6 +43,8 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
     private const int LimitsMaxPushConstantsSizeOffset = (PhysicalDeviceLimitsOffset + 32);
     // maxUniformBufferRange follows the six image/texel-buffer dimension uints.
     private const int LimitsMaxUniformBufferRangeOffset = (PhysicalDeviceLimitsOffset + 24);
+    // maxStorageBufferRange follows it.
+    private const int LimitsMaxStorageBufferRangeOffset = (PhysicalDeviceLimitsOffset + 28);
     // The VkDeviceSize sparseAddressSpaceSize follows bufferImageGranularity at 48, and minStorageBufferOffsetAlignment
     // follows the texel and uniform offset alignments at 312 and 320; VkPhysicalDeviceLimits is 504 bytes, so
     // VkPhysicalDeviceSparseProperties's five VkBool32s follow at 800, residencyNonResidentStrict last (offsets computed
@@ -291,7 +293,8 @@ public unsafe sealed class VulkanNativePhysicalDeviceApi : IVulkanPhysicalDevice
                 MaxRootSignatureWords: 0U,
                 Backing: ((Read(offset: SparseResidencyNonResidentStrictOffset) != 0U) ? GpuBackingSupport.SparseNonResidentStrict : GpuBackingSupport.None),
                 SparseAddressSpaceBytes: unchecked((ulong)Marshal.ReadInt64(ofs: LimitsSparseAddressSpaceSizeOffset, ptr: propertiesBuffer)),
-                StorageBufferOffsetAlignment: checked((uint)Marshal.ReadInt64(ofs: LimitsMinStorageBufferOffsetAlignmentOffset, ptr: propertiesBuffer))
+                StorageBufferOffsetAlignment: checked((uint)Marshal.ReadInt64(ofs: LimitsMinStorageBufferOffsetAlignmentOffset, ptr: propertiesBuffer)),
+                MaxStorageBufferBytes: Read(offset: LimitsMaxStorageBufferRangeOffset)
             );
         } finally {
             m_allocator.Free(ptr: propertiesBuffer);

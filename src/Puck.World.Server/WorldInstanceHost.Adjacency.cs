@@ -254,22 +254,12 @@ public sealed partial class WorldInstanceHost {
                 continue;
             }
 
-            var earliest = hits.Min(selector: static hit => hit.Parameter);
-            var eligible = hits.Where(predicate: hit => (hit.Parameter == earliest))
-                .OrderBy(
-                keySelector: static hit => hit.Adjacency.Name.Value,
-                comparer: StringComparer.Ordinal
-            )
-                .ToArray();
-            var choice = ((eligible.Length == 1)
-                ? 0
-                : (int)(StableJunctionSeed(
-                    authority: instance.Server.AuthorityIdentity,
-                    entity: seat,
-                    generation: population.Generation(index: seat)
-                ) % ((ulong)eligible.Length))
+            var winner = CrossingWinner(
+                authority: instance.Server.AuthorityIdentity,
+                generation: population.Generation(index: seat),
+                hits: hits,
+                seat: seat
             );
-            var winner = eligible[choice];
 
             if (
                 (population.EntryBody(index: seat)?.PendingContinuum is { } pending) &&
@@ -298,6 +288,27 @@ public sealed partial class WorldInstanceHost {
                 );
             }
         }
+    }
+    // The hit a body crosses by: the earliest crossing parameter, and among equal ones the stable junction seed's
+    // choice from the hits in ordinal name order. A method of its own, so the scan makes the selection's closure for a
+    // body that crossed something, never once a slot on every tick.
+    private static WorldAdjacencyFaceHit CrossingWinner(List<WorldAdjacencyFaceHit> hits, string authority, int seat, int generation) {
+        var earliest = hits.Min(selector: static hit => hit.Parameter);
+        var eligible = hits.Where(predicate: hit => (hit.Parameter == earliest))
+            .OrderBy(
+            keySelector: static hit => hit.Adjacency.Name.Value,
+            comparer: StringComparer.Ordinal
+        )
+            .ToArray();
+
+        return eligible[((eligible.Length == 1)
+            ? 0
+            : (int)(StableJunctionSeed(
+                authority: authority,
+                entity: seat,
+                generation: generation
+            ) % ((ulong)eligible.Length))
+        )];
     }
     private void ScanInstanceBoundaries(WorldInstance instance) {
         instance.Server.ExecuteAuthorityAction(state: (Host: this, Instance: instance),

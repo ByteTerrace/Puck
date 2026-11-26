@@ -68,6 +68,20 @@ internal struct BodyProducerState {
     public WorldFlockObservation? FlockTarget;
     // Derived binding, restored from the checkpoint's kit/producer names. Not independent simulation state.
     public CompiledBodyProducer? FlockBinding;
+
+    // Whether everything a producer run can move stands as in `before`: the selection, the oscillators, the curve
+    // station, the acquired target and the flock's cached perception. StandDown is not a run's to move.
+    public readonly bool ProgressEquals(in BodyProducerState before) => (
+        (AcquiredTarget == before.AcquiredTarget) &&
+        (ActivityPhase == before.ActivityPhase) && (ActivityPhaseRemainder == before.ActivityPhaseRemainder) && (ActivityRate == before.ActivityRate) &&
+        (Phase == before.Phase) && (PhaseRemainder == before.PhaseRemainder) &&
+        (PreferredAltitude == before.PreferredAltitude) && (WeaveFrequency == before.WeaveFrequency) &&
+        (CurveArcRaw == before.CurveArcRaw) && (CurveArcRemainder == before.CurveArcRemainder) &&
+        ReferenceEquals(objA: ActiveProducerName, objB: before.ActiveProducerName) &&
+        (ActiveProducerCurveIndex == before.ActiveProducerCurveIndex) && (ActiveProducerNavigationDomainIndex == before.ActiveProducerNavigationDomainIndex) &&
+        (FlockSeeded == before.FlockSeeded) && (FlockGeneration == before.FlockGeneration) && (FlockDesired == before.FlockDesired) &&
+        (FlockRemainingTicks == before.FlockRemainingTicks) && (FlockSampleOrdinal == before.FlockSampleOrdinal) && (FlockTarget == before.FlockTarget)
+    );
 }
 internal struct BodyAutonomyState {
     public ulong MotionPeriodTicks;
