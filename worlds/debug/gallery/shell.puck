@@ -583,9 +583,11 @@ template shellForecourt() {
 
 // The kit pieces that stand on the plan, each a list gallery.puck stamps: the arcades' piers on every level, the
 // balcony edges round the nave's void and round the fall's well, the terrace's edge, and the furniture.
-let shellPiers = flatMap(range(0, 4), k => flatMap(arcadeXs, x => [
-  { id: $"pier-south-{k}-{x}", x: x, y: galleryFloor[k], z: arcadeSouth, yaw: 180 }
-  { id: $"pier-north-{k}-{x}", x: x, y: galleryFloor[k], z: arcadeNorth, yaw: 0 }
+// A pier's prototype: the hall's teal, or on level 1 the toybox's pastel for its place along the arcade.
+function shellPierPrototype(k, b) = ((k == 1) ? $"gallery-pier-toy-{(b % length(lookToyPiers))}" : "gallery-pier")
+let shellPiers = flatMap(range(0, 4), k => flatMap(range(0, length(arcadeXs)), b => [
+  { id: $"pier-south-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeSouth, yaw: 180, prototype: shellPierPrototype(k, b) }
+  { id: $"pier-north-{k}-{arcadeXs[b]}", x: arcadeXs[b], y: galleryFloor[k], z: arcadeNorth, yaw: 0, prototype: shellPierPrototype(k, b) }
 ]))
 // A length of balustrade: its centre, the yaw that turns its drop side to the void, and whether it is the 2 m piece.
 let shellRails = concat(
@@ -794,6 +796,16 @@ template shellPrototypes() {
       branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2), foot: [shellTileHalf, shellTileHalf])
     }
   }
+  for (tone, n) in lookToyPiers {
+    prototype $"gallery-pier-toy-{n}" {
+      document {
+        name: $"gallery-pier-toy-{n}"
+        schema: "puck.creation.v1"
+        palette [shellBrushed((structurePalette[0] with { color: tone }), lookBrushStructure), (structurePalette[1] with { color: lookBrass })]
+        branchedPier(base: 0, height: (galleryCeiling[0] - galleryFloor[0]), span: (arcadePitch / 2), foot: [shellTileHalf, shellTileHalf])
+      }
+    }
+  }
   // The nave's end: a slim pier either side of each tall bay, whose branches arch over the bay's head.
   prototype "gallery-nave-pier" {
     document {
@@ -963,7 +975,7 @@ template shellPlacements() {
   }
   for pier in shellPiers {
     placement $"gallery-{pier.id}" {
-      prototype: "gallery-pier"
+      prototype: pier.prototype
       parent: "gallery"
       position [pier.x, pier.y, pier.z]
       yawDegrees: pier.yaw

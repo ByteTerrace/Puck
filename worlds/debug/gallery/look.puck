@@ -40,6 +40,10 @@ let lookLevelToybox = (lookLevelHall with {
   ceiling: "#FFF3D6", coffer: "#FF9BB8", cofferTone: "#8FD8FF"
 })
 let lookLevels = [lookLevelHall, lookLevelToybox, lookLevelHall, lookLevelHall]
+// The toybox's arcade: each of level 1's piers in a soft pastel instead of the hall's teal, the six colours stepping
+// along the arcade from the west wall and repeating, the same at each north and south pair so the nave stays balanced:
+// mint, lilac, peach, butter, sky, rose.
+let lookToyPiers = ["#9FE3C6", "#C6B3EA", "#FFC9A8", "#FFE98F", "#9ED4F5", "#FFA9C8"]
 // A tile's joint's width, in metres (the tile's side is the plan's module, layout.puck's galleryTile), and how smooth
 // the glaze is.
 let lookTileJoint = 0.01
