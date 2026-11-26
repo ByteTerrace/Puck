@@ -160,6 +160,11 @@ public sealed record WorldGravityAreaVector(
 /// <param name="JoinSpeed">The speed, in world units per second, at which a body away from the orbit closes on it
 /// once it rides again, on top of the orbit's own motion: it catches the rails rather than jumping onto them. Zero,
 /// the default, puts the body on the orbit at once.</param>
+/// <param name="PhaseBy">A <c>Fixed</c> state row whose value's fractional part is the orbit's phase, in place of
+/// the engine tick: one whole unit of the row is one turn, and <paramref name="Phase"/> is added to it. The row is
+/// the orbit's clock, so a row another world owns and this one follows places the orbit where that world's clock
+/// says, and writing or holding the row moves or holds the body. <paramref name="PeriodSeconds"/> then states the
+/// period the row's own advance gives and places nothing. Absent reads the engine tick.</param>
 public sealed record WorldGravityOrbit(
     [property: DocumentText("an orbit name")] string Name,
     [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)] string Around,
@@ -173,7 +178,9 @@ public sealed record WorldGravityOrbit(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? BodyIndex = null,
     [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Riding = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float JoinSpeed = 0f
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float JoinSpeed = 0f,
+    [property: DocumentName(WorldNameKind.State, WorldNameRole.Names)]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? PhaseBy = null
 );
 /// <summary>A far mass whose pull reaches this world as a tide: the difference of its pull across the world, since
 /// the pull itself moves the world's frame with everything in it and is dropped.</summary>
@@ -635,6 +642,8 @@ public readonly record struct FixedWorldGravity(
 /// <param name="RidingRow">The state row whose nonzero value keeps the body on the orbit, or <see langword="null"/>
 /// for a body that always rides.</param>
 /// <param name="JoinSpeed">The speed at which a body away from the orbit closes on it, or zero to join at once.</param>
+/// <param name="PhaseRow">The <c>Fixed</c> state row whose fractional part is the phase, or <see langword="null"/> for
+/// an orbit that reads the engine tick.</param>
 public readonly record struct FixedWorldGravityOrbit(
     string Name,
     FixedVector3 AuthoredCenter,
@@ -644,13 +653,26 @@ public readonly record struct FixedWorldGravityOrbit(
     ulong PhaseOffset,
     int BodyIndex,
     string? RidingRow,
-    FixedQ4816 JoinSpeed
+    FixedQ4816 JoinSpeed,
+    string? PhaseRow = null
 ) {
     /// <summary>Returns the orbit's position relative to its focus at an engine tick: one integer division for the
     /// phase and one closed-form evaluation, whatever ticks were evaluated before.</summary>
     /// <param name="engineTick">The engine tick.</param>
     /// <returns>The offset from the focus, in world units.</returns>
     public FixedVector3 OffsetAt(ulong engineTick) => Orbit.PositionAt(phase: unchecked((FixedConicOrbit.Phase(elapsedTicks: engineTick, periodTicks: PeriodTicks) + PhaseOffset)));
+    /// <summary>Returns the orbit's position relative to its focus where a clock row stands
+    /// (<see cref="WorldGravityOrbit.PhaseBy"/>): the row's fractional part is the turn, which the authored phase
+    /// offsets.</summary>
+    /// <param name="clock">The clock row's value; one whole unit is one turn.</param>
+    /// <returns>The offset from the focus, in world units.</returns>
+    public FixedVector3 OffsetAt(FixedQ4816 clock) => Orbit.PositionAt(phase: unchecked((TurnOf(clock: clock) + PhaseOffset)));
+
+    /// <summary>Returns a clock value's fractional part as a fraction of one turn scaled by 2^64, the form
+    /// <see cref="FixedConicOrbit.PositionAt"/> reads.</summary>
+    /// <param name="clock">The clock value; one whole unit is one turn.</param>
+    /// <returns>The turn.</returns>
+    public static ulong TurnOf(FixedQ4816 clock) => (unchecked((ulong)clock.Value) << (64 - FixedQ4816.FractionBitCount));
 
     /// <summary>Attempts to lower an authored orbit to fixed point.</summary>
     internal static bool TryCompile(WorldGravityOrbit orbit, WorldPlacement placement, CompiledPlacementFrame frame, out FixedWorldGravityOrbit compiled) {
@@ -702,6 +724,7 @@ public readonly record struct FixedWorldGravityOrbit(
                 PeriodTicks: periodTicks,
                 // The authored phase is a fraction of a turn; only its fractional part places the body.
                 PhaseOffset: ((ulong)(((double)(orbit.Phase - MathF.Floor(x: orbit.Phase))) * 18446744073709551616d)),
+                PhaseRow: orbit.PhaseBy,
                 RidingRow: orbit.Riding
             );
 

@@ -615,6 +615,21 @@ public static class WorldProjection {
             _ = keyed.TryAdd(key: value.Track.Clock, value: value.Path);
         }
 
+        // A light's source rides each of its orbits on a clock, which the recipient reads to place it.
+        if (definition.Render.Lighting?.Lights is { } lights) {
+            for (var index = 0; (index < lights.Count); index++) {
+                if (lights[index] is not WorldRenderLight.Directional { Source.Orbits: { } orbits }) {
+                    continue;
+                }
+
+                for (var orbit = 0; (orbit < orbits.Count); orbit++) {
+                    if (orbits[orbit]?.Clock is { } orbitClock) {
+                        _ = keyed.TryAdd(key: orbitClock, value: $"render.lighting.lights[{index}].source.orbits[{orbit}]");
+                    }
+                }
+            }
+        }
+
         return keyed;
     }
     // A state clock reads its row's slot, so a keyed value on it is a reading of that cell: a recipient that may not

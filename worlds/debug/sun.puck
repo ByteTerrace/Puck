@@ -1,36 +1,82 @@
 // The sun: a world of its own, the third body of the debug world's small system with the planet under the valley and
-// the moon. It has no ground to stand on. It owns two values, its light and its mass, and the worlds about it follow
-// them (sun-watch.puck for the debug world, moon.puck for the moon), each reading what this world wrote as long ago as
-// light takes to reach it (moon-frame.puck's delays). No world lights or pulls another directly: each lights itself
-// from the light it has received and feels the tide of the mass it has received.
+// the moon, and a place a traveller can stand beside. The star is a body here (moon-frame.puck's `sunStar`): it rides
+// the day's turn about the valley floor, the same turn every world of the system places its sun on, so the sun in the
+// valley's sky and the ball of fire that passes this world's outpost are one thing on one clock.
 //
-// The sun can go out. The debug world owns a switch (`sunSwitch`, sun-watch.puck); this world follows it, across the
-// same distance, and its own rules decide what the switch does here. When it goes out the dark and the lost pull reach
-// the moon first and the valley a little over half a second later, and the same when it lights again.
+// This world is centred on that outpost, Perihelion: a rock `sunPassGap` metres inside the star's path, which the
+// star passes once a day at `sunPassHour`. The sun painting in the debug world's painting wing (paintings.puck) opens
+// onto the frame on its pad. Most of the day the star is a disc far across the void; near the pass it fills a third
+// of the sky, its pull reaches for whatever leaves the rock, and its heat burns a body that comes within
+// `sunLethal` metres of its centre. sun.md beside this file says how to get here and what to look at.
+//
+// The star owns two values the worlds about it follow, its light and its mass (sun-watch.puck for the debug world,
+// moon.puck for the moon), each reading what this world wrote as long ago as light takes to reach it
+// (moon-frame.puck's delays). No world lights or pulls another directly: each lights itself from the light it has
+// received and feels the tide of the mass it has received. The sun can go out: the debug world owns a switch
+// (`sunSwitch`, sun-watch.puck); this world follows it, across the same distance, and its own rules decide what the
+// switch does here. When it goes out the dark and the lost pull reach the moon first and the valley a little later,
+// and the same when it lights again.
 // Boot the debug world, never this one.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "sun"
 
+// The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's size.
+import "moth-controls"
+import "size"
+import "painting-kit"
+import "place-kit"
 import "moon-frame"
+import "../standard/gravity"
+import "../standard/kits"
+import "../standard/skies"
+import "../standard/stars"
+import "../standard/visitors"
+
+// The sun draws no HUD panels; controls.puck supplies its cursor.
+hud {
+  panels []
+}
 
 metadata {
   title: "Sun"
-  description: "The sun of the debug world's small system: a world that owns its light and its mass, which the debug world and the moon follow after light's delay."
+  description: "The sun of the debug world's small system: a star that circles the double planet once a day, seen from an outpost on a rock it passes, and the light and mass the debug world and the moon follow after light's delay."
 }
 
-// The debug world and the moon observe the sun whole as sessions; nobody stands here.
+// The outpost's rock: a ball about the origin with a level pad cut on top, and the pull that holds a body to it.
+let rockRadius = 14
+let rockPull = 14
+let rockReach = 60
+let padHalf = 5
+let padTop = (rockRadius - 1.2)
+
+// The star's body: the population body that rides the day's turn, and how near its centre a body may come.
+let sunBody = 8
+let sunLethal = (sunStar.radius + 160)
+let sunWarning = (sunStar.radius + 900)
+let sunReach = 4000
+
+bodies {
+  capacity: 9
+  localSeats: 4
+  networkPlayers: 4
+  reconnectGraceSeconds: 3
+}
+
+// The debug world and the moon observe the sun whole as sessions; arriving visitors receive the standard visitor row.
 admission [
   {
     admits: Session
     disclosure: Replica
     domain: "*"
     grants [
+      { budget: 8, capability: Drive, exclusive: true }
       { budget: 64, capability: Observe, subject: "all" }
     ]
     mode: FederatedAuthority
   }
+  visitorAdmissionRow(domain: "*")
 ]
 
 references [
@@ -41,8 +87,53 @@ destinations [
   { durability: persisted, name: "debug", reference: "debug", scope: global }
 ]
 
+views {
+  nestingDepth: 3
+}
+
+collision {
+  contactSkin: 0.02
+  defaultHold: true
+  gradientProbe: 0.05
+  gridCellSize: 0
+  maxIterations: 4
+  maxSlopeDegrees: 60
+  requirements [GradientDerivedUp]
+}
+
+// The rock holds a body within its reach, and the star pulls everything else: its surface pull at its surface,
+// falling with the square of the distance. A body that leaves the rock while the star passes falls toward the star.
+gravity {
+  attractors []
+  gravitationalConstant: 0
+  isActive: true
+  softeningLength: 0.5
+  solver: Pairwise
+  uniform [0, 0, 0]
+  areas [
+    starPull(of: sunStar, placement: "sun-ball", reach: sunReach, priority: 1)
+    ballPull(placement: "rock-core", reach: rockReach, pull: rockPull, radius: rockRadius, blend: 12, priority: 2)
+  ]
+  orbits [
+    starRail(of: sunStar, turn: sunTurn, around: "system-centre", periodSeconds: sharedDaySeconds, body: sunBody)
+  ]
+}
+
+timeline {
+  clocks [{ name: day, state: day, spanSeconds: 24h }]
+}
+
 state {
   world [
+    // The day the system shares (moon-frame.puck): the debug world's own `day`, which this row follows, so writing or
+    // holding the day in the valley moves or holds the star here.
+    {
+      name: "day"
+      kind: "Fixed"
+      value: $"{sharedDayStart / 24}"
+      advance { perSecondNumerator: 1, perSecondDenominator: sharedDaySeconds }
+      follows { destination: "debug" }
+    }
     // The debug world's switch, read here as long after it was thrown as the distance takes.
     {
       name: "sunSwitch"
@@ -55,6 +146,8 @@ state {
     // What this world publishes: its light and its mass, each a share of the whole.
     { name: "sunLight", kind: "Fixed", value: "1", min: "0", max: "1" }
     { name: "sunMass", kind: "Fixed", value: "1", min: "0", max: "1" }
+    // The star's own light here, in lux at its distance from the valley, which its rules write with its share.
+    { name: "sunLux", kind: "Fixed", value: $"{sunStar.illuminance}" }
   ]
 }
 
@@ -63,10 +156,227 @@ rule "sun-goes-out" {
   mode: Edge
   sunLight = 0
   sunMass = 0
+  sunLux = 0
 }
 rule "sun-lights" {
   when sunSwitch == 1
   mode: Edge
   sunLight = 1
   sunMass = 1
+  sunLux = sunStar.illuminance
+}
+
+// The star's heat: within `sunLethal` metres of its centre a body is burned and wakes on the pad.
+starHeat(of: sunStar, rider: sunBody, lethal: sunLethal, warning: sunWarning, spawn: "sun-arrival", name: "sun")
+
+heldKit(name: "sun")
+
+looks [
+  {
+    motion { cues [], gaitAmplitude: 0, replayFrames: false, secondsPerFrame: 0 }
+    name: "sun"
+    scale: 1
+    source: creation(prototypeId: `hidden`)
+  }
+]
+
+spawnPoints [
+  { id: "stage", position [0, (padTop + 0.05), 2], yawDegrees: 180 }
+  { id: "sun-arrival", position [0, (padTop + 0.05), 2], yawDegrees: 180 }
+]
+
+placements {
+  policy {
+    authoringHeadroomInstances: 0
+    authoringHeadroomScreens: 0
+    candidateCap: 1
+    candidateRadius: 1
+    maxPlacementScale: 1
+    minPlacementScale: 1
+    previewDeadlineFrames: 1
+  }
+
+  placement "place-perihelion" {
+    prototype: "place"
+    position [0, padTop, 0]
+    region {
+      halfExtents [40, 30, 40]
+    }
+  }
+
+  // What the rock's pull rides, and the valley floor in this world's coordinates, which the star circles.
+  placement "rock-core" {
+    prototype: "place"
+    position [0, 0, 0]
+  }
+  placement "system-centre" {
+    prototype: "place"
+    position: sunSystemCentre
+  }
+
+  placement "rock" {
+    prototype: "rock"
+    position [0, 0, 0]
+    solid
+  }
+
+  // The sun painting's counterpart, on the pad: walking into its glass arrives out of the painting.
+  placement "arrival" {
+    prototype: "frame"
+    position [0, padTop, 4]
+    yawDegrees: 0
+    faceSources [
+      {
+        face: "glass"
+        filter: linear
+        portal {
+          arrival: "mapped"
+          counterpart: "painting-sun/glass"
+          destination: "debug"
+          travel: "body"
+        }
+        source {
+          $type: "session"
+          destination: "debug"
+          fallback: "#D8D2C6"
+          projection: window
+        }
+      }
+    ]
+  }
+
+  // The star: the body the day's turn moves (kit `sun`), and the ball of fire and the pull attached to it. It starts
+  // where the turn stands at the day's start.
+  placement "sun" {
+    prototype: "hidden"
+    position [(sunSystemCentre[0] + sunAtStart[0]), (sunSystemCentre[1] + sunAtStart[1]), (sunSystemCentre[2] + sunAtStart[2])]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "sun"
+      look: "sun"
+      source: "Idle"
+    }
+  }
+  placement "sun-ball" {
+    prototype: "sun"
+    position [(sunSystemCentre[0] + sunAtStart[0]), (sunSystemCentre[1] + sunAtStart[1]), (sunSystemCentre[2] + sunAtStart[2])]
+    attach {
+      bodyIndex: sunBody
+      localOffset [0, 0, 0]
+    }
+  }
+}
+
+prototypes {
+  // The basis's floor, which this world has no use for: a speck inside the rock.
+  prototype "floor" {
+    document {
+      name: "floor"
+      palette [{ color: "#000000" }]
+      schema: "puck.creation.v1"
+      shape Box "ground" {
+        material: 0
+        position [0, 0, 0]
+        scale [1, 1, 1]
+      }
+    }
+  }
+
+  prototype "hidden" {
+    document {
+      name: "hidden"
+      schema: "puck.creation.v1"
+      palette [{ color: "#000000" }]
+      shapes []
+    }
+  }
+
+  // The rock: a scorched ball with its top cut level for the pad.
+  prototype "rock" {
+    document {
+      name: "rock"
+      schema: "puck.creation.v1"
+      palette [
+        { color: "#4A3F3A", roughness: 0.9, specular: 0.05 }
+        { color: "#8C857B", roughness: 0.7, specular: 0.1 }
+      ]
+      shape Sphere "body" {
+        material: 0
+        position [0, 0, 0]
+        scale [rockRadius, rockRadius, rockRadius]
+      }
+      shape Cylinder "pad" {
+        material: 1
+        position [0, (padTop - 0.6), 0]
+        scale [padHalf, 0.6, padHalf]
+      }
+    }
+  }
+
+  // The way back: the shared arrival frame (painting-kit.puck) in dark iron.
+  prototype "frame" {
+    document {
+      arrivalFrame(color: "#2B2622", roughness: 0.5, specular: 0.3, post: 0.12)
+    }
+  }
+
+  // The star's body. Its surface dims with the light it has left (`sunLight`, the world's first render lane).
+  prototype "sun" {
+    document {
+      starSurface(of: sunStar, name: "sun", lane: 4)
+    }
+  }
+}
+
+// Vacuum: the star, a black sky of stars, and no air between the eye and the fire. The light comes from where the
+// star stands, so the pad's shadows swing as it passes, and its strength rises as the square of its nearness.
+render {
+  farDistance: 8000
+  lanes ["state.sunLight"]
+  lighting {
+    lights [
+      starLight(of: sunStar, turns: [sunTurn], focus: sunSystemCentre, illuminance: "state.sunLux", color: "#FFF4E2")
+    ]
+  }
+  sky {
+    layers [
+      gradient(name: "void", luminance: spaceLuminance, stops: [
+        { elevation: -1, color: spaceColor }
+        { elevation: 1, color: spaceColor }
+      ])
+      stars(
+        name: "stars",
+        luminance: spaceStarLuminance,
+        density: spaceStarDensity,
+        brightness: spaceStarBrightness,
+        seed: spaceStarSeed
+      )
+      starDisc(of: sunStar)
+    ]
+  }
+  atmosphere {
+    fog {
+      density: 0
+    }
+  }
+  // A camera in vacuum meters what the star lights, not the black sky round it, and stops down as the star nears.
+  exposure {
+    mode: Auto
+    minimum: 11
+    maximum: 20
+    adaptation: 0.75
+    local: 0.5
+    band: 0.75
+    low: 0.7
+    high: 0.9
+    center: 0.25
+  }
 }

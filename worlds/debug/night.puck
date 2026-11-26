@@ -22,6 +22,7 @@ import "size"
 import "painting-kit"
 import "place-kit"
 import "../standard/visitors"
+import "../standard/stars"
 
 // The night field draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -246,14 +247,7 @@ render {
   farDistance: 120
   lighting {
     lights [
-      directional(
-        name: "key",
-        direction: [-3, 3.5, -5],
-        color: "#9DB4FF",
-        illuminance: 300lx,
-        shadow: always,
-        angularRadius: 0.2
-      )
+      sunlight(direction: [-3, 3.5, -5], color: "#9DB4FF", illuminance: 300lx)
       directional(direction: [0.7, 0.3, 0.65], color: "#7C8CC8", illuminance: 120lx)
     ]
   }

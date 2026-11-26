@@ -1,0 +1,213 @@
+// The standard's stars, a library: a sun for a world that stands alone, and a star that is a body with a place, which
+// every world of its system sees from where it stands. It hands its importers functions and templates and emits no
+// document. The engine supplies the mechanisms: a directional light that comes from a body (`directional`'s `source`),
+// a sun disc that shows that body's size, a closed-form orbit a state row turns (`gravity.orbits`' `phaseBy`), a tide
+// and a pull a body carries. Every size, colour, strength and danger here is a design an author overrides or replaces.
+//
+// A world that stands alone lights itself with `sunlight`:
+//
+//   import "../standard/stars"
+//   render { lighting { lights [sunlight(color: "#FFC27A", illuminance: 2000lx)] } }
+//
+// A system is one description of each star (`star`), shared by every world of the system as a module, and one clock
+// each world adopts (a followed state row). From the two a world writes what it sees and feels of the star:
+//
+//   let home = star(radius: 250, distance: 15000)
+//   let turn = dayTurn(clock: "day", distance: home.distance, heading: 37, noonElevation: 46)
+//   render {
+//     lighting { lights [starLight(of: home, turns: [turn])] }
+//     sky { layers [starDisc(of: home)] }
+//   }
+//   gravity { orbits [starRail(of: home, turn: turn, around: "system-centre", periodSeconds: 1440)] }
+//
+// The light's direction, its strength and the disc's size follow from where the star stands on its orbit and where the
+// viewer stands, so the star is one thing from a valley floor, from a ship climbing toward it and from beside it. The
+// world the star's body is in rides a body on the same rail (`starRail`'s `body`), wears `starSurface` on it and
+// authors its dangers with `starHeat`. Nothing about the star is sent between worlds but the clock.
+
+// A sun for a world that stands alone: the directional light named `key` (the name the Moth basis gives its sun, so a
+// world over that basis restyles the basis's light rather than adding a second), from `direction`, at `illuminance`
+// lux, casting shadows whose edge is `softness` radians soft.
+function sunlight(direction = [3, 5, -4], color = "#FFF0DC", illuminance = 100000lx, softness = 0.2, name = "key", shadow = always) = directional(
+  name: name,
+  direction: direction,
+  color: color,
+  illuminance: illuminance,
+  shadow: shadow,
+  angularRadius: softness
+)
+
+// A star: a ball `radius` metres in radius that gives `illuminance` lux at `distance` metres, in `color`. `light` names
+// the directional light every world of the system gives it, `surface` and `spots` colour its body, `glow` is the
+// luminance of that body's surface in nits, and `pull` is the acceleration a body feels at its surface, which with the
+// radius is its mass.
+function star(radius = 250, distance = 15000, illuminance = 100000, color = "#FFF0DC", light = "key", surface = "#FFE2B0", spots = "#B4410F", glow = 120000, pull = 30) = {
+  radius: radius
+  distance: distance
+  illuminance: illuminance
+  color: color
+  light: light
+  surface: surface
+  spots: spots
+  glow: glow
+  pull: pull
+}
+
+// A day's turn: the orbit, about the world that sees it, of a star that rises due east of `heading` degrees at six on
+// `clock`, stands `noonElevation` degrees up at noon and sets at eighteen, `distance` metres away. `clock` is a
+// timeline clock one turn of which is one day (a state clock over the row of the same name, as `dayCycle` declares).
+// The same star as `skies.puck`'s `sunDirection` places it: a circle through the east point and the noon point.
+function dayTurn(clock, distance, heading = 0, noonElevation = 60) = {
+  clock: clock
+  semiMajorAxis: distance
+  inclinationDegrees: noonElevation
+  ascendingNodeDegrees: (0 - heading)
+  phase: 0.75
+}
+
+// A star's turn about the common centre of a pair or a cluster: an orbit `separation` metres from that centre, read
+// on `clock`, one turn of which is one period, tilted `inclination` degrees and standing `phase` of a turn round at
+// the clock's zero. A star of a pair rides the pair's day turn and then this one (`starLight`'s `turns`), and its
+// companion the same turn half a turn on.
+function pairTurn(clock, separation, inclination = 0, node = 0, phase = 0, eccentricity = 0) = {
+  clock: clock
+  semiMajorAxis: separation
+  eccentricity: eccentricity
+  inclinationDegrees: inclination
+  ascendingNodeDegrees: node
+  phase: phase
+}
+
+// A star's light in a world of its system: the directional light named by the star's `light`, coming from the star where
+// `turns` put it about `focus` (the system's centre in this world's coordinates). `turns` are the orbits it rides in
+// order, each about the point the ones before it reach; none stands the star at `focus`. The light gives the star's
+// illuminance at the star's distance and falls with the square of the distance from there; `illuminance` restates it
+// for a world that keys or binds it (a horizon that hides the star, light that arrives late). `softness` is the edge
+// of its shadows in radians, a look; absent, the shadows are as soft as the star is wide.
+function starLight(of, turns = [], focus = [0, 0, 0], illuminance = null, color = null, softness = null, shadow = always) = directional(
+  name: $"{of.light}",
+  color: (color ?? of.color),
+  illuminance: (illuminance ?? of.illuminance),
+  shadow: shadow,
+  angularRadius: softness,
+  source: { position: focus, orbits: turns, radius: of.radius, distance: of.distance }
+)
+
+// The star in a world's sky: a disc about its light, as wide as the star stands from the viewer, so it grows as she
+// nears it and is the body's own outline where the body is too far to draw. `intensity` is its brightness against
+// the layer's luminance.
+function starDisc(of, name = "sun", intensity = 12, color = "#FFF1D6") = sunDisc(
+  name: name,
+  follows: $"{of.light}",
+  intensity: intensity,
+  color: color
+)
+
+// The rail a star rides in a world of its system: the `gravity.orbits` row of `turn` about the placement `around`
+// (the system's centre in this world), turned by the state row the turn's clock reads, so the star stands where that
+// clock says in every world that follows it. `periodSeconds` is how long the row takes to count one. `body` is the
+// population body that rides the rail in the world the star is a place in; a world that only sees and feels the star
+// names none, and its tide reads the rail (`tides [{ orbit: name, ... }]`).
+function starRail(of, turn, around, periodSeconds, name = null, body = null) = {
+  name: (name ?? $"{of.light}")
+  around: around
+  semiMajorAxis: turn.semiMajorAxis
+  periodSeconds: periodSeconds
+  eccentricity: (turn.eccentricity ?? 0)
+  inclinationDegrees: turn.inclinationDegrees
+  ascendingNodeDegrees: turn.ascendingNodeDegrees
+  phase: turn.phase
+  phaseBy: turn.clock
+  bodyIndex: body
+}
+
+// The star's tide on a world of its system: the pull of its mass as it reaches a world it does not stand in, read
+// from the rail of that name. `scale` is a state row that scales the mass (a followed row carries the star's own).
+function starTide(of, rail = null, scale = null) = {
+  orbit: (rail ?? $"{of.light}")
+  surfaceGravity: of.pull
+  referenceRadius: of.radius
+  scale: scale
+}
+
+// The star's own pull, in the world it is a place in: toward `placement` (a placement attached to the body that rides
+// the rail), the star's surface pull at its surface and falling with the square of the distance out to `reach`.
+function starPull(of, placement, reach, blend = 0, priority = 1) = {
+  placementId: placement
+  priority: priority
+  mode: Replace
+  bounds: sphere(radius: reach)
+  acceleration: point(surfaceGravity: of.pull, referenceRadius: of.radius)
+  blend: blend
+}
+
+// The star's body, a creation document: one ball of the star's radius whose surface shines by its own light, with
+// darker cells that drift across it. Expand it inside a prototype's `document`, and attach a placement of that
+// prototype to the body that rides the star's rail. `churn` is how fast the cells drift, in metres a second,
+// `cells` how many of them span the radius and `cover` the share of the surface they darken. `lane` is a render lane
+// whose value scales the surface's light, for a star that can dim; absent, it shines whole.
+template starSurface(of, name = "star", churn = 6, cells = 5, cover = 0.35, lane = null) {
+  name: name
+  schema: "puck.creation.v1"
+  palette [
+    {
+      color: of.surface
+      roughness: 1
+      specular: 0
+      emissive: of.glow
+      emissiveLane: lane
+      flow {
+        frame: Object
+        velocity [churn, (churn * 0.4), 0]
+        scale: (cells / of.radius)
+        stretch: 1.6
+        cycle: 16
+        tilt: 0
+        coverage: cover
+        softness: 0.45
+        surface { color: of.spots, roughness: 1, metal: 0 }
+        seed: 3
+      }
+    }
+  ]
+  shape Sphere "photosphere" {
+    material: 0
+    position [0, 0, 0]
+    scale [of.radius, of.radius, of.radius]
+  }
+}
+
+// The star's heat, as rules of the world it is a place in. A body within `lethal` metres of the centre of the star
+// (the population body `rider`, which rides its rail) is burned: it is stood at `spawn`, and the `burned` row counts
+// it. Between `lethal` and `warning` metres the row `<name>Heat` reads how far in the nearest such body of the seats
+// is, from zero at the warning distance to one at the lethal one, for a look or a cue to read. The star itself and
+// whatever rides it are not judged.
+template starHeat(of, rider, lethal, warning, spawn, name = "star") {
+  state {
+    world [
+      { name: $"{name}Burned", kind: "Int", value: 0, min: 0 }
+      { name: $"{name}Heat", kind: "Fixed", value: "0", min: "0", max: "1" }
+    ]
+  }
+
+  rule $"{name}-burn" {
+    local dx = bodyPosition(each, x) - bodyPosition(body, rider, x)
+    local dy = bodyPosition(each, y) - bodyPosition(body, rider, y)
+    local dz = bodyPosition(each, z) - bodyPosition(body, rider, z)
+    when ((dx * dx) + (dy * dy) + (dz * dz)) < (lethal * lethal) and ((dx * dx) + (dy * dy) + (dz * dz)) > 1
+    mode: Level
+    forEach: $bodies
+    pose(key: $each, spawnPoint: spawn)
+    $"{name}Burned" = $"{name}Burned" + 1
+  }
+
+  rule $"{name}-heat" {
+    local dx = bodyPosition(body, 0, x) - bodyPosition(body, rider, x)
+    local dy = bodyPosition(body, 0, y) - bodyPosition(body, rider, y)
+    local dz = bodyPosition(body, 0, z) - bodyPosition(body, rider, z)
+    local near = squareRoot((dx * dx) + (dy * dy) + (dz * dz))
+    when 1 == 1
+    mode: Level
+    $"{name}Heat" = clamp((warning - near) / (warning - lethal), 0, 1)
+  }
+}

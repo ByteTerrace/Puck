@@ -5,6 +5,7 @@ basis: "shade-checks"
 documentId: "shade-surface-checks"
 import "../standard/styles"
 import "../standard/water"
+import "../standard/stars"
 
 shade template shadowProbe() {
   surface {
@@ -23,14 +24,7 @@ render {
   lanes ["state.shadeWrap", "state.shadeTilt"]
   lighting {
     lights [
-      directional(
-        name: "key",
-        direction: [1, 1, 1],
-        color: "#FFFFFF",
-        illuminance: 100000lx,
-        shadow: always,
-        angularRadius: 0.2
-      )
+      sunlight(direction: [1, 1, 1], color: "#FFFFFF")
     ]
   }
   sky {

@@ -28,6 +28,7 @@ import "place-kit"
 import "../standard/visitors"
 import "../standard/gravity"
 import "../standard/kits"
+import "../standard/stars"
 
 // The galaxy draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -552,14 +553,7 @@ render {
   farDistance: 400
   lighting {
     lights [
-      directional(
-        name: "key",
-        direction: [3, 5, -4],
-        color: "#FFF4E2",
-        illuminance: 60000lx,
-        shadow: always,
-        angularRadius: 0.0046
-      )
+      sunlight(color: "#FFF4E2", illuminance: 60000lx, softness: 0.0046)
     ]
   }
   sky {
