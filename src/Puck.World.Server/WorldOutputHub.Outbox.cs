@@ -280,7 +280,7 @@ public sealed partial class WorldOutputHub {
                 break;
             }
             case RecordKind.Definition: route!.ReplayDefinition((WorldDefinition)record.Payload!, record.Version, in record.Stream); break;
-            case RecordKind.Presentation: route!.ReplayPresentation((WorldDefinition)record.Payload!, record.Rows!, record.Version, in record.Stream); break;
+            case RecordKind.Presentation: route!.ReplayPresentation(record.Rows!, record.Version, in record.Stream); break;
             case RecordKind.State: route!.ReplayState((WorldDefinition)record.Payload!, record.Version, in record.Stamp, in record.Stream); break;
             case RecordKind.Cut: route!.ReplayCut(in record.Stream, record.Terminal); break;
             case RecordKind.CloseSpan: route!.ReplayCloseSpan(record.Stream.Stream); break;
@@ -372,8 +372,8 @@ public sealed partial class WorldOutputHub {
     }
     internal void RecordDefinition(WorldSinkRoute route, WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) =>
         Add(new Record { Kind = RecordKind.Definition, Route = route, Payload = definition, Version = version, Stream = stream });
-    internal void RecordPresentation(WorldSinkRoute route, WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) =>
-        Add(new Record { Kind = RecordKind.Presentation, Route = route, Payload = definition, Rows = rows, Version = version, Stream = stream });
+    internal void RecordPresentation(WorldSinkRoute route, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) =>
+        Add(new Record { Kind = RecordKind.Presentation, Route = route, Rows = rows, Version = version, Stream = stream });
     internal void RecordCut(WorldSinkRoute route, in WorldStreamStamp stream, bool terminal) =>
         Add(new Record { Kind = RecordKind.Cut, Route = route, Stream = stream, Terminal = terminal });
     internal void RecordCloseSpan(WorldSinkRoute route, ulong span) =>
@@ -445,14 +445,13 @@ public sealed class WorldSinkRoute {
         if (m_faulted) { return; }
         if (Defers) { m_hub.RecordDefinition(this, definition, version, in stream); } else { m_sink.DeliverDefinition(definition, version, in stream); }
     }
-    /// <summary>Hands the sink changed creation and shade rows.</summary>
-    /// <param name="definition">The definition the rows complete.</param>
+    /// <summary>Hands the sink the rows that moved over the definition it holds.</summary>
     /// <param name="rows">The changed rows.</param>
-    /// <param name="version">The version of <paramref name="definition"/>.</param>
+    /// <param name="version">The version the held definition stands at once the rows apply.</param>
     /// <param name="stream">The stamp of the record in its stream.</param>
-    public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+    public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (m_faulted) { return; }
-        if (Defers) { m_hub.RecordPresentation(this, definition, rows, version, in stream); } else { m_sink.DeliverPresentation(definition, rows, version, in stream); }
+        if (Defers) { m_hub.RecordPresentation(this, rows, version, in stream); } else { m_sink.DeliverPresentation(rows, version, in stream); }
     }
     /// <summary>Hands the sink a value-only definition; a recorded hand-off holds a copy of the moved rows.</summary>
     /// <param name="definition">The definition.</param>
@@ -499,9 +498,9 @@ public sealed class WorldSinkRoute {
         if (m_faulted) { return; }
         try { m_sink.DeliverDefinition(definition, version, in stream); } catch (Exception exception) { m_faulted = true; m_fault(exception); }
     }
-    internal void ReplayPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+    internal void ReplayPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (m_faulted) { return; }
-        try { m_sink.DeliverPresentation(definition, rows, version, in stream); } catch (Exception exception) { m_faulted = true; m_fault(exception); }
+        try { m_sink.DeliverPresentation(rows, version, in stream); } catch (Exception exception) { m_faulted = true; m_fault(exception); }
     }
     internal void ReplayState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         if (m_faulted) { return; }

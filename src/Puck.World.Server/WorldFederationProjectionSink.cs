@@ -293,7 +293,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     }
     public void DeliverSessionLever(WorldSessionLever lever) { }
 
-    public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+    public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (!Current()) { return; }
         // A body policy that moved with the edit owes a cut, which the row path refuses so the document door primes it.
         _ = ObserveBodies();

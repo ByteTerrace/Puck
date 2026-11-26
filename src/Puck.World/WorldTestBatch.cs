@@ -370,6 +370,7 @@ internal sealed class WorldTestBatch {
         public void DeliverAnswer(in QueryAnswer answer) { }
         public void DeliverComposition(WorldComposition composition) { }
         public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) { }
+        public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) { }
         public void DeliverCut(in WorldStreamStamp stream, bool terminal) { }
         public void CloseSpan(ulong stream) { }
         public void DeliverSessionLever(WorldSessionLever lever) { }

@@ -832,10 +832,11 @@ public sealed class WorldSessionMirror : IClientSink {
 
     // Adopts a delivered definition through the state view, the mirror's one door for documents, and publishes it with
     // its version as one pair; the same pair delivered again is kept, so a repeated delivery allocates nothing. Returns
-    // the published definition.
-    private WorldDefinition Publish(WorldDefinition definition, WorldDocumentVersion version) {
+    // the published definition. valuesFollow is the state view's (WorldDocumentStateView.Adopt): the delivery kept the
+    // state section's shape, so the view keeps the arena and field cells it holds, as a client's does.
+    private WorldDefinition Publish(WorldDefinition definition, WorldDocumentVersion version, bool valuesFollow = false) {
         lock (m_followGate) {
-            var adopted = m_stateView.Adopt(delivered: definition);
+            var adopted = m_stateView.Adopt(delivered: definition, valuesFollow: valuesFollow);
 
             m_previousDelivered = m_lastDelivered;
             m_lastDelivered = definition;
@@ -877,15 +878,20 @@ public sealed class WorldSessionMirror : IClientSink {
         ApplyDefinition(definition: definition, version: version);
     }
     /// <inheritdoc/>
-    public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+    /// <remarks>The rows apply to the held definition without reshaping the state view, which the rows never move.
+    /// Rows that moved placement holdings alone, none of them on a row showing a creation that derives a facet, leave
+    /// the composing revision to the scene that presents them, as a state delivery that moved them does.</remarks>
+    public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (!m_ingress.Admit(stream: in stream)) { return; }
         var started = Stopwatch.GetTimestamp();
         lock (m_snapshotWriteGate) {
             lock (m_followGate) {
-                if (!rows.TryApply(Document.Definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the mirror's creation roster."); }
-                _ = Publish(changed, version);
+                var held = Document.Definition;
+                if (!rows.TryApply(held, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the mirror's creation roster and placement rows."); }
+                var adopted = Publish(changed, version, valuesFollow: true);
+                _ = WorldPlacementResponse.CompareRows(after: adopted, before: held, holdings: out var holdings, rows: rows, solid: out _);
                 _ = Interlocked.Increment(ref m_definitionRevision);
-                _ = Interlocked.Increment(location: ref m_composingRevision);
+                if (!(holdings && rows.MovesHoldingsOnly)) { _ = Interlocked.Increment(location: ref m_composingRevision); }
             }
         }
         DocumentDelivered?.Invoke(Document);
@@ -1169,9 +1175,13 @@ public sealed class WorldSessionMirror : IClientSink {
         // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
         // Publish the definition and its stamped clock together with respect to followers, including event readers.
         lock (m_followGate) {
-            var previous = Volatile.Read(location: ref m_document).Definition;
+            var document = Volatile.Read(location: ref m_document);
+            var previous = document.Definition;
+            // The values follow in the snapshots, under the same state section, exactly when WorldClient.DeliverState
+            // keeps its view's shape: a value-only delivery within one activation.
             var adopted = Publish(
                 definition: definition,
+                valuesFollow: (stamp.ArenaValues && (version.Activation == document.Version.Activation)),
                 version: version
             );
 
