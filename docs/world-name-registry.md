@@ -996,6 +996,88 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].motion.shaping[].when[not].predicate…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].motion.shaping[].dynamics` | Dynamics | Names | Read | `WorldShaping.Dynamics` |
 | `kits.rows[].motion.holds[].cone` | State | Binding | Binding | `WorldHold.Cone` |
+| `kits.rows[].motion.holds[].restore.when[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `kits.rows[].motion.holds[].restore.when[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `kits.rows[].motion.holds[].restore.when[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `kits.rows[].motion.holds[].restore.when[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].restore.when[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].motion.holds[].restore.when[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].motion.holds[].restore.when[not].predicate…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].motion.holds[].when[compareState].state` | State | Names | Read | `ActionPredicate.CompareState.State` |
+| `kits.rows[].motion.holds[].when[compareState].key` | State | Key | Read | `ActionPredicate.CompareState.Key` |
+| `kits.rows[].motion.holds[].when[compareState].comparandState` | State | Names | Read | `ActionPredicate.CompareState.ComparandState` |
+| `kits.rows[].motion.holds[].when[compareState].comparandKey` | State | Key | Read | `ActionPredicate.CompareState.ComparandKey` |
+| `kits.rows[].motion.holds[].when[compareValue].left` | State | Expression | Read | `ActionPredicate.CompareValue.Left` |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].when[compareValue].right` | State | Expression | Read | `ActionPredicate.CompareValue.Right` |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[state].name` | State | Names | Read | `InstructionPayload.State.Name` |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[state].key` | State | Key | Read | `InstructionPayload.State.Key` |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[vector].left[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[vector].left[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[vector].right[cell].name` | State | Names | Read | `VectorOperand.Cell.Name` |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[vector].right[cell].key` | State | Key | Read | `VectorOperand.Cell.Key` |
+| `kits.rows[].motion.holds[].when[all].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].motion.holds[].when[any].predicates[]…` | | | | re-enters `ActionPredicate` |
+| `kits.rows[].motion.holds[].when[not].predicate…` | | | | re-enters `ActionPredicate` |
 | `kits.rows[].producers{*}.flock.cohesionAffinity` | State | Expression | Read | `WorldFlockProfile.CohesionAffinity` |
 | `kits.rows[].producers{*}.flock.cohesionAffinity{instructions}[board].topology` | Topology | Names | Read | `InstructionPayload.Board.Topology` |
 | `kits.rows[].producers{*}.flock.cohesionAffinity{instructions}[fold].family` | State | Names | Read | `InstructionPayload.Fold.Family` |
@@ -4893,6 +4975,78 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].motion.holds[].name` | `WorldHold.Name` | a hold name, local to its kit |
 | `kits.rows[].motion.holds[].release` | `WorldHold.Release` | logical input channels |
 | `kits.rows[].motion.holds[].spend.state` | `WorldHoldSpend.State` | a per-body slot name |
+| `kits.rows[].motion.holds[].restore.state` | `WorldHoldRestore.State` | a per-body slot name |
+| `kits.rows[].motion.holds[].restore.when[compareState].text` | `ActionPredicate.CompareState.Text` | literal text |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].restore.when[compareValue].left{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].restore.when[compareValue].right{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].restore.when[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `kits.rows[].motion.holds[].restore.when[held].channel` | `WorldPredicate.Held.Channel` | logical input channels |
+| `kits.rows[].motion.holds[].when[compareState].text` | `ActionPredicate.CompareState.Text` | literal text |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].when[compareValue].left{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].when[compareValue].left{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].when[compareValue].right{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[vector].left[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[vector].left[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[vector].right[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[vector].right[embed].space` | `VectorOperand.Embed.Space` | an embedding space |
+| `kits.rows[].motion.holds[].when[compareValue].right{subprograms}{instructions}[vector].right[literal].value` | `VectorOperand.Literal.Value` | encoded vector components |
+| `kits.rows[].motion.holds[].when[timerElapsed].state` | `WorldPredicate.TimerElapsed.State` | a per-body slot name |
+| `kits.rows[].motion.holds[].when[held].channel` | `WorldPredicate.Held.Channel` | logical input channels |
+| `kits.rows[].motion.holds[].mantle.state` | `WorldHoldMantle.State` | a per-body slot name |
 | `kits.rows[].producers{*}.channels` | `BodyProgramParameters.Channels` | logical input channels |
 | `kits.rows[].producers{*}.flock.movementDomain` | `WorldFlockProfile.MovementDomain` | a navigation domain |
 | `kits.rows[].producers{*}.flock.cohesionAffinity{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |

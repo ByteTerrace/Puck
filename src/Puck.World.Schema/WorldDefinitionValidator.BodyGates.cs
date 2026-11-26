@@ -131,7 +131,7 @@ public static partial class WorldDefinitionValidator {
                 break;
             case WorldPredicate.Held held:
                 if (channelNames is null) {
-                    errors.Add(item: $"{path} is 'held' — legitimate only inside a kit's shaping-row gate, not an action trigger.");
+                    errors.Add(item: $"{path} is 'held', which this gate has no channel table to resolve.");
                 } else if (string.IsNullOrWhiteSpace(value: held.Channel) || !channelNames.Contains(item: held.Channel)) {
                     errors.Add(item: $"{path}.channel '{held.Channel}' names no declared composition channel.");
                 }

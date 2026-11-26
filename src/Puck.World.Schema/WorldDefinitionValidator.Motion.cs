@@ -473,7 +473,7 @@ public static partial class WorldDefinitionValidator {
     // ResolveHold takes it only when the world's own lattice offers a medium column where the body stands
     // (WorldBody.Hold.cs's ResolveHold: `if (m_mediumSurface is not null) { chosen = index; } else { continue; }`),
     // so a body outside its medium is exactly the case a Medium-only hold list leaves with nothing to fall to.
-    private static bool HoldIsUnconditional(WorldHold hold) => ((hold is not null) && (hold.Bond == BodyHoldBond.Free) && (hold.Release is null) && (hold.Spend is null));
+    private static bool HoldIsUnconditional(WorldHold hold) => ((hold is not null) && (hold.Bond == BodyHoldBond.Free) && (hold.Release is null) && (hold.Spend is null) && (hold.When is null));
     // The ordered hold list: a unique name per row, a cone inside [0, 180] with min < max for a surface row (and no
     // cone at all for a free one), the kind's own operands, and every named channel/state slot resolvable. Absence,
     // and the presence of an unconditional row, are checked by the caller (ValidateMotionRow) against the compiled
@@ -682,6 +682,12 @@ public static partial class WorldDefinitionValidator {
                     value: hold.Lift
                 );
             }
+            RequireNonNegative(
+                errors: errors,
+                name: new Subject(Member: ".driveSeconds", Path: rowPath),
+                value: hold.DriveSeconds
+            );
+
             if (
                 hold.OnDrive &&
                 (hold.Bond != BodyHoldBond.Surface)
@@ -712,6 +718,83 @@ public static partial class WorldDefinitionValidator {
                     name: new Subject(Member: ".spend.ratePerSecond", Path: rowPath),
                     value: spend.RatePerSecond
                 );
+
+                if (spend.RestingRatePerSecond is { } resting) {
+                    RequireNonNegative(
+                        errors: errors,
+                        name: new Subject(Member: ".spend.restingRatePerSecond", Path: rowPath),
+                        value: resting
+                    );
+                }
+            }
+            if (hold.Restore is { } restore) {
+                if (
+                    string.IsNullOrWhiteSpace(value: restore.State) ||
+                    !stateSlots.TryGetValue(
+                    key: restore.State,
+                    value: out var restored
+                )
+                ) {
+                    errors.Add(item: $"{rowPath}.restore.state '{restore.State}' names no declared body or identity state slot.");
+                } else if (restored.Kind != ActionStateKind.Counter) {
+                    errors.Add(item: $"{rowPath}.restore.state '{restore.State}' is a {restored.Kind} slot — a hold restores a Counter.");
+                } else if (restored.Envelope is not ActionStateEnvelope.Range) {
+                    errors.Add(item: $"{rowPath}.restore.state '{restore.State}' has no range envelope — a restored slot fills to its envelope's maximum, so it must declare one.");
+                }
+
+                RequirePositiveFixed(
+                    errors: errors,
+                    name: new Subject(Member: ".restore.ratePerSecond", Path: rowPath),
+                    value: restore.RatePerSecond
+                );
+                ValidatePredicate(
+                    channelNames: channelNames,
+                    errors: errors,
+                    path: $"{rowPath}.restore.when",
+                    predicate: restore.When,
+                    stateSlots: stateSlots
+                );
+            }
+
+            ValidatePredicate(
+                channelNames: channelNames,
+                errors: errors,
+                path: $"{rowPath}.when",
+                predicate: hold.When,
+                stateSlots: stateSlots
+            );
+
+            if (hold.Mantle is { } mantle) {
+                if (hold.Hold != BodyHoldKind.Pull) {
+                    errors.Add(item: $"{rowPath}.mantle is refused for a {hold.Hold} hold — only a Pull row climbs a face that has an edge to get over.");
+                }
+
+                RequirePositiveFixed(
+                    errors: errors,
+                    name: new Subject(Member: ".mantle.height", Path: rowPath),
+                    value: mantle.Height
+                );
+                RequirePositiveFixed(
+                    errors: errors,
+                    name: new Subject(Member: ".mantle.depth", Path: rowPath),
+                    value: mantle.Depth
+                );
+
+                RequirePositive(
+                    errors: errors,
+                    name: new Subject(Member: ".mantle.seconds", Path: rowPath),
+                    value: mantle.Seconds
+                );
+                if (mantle.State is { } mantleState) {
+                    if (!stateSlots.TryGetValue(
+                        key: mantleState,
+                        value: out var mantleSlot
+                    )) {
+                        errors.Add(item: $"{rowPath}.mantle.state '{mantleState}' names no declared body or identity state slot.");
+                    } else if (mantleSlot.Kind != ActionStateKind.Timer) {
+                        errors.Add(item: $"{rowPath}.mantle.state '{mantleState}' is a {mantleSlot.Kind} slot — a mantle starts a Timer.");
+                    }
+                }
             }
         }
     }

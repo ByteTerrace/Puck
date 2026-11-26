@@ -947,12 +947,24 @@ template shellPrototypes() {
 }
 
 template shellPlacements() {
+  // The ground floor's walls can be climbed (the standard's climb ability); the upper floors' cannot, level 1's so
+  // that the toybox is not reached round its lattice.
   for k in range(0, 4) {
     placement $"gallery-walls-{k}" {
       prototype: $"gallery-walls-{k}"
       parent: "gallery"
       position [0, 0, 0]
+      grip {
+        holdable: ((k == 0) ? true : false)
+      }
       solid
+    }
+  }
+  // The central tree (tree.puck) can be climbed: its trunk and limbs hold a climber, and its treads and branch tops
+  // are ground she walks. This row adds only the grip to the placement that file declares.
+  placement "gallery-tree" {
+    grip {
+      holdable: true
     }
   }
   placement "gallery-floor-0" {

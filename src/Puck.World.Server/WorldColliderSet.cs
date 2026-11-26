@@ -1185,11 +1185,10 @@ public sealed partial class WorldColliderSet : IContactField {
         m_static.TrySupportDistance(descent: out descent, dynamicColliders: QueryAttachedSet, orientation: in orientation, position: in position,
             reach: reach, up: in up, volumes: volumes);
     /// <inheritdoc/>
-    // Searches the static and sampled moving holdable subsets, with a zero
-    // assist cone: a hold aims at the surface it is already touching, not at a target it is trying to acquire.
+    // A ray cast over the static and sampled moving holdable subsets: the first holdable surface the ray meets,
+    // whatever angle it meets it at, as the field provider's march answers.
     public bool TryHoldableSurfaceAlongDirection(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 maxDistance, out FixedSurfaceAttachCandidate candidate, out bool grantedByOverride) {
-        if (!FixedSurfaceQuery.TryNearestDirected(
-            assistHalfAngle: FixedQ4816.Zero,
+        if (!FixedSurfaceQuery.TryCast(
             candidate: out candidate,
             colliders: m_holdableColliders,
             direction: in direction,

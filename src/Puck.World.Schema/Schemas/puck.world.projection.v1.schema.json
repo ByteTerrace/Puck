@@ -2074,45 +2074,9 @@
                   ],
                   "properties": {
                     "when": {
+                      "$ref": "#/$defs/ActionPredicateNullable2",
                       "description": "The gate that must hold for this row to win, or null for the unconditional row (permitted only as the final row). The gate reuses the action-lane predicate vocabulary, admitting body-fact kinds (now/recently/all/any/not) and held (a composition channel\u0027s own live read) \u2014 never a per-body action-state predicate.",
-                      "type": [
-                        "object",
-                        "null"
-                      ],
-                      "required": [
-                        "$type"
-                      ],
-                      "anyOf": [
-                        {
-                          "$ref": "#/$defs/ActionPredicateCompareState"
-                        },
-                        {
-                          "$ref": "#/$defs/ActionPredicateCompareValue"
-                        },
-                        {
-                          "$ref": "#/$defs/ActionPredicateAll"
-                        },
-                        {
-                          "$ref": "#/$defs/ActionPredicateAny"
-                        },
-                        {
-                          "$ref": "#/$defs/ActionPredicateNot"
-                        },
-                        {
-                          "$ref": "#/$defs/WorldPredicateNow"
-                        },
-                        {
-                          "$ref": "#/$defs/WorldPredicateRecently"
-                        },
-                        {
-                          "$ref": "#/$defs/WorldPredicateTimerElapsed"
-                        },
-                        {
-                          "$ref": "#/$defs/WorldPredicateHeld"
-                        }
-                      ],
-                      "default": null,
-                      "title": "ActionPredicate"
+                      "default": null
                     },
                     "along": {
                       "description": "The along facet \u2014 see WorldShapingAlong \u2014 or null for a Dynamics row.",
@@ -2285,7 +2249,8 @@
                       "enum": [
                         "Heading",
                         "Intent",
-                        "Velocity"
+                        "Velocity",
+                        "Surface"
                       ],
                       "default": "Heading",
                       "title": "BodyHoldForward"
@@ -2320,8 +2285,16 @@
                           "type": "string"
                         },
                         "ratePerSecond": {
-                          "description": "The positive rate the slot drains at, per second.",
+                          "description": "The positive rate the slot drains at, per second, while the body is commanded to move.",
                           "type": "number"
+                        },
+                        "restingRatePerSecond": {
+                          "description": "The rate the slot drains at, per second, while nothing is commanded: zero holds the slot where it is, so a climber hanging still tires no further. null drains at RatePerSecond whether the body moves or not.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
                       "required": [
@@ -2412,6 +2385,82 @@
                     },
                     "thrust": {
                       "description": "The fraction of the kit\u0027s resolved move speed the MoveUp role commands vertically while this row holds, in every bond \u2014 0 (the default) is no vertical thrust at all, 1 is fully isotropic. A non-Medium row commanding thrust takes the vertical channel outright for the tick, clearing the ballistic carry; a medium row folds it into the medium\u0027s own displacement before that law\u0027s convergence runs.",
+                      "type": "number",
+                      "default": 0
+                    },
+                    "restore": {
+                      "description": "What the row refills while held, or null for a row that restores nothing.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "state": {
+                          "description": "The declared state.body slot name.",
+                          "type": "string"
+                        },
+                        "ratePerSecond": {
+                          "description": "The positive rate the slot fills at, per second.",
+                          "type": "number"
+                        },
+                        "when": {
+                          "$ref": "#/$defs/ActionPredicateNullable2",
+                          "description": "The gate that must hold for the slot to fill, or null to fill whenever the row holds. A fall row that restores only now(fact: Grounded) refills a body standing on any ground and not one in the air.",
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "state",
+                        "ratePerSecond"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "WorldHoldRestore"
+                    },
+                    "when": {
+                      "$ref": "#/$defs/ActionPredicateNullable2",
+                      "description": "The gate that must hold for the row to be taken or kept: facts, body registers, timers and held channels. null is a row with no condition of its own.",
+                      "default": null
+                    },
+                    "mantle": {
+                      "description": "How a body climbing off the end of this row\u0027s face gets onto what lies past it. Admitted on a Pull row only.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "height": {
+                          "description": "The greatest height above the body\u0027s feet, world units at unit scale, at which the edge is felt and over which the body is raised. Positive.",
+                          "type": "number"
+                        },
+                        "depth": {
+                          "description": "How far past the face the body steps in, world units at unit scale. Positive.",
+                          "type": "number"
+                        },
+                        "seconds": {
+                          "description": "How long the mantle takes. Positive.",
+                          "type": "number"
+                        },
+                        "state": {
+                          "description": "A declared state.body Timer slot the mantle starts for its own length, so rules and a rig can tell a mantle from a climb, or null.",
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "default": null
+                        }
+                      },
+                      "required": [
+                        "height",
+                        "depth",
+                        "seconds"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "WorldHoldMantle"
+                    },
+                    "driveSeconds": {
+                      "description": "How long a body standing on ground must keep driving into a face before OnDrive takes it, so brushing a wall is not a grab. A body in the air takes it at once. Zero, the default, takes it at once on the ground too.",
                       "type": "number",
                       "default": 0
                     }
@@ -15849,6 +15898,46 @@
       "items": {
         "$ref": "#/$defs/ActionPredicateNullable"
       }
+    },
+    "ActionPredicateNullable2": {
+      "description": "A data-composable gate over named state. A rule fires only while its gate holds. The $type string is the JSON discriminator, the same convention every polymorphic row family uses; the arms declared here are the ones this library owns, and a document project appends its own derived arms through its own rule vocabulary (RuleVocabulary.ExtendJson) rather than by editing this list.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "$type"
+      ],
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ActionPredicateCompareState"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateCompareValue"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateAll"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateAny"
+        },
+        {
+          "$ref": "#/$defs/ActionPredicateNot"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateNow"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateRecently"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateTimerElapsed"
+        },
+        {
+          "$ref": "#/$defs/WorldPredicateHeld"
+        }
+      ],
+      "title": "ActionPredicate"
     },
     "DocumentQuaternion": {
       "title": "DocumentQuaternion",

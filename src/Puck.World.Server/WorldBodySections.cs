@@ -77,6 +77,8 @@ public readonly record struct BodyPoseSection(
 /// <param name="MediumThrustRampRemainder">The medium law's thrust ramp remainder.</param>
 /// <param name="OverlayRemainder">The overlay accumulator's remainders.</param>
 /// <param name="HoldSpendRemainder">The hold spend accumulator's remainder.</param>
+/// <param name="HoldRestoreRemainder">The hold restore accumulator's remainder.</param>
+/// <param name="HoldDriveDwellTicks">How long, in engine ticks, the body has driven into a face it has not taken.</param>
 /// <param name="AttitudeTurnRemainder">The drawn-axis turn accumulator's remainder.</param>
 /// <param name="PlanarFollowerPosition">The planar dynamics follower's Q32 position raws.</param>
 /// <param name="PlanarFollowerVelocity">The planar dynamics follower's Q32 velocity raws.</param>
@@ -125,6 +127,8 @@ public readonly record struct BodyMotionSection(
     long MediumThrustRampRemainder,
     (long X, long Y, long Z) OverlayRemainder,
     long HoldSpendRemainder,
+    long HoldRestoreRemainder,
+    ulong HoldDriveDwellTicks,
     long AttitudeTurnRemainder,
     (long X, long Y, long Z) PlanarFollowerPosition,
     (long X, long Y, long Z) PlanarFollowerVelocity,
@@ -185,6 +189,8 @@ public readonly record struct BodyMotionSection(
         writer.WriteInt64(value: section.MediumThrustRampRemainder);
         WriteRaws(raws: section.OverlayRemainder, writer: writer);
         writer.WriteInt64(value: section.HoldSpendRemainder);
+        writer.WriteInt64(value: section.HoldRestoreRemainder);
+        writer.WriteUInt64(value: section.HoldDriveDwellTicks);
         writer.WriteInt64(value: section.AttitudeTurnRemainder);
         WriteRaws(raws: section.PlanarFollowerPosition, writer: writer);
         WriteRaws(raws: section.PlanarFollowerVelocity, writer: writer);
@@ -240,6 +246,8 @@ public readonly record struct BodyMotionSection(
         MediumThrustRampRemainder: reader.ReadInt64(),
         OverlayRemainder: ReadRaws(reader: ref reader),
         HoldSpendRemainder: reader.ReadInt64(),
+        HoldRestoreRemainder: reader.ReadInt64(),
+        HoldDriveDwellTicks: reader.ReadUInt64(),
         AttitudeTurnRemainder: reader.ReadInt64(),
         PlanarFollowerPosition: ReadRaws(reader: ref reader),
         PlanarFollowerVelocity: ReadRaws(reader: ref reader),

@@ -50,6 +50,9 @@ public enum BodyHoldForward : byte {
 
     /// <summary>The direction the body is travelling.</summary>
     Velocity,
+
+    /// <summary>Into the held surface: a climber faces the wall it holds, whichever way it moves along it.</summary>
+    Surface,
 }
 /// <summary>The compiled displacement law of a <see cref="BodyHoldBond.Medium"/> hold — what the medium does to a
 /// body that is in it, independent of what the body itself thrusts. Meaningless, and left zeroed, on every other
@@ -89,6 +92,22 @@ public readonly record struct FixedVerticalEnvelope(
     FixedQ4816 RiseSpeed,
     FixedQ4816 SinkSpeed
 );
+/// <summary>The compiled mantle of a <see cref="BodyHoldKind.Pull"/> row: how a body that climbs to the end of its
+/// face gets onto what lies past it. Zeroed, and inert, on a row that authors none.</summary>
+/// <param name="Height">The greatest height above the body's feet, world units at unit scale, at which the end of
+/// the face is felt and over which the body is raised; zero for a row with no mantle.</param>
+/// <param name="Depth">How far past the face the body steps in to stand, world units at unit scale.</param>
+/// <param name="DurationTicks">How long the mantle takes, in engine ticks.</param>
+/// <param name="State">The body-lane Timer slot started for the mantle's length, or <see langword="null"/>.</param>
+public readonly record struct FixedBodyMantle(
+    FixedQ4816 Height,
+    FixedQ4816 Depth,
+    ulong DurationTicks,
+    string? State
+) {
+    /// <summary>Gets whether the row authors a mantle at all.</summary>
+    public bool Exists => (Height > FixedQ4816.Zero);
+}
 /// <summary>
 /// One compiled hold: the fixed-point form of an authored hold row, in the ordered list a kit's motion row
 /// declares. <see cref="BodyMotionOp.ResolveHold"/> walks the list in order and takes the first hold the world
@@ -115,12 +134,20 @@ public readonly record struct FixedVerticalEnvelope(
 /// <param name="OnDrive">Whether driving into a face inside the cone takes the hold.</param>
 /// <param name="DriveAlignment">The least alignment, in <c>[0, 1]</c>, between the commanded direction and the
 /// face's inward normal before <see cref="OnDrive"/> takes it.</param>
+/// <param name="DriveDwellTicks">How long, in engine ticks, a body standing on ground must keep driving into a face
+/// before <see cref="OnDrive"/> takes it; zero takes it at once.</param>
 /// <param name="ReleaseOrdinal">The channel ordinal whose held read drops the hold, or <c>-1</c> for a hold no
 /// channel can drop.</param>
 /// <param name="ReleaseThreshold">That channel's own binary crossing threshold.</param>
 /// <param name="SpendState">The body-lane state slot name the hold drains while held, or <see langword="null"/> for
 /// a hold that spends nothing.</param>
-/// <param name="SpendPerSecond">The rate that slot drains at, per second.</param>
+/// <param name="SpendPerSecond">The rate that slot drains at, per second, while the body is commanded to move.</param>
+/// <param name="SpendRestingPerSecond">The rate that slot drains at, per second, while nothing is commanded.</param>
+/// <param name="RestoreState">The body-lane state slot name the hold refills while held, or <see langword="null"/>
+/// for a hold that restores nothing.</param>
+/// <param name="RestorePerSecond">The rate that slot refills at, per second.</param>
+/// <param name="Mantle">How a body climbing off the end of this row's face gets onto what lies past it. A row
+/// carrying one also keeps the body on its face where nothing lies past the edge.</param>
 /// <param name="Medium">The displacement law of a <see cref="BodyHoldBond.Medium"/> bond; zeroed on every
 /// other.</param>
 /// <param name="Gravity">The vertical arc a <see cref="BodyHoldKind.Gravity"/> or <see cref="BodyHoldKind.Lift"/>
@@ -147,10 +174,15 @@ public readonly record struct FixedBodyHold(
     BodyHoldForward Forward,
     bool OnDrive,
     FixedQ4816 DriveAlignment,
+    ulong DriveDwellTicks,
     int ReleaseOrdinal,
     FixedQ4816 ReleaseThreshold,
     string? SpendState,
     FixedQ4816 SpendPerSecond,
+    FixedQ4816 SpendRestingPerSecond,
+    string? RestoreState,
+    FixedQ4816 RestorePerSecond,
+    FixedBodyMantle Mantle,
     FixedBodyMedium Medium,
     FixedBodyHoldGravity Gravity,
     FixedVerticalEnvelope Envelope,

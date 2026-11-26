@@ -372,6 +372,90 @@ public static class FixedSurfaceQuery {
 
         return found;
     }
+    // How near a cast's ray must stand to a surface to have met it, and how many steps it takes to get there. A step
+    // covers the whole free distance, so a ray meeting a face at thirty degrees or steeper halves its gap each step
+    // and arrives well inside the count; a ray that only grazes a face runs out of steps and reports no hit.
+    private static readonly FixedQ4816 CastTolerance = FixedQ4816.FromRawBits(value: (1L << 6));
+    private const int CastSteps = 32;
+
+    /// <summary>Casts a ray to the first analytic surface it meets, by sphere tracing over <see cref="TryNearest"/>:
+    /// the nearest surface's distance from a point on the ray is how far the ray is free of every collider, so the
+    /// ray advances by it until it stands on a surface or leaves its reach. The directed probe a surface hold takes
+    /// and tracks a face with.</summary>
+    /// <param name="colliders">The colliders compiled once (<see cref="FixedSurfaceColliderSource.Static"/>).</param>
+    /// <param name="dynamicColliders">The colliders the caller recomputes per tick
+    /// (<see cref="FixedSurfaceColliderSource.Dynamic"/>), or empty.</param>
+    /// <param name="origin">The world-space ray origin, in open space.</param>
+    /// <param name="direction">The ray direction; need not be pre-normalized.</param>
+    /// <param name="maxDistance">The non-negative length of the ray.</param>
+    /// <param name="candidate">The surface point the ray meets, its outward normal and its distance along the ray, or
+    /// <see langword="default"/> when the ray meets none.</param>
+    /// <returns><see langword="true"/> when the ray meets a surface facing it within <paramref name="maxDistance"/>.
+    /// A ray that grazes a face without closing on it, or that starts inside a collider and leaves through its
+    /// surface, meets none.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="maxDistance"/> is negative.</exception>
+    public static bool TryCast(
+        ReadOnlySpan<FixedStaticCollider> colliders,
+        ReadOnlySpan<FixedStaticCollider> dynamicColliders,
+        in FixedVector3 origin,
+        in FixedVector3 direction,
+        FixedQ4816 maxDistance,
+        out FixedSurfaceAttachCandidate candidate
+    ) {
+        ArgumentOutOfRangeException.ThrowIfNegative(
+            paramName: nameof(maxDistance),
+            value: maxDistance.Value
+        );
+
+        candidate = default;
+
+        var unitDirection = direction.Normalize();
+
+        if (unitDirection == FixedVector3.Zero) {
+            return false;
+        }
+
+        var travelled = FixedQ4816.Zero;
+
+        for (var step = 0; (step < CastSteps); step++) {
+            var point = (origin + (unitDirection * travelled));
+
+            if (!TryNearest(
+                candidate: out var nearest,
+                colliders: colliders,
+                dynamicColliders: dynamicColliders,
+                probe: in point,
+                reach: (maxDistance - travelled)
+            )) {
+                return false;
+            }
+
+            // A collider whose nearest point is not its true distance (a field's projection through relief) can let
+            // a step carry the ray through its surface. The ray is then behind the surface it reports, which is the
+            // surface it met.
+            var crossed = ((step > 0) && (FixedVector3.Dot(
+                left: (point - nearest.Point),
+                right: nearest.Normal
+            ) < FixedQ4816.Zero));
+
+            if (crossed || (nearest.Distance <= CastTolerance)) {
+                if (FixedVector3.Dot(
+                    left: nearest.Normal,
+                    right: unitDirection
+                ) >= FixedQ4816.Zero) {
+                    return false;
+                }
+
+                candidate = (nearest with { Distance = (travelled + nearest.Distance) });
+
+                return true;
+            }
+
+            travelled += nearest.Distance;
+        }
+
+        return false;
+    }
     /// <summary>Finds the best tether anchor candidate along an aim direction — a soft-lock cone rather than an
     /// exact ray cast: every collider's own <see cref="TryNearest"/> point to <paramref name="origin"/> is a
     /// candidate, filtered to <paramref name="maxDistance"/> and to within <paramref name="assistHalfAngle"/> of

@@ -263,12 +263,13 @@ public static partial class BodyActionSpecFactory {
             Value: form.Value
         );
     }
-    private static CompiledTrigger? CompileTrigger(ActionTrigger? trigger, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName) {
+    private static CompiledTrigger? CompileTrigger(ActionTrigger? trigger, List<ActionFact> recencyFacts, List<ulong> recencyWindows, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName, WorldChannelTable? channels) {
         if (trigger is null) {
             return null;
         }
 
         var gate = CompileGate(
+            channels: channels,
             predicate: trigger.Gate,
             recencyFacts: recencyFacts,
             recencyWindows: recencyWindows,
@@ -338,8 +339,10 @@ public static partial class BodyActionSpecFactory {
     /// <param name="stateSlots">The kit-wide named action-state lookup.</param>
     /// <param name="program">The compiled program profile admitting trigger instructions.</param>
     /// <param name="actionName">The refusing action's qualified name.</param>
+    /// <param name="channels">The world's compiled channel table, which a gate's <c>held</c> predicate resolves its
+    /// channel against, or <see langword="null"/> when no gate names one.</param>
     /// <returns>The compiled binding, or <see langword="null"/> for an unbound lane.</returns>
-    public static CompiledActionSpec? Compile(ActionSpec? spec, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName) {
+    public static CompiledActionSpec? Compile(ActionSpec? spec, IReadOnlyDictionary<string, int> stateSlots, CompiledBodyMotionProgram program, string actionName, WorldChannelTable? channels = null) {
         if (spec is null) {
             return null;
         }
@@ -352,7 +355,8 @@ public static partial class BodyActionSpecFactory {
             recencyWindows: recencyWindows,
             stateSlots: stateSlots,
             program: program,
-            actionName: actionName
+            actionName: actionName,
+            channels: channels
         );
         var onRelease = CompileTrigger(
             trigger: spec.OnRelease,
@@ -360,12 +364,14 @@ public static partial class BodyActionSpecFactory {
             recencyWindows: recencyWindows,
             stateSlots: stateSlots,
             program: program,
-            actionName: actionName
+            actionName: actionName,
+            channels: channels
         );
         // A fact trigger's own gate allocates recency slots from the SAME two lists both channel triggers use — one
         // recency clock table per lane binding, never a third parallel table for the fact channel.
         var onFact = (spec.OnFact ?? []).Select(selector: rule => {
             var factGate = CompileGate(
+                channels: channels,
                 predicate: rule.Gate,
                 recencyFacts: recencyFacts,
                 recencyWindows: recencyWindows,

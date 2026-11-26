@@ -328,15 +328,16 @@ public sealed partial class WorldBody {
     private bool m_kitLocalStale = true;
 
     private void MarkKitLocalStale() => m_kitLocalStale = true;
-    // No rigid, carry or tether facet, no action binding, no hold that spends a register (it writes while held), and
-    // no timer that resets on a fact (the reset writes whatever the timer holds).
+    // No rigid, carry or tether facet, no action binding, no hold that spends or restores a register or starts a
+    // mantle's timer (each writes while held), and no timer that resets on a fact (the reset writes whatever the timer
+    // holds).
     private bool KitIsLocal {
         get {
             if (!m_kitLocalStale) { return m_kitLocal; }
             var local = ((m_rigid is null) && (m_carry is null) && (m_tetherFacet is null));
 
             foreach (var binding in m_laneBindings) { local &= (binding is null); }
-            foreach (var hold in m_holds) { local &= (hold.SpendState is null); }
+            foreach (var hold in m_holds) { local &= ((hold.SpendState is null) && (hold.RestoreState is null) && (hold.Mantle.State is null)); }
             foreach (var definition in m_actionStateDefinitions) { local &= !((definition.Kind == ActionStateKind.Timer) && (definition.ResetFact is not null)); }
             m_kitLocal = local;
             m_kitLocalStale = false;
