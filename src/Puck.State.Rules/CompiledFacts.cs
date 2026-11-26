@@ -260,6 +260,25 @@ public interface IRuleEffect : ICompiledFact, IEffectNeeds {
         return TryFire(firing: in firing, host: host, refusal: out refusal);
     }
 }
+/// <summary>An effect that sets a value a host fact reads, such as a body's register: what lets the work sheet prove
+/// that a Level rule's firing closes its own gate (<see cref="RuleResponse.ClosesItself"/>) when the gate tests that
+/// fact rather than an arena cell.</summary>
+public interface IFactSettingEffect : IRuleEffect {
+    /// <summary>Gets the value the effect writes.</summary>
+    CompiledValueSource Source { get; }
+
+    /// <summary>Returns whether this effect writes what <paramref name="fact"/> reads, for any binding.</summary>
+    /// <param name="fact">A fact a gate or a local reads.</param>
+    /// <returns><see langword="true"/> when a firing of this effect can move the fact.</returns>
+    bool Writes(ICompiledFact fact);
+    /// <summary>Returns whether this effect, on its own, sets for the binding's own key exactly what
+    /// <paramref name="fact"/> reads, so the fact reads <see cref="Source"/>'s value back until another line or the
+    /// host writes it: nothing clamps, converts or ages the value between the write and the read.</summary>
+    /// <param name="fact">The fact the gate tests.</param>
+    /// <param name="context">The context the rule compiled in.</param>
+    /// <returns><see langword="true"/> when the read-back is exact; <see langword="false"/> proves nothing.</returns>
+    bool SetsExactly(ICompiledFact fact, RuleCompileContext context);
+}
 /// <summary>A compiled effect that writes the arena and nothing outside it.</summary>
 public abstract class RuleEffect : IRuleEffect {
     /// <summary>Initializes the effect with its read-back spelling.</summary>
