@@ -79,7 +79,18 @@ namespace beside `views.seatRig`, `views.cameraRig` and every `cameras[].rig`.
 A seat rig that selects or blends whole framings steers the orbit its default
 path reaches (a select's `default`, a blend's `a`) among the `views` section's
 own programs (`WorldCameraPrograms.SeatOrbit`); its live pitch clamps about that
-orbit's pitch and its distance is the boom's rest length.
+orbit's pitch and its distance is the boom's rest length. A requested distance
+(the zoom) is read against that orbit: every other interactive orbit the rig
+reaches keeps its own proportion to it (`SdfCameraLook.OrbitDistance`), so a
+blend between a near and a far framing stays near and far at any zoom.
+
+`chaseCamera(wall: wallFraming(...))` adds a framing for a body on a face it
+cannot stand on: each clearance case becomes a `blend` of its `-ground` and
+`-wall` programs, weighted by `state.cameraOnWall.$body`. A rule over `$players`
+writes that row from the `HoldingUnwalkable` fact, and the row's `dynamics`
+trait (`camera-wall`) eases what the rig reads, so the eye draws back and looks
+up the face as a climber takes it and returns as she lets go or mantles. The
+debug world's Moth opts in (`worlds/debug/avatars/moth-camera.puck`).
 
 The document members are `views.layouts`, `views.seatControl`, `views.seatRig`
 and `seatDefaults.seatCameraFeel` (C# `WorldDefinition.PlayerDefaults.SeatLook`,
@@ -132,6 +143,16 @@ it was left until the body moves; `whileIdle: true` also follows an idle body.
 The validator refuses `follow` unless `yawReference` is `World`, because a
 body-relative yaw already rides the body. Absent `follow` is a still camera that
 goes only where look input sends it.
+
+`seatControl.faceFrame` (`Camera`, the default, or `Body`) is the frame a
+seat's movement resolves in while its body holds a face it cannot stand on (the
+`HoldingUnwalkable` fact off the wire). `Camera` keeps the camera's yaw, so the
+direction pushed on screen is laid onto the face and orbiting changes which push
+climbs. `Body` resolves the stick, and camera-framed channel rows, against the
+body's authoritative heading (`WorldClient.ComposeMoveFrame`), as held free look
+does: under a hold row with `forward: Surface` forward climbs and sideways
+traverses wherever the camera stands. The standard's `chaseCamera` authors
+`Body`.
 
 `seatControl.yawReference` is `World` for standard camera-relative movement or
 `Body` for an explicitly body-relative camera. A mapped arrival turns a followed seat's

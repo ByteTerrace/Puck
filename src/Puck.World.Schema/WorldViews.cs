@@ -203,10 +203,24 @@ public sealed record WorldViewTransition(float Seconds = 0f, float RenderScale =
 /// <param name="AutoFirstPerson">The automatic pull-in policy; absent, automatic pull-in is unavailable whatever a
 /// player or session asks.</param>
 /// <param name="Boom">Optional authored distance limits and input step for the interactive orbit.</param>
+/// <param name="FaceFrame">The frame the seat's movement resolves in while its body holds a face it cannot stand
+/// on.</param>
 public sealed record WorldSeatViewControl(WorldSeatYawReference YawReference, float MinPitch, float MaxPitch,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldSeatFollow? Follow = null,
     [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)] WorldCameraAutoFirstPerson? AutoFirstPerson = null,
-    WorldCameraBoom? Boom = null);
+    WorldCameraBoom? Boom = null,
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)] WorldSeatFaceFrame FaceFrame = WorldSeatFaceFrame.Camera);
+/// <summary>The frame a seat's camera-framed movement resolves in while its body holds a face it cannot stand on (the
+/// <c>HoldingUnwalkable</c> body fact).</summary>
+[System.Text.Json.Serialization.JsonConverter(typeof(Puck.Abstractions.Documents.StrictEnumConverter<WorldSeatFaceFrame>))]
+public enum WorldSeatFaceFrame : byte {
+    /// <summary>The camera's yaw, as on the ground: the direction pushed on screen is laid onto the face, so orbiting
+    /// the camera changes which push climbs.</summary>
+    Camera,
+    /// <summary>The body's own heading: forward, back and sideways stay the body's on the face wherever the camera
+    /// orbits. Under a hold row that faces its body into the face, forward climbs and sideways traverses.</summary>
+    Body,
+}
 /// <summary>Authored bounds for a seat's interactive orbit distance, in full-size metres.</summary>
 /// <param name="Minimum">The closest requested orbit distance.</param>
 /// <param name="Maximum">The farthest requested orbit distance.</param>
