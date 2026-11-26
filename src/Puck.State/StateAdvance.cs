@@ -118,6 +118,44 @@ public sealed record StateAdvance(long PerSecondNumerator, long PerSecondDenomin
         return row.ClampToEnvelope(value: baseValue.AddSaturating(right: delta));
     }
 
+    /// <summary>Returns the turn a <see cref="CellKind.Fixed"/> row's current value stands at, where one whole unit is one
+    /// turn: the fractional part of the exact accumulation, as a fraction of a turn scaled by 2^64. The read value
+    /// (<see cref="ComputeCurrentValue"/>) keeps only the carrier's sixteen fractional bits, so a clock read through it
+    /// steps by a 65,536th of a turn; this keeps the base's bits and the rate's exact rational phase
+    /// (<see cref="FixedConicOrbit.Phase(ulong, ulong, ulong)"/>), so a body a turn places moves smoothly between ticks.
+    /// A value the row's envelope clamps, or a rate past what the exact form holds, answers the read value's turn.</summary>
+    /// <param name="row">The carrying row.</param>
+    /// <param name="baseValue">The row's stored raw cell value.</param>
+    /// <param name="currentEngineTick">The engine tick to compute the turn as of.</param>
+    /// <param name="epochEngineTick">The carrying cell's own <see cref="StateCellClock.EpochEngineTick"/>.</param>
+    /// <returns>The turn, scaled by 2^64.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="row"/> is <see langword="null"/>.</exception>
+    public ulong TurnAt(StateRow row, long baseValue, ulong currentEngineTick, long epochEngineTick = 0L) {
+        ArgumentNullException.ThrowIfNull(argument: row);
+
+        var read = ComputeCurrentValue(baseValue: baseValue, currentEngineTick: currentEngineTick, epochEngineTick: epochEngineTick, row: row);
+        var readTurn = (unchecked((ulong)read) << (64 - FixedQ4816.FractionBitCount));
+        var epoch = ((ulong)Math.Max(val1: epochEngineTick, val2: 0L));
+
+        if ((row.Kind != CellKind.Fixed) || (PerSecondNumerator == 0) || (currentEngineTick <= epoch) || (PerSecondNumerator == long.MinValue) ||
+            (PerSecondDenominator > (long)(ulong.MaxValue / FixedTickConversion.TicksPerSecond))) {
+            return readTurn;
+        }
+
+        var elapsed = (currentEngineTick - epoch);
+
+        // A clamped read is the envelope's value, which the exact turn would pass.
+        if (TryAccumulate(elapsed: elapsed, magnitude: out var magnitude, scale: (1L << FixedQ4816.FractionBitCount)) &&
+            (read != baseValue.AddSaturating(right: ((PerSecondNumerator < 0) ? -magnitude : magnitude)))) {
+            return readTurn;
+        }
+
+        var phase = FixedConicOrbit.Phase(elapsedTicks: elapsed, periodTicks: (((ulong)PerSecondDenominator) * FixedTickConversion.TicksPerSecond), turns: ((ulong)Math.Abs(value: PerSecondNumerator)));
+        var baseTurn = (unchecked((ulong)baseValue) << (64 - FixedQ4816.FractionBitCount));
+
+        return unchecked((PerSecondNumerator < 0) ? (baseTurn - phase) : (baseTurn + phase));
+    }
+
     // |rate| · scale allocated over the elapsed engine ticks, as ⌊elapsed · |rate| · scale / (denominator ·
     // TicksPerSecond)⌋ — the exact rational allocation of DiscreteMeasure, with the per-second rate's own denominator
     // folded together with the engine's fixed ticks-per-second so the allocation is exact over engine ticks directly.

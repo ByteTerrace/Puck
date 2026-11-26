@@ -33,6 +33,9 @@ import "../standard/kits"
 import "../standard/skies"
 import "../standard/stars"
 import "../standard/visitors"
+// A ship that climbs over the moon through the seam above it is a ship here: the craft register and the selectors that
+// read it.
+import "craft-form"
 
 // The sun draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -53,15 +56,21 @@ let padHalf = 5
 let padTop = (rockRadius + 0.3)
 
 // The star's body: the population body that rides the day's turn, and how near its centre a body may come.
-let sunBody = 8
+let sunBody = 15
 let sunLethal = (sunStar.radius + 160)
 let sunWarning = (sunStar.radius + 900)
 let sunReach = 4000
+// The companion's body (moon-frame.puck's `companionStar`), the inhabitant below the star's, and its reaches.
+let companionBody = 14
+let companionLethal = (companionStar.radius + 100)
+let companionWarning = (companionStar.radius + 500)
+let companionReach = 1500
 
+// The star rides the top slot; a ship and its pilot arrive from the moon as two.
 bodies {
-  capacity: 9
+  capacity: 16
   localSeats: 4
-  networkPlayers: 4
+  networkPlayers: 8
   reconnectGraceSeconds: 3
 }
 
@@ -82,10 +91,30 @@ admission [
 
 references [
   { document: "debug", name: "debug" }
+  { document: "moon", name: "moon" }
 ]
 
 destinations [
   { durability: persisted, name: "debug", reference: "debug", scope: global }
+  { durability: persisted, name: "moon", reference: "moon", scope: global }
+]
+
+// The seam over the moon (moon-frame.puck's `sunSeamHeight`), seen from above: a ship climbing away from the moon
+// arrives here at the same point of the system's frame, and one that sinks through it is the moon's again.
+adjacencies [
+  {
+    name: "moon"
+    destination: "moon"
+    counterpart: "sun"
+    presentation: Apart
+    boundary {
+      center [moonInSun[0], (moonInSun[1] + sunSeamHeight), moonInSun[2]]
+      outwardYawDegrees: 180
+      outwardPitchDegrees: -90
+      width: sunSeamSpan
+      height: sunSeamSpan
+    }
+  }
 ]
 
 views {
@@ -113,15 +142,21 @@ gravity {
   uniform [0, 0, 0]
   areas [
     starPull(of: sunStar, placement: "sun-ball", reach: sunReach, priority: 1)
+    starPull(of: companionStar, placement: "companion-ball", reach: companionReach, priority: 1)
     ballPull(placement: "rock-core", reach: rockReach, pull: rockPull, radius: rockRadius, blend: 12, priority: 2)
   ]
+  // The companion's turn is about the star's ball, so it is placed after the star's.
   orbits [
     starRail(of: sunStar, turn: sunTurn, around: "system-centre", periodSeconds: sharedDaySeconds, body: sunBody)
+    starRail(of: companionStar, turn: companionTurn, around: "sun-ball", periodSeconds: pairSeconds, body: companionBody)
   ]
 }
 
 timeline {
-  clocks [{ name: day, state: day, spanSeconds: 24h }]
+  clocks [
+    { name: day, state: day, spanSeconds: 24h }
+    { name: pair, state: pair, spanSeconds: pairSeconds }
+  ]
 }
 
 state {
@@ -143,6 +178,14 @@ state {
       min: 0
       max: 1
       follows { destination: "debug", delaySeconds: sunDelayPlanet }
+    }
+    // The pair's turn, which this world owns and the valley and the moon follow: one turn of the companion about the
+    // star every `pairSeconds`.
+    {
+      name: "pair"
+      kind: "Fixed"
+      value: "0"
+      advance { perSecondNumerator: 1, perSecondDenominator: pairSeconds }
     }
     // What this world publishes: its light and its mass, each a share of the whole.
     { name: "sunLight", kind: "Fixed", value: "1", min: "0", max: "1" }
@@ -169,6 +212,7 @@ rule "sun-lights" {
 
 // The star's heat: within `sunLethal` metres of its centre a body is burned and wakes on the pad.
 starHeat(of: sunStar, rider: sunBody, lethal: sunLethal, warning: sunWarning, spawn: "sun-arrival", name: "sun")
+starHeat(of: companionStar, rider: companionBody, lethal: companionLethal, warning: companionWarning, spawn: "sun-arrival", name: "companion")
 
 heldKit(name: "sun")
 
@@ -274,6 +318,35 @@ placements {
       localOffset [0, 0, 0]
     }
   }
+
+  // The companion: the body its turn about the star moves, and its ball and pull. It joins its turn from beside the
+  // star at the first tick.
+  placement "companion" {
+    prototype: "hidden"
+    position [(sunSystemCentre[0] + sunAtStart[0]), (sunSystemCentre[1] + sunAtStart[1]), (sunSystemCentre[2] + sunAtStart[2])]
+    inhabit {
+      count: 1
+      distribution {
+        fill {
+          name: "additive"
+          offset: 0
+          step: 0.001
+        }
+        region: disc(radius: 0.01)
+      }
+      kit: "sun"
+      look: "sun"
+      source: "Idle"
+    }
+  }
+  placement "companion-ball" {
+    prototype: "companion"
+    position [(sunSystemCentre[0] + sunAtStart[0]), (sunSystemCentre[1] + sunAtStart[1]), (sunSystemCentre[2] + sunAtStart[2])]
+    attach {
+      bodyIndex: companionBody
+      localOffset [0, 0, 0]
+    }
+  }
 }
 
 prototypes {
@@ -335,11 +408,18 @@ prototypes {
       starSurface(of: sunStar, name: "sun", lane: 4)
     }
   }
+  // The companion's body: a smaller, redder ball whose cells drift faster.
+  prototype "companion" {
+    document {
+      starSurface(of: companionStar, name: "companion", churn: 9, cells: 4, cover: 0.45)
+    }
+  }
 }
 
 // Vacuum: the star, a black sky of stars, and no air between the eye and the fire. The light comes from where the
-// star stands, and its strength rises as the square of its nearness. It casts no shadows here: the star's own ball
-// stands on the line from every surface toward its light, and a ball that cast would shadow all of them.
+// star stands, and its strength rises as the square of its nearness. Its shadows are as soft as the star is wide from
+// where they fall, so the frame's posts throw hard lines while the star is far and blurred ones as it passes; the
+// star's own ball casts none (`starSurface`).
 render {
   farDistance: 8000
   lanes ["state.sunLight"]
@@ -350,9 +430,10 @@ render {
         turns: [sunTurn],
         focus: sunSystemCentre,
         illuminance: "state.sunLux",
-        color: "#FFF4E2",
-        shadow: never
+        color: "#FFF4E2"
       )
+      // The companion, from where its turn puts it about the star: a second, redder light and a second shadow.
+      starLight(of: companionStar, turns: [sunTurn, companionTurn], focus: sunSystemCentre)
     ]
   }
   sky {
@@ -369,6 +450,7 @@ render {
         seed: spaceStarSeed
       )
       starDisc(of: sunStar)
+      starDisc(of: companionStar, name: "companion", color: companionStar.color)
     ]
   }
   atmosphere {
@@ -376,11 +458,12 @@ render {
       density: 0
     }
   }
-  // A camera in vacuum meters what the star lights, not the black sky round it, and stops down as the star nears.
+  // A camera in vacuum meters what the star lights, not the black sky round it, and stops down as the star nears, as far
+  // as the star's own surface filling the frame from beside it.
   exposure {
     mode: Auto
     minimum: 11
-    maximum: 26
+    maximum: 30
     adaptation: 0.75
     local: 0.5
     band: 0.75

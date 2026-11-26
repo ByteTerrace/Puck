@@ -181,12 +181,13 @@ function sunDirection(h, heading, noonElevation) = [
 // advance holds the sun (`world.row.set state <clock> advance {"perSecondNumerator":0,"perSecondDenominator":1}`) and
 // runs it again (the numerator back to one over `daySeconds`). `bodies` are layers of the world's own that hang in the
 // sky behind the clouds and before the stars and the sun's disc: a moon, a planet, another world seen from here.
+// `otherLights` are lights of the world's own beside the day's sun and moon, a companion star's among them.
 // `space` are layers under the air, what the sky shows where the air does not: the air's gradient draws over them at
 // `airOpacity` and the clouds at `cloudOpacity`, each one unless the world keys it, on a view clock of the viewer's
 // height for a sky that thins to space as she climbs (`timeline.clocks`' `view`). The
 // exposure is the world's to key on the same clock
 // (`render.exposure`'s `minimum`, `maximum`, `compensation` and `ev100` take `{ clock, keys }`).
-template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 60, heading = 0, peak = 100000, noonColor = "#FFF0DC", horizonColor = "#FFB278", cloudiness = 0.25, cloudTier = low, daystar = null, sunDistance = 15000, sunRadius = 140, softness = 0.2, illuminance = null, moonPeak = 0.25, moonColor = "#C8D4FF", moonAngularRadius = 0.11, nightLuminance = 2, starLuminance = 2, starDensity = 48, starBrightness = 1.2, starSeed = 7, starOpacity = 0, bodies = [], space = [], airOpacity = 1, cloudOpacity = 1) {
+template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 60, heading = 0, peak = 100000, noonColor = "#FFF0DC", horizonColor = "#FFB278", cloudiness = 0.25, cloudTier = low, daystar = null, sunDistance = 15000, sunRadius = 140, softness = 0.2, illuminance = null, moonPeak = 0.25, moonColor = "#C8D4FF", moonAngularRadius = 0.11, nightLuminance = 2, starLuminance = 2, starDensity = 48, starBrightness = 1.2, starSeed = 7, starOpacity = 0, bodies = [], space = [], airOpacity = 1, cloudOpacity = 1, otherLights = []) {
   let daySun = (daystar ?? star(radius: sunRadius, distance: sunDistance, illuminance: peak, color: noonColor))
   timeline {
     clocks [{ name: clock, state: clock, spanSeconds: 24h }]
@@ -203,23 +204,26 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
   }
   render {
     lighting {
-      lights [
-        starLight(
-          of: daySun,
-          turns: [dayTurn(clock: clock, distance: daySun.distance, heading: heading, noonElevation: noonElevation)],
-          illuminance: (illuminance ?? sunIlluminance(clock, peak)),
-          color: noonColor,
-          softness: softness
-        )
-        directional(
-          name: "moon",
-          direction: [0, 1, 0],
-          color: moonColor,
-          illuminance: 0lx,
-          shadow: auto,
-          angularRadius: moonAngularRadius
-        )
-      ]
+      lights: concat(
+        [
+          starLight(
+            of: daySun,
+            turns: [dayTurn(clock: clock, distance: daySun.distance, heading: heading, noonElevation: noonElevation)],
+            illuminance: (illuminance ?? sunIlluminance(clock, peak)),
+            color: noonColor,
+            softness: softness
+          )
+          directional(
+            name: "moon",
+            direction: [0, 1, 0],
+            color: moonColor,
+            illuminance: 0lx,
+            shadow: auto,
+            angularRadius: moonAngularRadius
+          )
+        ],
+        otherLights
+      )
       clock: clock
       keys: map(range(0, 24), h => {
         at: h * 3600

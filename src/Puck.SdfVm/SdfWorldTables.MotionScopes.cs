@@ -93,6 +93,7 @@ public sealed partial class SdfWorldTables {
         public int SlotCount;
         public bool Live;
         public bool Glass;
+        public bool Caster;
         public SdfMeshBox? Box;
     }
 
@@ -319,13 +320,16 @@ public sealed partial class SdfWorldTables {
     // Notes one change for judgement against every open scope: what changed as it stood before and as it stands after,
     // each a box and whether it is glass, and null for one no box bounds. A side that draws nothing is not live. Shading
     // names a change only shading reads, which no shadow layer shows. Rigid names a slot whose two boxes are one box its
-    // pose carries (SdfWorldShadows.Moved). Judged with its batch (FlushMotion).
-    private void NoteMotion(SdfMotionCause cause, int row, bool wasLive, in SdfMeshBox? before, bool wasGlass, bool isLive, in SdfMeshBox? after, bool isGlass, bool shading = false, bool affectsShadows = true, bool rigid = false) {
+    // pose carries (SdfWorldShadows.Moved). A side that casts no shadow (SdfMeshRegion.CastsShadow) is no caster the
+    // shadows judge, though every scope still judges it. Judged with its batch (FlushMotion).
+    private void NoteMotion(SdfMotionCause cause, int row, bool wasLive, in SdfMeshBox? before, bool wasGlass, bool isLive, in SdfMeshBox? after, bool isGlass, bool shading = false, bool affectsShadows = true, bool rigid = false, bool wasCaster = true, bool isCaster = true) {
         // The world's shadows redraw where a caster was and where it is, whatever scope the change meets.
-        if (affectsShadows && !shading && (wasLive || isLive)) {
+        var (castWas, castIs) = ((wasLive && wasCaster), (isLive && isCaster));
+
+        if (affectsShadows && !shading && (castWas || castIs)) {
             var slot = (cause == SdfMotionCause.Slot);
-            m_shadows?.Moved(key: slot ? row : ~row, wasLive: wasLive, before: in before, isLive: isLive, after: in after,
-                glass: ((wasLive && wasGlass) || (isLive && isGlass)), rigid: (slot && rigid));
+            m_shadows?.Moved(key: slot ? row : ~row, wasLive: castWas, before: in before, isLive: castIs, after: in after,
+                glass: ((castWas && wasGlass) || (castIs && isGlass)), rigid: (slot && rigid && (castWas == castIs)));
         }
         if ((m_motionOpen == 0) || !(wasLive || isLive)) { return; }
         m_pendingMotion[m_pendingMotionCount++] = new(After: after, Before: before, Cause: cause, IsGlass: isGlass, IsLive: isLive, Row: row, Shading: shading, WasGlass: wasGlass, WasLive: wasLive);
@@ -387,7 +391,7 @@ public sealed partial class SdfWorldTables {
         SdfMeshRegion.ReadSelection(m_meshDrawWords.AsSpan(row * SdfMeshRecord.DrawWords, SdfMeshRecord.DrawWords),
             m_motionTransforms, out box, out glass);
 
-    private void NoteStagedRow(int row, bool wasLive, in SdfMeshBox? before, bool wasGlass, in SdfMeshDraw draw, ReadOnlySpan<uint> record) {
+    private void NoteStagedRow(int row, bool wasLive, in SdfMeshBox? before, bool wasGlass, bool wasCaster, in SdfMeshDraw draw, ReadOnlySpan<uint> record) {
         var wasSkinned = m_skinRows.ContainsKey(row);
         var isSkinned = (draw.Mesh is { Members.IsEmpty: false });
         var slot = MotionSlotOf(in draw);
@@ -419,7 +423,7 @@ public sealed partial class SdfWorldTables {
         var isLive = (slot < 0) && !isSkinned && SdfMeshRegion.ReadSelection(record, m_motionTransforms, out after, out isGlass);
 
         NoteMotion(cause: SdfMotionCause.Draw, row: row, wasLive: wasLive && !wasSkinned, before: in before, wasGlass: wasGlass,
-            isLive: isLive, after: in after, isGlass: isGlass);
+            isLive: isLive, after: in after, isGlass: isGlass, wasCaster: wasCaster, isCaster: !draw.CastsNoShadow);
     }
 
     private void NoteUnnamedRow(int row) {
@@ -433,7 +437,8 @@ public sealed partial class SdfWorldTables {
         } else {
             var wasLive = RowSelection(row, out var before, out var glass);
 
-            NoteMotion(cause: SdfMotionCause.Draw, row: row, wasLive: wasLive, before: in before, wasGlass: glass, isLive: false, after: null, isGlass: false);
+            NoteMotion(cause: SdfMotionCause.Draw, row: row, wasLive: wasLive, before: in before, wasGlass: glass, isLive: false, after: null, isGlass: false,
+                wasCaster: SdfMeshRegion.CastsShadow(record: m_meshDrawWords.AsSpan(row * SdfMeshRecord.DrawWords, SdfMeshRecord.DrawWords)));
         }
     }
     // The slots a skinned draw may read: its root's and its members', as one range. A draw with no root slot reads
@@ -454,7 +459,7 @@ public sealed partial class SdfWorldTables {
     // A row stopped holding a skinned draw: judges the bound it held, and forgets it.
     private void RetireSkinRow(int row) {
         if (!m_skinRows.Remove(key: row, value: out var skin)) { return; }
-        NoteMotion(cause: SdfMotionCause.Skin, row: row, wasLive: skin.Live, before: in skin.Box, wasGlass: skin.Glass, isLive: false, after: null, isGlass: false);
+        NoteMotion(cause: SdfMotionCause.Skin, row: row, wasLive: skin.Live, before: in skin.Box, wasGlass: skin.Glass, isLive: false, after: null, isGlass: false, wasCaster: skin.Caster);
 
         var last = m_skinOrder[^1];
 
@@ -478,8 +483,9 @@ public sealed partial class SdfWorldTables {
             var live = !m_absentRows.Contains(item: row);
             var box = SkinBoxOf(count: skin.SlotCount, draw: in draw, first: skin.FirstSlot);
 
-            NoteMotion(cause: SdfMotionCause.Skin, row: row, wasLive: skin.Live, before: in skin.Box, wasGlass: skin.Glass, isLive: live, after: in box, isGlass: draw.Glass);
-            (skin.Live, skin.Box, skin.Glass) = (live, box, draw.Glass);
+            NoteMotion(cause: SdfMotionCause.Skin, row: row, wasLive: skin.Live, before: in skin.Box, wasGlass: skin.Glass, isLive: live, after: in box, isGlass: draw.Glass,
+                wasCaster: skin.Caster, isCaster: !draw.CastsNoShadow);
+            (skin.Live, skin.Box, skin.Glass, skin.Caster) = (live, box, draw.Glass, !draw.CastsNoShadow);
             WriteSkinSelection(box: in box, row: row);
         }
     }

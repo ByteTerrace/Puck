@@ -105,6 +105,11 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
     /// <summary>Gets the device bytes the region holds. Safe to read from any thread.</summary>
     internal GpuMemoryBytes OwnedBytes { get { lock (m_gate) { return (m_disposed ? default : m_region.OwnedBytes); } } }
 
+    /// <summary>Gets whether a begun upload has words ready that only a residency's upload carries (<see cref="RecordOwed"/>):
+    /// a chunk or a root, or chunks a refused flush kept staged. Its claimant takes no query until the root lands, so while
+    /// this holds some residency's upload must open, whether or not any view renders. Safe to read from any thread.</summary>
+    internal bool OwesCopies { get { lock (m_gate) { return (!m_disposed && ((m_staged.Count > 0) || HasOwed())); } } }
+
     /// <summary>Begins the upload of a claimant's scene: its worker creates the export in the store's arena, claiming each
     /// geometry it names, and cuts the words the arena does not hold yet into chunks, which residencies' uploads record in
     /// the order uploads were begun.</summary>

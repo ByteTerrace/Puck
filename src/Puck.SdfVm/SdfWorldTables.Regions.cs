@@ -204,7 +204,9 @@ public sealed partial class SdfWorldTables {
         _ => m_shadowHandoffRegion,
     };
     // The debug name of region index's objects, its reserved copy sets included: its table's role.
-    private static GpuObjectName RegionName(int region) => NameOf(part: region switch {
+    private static GpuObjectName RegionName(int region) => NameOf(part: RegionRole(region: region));
+    // Region index's table's role, which names its objects and its line in DescribeRegionFlushes.
+    private static string RegionRole(int region) => region switch {
         ProgramRegionIndex => "program",
         DynamicTransformRegionIndex => "dynamic-transforms",
         ScreenSurfaceRegionIndex => "screen-surfaces",
@@ -217,7 +219,27 @@ public sealed partial class SdfWorldTables {
         SkyLayerRegionIndex => "sky-layers",
         FrameSampledRegionIndex => "frame-sampled",
         _ => "shadow-handoffs",
-    });
+    };
+    /// <summary>Describes what the latest upload flushed of the tables' regions (<see cref="GpuRegion.LastFlushedBytes"/>):
+    /// the bytes of region words it wrote into host-visible memory, then each region that wrote any, by its table's role,
+    /// and the sum every upload has flushed. A still world's upload writes what moved and nothing else. Read on the frame's
+    /// thread.</summary>
+    /// <returns>One line of <c>key=value</c> pairs.</returns>
+    public string DescribeRegionFlushes() {
+        var builder = new System.Text.StringBuilder();
+        var last = 0L;
+        var total = 0L;
+
+        for (var index = 0; (index < RegionCount); index++) {
+            if (RegionAt(index: index) is not { } region) { continue; }
+            last += region.LastFlushedBytes;
+            total += region.FlushedBytes;
+            if (region.LastFlushedBytes == 0L) { continue; }
+            _ = builder.Append(value: ((builder.Length == 0) ? string.Empty : ",")).Append(value: RegionRole(region: index)).Append(value: ':').Append(value: region.LastFlushedBytes);
+        }
+
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"region-flushes last={last}B [{builder}] total={total}B uploads={m_uploads}");
+    }
     // Creates the one copy pool of every region the tables may create, each region's sets named as its region: the pool its admission states (RegionCopyPoolSizes).
     private GpuRegionCopyPool ReserveRegionCopyPool(GpuCreationScope scope) {
         var regions = new GpuObjectName[RegionCount];
