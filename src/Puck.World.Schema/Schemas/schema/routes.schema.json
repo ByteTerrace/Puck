@@ -192,7 +192,7 @@
                     "title": "WorldRouteStepCross"
                   },
                   {
-                    "description": "Flies to a point through the air, as a player flying a craft or a free-flight body does: the stick held toward the point over the ground with the camera turned onto the way, and the program\u0027s rise controls (Rise) held while the point stands above or below the body along the body\u0027s own up. No path is planned and no corridor checked. The step ends within Within of the point, on arriving in the world Enters names, when the way crosses a seam into it, or, with Lands, once the body stands on ground.",
+                    "description": "Flies to a point through the air, as a player flying a craft or a free-flight body does: the stick held toward the point over the ground with the camera turned onto the way, and the program\u0027s rise controls (Rise) held while the point stands above or below the body along the body\u0027s own up. No path is planned and no corridor checked. The step ends within Within of the point, on arriving in the world Enters names, when the way crosses a seam into it, or, with Lands, once the body stands on ground; with Until it ends only once the body stands in that place, holding at the point until something carries it there (a rule that stands a body burned beside a star back on its pad), and the chapter\u0027s timeout fails it otherwise.",
                     "properties": {
                       "$type": {
                         "const": "fly"
@@ -231,6 +231,14 @@
                         "description": "Whether the step is a landing: it flies at the point, a point of the ground or under it, until the body, or the body it rides, is grounded, and Within ends nothing.",
                         "type": "boolean",
                         "default": false
+                      },
+                      "until": {
+                        "description": "The place, in the world the step is played in, that ends the step, or null for a step the point, the arrival or the landing ends.",
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "default": null
                       }
                     },
                     "required": [

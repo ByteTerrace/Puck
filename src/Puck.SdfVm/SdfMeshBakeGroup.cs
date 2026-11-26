@@ -45,6 +45,12 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
     /// probe. A glass instance never bakes with an opaque one, so a static group is glass or opaque whole; a dynamic
     /// group is glass only while every instance riding its slot is, and the world group never is.</summary>
     public bool Glass { get; private set; }
+    /// <summary>Gets whether the group's shapes all carry materials that cast no shadow
+    /// (<see cref="SdfProgram.IsShadowlessRange"/>): its draws are drawn by every view and selected by no shadow drawing
+    /// (<see cref="SdfMeshDraw.CastsNoShadow"/>). Such an instance never bakes with one that casts, so a static group casts
+    /// or not whole; a dynamic group casts none only while no instance riding its slot casts, and the world group always
+    /// casts.</summary>
+    public bool CastsNoShadow { get; private set; }
     /// <summary>Gets the heights a static group of one height field's instance is displaced by as it is drawn
     /// (<see cref="SdfProgram.HeightFields"/>), with the handle of the program the group was planned of; <see langword="null"/>
     /// for a group drawn as it was baked. A height field's instance bakes alone: no instance bakes with it.</summary>
@@ -295,6 +301,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
         replanned.Low = group.PlannedLow;
         replanned.High = group.PlannedHigh;
         replanned.Glass = group.Glass;
+        replanned.CastsNoShadow = group.CastsNoShadow;
         replanned.Displacement = group.Displacement;
         replanned.Clamped = group.Clamped;
         replanned.Fitted = group.Fitted;
@@ -344,6 +351,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                 ? Rounded(value: Vector3.Transform(value: instance.Center, rotation: SdfMeshGeometryBuilder.BoundTurnOf(slot: instance.Slot, transforms: transforms)))
                 : instance.Center);
             var glass = program.IsGlassRange(end: instance.End, first: instance.First);
+            var shadowless = program.IsShadowlessRange(end: instance.End, first: instance.First);
             T group;
 
             if (instance.IsDynamic && instance.BakesSeparately) {
@@ -352,6 +360,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                 group.Low = (center - new Vector3(radius));
                 group.High = (center + new Vector3(radius));
                 group.Glass = glass;
+                group.CastsNoShadow = shadowless;
                 groups.Add(group);
             } else if (instance.IsDynamic) {
                 if (!bySlot.TryGetValue(key: instance.Slot, value: out group!)) {
@@ -359,14 +368,16 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                     group.Low = (center - new Vector3(value: radius));
                     group.High = (center + new Vector3(value: radius));
                     group.Glass = glass;
+                    group.CastsNoShadow = shadowless;
                     bySlot.Add(key: instance.Slot, value: group);
                     groups.Add(item: group);
                 } else {
                     group.Low = Vector3.Min(value1: group.Low, value2: (center - new Vector3(value: radius)));
                     group.High = Vector3.Max(value1: group.High, value2: (center + new Vector3(value: radius)));
                     group.Glass &= glass;
+                    group.CastsNoShadow &= shadowless;
                 }
-            } else if (instance.BakesWithPrevious && (instance.HeightField is null) && (staticRun is { } run) && !glass && !run.Glass && (run.Displacement is null) && ((-(run.Selector + 1) + run.Instances) == index)) {
+            } else if (instance.BakesWithPrevious && (instance.HeightField is null) && (staticRun is { } run) && !glass && !run.Glass && (shadowless == run.CastsNoShadow) && (run.Displacement is null) && ((-(run.Selector + 1) + run.Instances) == index)) {
                 group = run;
                 group.Instances++;
                 group.Low = Vector3.Min(value1: group.Low, value2: (instance.Center - new Vector3(value: radius)));
@@ -376,6 +387,7 @@ public class SdfMeshBakeGroup(int selector, bool dynamic) {
                 group.Low = (instance.Center - new Vector3(value: radius));
                 group.High = (instance.Center + new Vector3(value: radius));
                 group.Glass = glass;
+                group.CastsNoShadow = shadowless;
                 group.Displacement = ((instance.HeightField is null) ? null : DisplacementOf(program: program, instance: index));
                 groups.Add(item: group);
             }

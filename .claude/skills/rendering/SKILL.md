@@ -579,6 +579,13 @@ records the options weighed.
   back (`Entry.Move`). A new layer is cleared before anything binds it.
 - **Glass.** An entry's glass extinction (`Optical`) is drawn with each whole redraw, against the front depth, from a
   selection of every draw (`OpticalKind`).
+- **Draws that cast no shadow.** A palette slot with `castsShadow: false` (`SdfMaterial.CastsNoShadow`, carried on the
+  appearance outline) bakes its shapes into groups of their own (`SdfMeshBakeGroup.CastsNoShadow`), whose records carry
+  `SdfMeshRecord.NoShadowFlag`; the selection kernel filters that flag out of every split-exit staging
+  (`SdfMeshOcclusion.Stage`'s `splitExit`, which the world's shadows pass for every drawing), so a new shadow drawing
+  must stage with `splitExit` or it draws them.
+  `NoteMotion` takes whether each side casts (`SdfMeshRegion.CastsShadow`), so such a draw's motion owes the shadows
+  nothing. A static one stays in the irradiance volume's scene and the far product.
 - **Block bounds.** A pair of layers carries its block bounds (`Pair.Blocks`, `frame/sdf-shadow-blocks.hlsli`): a
   fitted plane and the depth range off it for each block of `SdfWorldPackage.ShadowBlockEdge` texels and the filter's
   reach about it, which the surface pass classifies a receiver by before any tap (`sdfMeshShadowClass`: lit, umbra
@@ -1076,6 +1083,19 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   exposure for any before/after comparison. A view with no camera sample reads the
   open sky, so a closed room meters as daylight and a display in it reads black:
   `camera=none` names its `wait=` ([mesh GI](references/mesh-gi.md)).
+- **A view stores its light at a scale near its exposure** (the pass block's
+  `lightScale`, `SdfPhotometry.StoredLightScale`, a power of two kept within
+  `StoredLightBand` stops of the exposure), so a star's surface and the noon sky
+  fit the same half-float images. The views pass multiplies the nits it writes
+  into the lit image by `sdfStoredLightScale`, the glass pass divides it out as
+  it reads the lit image and multiplies again as it writes `glassLit`, the resolve
+  works on stored values throughout, and the composite divides it out before the
+  exposure; a debug image that is its own picture is stored unscaled. A new reader
+  or writer of a view's lit image goes through `sdfStoredLightScale` or it reads
+  the light thousands of times too dim or too bright. The temporal history holds
+  one scale (`SdfTemporalEpoch.LightScale`), so a scale step restarts it.
+  `world.exposure` prints each view's `stored=2^n`. The irradiance volume's
+  shared-exponent cubes are not scaled and top out near 65,000 nits.
 - **Temporal views can share shading in smooth interiors.** The device table's
   `viewsRate` chooses the coarsest spacing and classification tile. The resolve
   publishes smooth axes in the existing history surface. `sdfRateTile` checks

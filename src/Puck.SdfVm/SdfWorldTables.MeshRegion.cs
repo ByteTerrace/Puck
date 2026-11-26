@@ -591,10 +591,11 @@ public sealed partial class SdfWorldTables {
                     }
 
                     var wasLive = ReadStagedSelection(row: index, record: record, box: out var before, glass: out var wasGlass);
+                    var wasCaster = SdfMeshRegion.CastsShadow(record: record);
                     var posed = (sameRoster && (difference == SdfMeshDrawDifference.Matrix) && (index < m_stagedCount));
                     var mask = StageMeshDraw(draw: in draw, index: index, posed: posed, record: record, tally: ref tally);
 
-                    NoteStagedRow(row: index, wasLive: wasLive, before: in before, wasGlass: wasGlass, draw: in draw, record: record);
+                    NoteStagedRow(row: index, wasLive: wasLive, before: in before, wasGlass: wasGlass, wasCaster: wasCaster, draw: in draw, record: record);
                     // A grown region's new bytes are unknown to its host copy, so its zeros are not evidence of device
                     // zeros: initialize every word of a newly exposed record, including zero placement words.
                     if (index >= m_stagedCount) { mask = (ulong.MaxValue >> (64 - SdfMeshRecord.DrawWords)); }
