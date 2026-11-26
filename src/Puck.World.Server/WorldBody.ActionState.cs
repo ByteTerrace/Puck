@@ -379,6 +379,18 @@ public sealed partial class WorldBody {
         writer: "crossing"
     );
 
+    /// <summary>Writes the size the body's clearance held its growth to into the register <c>bodies.scale</c> names,
+    /// called only by <c>WorldPopulation.SyncBodyScale</c> once <see cref="SetScaleWithinClearance"/> answered less than
+    /// the register asked for.</summary>
+    /// <param name="slot">The register's action-state slot.</param>
+    /// <param name="raw">The size the body took, as a raw fixed-point value.</param>
+    internal void ApplyClearanceScale(int slot, long raw) => ApplyRawState(
+        reason: "growth held by clearance",
+        requested: raw,
+        slot: slot,
+        writer: "clearance"
+    );
+
     private void ApplyRawState(int slot, long requested, string writer, string reason) {
         var definition = m_actionStateDefinitions[slot];
         var effective = (definition.Envelope?.Clamp(

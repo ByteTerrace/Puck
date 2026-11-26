@@ -160,6 +160,14 @@ same change.
 - **Scale reaches every contact query.** A body's `Scale` multiplies its
   collider volumes for world contact, body pairs, events, the adjacency
   sweep's local side and rigid probing alike.
+- **Growth is held to the room about the body.** A tick's scale resync
+  (`WorldPopulation.SyncBodyScale` through `WorldBody.SetScaleWithinClearance`)
+  admits a larger size only where the grown body, lifted clear of its floor,
+  takes no push down its own up and only a skin's worth in all; otherwise it
+  takes the largest size that fits and writes it back into the register, so a
+  size field (`worlds/standard/size-field.puck`) that asks again each tick
+  grows the body once it walks clear. Shrinking is always admitted; a
+  crossing's resync takes the pair's size whole.
 - **Carried rigid contacts use the solve.** `TwoBodyHandle` makes a carried body
   static with its carrier's velocity. Its owned pair manifolds still join the
   solve; it never joins the integration roster. Carry's positional pair split

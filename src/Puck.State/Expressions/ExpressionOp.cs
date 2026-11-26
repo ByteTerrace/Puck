@@ -218,7 +218,9 @@ public enum ExpressionOp : byte {
     FloorDivideModulo,
     /// <summary>The truncated quotient and remainder of a by b from one division, as the pair (a / b, a % b).</summary>
     DivideRemainder,
-    /// <summary>The base raised to a non-negative exponent by squaring, exact or refused.</summary>
+    /// <summary>The base raised to an exponent: an int base to a non-negative int exponent by squaring, exact or refused;
+    /// a fixed base to any fixed exponent by <see cref="Puck.Maths.FixedQ4816.Pow"/>, refused where no real power exists
+    /// (zero to a negative exponent, a negative base to a fraction).</summary>
     Power,
     /// <summary>The base raised to a non-negative exponent modulo a positive modulus, in [0, modulus); never overflows.</summary>
     ModularPower,
