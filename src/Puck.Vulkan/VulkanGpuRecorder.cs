@@ -16,7 +16,9 @@ namespace Puck.Vulkan;
 /// <param name="deviceContext">The device context whose current logical device every command is recorded against; a
 /// device recreated after a loss is picked up by the next command.</param>
 /// <param name="recordingApi">The native recording API.</param>
-public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulkanCommandBufferRecordingApi recordingApi) : IGpuRecorder {
+/// <param name="labels">Whether <see cref="BeginDebugGroup"/> records a debug label: on for a device that names its
+/// objects (<c>GpuDeviceOptions.NameObjects</c>), off otherwise.</param>
+public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulkanCommandBufferRecordingApi recordingApi, bool labels = false) : IGpuRecorder {
     private VulkanDeviceCommands Device => deviceContext.LogicalDevice.Commands;
     // The open runs of barriers (BeginBarriers), by command buffer; a command buffer records on one thread at a time.
     private readonly Dictionary<nint, BarrierBatch> m_batches = [];
@@ -131,13 +133,16 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             device: Device
         ).ThrowIfFailed(device: Device, operation: "vkBeginCommandBuffer");
     /// <inheritdoc/>
-    /// <remarks>The label is also the device's breadcrumb (<see cref="VulkanDeviceCheckpoints"/>).</remarks>
+    /// <remarks>The label is also the device's breadcrumb (<see cref="VulkanDeviceCheckpoints"/>), marked whether or not
+    /// the recorder records labels.</remarks>
     public void BeginDebugGroup(nint commandBufferHandle, string label) {
-        recordingApi.BeginDebugLabel(
-            commandBufferHandle: commandBufferHandle,
-            device: Device,
-            label: label
-        );
+        if (labels) {
+            recordingApi.BeginDebugLabel(
+                commandBufferHandle: commandBufferHandle,
+                device: Device,
+                label: label
+            );
+        }
         Device.Checkpoints.Mark(commandBuffer: commandBufferHandle, label: label);
     }
     /// <inheritdoc/>
@@ -403,11 +408,14 @@ public sealed class VulkanGpuRecorder(IVulkanDeviceContext deviceContext, IVulka
             device: Device
         ).ThrowIfFailed(device: Device, operation: "vkEndCommandBuffer");
     /// <inheritdoc/>
-    public void EndDebugGroup(nint commandBufferHandle) =>
-        recordingApi.EndDebugLabel(
-            commandBufferHandle: commandBufferHandle,
-            device: Device
-        );
+    public void EndDebugGroup(nint commandBufferHandle) {
+        if (labels) {
+            recordingApi.EndDebugLabel(
+                commandBufferHandle: commandBufferHandle,
+                device: Device
+            );
+        }
+    }
     /// <inheritdoc/>
     public void MemoryBarrier(nint commandBufferHandle, GpuAccess sourceAccessMask, GpuAccess destinationAccessMask, GpuStage sourceStageMask, GpuStage destinationStageMask) {
         if (BatchOf(commandBufferHandle: commandBufferHandle) is { } batch) {

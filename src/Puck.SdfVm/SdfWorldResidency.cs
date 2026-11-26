@@ -208,7 +208,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
     /// <summary>Describes the residency's mesh residency for <c>world.residency</c>: the latest bake's landing from its
     /// start, near the primary seat's eye and everywhere (<see cref="SdfMeshPathBake.DescribeResidency"/>), its floors
     /// (<see cref="SdfMeshPathBake.DescribeFloors"/>), the store's reads, the mesh region's landing
-    /// (<see cref="SdfWorldTables.DescribeLanding"/>), what the raster passes selected of it
+    /// (<see cref="SdfWorldTables.DescribeLanding"/>), what the latest upload flushed of each table
+    /// (<see cref="SdfWorldTables.DescribeRegionFlushes"/>), what the raster passes selected of it
     /// (<see cref="SdfWorldTables.DescribeSelection"/>), the motion scopes its passes sign with and why each last moved
     /// (<see cref="SdfWorldTables.DescribeMotion"/>), its presentation's selector
     /// (<see cref="SdfResidencySelector.Describe"/>) with the background work's one budget, the tables' fixed cost (<see cref="SdfWorldTables.DescribeFixedCost"/>), the background GPU work's buffers
@@ -228,6 +229,7 @@ public sealed partial class SdfWorldResidency : IDisposable {
             MeshPathBake.DescribeFloors(),
             $"{(MeshPathBake.Library.Disk?.DescribeReads() ?? "store=none")} {SdfMesh.DescribeRestores()}",
             (m_tables?.DescribeLanding() ?? "region=none"),
+            (m_tables?.DescribeRegionFlushes() ?? "region-flushes=none"),
             (m_tables?.DescribeSelection() ?? "selection=none"),
             (m_tables?.DescribeMotion() ?? "motion-scopes=none"),
             $"shadows {(m_tables?.DescribeShadows() is { Length: > 0 } shadows ? shadows : "none")}",

@@ -405,7 +405,11 @@ bakes; the lead measures frame times and edit-to-running on a quiet machine.
 A table the host writes each frame is a `GpuRegion` (`Puck.Abstractions/Gpu/Residency`). Create it with the
 profile constructor so it chooses ring, in place or staged by `GpuResidency.Select`, and grow it only through
 `Grow`, which chooses again and restages a region past a ring's share of the aperture; never select a policy or
-replace a region in the owner. A fixed policy (the always-staged mesh region, uniform frame blocks) uses the policy
+replace a region in the owner. A write owes and copies into the host copy only the words that differ, and a flush
+writes only owed words (`GpuRegion.LastFlushedBytes`): `world.residency`'s `region-flushes` line names what the latest
+upload flushed of each residency table, and a render node's regions count under its `region copies` pass
+(`world.counters gpu counter gpu.uploads`). A ring writes each change into every slot's buffer, so a table whose rows
+move every frame (the animated bodies' transforms) flushes about twice its changed rows. A fixed policy (the always-staged mesh region, uniform frame blocks) uses the policy
 constructor. Round a constant-buffer block with `IGpuBindings.ConstantBufferBytes`. What `Grow` returns retires
 after the submissions that read the old buffers (`SdfWorldTables.Retire`).
 The mesh region is the presentation's, never a residency's: every residency on a device names its meshes in one
