@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 using Puck.Abstractions.Gpu;
-using Puck.Testing;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;

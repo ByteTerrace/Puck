@@ -1,6 +1,5 @@
 using System.Numerics;
 using Puck.SignedDistance;
-using Puck.Testing;
 using Xunit;
 
 namespace Puck.SdfVm.Tests;

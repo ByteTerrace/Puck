@@ -4,7 +4,6 @@ using Puck.DirectX;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Puck.Platform.Windows;
-using Puck.Testing;
 using Puck.Vulkan;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Factories;

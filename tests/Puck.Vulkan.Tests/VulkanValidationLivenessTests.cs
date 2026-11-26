@@ -1,6 +1,5 @@
 using Puck.Abstractions.Gpu;
 using Puck.Abstractions.Windowing;
-using Puck.Testing;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Factories;
 using Puck.Vulkan.Interfaces;
