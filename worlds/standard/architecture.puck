@@ -1147,3 +1147,50 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
     domain [repeat(spacing: [1, (height / rails), 1], limit: [0, ((rails / 2) - 1), 0], origin: [0, (height / 2), 0])]
   }
 }
+
+// A pendant lamp hung from a ceiling at `at` (the ceiling point, +Y up): a rose against the ceiling, a cord down to a
+// drum shade `shade` in radius and `pendantShadeHeight` tall whose foot is `drop` metres under the ceiling, and across
+// the drum's foot a frosted diffuser `glow` in radius, the emitter, whose face's centre is `pendantGlowAt(at, drop)`:
+// that is where the lamp's light stands. Its palette slots from `base` are the shade (and the rose), the cord and the
+// diffuser.
+let pendantShade = 0
+let pendantCord = 1
+let pendantGlow = 2
+let pendantShadeHeight = 0.22
+function pendantGlowAt(at, drop) = (at + [0, (0 - (drop + 0.02)), 0])
+function pendantGlowArea(glow = 0.17) = (3.141592653589793 * glow * glow)
+// The light a downward glowing face of `luminance` nits and `area` square metres gives as a spot opening to a
+// hemisphere (angle 90deg), in lumens: such a spot's intensity is its power over 2 pi, and the face's own along its axis
+// is its luminance times its area, so the two agree straight below it and the light reads as the face it stands at.
+// Rounded to whole lumens, since a state cell carrying it is an integer.
+function glowSpotPower(luminance, area) = round(6.283185307179586 * luminance * area)
+template pendantLamp(base, at, drop, shade = 0.2, glow = 0.17) {
+  let cord = ((drop - pendantShadeHeight) - 0.03)
+  shape Cylinder "pendant-rose" {
+    material: (base + pendantShade)
+    position: (at + [0, -0.015, 0])
+    scale [0.07, 0.015, 0.07]
+    rounding: 0.005
+    detail: true
+  }
+  shape Cylinder "pendant-cord" {
+    material: (base + pendantCord)
+    position: (at + [0, (0 - (0.03 + (cord / 2))), 0])
+    scale [0.006, (cord / 2), 0.006]
+    detail: true
+  }
+  shape Cylinder "pendant-shade" {
+    material: (base + pendantShade)
+    position: (at + [0, (0 - (drop - (pendantShadeHeight / 2))), 0])
+    scale [shade, (pendantShadeHeight / 2), shade]
+    rounding: 0.02
+    detail: true
+  }
+  shape Cylinder "pendant-glow" {
+    material: (base + pendantGlow)
+    position: (at + [0, (0 - (drop + 0.008)), 0])
+    scale [glow, 0.008, glow]
+    rounding: 0.004
+    detail: true
+  }
+}

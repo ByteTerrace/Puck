@@ -1,0 +1,396 @@
+// Level 1's handheld rentals: two stalls in the toybox, each lending 12 Humble Gaming Bricks and 12 Advanced Gaming
+// Bricks, 48 devices in all, each one of a kind (its stall, its model and its colourway). The world holds only these
+// 48, so a device is either in its cubby or on loan to one body, and rules can name any one of them.
+//
+// The stalls wrap the open corner of the two spiral stairs (layout.puck's `galleryStairs`, south-east and north-west),
+// an L-shaped counter whose two arms are the corner's two sides, its corner on the diagonal out from the stair's, so
+// the plan reads the same turned half round with the switchbacks. The south-east stall's west arm shows its bricks and
+// its north arm its advanced bricks; the north-west stall, turned half round, its east and south arms. A device stands
+// on the counter facing whoever walks up to it.
+//
+// Renting: stand before a device and press the context button (`interact`, E or RB on a pad). The device leaves its
+// cubby and rides the renter's hip, and the renter's own handheld machine starts. A body rents one device at a time.
+// Returning: press the context button at the stall's corner (the returns tray). A renter who leaves level 1, or leaves
+// the world, returns the device to its cubby.
+//
+// The state a puzzle reads: `rentalLoan[<ordinal>]` is 0 while the device is in its cubby and N + 1 while body N holds
+// it; `rentalDevice[<ordinal>]` names the device (`se-hgb-01` .. `nw-agb-12`), `rentalDeviceModel` its model (1 a
+// brick, 2 an advanced brick) and `rentalDeviceColour` its colourway's name. `rentalHeld[<body>]` is the ordinal a body
+// holds (0 for none) and `rentalModel[<body>]` its model.
+//
+// Handhelds at scale: a device in its cubby, or riding a hip, is a static creation and runs no machine. The machines
+// are a pool, one brick and one advanced brick for each seat's body (`rental-hgb-<body>`, `rental-agb-<body>`), each
+// advanced only while its body holds a device of its model (the machine's `runsWhen`), so at most one handheld runs per
+// player however many devices the stalls hold, and a pool machine whose body holds nothing costs no emulation. The
+// renting interaction is one rule per device over the bodies standing in its reach (reach.puck), so its cost is the
+// bodies at the counter.
+//
+// The engage hook: every rent and return gate is `rentalCanRent(each)` and `pressing()`; a size or pass condition
+// (another body state a rule can read) is added to `rentalCanRent` once and gates every stall.
+
+import "../../standard/machines"
+import "../reach"
+import "layout"
+import "look"
+
+// The stalls, each by its L's corner in the plan and its turn: 0 for the south-east, whose arms run south and east
+// from the corner, 180 for the north-west, turned half round. `sign` turns the stall's own frame into the plan's.
+let rentalStallInset = 0.9
+let rentalStalls = [
+  {
+    id: "se"
+    x: (galleryStair("south-east").well.x0 - rentalStallInset)
+    z: (galleryStair("south-east").well.z1 + rentalStallInset)
+    yaw: 0
+    sign: 1
+  }
+  {
+    id: "nw"
+    x: (galleryStair("north-west").well.x1 + rentalStallInset)
+    z: (galleryStair("north-west").well.z0 - rentalStallInset)
+    yaw: 180
+    sign: -1
+  }
+]
+// A point of a stall's own frame (x and z from its corner) in the plan.
+function rentalPlan(stall, lx, lz) = [(stall.x + (stall.sign * lx)), (stall.z + (stall.sign * lz))]
+
+// The counter: 0.95 m high, 0.5 m deep, each arm 2.6 m from the corner. Arm 0 runs along the stall's -z and faces its
+// -x; arm 1 runs along its +x and faces its +z. Each device stands 0.19 m from the next along its arm, the first 0.35 m
+// from the corner, near the counter's front edge; the customer stands in the 0.95 m before the counter.
+let rentalCounterTop = 0.95
+let rentalCounterHalfDepth = 0.25
+let rentalArmLength = 2.6
+let rentalPitch = 0.19
+let rentalFirst = 0.35
+let rentalFront = 0.1
+let rentalReachDepth = 1.2
+function rentalAlong(n) = (rentalFirst + (rentalPitch * n))
+// A device's place on its arm, in the stall's frame, and the yaw it faces the customer at.
+function rentalSpot(arm, n) = ((arm == 0) ? [(0 - rentalFront), (0 - rentalAlong(n))] : [rentalAlong(n), rentalFront])
+function rentalArmYaw(arm) = ((arm == 0) ? 90 : 180)
+
+// The models: a brick on arm 0, an advanced brick on arm 1.
+let rentalModels = [
+  { id: "hgb", model: 1, arm: 0, title: "HUMBLE GAMING BRICK" }
+  { id: "agb", model: 2, arm: 1, title: "ADVANCED GAMING BRICK" }
+]
+// Twelve colourways a model, the same twelve at both stalls: each a shell and the buttons' colour.
+let rentalColours = [
+  [
+    { name: "tangerine", shell: "#F28A2E", key: "#3A2C55" }
+    { name: "grape", shell: "#7B4FB8", key: "#2B2340" }
+    { name: "kiwi", shell: "#8CC63F", key: "#2E3A22" }
+    { name: "berry", shell: "#D83A6B", key: "#3B1C2A" }
+    { name: "teal", shell: "#1FA3A0", key: "#173A3A" }
+    { name: "dandelion", shell: "#F6CB2F", key: "#4A3A12" }
+    { name: "ice", shell: "#BFE6F2", key: "#2F3F55" }
+    { name: "smoke", shell: "#6A6E78", key: "#222428" }
+    { name: "ivory", shell: "#EDE6D3", key: "#5A2E3F" }
+    { name: "jungle", shell: "#3E7D4A", key: "#1E2B20" }
+    { name: "cobalt", shell: "#2F6FD6", key: "#F2B52C" }
+    { name: "crimson", shell: "#C2262E", key: "#F7F3E8" }
+  ]
+  [
+    { name: "glacier", shell: "#AFC9E6", key: "#2E3A5A" }
+    { name: "indigo", shell: "#3E3A8C", key: "#C9C6F0" }
+    { name: "fuchsia", shell: "#D9408F", key: "#3A1A2C" }
+    { name: "spice", shell: "#E0702F", key: "#3A2414" }
+    { name: "black", shell: "#24242A", key: "#8E8E98" }
+    { name: "platinum", shell: "#C9CCD2", key: "#3A3E48" }
+    { name: "lime", shell: "#B5D936", key: "#2C3A12" }
+    { name: "flame", shell: "#E8452F", key: "#F6CB2F" }
+    { name: "pearl", shell: "#F2EEE6", key: "#2F6FD6" }
+    { name: "midnight", shell: "#1E2A4A", key: "#9ED4F5" }
+    { name: "orchid", shell: "#B07CC6", key: "#2E1E38" }
+    { name: "jade", shell: "#2FA37A", key: "#F7F3E8" }
+  ]
+]
+let rentalPerModel = length(rentalColours[0])
+
+function rentalNumber(n) = ((n < 10) ? $"0{n}" : $"{n}")
+// The 48 devices, each by its ordinal (1 .. 48), stall, model and colourway.
+let rentalDevices = flatMap(
+  range(0, length(rentalStalls)),
+  s => flatMap(
+    range(0, length(rentalModels)),
+    m => map(
+      range(0, rentalPerModel),
+      n => {
+        ordinal: ((((s * length(rentalModels)) + m) * rentalPerModel) + n + 1)
+        stall: s
+        model: m
+        colour: n
+        id: $"{rentalStalls[s].id}-{rentalModels[m].id}-{rentalNumber(n + 1)}"
+      }
+    )
+  )
+)
+function rentalPrototype(d) = $"rental-{rentalModels[d.model].id}-{rentalColours[d.model][d.colour].name}"
+// Where a device stands in the plan, its counter's top under it.
+function rentalDeviceAt(d) = rentalPlan(rentalStalls[d.stall], rentalSpot(rentalModels[d.model].arm, d.colour)[0], rentalSpot(rentalModels[d.model].arm, d.colour)[1])
+
+// A reach in the plan from two corners of a stall's frame, on level 1's floor, in world coordinates.
+function rentalReachBox(stall, lx0, lz0, lx1, lz1) = {
+  x0: galleryWorld(minimum(rentalPlan(stall, lx0, lz0)[0], rentalPlan(stall, lx1, lz1)[0]), 0, 0)[0]
+  x1: galleryWorld(maximum(rentalPlan(stall, lx0, lz0)[0], rentalPlan(stall, lx1, lz1)[0]), 0, 0)[0]
+  z0: galleryWorld(0, 0, minimum(rentalPlan(stall, lx0, lz0)[1], rentalPlan(stall, lx1, lz1)[1]))[2]
+  z1: galleryWorld(0, 0, maximum(rentalPlan(stall, lx0, lz0)[1], rentalPlan(stall, lx1, lz1)[1]))[2]
+  y0: (galleryFloor[toyboxLevel] - 0.5)
+  y1: (galleryFloor[toyboxLevel] + 1)
+}
+// The floor before a device: its 0.19 m along the arm, the 0.95 m before the counter.
+function rentalDeviceReach(d) = (
+  (rentalModels[d.model].arm == 0)
+    ? rentalReachBox(rentalStalls[d.stall], (0 - rentalReachDepth), ((0 - rentalAlong(d.colour)) - (rentalPitch / 2)), (0 - rentalCounterHalfDepth), ((rentalPitch / 2) - rentalAlong(d.colour)))
+    : rentalReachBox(rentalStalls[d.stall], (rentalAlong(d.colour) - (rentalPitch / 2)), rentalCounterHalfDepth, (rentalAlong(d.colour) + (rentalPitch / 2)), rentalReachDepth)
+)
+// The returns tray's floor: the square before the counter's outer corner.
+function rentalReturnReach(stall) = rentalReachBox(stall, (0 - rentalReachDepth), rentalCounterHalfDepth, (0 - rentalCounterHalfDepth), rentalReachDepth)
+
+// Whether a body may rent or return: one of the seats' bodies. A size or pass condition joins here.
+function rentalCanRent() = (rentalHolder[$each] > 0)
+
+state {
+  world {
+    row {
+      name: "rentalLoan"
+      kind: Int
+      capacity: length(rentalDevices)
+      cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: 0 })
+    }
+    row {
+      name: "rentalDevice"
+      kind: Text
+      capacity: length(rentalDevices)
+      cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: d.id })
+    }
+    row {
+      name: "rentalOrdinal"
+      kind: Int
+      capacity: length(rentalDevices)
+      cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: d.ordinal })
+    }
+    row {
+      name: "rentalDeviceModel"
+      kind: Int
+      capacity: length(rentalDevices)
+      cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: rentalModels[d.model].model })
+    }
+    row {
+      name: "rentalDeviceColour"
+      kind: Text
+      capacity: length(rentalDevices)
+      cells: map(rentalDevices, d => { key: $"{d.ordinal}", value: rentalColours[d.model][d.colour].name })
+    }
+    row {
+      name: "rentalHeld"
+      kind: Int
+      capacity: length(rentalBodies)
+      cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
+    }
+    row {
+      name: "rentalModel"
+      kind: Int
+      capacity: length(rentalBodies)
+      cells: map(rentalBodies, b => { key: $"{b}", value: 0 })
+    }
+    // The number a loan names each seat's body by, its index + 1: fixed.
+    row {
+      name: "rentalHolder"
+      kind: Int
+      capacity: length(rentalBodies)
+      cells: map(rentalBodies, b => { key: $"{b}", value: (b + 1) })
+    }
+  }
+}
+
+// A device's creation, standing on its base with its face toward -Z (the side a placement's yaw turns to face): a
+// brick is 75 x 133 x 27.5 mm upright, an advanced brick 144 x 82 x 25 mm landscape. Each shell is its colourway's
+// plastic, its screen dark glass behind a bezel, its pad and buttons the colourway's keys.
+let rentalBezel = { color: "#1A1820", roughness: 0.2, specular: 0.05 }
+let rentalGlass = { color: "#0E1418", roughness: 0.06, specular: 0.06, coat: 0.6 }
+function rentalPalette(c) = [
+  { color: c.shell, roughness: 0.3, specular: 0.04, coat: 0.5 }
+  rentalBezel
+  rentalGlass
+  { color: c.key, roughness: 0.35, specular: 0.04 }
+]
+template rentalBrick(c) {
+  shape Box "shell" { material: 0, position [0, 0.0665, 0], scale [0.0375, 0.0665, 0.01375], rounding: 0.006 }
+  shape Box "bezel" { material: 1, position [0, 0.095, -0.0135], scale [0.031, 0.026, 0.0015], rounding: 0.0012 }
+  shape Box "glass" { material: 2, position [0, 0.096, -0.0146], scale [0.022, 0.0198, 0.0008] }
+  shape Box "pad-x" { material: 3, position [0.019, 0.042, -0.0142], scale [0.0095, 0.003, 0.0015], rounding: 0.001 }
+  shape Box "pad-y" { material: 3, position [0.019, 0.042, -0.0142], scale [0.003, 0.0095, 0.0015], rounding: 0.001 }
+  shape Cylinder "a" { material: 3, position [-0.024, 0.046, -0.0142], rotation [0.7071, 0, 0, 0.7071], scale [0.0045, 0.0015, 0.0045] }
+  shape Cylinder "b" { material: 3, position [-0.012, 0.04, -0.0142], rotation [0.7071, 0, 0, 0.7071], scale [0.0045, 0.0015, 0.0045] }
+}
+template rentalAdvanced(c) {
+  shape Box "shell" { material: 0, position [0, 0.041, 0], scale [0.072, 0.041, 0.0125], rounding: 0.012 }
+  shape Box "bezel" { material: 1, position [0, 0.043, -0.0122], scale [0.038, 0.027, 0.0015], rounding: 0.0012 }
+  shape Box "glass" { material: 2, position [0, 0.043, -0.0133], scale [0.0306, 0.0204, 0.0008] }
+  shape Box "pad-x" { material: 3, position [0.054, 0.045, -0.0128], scale [0.009, 0.003, 0.0015], rounding: 0.001 }
+  shape Box "pad-y" { material: 3, position [0.054, 0.045, -0.0128], scale [0.003, 0.009, 0.0015], rounding: 0.001 }
+  shape Cylinder "a" { material: 3, position [-0.058, 0.049, -0.0128], rotation [0.7071, 0, 0, 0.7071], scale [0.0045, 0.0015, 0.0045] }
+  shape Cylinder "b" { material: 3, position [-0.048, 0.042, -0.0128], rotation [0.7071, 0, 0, 0.7071], scale [0.0045, 0.0015, 0.0045] }
+}
+
+// The counter, in its stall's frame from the L's corner: each arm a body in the toybox's sunflower with a cobalt kick
+// and a candy-pink top, and the returns tray at the corner, cut into the top.
+let rentalCounterPalette = [
+  { color: lookLevelToybox.tileTone, roughness: 0.3, specular: 0.04, coat: 0.5 }
+  { color: lookLevelToybox.tile, roughness: 0.35, specular: 0.04 }
+  { color: lookLevelToybox.coffer, roughness: 0.25, specular: 0.04, coat: 0.6 }
+  { color: lookLevelToybox.grout, roughness: 0.4, specular: 0.04 }
+]
+let rentalArmBoxes = [
+  { x0: (0 - rentalCounterHalfDepth), x1: rentalCounterHalfDepth, z0: (0 - rentalArmLength), z1: rentalCounterHalfDepth }
+  { x0: (0 - rentalCounterHalfDepth), x1: rentalArmLength, z0: (0 - rentalCounterHalfDepth), z1: rentalCounterHalfDepth }
+]
+
+prototypes {
+  prototype "rental-counter" {
+    document {
+      name: "rental-counter"
+      schema: "puck.creation.v1"
+      palette: rentalCounterPalette
+      for (box, a) in rentalArmBoxes {
+        shape Box $"body-{a}" {
+          material: 0
+          position [((box.x0 + box.x1) / 2), ((rentalCounterTop - 0.04) / 2), ((box.z0 + box.z1) / 2)]
+          scale [((box.x1 - box.x0) / 2), ((rentalCounterTop - 0.04) / 2), ((box.z1 - box.z0) / 2)]
+          rounding: 0.03
+        }
+        shape Box $"kick-{a}" {
+          material: 1
+          position [((box.x0 + box.x1) / 2), 0.05, ((box.z0 + box.z1) / 2)]
+          scale [(((box.x1 - box.x0) / 2) - 0.03), 0.05, (((box.z1 - box.z0) / 2) - 0.03)]
+        }
+        shape Box $"top-{a}" {
+          material: 2
+          position [((box.x0 + box.x1) / 2), (rentalCounterTop - 0.02), ((box.z0 + box.z1) / 2)]
+          scale [(((box.x1 - box.x0) / 2) + 0.02), 0.02, (((box.z1 - box.z0) / 2) + 0.02)]
+          rounding: 0.015
+        }
+      }
+      shape Box "tray" {
+        material: 3
+        position [0, (rentalCounterTop + 0.01), 0]
+        scale [0.18, 0.012, 0.18]
+        rounding: 0.01
+      }
+    }
+  }
+  prototype "rental-device-empty" {
+    document {
+      name: "rental-device-empty"
+      schema: "puck.creation.v1"
+      palette [rentalBezel]
+    }
+  }
+  for (model, m) in rentalModels {
+    for c in rentalColours[m] {
+      prototype $"rental-{model.id}-{c.name}" {
+        document {
+          name: $"{model.title} ({c.name})"
+          schema: "puck.creation.v1"
+          palette: rentalPalette(c)
+          for k in filter([0], k => (m == 0)) {
+            rentalBrick(c)
+          }
+          for k in filter([0], k => (m == 1)) {
+            rentalAdvanced(c)
+          }
+        }
+      }
+    }
+  }
+}
+
+placements {
+  for stall in rentalStalls {
+    placement $"rental-counter-{stall.id}" {
+      prototype: "rental-counter"
+      parent: "gallery"
+      position [stall.x, galleryFloor[toyboxLevel], stall.z]
+      yawDegrees: stall.yaw
+      solid
+    }
+    reach(id: $"rental-return-{stall.id}", box: rentalReturnReach(stall))
+  }
+  // Each device in its cubby, until it is on loan.
+  for d in rentalDevices {
+    placement $"rental-{d.id}" {
+      prototype: rentalPrototype(d)
+      parent: "gallery"
+      position [rentalDeviceAt(d)[0], (galleryFloor[toyboxLevel] + rentalCounterTop), rentalDeviceAt(d)[1]]
+      yawDegrees: (rentalStalls[d.stall].yaw + rentalArmYaw(rentalModels[d.model].arm))
+      respond [
+        { when: state(state: rentalLoan, key: $"{d.ordinal}", comparison: NotEqual, value: 0), prototypeId: "rental-device-empty" }
+      ]
+    }
+    reach(id: $"rental-reach-{d.ordinal}", box: rentalDeviceReach(d))
+  }
+  // The device a seat's body holds rides its right hip, its face out.
+  for b in rentalBodies {
+    placement $"rental-carried-{b}" {
+      prototype: "rental-device-empty"
+      position [0, 0, 0]
+      attach {
+        bodyIndex: b
+        localOffset [-0.26, 0.92, 0]
+        localYawDegrees: 90
+      }
+      respond: map(rentalDevices, d => { when: state(state: rentalHeld, key: $"{b}", comparison: Equal, value: d.ordinal), prototypeId: rentalPrototype(d) })
+    }
+  }
+}
+
+// Renting: a seat's body before a device in its cubby, holding none, presses the context button.
+for d in rentalDevices {
+  rule $"rental-rent-{d.ordinal}" {
+    when pressing() and rentalCanRent() and rentalLoan[$"{d.ordinal}"] == 0 and rentalHeld[$each] == 0
+    mode: Edge
+    forEach: region($"rental-reach-{d.ordinal}")
+    rentalLoan[$"{d.ordinal}"] = rentalHolder[$each]
+    rentalHeld[$each] = d.ordinal
+    rentalModel[$each] = rentalModels[d.model].model
+  }
+}
+
+// Returning at a stall's tray: the device goes back to its cubby and the body lets go.
+for stall in rentalStalls {
+  rule $"rental-return-{stall.id}" {
+    when pressing() and rentalCanRent() and rentalHeld[$each] > 0
+    mode: Edge
+    forEach: region($"rental-return-{stall.id}")
+    rentalLoan[rentalHeld[$each]] = 0
+    rentalHeld[$each] = 0
+    rentalModel[$each] = 0
+  }
+}
+
+// Leaving level 1, or the world (an absent body stands at the origin), returns the device.
+rule "rental-leave" {
+  when rentalHeld[$each] > 0 and (bodyPosition(each, y) < (galleryFloor[toyboxLevel] - 1) or bodyPosition(each, y) > (galleryFloor[toyboxLevel] + 3))
+  mode: Level
+  forEach: rentalHeld
+  rentalLoan[rentalHeld[$each]] = 0
+  rentalHeld[$each] = 0
+  rentalModel[$each] = 0
+}
+
+// Each seat's handheld pool: a brick and an advanced brick, advanced only while the body holds a device of that model.
+// Every brick in the stalls plays the tetromino game and every advanced brick the moth's pip; their paths resolve
+// beside this file.
+machines: flatMap(
+  rentalBodies,
+  b => [
+    (brickMachine($"rental-hgb-{b}", "../cartridges/cgb/tetromino.cgb.puck") with {
+      runsWhen { state: rentalModel, key: $"{b}", comparison: Equal, value: 1 }
+    })
+    (advancedBrickMachine($"rental-agb-{b}", "../cartridges/agb/pip.agb.puck") with {
+      runsWhen { state: rentalModel, key: $"{b}", comparison: Equal, value: 2 }
+    })
+  ]
+)

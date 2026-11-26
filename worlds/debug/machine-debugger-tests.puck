@@ -44,7 +44,7 @@ machines: concat([
   { name: "range-deck-9", running: false }
   { name: "range-deck-24", running: false }
   { name: "range-deck-50", running: false }
-], map(toyboxMachines, name => { name: name, running: false }))
+], map(concat(toyboxMachines, rentalMachines), name => { name: name, running: false }))
 
 test "every machine passes the six checks on bundled diagnostic cartridges" {
   when {

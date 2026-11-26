@@ -40,22 +40,18 @@ import "shell"
 import "look"
 import "flaw"
 import "toybox"
+import "rentals"
 import "wonder"
 // The companion hears the lift's authored door edge through its read-only sensory projection, and the world that stands
 // the building binds its camera to the inspection lever's cells (the debug world's exposure.puck).
 exports {
   reads [liftDoors, gallery]
   // The debug world's lamp over the context button reads which display a seat stands at (debug.puck).
-  bindings [galleryFill, stationNear]
+  bindings [galleryExposure, stationNear]
 }
 
-// What `gallery.inspect On` writes: the sky's ambient gain and the pinned exposure, in EV100 (a lit room is about 7).
-let inspectAmbient = 2.5
-// The basis's ambient gain (avatars/moth.puck). A multiple of 1/64, so the state cell holds it exactly and Off restores
-// it bit for bit.
-let authoredAmbient = 0.40625
+// The exposure `gallery.inspect On` pins the camera at, in EV100 (a lit room is about 7).
 let inspectHold = 7
-let inspectFill = 60
 
 // The lift's panels and displays: a satin steel plate, charcoal legends, chrome bezels and black display glass, with the
 // lit and unlit lamps and button faces in the slots after them. The variants of a button or display share their
@@ -166,11 +162,32 @@ let hallSwitchStates = [
   { name: "off", indicator: "#5BE38A", glow: 200 }
 ]
 
+// The south-west stair's pendant (architecture.puck's pendantLamp): hung over the middle of level 1's half landing
+// from the soffit of level 2's, its diffuser 3.6 m over the landing, so it lights the flights between levels 1 and 2,
+// where the flaw does not reach. `stairPendantAt` is the ceiling point in the building's frame.
+let stairPendantStair = galleryStair("south-west")
+let stairPendantAt = [
+  stairCentreX(stairPendantStair),
+  ((galleryFloor[2] + (galleryStorey / 2)) - 0.3),
+  (stairPendantStair.well.z0 + (switchbackLanding / 2))
+]
+let stairPendantDrop = 0.55
+let stairPendantPower = glowSpotPower(lookStairPendant.luminance, pendantGlowArea())
+// The pendant's diffuser lit and dark: the two prototypes differ only in that slot, so a flip bakes nothing.
+let stairPendantStates = [
+  { name: "on", glow { color: lookStairPendant.color, roughness: 0.5, emissive: lookStairPendant.luminance } }
+  { name: "off", glow { color: lookStairPendant.off, roughness: 0.5, specular: 0.04 } }
+]
+// The car's luminous ceiling panel, in the cab's frame: its half extents across and along, and its glowing face's
+// height over the car's floor.
+let carLampHalf = [1.25, 1.4]
+let carLampFace = 2.51
+
 // What each `hallLamps` cell holds while its level is On: a storey's stretch of the flaw, its light in candela per metre
 // (look.puck's lookFlaw), and the stairwell's pendant, in lumens, on level 1's switch.
 let hallLampLevels = concat(
   map(range(0, 4), k => { key: $"level{k}", level: k, value: lookFlaw.intensity }),
-  [{ key: "stairs", level: 1, value: 800 }]
+  [{ key: "stairs", level: 1, value: stairPendantPower }]
 )
 
 // The tour: every exhibit in walking order, level by level and display by display (shapes.puck's galleryCatalog).
@@ -227,6 +244,21 @@ prototypes {
             align: "center"
           }
         ]
+      }
+    }
+  }
+  // The stair's pendant, lit while level 1's lights are on and dark while they are off.
+  for state in stairPendantStates {
+    prototype $"stair-pendant-{state.name}" {
+      document {
+        name: $"stair-pendant-{state.name}"
+        schema: "puck.creation.v1"
+        palette [
+          { color: lookStairPendant.drum, roughness: 0.45, specular: 0.05 }
+          { color: lookStairPendant.cord, roughness: 0.6, specular: 0.04 }
+          state.glow
+        ]
+        pendantLamp(base: 0, at: [0, 0, 0], drop: stairPendantDrop)
       }
     }
   }
@@ -298,8 +330,8 @@ prototypes {
       }
       shape Box "lamp" {
         material: shellCarLight
-        position [0, 2.53, 0]
-        scale [1.25, 0.02, 1.4]
+        position [0, (carLampFace + 0.02), 0]
+        scale [carLampHalf[0], 0.02, carLampHalf[1]]
       }
       shape Box "panel" {
         material: shellTrim
@@ -526,6 +558,17 @@ placements {
       ]
     }
   }
+  placement "stair-pendant" {
+    prototype: "stair-pendant-on"
+    parent: "gallery"
+    position: stairPendantAt
+    respond [
+      {
+        when: state(state: hallLights, key: level1, comparison: Equal, value: 0)
+        prototypeId: "stair-pendant-off"
+      }
+    ]
+  }
   placement "boardroom-sign" {
     prototype: "boardroom-sign"
     parent: "gallery"
@@ -729,40 +772,38 @@ placements {
 // The building's lights, each anchored to the root: a light stands where the root puts it and, standing still there,
 // is traced into the irradiance volume, which bounces its light and occludes it where the probes about a surface
 // cannot see it. The flaw (flaw.puck) lights the inside: its tube lights run the whole of its length, each in one
-// storey, reading its power from that storey's `hallLamps` cell. Beside it stand only what it cannot do: the
-// stairwell's pendant, since the flaw never enters the core's stair shaft, and the lamp riding the lift car's body
-// under its ceiling, which moves with the car through the shaft, so it is neither traced nor bounced. The coffers'
-// small lamps are paint, and the windows' daylight is the world's sun.
+// storey, reading its power from that storey's `hallLamps` cell. Beside it stand only the two lamps a body can see,
+// each light standing at its fixture's glowing face in that face's colour and giving what the face shows (look.puck's
+// lookCarLamp and lookStairPendant): the south-west stair's pendant, since the flaw never enters that stair's well, and
+// the lift car's luminous ceiling, which rides the car's body through the shaft, so it is neither traced nor bounced.
+// Every screen lights what stands before it by its own picture (toybox.puck), and the windows' daylight is the world's
+// sun. Nothing else lights the building: the coffers' small lamps are paint.
 render {
   lighting {
     lights: concat(
       [
-        // The inspection fill (`gallery.inspect`): five unshadowed neutral lights, one from overhead and four low
-        // from the sides, each at the `galleryFill.fill` illuminance, zero while the lever is Off. They reach every
-        // surface that faces them, shadowed or not, so no exhibit sits in the dark.
-        directional(name: "inspect-fill-top", direction: [0, 1, 0], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
-        directional(name: "inspect-fill-east", direction: [1, 0.3, 0], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
-        directional(name: "inspect-fill-west", direction: [-1, 0.3, 0], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
-        directional(name: "inspect-fill-south", direction: [0, 0.3, 1], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
-        directional(name: "inspect-fill-north", direction: [0, 0.3, -1], color: "#FFFFFF", illuminance: "state.galleryFill.fill")
-        point(
+        // The pendant's diffuser faces down under its drum shade, so its light is a spot opening to a hemisphere.
+        spot(
           name: "hall-stairs",
           anchor: placement(placementId: gallery),
-          position: [stairCentreX(galleryStair("south-west")), 10.5, (galleryStair("south-west").well.z0 + (switchbackLanding / 2))],
-          temperature: 2700K,
+          position: pendantGlowAt(stairPendantAt, stairPendantDrop),
+          direction: [0, -1, 0],
+          angle: 90deg,
+          innerAngle: 70deg,
+          color: lookStairPendant.color,
           power: "state.hallLamps.stairs"
         )
-        // The car's light, just under its luminous ceiling: a spot opening almost to a hemisphere, so it lights the
-        // cab up to the ceiling but not the panel above it, riding the car's body.
+        // The car's panel lights the cab below it and not the ceiling it is set in, in the car body's frame (the cab
+        // rides `liftRoot` under the body).
         spot(
           name: "hall-lift",
           anchor: placement(placementId: `lift-car`),
-          position: [0, 0.22, 0],
+          position: [0, ((carLampFace - liftRoot) - 0.01), 0],
           direction: [0, -1, 0],
-          angle: 89deg,
+          angle: 90deg,
           innerAngle: 75deg,
-          temperature: 6500K,
-          power: 6000lm
+          color: lookCarLamp.color,
+          power: glowSpotPower(lookCarLamp.luminance, ((4 * carLampHalf[0]) * carLampHalf[1]))
         )
       ],
       flawLights(placement(placementId: gallery))
@@ -856,17 +897,12 @@ state {
       level2 = Down
       level3 = Down
     }
-    // The inspection lever (`gallery.inspect`), and the render values its rules write: the sky's ambient gain, the
-    // exposure hold in EV100 (zero releases it) and the screens' gain on the traced light, at their authored values
-    // while the lever is Off.
+    // The inspection lever (`gallery.inspect`), and the exposure hold in EV100 its rules write (zero releases it).
     table galleryInspect: HallLight {
       mode = Off
     }
-    table galleryFill {
-      ambient = authoredAmbient
+    table galleryExposure {
       hold = 0
-      screens = 1
-      fill = 0
     }
     // Each level's light by the level that owns it (hallLampLevels): zero while its level is Off.
     table hallLamps {
@@ -874,7 +910,7 @@ state {
       level1 = lookFlaw.intensity
       level2 = lookFlaw.intensity
       level3 = lookFlaw.intensity
-      stairs = 800
+      stairs = stairPendantPower
     }
     slot liftAt = 0 bounds(0..(3 * liftCells))
     slot liftTarget = 0 bounds(0..(3 * liftCells))
@@ -1196,25 +1232,17 @@ for lamp in hallLampLevels {
   }
 }
 
-// The inspection lever: On fills every surface with a flat sky ambient, pins the camera at one exposure and takes the
-// screens out of the traced light, so an agent's capture or a person's eye reads albedo and form the same at every
-// exhibit; Off writes the authored values back. The physical lighting (the flaw, the lamps, blinds, the traced bounce) is
-// untouched either way, so a lighting check turns it Off.
+// The inspection lever: On pins the camera at one exposure, so captures of different exhibits compare at one EV; Off
+// releases it to the automatic exposure. It adds no light: every exhibit is lit by the building's own lights alone.
 rule "gallery-inspect-on" {
   when galleryInspect[$"mode"] == 1
   mode: Edge
-  galleryFill[$"ambient"] = inspectAmbient
-  galleryFill[$"hold"] = inspectHold
-  galleryFill[$"screens"] = 0
-  galleryFill[$"fill"] = inspectFill
+  galleryExposure[$"hold"] = inspectHold
 }
 rule "gallery-inspect-off" {
   when galleryInspect[$"mode"] == 0
   mode: Edge
-  galleryFill[$"ambient"] = authoredAmbient
-  galleryFill[$"hold"] = 0
-  galleryFill[$"screens"] = 1
-  galleryFill[$"fill"] = 0
+  galleryExposure[$"hold"] = 0
 }
 
 // One camera per bookmarked viewpoint (look.puck's lookShots), its eye and aim placed from the building's site when the
@@ -1270,7 +1298,7 @@ stationPlay(
 commands [
   {
     name: "gallery.inspect"
-    help: "Switches the gallery's inspection fill On or Off: On gives every surface a flat sky ambient, pins the camera's exposure and keeps the screens out of the traced light, so captures read the same at every exhibit; Off restores the authored lighting exactly. Beside the physical lighting (gallery.lights, gallery.blinds), which it does not touch."
+    help: "Switches the gallery's inspection exposure On or Off: On pins the camera at EV100 7, so captures of different exhibits compare at one exposure; Off releases it to the automatic exposure. It adds no light; the building's own lights (gallery.lights, gallery.blinds) light every exhibit."
     parameters [
       { name: "state", kind: Choice, values ["On", "Off"], default: "On" }
     ]

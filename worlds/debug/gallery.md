@@ -164,6 +164,23 @@ ceiling painting, a portal back to the floor painting, so a body flying up the
 well crosses to the floor rather than into level 1; the bridge is level 1's
 own floor, inside the lattice. The corner stairs and the lift are the ways in.
 
+**The rentals.** [gallery/rentals.puck](gallery/rentals.puck) stands an
+L-shaped counter round the open corner of each spiral stair (south-east and
+north-west), so the plan reads the same turned half round. Each counter lends
+12 Humble Gaming Bricks on one arm and 12 Advanced Gaming Bricks on the other,
+one colourway each, 48 devices in the world. The context button before a
+device rents it: the device leaves the counter and rides the renter's hip. The
+context button before the counter's outer corner (the returns tray) returns it,
+and leaving level 1 returns it too. `rentalLoan` (keyed by ordinal, 1 to 48)
+holds 0 for a device on the counter and N + 1 while body N holds it;
+`rentalDevice`, `rentalDeviceModel` and `rentalDeviceColour` name each device.
+No device on the counter runs a machine: each seat's body has a pool brick and
+a pool advanced brick (`rental-hgb-<body>`, `rental-agb-<body>`) whose
+`runsWhen` advances it only while that body holds a device of its model, so at
+most one handheld runs per player. `machine.state rental-hgb-0` reads
+`running`. The rented device's picture is not yet shown: a screen cannot follow
+a body, so the pool machine runs with no display (see "What is still open").
+
 ## The displays
 
 The owner's ruling, in the plan's own words: "The nave should widen and have
@@ -341,6 +358,26 @@ drifts a few hundredths over patches a couple of metres across, so no wall,
 pier or floor is one flat colour. The kit's paints are plain dielectrics, and
 the primitives that open the nave each take a material of their own.
 
+### Lighting
+
+Every light in the building comes from something a body can see, and there
+are four kinds:
+
+| Source | What it is | Its light |
+|---|---|---|
+| The sun | The world's sun, with its moon and the companion star ([day.puck](day.puck)) | Through the windows and skylights |
+| The flaw | The glowing tube that weaves through every floor ([flaw.puck](gallery/flaw.puck)) | A chain of tube lights along it, each in one storey, on that storey's switch |
+| Screens | The toybox's twelve visible pictures ([toybox.puck](gallery/toybox.puck)) | Each lights what stands before it with its own picture: the engine reduces the picture to its mean on the GPU and shades it as an area light the size of the face, and the irradiance volume bounces it |
+| Lamps | The lift car's luminous ceiling and the south-west stair's pendant, hung from the soffit of level 2's half landing (the standard's `pendantLamp`) | A spot at the lamp's glowing face, in that face's colour, giving what the face shows (`glowSpotPower`); the pendant follows level 1's switch and goes dark with it |
+
+Glowing marquees, indicators and the display consoles' interfaces are emissive
+surfaces that light nothing directly. A material's emission reaches its
+surroundings through the irradiance volume's bounce. The consoles' interfaces
+are paint on glass, which the volume does not trace, so they light nothing yet
+([open items](../../docs/plans/open-items.md#debug-tools)).
+`gallery.inspect On` pins the camera at EV100 7 so that captures of different
+exhibits compare at one exposure. It adds no light.
+
 ### Tuning it
 
 [`gallery/look.puck`](gallery/look.puck) names every value a look pass tunes,
@@ -444,6 +481,17 @@ small that way.
   treads and risers that shrink with the body over the flight, so each step
   costs it the same share of its stride (the curve the size field already
   follows).
+- **A rented handheld's picture.** A screen's frame is fixed in the world
+  (`WorldScreen.Origin`), and its `carry` is presentation keyed to one look's
+  pose, with the engage radius left at the authored frame, so the pool machine
+  a renter's device runs has no display that rides the device and cannot be
+  engaged away from where its screen is authored. A screen that follows a body
+  (the device's hip, then its hands when played) is the engine gap; the rentals
+  then give each pool machine that screen. Network visitors already rent
+  (the reach rules cover every seat's body).
+- **Dormant pool runtimes.** A gated-off pool machine is not advanced but its
+  runtime is created at boot, 24 runtimes for 12 seats. Creating a runtime on
+  the first tick its `runsWhen` holds would make an unused pool free.
 - **World-space pieces.** A static creation's paints, a state lattice's origin
   and a table's board are placed in the world's frame. The floor's tiles and
   pads, the tables in the board game room and the fixtures that stand by world

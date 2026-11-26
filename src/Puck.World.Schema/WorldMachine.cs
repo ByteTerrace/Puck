@@ -24,6 +24,13 @@ namespace Puck.World;
 /// (<c>machine.default</c>) and the boot and every <c>world.reload</c> read, so the default lives beside the content
 /// and no document names it. A device with no default set, or whose default is absent or unmountable, boots its
 /// authored content. Omitted from the wire when false.</param>
+/// <param name="RunsWhen">The state condition the host advances this instance under, or <see langword="null"/> to
+/// advance it on every tick <paramref name="Running"/> allows. The tick evaluates it against the arena after the rule
+/// frame folds and before the machines step (<c>Server.WorldTick.GateMachines</c>), so a rule's write starts or stops
+/// the machine on the tick it lands, and a replay or a restored checkpoint derives the same gate from the same state:
+/// the gate is never stored. A gated-off instance keeps its hardware state, as a stopped one does, and costs no
+/// emulation while it waits. It reuses <see cref="WorldPlacementResponseCondition.StateCondition"/>, the reading
+/// placement responses, binding overlays and portals share. Omitted from the wire when null.</param>
 public sealed record WorldMachine(
     [property: DocumentName(WorldNameKind.Machine, WorldNameRole.Declares)] string Name,
     [property: DocumentText("a machine provider id")] string Engine,
@@ -33,5 +40,6 @@ public sealed record WorldMachine(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldMachineCable? Cable = null,
     [property: DocumentText("a path or document locator")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? ContentFolders = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool PreferFolderDefault = false
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool PreferFolderDefault = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementResponseCondition.StateCondition? RunsWhen = null
 );

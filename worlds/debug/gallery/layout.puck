@@ -6,6 +6,8 @@
 // placement, `gallery` (gallery.puck), so a world stands the building by giving that row a position and a turn; the
 // yaw of a row here is the row's own, with yaw 0 facing -z (south) and yaw 180 facing +z, as a placement's does.
 
+import "../../standard/paths"
+
 // Where the debug world stands the building: its root placement's position. A document that stands something in the
 // building by world coordinates (a table's lattice, a painting's door) adds it to a plan position with `galleryWorld`.
 // The site keeps the nave's west arcade at world x 22 and its south edge at world z 20.375 however the aisles are sized.
@@ -201,31 +203,54 @@ let fallHole = 1
 let fallX = (gallerySite[0] + fallPlan[0])
 let fallZ = (gallerySite[2] + fallPlan[1])
 
-// The flaw's path (flaw.puck): the control points of one closed, smooth curve (a quadratic B-spline: the curve runs
-// from the midpoint of each pair of neighbouring points to the next, bending toward the point between them), in the
-// building's frame, metres. It weaves along the north arcade eastward, a wave from under the roof down to level 0 and
-// back twice, its flanks passing behind the arcade's piers (z 30.6) and through the slabs of levels 1 to 3 in the
-// walls of the north gallery, its crests and troughs out over the void (z 27.6); crosses the void under the roof at the
-// east end; weaves back west along the south arcade the same way; and climbs from level 0 through the bridge's three
-// floors at the west end to where it began. It keeps out of the corner stair bays (0 and 12) and clear of the showcase
-// displays, and a crest of each arcade's wave stands at bay 6 (x 29.7), where the hall's tree grows: there the flaw
-// passes 16 to 17 m up, 10 m from the trunk's axis and over every branch's landing on the balcony edges, leaving the
-// trunk and the branches' walkable tops clear. A curve crosses a slab between two points that stand either side of
-// it; move a point and the curve and every light along it follow.
-let flawControls = [
-  [12.2, 15.15, 30.6], [14.7, 9.8, 30.6], [17.2, 4.45, 30.6], [19.7, 2.25, 27.6], [22.2, 4.45, 30.6]
-  [24.7, 9.8, 30.6], [27.2, 15.15, 30.6], [29.7, 17.35, 27.6], [32.2, 15.15, 30.6], [34.7, 9.8, 30.6]
-  [37.2, 4.45, 30.6], [39.7, 2.25, 27.6], [42.2, 4.45, 30.6], [44.7, 9.8, 30.6], [47.2, 15.15, 30.6]
-  [49.7, 17.35, 27.6], [52.2, 15.15, 30.6]
-  [55.2, 16.9, 24.2], [56.2, 16.9, 18.4], [55.2, 16.9, 12.6]
-  [52.2, 15.15, 6.4], [49.7, 17.35, 9.25], [47.2, 15.15, 6.4], [44.7, 9.8, 6.4], [42.2, 4.45, 6.4]
-  [39.7, 2.25, 9.25], [37.2, 4.45, 6.4], [34.7, 9.8, 6.4], [32.2, 15.15, 6.4], [29.7, 17.35, 9.25]
-  [27.2, 15.15, 6.4], [24.7, 9.8, 6.4], [22.2, 4.45, 6.4], [19.7, 2.25, 9.25]
-  [15.2, 3.4, 11.0], [10.4, 4.3, 12.8], [7.4, 7.6, 15.6], [7.0, 10.8, 19.6], [7.4, 13.8, 23.4], [9.7, 16.6, 26.4]
+// The flaw's route (flaw.puck): the corners of one closed polyline in the building's frame, metres, which the flaw
+// follows with each corner rounded (look.puck's `lookFlaw.bend`). Every run is level or plumb, on the building's lines:
+// along each gallery the run keeps one tile behind its arcade's row, `flawDrop` under its storey's ceiling, and it changes
+// storey by a riser standing plumb one tile behind a pier, straight through the slab between. Along each gallery it
+// steps down a storey a bay from under the roof to level 0 and back up the same way, so it serves every storey on both
+// sides; the two galleries are mirrored about the nave's centre row, and the steps about bay 7. It crosses the void only
+// under the roof, at the middles of bays 3 and 11, beneath the arches' crowns, clear of the skylights. It keeps out of
+// the corner stair bays (0 and 12) and the bridge, and away from the nave, the tree and the showcase.
+//
+// `flawProfile` is the editable route: walking east along a gallery, each step's run stands at `level` from its `x` to
+// the next step's, and the last step only marks where the run ends and crosses. Move a step and the risers, the slabs'
+// openings (`flawCrossings`) and the lights follow.
+let flawDrop = 0.6
+function flawRun(level) = (galleryCeiling[level] - flawDrop)
+let flawNorth = tileZ((arcadeRowNorth + 1))
+let flawSouth = tileZ((arcadeRowSouth - 1))
+let flawProfile = [
+  { x: bayX(3), level: 3 }
+  { x: pierX(4), level: 2 }
+  { x: pierX(5), level: 1 }
+  { x: pierX(6), level: 0 }
+  { x: pierX(9), level: 1 }
+  { x: pierX(10), level: 2 }
+  { x: pierX(11), level: 3 }
+  { x: bayX(11), level: 3 }
 ]
-// The heights the flaw's lights are cut at, each slab's middle, so every stretch of light lies in one storey and the
-// irradiance volume shuts it out of the storeys the slabs close off.
+// One gallery's corners walking east at `z`: where each step meets the next, the run's corner at the old level and the
+// riser's foot or head at the new; at the two ends the corner where the run turns to cross the void.
+let flawGallery = concat(
+  [{ x: flawProfile[0].x, level: flawProfile[0].level }],
+  flatMap(
+    range(1, (length(flawProfile) - 2)),
+    j => [{ x: flawProfile[j].x, level: flawProfile[(j - 1)].level }, { x: flawProfile[j].x, level: flawProfile[j].level }]
+  ),
+  [{ x: flawProfile[(length(flawProfile) - 1)].x, level: flawProfile[(length(flawProfile) - 2)].level }]
+)
+function flawGalleryAt(z, corners) = map(corners, c => [c.x, flawRun(c.level), z])
+// The loop: east along the north gallery, across the void at bay 11, west along the south gallery, and back across the
+// void at bay 3 to the start.
+let flawRoute = concat(
+  flawGalleryAt(flawNorth, flawGallery),
+  flawGalleryAt(flawSouth, map(range(0, length(flawGallery)), i => flawGallery[((length(flawGallery) - 1) - i)]))
+)
+// The heights the flaw is cut at, each slab's middle: its lights are cut there so every stretch of light lies in one
+// storey and the irradiance volume shuts it out of the storeys the slabs close off, and each place it passes through a
+// slab (`flawCrossings`, each { point, height, segment }: `height` 0 is level 1's slab) is opened and collared.
 let flawCuts = map(range(1, 3), k => ((galleryStorey * k) - 0.1))
+let flawCrossings = loopCrossings(flawRoute, flawCuts)
 
 // The display stations: the showcase's twelve stand in its bays (shapes.puck's galleryDisplays), a pair to each bay
 // across the nave on the two showcase rows, each console toward the centre aisle (yaw 180 faces +z, yaw 0 faces -z); a
@@ -273,6 +298,12 @@ let toyboxStations = flatMap(toyboxSides, side => map(toyboxPlan, s => (s with {
   facing: side.facing
 })))
 let toyboxMachines = map(toyboxStations, s => s.machine)
+
+// Level 1's handheld rentals (rentals.puck): a pool of one brick and one advanced brick for each seat's body (bodies 0
+// to 11, shapes.puck's four local seats and eight visitors), each run only while its body holds a rented device of that
+// model.
+let rentalBodies = range(0, 12)
+let rentalMachines = flatMap(rentalBodies, b => [$"rental-hgb-{b}", $"rental-agb-{b}"])
 
 // Level 1's lattice (shell.puck): a toy construction panel along every edge level 1 shares with the nave's void,
 // standing on the floor and reaching into the fascia (or the slab) above, so no body flies or jumps into the toybox
