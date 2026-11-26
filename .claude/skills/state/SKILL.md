@@ -50,6 +50,8 @@ corrected in the same change.
 | Legal moves, a computer opponent's best move, chance nodes | `ArenaSearch` over journal scopes, judged by `IArenaSearchJudge.Judge` (`RuleArenaSearchJudge`); world jobs are `search` rows (`WorldSearchSection`) | [search](../../../docs/reference/state/search.md) |
 | Schedule a distance or region interaction | `WorldRuleHost` supplies carrier rows, positions and sampled occupancy to `RuleDueList`. `RuleEvaluator.DrainFactMoves` delivers moves to both rule families. | [analysis](../../../docs/reference/state/analysis.md) |
 | Read and write sets, order-sensitive pairs, judge a binding only when something it reads moved, price a tick by that | `RuleDataflow`, `RuleHazards`, `RuleSchedule` and `RuleDueList` (per rule, and per binding of a keyed sweep, fed by `StateArena.TryReadCellMoves` and the host's fact moves), `RuleResponse` and `RuleWorkBudget` against `RuleCapacity.MaxWorkUnitsPerTick` | [analysis](../../../docs/reference/state/analysis.md) |
+| Bound the values a program or a read can answer; prove a written value lands inside what its destination keeps | `RuleBounds.Of` over `RuleCompileContext.ReadBounds` (a `ValueBounds`: an exact set by enumerating the reads' declared values through the one interpreter, else a range over `FixedInterval`); a host answers for its facts (`WorldBodyStateReads.TryCounterBounds`) | [bounds](../../../docs/reference/state/analysis.md#bound-what-a-program-can-answer) |
+| Know which lane ordinals' slots were touched since you last looked, open writes and rewinds included | `ArenaLaneTouches` through `StateArena.WatchLaneTouches` (the cell-level `RowGeneration`); the open scopes' touched lane ordinals and keys are `StateArena.CollectOpenLaneOrdinals` and `TryCollectOpenKeys` | [arena](../../../docs/reference/state/arena.md#row-versions-and-generations) |
 | Stop a Level rule firing again when its firing changed nothing | the firing schedule (`RuleDataflow.CollectFiring`), settled by `RuleEvaluator.FireProposal`; an unversioned host fact or host-owned row keeps it firing, so version them in the host (`IStateReader.TryScheduleFact`, `IStateReader.TryScheduleHostOwnedRow`) | [keep a Level firing](../../../docs/reference/state/analysis.md#keep-a-level-firing-that-changed-nothing) |
 | A host fact, effect or row family only your host understands | facets and families registered on the compile context; `ArenaEffectHost` as the base host | [hosting](../../../docs/reference/state/hosting.md) |
 | Decide what a recipient may read or write | `WorldRecipientView` over `WorldStateDisclosure`; mutation/guard admission in `WorldRecipientMutations`; audience enclosure in `StateArena.ReadAudienceEncloses` | [disclosure plan](../../../docs/plans/disclosure.md) |
@@ -70,8 +72,8 @@ deciding place reads what it was handed: a rule's judgement holds its latch on a
 re-arms and a fixpoint pass counts no progress, a decision keeps its choice, a search step lands nothing and restarts. An
 effect that meets a fault refuses its firing by name, so a firing that proposes is one no fault touched. Local code may
 drop a value but never the fault: firing evaluations use `EvaluationFrame`; `RuleExpressions.EvaluateDetached`
-enters the same interpreter only from the constant folder, a flock's affinity and browser read-back, as
-`OutcomeDetachedAllowlist` specifies. Each consumer handles the cases of what it gets back.
+enters the same interpreter only from the constant folder, the bounds lowering, a flock's affinity and browser
+read-back, as `OutcomeDetachedAllowlist` specifies. Each consumer handles the cases of what it gets back.
 `Absent` is a value each consumer answers, never a fault
 ([expressions](../../../docs/reference/state/expressions.md#constant-folding-and-faults)).
 
@@ -205,7 +207,11 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   change is priced for a tick at rest plus one change (`RuleResponse.Of`, read
   off the judgement walk a schedule is built from); a line judged in place (a
   group's, a search judge's, an interaction, a decision, a `maxFirings` sweep)
-  for every binding. What rests is one answer: a row by its declarations
+  for every binding; a sweep of this tick's events (`RuleIteration.BindsEvents`: a contacts or input-events
+  sweep) binds nothing at rest and is priced at one binding. A Level line whose firing closes its own gate
+  (`RuleResponse.ClosesItself`: a literal the written literal fails, or `cell != source` with `cell = source` over
+  one plain cell or one local) fires nothing at rest; the tested cell may be a host fact an `IFactSettingEffect`
+  sets exactly, which for a register with an envelope needs the source's `RuleBounds` inside it. What rests is one answer: a row by its declarations
   (`RuleCompileContext.RowRests`, the trait and host-owned test
   `RuleSchedule.Build` applies), a host fact by `RuleCompileContext.FactRests`,
   and the world host refuses to leave unversioned a fact
@@ -220,6 +226,12 @@ its scope validation is in `WorldDefinitionValidator.BodyGates.cs`. No body gate
   unless a write can land between them in the tick's pass
   (`RuleCellWriters.Between`); a host that evaluates rules in another order
   places its lines and writers by that order.
+- **A commit's price is what the commit does.** A host whose commit of one firing derives from what it wrote prices
+  that into the firing (`RuleWorkBudget.Contributor`'s commit units, `WorldBodyStateEffect.Cost`). The world's
+  commit resyncs only what the transaction touched: the bodies whose scale, kit or look registers were touched
+  (`WorldPopulation.SyncBodyCells` over `ArenaLaneTouches`), and the drive gate and owners of each gate key written
+  (`WorldGrants.SyncDriveGate`). A new derivation at the commit that walks the population is priced at the
+  population, so make it follow the touched cells instead.
 - **A price reads declarations, never members.** Every price reads a row's room
   through `RuleCompileContext.RowCapacity`: an uncapped keyed row is priced at
   `StateCapacity.MaxCellsPerRow` (or its token domain's room), never at its cells

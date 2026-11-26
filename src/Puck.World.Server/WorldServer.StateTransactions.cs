@@ -9,8 +9,11 @@ public sealed partial class WorldServer {
     private bool[] m_transactionRows = [];
 
     private readonly List<int> m_transactionWritten = [];
-    // The bodies whose input selection registers the committing transaction touched.
+    // The bodies whose owners the open transaction resynchronizes: those whose input selection registers it touched
+    // and those whose drive-gate cells it wrote, each once; and the gate cells' keys.
     private readonly List<int> m_transactionBodies = [];
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_transactionBodySeen = new();
+    private readonly List<CellKey> m_transactionGateKeys = [];
 
     /// <summary>Opens one atomic gameplay batch. Every producer uses this journal boundary.</summary>
     public int BeginStateTransaction() {
@@ -24,28 +27,54 @@ public sealed partial class WorldServer {
     private long m_transactionDrawReads;
 
     /// <summary>Commits a prepared batch. Deliveries happen after this boundary.</summary>
-    /// <remarks>A batch that wrote a drive-gate row resyncs the gates and every input owner. Otherwise only the owners
-    /// routing a body whose selection registers the batch touched resynchronize; every other owner's selection reads
-    /// nothing the batch wrote.</remarks>
+    /// <remarks>Only the owners routing a body whose selection registers or drive-gate cells the batch touched
+    /// resynchronize, and only those bodies' gates; every other owner's selection reads nothing the batch wrote. A
+    /// batch that changed a drive-gate row in a way no key describes resyncs the gates and every input owner.</remarks>
     /// <returns><see langword="true"/> when the commit closed the outermost scope and did nothing else: no gate or
     /// input owner resynchronised, no body cell resynchronised, and the batch read no private draw word
     /// (<see cref="IEffectHost.CommitStateTransaction"/>).</returns>
     public bool CommitStateTransaction(int mark) {
         FlagTransactionRows();
         var driveGateChanged = DrivesGate();
+        var everyOwner = !TryCollectTransactionBodies();
         var outermost = (m_arena.Journal.Scopes == 1);
 
-        m_transactionBodies.Clear();
-        if (!driveGateChanged) { m_transactionBodies.AddRange(collection: Input.TouchedSelectionBodies(writtenRows: m_transactionWritten)); }
         ClearTransactionRows();
         m_arena.Commit(mark: mark);
-        if (driveGateChanged) { m_grants.SyncState(Document.Definition, m_arena); }
+        if (everyOwner) {
+            m_grants.SyncState(Document.Definition, m_arena);
+        } else {
+            foreach (var key in m_transactionGateKeys) { m_grants.SyncDriveGate(arena: m_arena, key: key); }
+        }
         var cellsSynced = m_population.SyncBodyCells(definition: Document.Definition);
         // Every selection was admitted by ValidateStateTransaction while the journal could still rewind; applying them
         // cannot refuse, so nothing past the arena commit can need the rewind.
-        if (driveGateChanged) { Input.ApplyPreparedAll(); } else if (m_transactionBodies.Count > 0) { Input.ApplyPreparedBodies(bodies: m_transactionBodies); }
+        if (everyOwner) { Input.ApplyPreparedAll(); } else if (m_transactionBodies.Count > 0) { Input.ApplyPreparedBodies(bodies: m_transactionBodies); }
 
         return (outermost && !driveGateChanged && !cellsSynced && (m_transactionBodies.Count == 0) && (DrawKeys.Reads == m_transactionDrawReads));
+    }
+    // Collects, from the open transaction's journal, the bodies whose owners its commit resynchronizes
+    // (m_transactionBodies) and the drive-gate keys it wrote (m_transactionGateKeys). Validation prepares and the
+    // commit applies exactly this set, so both read it here. Returns false when the transaction changed a drive-gate
+    // row in a way no key describes: every gate and every owner resynchronizes.
+    private bool TryCollectTransactionBodies() {
+        m_transactionBodies.Clear();
+        m_transactionGateKeys.Clear();
+        if (DrivesGate() && !m_arena.TryCollectOpenKeys(keys: m_transactionGateKeys, rows: m_grants.DriveGateRows)) {
+            m_transactionGateKeys.Clear();
+
+            return false;
+        }
+
+        m_transactionBodySeen.Clear();
+        foreach (var body in Input.TouchedSelectionBodies(writtenRows: m_transactionWritten)) {
+            if (m_transactionBodySeen.Add(index: body)) { m_transactionBodies.Add(item: body); }
+        }
+        foreach (var key in m_transactionGateKeys) {
+            if (m_arena.Keys.TryCandidateIndex(key: key, index: out var body) && m_transactionBodySeen.Add(index: body)) { m_transactionBodies.Add(item: body); }
+        }
+
+        return true;
     }
     /// <summary>Restores a refused batch.</summary>
     public void RewindStateTransaction(int mark) => m_arena.Rewind(mark: mark);
@@ -97,9 +126,9 @@ public sealed partial class WorldServer {
                 validateBindings |= DocumentValueRows().Contains(item: name);
             }
             if (!m_arena.TryValidateRelations(changedRows: m_transactionRows, reason: out reason)) { return false; }
-            if (DrivesGate()
-                ? !Input.TryPrepareAll(reason: out reason)
-                : !Input.TryPrepareBodies(bodies: Input.TouchedSelectionBodies(writtenRows: m_transactionWritten), reason: out reason)) { return false; }
+            if (TryCollectTransactionBodies()
+                ? !Input.TryPrepareBodies(bodies: m_transactionBodies, reason: out reason)
+                : !Input.TryPrepareAll(reason: out reason)) { return false; }
             if (validateBindings) {
                 var view = WriteView(principal);
                 if (!view.IsAuthority && !RenamesIdentity()) {

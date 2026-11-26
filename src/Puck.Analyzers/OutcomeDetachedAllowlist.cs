@@ -15,6 +15,11 @@ public static class OutcomeDetachedAllowlist {
             Reason: "The constant folder: a faulted or absent subtree stays unfolded, so the interpreter answers it at run time."
         ),
         new(
+            Assembly: "Puck.State.Rules",
+            Path: "src/Puck.State.Rules/Evaluation/RuleBounds.cs",
+            Reason: "The bounds lowering evaluates a program at each assignment of its reads' declared values: an assignment that faults or answers an absence leaves the program unbounded."
+        ),
+        new(
             Assembly: "Puck.World.Server",
             Path: "src/Puck.World.Server/WorldRuleHost.FlockAffinities.cs",
             Reason: "The flock affinity is a perception, not a firing: a non-finite outcome is a counted AffinityFailures and a weight of zero."
