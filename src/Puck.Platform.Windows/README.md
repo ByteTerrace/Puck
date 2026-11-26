@@ -5,7 +5,10 @@ The Windows concrete backends behind `Puck.Platform`'s contracts.
 ## Contents
 
 - **Windowing**—`Win32NativeWindow` (+ its `INativeWindowBackend` wrapper
-  `Win32NativeWindowBackend`), `Win32ClipboardService`, VRR/EDID handling.
+  `Win32NativeWindowBackend`), `Win32ClipboardService`, VRR/EDID handling,
+  and live placement (`Win32NativeWindow.Placement`: client size through
+  `AdjustWindowRectEx` and `SetWindowPos`, centring in the monitor's work area,
+  the borderless fullscreen Alt+Enter also toggles).
 - **Camera/capture**—`Win32MediaFoundationCameraService` (the webcam,
   Media Foundation plus the camera frame server), `Win32NativeImageCaptureService`
   (Windows Graphics Capture desktop/window feeds).

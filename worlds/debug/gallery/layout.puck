@@ -22,46 +22,67 @@ let galleryParapet = 19.1
 // The footprint's walls, 0.3 m thick; its depth follows the nave (below).
 let galleryWall = 0.3
 
-// The nave runs east from the west arcade to the east wall, 21.25 m wide (seventeen tiles): a void from level 0's floor to the roof between the two
-// balcony edges, a hall about as deep from its viewpoint as it is wide (the kit pack's level-zero hall). The aisles
-// either side of it, and the bridge west of it, are floors on every level. The arcades' piers stand half a floor tile
-// behind each balcony edge, one wide bay apart, so every pier stands on a tile's centre.
-// The floor tile, the module the floor, the ceiling's coffers, the piers and the displays share: a pier's pitch is
-// four tiles, and a pier and a display each stand on a tile's centre.
+// The grid. The hall's floor is a whole number of 1.25 m tiles, and every dimension of the plan is a count of them:
+// along x, thirteen arcade bays of four tiles and the last pier's tile (53 tiles); along z, six tiles of aisle, the
+// nave's seventeen and six more (29 tiles). Tile (i, j) counts from the south-west corner of the walls' inner faces, so
+// a wall's inner face always lies on a tile's edge, and the piers, displays and furniture stand on tile centres. The
+// floor's tile paint, the ceiling's coffers, the piers and the displays all share this one module.
 let galleryTile = 1.25
-// The nave's edges, seventeen tiles apart, with six tiles of aisle either side between them and the south and north
-// walls' inner faces, so the room ends at a full tile against both walls.
-let naveSouth = (galleryWall + (6 * galleryTile))
-let naveNorth = (naveSouth + (17 * galleryTile))
-let galleryNorth = (naveNorth + (6 * galleryTile))
-let galleryDepth = (galleryNorth + galleryWall)
-// The west arcade stands nine and a half tiles east of the west wall's inner face, so the tile grid its piers centre
-// meets that wall at a tile's edge.
-let naveWest = (galleryWall + (9.5 * galleryTile))
-let naveMid = ((naveSouth + naveNorth) / 2)
-let arcadeSouth = (naveSouth - (galleryTile / 2))
-let arcadeNorth = (naveNorth + (galleryTile / 2))
-let arcadePitch = 5
-// The arcades run on under the bridge three bays west of the nave's void, so the west hall is arcaded as the nave is
-// and holds a pair of displays of its own; the westmost pier stands against the west wall, as the eastmost does the
-// east wall.
+let galleryBays = 13
+let galleryBayTiles = 4
+let galleryAisleTiles = 6
+let galleryNaveTiles = 17
+let gridTilesX = ((galleryBays * galleryBayTiles) + 1)
+let gridTilesZ = ((2 * galleryAisleTiles) + galleryNaveTiles)
+// The grid's south-west corner in the plan's frame. The plan's x 0 is the hall's old west face, three tiles east of
+// the grid's west edge; z 0 is the south wall's outer face.
+let gridX0 = (galleryWall - (3 * galleryTile))
+let gridZ0 = galleryWall
+// A tile's centre, a tile's west or south edge, along x and z.
+function tileX(i) = (gridX0 + ((i + 0.5) * galleryTile))
+function tileZ(j) = (gridZ0 + ((j + 0.5) * galleryTile))
+function tileEdgeX(i) = (gridX0 + (i * galleryTile))
+function tileEdgeZ(j) = (gridZ0 + (j * galleryTile))
+// The arcades: a pier on every fourth tile from the west wall's, fourteen of them, the first and last against the end
+// walls; bay b lies between piers b and b + 1, its centre on the middle tile of its four.
+function pierX(b) = tileX((galleryBayTiles * b))
+function bayX(b) = tileX(((galleryBayTiles * b) + (galleryBayTiles / 2)))
+let arcadeXs = map(range(0, (galleryBays + 1)), b => pierX(b))
+let arcadePitch = (galleryBayTiles * galleryTile)
+// The bays alternate: the odd ones are the showcase's, each holding a pair of displays across the nave (six bays, twelve
+// stations), and the even ones are for rest, each holding a bench against each long wall (seven bays).
+let showcaseBays = map(range(0, ((galleryBays - 1) / 2)), n => ((2 * n) + 1))
+let restBays = map(range(0, ((galleryBays + 1) / 2)), n => (2 * n))
+// The rows: each long wall's first tile row, the arcades' rows (a pier's tile, behind each balcony edge), and the two
+// showcase rows, mirrored about the nave's centre row.
+let wallRowSouth = 0
+let wallRowNorth = (gridTilesZ - 1)
+let arcadeRowSouth = (galleryAisleTiles - 1)
+let arcadeRowNorth = (galleryAisleTiles + galleryNaveTiles)
+let naveRowMid = ((gridTilesZ - 1) / 2)
+let showcaseRowSouth = (naveRowMid - 5)
+let showcaseRowNorth = (naveRowMid + 5)
+// The hall's edges in metres, for the documents that build walls and floors from them: the nave's balcony edges, its
+// west end (the void starts at the fourth pier; the bridge spans the three bays west of it), and the walls' inner faces.
+let naveSouth = tileEdgeZ(galleryAisleTiles)
+let naveNorth = tileEdgeZ((galleryAisleTiles + galleryNaveTiles))
+let naveMid = tileZ(naveRowMid)
+let arcadeSouth = tileZ(arcadeRowSouth)
+let arcadeNorth = tileZ(arcadeRowNorth)
 let arcadeWestBays = 3
-let arcadeXs = map(range(0, 14), i => (naveWest + (arcadePitch * (i - arcadeWestBays))))
-// The west wall: its inner face lies on the tile edge the westmost pier's foot ends at. The hall grew west past the
-// plan's x 0 (the old outer face), so the wall stands at negative x and the plan's other dimensions keep their values.
-let galleryWestIn = (arcadeXs[0] - (galleryTile / 2))
+let naveWest = pierX(arcadeWestBays)
+let galleryNorth = tileEdgeZ(gridTilesZ)
+let galleryDepth = (galleryNorth + galleryWall)
+let galleryWestIn = tileEdgeX(0)
 let galleryWestOut = (galleryWestIn - galleryWall)
+let galleryEast = tileEdgeX(gridTilesX)
+let galleryWidth = (galleryEast + galleryWall)
 // How far east, in metres, the west wall's inner face now stands of world x 10.3, where the rooms against it were
 // authored: Wonderland's room and its devices behind it, the desktop and the press before it.
 let galleryWestShift = ((22 - naveWest) + galleryWestIn - 10.3)
-// The footprint's east end: the arcades' last pier stands against the east wall, whose inner face lies on the tile edge
-// that pier's foot ends at, so the room ends at a full tile and the arcades' last arches close on that pier.
-let galleryEast = ((arcadeXs[(length(arcadeXs) - 1)] + (galleryTile / 2)))
-let galleryWidth = (galleryEast + galleryWall)
-// The centre of the tile nearest a plan position, along x or z: tile centres stand on the west arcade's line and the
-// south arcade's row, a tile apart.
-function galleryTileX(x) = (naveWest + (galleryTile * floor((((x - naveWest) / galleryTile) + 0.5))))
-function galleryTileZ(z) = (arcadeSouth + (galleryTile * floor((((z - arcadeSouth) / galleryTile) + 0.5))))
+// The centre of the tile nearest a plan position, along x or z.
+function galleryTileX(x) = tileX(floor(((x - gridX0) / galleryTile)))
+function galleryTileZ(z) = tileZ(floor(((z - gridZ0) / galleryTile)))
 // The north aisle's middle, where its ceiling strip, its downlights and its galleries' displays stand.
 let northAisleMid = ((naveNorth + galleryNorth) / 2)
 
@@ -141,13 +162,10 @@ let fallHole = 1
 let fallX = (gallerySite[0] + fallPlan[0])
 let fallZ = (gallerySite[2] + fallPlan[1])
 
-// The display stations: a few large interactive displays staged far apart on pads (shapes.puck's galleryDisplays). A
-// display stands at one of these lines, its console toward the walkway: yaw 180 faces +z, yaw 0 faces -z. The nave's
-// two lines flank its centre aisle, each a pair of displays 12 m apart; a gallery's displays stand along its middle,
-// their consoles toward its balcony edge.
-let displayNaveSouth = (naveSouth + 4.5)
-let displayNaveNorth = (naveNorth - 4.5)
-let displayNaveXs = [36, 48]
+// The display stations: the showcase's twelve stand in its bays (shapes.puck's galleryDisplays), a pair to each bay
+// across the nave on the two showcase rows, each console toward the centre aisle (yaw 180 faces +z, yaw 0 faces -z); a
+// gallery's displays stand along its middle, their consoles toward its balcony edge.
+let showcaseRows = [{ row: showcaseRowSouth, yaw: 180 }, { row: showcaseRowNorth, yaw: 0 }]
 let displayNorth = (northAisleMid + 0.6)
 let displaySouth = 4.4
 // A display is the standard's display plinth (architecture.puck) stamped at `displayScale`, its cap's top 1.05 m up,
