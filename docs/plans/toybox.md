@@ -58,6 +58,12 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
   `rentalCanRent` once it lands.
 - The flaw: the light tube, then its hollow interior, its openings and exits, and the imprint (light lane in
   progress; the interior and puzzle follow).
-- The central tree: a hero-quality sculpt, climbable, with walkable branches; the level-1 branches shrink.
+- The central tree's look: the tree stands, walkable (gallery.md, "The central tree"), but its sculpt is not yet at
+  the visual bar. The trunk is a plain cone, the treads read as a built stair rather than grown root and bark, the
+  branches are even-thickness limbs without knots or forks, and the canopy is a few broad leaf masses. A look pass
+  owes it a gnarled, fluted trunk, treads grown into the bark, branches that fork and taper, and a broken, layered
+  crown, judged live from every level.
+- The tree's level-1 branches shrink: a size field along each of `treeShrinkLimbs` (layout.puck), part of the size
+  field work above. Until then the bay-6 gate lets a full-size body into the toybox.
 - Climbing: a real climbing mechanic at Breath of the Wild / Tears of the Kingdom quality or better, preceded by a
   research round (the climb's states, stamina, ledge and mantle, the camera, animation and authored surfaces).
