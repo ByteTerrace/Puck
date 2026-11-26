@@ -1,0 +1,32 @@
+// A small fir grove in the open meadow: three plain firs and, beside them, the same tree dressed in lights.
+import "../standard/conifer"
+
+prototypes {
+  firTree(id: "fir")
+  firTree(id: "fir-tall", height: 1.3, spread: 0.9)
+  firTree(id: "fir-lit", lights: true)
+}
+
+placements {
+  placement "fir-0" {
+    prototype: "fir"
+    position [124, 0, -66]
+    yawDegrees: 20
+  }
+  placement "fir-1" {
+    prototype: "fir-tall"
+    position [127.5, 0, -70]
+    yawDegrees: 140
+  }
+  placement "fir-2" {
+    prototype: "fir"
+    position [121, 0, -70.5]
+    scale: 0.8
+    yawDegrees: 260
+  }
+  placement "fir-lit-0" {
+    prototype: "fir-lit"
+    position [130, 0, -63.5]
+    yawDegrees: 0
+  }
+}

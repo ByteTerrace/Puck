@@ -1,0 +1,95 @@
+// Conifers: a fir built from drooping tiers of cones over a short trunk, cartoony and chunky like the broadleaf
+// families in foliage.puck. `lights` hangs a spiral of glowing bulbs around the tiers and sets a star on top, so the
+// same tree stands plain or festive. Every look value is an argument with a default; a world overrides it.
+let firNeedles = ["#2E6B45", "#3B7D4E", "#4C9058"]
+let firBulbs = ["#FF4A3D", "#FFC63D", "#3DA8FF", "#5EE07A", "#FF7AD9"]
+
+template firTree(
+  id,
+  height = 1,
+  spread = 1,
+  tiers = 5,
+  needles = firNeedles,
+  bark = "#4A3424",
+  lights = false,
+  bulbs = firBulbs,
+  bulbCount = 42,
+  bulbGlow = 70,
+  star = "#FFD95A"
+) {
+  prototype $"{id}" {
+    document {
+      schema: "puck.creation.v1"
+      name: lights ? "fir-tree-lit" : "fir-tree"
+      palette: concat(
+        [{ color: bark, roughness: 0.95, specular: 0.02 }],
+        map(needles, c => { color: c, roughness: 0.92, specular: 0.02, wrap: 0.45 }),
+        lights ? concat(
+          map(bulbs, c => { color: c, roughness: 0.3, emissive: bulbGlow }),
+          [{ color: star, roughness: 0.25, emissive: bulbGlow * 1.5 }]
+        ) : []
+      )
+      shape Cylinder "trunk" {
+        position [0, 0.55 * height, 0]
+        scale [0.16 * spread, 0.55 * height, 0.16 * spread]
+        material: 0
+      }
+      shape Cylinder "flare" {
+        position [0, 0.08 * height, 0]
+        scale [0.26 * spread, 0.08 * height, 0.26 * spread]
+        rounding: 0.05
+        material: 0
+        blend: SmoothUnion
+        smooth: 0.12
+      }
+      // Tier t's cone stands on y = firBase, is 2 * firHalf tall and firRim wide at its base; the next tier's skirt hides
+      // this one's apex, so the silhouette steps the way a cartoon fir does.
+      for t in range(0, tiers) {
+        shape Cone $"tier-{t}" {
+          position [0, ((0.55 + t * 3.3 / tiers) + (0.95 - t * 0.3 / tiers)) * height, 0]
+          scale [(1.55 - t * 1.2 / tiers) * spread, (0.95 - t * 0.3 / tiers) * height, (1.55 - t * 1.2 / tiers) * spread]
+          material: 1 + t % length(needles)
+          blend: SmoothUnion
+          smooth: 0.14
+        }
+      }
+      // A puffed lip under each tier rounds its hem, so the tiers read as soft boughs rather than paper cones.
+      for t in range(0, tiers) {
+        shape Superellipsoid $"hem-{t}" {
+          exponent: 2.6
+          position [0, (0.6 + t * 3.3 / tiers) * height, 0]
+          scale [(1.5 - t * 1.2 / tiers) * spread, 0.16 * height, (1.5 - t * 1.2 / tiers) * spread]
+          material: 1 + t % length(needles)
+          blend: SmoothUnion
+          smooth: 0.18
+        }
+      }
+      // A bulb rides the lower skirt of tier k % tiers, a share s up its slope where the cone's radius is rim * (1 - s);
+      // the golden angle spaces bulbs around the tree so no two stack.
+      for k in range(0, lights ? bulbCount : 0) {
+        shape Sphere $"bulb-{k}" {
+          position [
+            ((1.55 - (k % tiers) * 1.2 / tiers) * spread * (0.9 - 0.3 * ((k * 0.618034) - floor(k * 0.618034))) + 0.1) *
+              cosine(k * 2.39996323),
+            ((0.55 + (k % tiers) * 3.3 / tiers) + 2 * (0.95 - (k % tiers) * 0.3 / tiers) *
+              (0.1 + 0.3 * ((k * 0.618034) - floor(k * 0.618034)))) * height,
+            ((1.55 - (k % tiers) * 1.2 / tiers) * spread * (0.9 - 0.3 * ((k * 0.618034) - floor(k * 0.618034))) + 0.1) *
+              sine(k * 2.39996323),
+          ]
+          scale [0.075, 0.075, 0.075]
+          material: 1 + length(needles) + (k + floor(k / tiers)) % length(bulbs)
+        }
+      }
+      // Two squares turned 45 degrees apart make an eight-pointed star.
+      for (turn, k) in (lights ? [0, 0.38268343] : []) {
+        shape Box $"star-{k}" {
+          position [0, 4.85 * height, 0]
+          rotation [0, 0, turn, turn == 0 ? 1 : 0.92387953]
+          scale [0.2, 0.2, 0.05]
+          rounding: 0.02
+          material: 1 + length(needles) + length(bulbs)
+        }
+      }
+    }
+  }
+}

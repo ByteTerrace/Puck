@@ -55,6 +55,7 @@ import "companion"
 import "exposure"
 import "gallery/gallery"
 import "chess"
+import "firs"
 // The board game room's hidden-information tables, which hold no bodies: the sealed-bid auction, the shedding card game,
 // social deduction and the fog-of-war skirmish (auction.puck, shedding.puck, deduction.puck, skirmish.puck).
 import "auction"
