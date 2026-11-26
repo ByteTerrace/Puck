@@ -382,19 +382,48 @@ template balustrade(base, length = 4, posts = 3, height = 1.1) {
   }
 }
 
+// A stair's riser schedule for a body whose size changes along it. A size field (size-field.puck) sizes a body on a
+// flight by its height on the standard's geometric curve, `size0 * power(size1 / size0, t)` at the fraction t of the
+// flight's rise, and a body's step height is its size times its kit's. A flight of `risers` even risers is built for a
+// body of size 1; the schedule keeps each riser the same share of the smaller size its two ends give a body, so the
+// flight costs a shrinking or growing body the same effort at every step and reads to an observer as an ordinary
+// flight that grows finer toward its small end. With the size's reciprocal stepped evenly over the steps (1 / s at
+// step n runs in a straight line from 1 / size0 to 1 / size1), a riser rises a constant share of the size at it, so
+// the step boundaries' sizes and heights are closed forms: the riser count, `stairRiserCount`, and the fraction of the
+// rise at the top of step n of `count`, `stairStepHeight`. The count rounds up past the share a size-1 body takes, by
+// the growth over one step (`size1 / size0`'s larger over its smaller, less one), so a riser never exceeds the share
+// at its smaller end. Equal sizes give `risers / size0` even risers: the plain flight at size 1.
+function stairRiserCount(risers, size0, size1) = (
+  (size0 == size1) ? ceiling((risers / size0)) : ceiling((
+      ((risers * absolute(((1 / size1) - (1 / size0)))) / absolute(logarithm((size1 / size0), 2.718281828459045))) +
+        ((maximum(size0, size1) / minimum(size0, size1)) - 1)
+    ))
+)
+function stairStepSize(n, count, size0, size1) = (1 / ((1 / size0) + ((((1 / size1) - (1 / size0)) * n) / count)))
+function stairStepHeight(n, count, size0, size1) = (
+  (size0 == size1) ? (n / count) : logarithm((stairStepSize(n, count, size0, size1) / size0), (size1 / size0))
+)
+
 // One straight flight of stairs between `x0` and `x1`, from its foot at z `foot` to its head at z `head` (either way
-// along Z), climbing `rise` from `y0` in `risers` risers: a tread box for each riser but the last, which steps onto
-// whatever stands at the head (a landing, a floor). Each tread is solid down to the flight's foot when `soffit` is 0,
-// or a slab `soffit` thick under its top, so a flight can stand over the one a storey below. Its shape follows from
-// its own rise, run and riser count alone, so a stair can reshape one flight without the others.
-template stairFlight(label, material, x0, x1, foot, head, y0, rise, risers, soffit = 0) {
-  for n in range(1, (risers - 1)) {
-    let top = (y0 + ((rise * n) / risers))
+// along Z), climbing `rise` from `y0`: a tread box for each riser but the last, which steps onto whatever stands at the
+// head (a landing, a floor). Each tread is solid down to the flight's foot when `soffit` is 0, or a slab `soffit` thick
+// under its top, so a flight can stand over the one a storey below. `risers` is the count a body of size 1 climbs;
+// `size0` and `size1` are the sizes a body takes at the flight's foot and head (the stair's riser schedule, above), so
+// a flight into a small place grows finer toward it, each tread as deep as its riser is high times the flight's run
+// over its rise. Its shape follows from its own rise, run, riser count and sizes alone, so a stair can reshape one
+// flight without the others.
+template stairFlight(label, material, x0, x1, foot, head, y0, rise, risers, soffit = 0, size0 = 1, size1 = 1) {
+  let count = stairRiserCount(risers, size0, size1)
+  let run = stairStepHeight((count - 1), count, size0, size1)
+  for n in range(1, (count - 1)) {
+    let top = (y0 + (rise * stairStepHeight(n, count, size0, size1)))
     let bottom = ((soffit == 0) ? y0 : (top - soffit))
+    let near = (stairStepHeight((n - 1), count, size0, size1) / run)
+    let far = (stairStepHeight(n, count, size0, size1) / run)
     shape Box $"{label}-{n}" {
       material: material
-      position [((x0 + x1) / 2), ((top + bottom) / 2), (foot + (((head - foot) * (n - 0.5)) / (risers - 1)))]
-      scale [((x1 - x0) / 2), ((top - bottom) / 2), (absolute((head - foot)) / (2 * (risers - 1)))]
+      position [((x0 + x1) / 2), ((top + bottom) / 2), (foot + (((head - foot) * (near + far)) / 2))]
+      scale [((x1 - x0) / 2), ((top - bottom) / 2), ((absolute((head - foot)) * (far - near)) / 2)]
     }
   }
 }
@@ -406,14 +435,29 @@ template stairFlight(label, material, x0, x1, foot, head, y0, rise, risers, soff
 // first flight. Copies stacked a storey apart make one stair, each storey's first flight solid to its foot under the
 // next storey's and its second a slab over the one below. `guard` 1 is the top storey's piece, whose next floor has no
 // flight to start: it carries the spine and the glass up into a guard round the well, with a rail across the first
-// flight's head. Boxes joined by union, so it collides as drawn.
-template switchbackStair(base, width = 5, depth = 6.25, landing = 2.5, rise = 4.5, risers = 18, spine = 0.2, guard = 0, rail = 1.1) {
+// flight's head. `size0` and `size1` are the sizes a body takes at the storey's foot and head on the standard's size
+// curve (the stair's riser schedule), the half landing taking the curve's middle, so each flight grows finer toward
+// the smaller. Boxes joined by union, so it collides as drawn.
+template switchbackStair(base, width = 5, depth = 6.25, landing = 2.5, rise = 4.5, risers = 18, spine = 0.2, guard = 0, rail = 1.1, size0 = 1, size1 = 1) {
   let front = (depth / 2)
   let back = (0 - (depth / 2))
   let half = (rise / 2)
   let flight = (risers / 2)
   let guardTop = ((guard == 1) ? (rise + rail) : rise)
-  stairFlight(label: "stair-up", material: (base + kitTerracotta), x0: (spine / 2), x1: (width / 2), foot: front, head: (back + landing), y0: 0, rise: half, risers: flight)
+  let sizeHalf = (size0 * power((size1 / size0), 0.5))
+  stairFlight(
+    label: "stair-up",
+    material: (base + kitTerracotta),
+    x0: (spine / 2),
+    x1: (width / 2),
+    foot: front,
+    head: (back + landing),
+    y0: 0,
+    rise: half,
+    risers: flight,
+    size0: size0,
+    size1: sizeHalf
+  )
   stairFlight(
     label: "stair-back",
     material: (base + kitTerracotta),
@@ -424,7 +468,9 @@ template switchbackStair(base, width = 5, depth = 6.25, landing = 2.5, rise = 4.
     y0: half,
     rise: half,
     risers: flight,
-    soffit: 0.45
+    soffit: 0.45,
+    size0: sizeHalf,
+    size1: size1
   )
   shape Box "stair-landing" {
     material: (base + kitTerracotta)
@@ -467,36 +513,47 @@ template switchbackStair(base, width = 5, depth = 6.25, landing = 2.5, rise = 4.
 // rim to meet the next, so each riser is closed; the last is the next floor's landing step, reaching `reach` past the
 // rim so it meets that floor's edge. Glass panes stand at the rim of every tread but the two either side of that
 // landing step under a brass handrail that climbs with them, so a body steps off only onto the next floor. With a turn
-// of 360 copies stacked a storey apart make one stair, each storey's landing step under the next storey's start. The
-// treads, newel and panes are boxes and a cylinder joined by union and collide as drawn; the handrail is drawn only.
-template spiralStair(base, radius = 2.5, newel = 0.5, rise = 4.5, risers = 18, turn = 360, start = 90, thickness = 0.3, reach = 0.6, rail = 0.95) {
+// of 360 copies stacked a storey apart make one stair, each storey's landing step under the next storey's start.
+// `size0` and `size1` are the sizes a body takes at the storey's foot and head (the stair's riser schedule): the treads
+// then grow finer toward the smaller, each turning as far as it rises, so every tread's centre stays on the one helix
+// and the panes and handrail keep their even steps along it, each pane reaching half a step below its tread's top so
+// the finer treads under it meet its foot. The treads, newel and panes are boxes and a cylinder joined by union and
+// collide as drawn; the handrail is drawn only.
+template spiralStair(base, radius = 2.5, newel = 0.5, rise = 4.5, risers = 18, turn = 360, start = 90, thickness = 0.3, reach = 0.6, rail = 0.95, size0 = 1, size1 = 1) {
   let step = (turn / risers)
   let halfStep = ((absolute(step) * 3.14159265) / 360)
   let rim = (((radius * sine(halfStep)) / cosine(halfStep)) + 0.02)
+  let count = stairRiserCount(risers, size0, size1)
   shape Cylinder "spiral-newel" {
     material: (base + kitTeal)
     position [0, (rise / 2), 0]
     scale [newel, (rise / 2), newel]
   }
-  for n in range(1, risers) {
-    let angle = (start + (step * n))
-    let outer = ((n == risers) ? (radius + reach) : radius)
+  for n in range(1, count) {
+    let height = stairStepHeight(n, count, size0, size1)
+    let before = stairStepHeight((n - 1), count, size0, size1)
+    // The step past the last mirrors the one before it, so the landing step spans as far beyond its centre as before.
+    let after = ((n == count) ? (2 - before) : stairStepHeight((n + 1), count, size0, size1))
+    let angle = (start + (turn * ((before + (2 * height) + after) / 4)))
+    let half = (((absolute(turn) * (after - before)) * 3.14159265) / 720)
+    let outer = ((n == count) ? (radius + reach) : radius)
     let inner = (newel / 2)
     shape Box $"spiral-tread-{n}" {
       material: (base + kitTerracotta)
-      position: polarPoint(((inner + outer) / 2), angle, (((rise * n) / risers) - (thickness / 2)))
+      position: polarPoint(((inner + outer) / 2), angle, ((rise * height) - (thickness / 2)))
       rotation: rotate([0, 1, 0], (90 - angle))
-      scale [rim, (thickness / 2), ((outer - inner) / 2)]
+      scale [(((radius * sine(half)) / cosine(half)) + 0.02), (thickness / 2), ((outer - inner) / 2)]
     }
   }
   for n in range(2, (risers - 3)) {
     let angle = (start + (step * n))
     let top = ((rise * n) / risers)
+    let foot = (rise / (2 * risers))
     shape Box $"spiral-pane-{n}" {
       material: (base + kitGlass)
-      position: polarPoint((radius - 0.05), angle, (top + (rail / 2)))
+      position: polarPoint((radius - 0.05), angle, (top + ((rail - foot) / 2)))
       rotation: rotate([0, 1, 0], (90 - angle))
-      scale [rim, (rail / 2), 0.012]
+      scale [rim, ((rail + foot) / 2), 0.012]
     }
   }
   for n in range(2, (risers - 4)) {

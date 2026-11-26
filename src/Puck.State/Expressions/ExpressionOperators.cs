@@ -1172,6 +1172,16 @@ public static class ExpressionOperators {
             symbol: null
         ),
         Define(
+            arity: 2,
+            cost: 40L,
+            function: true,
+            name: "logarithm",
+            operation: ExpressionOp.Logarithm,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Fixed,
+            symbol: null
+        ),
+        Define(
             arity: 3,
             cost: 150L,
             function: true,

@@ -359,10 +359,14 @@ let shellRoofPieces = concat(
 // level 0 to level 2 standing at its well's centre, the switchbacks' top copy guarding its well on level 3. A spiral's
 // well is the square round its turn, so each floor above it rails the well's open sides but for the two tiles of its
 // front the stair arrives through, and its back where the south wall stops short of it (the wing's storeys).
+// Each storey's piece is its own creation, since the storeys either side of level 1 are shaped for a body changing size
+// on them: a body is the toybox's size (look.puck's `lookWonderSize`) on level 1 and full size on every other floor,
+// the toybox's size field (wonder.puck) carrying it between on the standard's curve, so a piece's foot and head take
+// their floors' sizes and its risers grow finer toward level 1 (architecture.puck's riser schedule) in step with the
+// body climbing them. Retuning Alice's size reshapes these flights at the next reload.
 let shellStairStoreys = map(range(0, 3), k => k)
-function shellStairPiece(stair, k) = (
-  (stair.form == "spiral") ? "gallery-spiral" : ((k == (length(shellStairStoreys) - 1)) ? "gallery-switchback-top" : "gallery-switchback")
-)
+function shellLevelSize(level) = ((level == toyboxLevel) ? lookWonderSize : 1)
+function shellStairPiece(stair, k) = $"gallery-{stair.form}-{k}"
 function shellWellBackOpen(stair, k) = (
   (stair.yaw == 180) and ((stair.well.x0 < shellSouthWall(k).x0) or (stair.well.x1 > shellSouthWall(k).x1))
 )
@@ -724,11 +728,11 @@ template shellPrototypes() {
       boundsBox(label: "frame-spine", x0: -5, x1: 5, y0: 0, y1: 0.26, z0: -0.08, z1: 0.08, slot: shellTrim)
     }
   }
-  // The stairs' kit pieces, one storey each.
-  for piece in [{ id: "gallery-switchback", guard: 0 }, { id: "gallery-switchback-top", guard: 1 }] {
-    prototype $"{piece.id}" {
+  // The stairs' kit pieces, one storey each, the top switchback guarding its well.
+  for k in shellStairStoreys {
+    prototype $"gallery-switchback-{k}" {
       document {
-        name: piece.id
+        name: $"gallery-switchback-{k}"
         schema: "puck.creation.v1"
         palette: shellKit
         switchbackStair(
@@ -738,17 +742,27 @@ template shellPrototypes() {
           landing: switchbackLanding,
           rise: galleryStorey,
           risers: stairRisers,
-          guard: piece.guard
+          guard: ((k == (length(shellStairStoreys) - 1)) ? 1 : 0),
+          size0: shellLevelSize(k),
+          size1: shellLevelSize((k + 1))
         )
       }
     }
-  }
-  prototype "gallery-spiral" {
-    document {
-      name: "gallery-spiral"
-      schema: "puck.creation.v1"
-      palette: shellKit
-      spiralStair(base: 0, radius: spiralRadius, newel: spiralNewel, rise: galleryStorey, risers: stairRisers)
+    prototype $"gallery-spiral-{k}" {
+      document {
+        name: $"gallery-spiral-{k}"
+        schema: "puck.creation.v1"
+        palette: shellKit
+        spiralStair(
+          base: 0,
+          radius: spiralRadius,
+          newel: spiralNewel,
+          rise: galleryStorey,
+          risers: stairRisers,
+          size0: shellLevelSize(k),
+          size1: shellLevelSize((k + 1))
+        )
+      }
     }
   }
   prototype "gallery-tower" {

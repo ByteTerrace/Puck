@@ -222,6 +222,10 @@ public enum ExpressionOp : byte {
     /// a fixed base to any fixed exponent by <see cref="Puck.Maths.FixedQ4816.Pow"/>, refused where no real power exists
     /// (zero to a negative exponent, a negative base to a fraction).</summary>
     Power,
+    /// <summary>The exponent <see cref="Power"/> raises a base to for a value, <c>logarithm(value, base)</c>: a fixed
+    /// value and base, both positive and the base not one, through <see cref="Puck.Maths.FixedQ4816.Log2"/>; fixed
+    /// expressions only.</summary>
+    Logarithm,
     /// <summary>The base raised to a non-negative exponent modulo a positive modulus, in [0, modulus); never overflows.</summary>
     ModularPower,
     /// <summary>The inverse of a value modulo a modulus of at least two, in [1, modulus); a value sharing a factor with the modulus is refused.</summary>

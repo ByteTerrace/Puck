@@ -23,8 +23,8 @@ public static class DocumentScalars {
     /// <see cref="ExpressionDomain.Integer"/> name is folded too, by delegation — see <see cref="Delegated"/> — so
     /// the refused set is what is left: the fixed-point-only and specialized-lowering entries, refused BY NAME.</summary>
     private static readonly HashSet<string> InDouble = new(comparer: StringComparer.Ordinal) {
-        "absolute", "ceiling", "clamp", "cosine", "floor", "maximum", "minimum", "round", "sign", "sine",
-        "squareRoot",
+        "absolute", "ceiling", "clamp", "cosine", "floor", "logarithm", "maximum", "minimum", "power", "round", "sign",
+        "sine", "squareRoot",
     };
 
     // An integer-domain function is the engine's to evaluate: integers are exact in both languages, so calling the
@@ -168,10 +168,33 @@ public static class DocumentScalars {
                 scope: scope
             );
         }
+        if (
+            (call.Name == "power") &&
+            (((numbers[0] == 0) && (numbers[1] < 0)) || ((numbers[0] < 0) && (numbers[1] != Math.Floor(d: numbers[1]))))
+        ) {
+            return Refuse(
+                call: call,
+                message: "power has no real value for zero to a negative exponent or a negative base to a fraction",
+                scope: scope
+            );
+        }
+        if (
+            (call.Name == "logarithm") &&
+            ((numbers[0] <= 0) || (numbers[1] <= 0) || (numbers[1] == 1))
+        ) {
+            return Refuse(
+                call: call,
+                message: "logarithm takes a positive value and a positive base other than one",
+                scope: scope
+            );
+        }
 
+        // A whole power with a non-negative exponent stays exact in the integer evaluator; a negative or fractional
+        // one is the real power the fixed-point rule evaluator also takes.
         if (
             allIntegers &&
-            (call.Name is not ("cosine" or "sine" or "squareRoot"))
+            (call.Name is not ("cosine" or "logarithm" or "sine" or "squareRoot")) &&
+            ((call.Name != "power") || (integers[1] >= 0))
         ) {
             long value;
             var evaluated = function.Operation switch {
@@ -194,6 +217,7 @@ public static class DocumentScalars {
                 ),
                 "cosine" => Math.Cos(d: numbers[0]),
                 "floor" => Math.Floor(d: numbers[0]),
+                "logarithm" => (Math.Log(d: numbers[0]) / Math.Log(d: numbers[1])),
                 "maximum" => Math.Max(
                     val1: numbers[0],
                     val2: numbers[1]
@@ -202,6 +226,7 @@ public static class DocumentScalars {
                     val1: numbers[0],
                     val2: numbers[1]
                 ),
+                "power" => Math.Pow(x: numbers[0], y: numbers[1]),
                 "round" => Math.Round(
                     value: numbers[0],
                     mode: MidpointRounding.ToEven
