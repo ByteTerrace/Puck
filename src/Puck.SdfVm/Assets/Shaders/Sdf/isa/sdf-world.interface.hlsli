@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/6351debf990a56769eb8532808c0344a5e3b6bf0d29199f5bff0b98c457bc719). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/6fd79f8822b324fba4224db4a8e6a2cb84395f52086188af5bfdc4fca8f9693d). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -209,7 +209,7 @@ struct SdfWorldPass {
     [[vk::offset(928)]] float4 previousView[6];
     [[vk::offset(1024)]] uint screenCount;
     [[vk::offset(1028)]] float screenFidelity;
-    [[vk::offset(1032)]] uint _pad1032;
+    [[vk::offset(1032)]] uint screenReflections;
     [[vk::offset(1036)]] uint _pad1036;
     [[vk::offset(1040)]] float4 screenWindows[128];
     [[vk::offset(3088)]] uint4 shadeBinWidths;
@@ -251,8 +251,8 @@ struct SdfWorldPass {
     [[vk::offset(3372)]] uint _pad3372;
     [[vk::offset(3376)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa80AC6066 : register(b0, space3);
-#define passGroup passGroupIsa80AC6066
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa8F0B4D51 : register(b0, space3);
+#define passGroup passGroupIsa8F0B4D51
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);
@@ -288,6 +288,9 @@ struct SdfWorldPass {
 [[vk::binding(160, 3)]] StructuredBuffer<uint> historySurface : register(t160, space3);
 [[vk::binding(161, 3)]] StructuredBuffer<uint> sdfViewsProbeHistory : register(t161, space3);
 [[vk::binding(162, 3)]] RWStructuredBuffer<uint> sdfViewsProbeHistoryRW : register(u162, space3);
+[[vk::binding(163, 3)]] StructuredBuffer<uint2> sdfViewsReflections : register(t163, space3);
+[[vk::binding(164, 3)]] RWStructuredBuffer<uint2> sdfViewsReflectionsRW : register(u164, space3);
+[[vk::binding(165, 3)]] Texture2D<float4> sdfReflectionHistory : register(t165, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfWorldPushedIndex {
