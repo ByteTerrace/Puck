@@ -44,10 +44,11 @@ let lookLevels = [lookLevelHall, lookLevelToybox, lookLevelHall, lookLevelHall]
 // along the arcade from the west wall and repeating, the same at each north and south pair so the nave stays balanced:
 // mint, lilac, peach, butter, sky, rose.
 let lookToyPiers = ["#9FE3C6", "#C6B3EA", "#FFC9A8", "#FFE98F", "#9ED4F5", "#FFA9C8"]
-// The toybox's arcade cabinets (toybox.puck), by game: the two cabinets that play one game across the nave wear one
-// colourway of glossy toy plastic, its body, its cheeks and marquee housing, its control shelf, the stick's ball and
-// the first button, the second button, and the marquee's glow. Tomato with sunflower, cobalt with candy pink, mint with
-// violet. Every cabinet's bezel is near-black and its marquee lettering a deep plum.
+// The toybox's arcade cabinets (toybox.puck), by colourway (layout.puck's toyboxPlan `look`; a cabinet and its twin
+// across the nave wear one): glossy toy plastic, its body, its cheeks and marquee housing, its control shelf and the
+// players' marks, the stick's ball and the first button, the second button, and the marquee's glow. Tomato with
+// sunflower, cobalt with candy pink, mint with violet. Every cabinet's bezel is near-black and its marquee lettering a
+// deep plum.
 let lookCabinets = [
   { body: "#E2453C", trim: "#F2B52C", shelf: "#F7F3E8", button: "#2F6FD6", buttonAlt: "#3EC24A", glow: "#FFD86A" }
   { body: "#2F6FD6", trim: "#FF9BB8", shelf: "#F7F3E8", button: "#F2B52C", buttonAlt: "#E2453C", glow: "#9EDCFF" }
@@ -56,8 +57,10 @@ let lookCabinets = [
 let lookCabinetBezel = "#15121B"
 let lookCabinetInk = "#2E1838"
 // How bright a marquee's panel glows, and the picture's peak luminance: an arcade monitor's, bright enough that the
-// games read as lit screens from across the nave.
-let lookCabinetGlow = 600
+// games read as lit screens from across the nave. Both are nits. An emissive shows as its colour times the figure, so
+// the pale glows here show at about three quarters of it, and a daylit level meters its lit walls to a few hundred nits:
+// a sign reads as lit only some stops above them, as a lit diffuser's few thousand nits does.
+let lookCabinetGlow = 2500nit
 let lookCabinetLuminance = 900nit
 // A cabinet's materials in the standard's slot order (architecture.puck's arcadeCabinet).
 function lookCabinetPalette(c) = [
@@ -69,6 +72,43 @@ function lookCabinetPalette(c) = [
   { color: c.buttonAlt, roughness: 0.25, specular: 0.04, coat: 0.6 }
   { color: c.glow, roughness: 0.4, emissive: lookCabinetGlow }
   { color: lookCabinetInk, roughness: 0.5, specular: 0.04 }
+]
+// The toybox's television sets (toybox.puck), by colourway: a set and its twin across the nave wear one. Each names
+// the television's case and trim, the stand's painted boards, the console's shell, the pads' shells and buttons, and
+// the lounge before it: the rug's field and border and its two beanbags. Sunflower on a cobalt stand over a cherry rug,
+// candy pink on mint over a sky rug, sky blue on butter over a lilac rug. Every set's dark parts are the cabinets'
+// near-black and its lamps a warm red.
+let lookTelevisions = [
+  {
+    case: "#F2B52C", trim: "#E2453C", stand: "#2F6FD6", console: "#EDE6DA", pad: "#3B3542", button: "#E2453C"
+    rug: "#E2574C", rugBorder: "#FFF3D6", beanbag: "#8E5BE0", beanbagAlt: "#3DBE8B"
+  }
+  {
+    case: "#FF9BB8", trim: "#2F6FD6", stand: "#3DBE8B", console: "#EDE6DA", pad: "#3B3542", button: "#F2B52C"
+    rug: "#8FD8FF", rugBorder: "#2F6FD6", beanbag: "#FF7A2F", beanbagAlt: "#F2B52C"
+  }
+  {
+    case: "#8FD8FF", trim: "#FF7A2F", stand: "#FFE98F", console: "#EDE6DA", pad: "#3B3542", button: "#3EC24A"
+    rug: "#C6B3EA", rugBorder: "#FFF3D6", beanbag: "#E2453C", beanbagAlt: "#2F6FD6"
+  }
+]
+let lookTelevisionLamp = "#FF3A2A"
+// A lamp's glow, in nits: an indicator's.
+let lookTelevisionLampGlow = 400nit
+// A set's and its lounge's materials in the standard's slot orders (architecture.puck's televisionSet, then lounge).
+function lookTelevisionPalette(t) = [
+  { color: t.case, roughness: 0.3, specular: 0.04, coat: 0.5 }
+  { color: t.trim, roughness: 0.3, specular: 0.04, coat: 0.5 }
+  { color: lookCabinetBezel, roughness: 0.12, specular: 0.05, coat: 0.6 }
+  { color: t.stand, roughness: 0.45, specular: 0.04 }
+  { color: t.console, roughness: 0.4, specular: 0.04 }
+  { color: t.pad, roughness: 0.35, specular: 0.04 }
+  { color: t.button, roughness: 0.25, specular: 0.04, coat: 0.6 }
+  { color: lookTelevisionLamp, roughness: 0.4, emissive: lookTelevisionLampGlow }
+  { color: t.rug, roughness: 0.95, specular: 0.02 }
+  { color: t.rugBorder, roughness: 0.95, specular: 0.02 }
+  { color: t.beanbag, roughness: 0.7, specular: 0.03 }
+  { color: t.beanbagAlt, roughness: 0.7, specular: 0.03 }
 ]
 // A tile's joint's width, in metres (the tile's side is the plan's module, layout.puck's galleryTile), and how smooth
 // the glaze is.
@@ -115,8 +155,8 @@ let lookAfternoon = 0.62
 // four displays either side ahead, and `hall-side` its second angle; the rest face what a kit sheet draws: a display,
 // the arcade, the end wall's wide bays, a balcony edge, the floor and the ceiling, the furniture, and the two concept
 // paintings' views of the entrance and the outside. `toybox` looks from level 2's north balcony down across the void
-// into level 1's south cabinets, as a player drawn in from another level sees them, and `toybox-across` from level 1's
-// south balcony edge across to its north cabinets.
+// into level 1's south stations, as a player drawn in from another level sees them, and `toybox-across` from level 1's
+// south balcony edge across to its north stations.
 // The station view every display shares (gallery.station): the eye and aim in the plinth placement's own axes
 // (+Y up, -Z toward a viewer before the console), framing the exhibit and the console's base with a little room.
 let lookStation = { eye [0, 2.305, -4.06], aim [0, 1.75, -1.8], fov: 55 }

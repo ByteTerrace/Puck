@@ -82,7 +82,8 @@ let devicePadKit = {
 
 // A device's screen engages on the context button (`interact`) within 3 m, and the same press leaves, since the pad
 // does not play it. Once the camera has framed the picture, the window shows it alone, as a desktop emulator does, on
-// a black matte. A deck's screen seats its player on the first controller port.
+// a black matte. A deck's screen seats its player on the first controller port (`deckRoute`); `deckPortRoutes` holds a
+// route for each of its ports in order, for a station that seats a player on each.
 let deviceRoute = {
   engageable: true
   engageRadius: 3
@@ -92,4 +93,5 @@ let deviceRoute = {
     fill: "#000000"
   }
 }
-let deckRoute = (deviceRoute with { port: "controls" })
+let deckPortRoutes = [(deviceRoute with { port: "controls" }), (deviceRoute with { port: "controls-2" })]
+let deckRoute = deckPortRoutes[0]
