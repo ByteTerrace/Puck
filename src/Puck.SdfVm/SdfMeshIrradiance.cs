@@ -223,6 +223,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             foreach (var level in m_levels) { level.Cache.Clear(); }
             RetireVolume(next: VolumeWords.None);
             m_volumeOwner.Dispose();
+            m_gpuAnswer?.Dispose();
+            m_gpuAnswer = null;
         }
         ReclaimReleased(attempt: 0);
     }
@@ -2773,8 +2775,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     }
     // Gives back the GPU answers' array the batch's selections, traces and relights reused.
     private void BatchEnded() {
-        if (m_gpuAnswer.Length > 0) { RentedArrays.Return(array: m_gpuAnswer); }
-        m_gpuAnswer = [];
+        m_gpuAnswer?.Free();
     }
     private void BatchTraced(BatchBlocks blocks, List<Candidate> candidates, int first, int count, Lighting lighting, ParallelOptions parallel, int pass, in Snapshot snapshot,
         ReaderEpochs<Reclaimable>.Hold hold, ProbeData[] results, bool traces, int blockProbes, OwnedBuffer<uint>? rentedHits) {
