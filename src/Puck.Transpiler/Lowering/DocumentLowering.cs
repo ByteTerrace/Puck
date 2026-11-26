@@ -918,15 +918,8 @@ public static partial class DocumentLowering {
             );
         }
 
-        if ((row.Operation is ExpressionOp.Add or ExpressionOp.Subtract) && (leftNode is JsonArray leftPoint) && (rightNode is JsonArray rightPoint) &&
-            (leftPoint.Count is 2 or 3) && (leftPoint.Count == rightPoint.Count)) {
-            scope.Budget.Collection(count: leftPoint.Count, span: bin.Span);
-            var result = new JsonArray();
-
-            for (var index = 0; (index < leftPoint.Count); index++) {
-                result.AppendNode(item: EvaluateNumberBinary(bin: bin, leftNode: leftPoint[index], rightNode: rightPoint[index], row: row, scope: scope));
-            }
-            return result;
+        if ((row.Operation is ExpressionOp.Add or ExpressionOp.Subtract or ExpressionOp.Multiply or ExpressionOp.Divide) && ((leftNode is JsonArray) || (rightNode is JsonArray))) {
+            return EvaluateArrayBinary(bin: bin, leftNode: leftNode, rightNode: rightNode, row: row, scope: scope);
         }
         // Two strings are equal when their UTF-16 code units are, the unit length(value) and indexing count; a
         // string has no order, so only equality reads one.
@@ -937,6 +930,57 @@ public static partial class DocumentLowering {
             return JsonValue.Create(value: (((row.Operation == ExpressionOp.Equal) == equal) ? 1L : 0L));
         }
         return EvaluateNumberBinary(bin: bin, leftNode: leftNode, rightNode: rightNode, row: row, scope: scope);
+    }
+    // Arithmetic over numeric arrays is element-wise: two arrays of one length pair their elements, and a number meets
+    // every element of an array (`2 * p`, `p * 2`, `p / 2`; a number over an array is refused as meaningless). Nested
+    // arrays recurse, so a list of points scales as one value.
+    private static JsonNode? EvaluateArrayBinary(BinaryExpressionNode bin, ExpressionOperator row, DocumentScope scope, JsonNode? leftNode, JsonNode? rightNode) {
+        var leftArray = (leftNode as JsonArray);
+        var rightArray = (rightNode as JsonArray);
+
+        if ((leftArray is not null) && (rightArray is not null) && (leftArray.Count != rightArray.Count)) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.InvalidValue,
+                message: $"'{bin.Operator}' pairs the elements of two arrays, which needs one length; these have {leftArray.Count} and {rightArray.Count}.",
+                span: bin.Span
+            );
+
+            return null;
+        }
+        if ((leftArray is null) && (row.Operation is not ExpressionOp.Multiply)) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.InvalidValue,
+                message: $"'{bin.Operator}' with a number on the left and an array on the right has no element-wise meaning; only '*' scales an array from either side.",
+                span: bin.Span
+            );
+
+            return null;
+        }
+        if ((rightArray is null) && (row.Operation is ExpressionOp.Add or ExpressionOp.Subtract)) {
+            scope.Diagnostics.ReportError(
+                code: PuckDiagnosticCodes.InvalidValue,
+                message: $"'{bin.Operator}' adds arrays of one length element by element; a number is not added to every element.",
+                span: bin.Span
+            );
+
+            return null;
+        }
+
+        var count = (leftArray ?? rightArray)!.Count;
+
+        scope.Budget.Collection(count: count, span: bin.Span);
+        var result = new JsonArray();
+
+        for (var index = 0; (index < count); index++) {
+            var left = ((leftArray is null) ? leftNode : leftArray[index]);
+            var right = ((rightArray is null) ? rightNode : rightArray[index]);
+
+            result.AppendNode(item: (((left is JsonArray) || (right is JsonArray))
+                ? EvaluateArrayBinary(bin: bin, leftNode: left, rightNode: right, row: row, scope: scope)
+                : EvaluateNumberBinary(bin: bin, leftNode: left, rightNode: right, row: row, scope: scope)));
+        }
+
+        return result;
     }
     private static JsonNode? EvaluateIntegerBinary(BinaryExpressionNode bin, ExpressionOp operation, JsonNode? leftNode, JsonNode? rightNode, DocumentScope scope) {
         if (
@@ -1485,7 +1529,7 @@ public static partial class DocumentLowering {
     /// <param name="bindLets">Whether to evaluate and bind compile-time <c>let</c> statements inside the loop body.</param>
     /// <remarks>Compile-time: the document carries the statements produced, never the loop. The bound names are
     /// locals, so they shadow a constant of the same name for the length of one iteration and are gone after.</remarks>
-    public static void ExpandFor(ForStatementNode loop, JsonObject target, DocumentScope scope, Action<StatementNode, JsonObject, DocumentScope> sink, bool bindLets = false) {
+    public static void ExpandFor(ForStatementNode loop, JsonObject target, DocumentScope scope, Action<StatementNode, JsonObject, DocumentScope> sink, bool bindLets = true) {
         ArgumentNullException.ThrowIfNull(loop);
         ArgumentNullException.ThrowIfNull(scope);
         ArgumentNullException.ThrowIfNull(sink);
@@ -1510,7 +1554,7 @@ public static partial class DocumentLowering {
     /// rather than yielding them (false for vocabularies such as <c>shade</c> whose <c>let</c>s hold runtime
     /// expressions).</param>
     /// <returns>Each produced statement and the scope to lower it under.</returns>
-    public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandForStatements(ForStatementNode loop, DocumentScope scope, bool bindLets = false) {
+    public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandForStatements(ForStatementNode loop, DocumentScope scope, bool bindLets = true) {
         ArgumentNullException.ThrowIfNull(loop);
         ArgumentNullException.ThrowIfNull(scope);
         using var expansion = scope.Budget.Enter(span: loop.Span);
@@ -1542,6 +1586,51 @@ public static partial class DocumentLowering {
                 }
                 yield return (statement, active);
             }
+        }
+    }
+    /// <summary>Expands a compile-time <c>if</c>, emitting the statements of the branch its condition selects.</summary>
+    /// <param name="branch">The conditional as written.</param>
+    /// <param name="target">The object the branch's statements land in.</param>
+    /// <param name="scope">The enclosing scope.</param>
+    /// <param name="sink">The vocabulary's own statement processor.</param>
+    /// <param name="bindLets">Whether to evaluate and bind compile-time <c>let</c> statements inside the branch.</param>
+    public static void ExpandConditional(ConditionalStatementNode branch, JsonObject target, DocumentScope scope, Action<StatementNode, JsonObject, DocumentScope> sink, bool bindLets = true) {
+        ArgumentNullException.ThrowIfNull(sink);
+
+        foreach (var (statement, active) in ExpandConditionalStatements(bindLets: bindLets, branch: branch, scope: scope)) {
+            sink(statement, target, active);
+        }
+    }
+    /// <summary>Flattens a compile-time <c>if</c> into the statements of the branch its condition selects, each paired
+    /// with the scope its bindings are live in. The condition reads as a truth value (zero and absence are false), and
+    /// the branch it rules out is never lowered, as <c>for k in range(0, cond ? 1 : 0)</c> never lowers its body. A
+    /// branch is written once, so unlike a <c>for</c> body it may hold field assignments.</summary>
+    /// <param name="branch">The conditional as written.</param>
+    /// <param name="scope">The enclosing scope.</param>
+    /// <param name="bindLets">Whether to evaluate and bind compile-time <c>let</c> statements inside the branch rather
+    /// than yielding them.</param>
+    /// <returns>Each produced statement and the scope to lower it under.</returns>
+    public static IEnumerable<(StatementNode Statement, DocumentScope Scope)> ExpandConditionalStatements(ConditionalStatementNode branch, DocumentScope scope, bool bindLets = true) {
+        ArgumentNullException.ThrowIfNull(branch);
+        ArgumentNullException.ThrowIfNull(scope);
+        using var expansion = scope.Budget.Enter(span: branch.Span);
+
+        var chosen = (IsTruthy(node: EvaluateValue(expr: branch.Condition, scope: scope)) ? branch.Then : branch.Else);
+        var active = scope;
+
+        foreach (var statement in (chosen ?? [])) {
+            scope.Budget.Spend(count: 1, span: statement.Span);
+            if (bindLets && (statement is LetNode binding)) {
+                active = BindLocalLet(binding: binding, scope: active);
+                continue;
+            }
+            if (statement is ConditionalStatementNode nested) {
+                foreach (var produced in ExpandConditionalStatements(bindLets: bindLets, branch: nested, scope: active)) {
+                    yield return produced;
+                }
+                continue;
+            }
+            yield return (statement, active);
         }
     }
     // The one iteration walk shared by statement `for` (`ExpandForStatements`) and list `for` (`AppendForExpression`).

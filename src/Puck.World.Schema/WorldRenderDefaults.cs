@@ -144,6 +144,18 @@ public readonly record struct WorldQualityPreset(
             ? null
             : $"{path} must be a power of two from {MinShadowTexels} through {MaxShadowTexels}.");
 }
+/// <summary>One of the world's render lanes: a name a creation's lane member may write in place of the lane's index,
+/// and the value the lane reads.</summary>
+/// <param name="Name">The lane's name, unique among the composed document's lanes. A creation's render-lane member
+/// (<see cref="DocumentRenderLaneAttribute"/>) that writes it reads this lane; the load resolves it to the lane's index
+/// (<see cref="WorldRenderLaneNames"/>).</param>
+/// <param name="Value">The bindable scalar the lane reads: a literal, a <c>state.&lt;row&gt;</c> binding, or keys on a
+/// clock.</param>
+public sealed record WorldRenderLane(
+    [property: DocumentText("a render lane's name, which a creation's lane members write")] string Name,
+    BindableScalar Value
+);
+
 /// <summary>The world's render-lever defaults — the boot values <c>Puck.World.WorldRenderSettings</c> wakes on and the
 /// <c>world.quality</c> preset table. Session state, not identity: these are engine-wide levers (shadows, AO, render
 /// scale), the graphics-menu defaults a server-pulled world would carry.</summary>
@@ -202,10 +214,11 @@ public readonly record struct WorldQualityPreset(
 /// <param name="Devices">The world's device profiles (<see cref="WorldDeviceProfile"/>): for each graphics device, the
 /// quality table it runs and the memory it may use. The engine selects one by the adapter it runs on and by name
 /// (<c>world.device-profile</c>). Absent authors none, and no cap applies.</param>
-/// <param name="Lanes">The world's render lanes: up to four bindable scalars (a literal, a <c>state.&lt;row&gt;</c>
-/// binding, or keys on a clock), resolved at each frame's presented tick and read by every surface and volume as
-/// render lanes 4 to 7 (<c>SdfLanes</c>), so a static placement sharing one baked mesh follows world state without a
-/// slot. Absent or a missing entry reads zero; <c>world.lighting</c> echoes them as authored.</param>
+/// <param name="Lanes">The world's render lanes (<see cref="WorldRenderLane"/>): up to four named bindable scalars,
+/// resolved at each frame's presented tick and read by every surface and volume as render lanes 4 to 7
+/// (<c>SdfLanes</c>) in the order the composed document holds them, so a static placement sharing one baked mesh
+/// follows world state without a slot. Rows merge across imports by name. Absent or a missing entry reads zero;
+/// <c>world.lighting</c> echoes them as authored.</param>
 /// <param name="Nested">What a nested view gives up at each presented size (<see cref="WorldNestedViewQuality"/>). Absent
 /// gives up nothing.</param>
 /// <param name="RayQueries">Whether the indirect volume's background rays (its probe trace, the relight's shadow rays
@@ -250,7 +263,7 @@ public sealed record WorldRenderDefaults(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ToonStyleDocument? Toon = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Hosting.CameraBloom? Bloom = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderShadowCoverage? ShadowCoverage = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<BindableScalar>? Lanes = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRenderLane>? Lanes = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.World.Authoring.ShadeReference? Shade = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldDeviceProfile>? Devices = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldNestedViewQuality>? Nested = null,

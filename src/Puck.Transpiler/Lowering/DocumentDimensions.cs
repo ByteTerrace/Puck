@@ -47,6 +47,9 @@ public static class DocumentDimensions {
     /// dimension is admitted there in its canonical unit (an angle in radians), and the dimension travels with the
     /// argument into the body (<see cref="Carry"/>), which is judged where the body fills a field.</summary>
     public const string ArgumentPosition = "$argument";
+    /// <summary>The field key a rotation builtin's angle is lowered under: an angle, written in degrees, so a bare
+    /// number is degrees and <c>rad</c> converts.</summary>
+    public const string DegreesArgument = "$degrees";
     private const int MaximumDepth = 64;
 
     // A function argument's lowered value, which its body reads as a local, keyed to the dimension the argument carried.
@@ -69,6 +72,7 @@ public static class DocumentDimensions {
         return fieldKey switch {
             null or ArgumentPosition => UnitDimension.None,
             AngleArgument => UnitDimension.Radians,
+            DegreesArgument => UnitDimension.Degrees,
             _ => scope.Vocabulary.ClassifyField(fieldKey: fieldKey),
         };
     }
@@ -100,11 +104,11 @@ public static class DocumentDimensions {
 
         var dimension = Classify(fieldKey: fieldKey, scope: scope);
 
-        if (fieldKey == AngleArgument) {
+        if (fieldKey is AngleArgument or DegreesArgument) {
             if (!inferred.Dimension.IsNone && (inferred.Dimension != Angle)) {
                 scope.Diagnostics.ReportError(
                     code: PuckDiagnosticCodes.DimensionMismatch,
-                    message: $"a trigonometric function takes an angle or a pure number, but this value is {Spelling(dimension: inferred.Dimension)}",
+                    message: $"{FieldName(fieldKey: fieldKey)} takes an angle or a pure number, but this value is {Spelling(dimension: inferred.Dimension)}",
                     span: expression.Span
                 );
             }
@@ -365,6 +369,7 @@ public static class DocumentDimensions {
     private static string FieldName(string? fieldKey) => (fieldKey switch {
         null => "this value's position",
         AngleArgument => "a trigonometric function",
+        DegreesArgument => "a rotation's angle",
         _ => $"'{fieldKey}'",
     });
     private static string Spelling(PhysicalDimension dimension) => (dimension.IsNone ? "a pure number" : $"in {dimension}");

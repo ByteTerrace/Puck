@@ -597,10 +597,11 @@ public sealed partial class WorldInstanceHost {
     }
 
     /// <inheritdoc/>
-    public bool HasOnwardRoute(WorldServer source, in WorldMobilityIdentity mobility) => m_forwardedBodies.ContainsKey(key: (source, mobility.Incarnation));
+    public bool HasOnwardRoute(WorldServer source, in WorldMobilityIdentity mobility) => m_forwardedBodies.TryGetValue(left: source, right: mobility.Incarnation, value: out _);
     private bool TryFindOnwardRoute(WorldServer source, in WorldMobilityIdentity mobility, out ForwardedBody route, out string reason) {
         if (m_forwardedBodies.TryGetValue(
-            key: (source, mobility.Incarnation),
+            left: source,
+            right: mobility.Incarnation,
             value: out route
         )) {
             reason = string.Empty;
@@ -737,15 +738,17 @@ public sealed partial class WorldInstanceHost {
         }
 
         var traveler = mobility;
+        var answering = route.Authority;
 
         return route.Authority.TryForwardSubmission(
             completion: result => {
-                // An accepted leave retires the forwarded traveler once its answer arrives.
+                // An accepted leave retires the forwarded traveler once its answer arrives. The hop that answered it
+                // retired the traveler before it answered.
                 if (
                     (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
                     (result is WorldSubmissionResult.Session { Reply.Accepted: true })
                 ) {
-                    RetireForwardedTraveler(incarnation: traveler.Incarnation);
+                    RetireForwardedTraveler(incarnation: traveler.Incarnation, told: answering);
                 }
 
                 completion(obj: result);
@@ -837,7 +840,7 @@ public sealed partial class WorldInstanceHost {
             if (instance is null) {
                 return false;
             }
-            if (m_forwardedBodies.TryGetValue(key: (instance.Server, mobility.Incarnation), value: out var onward)) {
+            if (m_forwardedBodies.TryGetValue(left: instance.Server, right: mobility.Incarnation, value: out var onward)) {
                 current = onward;
                 continue;
             }

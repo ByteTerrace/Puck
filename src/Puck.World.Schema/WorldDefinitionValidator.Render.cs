@@ -113,7 +113,7 @@ public static partial class WorldDefinitionValidator {
             errors.Add(item: $"render.lanes holds at most {WorldRenderDefaults.MaxLanes} lanes (render lanes {SdfLanes.FirstWorld} to {(SdfLanes.Count - 1)}); got {lanes.Count}.");
         }
         for (var index = 0; (index < lanes.Count); index++) {
-            JudgeScalar(WorldValueFields.RenderLane, lanes[index], definition, $"render.lanes[{index}]", errors);
+            JudgeScalar(WorldValueFields.RenderLane, lanes[index].Value, definition, $"render.lanes[{index}].value", errors);
         }
     }
     private static void ValidateShadowCoverage(WorldRenderShadowCoverage? coverage, List<string> errors) {

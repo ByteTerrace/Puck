@@ -708,15 +708,35 @@
       "title": "WorldRenderShadowCoverage"
     },
     "lanes": {
-      "description": "The world\u0027s render lanes: up to four bindable scalars (a literal, a state.\u003Crow\u003E binding, or keys on a clock), resolved at each frame\u0027s presented tick and read by every surface and volume as render lanes 4 to 7 (SdfLanes), so a static placement sharing one baked mesh follows world state without a slot. Absent or a missing entry reads zero; world.lighting echoes them as authored.",
+      "description": "The world\u0027s render lanes (WorldRenderLane): up to four named bindable scalars, resolved at each frame\u0027s presented tick and read by every surface and volume as render lanes 4 to 7 (SdfLanes) in the order the composed document holds them, so a static placement sharing one baked mesh follows world state without a slot. Rows merge across imports by name. Absent or a missing entry reads zero; world.lighting echoes them as authored.",
       "type": [
         "array",
         "null"
       ],
-      "default": null,
       "items": {
-        "$ref": "./common.schema.json#/$defs/BindableScalar"
-      }
+        "description": "One of the world\u0027s render lanes: a name a creation\u0027s lane member may write in place of the lane\u0027s index, and the value the lane reads.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "name": {
+            "description": "The lane\u0027s name, unique among the composed document\u0027s lanes. A creation\u0027s render-lane member (DocumentRenderLaneAttribute) that writes it reads this lane; the load resolves it to the lane\u0027s index (WorldRenderLaneNames).",
+            "type": "string"
+          },
+          "value": {
+            "$ref": "./common.schema.json#/$defs/BindableScalar",
+            "description": "The bindable scalar the lane reads: a literal, a state.\u003Crow\u003E binding, or keys on a clock."
+          }
+        },
+        "required": [
+          "name",
+          "value"
+        ],
+        "additionalProperties": false,
+        "title": "WorldRenderLane"
+      },
+      "default": null
     },
     "shade": {
       "$ref": "./common.schema.json#/$defs/ShadeReference",

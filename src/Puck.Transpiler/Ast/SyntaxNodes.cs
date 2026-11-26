@@ -662,6 +662,31 @@ public sealed partial record ForStatementNode(
     Line,
     Column
 );
+/// <summary>A compile-time <c>if cond { … } else { … }</c> in document or section position: the rows of the branch
+/// the condition selects are emitted in place, and the other branch is never lowered. Distinct from a rule body's
+/// <see cref="IfStatementNode"/>, which the rule evaluates when it runs.</summary>
+/// <param name="Condition">The condition, known at compile time; zero and absence are false.</param>
+/// <param name="Then">The statements emitted when the condition holds.</param>
+/// <param name="Else">The statements emitted otherwise, or <see langword="null"/> when there is no <c>else</c>; an
+/// <c>else if</c> is one nested <see cref="ConditionalStatementNode"/>.</param>
+/// <param name="Offset">The character offset within the source text.</param>
+/// <param name="Length">The character length of the node span.</param>
+/// <param name="Line">The 1-based line number in source text.</param>
+/// <param name="Column">The 1-based column number in source text.</param>
+public sealed partial record ConditionalStatementNode(
+    ExpressionNode Condition,
+    IReadOnlyList<StatementNode> Then,
+    IReadOnlyList<StatementNode>? Else,
+    int Offset = 0,
+    int Length = 0,
+    int Line = 1,
+    int Column = 1
+) : StatementNode(
+    Offset,
+    Length,
+    Line,
+    Column
+);
 /// <summary>An index read: <c>target[index]</c>. An array takes a whole-number index, an object takes a string
 /// key.</summary>
 /// <param name="Target">The indexed expression.</param>

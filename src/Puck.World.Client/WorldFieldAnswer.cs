@@ -5,7 +5,8 @@ namespace Puck.World.Client;
 /// <summary>
 /// A presentation-side CPU query of a static field (a march, a sweep) whose answer its owner keeps for reuse through
 /// <see cref="WorldFieldAnswer{TQuery, TResult}"/>. The query decides its own reuse rule: <see cref="Covers"/> says
-/// whether the answer this query was marched for stands for another query within the bound it was marched under.
+/// whether the answer this query was marched for stands for another query within the bound it was marched under, and
+/// <see cref="TryProject"/> whether that answer, carried to another query, gives its answer for less than a march.
 /// </summary>
 /// <typeparam name="TQuery">The query type itself.</typeparam>
 /// <typeparam name="TResult">The answer type.</typeparam>
@@ -24,18 +25,28 @@ public interface IWorldFieldQuery<TQuery, TResult> where TQuery : struct, IWorld
     /// the point the asker compares it with).</param>
     /// <returns>Whether the held answer may be returned for <paramref name="asked"/>.</returns>
     bool Covers(in TQuery asked, in TResult held);
+    /// <summary>Answers <paramref name="asked"/> from the answer this query was marched for, carried to it, where the
+    /// query can prove the carried answer stands within the bound its family states for less than a march costs. A
+    /// projection leaves the held answer in place: later questions are carried from the march, never from a projection.</summary>
+    /// <param name="asked">The query asked now, over the same field, which <see cref="Covers"/> refused.</param>
+    /// <param name="held">The answer this query was marched for.</param>
+    /// <param name="answer">The carried answer, meaningful only where the method returns <see langword="true"/>.</param>
+    /// <returns>Whether <paramref name="answer"/> answers <paramref name="asked"/>.</returns>
+    bool TryProject(in TQuery asked, in TResult held, out TResult answer);
     /// <summary>Marches the query against its field.</summary>
     /// <returns>The answer.</returns>
     TResult March();
 }
 /// <summary>The counters one family of <see cref="IWorldFieldQuery{TQuery, TResult}"/> counts into:
-/// requests asked, requests answered without a field or with nothing to march (skipped), answers reused and
-/// answers marched. Skipped, reused and marched partition the requests.</summary>
+/// requests asked, requests answered without a field or with nothing to march (skipped), answers reused, answers
+/// projected from the held one and answers marched. Skipped, reused, projected and marched partition the requests.</summary>
 /// <param name="Requests">Every request, skipped ones included.</param>
 /// <param name="Skipped">Requests answered without marching because there was no field or nothing to ask.</param>
 /// <param name="Reused">Requests answered by the owner's held answer.</param>
+/// <param name="Projected">Requests answered by the owner's held answer carried to them
+/// (<see cref="IWorldFieldQuery{TQuery, TResult}.TryProject"/>).</param>
 /// <param name="Marched">Requests that marched the field.</param>
-public sealed record WorldFieldQueryFamily(WorkKind Requests, WorkKind Skipped, WorkKind Reused, WorkKind Marched) {
+public sealed record WorldFieldQueryFamily(WorkKind Requests, WorkKind Skipped, WorkKind Reused, WorkKind Projected, WorkKind Marched) {
     /// <summary>Counts a request that marches nothing.</summary>
     public void Skip() {
         WorldFieldQueryWork.Process.Count(kind: Requests);
@@ -48,6 +59,7 @@ public static class WorldFieldQueryWork {
     /// <summary>The effector surface probes (<see cref="WorldEffectorSolver.TryProbeSurface"/>).</summary>
     public static WorldFieldQueryFamily Surface { get; } = new(
         Marched: new(name: "world.field-queries.surface.marched", unit: "count", workClass: WorkClass.Pacing),
+        Projected: new(name: "world.field-queries.surface.projected", unit: "count", workClass: WorkClass.Pacing),
         Requests: new(name: "world.field-queries.surface.requests", unit: "count", workClass: WorkClass.Pacing),
         Reused: new(name: "world.field-queries.surface.reused", unit: "count", workClass: WorkClass.Pacing),
         Skipped: new(name: "world.field-queries.surface.skipped", unit: "count", workClass: WorkClass.Pacing)
@@ -55,22 +67,24 @@ public static class WorldFieldQueryWork {
     /// <summary>The chase camera's clearance sweeps (<see cref="WorldCameraClearance"/>).</summary>
     public static WorldFieldQueryFamily Clearance { get; } = new(
         Marched: new(name: "world.field-queries.clearance.marched", unit: "count", workClass: WorkClass.Pacing),
+        Projected: new(name: "world.field-queries.clearance.projected", unit: "count", workClass: WorkClass.Pacing),
         Requests: new(name: "world.field-queries.clearance.requests", unit: "count", workClass: WorkClass.Pacing),
         Reused: new(name: "world.field-queries.clearance.reused", unit: "count", workClass: WorkClass.Pacing),
         Skipped: new(name: "world.field-queries.clearance.skipped", unit: "count", workClass: WorkClass.Pacing)
     );
     /// <summary>Process totals; read twice to measure a window.</summary>
     public static WorkCounterSet Process { get; } = new(name: "world.field-queries", kinds: [
-        Surface.Requests, Surface.Skipped, Surface.Reused, Surface.Marched,
-        Clearance.Requests, Clearance.Skipped, Clearance.Reused, Clearance.Marched,
+        Surface.Requests, Surface.Skipped, Surface.Reused, Surface.Projected, Surface.Marched,
+        Clearance.Requests, Clearance.Skipped, Clearance.Reused, Clearance.Projected, Clearance.Marched,
     ]);
 }
 /// <summary>
 /// <para>One owner's held answer to one field query, kept beside the state it serves (an effector's arrays, a camera's
 /// arm), never in shared or thread-static storage, so packing on any thread reuses it.</para>
 /// <para>The one door to a held answer is <see cref="Ask"/>: the answer is private, and returned only where the held
-/// query <see cref="IWorldFieldQuery{TQuery, TResult}.Covers"/> the asked one over the same field; every other request
-/// marches and is held in its place.</para>
+/// query <see cref="IWorldFieldQuery{TQuery, TResult}.Covers"/> the asked one over the same field, or carried to it where
+/// the held query <see cref="IWorldFieldQuery{TQuery, TResult}.TryProject"/> it; every other request marches and is held
+/// in its place.</para>
 /// </summary>
 /// <typeparam name="TQuery">The query.</typeparam>
 /// <typeparam name="TResult">The answer.</typeparam>
@@ -79,8 +93,8 @@ public struct WorldFieldAnswer<TQuery, TResult> where TQuery : struct, IWorldFie
     private TResult m_result;
     private bool m_held;
 
-    /// <summary>Answers a query: the held answer where it covers <paramref name="asked"/>, otherwise a fresh march,
-    /// which is then held.</summary>
+    /// <summary>Answers a query: the held answer where it covers <paramref name="asked"/>, the held answer carried to
+    /// <paramref name="asked"/> where it projects, otherwise a fresh march, which is then held.</summary>
     /// <param name="asked">The query.</param>
     /// <returns>The answer.</returns>
     public TResult Ask(in TQuery asked) {
@@ -88,10 +102,17 @@ public struct WorldFieldAnswer<TQuery, TResult> where TQuery : struct, IWorldFie
 
         WorldFieldQueryWork.Process.Count(kind: family.Requests);
 
-        if (m_held && ReferenceEquals(objA: m_query.Field, objB: asked.Field) && m_query.Covers(asked: in asked, held: in m_result)) {
-            WorldFieldQueryWork.Process.Count(kind: family.Reused);
+        if (m_held && ReferenceEquals(objA: m_query.Field, objB: asked.Field)) {
+            if (m_query.Covers(asked: in asked, held: in m_result)) {
+                WorldFieldQueryWork.Process.Count(kind: family.Reused);
 
-            return m_result;
+                return m_result;
+            }
+            if (m_query.TryProject(answer: out var projected, asked: in asked, held: in m_result)) {
+                WorldFieldQueryWork.Process.Count(kind: family.Projected);
+
+                return projected;
+            }
         }
 
         WorldFieldQueryWork.Process.Count(kind: family.Marched);

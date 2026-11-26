@@ -199,12 +199,12 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
         m_resolutions++;
     }
     // The world's render lanes (render.lanes), each resolved through the one binding path; a missing entry reads zero.
-    private Vector4 Lanes(WorldStateMirror mirror, IReadOnlyList<BindableScalar>? lanes) {
+    private Vector4 Lanes(WorldStateMirror mirror, IReadOnlyList<WorldRenderLane>? lanes) {
         if (lanes is null) { return Vector4.Zero; }
         Span<float> values = stackalloc float[WorldRenderDefaults.MaxLanes];
 
         for (var index = 0; (index < Math.Min(val1: lanes.Count, val2: values.Length)); index++) {
-            values[index] = Scalar(fallback: 0f, field: WorldValueFields.RenderLane, mirror: mirror, scalar: lanes[index], site: new WorldValueSite(Index: index, Section: "render.lanes"));
+            values[index] = Scalar(fallback: 0f, field: WorldValueFields.RenderLane, mirror: mirror, scalar: lanes[index].Value, site: new WorldValueSite(Index: index, Section: "render.lanes"));
         }
 
         return new Vector4(x: values[0], y: values[1], z: values[2], w: values[3]);

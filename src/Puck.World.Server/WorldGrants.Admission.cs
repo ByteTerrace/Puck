@@ -158,10 +158,7 @@ public sealed partial class WorldGrants {
             ) {
                 return false;
             }
-            if (
-                !Host.Population.IsAdmittedPeer(bodyIndex: principal.Index) ||
-                (Host.Population.PeerPrincipal(index: principal.Index) != principal)
-            ) {
+            if (!Host.Population.HoldsPeer(principal: principal)) {
                 Host.TransferForwarder?.SetTravelerPresence(mobility: in mobility, present: true, source: Host);
                 return false;
             }

@@ -123,8 +123,10 @@ public sealed record PaletteFlowDocument(
     float? Softness = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteSurfaceDocument? Surface = null,
     uint? Seed = null,
+    [property: DocumentRenderLane]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Lane = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SdfFlowFrame? Frame = null,
+    [property: DocumentRenderLane]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? CoverageLane = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteFlowRegionDocument? Region = null
 ) {
@@ -265,6 +267,9 @@ public sealed record PalettePaintTextDocument(
 /// lettering reaches) and carries no <paramref name="Stroke"/>.</param>
 /// <param name="Repeat">The lattice the paint repeats on, or null for a paint drawn once; a text paint cannot
 /// repeat.</param>
+/// <param name="Softness">The width, in the frame's units (metres in world space), the paint's edge feathers over, centred on the
+/// primitive's surface (or the stroke's edge), so a path fades into the ground about it; null or zero for an edge as
+/// crisp as the pixel.</param>
 public sealed record PalettePaintDocument(
     SdfSolidPrimitive Type,
     [property: DocumentText("a color literal")] string Color,
@@ -282,7 +287,8 @@ public sealed record PalettePaintDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Exponent = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCurveDocument? Curve = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PalettePaintTextDocument? Text = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PalettePaintRepeatDocument? Repeat = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PalettePaintRepeatDocument? Repeat = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Softness = null
 ) {
     /// <summary>Resolves the engine paint at a placement scale.</summary>
     /// <param name="resolve">The color resolver.</param>
@@ -310,6 +316,7 @@ public sealed record PalettePaintDocument(
         Slot: slot,
         Stroke: ((Stroke ?? 0f) * scale),
         Text: text,
+        Softness: ((Softness ?? 0f) * scale),
         Repeat: ((Repeat is { } repeat) ? new SdfPaintRepeat(Cell: (repeat.Cell.Value * scale), Seed: repeat.Seed, Tone: ((repeat.Tone is { } tone) ? resolve(tone) : resolve(Color))) : null)
     );
 }
@@ -341,7 +348,7 @@ public sealed record PaletteWeatheringDocument(
     uint Seed = 0,
     float Scale = 1f,
     float Floor = 0f,
-    int Lane = 0,
+    [property: DocumentRenderLane] int Lane = 0,
     IReadOnlyList<PaletteRevealDocument>? Under = null,
     PaletteSurfaceDocument? Deposit = null,
     float Noise = 0f,

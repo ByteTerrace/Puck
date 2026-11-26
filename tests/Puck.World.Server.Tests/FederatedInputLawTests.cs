@@ -76,4 +76,52 @@ public sealed class FederatedInputLawTests {
         Assert.True(condition: owner.TryEvent(channel: tap, kind: WorldInputEventKind.Cancel, occurrence: 0, record: out var cancelled));
         Assert.Equal(held.Press, cancelled.HoldPress);
     }
+
+    // A link that stalls and then delivers a burst hands one tick the packets of many. The authority admits what the
+    // owner's step has room for and holds the rest, in order, for the ticks after: no packet is refused, the owner keeps
+    // its epoch, and every edge lands.
+    [Fact]
+    public void BunchedPacketsOverTheStepBoundSpreadOverLaterTicksWithoutRestartingTheOwner() {
+        const int StepCapacity = 4;
+        const int Packets = 6;
+        var basis = Fixtures.PeerPopulationDocument(networkPlayers: 1);
+        var definition = basis with {
+            ChannelsRaw = [.. basis.Channels, new("tap", ChannelShape.Binary, Composition: true)],
+            InputHistory = new(EventCapacity: 64, MaximumEventsPerStep: StepCapacity),
+        };
+        using var fixture = Fixtures.FreshServer(definition);
+        const int Body = WorldBodiesLimits.LocalSeatCount;
+
+        fixture.Server.Population.ApplyPeerAdmitted(new(Body, 1, IntentSource.Live, Principal.Console, "test", "input", false, null, 0, default, true), []);
+        var actor = fixture.Server.Population.PeerPrincipal(index: Body);
+
+        fixture.Server.Grant(new(actor, WorldCapability.Drive, GrantSubject.Body(index: Body), false, Budget: 8, Reach: new(["tap"])), Principal.Console);
+        fixture.Step();
+        var catalog = fixture.Server.Population.InputCatalog;
+
+        Assert.True(condition: catalog.TryGetLogicalId(id: out var tap, name: "tap"));
+        WorldInputSource[] sources = [new(0, tap, WorldInputContributionKind.Level, "test:tap")];
+        var owner = fixture.Server.Input.Admit(bodyIndex: Body, principal: actor, sources: sources);
+        var producer = new WorldInputProducer(catalog, owner.Mapping, sources, StepCapacity, owner.Revision, owner.Epoch);
+        var epoch = owner.Epoch;
+        var tick = fixture.Server.NextInputTick;
+
+        // Each packet is a press and a release, two events; together they carry three steps' worth.
+        for (var packet = 0; (packet < Packets); packet++) {
+            Assert.True(condition: producer.Observe(0, FixedQ4816.One.Value, tick, FixedQ4816.FromRawBits(value: ((2 * packet) + 1)), ((ulong)(packet + 1))));
+            Assert.True(condition: producer.Observe(0, 0, tick, FixedQ4816.FromRawBits(value: ((2 * packet) + 2)), ((ulong)(packet + 1))));
+            var batch = producer.Publish(tick);
+
+            fixture.Server.PublishFederatedIntent(leaseId: 91, submission: new(tick, Body, batch.Image, actor, batch));
+        }
+        for (var step = 1; (step <= (((2 * Packets) + StepCapacity - 1) / StepCapacity)); step++) {
+            fixture.Step();
+            Assert.Equal(epoch, owner.Epoch);
+            Assert.Equal(0UL, owner.RefusedBatches);
+            Assert.Equal(((uint)Math.Min(val1: (2 * Packets), val2: (step * StepCapacity))), owner.Sequence);
+        }
+        Assert.True(condition: owner.TryEvent(channel: tap, kind: WorldInputEventKind.Press, occurrence: (Packets - 1), record: out _));
+        Assert.False(condition: owner.TryEvent(channel: tap, kind: WorldInputEventKind.Press, occurrence: Packets, record: out _));
+        Assert.False(condition: owner.TryHeld(channel: tap, hold: out _));
+    }
 }

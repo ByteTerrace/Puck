@@ -482,6 +482,25 @@ public static partial class PuckPrinter {
             Indent(level: level);
             m_builder.Append(value: '}');
         }
+        // A compile-time `if` in document position, from its keyword on; an `else if` continues on the closing brace's line.
+        private void ConditionalRows(ConditionalStatementNode branch, int level) {
+            m_builder.Append(value: "if");
+            InlineHeader(trivia: branch.Trivia);
+            m_builder.Append(value: ' ');
+            Expression(expression: branch.Condition, level: level);
+            Body(closing: branch.Trivia.Inner, construct: m_construct, level: level, opening: branch.Trivia.Opening, statements: branch.Then);
+            if (branch.Else is not { } otherwise) {
+                return;
+            }
+            if ((otherwise.Count == 1) && (otherwise[0] is ConditionalStatementNode nested)) {
+                m_builder.Append(value: " else ");
+                ConditionalRows(branch: nested, level: level);
+
+                return;
+            }
+            m_builder.Append(value: " else");
+            Body(closing: branch.Trivia.Alternate, construct: m_construct, level: level, statements: otherwise);
+        }
         private void Statement(StatementNode statement, int level) {
             // A test's given, when and expect blocks hold one cell, step or expectation a line.
             if (statement is TestDeclarationNode) {
@@ -637,6 +656,10 @@ public static partial class PuckPrinter {
 
                         break;
                     }
+                case ConditionalStatementNode branch:
+                    ConditionalRows(branch: branch, level: level);
+
+                    break;
                 case BlockNode block: {
                         m_builder.Append(value: (block.IdentifierQuoted
                             ? Quote(text: block.Identifier)

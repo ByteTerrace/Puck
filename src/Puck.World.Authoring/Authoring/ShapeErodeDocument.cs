@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.SignedDistance;
 
 namespace Puck.World.Authoring;
@@ -17,4 +18,4 @@ namespace Puck.World.Authoring;
 /// run the fold in reverse (the shape grows IN as the lane rises — the torn-fabric use). Must differ from
 /// <see cref="From"/>.</param>
 /// <param name="Noise">The erosion front's noise lattice frequency, cells per world unit (null = 1).</param>
-public sealed record ShapeErodeDocument(int Lane, float From, float To, float? Noise = null);
+public sealed record ShapeErodeDocument([property: DocumentRenderLane] int Lane, float From, float To, float? Noise = null);

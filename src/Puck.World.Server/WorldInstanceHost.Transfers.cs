@@ -2698,6 +2698,10 @@ public sealed partial class WorldInstanceHost {
     ) {
         public Dictionary<int, Task<(WorldAuthorityRouteDescription? Route, string Reason)>>? RouteSeeds { get; set; }
         public bool PublicationFailureReported { get; set; }
+        // Whether the committed cohort's routes, roster facts and arrival lines were published
+        // (PublishCommittedTransfer). Kept in memory alone: a source recovered from its checkpoint publishes again,
+        // since a route is durable only once the settlement that names it is.
+        public bool Published { get; set; }
         // The settlement this source wrote ahead of acknowledging or restoring the cohort.
         public bool SettlementRecorded { get; set; }
         public bool SettlementFailureReported { get; set; }

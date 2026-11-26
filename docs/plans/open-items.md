@@ -1130,30 +1130,33 @@ open.
     traveler's origin, which no law runs. Check: the probe hops the guest
     before its capture and both restored rows hold no guest and no forwarding
     route.
-  - A world that retires a traveler's body tells its host, which drops the
-    routes and credentials of the worlds that forwarded to it on its next loop
-    (`IWorldTransferForwarder.RetireTraveler`). A process that dies between
-    the two leaves the forwarding world with a route to a traveler its
-    neighbour no longer holds, and the player's client is answered
-    `RouteUnknown` there until the next restore. Check: when a recovered route
-    binds its colocated destination (`WorldInstanceHost.ResolveForwardedRecoveries`),
-    retire it if the destination holds no credential for the traveler, and
-    show a crash between the retirement and the drain recovers to no route.
-  - The same word stops at a socket. A traveler retired by a world in another
-    process is retired upstream only when an accepted leave's answer comes
-    back, and a player's absence reaches a remote hop only as the streams to
-    it ending. Closed groups run in one process, so this is an open-world
-    gap. Check: a forwarding world retires its route when its next hop
-    answers that it holds no credential for the traveler.
-  - Two parts of the guest design are covered by their predicate and not by a
-    run. A federation handshake by a vouched identity that signed for no
-    session is refused its credential (`WorldTransferBoundary.CredentialRefusal`),
-    and the law asks the predicate, since the engine's own client always signs
-    a session. A seat whose traveler ended while its departure is still in
-    doubt is returned by that departure alone (`WorldInstanceHost.ReturnSeatHome`),
-    and the law's restore finds the departure already settled. Check: a
-    session-less issued claim against a closed group's door, and a restore
-    taken between a client's commit and its settlement.
+  - A world in another process that retires a traveler's body tells the worlds
+    upstream of it only when one of them next asks it about the traveler
+    (`WorldFederationRefusal.TravelerUnknown`,
+    `WorldInstanceHost.RetireUnheldRoutes`), because they dialled it and it
+    holds no connection to them. Until then each keeps a route and a
+    credential, and each hop learns one request after the hop below it. Closed
+    groups run in one process, so this is an open-world gap. Check: a
+    forwarding world's route to a traveler retired two hops away is gone
+    without a client asking for the traveler twice.
+  - A presence or retire word for a route whose next hop is not bound yet (a
+    recovered route whose destination row is not admitted) is dropped
+    (`WorldDeferredForwardedAuthority.SetPresence`). Check: the word a route
+    was owed while unbound reaches the next hop when it binds.
+  - An open world's client whose traveler was retired while it was away is
+    answered `RouteUnknown` when it observes the traveler, and only a closed
+    group answers `WorldFederationRefusal.SessionEnded`, which is what brings a
+    seat home (`WorldInstanceHost.ReturnSeatHome`). Check: decide whether a
+    traveler an open world holds no credential for ends the client's route the
+    same way, and show the seat comes home.
+  - A seat whose traveler ended while its departure is still in doubt comes
+    home once in the order a run can force: the observation's refusal first,
+    then the departure's resolution (the guest law's step 5). The other order,
+    in which a route's refusal is queued after the seat came home and joined
+    again, is closed by reading and by no run:
+    `WorldInstanceHost.ReturnEndedSeats` acts on a refusal only while the route
+    that heard it is the one the seat follows. Check: a law holds a route's
+    refusal until the seat follows a new traveler, and the seat stays there.
   - A crash recovery redoes arrivals from the crossing log and no retirement
     the tick made between them. Two arrivals in one journal tail, with the first
     traveler retired in between, redo as two bodies, and a second arrival that
@@ -5093,14 +5096,20 @@ the stages; this packet holds what a stage does not.
 - [low] An observer whose wire falls a full queue behind is no longer detached:
   it is sent nothing while its wire drains, and the next delivery cuts its
   stream to a new generation and sends the whole projection and a primer behind
-  the cut (`WorldFederationProjectionSink.ResumeDeliveryLimit`). Two parts are
-  left. The catch-up rides a delivery, so on a paused authority, which makes
-  none, a drained observer keeps what it held until the world steps; and the
-  receiver's side of a catch-up has been read only as records on the wire.
-  Check: `puck benchmark --route debug --remote local --jitter-ms <n>` at a
-  jitter that fills the queue arrives in every chapter with no
-  `world.observation.backpressure` line, and a paused authority's observer is
-  primed when its wire drains.
+  the cut (`WorldFederationProjectionSink.ResumeDeliveryLimit`). The catch-up
+  rides a delivery, so on a paused authority, which makes none, a drained
+  observer keeps what it held and is caught up by the first tick after the
+  authority resumes
+  (`WorldProjectionBackpressureLawTests.ASlowObserverOfAPausedAuthorityCatchesUpWhenItResumes`).
+  Two parts are left. An observer that fell behind just before a long pause
+  shows the world as it stood some ticks before the pause for as long as the
+  pause lasts; priming it when its wire drains needs the authority to compose
+  a delivery outside a tick. And the receiver's side of a catch-up has been
+  read only as records on the wire. Check:
+  `puck benchmark --route debug --remote local --jitter-ms <n>` at a jitter
+  that fills the queue arrives in every chapter with no
+  `world.observation.backpressure` line, and a paused authority's observer
+  shows the paused tick once its wire drains.
 - [medium] A replica dealt to a recipient who may not read a cell still carries
   the rules that read it (`WorldStateDisclosure.Disclose` withholds the cell and
   the rule is sent whole). The receiver no longer refuses the document, since it

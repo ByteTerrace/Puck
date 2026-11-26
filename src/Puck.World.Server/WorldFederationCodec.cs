@@ -64,6 +64,14 @@ public enum WorldFederationRequest : byte {
     /// <summary>Ask the destination's issuer, in place of authenticating, to vouch for the client's own per-run key
     /// after a sign-in (<see cref="WorldFederationCodec.EncodeIssuance"/>).</summary>
     Issue = 19,
+    /// <summary>Tell the authority a traveler was handed on to whether the traveler's source still attends to it
+    /// (<see cref="WorldFederationCodec.EncodePresence"/>): the body parks there when the source went away and resumes
+    /// when it returned.</summary>
+    Presence = 20,
+    /// <summary>Tell the authority a traveler was handed on to that the traveler is gone for good: it drops the
+    /// credential and every onward route it keeps for it. Carries the route's credential
+    /// (<see cref="WorldFederationCodec.EncodeRouteCredential"/>).</summary>
+    Retire = 21,
 }
 /// <summary>The federation response kinds an authority writes back.</summary>
 public enum WorldFederationResponse : byte {
@@ -171,6 +179,11 @@ public enum WorldFederationRefusal : byte {
     /// reconnect grace ran out, or the authority was restored to a recovery point. Terminal for the traveler; the
     /// session takes its seat back and enters again.</summary>
     SessionEnded,
+
+    /// <summary>This authority admits the asking source and holds no credential for the traveler it names: the
+    /// traveler was retired here, so no route through this authority reaches it. An authority that forwards the
+    /// traveler here retires its own route and credential on this answer.</summary>
+    TravelerUnknown,
 }
 /// <summary>
 /// The one authority-to-authority codec. It carries the same frame grammar, bounded reader, and named refusal
@@ -190,9 +203,9 @@ public static partial class WorldFederationCodec {
     /// <summary>The protocol discriminator, distinct from the interactive peer wire key so one listener can route
     /// both dialects off the first eight bytes. A dialer opens every federation connection by writing it through
     /// <see cref="HandshakeWireFormat.WriteHelloAsync"/> — that is the only hello; the challenge/authenticate exchange
-    /// that follows rides ordinary frames. The key's final digit is the contract's version: raise it whenever the
-    /// federation wire contract changes.</summary>
-    public const ulong WireKey = 0x394445464B435550UL; // "PUCKFED9"
+    /// that follows rides ordinary frames. The key's trailing digits are the contract's version: raise it whenever
+    /// the federation wire contract changes.</summary>
+    public const ulong WireKey = 0x303145464B435550UL; // "PUCKFE10"
     /// <summary>The length of a document leaf's header, in bytes: the tier byte, then the document version's 16
     /// activation bytes and 8 sequence bytes, both little-endian. The document's payload starts here.</summary>
     public const int DocumentHeaderBytes = 25;
@@ -802,11 +815,7 @@ public static partial class WorldFederationCodec {
         }
         var writer = new WireWriter(capacity: 1024);
 
-        writer.WriteString(value: sourceAuthority);
-        WorldWireLeaves.WriteMobility(
-            mobility: mobility,
-            writer: writer
-        );
+        WriteCredential(mobility: in mobility, sourceAuthority: sourceAuthority, writer: writer);
         writer.WriteUInt64(value: submission.Tick);
         writer.WriteInt32(value: submission.MeasuredHoldTicks);
 
@@ -942,6 +951,18 @@ public static partial class WorldFederationCodec {
 
         return writer.ToArray();
     }
+    // The credential every routed leaf opens with: the source namespace that handed the traveler on, then the traveler.
+    private static void WriteCredential(WireWriter writer, string sourceAuthority, in WorldMobilityIdentity mobility) {
+        writer.WriteString(value: sourceAuthority);
+        WorldWireLeaves.WriteMobility(
+            mobility: mobility,
+            writer: writer
+        );
+    }
+    private static void ReadCredential(ref WireReader reader, string field, out string sourceAuthority, out WorldMobilityIdentity mobility) {
+        sourceAuthority = reader.ReadRequiredString(field: field);
+        mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
+    }
     /// <summary>Encodes a committed-transfer credential without a gameplay payload.</summary>
     /// <param name="sourceAuthority">The authenticated source namespace.</param>
     /// <param name="mobility">The traveler's incarnation and committed epoch.</param>
@@ -949,11 +970,20 @@ public static partial class WorldFederationCodec {
     public static byte[] EncodeRouteCredential(string sourceAuthority, in WorldMobilityIdentity mobility) {
         var writer = new WireWriter();
 
-        writer.WriteString(value: sourceAuthority);
-        WorldWireLeaves.WriteMobility(
-            mobility: mobility,
-            writer: writer
-        );
+        WriteCredential(mobility: in mobility, sourceAuthority: sourceAuthority, writer: writer);
+
+        return writer.ToArray();
+    }
+    /// <summary>Encodes whether a handed-on traveler's source still attends to it.</summary>
+    /// <param name="sourceAuthority">The authenticated source namespace.</param>
+    /// <param name="mobility">The traveler's incarnation and committed epoch.</param>
+    /// <param name="present">Whether the source attends to the traveler.</param>
+    /// <returns>The encoded leaf.</returns>
+    public static byte[] EncodePresence(string sourceAuthority, in WorldMobilityIdentity mobility, bool present) {
+        var writer = new WireWriter();
+
+        WriteCredential(mobility: in mobility, sourceAuthority: sourceAuthority, writer: writer);
+        writer.WriteBoolean(value: present);
 
         return writer.ToArray();
     }
@@ -1080,11 +1110,7 @@ public static partial class WorldFederationCodec {
     public static byte[] EncodeSubmission(string sourceAuthority, in WorldMobilityIdentity mobility, ReadOnlySpan<byte> frame) {
         var writer = new WireWriter(capacity: (frame.Length + 256));
 
-        writer.WriteString(value: sourceAuthority);
-        WorldWireLeaves.WriteMobility(
-            mobility: mobility,
-            writer: writer
-        );
+        WriteCredential(mobility: in mobility, sourceAuthority: sourceAuthority, writer: writer);
         writer.WriteBytes(value: frame);
 
         return writer.ToArray();
@@ -1118,6 +1144,8 @@ public static partial class WorldFederationCodec {
         WorldFederationRequest.HopSettled => (4 * WireLimits.MaxStringBytes),
         WorldFederationRequest.AcknowledgeTransfer => (2 * WireLimits.MaxStringBytes),
         WorldFederationRequest.Route => (4 * WireLimits.MaxStringBytes),
+        WorldFederationRequest.Presence => (4 * WireLimits.MaxStringBytes),
+        WorldFederationRequest.Retire => (4 * WireLimits.MaxStringBytes),
         WorldFederationRequest.ObserveTraveler => (4 * WireLimits.MaxStringBytes),
         WorldFederationRequest.Intent => (64 * 1024),
         WorldFederationRequest.Submission => (WireLimits.MaxDocumentBytes + (64 * 1024)),
@@ -1442,8 +1470,7 @@ public static partial class WorldFederationCodec {
     public static bool TryDecodeIntent(ReadOnlySpan<byte> body, out string sourceAuthority, out WorldMobilityIdentity mobility, out IntentSubmission submission, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
-        sourceAuthority = reader.ReadRequiredString(field: "intent source authority");
-        mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
+        ReadCredential(field: "intent source authority", mobility: out mobility, reader: ref reader, sourceAuthority: out sourceAuthority);
 
         var tick = reader.ReadUInt64();
         var measured = reader.ReadInt32();
@@ -1737,8 +1764,25 @@ public static partial class WorldFederationCodec {
     public static bool TryDecodeRouteCredential(ReadOnlySpan<byte> body, out string sourceAuthority, out WorldMobilityIdentity mobility, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
-        sourceAuthority = reader.ReadRequiredString(field: "route credential source authority");
-        mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
+        ReadCredential(field: "route credential source authority", mobility: out mobility, reader: ref reader, sourceAuthority: out sourceAuthority);
+
+        return Finish(
+            failure: out failure,
+            reader: ref reader
+        );
+    }
+    /// <summary>Decodes whether a handed-on traveler's source still attends to it.</summary>
+    /// <param name="body">The leaf bytes.</param>
+    /// <param name="sourceAuthority">The claimed source namespace.</param>
+    /// <param name="mobility">The traveler credential.</param>
+    /// <param name="present">Whether the source attends to the traveler.</param>
+    /// <param name="failure">The named refusal on failure.</param>
+    /// <returns><see langword="true"/> when the leaf decoded exactly.</returns>
+    public static bool TryDecodePresence(ReadOnlySpan<byte> body, out string sourceAuthority, out WorldMobilityIdentity mobility, out bool present, out WireFailure failure) {
+        var reader = new WireReader(bytes: body);
+
+        ReadCredential(field: "presence source authority", mobility: out mobility, reader: ref reader, sourceAuthority: out sourceAuthority);
+        present = reader.ReadBoolean();
 
         return Finish(
             failure: out failure,
@@ -1913,8 +1957,7 @@ public static partial class WorldFederationCodec {
     public static bool TryDecodeSubmission(ReadOnlySpan<byte> body, out string sourceAuthority, out WorldMobilityIdentity mobility, out byte[] frame, out WireFailure failure) {
         var reader = new WireReader(bytes: body);
 
-        sourceAuthority = reader.ReadRequiredString(field: "submission source authority");
-        mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
+        ReadCredential(field: "submission source authority", mobility: out mobility, reader: ref reader, sourceAuthority: out sourceAuthority);
         frame = reader.ReadRest(
             field: "submission frame",
             maxBytes: WorldPeerWireFormat.MaxUpstreamFrameBytes
@@ -1967,6 +2010,22 @@ public static partial class WorldFederationCodec {
             body: Encoding.UTF8.GetBytes(s: $"{refusal}: {detail}"),
             ct: ct
         );
+    /// <summary>Returns whether a refusal frame's body opens with one refusal's name, as
+    /// <see cref="WriteRefusalAsync"/> writes it. A reader decides on the name this way and never on the sentence that
+    /// follows it.</summary>
+    /// <param name="body">The body of a <see cref="WorldFederationResponse.Refusal"/> frame.</param>
+    /// <param name="refusal">The refusal to look for.</param>
+    /// <returns><see langword="true"/> when the body names <paramref name="refusal"/>.</returns>
+    public static bool NamesRefusal(ReadOnlySpan<byte> body, WorldFederationRefusal refusal) {
+        Span<byte> name = stackalloc byte[64];
+        var text = refusal.ToString();
+
+        if (!Encoding.UTF8.TryGetBytes(chars: text, bytes: name, bytesWritten: out var length) || (length >= name.Length)) {
+            return false;
+        }
+        name[length] = ((byte)':');
+        return body.StartsWith(value: name[..(length + 1)]);
+    }
     /// <summary>Writes one framed request.</summary>
     /// <param name="stream">The connection stream.</param>
     /// <param name="kind">The request kind.</param>

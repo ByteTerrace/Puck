@@ -142,6 +142,13 @@ public static partial class WorldDocumentEmitter {
                         }
                     }
                     break;
+                case ConditionalStatementNode branch:
+                    foreach (var (expanded, active) in DocumentLowering.ExpandConditionalStatements(branch: branch, scope: scope)) {
+                        foreach (var nested in GroupMembers(scope: active, statements: [expanded])) {
+                            yield return nested;
+                        }
+                    }
+                    break;
                 case ExpressionStatementNode { IsUse: false, Expression: CallExpressionNode call } when (scope.Templates.TryGetValue(key: call.Name, value: out var template) && !template.IsModule): {
                         var stamped = new List<(StatementNode Statement, DocumentScope Scope)>();
 

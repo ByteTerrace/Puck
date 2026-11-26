@@ -725,6 +725,27 @@ public static class PuckSyntaxTrivia {
                             }),
                         });
                     }
+                case ConditionalStatementNode branch: {
+                        var open = FindNext(from: ContentEnd(node: branch.Condition), limit: ContentEnd(node: branch), target: '{');
+                        var close = MatchDelimiter(open: open);
+                        var (then, inner) = (((open < 0) || (close < 0))
+                            ? (((IReadOnlyList<StatementNode>)[.. branch.Then.Select(selector: VisitStatement)]), ((IReadOnlyList<TriviaPiece>)[]))
+                            : List(bodyEnd: close, bodyStart: (open + 1), items: branch.Then, visit: VisitStatement));
+                        var opening = m_opening;
+                        var trivia = (branch.Trivia with { Header = Header(from: branch.Offset, open: open), Inner = inner, Opening = opening });
+
+                        branch = (branch with { Condition = VisitExpression(expression: branch.Condition) });
+                        if (branch.Else is null) {
+                            return (branch with { Then = then, Trivia = trivia });
+                        }
+                        if ((branch.Else.Count == 1) && (branch.Else[0] is ConditionalStatementNode nested)) {
+                            return (branch with { Else = [VisitStatement(statement: nested)], Then = then, Trivia = trivia });
+                        }
+
+                        var (otherwise, otherwiseInner, _) = Braced(limit: ContentEnd(node: branch), openFrom: (close + 1), opener: '{', statements: branch.Else);
+
+                        return (branch with { Else = otherwise, Then = then, Trivia = (trivia with { Alternate = otherwiseInner }) });
+                    }
                 case RepeatStatementNode loop: {
                         var (statements, inner, header) = Braced(
                             headerFrom: loop.Offset,
