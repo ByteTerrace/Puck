@@ -525,6 +525,8 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
             WorldBootWork.Count(WorldBootWork.SessionCellsDelivered, redacted.FieldCells.Length);
             WorldBootWork.Count(WorldBootWork.SessionEntriesDelivered, redacted.Entries.Length);
             m_inner.DeliverSnapshot(snapshot: in redacted, stream: m_cursor.Stamp());
+            // The cells the rows lent the snapshot were handed on with it.
+            m_rows.Settle();
             m_observation.SettleSceneProof(tick: tick);
             FollowObserverDetach();
         } catch (Exception exception) {

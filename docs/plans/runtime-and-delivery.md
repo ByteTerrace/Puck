@@ -120,10 +120,11 @@ image of about 291 MB that every Puck change rewrites.
 
 1. **The whole set, read on the consumer.** The producer fills every detail
    tier of what the world's authored spawn points draw
-   (`SdfMeshCachePolicy.Ladder`), a player's build draws stored tiers alone
-   (`SdfMeshCachePolicy.Stored`), and a folder is complete only when each
-   target's check boot settles at every place with no lattice dispatched, no
-   group baked and no tier missed
+   (`SdfMeshCachePolicy.Ladder`), a player's build starts from its stored
+   tiers and bakes what they lack (`SdfMeshCachePolicy.Stored`), and a folder
+   is complete when each target's check boot settles at every place; what a
+   check dispatched, baked or missed is recorded as what the cache lacks,
+   never a refusal
    ([the decision](../decisions/runtime-and-delivery.md#the-player-channel)).
    Three things remain. The reading on the consumer machine itself: the RTX
    2060's boots of the next released build, both backends, at rest and over

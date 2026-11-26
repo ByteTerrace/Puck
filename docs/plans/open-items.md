@@ -940,8 +940,9 @@ stored one tier of each mesh. The replacement is built: the producer fills
 every tier (`SdfMeshCachePolicy.Ladder`), a player's build starts from its
 stored tiers and bakes only what they lack, on its play bar
 (`SdfMeshCachePolicy.Stored`, a warm start by the owner's ruling), and `puck
-world player` refuses a folder whose check boots did not settle with no tier
-missed.
+world player` refuses a folder only when a check boot did not settle: a tier a
+check missed is baked by that boot and listed under the record's
+`cacheMisses`.
 
 - [high] Both backends' fills and all four target checks
   (`rtx2060@1920x1080`, `rtx4070@2560x1440`) have run complete on the RTX
@@ -2103,10 +2104,11 @@ Owner: rendering lane (rendering, verification) · high · Next:
 step 5, the floor and eviction, an engine gap that goes first
 ([rendering research](rendering-research.md#engine-gaps-filled-first)); then
 what is left of [step 7, the backing](streaming-and-memory.md#step-7-the-backing):
-Direct3D 12's mesh region and probe scene grow in chunks of one reserved
-buffer (`IGpuMappedBuffer`), and Vulkan's still use contiguous storage, so
-Vulkan's sparse ownership behind the same interface, page-only reservation
-credit and physical compaction remain. Steps 0 to 3 are built and owe their
+the mesh region and the probe scene grow in chunks of one reserved buffer
+on both backends (`IGpuMappedBuffer`: Direct3D 12's reserved resource,
+Vulkan's sparse buffer), so page-only reservation credit and physical
+compaction remain, and Vulkan's sparse destination owes its first windowed
+boot and the hardware qualification the plan lists. Steps 0 to 3 are built and owe their
 windowed readings, and the indexed-read prototype owes one more window on the
 build its [design for review](streaming-and-memory.md#sparse-backing-design-for-review)
 was frozen at. The plan owns the decisions, the build order and each step's
@@ -2130,14 +2132,15 @@ check; this packet holds the defects beside it.
   the bake's scratch arrays, an unidentified renter of 92–98 MB `ArrayPool.Shared` arrays, and
   about 140 MB of trace-scene storage still rented managed. Check: the 2060's route ends under
   its host bar with the LOH flat across loops.
-- [medium] **mimalloc returns freed native pages only under pressure.** `MimallocAllocator` sets no
-  purge or decommit options, and `mi_collect(force: true)` runs only when the memory account asks
-  for a reclaim, when a thread returns its memory, or from a console command. Moving the GI
-  stores to native memory therefore swapped LOH fragmentation for allocator slack: on the 2060,
-  1.83 GB committed against 810 MB named, with 8.6 GB reserved. Set the purge options at process
-  start, give the large long-lived GPU-side stores their own heap or arena, and collect on a
-  cadence near the bar. Check: committed native memory tracks the named owners within a stated
-  slack on the same route.
+- [medium] **Read the native allocator's slack on the RTX 2060's route.** The 2060 read 1.83 GB
+  committed against 810 MB named, with 8.6 GB reserved, when freed ranges were decommitted only by
+  a later free and every size class committed its whole page. `MimallocAllocator`'s owner thread
+  now decommits expired ranges every `MimallocAllocator.PurgePeriod`, and pages past a slice
+  commit as their blocks are used. Check: committed native memory tracks the named owners within
+  a stated slack on the same route (`host.memory`'s native row and its residual). If the slack
+  that remains is live blocks pinning mostly empty pages, give the large long-lived stores (mesh
+  payloads, the irradiance volume) a heap of their own, apart from the bake's short-lived
+  workspace.
 - [high] Measure the session-residency fix on the RTX 4070. A cold debug-world
   boot built 55 residencies, one for each `self`, `wonderland` and nested
   session screen of the boot world, and the device pool held 15.5 GB, mostly
@@ -2202,6 +2205,25 @@ check; this packet holds the defects beside it.
   feedback volume, the hit and meter caches of `SdfMeshProbeGpuWork`) is still
   fixed storage with no reservation; only a job's slot buffers reserve
   (`SdfGpuWorkHold`).
+- [high] A volume's words stand three times: the host's copy
+  (`SdfMeshIrradiance`'s volume words), the probe service's feedback table,
+  which the relights read and commit into (`SdfMeshProbeGpuWork`), and the
+  published table the views read, which each publication copies from the
+  feedback table on the device (`SdfWorldTables.PublishMeshIrradiance`). The
+  two device tables bind one layout at one binding
+  (`SdfWorldPackage.MeshIrradiance`), and every slot carries the cell it holds,
+  so a view can reject a slot mid-move. On the RTX 2060's route the two read
+  about 230 MB each at the device's peak. Have the views bind the feedback
+  table and make a publication a revision alone, with the barriers the views'
+  stages need on that table. It changes what the passes read, so it is the
+  frame lane's edit with this plan; check that a still view stands until a
+  publication and that the probe history's serials still gate its reuse.
+- [medium] The temporal resolve's window (`historyWindow`,
+  `SdfWorldPackage.HistoryWindowWords` words an output pixel, about 207 MB at
+  1920 by 1080) follows the display and not the device's table, so the RTX
+  2060 holds what the RTX 4070 holds a pixel. A shorter period or narrower
+  words on that card is a reconstruction choice for its table, which the frame
+  budget owns.
 - [low] A mesh region's staging is named for its own owner
   (`SdfResidencySelector.RegionStagingOwner`) and states no class, so a flush
   that stages more than the pool has room for is admitted past the limit and
@@ -2248,18 +2270,42 @@ check; this packet holds the defects beside it.
   hold every column that can ever raise, with displacement closing the dry
   ones, is a design question for the field's owner.
 - One group in the debug world has a mesh no draw names, not yet identified.
-- [medium] The mesh store evicts whole sets when it nears its size limit
-  (`CacheRetention`), and a whole ladder per backend is now several times the
-  bytes of the sets that limit was sized for, so a lead machine that bakes
-  for two backends and several identities loses sets it still needs. A player
-  folder keeps only its build's sets and fails when one was evicted
-  (`puck world player`); the per-user store still needs its limit sized from
-  what a set is, or retirement by identity age, and an owner for the figure.
-- [medium] Step 2's heap walk on a headless debug world names two large-object
-  tenants the plan's [large host owners](streaming-and-memory.md#the-large-host-owners)
-  table bounds by no step: `FieldCellDelta[]` arrays held by
-  `WorldDeliveryRows` (9 objects, 33 MB) and by `WorldDocument` (3.7 MB). They
-  need an owner and a bound, or a reason they stay named only.
+- [low] The mesh store keeps its most recently used sets whole and holds the
+  older ones to a share of its volume (`SdfMeshStore.RetainedSets`,
+  `SdfMeshStore.CapacityOf`), so on a roomy volume the sets of builds no
+  checkout can produce again stand until the bytes ask for them. Retire a set
+  by the age of its last use if a lead machine's store is seen to fill with
+  them. A group that waits to bake takes a finer rung of its shape only when a
+  group of its own bake lands it (`SdfMeshPathBake.TakeLandedRungs`); a rung
+  another residency's bake landed is found at the group's plan alone.
+- [medium] A headless debug world's heap walk (`puck host heap --pid <pid>
+  --min-mib 2 --depth 2`, with the authority in the process) still names
+  three large-object tenants the plan's
+  [large host owners](streaming-and-memory.md#the-large-host-owners) table
+  bounds by no step. The composed documents' bytes
+  (`WorldComposedDocument`, about 36 MB in 5 arrays) and their layers
+  (`ComposedLayer`, about 10 MB) stand for the whole run so that a reload
+  composes only what changed; a player's process, which reloads nothing, could
+  let them go once it has booted. One `FieldCellDelta[]` of about 4 MB is held
+  by `WorldSnapshotStorage`. And for as long as the process runs no two gen2
+  collections half a minute apart, the shared byte pool keeps the arrays a
+  boot rented from it, 2, 4, 8, 16 and 64 MiB, in one thread's slots
+  (`SharedArrayPoolThreadLocalArray`): the jump past 32 MiB is the shape of one
+  `System.Text.Json` write of a string or raw value of about 13 million
+  characters through the serializer's pooled writer, which no site has been
+  matched to yet (`ContentDigest.HashText` was ruled out by bounding it). Find
+  that write with a trace taken from process start, and write it through a
+  stream.
+- [medium] A reload or a boot serializes whole documents into growing byte
+  buffers: `puck host allocations` over one `world.reload` of the headless
+  debug world sampled about 520 MiB, 208 MiB of it large objects, led by
+  `CanonicalJsonDocument.SerializeCompact` (128 MiB of `byte[]`: the
+  writer's own buffer, the `MemoryStream` it is flushed to and the array that
+  is copied out of it), `CreationDocumentJsonConverter.Write` (64 MiB) and
+  `CreationDocumentJson.Read` (57 MiB). A serialization whose reader only
+  hashes or compares the bytes needs no array of them. Owner: the document
+  and state code, with the iteration plan, since this is the edit loop's
+  garbage.
 - [low] Step 2 names the trace scene's current hierarchy only: a scene a job
   still borrows after a rebuild sits in the managed row's residual until its
   last claim ends (`SdfMeshIrradiance`'s sampled owners).
@@ -4112,12 +4158,13 @@ checks on the deployed worker below, then the RTX 2060's hosted leg; then the
 silo's cold activation, CI's steady state, the shader cache and the GC-hole
 retirement.
 
-- [high] **A player without the Azure CLI cannot sign in.** The `azure.api-users` provider takes
-  its token through `DefaultAzureCredential`'s default chain, which excludes the interactive
-  browser, with a 15 s acquisition deadline (`EntraSignIn`). Add an interactive browser
-  credential for clients in the provider project, with its own longer deadline; the deployment
-  already preauthorizes the Azure CLI client ID, which is the browser credential's default.
-  Check: a clean player install on a machine with no Azure CLI signs in and is admitted.
+- [high] **A player without the Azure CLI signing in is unproven.** The player channel now ships
+  the `Puck.World.Azure` extension (CI's player job passes `--extension`), and `EntraSignIn`'s
+  client chain falls back to a system-browser credential with a persisted token cache and its own
+  deadline (`EntraSignIn.InteractiveTokenAcquisitionTimeout`). Check: a clean player install on a
+  machine with no Azure CLI signs in through the browser, is admitted, and a second start renews
+  without a prompt. If the second start prompts again, persist the browser credential's
+  `AuthenticationRecord` beside the token cache.
 - [medium] `Puck.Launcher.Setup.exe` carries no Authenticode signature (seen on the 2060's clean
   install). The channel's own signature covers the release; an OS-level signature is the
   distributor's choice and needs a certificate the owner provides.
@@ -5028,6 +5075,15 @@ proves itself with `puck compile` lowering to the same document.
 [Code size](code-size.md) holds the measured map, the generator families and
 their lane order; this packet keeps the single duplicates and leads.
 
+- Two mapped buffers keep one chunk table apiece: `DirectXGpuMappedBuffer`
+  and `VulkanGpuMappedBuffer` each hold a backing a chunk, place every missing
+  chunk of a range before binding any, and revoke the chunks wholly inside a
+  range into a release (`Map`, `Unmap`). Their chunk arithmetic is shared
+  (`GpuMappedChunks`); the table, the all-or-none placement and the revoke
+  loop are still written twice. Lift them into one generic chunk table in
+  `Puck.Abstractions` that a backend supplies with its place, bind, unbind and
+  return calls. Do it in the window that first boots the Vulkan path, since
+  the Direct3D 12 half is the one hardware has qualified.
 - Two A* searches over a navigation domain's baked edges: `NavigationRuntime.Domain.FindPath`
   (`SearchPath`, per-domain workspace arrays, step costs in thousandths of a cell, no clearance
   surcharge) for a non-shared domain's followers, and `NavigationRuntime.FindRoute` (`SearchRoute`,

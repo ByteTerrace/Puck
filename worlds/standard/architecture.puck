@@ -1,0 +1,139 @@
+// Architectural pieces in the canyon-workshop building language (docs/game/art/canyon-workshop-pack): thick cream and
+// ochre shells with rounded corners over darker teal recesses, brass trim and small functional lights. A module library:
+// it hands its importers palettes and templates and emits no document. Each template takes `base`, the palette slot of
+// its palette's first entry, so a creation appends the palette after its own slots and passes where it starts.
+
+// The display plinth's materials, in slot order from `base`: cream shell, ochre body, teal recess, dark screen glass,
+// brass, and the warm light of the turntable ring.
+let plinthCream = 0
+let plinthOchre = 1
+let plinthTeal = 2
+let plinthScreen = 3
+let plinthBrass = 4
+let plinthGlow = 5
+let plinthPalette = [
+  { color: "#EFE3C8", roughness: 0.55, specular: 0.25 }
+  { color: "#E0A13A", roughness: 0.45, specular: 0.3 }
+  { color: "#2C5A63", roughness: 0.6, specular: 0.2 }
+  { color: "#14262E", roughness: 0.15, specular: 0.5 }
+  { color: "#C8902E", roughness: 0.3, metal: 1 }
+  { color: "#FFC46A", roughness: 0.4, emissive: 2.5 }
+]
+
+// The console's tilt back from vertical, as its sine and cosine and the quaternions that carry a shape onto its face:
+// `plinthFace` turns a box's +Z onto the face's outward normal, `plinthKnob` turns a cylinder's +Y onto it.
+let plinthTiltSin = 0.4226
+let plinthTiltCos = 0.9063
+let plinthFace = [-0.2164, 0, 0, 0.9763]
+let plinthKnob = [0.5373, 0, 0, 0.8434]
+
+// A point on the console's face: `across` along x, `up` along the face, `out` along its normal, from the face's centre.
+let plinthConsole = [0, 0.4, 0.66]
+let plinthConsoleDepth = 0.09
+function plinthOnFace(across, up, out) = [
+  across,
+  ((plinthConsole[1] + (up * plinthTiltCos)) + ((plinthConsoleDepth + out) * plinthTiltSin)),
+  ((plinthConsole[2] - (up * plinthTiltSin)) + ((plinthConsoleDepth + out) * plinthTiltCos))
+]
+
+// A display plinth that faces +Z: a teal foot, an ochre body, a cream cap whose top stands 0.7 m up with a glowing
+// turntable ring set in it, and a cream console tilted back across the front carrying a dark screen and two brass knobs.
+// About 1.8 m wide and 1.6 m deep with its console; an exhibit stands on the cap from y 0.7.
+template exhibitPlinth(base) {
+  shape Box "plinth-foot" {
+    material: (base + plinthTeal)
+    position [0, 0.06, 0]
+    scale [0.8, 0.06, 0.58]
+    rounding: 0.03
+  }
+  shape Box "plinth-body" {
+    material: (base + plinthOchre)
+    position [0, 0.37, 0]
+    scale [0.86, 0.26, 0.64]
+    rounding: 0.07
+  }
+  shape Box "plinth-cap" {
+    material: (base + plinthCream)
+    position [0, 0.665, 0]
+    scale [0.9, 0.035, 0.68]
+    rounding: 0.03
+  }
+  shape Cylinder "plinth-ring" {
+    material: (base + plinthGlow)
+    position [0, 0.705, 0]
+    scale [0.56, 0.006, 0.56]
+  }
+  shape Cylinder "plinth-turntable" {
+    material: (base + plinthCream)
+    position [0, 0.708, 0]
+    scale [0.5, 0.01, 0.5]
+  }
+  shape Box "plinth-console" {
+    material: (base + plinthCream)
+    position: plinthConsole
+    rotation: plinthFace
+    scale [0.62, 0.17, plinthConsoleDepth]
+    rounding: 0.04
+  }
+  shape Box "plinth-screen" {
+    material: (base + plinthScreen)
+    position: plinthOnFace(0, 0.04, 0)
+    rotation: plinthFace
+    scale [0.52, 0.1, 0.012]
+    rounding: 0.01
+  }
+  for x in [-0.3, 0.3] {
+    shape Cylinder $"plinth-knob-{x}" {
+      material: (base + plinthBrass)
+      position: plinthOnFace(x, -0.12, 0.02)
+      rotation: plinthKnob
+      scale [0.045, 0.025, 0.045]
+      rounding: 0.008
+    }
+  }
+}
+
+// The structure's materials, in slot order from `base`: deep teal steel and its brass inlay.
+let structureTeal = 0
+let structureBrass = 1
+let structurePalette = [
+  { color: "#2C5A63", roughness: 0.55, specular: 0.3 }
+  { color: "#C8902E", roughness: 0.3, metal: 1 }
+]
+let structureAcross = [0.7071, 0, 0, 0.7071]
+
+// A teal branched pier that faces +Z: a chamfered square shaft that splits into two arches springing toward ±X, cut by
+// two circles so the haunch above the shaft curves out to a band along the ceiling, with two brass inlay strips up the
+// shaft's face. It stands from the floor (y 0) to `height`; each arch reaches `span` metres out from the shaft's centre,
+// where the next pier's arch meets it, so piers `2 × span` apart join into an arcade.
+template branchedPier(base, height, span, depth = 0.34, shaft = 0.34) {
+  shape Box "pier-shaft" {
+    material: (base + structureTeal)
+    position [0, (height / 2), 0]
+    scale [shaft, (height / 2), depth]
+    chamfer: 0.06
+  }
+  shape Box "pier-haunch" {
+    material: (base + structureTeal)
+    position [0, (height - ((span - shaft) + 0.25) / 2), 0]
+    scale [span, (((span - shaft) + 0.25) / 2), (depth * 0.8)]
+    chamfer: 0.04
+  }
+  for side in [-1, 1] {
+    shape Cylinder $"pier-arch-{side}" {
+      blend: SmoothSubtraction
+      smooth: 0.05
+      material: (base + structureTeal)
+      position [(side * span), ((height - 0.25) - (span - shaft)), 0]
+      rotation: structureAcross
+      scale [(span - shaft), depth, (span - shaft)]
+    }
+  }
+  for side in [-1, 1] {
+    shape Box $"pier-inlay-{side}" {
+      material: (base + structureBrass)
+      position [(side * (shaft * 0.45)), (height * 0.42), (depth + 0.004)]
+      scale [0.025, (height * 0.3), 0.012]
+    }
+  }
+}

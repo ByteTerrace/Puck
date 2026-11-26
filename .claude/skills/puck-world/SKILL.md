@@ -878,6 +878,16 @@ check the flag: the owner may be holding the pad.
   `world.screenshot <path.png> presented 8`, which report each frame's changed
   pixels and luma change against the one before
   ([console](references/console.md#settled-stills-and-presented-bursts)).
+- **A look judgement states its conditions** (the owner's ruling, after a lead
+  read sunset light as a defect, and after lanes judged a camera aimed into a
+  wall). The debug world's day runs, its bakes and lighting settle while it
+  runs, and its camera follows the body. So before comparing captures: pin the
+  time (debug.md's "Time of day" holds the console lines) and report it with
+  every capture; wait until `world.residency` reads `all-landed` and the
+  lighting counters hold steady across two reads, or mark the capture partial;
+  and read what the camera sees (the `view.override` echo, `world.view.camera`,
+  `world.view.pick` on the subject) before naming anything in the frame. A
+  reading the console cannot give is a tooling gap, fixed in the same work.
 - **Patrol an area to see the body.** `world.patrol <x0> <z0> <x1> <z1> <step>
   [yawDegrees|-] [settleTicks] [y|-]` on a windowed World poses body 0 at each grid
   point of its current level (`y` names another level's floor height) and picks the centre of the first seat's rendered view
