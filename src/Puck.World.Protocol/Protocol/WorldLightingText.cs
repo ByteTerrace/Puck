@@ -372,6 +372,16 @@ public static class WorldLightingText {
                 .Field(key: "intensity", value: Describe(value: spot.Intensity))
                 .Field(key: "power", value: Describe(value: spot.Power))
                 .Field(key: "anchor", value: DescribeLightAnchor(anchor: spot.Anchor)),
+            WorldRenderLight.Tube tube => echo
+                .Field(key: "type", value: "tube")
+                .Field(key: "from", value: Describe(vector: tube.From))
+                .Field(key: "to", value: Describe(vector: tube.To))
+                .Field(key: "radius", value: tube.Radius.ToString(provider: CultureInfo.InvariantCulture))
+                .Field(key: "color", value: Describe(color: tube.Color))
+                .Field(key: "temperature", value: Describe(value: tube.Temperature))
+                .Field(key: "intensity", value: Describe(value: tube.Intensity))
+                .Field(key: "power", value: Describe(value: tube.Power))
+                .Field(key: "anchor", value: DescribeLightAnchor(anchor: tube.Anchor)),
             _ => echo.Field(
             key: "type",
             value: "unknown"

@@ -42,7 +42,7 @@ aisles.
 | Storeys | level k's floor top at 4.5k + 0.05 | slab 0.3 m, ceiling 4.2 m over the floor, roof at 18.05 |
 | Nave | x 12 to the east wall, z 9 to 29 | 20 m wide, 47.7 m long, open from level 0 to three skylights |
 | Arcades | piers every 5 m, 0.4 m behind each balcony edge | a branched pier on every level, 4.2 m tall, one wide bay between each pair |
-| Balcony edges | round the nave's void on levels 1 to 3 | level 1: a toy lattice from floor to fascia ([the lattice](#the-lattice)); level 2: glass balustrade, brass rail 1.1 m up |
+| Balcony edges | round the nave's void on levels 1 to 3 | level 1: a toy lattice from floor to fascia ([the lattice](#the-lattice)); level 2: glass balustrade, brass rail 1.1 m up; level 3: open. Each opens in bay 6 where [the central tree](#the-central-tree)'s branches land |
 | Stairs | one in each corner of the aisles, in the end bays (0 and 12), every one serving every storey: switchbacks south-west and north-east, spirals south-east and north-west, so the plan reads the same turned half round | eighteen 0.25 m risers a storey. A switchback fills 4 by 5 tiles (5 by 6.25 m): two 2.4 m flights of eight 0.47 m treads either side of a spine, a 2.5 m half landing against the long wall. A spiral fills 4 by 4 tiles round a 0.5 m newel, one turn a storey, its treads 0.52 m deep 1.5 m out; each floor rails its well but where the stair arrives |
 | Lift | car centre (18.8, -1.65), in a glass tower outside the south wall | car 2.8 by 3.1 m, door 1.8 m wide in the wall |
 | Entrance | x 24 to 28 in the south wall | 4 m wide, 3.3 m high, under the first arch |
@@ -59,7 +59,7 @@ of headroom over every tread.
 
 | Level | South of the nave | The nave | North of the nave |
 |---|---|---|---|
-| 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay | The north aisle, open, between the north-west and north-east stairs |
+| 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay, and the central tree at its centre | The north aisle, open, between the north-west and north-east stairs |
 | 1 | The toybox: a lounge beside the south-west stair; its game stations; the rail round the endless fall's well | void | The toybox's other game stations, facing the south ones across the void |
 | 2 | The board game room, from the lift's landing east and out into the projecting wing | void | The motion and motion II displays |
 | 3 | The terrace, with the south-west stair's head | void | The north gallery, open |
@@ -76,34 +76,53 @@ showing off the games the world hosts. Players on the other levels look across
 the nave's void into it.
 
 So level 1 wears the toybox's colours (look.puck's `lookLevelToybox` and its
-pastel piers), and [gallery/toybox.puck](gallery/toybox.puck) stands six toy
-arcade cabinets on it, three on each gallery in the middle showcase bays
-(layout.puck's `toyboxBays` and `toyboxRows`), each facing the nave. The two
-cabinets in a bay play one game across the void, each on its own hardware, in
-one colourway with the game's name on its glowing marquee:
+pastel piers), and [gallery/toybox.puck](gallery/toybox.puck) stands twelve
+Humble Gaming Deck stations on it, six on each gallery, each facing the nave
+and mirrored across the void (layout.puck's `toyboxPlan` and `toyboxStations`).
+Along each gallery a living-room television set and a two-player arcade cabinet
+alternate, a station and its twin across the void in one colourway:
 
-| Bay | South cabinet | North cabinet |
+| Bay | Station | Deck program |
 |---|---|---|
-| TETROMINO | a Color brick running `cartridges/cgb/tetromino.cgb.puck` | a monochrome brick running `cartridges/dmg/tetromino.dmg.puck` |
-| BOUNCE | a deck running `cartridges/deck/moving-sprite.deck` | a second deck running the same |
-| TEST CARD | an Advanced brick running `cartridges/agb/test-card.agb.puck` | a monochrome brick running `cartridges/dmg/test-card.dmg.puck` |
+| 2 | television set (sunflower, cherry rug) | `cartridges/deck/moving-sprite.deck` |
+| 3 | arcade cabinet BOUNCE (tomato) | `cartridges/deck/moving-sprite.deck` |
+| 5 | television set (candy pink, sky rug) | `cartridges/deck/colour-bars.deck` |
+| 6 | arcade cabinet BOUNCE (cobalt) | `cartridges/deck/moving-sprite.deck` |
+| 7 | television set (sky blue, lilac rug) | `cartridges/deck/moving-sprite.deck` |
+| 8 | arcade cabinet BOUNCE (mint) | `cartridges/deck/moving-sprite.deck` |
 
-Each cartridge moves on its own with no one playing: the tetromino game's
-title chases its colours through PRESS START, the ball bounces, and the bars
-drift. Each screen is a hosted machine's video in its cabinet's dark bezel, at
-the largest size the bezel frames for that machine's picture, through the
-standard's CRT material. Walk up to a cabinet and press the context button (E,
-or RB on a pad) to play it, through the same device route and `devicePad` kit
-as a Wonderland device ([devices.md](devices.md)). The machines are the
-toybox's own (`toybox-*`), so the gallery booted alone hosts them, and the
-debug world runs them beside the Wonderland devices. The cabinet is the
-standard's `arcadeCabinet` ([architecture.puck](../standard/architecture.puck));
-the machine rows, pictures, pad and route are the standard's
-[machines.puck](../standard/machines.puck).
+The cabinet is the standard's `arcadeCabinet` with two players: one picture
+over a wide shelf carrying a stick and two buttons for each player, marked 1P
+and 2P, and a glowing marquee. The television set is the standard's
+`televisionSet` and `lounge`: a toy television with rabbit ears on a low stand,
+the deck on the stand's shelf with a pad cabled to each of its two ports lying
+on a rug, and two beanbags behind the pads
+([architecture.puck](../standard/architecture.puck)). The plan leaves the
+corner bays and the walls beside them clear, and the lift's landing (bay 4) and
+the endless fall (bay 11).
+
+The ball bounces on its own with no one playing, so the screens move with the
+floor empty. Each screen is a deck's video in its station's dark bezel, at the
+largest size the bezel frames, through the standard's CRT material. Walk up to
+a station and press the context button (E, or RB on a pad) to play it, through
+the same device route and `devicePad` kit as a Wonderland device
+([devices.md](devices.md)). Every station seats two players: the first seat to
+engage it plays the deck's first controller port, and a second seat that
+engages while the first still plays takes the second, all on the station's one
+screen, whose route names both ports (the standard's `deckRoute`); leaving frees
+the port for the next seat. The decks are the toybox's own
+(`toybox-cabinet-south-3` and so on, layout.puck's `toyboxMachines`), so the
+gallery booted alone hosts them, and the debug world runs them beside the
+Wonderland devices. Each can swap among the shipped deck programs and the
+owner's local `roms/hgd` folder: `machine.content <deck>`, then
+`machine.swap <deck> <name>`. The machine rows, pictures, pad and routes are the
+standard's [machines.puck](../standard/machines.puck).
 
 Read them with `machine.state` (each machine's frames advance) and
-`screen.state <index>` (screens 20 to 25). `gallery.shot toybox` looks from
-level 2's north balcony down across the void at the south cabinets, and
+`screen.state <index>` (screens 20 to 31, one to a station in the plan's order,
+south then north), which names each player's port (`engaged=p1@controls+p2@controls-2`)
+and prints the pad each port receives. `gallery.shot toybox` looks from
+level 2's north balcony down across the void at the south stations, and
 `gallery.shot toybox-across` from level 1's south balcony edge at the north
 ones.
 
@@ -148,11 +167,82 @@ landing's plate, a car button, `gallery.lift 1`), so the car passes level 1
 without stopping, and `lift-toybox-doors` keeps a car standing there shut. A
 rule that sets `toyboxLift` to 1 serves level 1 as any other level.
 
+**The tree's gate.** The lattice panel in bay 6, where the central tree's two
+level-1 branches arrive ([the central tree](#the-central-tree)), stands as two
+side panels and a head over a 1.875 m opening (layout.puck's `treeGateCells`
+and `treeGateHeight`), each branch's tip passing through it onto the floor. The
+gate is a way in at full size until the size field goes along those branches
+(below).
+
 The other ways in, checked: the window bays and skylights are solid glass;
 the endless fall's hole in level 1's floor is covered from below by its
 ceiling painting, a portal back to the floor painting, so a body flying up the
 well crosses to the floor rather than into level 1; the bridge is level 1's
 own floor, inside the lattice. The corner stairs are the way in.
+
+**The rentals.** [gallery/rentals.puck](gallery/rentals.puck) stands an
+L-shaped counter round the open corner of each spiral stair (south-east and
+north-west), so the plan reads the same turned half round. Each counter lends
+12 Humble Gaming Bricks on one arm and 12 Advanced Gaming Bricks on the other,
+one colourway each, 48 devices in the world. The context button before a
+device rents it: the device leaves the counter and rides the renter's hip. The
+context button before the counter's outer corner (the returns tray) returns it,
+and leaving level 1 returns it too. `rentalLoan` (keyed by ordinal, 1 to 48)
+holds 0 for a device on the counter and N + 1 while body N holds it;
+`rentalDevice`, `rentalDeviceModel` and `rentalDeviceColour` name each device.
+No device on the counter runs a machine: each seat's body has a pool brick and
+a pool advanced brick (`rental-hgb-<body>`, `rental-agb-<body>`) whose
+`runsWhen` advances it only while that body holds a device of its model, so at
+most one handheld runs per player. `machine.state rental-hgb-0` reads
+`running`. The rented device's picture is not yet shown: a screen cannot follow
+a body, so the pool machine runs with no display (see "What is still open").
+
+## The central tree
+
+The owner's ruling: a giant, natural tree grows at the hall's exact centre, a
+diegetic tutorial that teaches players they can climb and then walk its
+branches to the other floors. [gallery/tree.puck](gallery/tree.puck) grows it
+on tile (26, 14), bay 6 on the nave's centre row (layout.puck's `treeX`,
+`treeZ`), as two creations on one spot:
+
+- `gallery-tree`, solid: a tapering trunk 4.2 m across at the floor with a
+  flare and six buttress roots, a spiral of treads round it, and six walkable
+  branches. Everything a body stands on or will climb is built from shapes
+  contact admits, the standard's [limbs.puck](../standard/limbs.puck): a
+  branch is a chain of flattened superellipsoids along a curve (`limb`), the
+  treads are shelves round the trunk's taper (`spiralTreads`). Smooth blends
+  and one bark relief (creation `noise`) join them, so the tree collides as
+  drawn, through one field collider.
+- `gallery-tree-canopy`, not solid: the crown's leaf masses high in the void
+  under the skylights, the limbs carrying them, and a leafy twig off each
+  branch, one tuft in three blossoming in the toybox's candy pink.
+
+**Climbing it.** The treads start on the trunk's east side, just south of
+east, and climb a storey a turn: one every 18 degrees, each 0.225 m above the
+last, under the Moth's 0.3 m step (`treeTreadStart`, `treeTreadStep`,
+`treeTreadRise`). `debug.go` has no stop yet; in the gallery root,
+`body.pose spawn:tree 0` stands her at their foot.
+
+**The branches.** Two reach each of levels 1 to 3, one to each balcony edge in
+bay 6 (`treeLimbs`, `treeLandings`). Each leaves the trunk from a tread, so the
+walker steps off the spiral onto it, and each pair leaves two treads further
+round than the pair below, so the canopy turns as it climbs. A level's south
+branch rises to its floor from a little below it, its north branch falls to it
+from half a turn higher. Level 1's pair pass through the lattice's gate,
+level 2's through a 1.5 m gap in the balustrade (`treeRailGap`), and level 3's
+step onto its open edge. Each branch's tip lies on the floor's edge, a few
+centimetres proud of it (`treeLandingLift`).
+
+**The hook for level 1's size.** The owner's ruling makes the level-1 branches
+shrink a body as the corner stairs do. `treeShrinkLimbs` names those two
+branches; each one's path runs from `treeBranchFrom` to `treeBranchTo`
+(layout.puck), and the size field (standard/size-field.puck) is laid along
+that path. The branches are walkable now, and real climbing (grab, climb,
+mantle) is a separate engine plan; every surface of the trunk and branches is
+solid for it.
+
+The tree's colours, bark relief and leaf clumping are look.puck's `lookTree`.
+`gallery.shot hall` stands just east of the roots.
 
 ## The displays
 
@@ -331,6 +421,26 @@ drifts a few hundredths over patches a couple of metres across, so no wall,
 pier or floor is one flat colour. The kit's paints are plain dielectrics, and
 the primitives that open the nave each take a material of their own.
 
+### Lighting
+
+Every light in the building comes from something a body can see, and there
+are four kinds:
+
+| Source | What it is | Its light |
+|---|---|---|
+| The sun | The world's sun, with its moon and the companion star ([day.puck](day.puck)) | Through the windows and skylights |
+| The flaw | The glowing tube that weaves through every floor ([flaw.puck](gallery/flaw.puck)) | A chain of tube lights along it, each in one storey, on that storey's switch |
+| Screens | The toybox's twelve visible pictures ([toybox.puck](gallery/toybox.puck)) | Each lights what stands before it with its own picture: the engine reduces the picture to its mean on the GPU and shades it as an area light the size of the face, and the irradiance volume bounces it |
+| Lamps | The lift car's luminous ceiling and the south-west stair's pendant, hung from the soffit of level 2's half landing (the standard's `pendantLamp`) | A spot at the lamp's glowing face, in that face's colour, giving what the face shows (`glowSpotPower`); the pendant follows level 1's switch and goes dark with it |
+
+Glowing marquees, indicators and the display consoles' interfaces are emissive
+surfaces that light nothing directly. A material's emission reaches its
+surroundings through the irradiance volume's bounce. The consoles' interfaces
+are paint on glass, which the volume does not trace, so they light nothing yet
+([open items](../../docs/plans/open-items.md#debug-tools)).
+`gallery.inspect On` pins the camera at EV100 7 so that captures of different
+exhibits compare at one exposure. It adds no light.
+
 ### Tuning it
 
 [`gallery/look.puck`](gallery/look.puck) names every value a look pass tunes,
@@ -354,7 +464,7 @@ own materials `exhibitSubjects` in [`shapes.puck`](shapes.puck). Edit a value,
 | `hall-side` | The nave from beside its south arcade, looking north-east across it |
 | `plinth`, `arcade`, `bay`, `balcony`, `floor`, `ceiling`, `furniture` | What each kit sheet draws: the primitives display's console, the north arcade, the end wall's wide bays, the balcony edges from the bridge, the tiles and a pad, a coffered soffit, a banner and planter |
 | `atrium`, `outside` | The entrance looking in, and the south front from the forecourt |
-| `toybox`, `toybox-across` | Level 1's south cabinets from level 2's north balcony, and its north cabinets from level 1's south balcony edge |
+| `toybox`, `toybox-across` | Level 1's south stations from level 2's north balcony, and its north stations from level 1's south balcony edge |
 
 A shot's eye and aim are placed from `gallerySite` when the document compiles,
 as the other world-space pieces are.
@@ -397,6 +507,17 @@ size below a tenth needs the envelope widened with it.
 
 ## What is still open
 
+- **A rented handheld's picture.** A screen's frame is fixed in the world
+  (`WorldScreen.Origin`), and its `carry` is presentation keyed to one look's
+  pose, with the engage radius left at the authored frame, so the pool machine
+  a renter's device runs has no display that rides the device and cannot be
+  engaged away from where its screen is authored. A screen that follows a body
+  (the device's hip, then its hands when played) is the engine gap; the rentals
+  then give each pool machine that screen. Network visitors already rent
+  (the reach rules cover every seat's body).
+- **Dormant pool runtimes.** A gated-off pool machine is not advanced but its
+  runtime is created at boot, 24 runtimes for 12 seats. Creating a runtime on
+  the first tick its `runsWhen` holds would make an unused pool free.
 - **World-space pieces.** A static creation's paints, a state lattice's origin
   and a table's board are placed in the world's frame. The floor's tiles and
   pads, the tables in the board game room and the fixtures that stand by world

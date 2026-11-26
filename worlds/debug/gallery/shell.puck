@@ -16,23 +16,22 @@ import "look"
 
 // The shell's materials: the hall's warm cream walls and ceiling, terracotta floor and deep teal trim, then the ochre
 // cladding and cream bands of the outside, the building's glass, brass and the forecourt's paving. `pads` are the paints
-// that inlay a level's cream pads into its floor, and `lit` (1 or 0) whether the ceiling's light strips glow: a lit and
-// a dark palette differ in that slot alone, so a floor drawn in either is one geometry.
+// that inlay a level's cream pads into its floor. The building's light is the flaw's (flaw.puck), so no slab carries a
+// fixture of its own.
 let shellWall = 0
 let shellFloor = 1
 let shellTrim = 2
-let shellLight = 3
-let shellBoard = 4
-let shellCeiling = 5
-let shellCarLight = 6
-let shellOchre = 7
-let shellCream = 8
-let shellGlass = 9
-let shellBrass = 10
-let shellPaving = 11
+let shellBoard = 3
+let shellCeiling = 4
+let shellCarLight = 5
+let shellOchre = 6
+let shellCream = 7
+let shellGlass = 8
+let shellBrass = 9
+let shellPaving = 10
 // A floor north of the nave's centre line is a second slot of the same tile, since a slot draws eight paints and a level
 // holds more pads than that leaves beside its tiles and joints.
-let shellFloorNorth = 12
+let shellFloorNorth = 11
 // The floor is terracotta tiles with a narrow joint (the kit's floor-and-ceiling sheet; look.puck holds the sizes and
 // colours): the slot's colour is the grout's, and one box paint a joint smaller than its cell repeats over it, each
 // tile's tone varied between two clays. The ceiling is coffered on the same module: a paler square in each cell with a
@@ -97,14 +96,13 @@ function shellFloorPaints(pads, north, look) = concat(
 // A palette's floor, walls and fascia wear `level`'s look (look.puck's lookLevels) and its ceiling `below`'s, since a
 // slab's underside is the ceiling of the level under it.
 function shellFloorRow(look) = { color: look.grout, roughness: lookFloorRoughness, specular: lookFloorSpecular }
-function shellPalette(pads, lit, level = 0, below = 0) = [
+function shellPalette(pads, level = 0, below = 0) = [
   shellBrushed({ color: lookLevels[level].wall, roughness: 0.85, specular: 0.04 })
   shellBrushed((shellFloorRow(lookLevels[level]) with { paints: shellFloorPaints(pads, 0, lookLevels[level]) }), lookBrushFloor, lookBrushFloorScale)
   shellBrushed({ color: lookTeal, roughness: 0.6, specular: 0.04 })
-  ((lit == 1) ? { color: "#FFFFFF", roughness: 0.5, emissive: 4000nit } : { color: "#D9D9D9", roughness: 0.5, specular: 0.06 })
   shellBrushed({ color: lookBoard, roughness: 0.6 })
   shellBrushed({ color: lookLevels[below].ceiling, roughness: 0.9, specular: 0.02, paints: shellCoffers(lookLevels[below]) }, lookBrushCeiling)
-  { color: "#FFFFFF", roughness: 0.5, emissive: 120nit }
+  { color: lookCarLamp.color, roughness: 0.5, emissive: lookCarLamp.luminance }
   shellBrushed({ color: lookOchre, roughness: 0.6, specular: 0.04 }, lookBrushCladding)
   shellBrushed({ color: lookLevels[level].cream, roughness: 0.6, specular: 0.04 })
   { color: lookGlass, roughness: 0.03, glass { depth: 0.04, ior: 1.5 } }
@@ -112,8 +110,7 @@ function shellPalette(pads, lit, level = 0, below = 0) = [
   shellBrushed({ color: lookPaving, roughness: 0.6, specular: 0.04 }, lookBrushFloor, lookBrushFloorScale)
   shellBrushed((shellFloorRow(lookLevels[level]) with { paints: shellFloorPaints(pads, 1, lookLevels[level]) }), lookBrushFloor, lookBrushFloorScale)
 ]
-let shellPlain = shellPalette([], 1)
-let shellLooks = [{ suffix: "", lit: 1 }, { suffix: "-dark", lit: 0 }]
+let shellPlain = shellPalette([])
 // The kit's palettes in the gallery's cel style; glass and brass keep their own shading.
 let shellKit = map(
   range(0, length(kitPalette)),
@@ -313,9 +310,16 @@ template shellSlab(label, x0, x1, y0, y1, z0, z1, top = shellFloor) {
 }
 
 // An upper level's floor as the boxes of its plan: the north gallery, the bridge west of the nave, the south gallery,
-// and on the wing's levels the floor of the projection, holed by a well over each stair and on level 1 by one over the
-// endless fall's ceiling painting.
+// and on the wing's levels the floor of the projection, holed by a well over each stair, on level 1 by one over the
+// endless fall's ceiling painting, and by a small square wherever the flaw passes through (layout.puck's
+// `flawCrossings`), which the flaw's collar (flaw.puck) fills and rounds.
 let fallWell = { x0: (fallPlan[0] - fallHole), x1: (fallPlan[0] + fallHole), z0: (fallPlan[1] - fallHole), z1: (fallPlan[1] + fallHole) }
+function flawOpenings(level) = map(filter(flawCrossings, c => ((c.height + 1) == level)), c => {
+  x0: (c.point[0] - lookFlawCollarCut)
+  x1: (c.point[0] + lookFlawCollarCut)
+  z0: (c.point[2] - lookFlawCollarCut)
+  z1: (c.point[2] + lookFlawCollarCut)
+})
 function shellFloorPieces(level) = boundsCutAll(
   concat(
     [
@@ -326,7 +330,7 @@ function shellFloorPieces(level) = boundsCutAll(
     ],
     ((level >= wingLevel) ? [{ id: "wing", x0: wingWest, x1: galleryWidth, z0: wingSouth, z1: galleryWall }] : [])
   ),
-  concat(galleryStairWells, ((level == 1) ? [fallWell] : []))
+  concat(galleryStairWells, ((level == 1) ? [fallWell] : []), flawOpenings(level))
 )
 // The roof: the same plan without the wells and the terrace, the nave closed over between three skylights, each
 // 2.5 m in from the balcony edges.
@@ -350,40 +354,6 @@ let shellRoofPieces = concat(
     i => { id: $"nave-rib-{i}", x0: skylights[i].x1, x1: skylights[(i + 1)].x0, z0: skylightSouth, z1: skylightNorth }
   )
 )
-
-// The ceiling light strips under a ceiling at `top`: one along each aisle between the stairs' wells, one over the
-// bridge and one over the lift's landing, 6 cm deep and sunk 1 cm into the slab, and on the wing's storeys one along
-// the projection. They are part of the slab above them, so a level's lit and dark looks stay one geometry.
-function shellStrips(wing) = concat(
-  [
-    { id: "south-west", x0: (galleryStair("south-west").well.x1 + 0.6), x1: (terraceEast - 0.6), z0: 4.4, z1: 4.8 }
-    { id: "south-east", x0: (wingWest + 0.6), x1: (galleryStair("south-east").well.x0 - 0.6), z0: 4.4, z1: 4.8 }
-    {
-      id: "north"
-      x0: (galleryStair("north-west").well.x1 + 0.6)
-      x1: (galleryStair("north-east").well.x0 - 0.6)
-      z0: (northAisleMid - 0.2)
-      z1: (northAisleMid + 0.2)
-    }
-    { id: "bridge", x0: 5.8, x1: 6.2, z0: (naveSouth + 1), z1: (naveNorth - 1) }
-    { id: "landing", x0: 17, x1: 20.6, z0: 3, z1: 3.4 }
-  ],
-  ((wing == 1) ? [{ id: "wing", x0: (wingWest + 0.6), x1: (galleryEast - 1.2), z0: -2.2, z1: -1.8 }] : [])
-)
-template shellStripBoxes(top, wing) {
-  for strip in shellStrips(wing) {
-    boundsBox(
-      label: $"strip-{strip.id}",
-      x0: strip.x0,
-      x1: strip.x1,
-      y0: (top - 0.06),
-      y1: (top + 0.01),
-      z0: strip.z0,
-      z1: strip.z1,
-      slot: shellLight
-    )
-  }
-}
 
 // The stairs: each corner's stair (layout.puck's `galleryStairs`) is the standard's kit piece, one copy a storey from
 // level 0 to level 2 standing at its well's centre, the switchbacks' top copy guarding its well on level 3. A spiral's
@@ -427,6 +397,12 @@ let shellTileRails = concat(
   flatMap(range(1, 3), k => [
     { id: $"nave-south-end-{k}", x: tileX((gridTilesX - 2)), y: galleryFloor[k], z: (naveSouth - 0.08), yaw: 180 }
     { id: $"nave-north-end-{k}", x: tileX((gridTilesX - 2)), y: galleryFloor[k], z: (naveNorth + 0.08), yaw: 0 }
+  ]),
+  // Level 2's length where the tree's branches land (layout.puck's treeRailGap) keeps a tile at each end, and the
+  // branch walks onto the balcony through the gap between them.
+  flatMap([{ name: "west", sign: -1 }, { name: "east", sign: 1 }], side => [
+    { id: $"tree-south-{side.name}", x: (treeRailGap + (side.sign * (2 - (galleryTile / 2)))), y: galleryFloor[2], z: (naveSouth - balconyInset), yaw: 180 }
+    { id: $"tree-north-{side.name}", x: (treeRailGap + (side.sign * (2 - (galleryTile / 2)))), y: galleryFloor[2], z: (naveNorth + balconyInset), yaw: 0 }
   ])
 )
 
@@ -553,7 +529,7 @@ let shellPiers = flatMap(range(0, 4), k => flatMap(range(0, length(arcadeXs)), b
 // 2's balcony edges take them; level 1's are its lattice (below).
 let shellRails = concat(
   flatMap([2], k => concat(
-    flatMap(range(0, floor(((galleryEast - naveWest) / 4))), i => [
+    flatMap(filter(range(0, floor(((galleryEast - naveWest) / 4))), i => ((14 + (4 * i)) != treeRailGap)), i => [
       { id: $"rail-south-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveSouth - balconyInset), yaw: 180, short: 0 }
       { id: $"rail-north-{k}-{i}", x: (14 + (4 * i)), y: galleryFloor[k], z: (naveNorth + balconyInset), yaw: 0, short: 0 }
     ]),
@@ -583,8 +559,20 @@ function shellBridgeZ(tile, tiles) = (tileEdgeZ((galleryAisleTiles + tile)) + ((
 function shellLatticeBay(b, edge, z) = ((b == toyLatticeLooseBay) ? {
   id: $"loose-{edge}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: edge, open: $"gallery-lattice-open-{(b % 6)}"
 } : { id: $"{edge}-{b}", x: bayX(b), z: z, yaw: 0, prototype: $"gallery-lattice-{(b % 6)}", slat: "", open: "" })
+// The tree's bay (layout.puck's treeBay) stands as a gate instead: a side panel either side of an opening the tree's
+// level-1 branch passes through, and a head over it from `treeGateHeight` up to the fascia, each rising in its own
+// `shellLatticeRails` crossbars so the bars keep one spacing.
+let shellGateSideCells = ((shellLatticeBayCells - treeGateCells) / 2)
+let shellGateHeadHeight = (shellLatticeHeight - treeGateHeight)
+function shellLatticeRails(height) = (2 * maximum(1, round((height / (shellLatticeHeight / 3)))))
+let shellGateSide = (((treeGateCells + shellGateSideCells) / 2) * toyLatticePitch)
+let shellLatticeGates = flatMap([{ edge: "south", z: (naveSouth - balconyInset) }, { edge: "north", z: (naveNorth + balconyInset) }], e => [
+  { id: $"gate-{e.edge}-west", x: (bayX(treeBay) - shellGateSide), y: 0, z: e.z, prototype: "gallery-lattice-gate-side" }
+  { id: $"gate-{e.edge}-east", x: (bayX(treeBay) + shellGateSide), y: 0, z: e.z, prototype: "gallery-lattice-gate-side" }
+  { id: $"gate-{e.edge}-head", x: bayX(treeBay), y: treeGateHeight, z: e.z, prototype: "gallery-lattice-gate-head" }
+])
 let shellLattices = concat(
-  flatMap(shellLatticeBays, b => [shellLatticeBay(b, "south", (naveSouth - balconyInset)), shellLatticeBay(b, "north", (naveNorth + balconyInset))]),
+  flatMap(filter(shellLatticeBays, b => (b != treeBay)), b => [shellLatticeBay(b, "south", (naveSouth - balconyInset)), shellLatticeBay(b, "north", (naveNorth + balconyInset))]),
   [
     { id: "east-south", x: ((pierX(galleryBays) + galleryEast) / 2), z: (naveSouth - balconyInset), yaw: 0, prototype: "gallery-lattice-half", slat: "", open: "" }
     { id: "east-north", x: ((pierX(galleryBays) + galleryEast) / 2), z: (naveNorth + balconyInset), yaw: 0, prototype: "gallery-lattice-half", slat: "", open: "" }
@@ -659,7 +647,7 @@ template shellPrototypes() {
       document {
         name: $"gallery-walls-{k}"
         schema: "puck.creation.v1"
-        palette: shellPalette([], 1, k, k)
+        palette: shellPalette([], k, k)
         shellWalls(level: k)
       }
     }
@@ -668,66 +656,55 @@ template shellPrototypes() {
     document {
       name: "gallery-floor-0"
       schema: "puck.creation.v1"
-      palette: shellPalette(shellPads(0), 1)
+      palette: shellPalette(shellPads(0))
       boundsBox(label: "ground", x0: galleryWestIn, x1: galleryEast, y0: 0, y1: galleryFloor[0], z0: galleryWall, z1: naveMid, slot: shellFloor)
       boundsBox(label: "ground-north", x0: galleryWestIn, x1: galleryEast, y0: 0, y1: galleryFloor[0], z0: naveMid, z1: galleryNorth, slot: shellFloorNorth)
       boundsBox(label: "threshold", x0: entranceWest, x1: entranceEast, y0: 0, y1: galleryFloor[0], z0: 0, z1: galleryWall, slot: shellFloor)
       boundsBox(label: "lift-threshold", x0: liftDoorway.a0, x1: liftDoorway.a1, y0: 0, y1: galleryFloor[0], z0: 0, z1: galleryWall, slot: shellTrim)
     }
   }
-  // Each upper floor, lit and dark: its slab's boxes, the cream fascia that deepens its balcony edges round the void, and
-  // the strips of the level below.
+  // Each upper floor: its slab's boxes and the cream fascia that deepens its balcony edges round the void.
   for k in range(1, 3) {
-    for look in shellLooks {
-      prototype $"gallery-floor-{k}{look.suffix}" {
-        document {
-          name: $"gallery-floor-{k}{look.suffix}"
-          schema: "puck.creation.v1"
-          palette: shellPalette(shellPads(k), look.lit, k, (k - 1))
-          for piece in shellFloorPieces(k) {
-            shellSlab(
-              label: $"slab-{piece.id}",
-              x0: piece.x0,
-              x1: piece.x1,
-              y0: ((galleryStorey * k) - 0.25),
-              y1: galleryFloor[k],
-              z0: piece.z0,
-              z1: piece.z1,
-              top: ((piece.z0 >= naveMid) ? shellFloorNorth : shellFloor)
-            )
-          }
-          boundsBox(
-            label: "lift-threshold",
-            x0: liftDoorway.a0,
-            x1: liftDoorway.a1,
+    prototype $"gallery-floor-{k}" {
+      document {
+        name: $"gallery-floor-{k}"
+        schema: "puck.creation.v1"
+        palette: shellPalette(shellPads(k), k, (k - 1))
+        for piece in shellFloorPieces(k) {
+          shellSlab(
+            label: $"slab-{piece.id}",
+            x0: piece.x0,
+            x1: piece.x1,
             y0: ((galleryStorey * k) - 0.25),
             y1: galleryFloor[k],
-            z0: 0,
-            z1: galleryWall,
-            slot: shellTrim
+            z0: piece.z0,
+            z1: piece.z1,
+            top: ((piece.z0 >= naveMid) ? shellFloorNorth : shellFloor)
           )
-          boundsBox(label: "fascia-south", x0: naveWest, x1: galleryEast, y0: ((galleryStorey * k) - shellFascia), y1: galleryFloor[k], z0: (naveSouth - 0.2), z1: naveSouth, slot: shellCream)
-          boundsBox(label: "fascia-north", x0: naveWest, x1: galleryEast, y0: ((galleryStorey * k) - shellFascia), y1: galleryFloor[k], z0: naveNorth, z1: (naveNorth + 0.2), slot: shellCream)
-          boundsBox(label: "fascia-bridge", x0: (naveWest - 0.2), x1: naveWest, y0: ((galleryStorey * k) - shellFascia), y1: galleryFloor[k], z0: naveSouth, z1: naveNorth, slot: shellCream)
-          shellStripBoxes(top: ((galleryStorey * k) - 0.25), wing: ((k > wingLevel) ? 1 : 0))
-          // The underside of the wing's first floor is the forecourt's soffit, and carries its own strip.
-          for soffit in ((k == wingLevel) ? [1] : []) {
-            boundsBox(label: "strip-soffit", x0: (wingWest + 0.6), x1: (galleryEast - 1.2), y0: ((galleryStorey * k) - 0.31), y1: ((galleryStorey * k) - 0.24), z0: -2.2, z1: -1.8, slot: shellLight)
-          }
         }
+        boundsBox(
+          label: "lift-threshold",
+          x0: liftDoorway.a0,
+          x1: liftDoorway.a1,
+          y0: ((galleryStorey * k) - 0.25),
+          y1: galleryFloor[k],
+          z0: 0,
+          z1: galleryWall,
+          slot: shellTrim
+        )
+        boundsBox(label: "fascia-south", x0: naveWest, x1: galleryEast, y0: ((galleryStorey * k) - shellFascia), y1: galleryFloor[k], z0: (naveSouth - 0.2), z1: naveSouth, slot: shellCream)
+        boundsBox(label: "fascia-north", x0: naveWest, x1: galleryEast, y0: ((galleryStorey * k) - shellFascia), y1: galleryFloor[k], z0: naveNorth, z1: (naveNorth + 0.2), slot: shellCream)
+        boundsBox(label: "fascia-bridge", x0: (naveWest - 0.2), x1: naveWest, y0: ((galleryStorey * k) - shellFascia), y1: galleryFloor[k], z0: naveSouth, z1: naveNorth, slot: shellCream)
       }
     }
   }
-  for look in shellLooks {
-    prototype $"gallery-roof{look.suffix}" {
-      document {
-        name: $"gallery-roof{look.suffix}"
-        schema: "puck.creation.v1"
-        palette: shellPalette([], look.lit, 3, 3)
-        for piece in shellRoofPieces {
-          shellSlab(label: $"roof-{piece.id}", x0: piece.x0, x1: piece.x1, y0: galleryCeiling[3], y1: galleryRoof, z0: piece.z0, z1: piece.z1, top: shellCream)
-        }
-        shellStripBoxes(top: galleryCeiling[3], wing: 1)
+  prototype "gallery-roof" {
+    document {
+      name: "gallery-roof"
+      schema: "puck.creation.v1"
+      palette: shellPalette([], 3, 3)
+      for piece in shellRoofPieces {
+        shellSlab(label: $"roof-{piece.id}", x0: piece.x0, x1: piece.x1, y0: galleryCeiling[3], y1: galleryRoof, z0: piece.z0, z1: piece.z1, top: shellCream)
       }
     }
   }
@@ -909,6 +886,8 @@ template shellPrototypes() {
       { id: "gallery-lattice-half", n: galleryBays, cells: (shellLatticeTileCells / 2), pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
       { id: "gallery-lattice-tile", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
       { id: "gallery-lattice-tile-open", n: arcadeWestBays, cells: shellLatticeTileCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 0 }
+      { id: "gallery-lattice-gate-side", n: (treeBay % 6), cells: shellGateSideCells, pitch: toyLatticePitch, height: shellLatticeHeight, upright: 1 }
+      { id: "gallery-lattice-gate-head", n: (treeBay % 6), cells: treeGateCells, pitch: toyLatticePitch, height: shellGateHeadHeight, upright: 1 }
     ]
   )
   for kind in latticeKinds {
@@ -920,7 +899,16 @@ template shellPrototypes() {
           latticePalette(lookToyLattice(kind.n).frame, lookToyLattice(kind.n).bar, lookToyLattice(kind.n).rail),
           entry => shellBrushed(entry, lookBrushStructure)
         )
-        lattice(base: 0, cells: kind.cells, pitch: kind.pitch, height: kind.height, bar: toyLatticeBar, upright: kind.upright, sill: kind.upright)
+        lattice(
+          base: 0,
+          cells: kind.cells,
+          pitch: kind.pitch,
+          height: kind.height,
+          bar: toyLatticeBar,
+          rails: shellLatticeRails(kind.height),
+          upright: kind.upright,
+          sill: kind.upright
+        )
       }
     }
   }
@@ -978,19 +966,12 @@ template shellPlacements() {
     position [0, 0, 0]
     solid
   }
-  // Slab k carries the strips of level k - 1 below it, and the roof those of level 3.
   for k in range(1, 3) {
     placement $"gallery-floor-{k}" {
       prototype: $"gallery-floor-{k}"
       parent: "gallery"
       position [0, 0, 0]
       solid
-      respond [
-        {
-          when: state(state: hallLights, key: $"level{k - 1}", comparison: Equal, value: 0)
-          prototypeId: $"gallery-floor-{k}-dark"
-        }
-      ]
     }
   }
   placement "gallery-roof" {
@@ -998,12 +979,6 @@ template shellPlacements() {
     parent: "gallery"
     position [0, 0, 0]
     solid
-    respond [
-      {
-        when: state(state: hallLights, key: `level3`, comparison: Equal, value: 0)
-        prototypeId: "gallery-roof-dark"
-      }
-    ]
   }
   for (light, n) in skylights {
     placement $"gallery-skylight-{n}" {
@@ -1132,6 +1107,14 @@ template shellPlacements() {
       parent: "gallery"
       position [panel.x, galleryFloor[1], panel.z]
       yawDegrees: panel.yaw
+      solid
+    }
+  }
+  for panel in shellLatticeGates {
+    placement $"gallery-lattice-{panel.id}" {
+      prototype: panel.prototype
+      parent: "gallery"
+      position [panel.x, (galleryFloor[1] + panel.y), panel.z]
       solid
     }
   }

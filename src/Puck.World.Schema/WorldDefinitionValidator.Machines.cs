@@ -105,6 +105,14 @@ public static partial class WorldDefinitionValidator {
                 machine: machine,
                 path: path
             );
+            if (machine.RunsWhen is { } runsWhen) {
+                ValidateStateCondition(
+                    condition: runsWhen,
+                    definition: definition,
+                    entryPath: $"{path}.runsWhen",
+                    errors: errors
+                );
+            }
             if (string.IsNullOrWhiteSpace(value: machine.Engine)) {
                 errors.Add(item: $"{path}.engine: a provider identifier is required.");
             } else if (catalog is null) {

@@ -136,7 +136,11 @@ mounted and engageable but the host does not advance it, so the scenario does
 not pay for emulating cartridges it never reads. Emulation and continuation
 hashing are most of a debug scenario's tick cost. A fixture that reads some
 machines stops the rest by name (`machine-debugger-tests.puck`), and a machine
-added to the debug world is added to that fragment.
+added to the debug world is added to that fragment. A machine that runs only
+while some state holds (a rented handheld) authors `runsWhen`, a state condition
+the tick decides before the machines step (`WorldTick.GateMachines`), rather than
+a rule toggling `running` through a document edit; `rentals-tests.puck` reads one
+start and stop.
 
 The arena is the live gameplay store. `WorldServer.Definition` holds declarations
 and seeds; use `ExportDefinition()` only at an explicit snapshot/edit boundary.
@@ -546,7 +550,15 @@ it cuts the delta from member bytes (`WorldReloadDelta.Between` over
 `WorldDefinitionMembers`, which slices a definition's compact canonical bytes per root
 member with a digest each): only members whose digests moved are diffed, each proved to
 merge and carried whole when its delta cannot be. The wire carries the patch, both
-revision pins (digests over member digests), the directory and the source pin.
+revision pins (digests over member digests), the directory and the source pin. A door
+runs one reload at a time: one begun while another is reading or awaiting its verdict
+waits, then captures the revision, so the last save applies cut from the last accepted
+revision; never capture a revision outside `Begin`'s queue. A refused reload asks its
+host's explanation off the pump (`explain`); the desktop's names a restart owed when an
+engine source in the checkout is newer than the running build (`WorldBuildCurrency`).
+What the operator holds for the session (levers, `view.override`, the state and row
+lines `WorldPinLedger` records, seat poses) survives a reload by living outside the
+source revision; `world.pins save` and `world.pins restore` carry it across a restart.
 
 **The authority merges the delta over the live document.** Its preparation
 (`WorldRebuildPreparation`, on the thread pool when `WorldServer.PreparesRebuildsOffTick`, which the desktop's job pool and a silo row set) reconstructs the next

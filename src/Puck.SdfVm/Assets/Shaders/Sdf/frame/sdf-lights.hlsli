@@ -22,7 +22,18 @@ uint worldShadowHandoffCount() {
     return min(passGroup.shadowFadeCount, min(count, (uint)SDF_SHADOW_FADE_CAPACITY));
 }
 
-// A point or occluder light's current world-space position: the live dynamic transform its slot names (an anchored
+// Whether a light reaches only the range about its position: a point or spot light (the sphere of its range) or a line
+// light (the capsule of its range about its segment). KEEP IN SYNC with SdfLight.IsRanged.
+bool sdfLightRanged(uint kind) {
+    return ((kind == SDF_LIGHT_POINT) || (kind == SDF_LIGHT_LINE));
+}
+// Whether a light sits at a position worldPointLightPosition reads: a ranged light or an occluder. KEEP IN SYNC with
+// SdfLight.IsPositional.
+bool sdfLightPositional(uint kind) {
+    return (sdfLightRanged(kind) || (kind == SDF_LIGHT_OCCLUDER));
+}
+
+// A point, line or occluder light's current world-space position (a line's midpoint): the live dynamic transform its slot names (an anchored
 // light tracking a moving shape), or the authored static position when unanchored. Falls back to the static position on
 // a kernel that binds no per-frame dynamic-transform table.
 float3 worldPointLightPosition(SdfLight light) {
@@ -100,6 +111,45 @@ float sdfPointReach(SdfLight light, float3 lightPosition, float3 surfacePosition
     return ((sdfLightWindow(distanceSquared, light.Param) * (cone * cone)) / max(distanceSquared, (SDF_LIGHT_MINIMUM_DISTANCE * SDF_LIGHT_MINIMUM_DISTANCE)));
 }
 
+// The nearest a line light's distance is taken as: its tube's radius (SpotOffset), never under a point light's.
+float sdfLineNearest(SdfLight light) {
+    return max(light.SpotOffset, SDF_LIGHT_MINIMUM_DISTANCE);
+}
+// The point of a line light's segment nearest a surface point, as the offset from the surface to it. KEEP IN SYNC with
+// the tile bound in sdfLightReachesBox, which bounds this distance from the midpoint less the half segment.
+float3 sdfLineNearestOffset(SdfLight light, float3 midpoint, float3 surfacePosition) {
+    float3 halfSegment = light.SpotAxis;
+    float halfSquared = max(dot(halfSegment, halfSegment), 1.0e-12);
+    float along = clamp((dot((surfacePosition - midpoint), halfSegment) / halfSquared), -1.0, 1.0);
+
+    return ((midpoint + (halfSegment * along)) - surfacePosition);
+}
+// A line light's reach at a surface point, and the unit direction its diffuse light arrives along: the segment's vector
+// irradiance V, the integral along it of the unit direction toward each element over its squared distance, whose closed
+// form is (u0 + u1) * length / (|l0| |l1| + l0 . l1) for the offsets l0, l1 to its ends and their unit directions u0,
+// u1 (Karis 2013, "Real Shading in Unreal Engine 4": exact for a segment the horizon does not clip; n . V is the
+// irradiance of a facing element's integral of cos / r^2). The reach is |V| under the point light's window at the
+// segment's nearest point and the direction V / |V|, so a wrapped Lambert of the direction times the reach is n . V
+// wherever the whole segment lies over the surface's horizon. The denominator is held to twice the nearest distance's
+// square, as a point light's distance is held to its nearest, so |V| never passes length / nearest^2, the bound
+// sdfLightReachesBox tests. The light's own weight (its intensity per metre over pi) is no part of it.
+float sdfLineReach(SdfLight light, float3 midpoint, float3 surfacePosition, out float3 direction) {
+    float3 halfSegment = light.SpotAxis;
+    float3 toStart = ((midpoint - halfSegment) - surfacePosition);
+    float3 toEnd = ((midpoint + halfSegment) - surfacePosition);
+    float startLength = length(toStart);
+    float endLength = length(toEnd);
+    float nearest = sdfLineNearest(light);
+    float denominator = max(((startLength * endLength) + dot(toStart, toEnd)), ((2.0 * nearest) * nearest));
+    float3 irradiance = (((toStart / max(startLength, 1.0e-6)) + (toEnd / max(endLength, 1.0e-6))) * ((2.0 * length(halfSegment)) / denominator));
+    float magnitude = length(irradiance);
+    float3 toNearest = sdfLineNearestOffset(light, midpoint, surfacePosition);
+
+    direction = ((magnitude > 1.0e-12) ? (irradiance / magnitude) : (toNearest * rsqrt(max(dot(toNearest, toNearest), 1.0e-12))));
+
+    return (magnitude * sdfLightWindow(dot(toNearest, toNearest), light.Param));
+}
+
 // The share a reach is widened by before a box is tested against it, past the rounding between this test and the
 // response's own: a light is left out only where its response is zero by a margin.
 static const float SdfLightReachMargin = 1.0e-3;
@@ -120,12 +170,28 @@ float sdfBoxDistanceSquared(float3 center, float3 low, float3 high) {
 // light within the angle whose cosine is -SpotOffset / |SpotAxis| of the axis. A sphere lies wholly outside a cone of
 // half-angle a when cos(a) * across - sin(a) * along exceeds its radius, `along` and `across` its centre's offset from
 // the apex along and across the axis: that expression is never more than the centre's distance to the cone.
+//
+// A line light at midpoint `position` is bounded by its segment's nearest distance to the box, which is at least the
+// midpoint's less the half segment: every element of the segment lies at least that far from every point of the box, so
+// the line gives a point of it at most its weight times its length, under its window there, over that distance squared
+// (sdfLineReach), and it has no cone.
 bool sdfLightReachesBox(SdfLight light, float3 position, float3 low, float3 high) {
-    float reach = (((light.Kind == SDF_LIGHT_POINT) ? light.Param : (SDF_LIGHT_OCCLUDER_REACH * light.Param)) * (1.0 + SdfLightReachMargin));
+    float reach = ((sdfLightRanged(light.Kind) ? light.Param : (SDF_LIGHT_OCCLUDER_REACH * light.Param)) * (1.0 + SdfLightReachMargin));
     float nearest = sdfBoxDistanceSquared(position, low, high);
 
+    if (light.Kind == SDF_LIGHT_LINE) {
+        float gap = max((sqrt(nearest) - length(light.SpotAxis)), 0.0);
+
+        nearest = (gap * gap);
+    }
     if (nearest > (reach * reach)) {
         return false;
+    }
+    if (light.Kind == SDF_LIGHT_LINE) {
+        float floorDistance = sdfLineNearest(light);
+        float lineBound = (((light.Weight * (2.0 * length(light.SpotAxis))) * sdfLightWindow(nearest, light.Param)) / max(nearest, (floorDistance * floorDistance)));
+
+        return (((lineBound * passGroup.exposure) * (1.0 + SdfLightReachMargin)) > SDF_LIGHT_RANGE_THRESHOLD);
     }
     if (light.Kind != SDF_LIGHT_POINT) {
         return true;

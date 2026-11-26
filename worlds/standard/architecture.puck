@@ -663,8 +663,8 @@ template banner(base, width = 0.9, drop = 2.3) {
 }
 
 // A toy arcade cabinet's materials, in slot order from `base`: its body, the cheeks, kick and marquee housing, the dark
-// bezel round the picture (and the stick's shaft), the control shelf, the stick's ball and the first button, the second
-// button, the marquee's glowing panel and the marquee's lettering.
+// bezel round the picture (and the stick's shaft), the control shelf and the players' marks, the stick's ball and the
+// first button, the second button, the marquee's glowing panel and the marquee's lettering.
 let cabinetBody = 0
 let cabinetTrim = 1
 let cabinetBezel = 2
@@ -673,43 +673,54 @@ let cabinetButton = 4
 let cabinetButtonAlt = 5
 let cabinetGlow = 6
 let cabinetInk = 7
+// The largest half-extents of a picture of `aspect` (its width over its height) that fits inside the half-extents
+// `half`: every frame round a screen row (a cabinet's bezel, a television's) fits its picture with it.
+function pictureHalvesIn(half, aspect) = (((half[1] * aspect) > half[0])
+  ? [half[0], (half[0] / aspect)]
+  : [(half[1] * aspect), half[1]])
 // The picture a cabinet frames is a screen row of the world's, not a shape: `cabinetPicture` is the centre of the
 // screen's front face in the cabinet's frame, 3 mm proud of the bezel, and `cabinetPictureHalf` the largest half-extents
-// the bezel frames. `cabinetPictureHalves` fits a picture of an aspect (width over height) inside them.
+// the bezel frames. `cabinetPictureHalves` fits a picture of an aspect inside them.
 let cabinetPicture = [0, 1.62, 0.183]
 let cabinetPictureHalf = [0.7, 0.48]
-function cabinetPictureHalves(aspect) = (((cabinetPictureHalf[1] * aspect) > cabinetPictureHalf[0])
-  ? [cabinetPictureHalf[0], (cabinetPictureHalf[0] / aspect)]
-  : [(cabinetPictureHalf[1] * aspect), cabinetPictureHalf[1]])
+function cabinetPictureHalves(aspect) = pictureHalvesIn(cabinetPictureHalf, aspect)
+// A cabinet's half-width: a one-player cabinet's, or the wider two-player one whose shelf carries a control panel for
+// each player side by side.
+function cabinetHalfWidth(players) = ((players == 2) ? 1.2 : 0.8)
 
 // A toy arcade cabinet that faces +Z, a toy built big: a chunky rounded body on a kick, cheeks standing proud of either
-// side, an upright picture in a dark bezel, a flat control shelf with a ball-topped stick on the left and two big
-// buttons on the right, and on top a marquee whose glowing panel carries `title`. About 1.9 m wide, 0.95 m deep and
-// 2.85 m tall; its shelf is 1.06 m up, at a standing player's hands. Every shape is a rounded box, cylinder or sphere
-// joined by union, so the analytic contact collides it as drawn.
-template arcadeCabinet(base, title, em = 0.13) {
+// side, an upright picture in a dark bezel, a flat control shelf, and on top a marquee whose glowing panel carries
+// `title`. Each of its `players` (one or two) has a control panel on the shelf: a ball-topped stick on the left and two
+// big buttons on the right; a two-player cabinet is wider, its panels side by side under one picture, each marked 1P or
+// 2P on the body below it. A one-player cabinet is about 1.9 m wide, a two-player one 2.7 m; both are 0.95 m deep and
+// 2.85 m tall, the shelf 1.06 m up, at a standing player's hands. The marquee's panel stands 3 cm proud of its housing,
+// so the glow stays its own surface however coarsely the bake meshes the cabinet. Every shape is a rounded box,
+// cylinder or sphere joined by union, so the analytic contact collides it as drawn.
+template arcadeCabinet(base, title, em = 0.13, players = 1) {
+  let w = cabinetHalfWidth(players)
+  let panels = ((players == 2) ? [(0 - (w / 2)), (w / 2)] : [0])
   shape Box "cabinet-kick" {
     material: (base + cabinetTrim)
     position [0, 0.08, -0.04]
-    scale [0.84, 0.08, 0.42]
+    scale [(w + 0.04), 0.08, 0.42]
     rounding: 0.04
   }
   shape Box "cabinet-body" {
     material: (base + cabinetBody)
     position [0, 0.57, -0.04]
-    scale [0.8, 0.41, 0.4]
+    scale [w, 0.41, 0.4]
     rounding: 0.09
   }
   shape Box "cabinet-shelf" {
     material: (base + cabinetShelf)
     position [0, 1.01, 0.1]
-    scale [0.84, 0.05, 0.34]
+    scale [(w + 0.04), 0.05, 0.34]
     rounding: 0.04
   }
   shape Box "cabinet-head" {
     material: (base + cabinetBody)
     position [0, 1.76, -0.16]
-    scale [0.8, 0.72, 0.29]
+    scale [w, 0.72, 0.29]
     rounding: 0.09
   }
   shape Box "cabinet-bezel" {
@@ -721,7 +732,7 @@ template arcadeCabinet(base, title, em = 0.13) {
   for side in [-1, 1] {
     shape Box $"cabinet-cheek-{side}" {
       material: (base + cabinetTrim)
-      position [(side * 0.87), 1.31, -0.04]
+      position [(side * (w + 0.07)), 1.31, -0.04]
       scale [0.07, 1.31, 0.45]
       rounding: 0.06
     }
@@ -729,54 +740,354 @@ template arcadeCabinet(base, title, em = 0.13) {
   shape Box "cabinet-marquee" {
     material: (base + cabinetTrim)
     position [0, 2.66, -0.06]
-    scale [0.94, 0.18, 0.4]
+    scale [(w + 0.14), 0.18, 0.4]
     rounding: 0.08
   }
   shape Box "cabinet-marquee-panel" {
     material: (base + cabinetGlow)
-    position [0, 2.66, 0.335]
-    scale [0.8, 0.12, 0.012]
+    position [0, 2.66, 0.35]
+    scale [w, 0.12, 0.02]
   }
-  shape Cylinder "cabinet-stick-base" {
-    material: (base + cabinetBezel)
-    position [-0.42, 1.07, 0.22]
-    scale [0.09, 0.012, 0.09]
-  }
-  shape Cylinder "cabinet-stick" {
-    material: (base + cabinetBezel)
-    position [-0.42, 1.15, 0.22]
-    scale [0.025, 0.08, 0.025]
-  }
-  shape Sphere "cabinet-stick-ball" {
-    material: (base + cabinetButton)
-    position [-0.42, 1.25, 0.22]
-    scale [0.075, 0.075, 0.075]
-  }
-  shape Cylinder "cabinet-button-a" {
-    material: (base + cabinetButton)
-    position [0.18, 1.08, 0.24]
-    scale [0.075, 0.025, 0.075]
-    rounding: 0.01
-  }
-  shape Cylinder "cabinet-button-b" {
-    material: (base + cabinetButtonAlt)
-    position [0.42, 1.08, 0.18]
-    scale [0.075, 0.025, 0.075]
-    rounding: 0.01
+  for (c, p) in panels {
+    shape Cylinder $"cabinet-stick-base-{p}" {
+      material: (base + cabinetBezel)
+      position [(c - 0.42), 1.07, 0.22]
+      scale [0.09, 0.012, 0.09]
+    }
+    shape Cylinder $"cabinet-stick-{p}" {
+      material: (base + cabinetBezel)
+      position [(c - 0.42), 1.15, 0.22]
+      scale [0.025, 0.08, 0.025]
+    }
+    shape Sphere $"cabinet-stick-ball-{p}" {
+      material: (base + cabinetButton)
+      position [(c - 0.42), 1.25, 0.22]
+      scale [0.075, 0.075, 0.075]
+    }
+    shape Cylinder $"cabinet-button-a-{p}" {
+      material: (base + cabinetButton)
+      position [(c + 0.18), 1.08, 0.24]
+      scale [0.075, 0.025, 0.075]
+      rounding: 0.01
+    }
+    shape Cylinder $"cabinet-button-b-{p}" {
+      material: (base + cabinetButtonAlt)
+      position [(c + 0.42), 1.08, 0.18]
+      scale [0.075, 0.025, 0.075]
+      rounding: 0.01
+    }
   }
   textRuns [
     {
       text: title
-      position [0, 2.66, 0.347]
+      position [0, 2.66, 0.372]
       rotation [0, 0, 0, 1]
       emHeight: em
       depth: 0.008
       mode: "emboss"
       material: (base + cabinetInk)
       align: "center"
-      maxWidth: 1.5
+      maxWidth: (2 * (w - 0.05))
+    }
+    for (c, p) in ((players == 2) ? panels : []) {
+      {
+        text: $"{p + 1}P"
+        position [c, 0.78, 0.36]
+        rotation [0, 0, 0, 1]
+        emHeight: 0.11
+        depth: 0.008
+        mode: "emboss"
+        material: (base + cabinetShelf)
+        align: "center"
+        maxWidth: 0.4
+      }
     }
   ]
+}
+
+// A living-room television set's materials, in slot order from `base`: the television's toy-plastic case, its trim
+// (knobs, the antenna's tips, the console's cartridge and buttons), the dark parts (the bezel round the picture, the
+// antenna's rods, the console's slot and ports, the pads' cables, d-pads and small keys), the low stand's boards, the
+// console's shell, the pads' shells, the pads' buttons and the power lamps.
+let setCase = 0
+let setTrim = 1
+let setDark = 2
+let setStand = 3
+let setConsole = 4
+let setPad = 5
+let setButton = 6
+let setLamp = 7
+
+// A toy television that faces +Z, its foot's centre at `at`: a chunky rounded case 1.6 m wide and 1.56 m tall with a
+// tube's hump behind it, a picture in a dark bezel, two knobs and a power lamp on its chin, and rabbit-ear antennas on
+// a dome on top. The picture is a screen row of the world's: `televisionPicture` is its front face's centre in the
+// television's frame, 3 mm proud of the bezel, and `televisionPictureHalf` the largest half-extents the bezel frames.
+let televisionPicture = [0, 0.9, 0.433]
+let televisionPictureHalf = [0.6, 0.48]
+function televisionPictureHalves(aspect) = pictureHalvesIn(televisionPictureHalf, aspect)
+template television(base, at) {
+  shape Box "television-case" {
+    material: (base + setCase)
+    position: (at + [0, 0.78, 0])
+    scale [0.8, 0.78, 0.42]
+    rounding: 0.12
+  }
+  shape Box "television-tube" {
+    material: (base + setCase)
+    position: (at + [0, 0.78, -0.5])
+    scale [0.58, 0.52, 0.2]
+    rounding: 0.12
+  }
+  shape Box "television-bezel" {
+    material: (base + setDark)
+    position: (at + [0, televisionPicture[1], 0.4])
+    scale [(televisionPictureHalf[0] + 0.06), (televisionPictureHalf[1] + 0.06), 0.03]
+    rounding: 0.025
+  }
+  for (x, i) in [0.45, 0.63] {
+    shape Cylinder $"television-knob-{i}" {
+      material: (base + setTrim)
+      position: (at + [x, 0.2, 0.43])
+      rotation: rotate([1, 0, 0], 90)
+      scale [0.055, 0.03, 0.055]
+      rounding: 0.01
+      detail: true
+    }
+  }
+  shape Sphere "television-lamp" {
+    material: (base + setLamp)
+    position: (at + [-0.62, 0.2, 0.42])
+    scale [0.025, 0.025, 0.025]
+    detail: true
+  }
+  shape Sphere "television-dome" {
+    material: (base + setDark)
+    position: (at + [0, 1.56, -0.12])
+    scale [0.13, 0.1, 0.13]
+  }
+  for side in [-1, 1] {
+    let ear = rotate([0, 0, 1], (side * -28))
+    shape Cylinder $"television-ear-{side}" {
+      material: (base + setDark)
+      position: (at + [0, 1.6, -0.12] + rotatePoint(ear, [0, 0.42, 0]))
+      rotation: ear
+      scale [0.014, 0.42, 0.014]
+      detail: true
+    }
+    shape Sphere $"television-ear-tip-{side}" {
+      material: (base + setTrim)
+      position: (at + [0, 1.6, -0.12] + rotatePoint(ear, [0, 0.86, 0]))
+      scale [0.04, 0.04, 0.04]
+      detail: true
+    }
+  }
+}
+
+// A low open stand that faces +Z, its foot's centre at `at`: a top board `height` up, two side boards and a bottom
+// shelf 8 cm up for the console.
+template lowStand(base, at, width = 0.95, height = 0.42, depth = 0.45) {
+  shape Box "stand-top" {
+    material: (base + setStand)
+    position: (at + [0, (height - 0.025), 0])
+    scale [width, 0.025, depth]
+    rounding: 0.02
+  }
+  for side in [-1, 1] {
+    shape Box $"stand-side-{side}" {
+      material: (base + setStand)
+      position: (at + [(side * (width - 0.05)), ((height - 0.05) / 2), 0])
+      scale [0.05, ((height - 0.05) / 2), (depth - 0.02)]
+      rounding: 0.02
+    }
+  }
+  shape Box "stand-shelf" {
+    material: (base + setStand)
+    position: (at + [0, 0.06, 0])
+    scale [(width - 0.1), 0.02, (depth - 0.03)]
+  }
+}
+
+// A toy top-loading console that faces +Z, its foot's centre at `at`: a 0.64 m shell with a slot on top holding a
+// cartridge, a power and a reset key, a power lamp, and two controller ports in its face (`consolePort`, in the
+// console's frame), which a pad's cable plugs into.
+function consolePort(p) = [((p == 0) ? -0.12 : 0.12), 0.06, 0.249]
+template deckConsole(base, at) {
+  shape Box "console-shell" {
+    material: (base + setConsole)
+    position: (at + [0, 0.07, 0])
+    scale [0.32, 0.07, 0.24]
+    rounding: 0.03
+  }
+  shape Box "console-slot" {
+    material: (base + setDark)
+    position: (at + [0, 0.14, -0.05])
+    scale [0.16, 0.006, 0.05]
+  }
+  shape Box "console-cartridge" {
+    material: (base + setTrim)
+    position: (at + [0, 0.2, -0.05])
+    scale [0.14, 0.065, 0.03]
+    rounding: 0.01
+  }
+  for (x, i) in [0.17, 0.25] {
+    shape Box $"console-key-{i}" {
+      material: (base + setTrim)
+      position: (at + [x, 0.142, 0.14])
+      scale [0.03, 0.008, 0.02]
+      rounding: 0.004
+      detail: true
+    }
+  }
+  shape Sphere "console-lamp" {
+    material: (base + setLamp)
+    position: (at + [-0.25, 0.1, 0.235])
+    scale [0.013, 0.013, 0.013]
+    detail: true
+  }
+  for p in [0, 1] {
+    shape Box $"console-port-{p}" {
+      material: (base + setDark)
+      position: (at + consolePort(p) + [0, 0, -0.006])
+      scale [0.035, 0.022, 0.006]
+      detail: true
+    }
+  }
+}
+
+// A toy pad lying flat at `at` (its foot's centre), its cable leaving its edge toward -Z (`padCableEnd`, in the pad's
+// frame): a rounded shell 0.32 m long, a d-pad on +X and two buttons on -X, so a player sitting on its +Z side facing -Z
+// holds the d-pad in the left hand, and start and select keys between them. Visual only: a body walks over it.
+let padCableEnd = [0, 0.022, -0.07]
+template gamePad(base, at, label) {
+  shape Box $"{label}-shell" {
+    material: (base + setPad)
+    position: (at + [0, 0.022, 0])
+    scale [0.16, 0.022, 0.07]
+    rounding: 0.02
+    detail: true
+  }
+  for (s, i) in [[0.035, 0.012], [0.012, 0.035]] {
+    shape Box $"{label}-dpad-{i}" {
+      material: (base + setDark)
+      position: (at + [0.09, 0.046, 0])
+      scale [s[0], 0.005, s[1]]
+      detail: true
+    }
+  }
+  for (b, i) in [[-0.07, 0.016], [-0.115, -0.014]] {
+    shape Cylinder $"{label}-button-{i}" {
+      material: (base + setButton)
+      position: (at + [b[0], 0.046, b[1]])
+      scale [0.018, 0.005, 0.018]
+      detail: true
+    }
+  }
+  for (x, i) in [-0.02, 0.02] {
+    shape Box $"{label}-key-{i}" {
+      material: (base + setDark)
+      position: (at + [x, 0.045, 0.02])
+      scale [0.012, 0.004, 0.006]
+      detail: true
+    }
+  }
+}
+
+// A pad's cable from `from` (a console's port, leaving it toward +Z) to `to` (the pad's cable end): it drops to lie
+// `lie` up (on the floor, or on a rug over it) a third of the way out and runs straight along it to the pad. Visual
+// only: a body steps over it.
+template padCable(base, label, from, to, lie = 0.024, radius = 0.012) {
+  let drop = [(from[0] + ((to[0] - from[0]) * 0.3)), lie, (from[2] + ((to[2] - from[2]) * 0.35))]
+  shape Sweep $"{label}-drop" {
+    material: (base + setDark)
+    position: from
+    curve {
+      a [0, 0, 0]
+      b: ([from[0], lie, (from[2] + 0.15)] - from)
+      c: (drop - from)
+      radiusStart: radius
+      radiusEnd: radius
+    }
+    detail: true
+  }
+  shape Sweep $"{label}-run" {
+    material: (base + setDark)
+    position: drop
+    curve {
+      a [0, 0, 0]
+      b: (((to - drop) * 0.5))
+      c: (to - drop)
+      radiusStart: radius
+      radiusEnd: radius
+    }
+    detail: true
+  }
+}
+
+// A living-room television set that faces +Z, its stand's foot at the origin: the television on a low stand, the
+// console on the stand's shelf, and a pad for each of its `players` lying on the floor before it at `setPads`, each
+// cabled to its own port. `televisionSetPicture` is the picture's centre in the set's frame.
+let setStandHeight = 0.42
+let setTelevisionAt = [0, setStandHeight, -0.05]
+let setConsoleAt = [0, 0.08, 0.05]
+let televisionSetPicture = (setTelevisionAt + televisionPicture)
+let setPads = [[0.45, 0.012, 1.25], [-0.45, 0.012, 1.25]]
+template televisionSet(base, players = 2) {
+  lowStand(base: base, at: [0, 0, 0], height: setStandHeight)
+  television(base: base, at: setTelevisionAt)
+  deckConsole(base: base, at: setConsoleAt)
+  for p in range(0, players) {
+    gamePad(base: base, at: setPads[p], label: $"pad-{p}")
+    padCable(base: base, label: $"cable-{p}", from: (setConsoleAt + consolePort(p)), to: (setPads[p] + padCableEnd))
+  }
+}
+
+// A lounge's materials, in slot order from `base`: a rug's field and its border, and two beanbags' covers.
+let loungeRug = 0
+let loungeRugBorder = 1
+let loungeBeanbag = 2
+let loungeBeanbagAlt = 3
+
+// A rug lying on the floor at `at`, `half` its half-extents along X and Z: a border band round a field, 12 mm thick.
+template rug(base, at, half) {
+  shape Box "rug-border" {
+    material: (base + loungeRugBorder)
+    position: (at + [0, 0.005, 0])
+    scale [half[0], 0.005, half[1]]
+    rounding: 0.004
+  }
+  shape Box "rug-field" {
+    material: (base + loungeRug)
+    position: (at + [0, 0.006, 0])
+    scale [(half[0] - 0.14), 0.006, (half[1] - 0.14)]
+    rounding: 0.005
+  }
+}
+
+// A beanbag at `at` facing +Z turned by `yaw` degrees: a slumped seat and a soft back rising behind it, a metre across.
+template beanbag(base, label, at, yaw = 0, slot = 0) {
+  let turn = rotate([0, 1, 0], yaw)
+  shape Superellipsoid $"{label}-seat" {
+    material: (base + slot)
+    position: (at + [0, 0.22, 0])
+    rotation: turn
+    scale [0.5, 0.22, 0.5]
+    exponent: 2.4
+  }
+  shape Superellipsoid $"{label}-back" {
+    material: (base + slot)
+    position: (at + rotatePoint(turn, [0, 0.45, -0.3]))
+    rotation: compose(turn, rotate([1, 0, 0], -18))
+    scale [0.44, 0.3, 0.2]
+    exponent: 2.4
+  }
+}
+
+// A lounge before a television set that faces +Z: a rug from 0.65 m to 2.85 m before the stand and two beanbags on it
+// facing the set, behind the pads.
+template lounge(base) {
+  rug(base: base, at: [0, 0, 1.75], half: [1.5, 1.1])
+  beanbag(base: base, label: "beanbag-0", at: [0.75, 0.012, 2.25], yaw: 180, slot: loungeBeanbag)
+  beanbag(base: base, label: "beanbag-1", at: [-0.75, 0.012, 2.25], yaw: 180, slot: loungeBeanbagAlt)
 }
 
 // A construction lattice that runs along X, a toy building set's panel: a frame of square members `frame` thick round a
@@ -837,3 +1148,49 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
   }
 }
 
+// A pendant lamp hung from a ceiling at `at` (the ceiling point, +Y up): a rose against the ceiling, a cord down to a
+// drum shade `shade` in radius and `pendantShadeHeight` tall whose foot is `drop` metres under the ceiling, and across
+// the drum's foot a frosted diffuser `glow` in radius, the emitter, whose face's centre is `pendantGlowAt(at, drop)`:
+// that is where the lamp's light stands. Its palette slots from `base` are the shade (and the rose), the cord and the
+// diffuser.
+let pendantShade = 0
+let pendantCord = 1
+let pendantGlow = 2
+let pendantShadeHeight = 0.22
+function pendantGlowAt(at, drop) = (at + [0, (0 - (drop + 0.02)), 0])
+function pendantGlowArea(glow = 0.17) = (3.141592653589793 * glow * glow)
+// The light a downward glowing face of `luminance` nits and `area` square metres gives as a spot opening to a
+// hemisphere (angle 90deg), in lumens: such a spot's intensity is its power over 2 pi, and the face's own along its axis
+// is its luminance times its area, so the two agree straight below it and the light reads as the face it stands at.
+// Rounded to whole lumens, since a state cell carrying it is an integer.
+function glowSpotPower(luminance, area) = round(6.283185307179586 * luminance * area)
+template pendantLamp(base, at, drop, shade = 0.2, glow = 0.17) {
+  let cord = ((drop - pendantShadeHeight) - 0.03)
+  shape Cylinder "pendant-rose" {
+    material: (base + pendantShade)
+    position: (at + [0, -0.015, 0])
+    scale [0.07, 0.015, 0.07]
+    rounding: 0.005
+    detail: true
+  }
+  shape Cylinder "pendant-cord" {
+    material: (base + pendantCord)
+    position: (at + [0, (0 - (0.03 + (cord / 2))), 0])
+    scale [0.006, (cord / 2), 0.006]
+    detail: true
+  }
+  shape Cylinder "pendant-shade" {
+    material: (base + pendantShade)
+    position: (at + [0, (0 - (drop - (pendantShadeHeight / 2))), 0])
+    scale [shade, (pendantShadeHeight / 2), shade]
+    rounding: 0.02
+    detail: true
+  }
+  shape Cylinder "pendant-glow" {
+    material: (base + pendantGlow)
+    position: (at + [0, (0 - (drop + 0.008)), 0])
+    scale [glow, 0.008, glow]
+    rounding: 0.004
+    detail: true
+  }
+}

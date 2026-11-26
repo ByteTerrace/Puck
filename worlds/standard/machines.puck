@@ -39,7 +39,7 @@ function advancedBrickMachine(name, content) = {
     }
   }
 }
-// A Humble Gaming Deck. It has two controller ports, so a screen that seats a player on it names one (`deckRoute`).
+// A Humble Gaming Deck. It has two controller ports, so a screen that seats players on it names them (`deckRoute`).
 function deckMachine(name, content) = {
   name: name
   engine: "humble-gaming-deck"
@@ -82,7 +82,9 @@ let devicePadKit = {
 
 // A device's screen engages on the context button (`interact`) within 3 m, and the same press leaves, since the pad
 // does not play it. Once the camera has framed the picture, the window shows it alone, as a desktop emulator does, on
-// a black matte. A deck's screen seats its player on the first controller port.
+// a black matte. A deck's screen seats a player on each of its controller ports (`deckRoute`): the first seat to engage
+// it plays the first port, a second seat that engages while the first still plays takes the second, and leaving frees
+// the port.
 let deviceRoute = {
   engageable: true
   engageRadius: 3
@@ -92,4 +94,4 @@ let deviceRoute = {
     fill: "#000000"
   }
 }
-let deckRoute = (deviceRoute with { port: "controls" })
+let deckRoute = (deviceRoute with { ports ["controls", "controls-2"] })

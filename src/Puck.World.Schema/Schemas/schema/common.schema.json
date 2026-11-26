@@ -1167,6 +1167,74 @@
       "additionalProperties": false,
       "title": "WorldRenderLightOccluder"
     },
+    "WorldRenderLightTube": {
+      "description": "A tube light, such as a fluorescent or neon tube: a straight segment from From to To whose every length element emits alike in every direction, so a surface beside it is lit softly and evenly along its length and a glossy one reflects it as a streak. It falls off with the point light\u0027s window, measured from the segment\u0027s nearest point, and is traced and occluded by the irradiance volume while static as a point light is. A curve is a chain of tubes, end to end; each is one light of the lights table, and the culling keeps only those near what a view shades.",
+      "properties": {
+        "$type": {
+          "const": "tube"
+        },
+        "from": {
+          "$ref": "#/$defs/BindableVector3",
+          "description": "The segment\u0027s first end: world space for a static light, an offset in the anchor\u0027s frame when an anchor is authored. Absent is the origin.",
+          "default": null
+        },
+        "to": {
+          "$ref": "#/$defs/BindableVector3",
+          "description": "The segment\u0027s second end, in the same frame as From. Absent is the origin.",
+          "default": null
+        },
+        "anchor": {
+          "$ref": "#/$defs/WorldAnchor",
+          "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
+          "default": null
+        },
+        "radius": {
+          "description": "The tube\u0027s radius, in metres, zero or more: the nearest the light\u0027s distance is taken as and how far its reflection\u0027s lobe widens. Absent is zero, which the point light\u0027s nearest distance stands in for.",
+          "type": "number",
+          "default": 0
+        },
+        "color": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "The light\u0027s colour, scaled to unit luminance. Refused beside Temperature.",
+          "default": null
+        },
+        "intensity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The luminous intensity of each metre of the tube, in candela per metre. Refused beside Power; absent with it is the engine default point intensity per metre.",
+          "default": null
+        },
+        "power": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The luminous power of the whole segment, in lumens, emitted alike in every direction: a 1.2 m fluorescent tube gives about 3,000. Refused beside Intensity.",
+          "default": null
+        },
+        "temperature": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The light\u0027s colour as a black body\u0027s, in kelvin, in [1000, 40000]. Refused beside Color.",
+          "default": null
+        },
+        "name": {
+          "description": "The name a section key addresses the light by, unique among the lights.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "lightName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bounce": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the finite nonnegative gain of this light\u0027s diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain."
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderLightTube"
+    },
     "WorldRenderLight": {
       "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its kind in SdfLightKind.",
       "type": [
@@ -1191,6 +1259,9 @@
         },
         {
           "$ref": "#/$defs/WorldRenderLightOccluder"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderLightTube"
         }
       ],
       "title": "WorldRenderLight"
@@ -10990,6 +11061,61 @@
       "additionalProperties": {
         "$ref": "#/$defs/WorldBindingBarLayout"
       }
+    },
+    "WorldPlacementResponseConditionStateConditionNullable": {
+      "description": "A state-cell condition: compares State\u0027s cell (its slot cell when Key is absent, else the cell at Key) against Value, or \u2014 when ComparandState is authored instead \u2014 against another declared row\u0027s cell, read live at the same evaluation. Exactly one of Value and ComparandState may be present, the same one-comparand rule CompareState already enforces for a rule\u0027s own gate \u2014 this facet reuses that field convention rather than inventing a second reading of \u0022compare a state cell.\u0022 Independent of the placement\u0027s position, and of whether the document declares a fields section at all.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "state": {
+          "description": "The state row compared \u2014 any declared state.world row of a numeric kind (never Text).",
+          "type": "string"
+        },
+        "comparison": {
+          "$ref": "#/$defs/ExpressionComparisonNonNullable",
+          "description": "The comparison."
+        },
+        "value": {
+          "description": "The literal comparand, or null when ComparandState spells the comparand instead.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null
+        },
+        "key": {
+          "description": "The cell inside State, or null for its slot cell. Refused when State is keyed and this is absent, or unkeyed and this is present.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "comparandState": {
+          "description": "Another declared state.world row, read live and compared instead of Value. Must share State\u0027s cell kind (refused by name otherwise).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "comparandKey": {
+          "description": "The cell inside ComparandState, on the same terms as Key. Refused when ComparandState is absent.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state",
+        "comparison"
+      ],
+      "additionalProperties": false,
+      "title": "WorldPlacementResponseConditionStateConditionBare"
     },
     "PaletteSurfaceDocument": {
       "description": "An authored surface tint and reflectance.",

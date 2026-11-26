@@ -1104,12 +1104,18 @@
                 ],
                 "title": "SourceDestination"
               },
-              "port": {
-                "description": "The machine input port, by the provider\u0027s port name (controls-2), that a seat engaged on this screen drives; the machine\u0027s other ports hold neutral input unless another screen routes to them. null (the default) resolves only a machine with a sole input port, and a screen showing a machine with several is refused by name until its route names one. Omitted from the wire when null.",
+              "ports": {
+                "description": "The machine input ports, by the provider\u0027s port names (controls, controls-2), that seats engaged on this screen drive, one seat a port: the first seat to engage takes the first port no other seat on the screen holds, the next the next, and leaving frees the port. Once every port is held the context button offers the screen to no one, and an engage by name shares the first port (the cabinet\u0027s merged pad). The machine\u0027s ports the list leaves out hold neutral input unless another screen routes to them. null (the default) resolves only a machine with a sole input port, which seats one player through the context button and merges every engage by name onto that port; a screen showing a machine with several is refused by name until its route names them. Omitted from the wire when null.",
                 "type": [
-                  "string",
+                  "array",
                   "null"
-                ]
+                ],
+                "items": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
               },
               "display": {
                 "description": "How the window shows this screen to a seat engaged on it once its camera has framed the picture: what surrounds the matte (WorldScreenDisplay). null (the default) is Neutral: a black matte. Omitted from the wire when null.",
@@ -10341,6 +10347,74 @@
       "additionalProperties": false,
       "title": "WorldRenderLightOccluder"
     },
+    "WorldRenderLightTube": {
+      "description": "A tube light, such as a fluorescent or neon tube: a straight segment from From to To whose every length element emits alike in every direction, so a surface beside it is lit softly and evenly along its length and a glossy one reflects it as a streak. It falls off with the point light\u0027s window, measured from the segment\u0027s nearest point, and is traced and occluded by the irradiance volume while static as a point light is. A curve is a chain of tubes, end to end; each is one light of the lights table, and the culling keeps only those near what a view shades.",
+      "properties": {
+        "$type": {
+          "const": "tube"
+        },
+        "from": {
+          "$ref": "#/$defs/BindableVector3",
+          "description": "The segment\u0027s first end: world space for a static light, an offset in the anchor\u0027s frame when an anchor is authored. Absent is the origin.",
+          "default": null
+        },
+        "to": {
+          "$ref": "#/$defs/BindableVector3",
+          "description": "The segment\u0027s second end, in the same frame as From. Absent is the origin.",
+          "default": null
+        },
+        "anchor": {
+          "$ref": "#/$defs/WorldAnchor",
+          "description": "An entity, entity part, or placement frame. A missing live target disables the light.",
+          "default": null
+        },
+        "radius": {
+          "description": "The tube\u0027s radius, in metres, zero or more: the nearest the light\u0027s distance is taken as and how far its reflection\u0027s lobe widens. Absent is zero, which the point light\u0027s nearest distance stands in for.",
+          "type": "number",
+          "default": 0
+        },
+        "color": {
+          "$ref": "#/$defs/BindableColor",
+          "description": "The light\u0027s colour, scaled to unit luminance. Refused beside Temperature.",
+          "default": null
+        },
+        "intensity": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The luminous intensity of each metre of the tube, in candela per metre. Refused beside Power; absent with it is the engine default point intensity per metre.",
+          "default": null
+        },
+        "power": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The luminous power of the whole segment, in lumens, emitted alike in every direction: a 1.2 m fluorescent tube gives about 3,000. Refused beside Intensity.",
+          "default": null
+        },
+        "temperature": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "The light\u0027s colour as a black body\u0027s, in kelvin, in [1000, 40000]. Refused beside Color.",
+          "default": null
+        },
+        "name": {
+          "description": "The name a section key addresses the light by, unique among the lights.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "lightName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bounce": {
+          "$ref": "#/$defs/BindableScalar",
+          "description": "Gets the finite nonnegative gain of this light\u0027s diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain."
+        }
+      },
+      "additionalProperties": false,
+      "title": "WorldRenderLightTube"
+    },
     "WorldRenderLight": {
       "description": "One light. The $type string is the JSON discriminator; a new kind is a new derived record, its JsonDerivedTypeAttribute line, and its kind in SdfLightKind.",
       "type": [
@@ -10365,6 +10439,9 @@
         },
         {
           "$ref": "#/$defs/WorldRenderLightOccluder"
+        },
+        {
+          "$ref": "#/$defs/WorldRenderLightTube"
         }
       ],
       "title": "WorldRenderLight"

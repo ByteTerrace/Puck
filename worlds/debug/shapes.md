@@ -39,26 +39,34 @@ the stairs and rides the lift, and the chase camera's clearance keeps the eye
 inside the rooms.
 
 The building has no sun of its own: the world that stands it lights it
-([`day.puck`](day.puck) in the debug world). Its own light is in real units.
-An emissive strip (4,000 nits) runs along the ceiling over each aisle, over
-the bridge and over the lift's landing, as part of the slab or roof above it
-(`shellStrips`). A 5,000-lumen downlight hangs along each aisle
-(`hallDownlights`), eight 30,000-lumen high bays under the roof light the
-nave's floor, and washes on level 1's balcony edges light level 0's two lines
-from the side. A pendant lights the south-west stair's well, and the lift's car has a
-luminous ceiling over a 6,000-lumen spot that rides the car's body. Every
-fixture but the car's is anchored to the building's root and stands still, so
-the irradiance volume traces it: its light bounces about its room and stops at
-the slab under it. The camera's exposure is the world's
-([`exposure.puck`](exposure.puck)).
+([`day.puck`](day.puck) in the debug world). Its own light is in real units,
+and almost all of it is the flaw ([`gallery/flaw.puck`](gallery/flaw.puck)):
+one continuous glowing tube, a neon core in a frosted sleeve whose tint drifts
+along its length, that runs through every floor like a finely made neon
+conduit. Every run is level or plumb, on the building's lines: along each
+gallery it keeps one tile behind the arcade, just under the storey's ceiling,
+and steps down a storey a bay from under the roof to level 0 and back up, each
+step a riser standing plumb behind a pier and passing straight through the slab
+through a brass collar. It crosses the void only under the roof, under the
+arches of bays 3 and 11, and the two galleries mirror each other. Its route is
+an editable list of steps (`flawProfile` in
+[`gallery/layout.puck`](gallery/layout.puck)), which gives the corners
+(`flawRoute`) and the slabs' openings (`flawCrossings`); its look, corner
+radius, collar and light per metre are `lookFlaw`, `lookFlawTint` and
+`lookFlawCollar` in [`gallery/look.puck`](gallery/look.puck).
+It lights like a fluorescent tube: a chain of tube lights along the same
+route, cut at each slab so every one lies in one storey, anchored to the
+building's root and standing still, so the irradiance volume traces each: its
+light bounces about its storey and stops at the slabs. Beside it a pendant
+lights the south-west stair's well, which the flaw never enters, and the lift's car has a
+luminous ceiling over a 6,000-lumen spot that rides the car's body. The
+camera's exposure is the world's ([`exposure.puck`](exposure.puck)).
 
 Each level's room lights switch on and off. `hallLights` holds each level's
-state (`Off` or `On`), and every level starts `On`. A level that is off shows
-the dark variant of the slab or roof above it (`gallery-floor-<k+1>-dark`,
-`gallery-roof-dark`: the same boxes with a pale, unlit diffuser in the strips'
-palette slot) through the placement's `respond` facet, and its fixtures
-(`hallLamps`) read a power of 0 lumens; the lift car's lamp stays with the car.
-A swap shows the same geometry, so the mesh library answers it without a bake.
+state (`Off` or `On`), and every level starts `On`. A level that is off sets
+its `hallLamps` cell to 0, which quiets the light of the stretch of the flaw
+that storey holds and its lamps; the tube itself keeps its glow, and the lift
+car's lamp stays with the car.
 Each level's switch is a plate on the south wall east of the lift's door, 1.1
 to 1.46 m over the floor and labelled `LIGHTS`: a warm indicator when on, a
 green locator glow when off, so it shows in the dark.
@@ -107,7 +115,7 @@ judge it. The card table's cards are posed by the rules, which judge each reques
 | Stand on a level's landing | `gallery.level <level> [body]` |
 | Go to the board game room | `debug.go boardroom`, or a table's own place (a table's edge, close enough to sit) |
 | Spread or gather a level's fan shades | `gallery.blinds <level> up\|down` |
-| Inspect without the showcase lighting | `gallery.inspect on\|off`: On lights every surface from five unshadowed neutral directional fills (60 lux each), raises the sky ambient gain to 2.5 against the authored 0.40625, pins the camera at EV100 7 with no local adaptation and takes the screens out of the traced light, so a capture reads albedo and form alike at every exhibit, shadowed sides included. Off writes the authored values back exactly. It touches only those render values (`galleryFill` cells bound by the fill lights' illuminance and by the world's `render.environment.ambient`, `render.exposure.hold` and `render.indirect.sources.screens`), so the fixtures, strips, shades and traced bounce stay as `gallery.lights` and `gallery.blinds` leave them; turn it Off for a lighting or photometric check |
+| Compare exhibits at one exposure | `gallery.inspect on\|off`: On pins the camera at EV100 7 with no local adaptation (the `galleryExposure` cell the world's `render.exposure.hold` reads), so captures of different exhibits compare at one exposure; Off releases it to the automatic exposure. It adds no light: the building's own lights ([gallery.md](gallery.md#lighting)) light every exhibit as `gallery.lights` and `gallery.blinds` leave them |
 | Switch a level's lights | Stand before the level's wall switch (`body.pose spawn:hall-switch-<level>`) and press the context button (E, or RB on a pad), or `gallery.lights <level> on\|off`. The press counts while a body stands in the reach box before the plate; a rule reads no facing, so that box stands in for facing the plate |
 | Walk to an exhibit | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`) stands her before its display's console, turned past it (`gallerySpawnTurn`) so the chase camera frames the display beside her, and shows the exhibit on its turntable; `gallery.go` alone returns to the entrance |
 | Show an exhibit without walking | `gallery.show <exhibit>`: its display's turntable shows it and its screen names it |

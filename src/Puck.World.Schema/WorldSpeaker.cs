@@ -2,6 +2,7 @@ using Puck.Abstractions.Documents;
 using Puck.Assets.Documents;
 using System.Text.Json.Serialization;
 using Puck.World.Authoring;
+using Puck.Abstractions.Collections;
 
 namespace Puck.World;
 
@@ -283,33 +284,18 @@ public sealed record WorldAudioCue(
         VoiceBabble,
     ];
 
-    // Ordinal membership over a published token list, allocation-free — the one scan the three Is*Token doors share.
-    private static bool Contains(IReadOnlyList<string> tokens, string? candidate) {
-        for (var index = 0; (index < tokens.Count); index++) {
-            if (string.Equals(
-                a: tokens[index],
-                b: candidate,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     /// <summary>Determines whether <paramref name="token"/> is one of the published <see cref="EventTokens"/>.</summary>
     /// <param name="token">The candidate token.</param>
-    public static bool IsEventToken(string? token) => Contains(
-        candidate: token,
-        tokens: EventTokens
+    public static bool IsEventToken(string? token) => StringLists.Holds(
+        value: token,
+        items: EventTokens
     );
     /// <summary>Determines whether <paramref name="token"/> is one of the <see cref="MusicWhenTokens"/> a
     /// <c>puck.music.v1</c> <c>when</c> field may name.</summary>
     /// <param name="token">The candidate token.</param>
-    public static bool IsMusicWhenToken(string? token) => MusicCueName(token) is not null || Contains(
-        candidate: token,
-        tokens: MusicWhenTokens
+    public static bool IsMusicWhenToken(string? token) => MusicCueName(token) is not null || StringLists.Holds(
+        value: token,
+        items: MusicWhenTokens
     );
     /// <summary>Extracts a valid authored rule cue name from a score condition.</summary>
     public static string? MusicCueName(string? token) => token is not null && token.StartsWith("cue:", StringComparison.Ordinal) &&
@@ -317,9 +303,9 @@ public sealed record WorldAudioCue(
     /// <summary>Determines whether <paramref name="token"/> is one of the <see cref="ProducerBypassedTokens"/> a
     /// producer fires directly, so an authored <c>audio.cues</c> row can never target it.</summary>
     /// <param name="token">The candidate token.</param>
-    public static bool IsProducerBypassedToken(string? token) => Contains(
-        candidate: token,
-        tokens: ProducerBypassedTokens
+    public static bool IsProducerBypassedToken(string? token) => StringLists.Holds(
+        value: token,
+        items: ProducerBypassedTokens
     );
 }
 /// <summary>

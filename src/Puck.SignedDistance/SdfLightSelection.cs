@@ -8,7 +8,8 @@ namespace Puck.SignedDistance;
 /// <see cref="SdfLights"/> in a mask the view's pass block carries. A point or spot light reaches only the sphere of its
 /// range (<see cref="SdfPhotometry.RangeOf"/>), where its windowed falloff ends exactly, and within it only as far as its
 /// light stays above the view's cutoff at the view's exposure (<see cref="ReachAt"/>), so a view whose frustum that
-/// sphere misses cannot show any of its light and skips it; an occluder likewise past three of its radii, where its
+/// sphere misses cannot show any of its light and skips it (a line light the capsule of its range about its segment); an
+/// occluder likewise past three of its radii, where its
 /// Gaussian is below a ten-thousandth. A directional or rim light reaches every surface and is always kept; a light of
 /// no strength is never kept. A positional light that rides a dynamic transform, whose position the host does not hold,
 /// is always kept. The views pass narrows this mask again for each tile it shades, by the same reaches against the
@@ -54,7 +55,7 @@ public static class SdfLightSelection {
     /// <param name="light">The light.</param>
     /// <returns>The reach, in world units.</returns>
     public static float ReachOf(in SdfLight light) => (light.Kind switch {
-        SdfLightKind.Point => light.Param,
+        SdfLightKind.Point or SdfLightKind.Line => light.Param,
         SdfLightKind.Occluder => (OccluderReach * light.Param),
         _ => float.PositiveInfinity,
     });
@@ -69,9 +70,15 @@ public static class SdfLightSelection {
     public static float ReachAt(in SdfLight light, float exposure) {
         var reach = ReachOf(light: in light);
 
-        return (((light.Kind == SdfLightKind.Point) && (exposure > 0f))
-            ? MathF.Min(x: reach, y: (SdfPhotometry.RangeOf(exposure: exposure, weight: light.Weight) * (1f + CutoffMargin)))
-            : reach);
+        if (!(exposure > 0f)) {
+            return reach;
+        }
+
+        return light.Kind switch {
+            SdfLightKind.Point => MathF.Min(x: reach, y: (SdfPhotometry.RangeOf(exposure: exposure, weight: light.Weight) * (1f + CutoffMargin))),
+            SdfLightKind.Line => MathF.Min(x: reach, y: (SdfPhotometry.LineRangeOf(exposure: exposure, length: light.LineLength, weight: light.Weight) * (1f + CutoffMargin))),
+            _ => reach,
+        };
     }
     /// <summary>Returns whether a light can reach a surface a view shows.</summary>
     /// <param name="light">The light.</param>
@@ -94,9 +101,10 @@ public static class SdfLightSelection {
             return false;
         }
 
+        // A line's reach is about its segment: the box of no width along the half segment, widened by the reach.
         return camera.MaySee(
             center: light.Direction,
-            halfX: Vector3.Zero,
+            halfX: ((light.Kind == SdfLightKind.Line) ? light.SpotAxis : Vector3.Zero),
             halfY: Vector3.Zero,
             halfZ: Vector3.Zero,
             margin: Margin,

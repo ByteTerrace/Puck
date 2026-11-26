@@ -229,6 +229,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             var anchor = lights[index] switch {
                 WorldRenderLight.Point point => point.Anchor,
                 WorldRenderLight.Spot spot => spot.Anchor,
+                WorldRenderLight.Tube tube => tube.Anchor,
                 WorldRenderLight.Occluder occluder => occluder.Anchor,
                 _ => null,
             };
@@ -241,11 +242,11 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             var light = output[index];
             var standing = (
                 (anchor is WorldAnchor.Placement { ShapeId: null } placed) &&
-                (light.Kind == SdfLightKind.Point) &&
+                light.IsRanged &&
                 (WorldDefinitionRows.FindPlacement(placements: definition.Placements, id: placed.PlacementId) is { Attach: null, Inhabit: null, Deal: null })
             );
 
-            // An anchored spot's aim turns with its anchor, as its position does.
+            // An anchored spot's aim, and an anchored tube's half segment, turn with its anchor, as its position does.
             output.Set(
                 index: index,
                 light: ((pose is { } frame)
@@ -300,6 +301,14 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             Param: 1f,
             Shadows: false
         ),
+        WorldRenderLight.Tube => new SdfLight(
+            Kind: SdfLightKind.Line,
+            Direction: Vector3.Zero,
+            Color: Vector3.One,
+            Weight: SdfPhotometry.PositionalWeight(candela: SdfLights.DefaultPointIntensity),
+            Param: 0f,
+            Shadows: false
+        ),
         WorldRenderLight.Point or WorldRenderLight.Spot => new SdfLight(
             Kind: SdfLightKind.Point,
             Direction: Vector3.Zero,
@@ -317,9 +326,32 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             Shadows: false
         ),
     });
-    // A point or spot light's range: where its light falls below the range threshold at the world's brightest exposure.
-    private static SdfLight Ranged(SdfLight light, in SdfExposure exposure) =>
-        (light with { Param = SdfPhotometry.RangeOf(exposure: exposure.BrightestGain, weight: light.Weight) });
+    // A point or spot light's range: where its light falls below the range threshold at the world's brightest exposure; a
+    // tube's measured from its segment (SdfPhotometry.LineRangeOf).
+    private static SdfLight Ranged(SdfLight light, in SdfExposure exposure) => (light with {
+        Param = ((light.Kind == SdfLightKind.Line)
+            ? SdfPhotometry.LineRangeOf(exposure: exposure.BrightestGain, length: light.LineLength, weight: light.Weight)
+            : SdfPhotometry.RangeOf(exposure: exposure.BrightestGain, weight: light.Weight)),
+    });
+    // A tube light's record: its midpoint, its half segment and radius, its intensity per metre from its power over its
+    // length when it authors power. An unanchored tube is static, so the irradiance volume traces and occludes it.
+    private SdfLight TubeOf(WorldStateMirror mirror, WorldRenderLight.Tube tube, SdfLight pinned, in WorldValueSite lightSite) {
+        var from = Position(fallback: Vector3.Zero, mirror: mirror, position: tube.From);
+        var to = Position(fallback: Vector3.Zero, mirror: mirror, position: tube.To);
+        var length = Vector3.Distance(value1: from, value2: to);
+        var perMetre = ((tube.Power is not null)
+            ? SdfPhotometry.LineIntensity(length: length, lumens: Scalar(fallback: 0f, field: WorldValueFields.TubePower, mirror: mirror, scalar: tube.Power, site: in lightSite))
+            : Scalar(fallback: SdfLights.DefaultPointIntensity, field: WorldValueFields.TubeIntensity, mirror: mirror, scalar: tube.Intensity, site: in lightSite));
+
+        return (pinned with {
+            Color = Chroma(color: tube.Color, field: WorldValueFields.TubeTemperature, mirror: mirror, site: in lightSite, temperature: tube.Temperature),
+            Direction = ((from + to) * 0.5f),
+            Shadows = ((tube.Anchor is null) ? 1u : 0u),
+            SpotAxis = ((to - from) * 0.5f),
+            SpotOffset = tube.Radius,
+            Weight = SdfPhotometry.PositionalWeight(candela: perMetre),
+        });
+    }
     // A light's colour: a black body's at its temperature, or its authored colour, scaled to unit luminance so the light
     // gives exactly its photometric quantity; white when it authors neither.
     private Vector3 Chroma(WorldStateMirror mirror, BindableColor? color, BindableScalar? temperature, WorldValueField field, in WorldValueSite site) {
@@ -670,6 +702,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                                 : Scalar(fallback: SdfLights.DefaultPointIntensity, field: WorldValueFields.PointIntensity, mirror: mirror, scalar: point.Intensity, site: in lightSite))),
                         }),
                         WorldRenderLight.Spot spot => Ranged(exposure: exposure, light: SpotOf(lightSite: in lightSite, mirror: mirror, pinned: pinned, spot: spot)),
+                        WorldRenderLight.Tube tube => Ranged(exposure: exposure, light: TubeOf(lightSite: in lightSite, mirror: mirror, pinned: pinned, tube: tube)),
                         _ => pinned,
                     })
                 );

@@ -1083,7 +1083,24 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   `puckCountLights`). Glass, which has no tiles, walks the view's lights that
   reach the box about its wave's active lanes' points (`sdfWaveLightMasks`,
   joined across the wave with no barrier). Index a vector at run time only
-  through `sdfComponent`.
+  through `sdfComponent`. A line (tube) light (`SdfLightKind.Line`, a world's
+  `tube` light) is ranged like a point (`sdfLightRanged`, `SdfLight.IsRanged`):
+  its record carries the midpoint in `Direction`, the half segment in
+  `SpotAxis` and the radius in `SpotOffset`; it shades by the segment's vector
+  irradiance (`sdfLineReach`) and a representative-point lobe
+  (`sdfLineSpecular`), the tile test bounds it by the midpoint's distance less
+  the half segment, and the irradiance volume traces it as a point at its
+  midpoint carrying its whole intensity (`SdfMeshIrradiance`'s capture), so a
+  long tube is a chain of segments cut where walls or slabs close it off.
+  A bound screen is a light of its own (`SdfLightScreen`, walked by the screen
+  mask): its colour is its face's mean luminance, which
+  `passes/sdf-screen-emission.comp.hlsl` reduces from the picture on the GPU
+  with no readback, and it shades as a Lambertian face of its area
+  (`E = L·A·cos / (d² + A/π)`) windowed to zero at its range, so a screen
+  lights what stands before it with what it shows. A world wanting a screen's
+  glow on its surroundings declares a `screens` row, never a point light beside
+  it, and a lamp's light stands at its fixture's glowing face in that face's
+  colour (the gallery's `glowSpotPower`, `worlds/standard/architecture.puck`).
 - **Cel shading is a style per material, not a whole-image filter, and the
   banding is a program.** The standard's `cel` shade program
   (`worlds/standard/shading.puck`) is the one implementation of the band; no

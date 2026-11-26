@@ -1,4 +1,5 @@
 using Puck.Commands;
+using Puck.Abstractions.Collections;
 
 namespace Puck.Overlays;
 
@@ -258,9 +259,10 @@ public static class BindingBarSeatComposer {
                     ((modifiers && (!declaredOnly || IsDeclaredModifier(
                         source: sources[index],
                         view: view
-                    ))) || Places(
-                        slotSet: slotSet,
-                        source: sources[index]
+                    ))) || StringLists.Holds(
+                        comparison: StringComparison.OrdinalIgnoreCase,
+                        items: slotSet,
+                        value: sources[index]
                     ))
                 );
             }
@@ -297,19 +299,6 @@ public static class BindingBarSeatComposer {
 
             if (modifier.Declared && (modifier.Sources.Count > 0) && string.Equals(
                 a: modifier.Sources[0],
-                b: source,
-                comparisonType: StringComparison.OrdinalIgnoreCase
-            )) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-    private static bool Places(IReadOnlyList<string> slotSet, string source) {
-        for (var index = 0; (index < slotSet.Count); index++) {
-            if (string.Equals(
-                a: slotSet[index],
                 b: source,
                 comparisonType: StringComparison.OrdinalIgnoreCase
             )) {

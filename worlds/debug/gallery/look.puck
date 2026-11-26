@@ -48,10 +48,11 @@ let lookToyPiers = ["#9FE3C6", "#C6B3EA", "#FFC9A8", "#FFE98F", "#9ED4F5", "#FFA
 // its west end, its uprights the pastel three steps on, and its crossbars the toybox's sunflower, so the panels step
 // along each edge with the piers. The members are glossy toy plastic, brushed as the structure is.
 function lookToyLattice(n) = { frame: lookToyPiers[(n % 6)], bar: lookToyPiers[((n + 3) % 6)], rail: lookLevelToybox.tileTone }
-// The toybox's arcade cabinets (toybox.puck), by game: the two cabinets that play one game across the nave wear one
-// colourway of glossy toy plastic, its body, its cheeks and marquee housing, its control shelf, the stick's ball and
-// the first button, the second button, and the marquee's glow. Tomato with sunflower, cobalt with candy pink, mint with
-// violet. Every cabinet's bezel is near-black and its marquee lettering a deep plum.
+// The toybox's arcade cabinets (toybox.puck), by colourway (layout.puck's toyboxPlan `look`; a cabinet and its twin
+// across the nave wear one): glossy toy plastic, its body, its cheeks and marquee housing, its control shelf and the
+// players' marks, the stick's ball and the first button, the second button, and the marquee's glow. Tomato with
+// sunflower, cobalt with candy pink, mint with violet. Every cabinet's bezel is near-black and its marquee lettering a
+// deep plum.
 let lookCabinets = [
   { body: "#E2453C", trim: "#F2B52C", shelf: "#F7F3E8", button: "#2F6FD6", buttonAlt: "#3EC24A", glow: "#FFD86A" }
   { body: "#2F6FD6", trim: "#FF9BB8", shelf: "#F7F3E8", button: "#F2B52C", buttonAlt: "#E2453C", glow: "#9EDCFF" }
@@ -60,8 +61,10 @@ let lookCabinets = [
 let lookCabinetBezel = "#15121B"
 let lookCabinetInk = "#2E1838"
 // How bright a marquee's panel glows, and the picture's peak luminance: an arcade monitor's, bright enough that the
-// games read as lit screens from across the nave.
-let lookCabinetGlow = 600
+// games read as lit screens from across the nave. Both are nits. An emissive shows as its colour times the figure, so
+// the pale glows here show at about three quarters of it, and a daylit level meters its lit walls to a few hundred nits:
+// a sign reads as lit only some stops above them, as a lit diffuser's few thousand nits does.
+let lookCabinetGlow = 2500nit
 let lookCabinetLuminance = 900nit
 // A cabinet's materials in the standard's slot order (architecture.puck's arcadeCabinet).
 function lookCabinetPalette(c) = [
@@ -74,6 +77,61 @@ function lookCabinetPalette(c) = [
   { color: c.glow, roughness: 0.4, emissive: lookCabinetGlow }
   { color: lookCabinetInk, roughness: 0.5, specular: 0.04 }
 ]
+// The toybox's television sets (toybox.puck), by colourway: a set and its twin across the nave wear one. Each names
+// the television's case and trim, the stand's painted boards, the console's shell, the pads' shells and buttons, and
+// the lounge before it: the rug's field and border and its two beanbags. Sunflower on a cobalt stand over a cherry rug,
+// candy pink on mint over a sky rug, sky blue on butter over a lilac rug. Every set's dark parts are the cabinets'
+// near-black and its lamps a warm red.
+let lookTelevisions = [
+  {
+    case: "#F2B52C", trim: "#E2453C", stand: "#2F6FD6", console: "#EDE6DA", pad: "#3B3542", button: "#E2453C"
+    rug: "#E2574C", rugBorder: "#FFF3D6", beanbag: "#8E5BE0", beanbagAlt: "#3DBE8B"
+  }
+  {
+    case: "#FF9BB8", trim: "#2F6FD6", stand: "#3DBE8B", console: "#EDE6DA", pad: "#3B3542", button: "#F2B52C"
+    rug: "#8FD8FF", rugBorder: "#2F6FD6", beanbag: "#FF7A2F", beanbagAlt: "#F2B52C"
+  }
+  {
+    case: "#8FD8FF", trim: "#FF7A2F", stand: "#FFE98F", console: "#EDE6DA", pad: "#3B3542", button: "#3EC24A"
+    rug: "#C6B3EA", rugBorder: "#FFF3D6", beanbag: "#E2453C", beanbagAlt: "#2F6FD6"
+  }
+]
+let lookTelevisionLamp = "#FF3A2A"
+// A lamp's glow, in nits: an indicator's.
+let lookTelevisionLampGlow = 400nit
+// A set's and its lounge's materials in the standard's slot orders (architecture.puck's televisionSet, then lounge).
+function lookTelevisionPalette(t) = [
+  { color: t.case, roughness: 0.3, specular: 0.04, coat: 0.5 }
+  { color: t.trim, roughness: 0.3, specular: 0.04, coat: 0.5 }
+  { color: lookCabinetBezel, roughness: 0.12, specular: 0.05, coat: 0.6 }
+  { color: t.stand, roughness: 0.45, specular: 0.04 }
+  { color: t.console, roughness: 0.4, specular: 0.04 }
+  { color: t.pad, roughness: 0.35, specular: 0.04 }
+  { color: t.button, roughness: 0.25, specular: 0.04, coat: 0.6 }
+  { color: lookTelevisionLamp, roughness: 0.4, emissive: lookTelevisionLampGlow }
+  { color: t.rug, roughness: 0.95, specular: 0.02 }
+  { color: t.rugBorder, roughness: 0.95, specular: 0.02 }
+  { color: t.beanbag, roughness: 0.7, specular: 0.03 }
+  { color: t.beanbagAlt, roughness: 0.7, specular: 0.03 }
+]
+// The central tree (tree.puck): an old broadleaf's bark, a warm grey-brown streaked along the grain, with a darker
+// under-tone in its furrows and moss settling where it faces up; its treads wear paler where feet have polished them.
+// The canopy's three greens run dark underneath to sunlit on top, leaning a breath toward the toybox's mint, and a few
+// tufts of blossom in the toybox's candy pink hang among the branches' leaves. `relief` is the bark's lumpy relief in
+// metres and `grain` its features a metre; `clump` and `clumpGrain` are the same for the canopy's leaf masses.
+let lookTree = {
+  bark: "#76604B"
+  barkUnder: "#4A3A2C"
+  tread: "#937A60"
+  treadUnder: "#6A5440"
+  moss: "#6E7D45"
+  leaves ["#2E5A3E", "#4F8A4A", "#8DBB5A"]
+  blossom: "#FFB3C8"
+  relief: 0.035
+  grain: 1.6
+  clump: 0.15
+  clumpGrain: 0.9
+}
 // A tile's joint's width, in metres (the tile's side is the plan's module, layout.puck's galleryTile), and how smooth
 // the glaze is.
 let lookTileJoint = 0.01
@@ -115,18 +173,18 @@ let lookNoon = 0.5
 let lookAfternoon = 0.62
 
 // The bookmarked viewpoints (`gallery.shot <name>`), each an eye and an aim in the building's frame and a field of view in
-// degrees. `hall` is the level-zero hall painting's viewpoint, the centre aisle 30 m from the end wall with the nave's
+// degrees. `hall` is the level-zero hall painting's viewpoint, the centre aisle 28 m from the end wall, just east of the central tree's roots, with the nave's
 // four displays either side ahead, and `hall-side` its second angle; the rest face what a kit sheet draws: a display,
 // the arcade, the end wall's wide bays, a balcony edge, the floor and the ceiling, the furniture, and the two concept
 // paintings' views of the entrance and the outside. `toybox` looks from level 2's north balcony down across the void
-// into level 1's south cabinets, as a player drawn in from another level sees them, and `toybox-across` from level 1's
-// south balcony edge across to its north cabinets.
+// into level 1's south stations, as a player drawn in from another level sees them, and `toybox-across` from level 1's
+// south balcony edge across to its north stations.
 // The station view every display shares (gallery.station): the eye and aim in the plinth placement's own axes
 // (+Y up, -Z toward a viewer before the console), framing the exhibit and the console's base with a little room.
 let lookStation = { eye [0, 2.305, -4.06], aim [0, 1.75, -1.8], fov: 55 }
 
 let lookShots = [
-  { name: "hall", eye [30, 1.6, 19], aim [60, 3.9, 19], fov: 70 }
+  { name: "hall", eye [34.5, 1.6, 19], aim [60, 3.9, 19], fov: 70 }
   { name: "hall-side", eye [32, 1.6, 10.2], aim [54, 4.6, 26], fov: 78 }
   { name: "plinth", eye [37.6, 1.7, 17.8], aim [36, 1.5, 13.5], fov: 60 }
   { name: "arcade", eye [42, 1.6, 22.6], aim [44, 3.3, 29.4], fov: 68 }
@@ -140,3 +198,49 @@ let lookShots = [
   { name: "toybox", eye [34.7, 10.65, 29.8], aim [34.7, 6.2, 3.6], fov: 70 }
   { name: "toybox-across", eye [34.7, 6.15, 7.2], aim [34.7, 6.2, 33.2], fov: 70 }
 ]
+
+// The flaw (flaw.puck): the one light that weaves through every floor, a long diffuse emitter like a fluorescent tube
+// that looks like neon, a saturated core glowing through a frosted sleeve. `core` and `sleeve` are the two radii in
+// metres, `frost` the sleeve's roughness, `glass` its tint and `depth` how deep that tint builds, `coreNits` the core's
+// luminance, and `intensity` the light each metre of the tube gives, in candela per metre (a fluorescent tube gives
+// about 200), which a level's switch writes into `hallLamps` for the stretch of the flaw that storey holds. `bend` is
+// the radius every corner of its route turns on, and `stretch` the longest stretch of one tint (and one light) along a
+// run, so the tint eases along the long runs too.
+let lookFlaw = {
+  core: 0.07
+  sleeve: 0.16
+  bend: 0.4
+  stretch: 5
+  frost: 0.42
+  glass: "#EAF4FF"
+  depth: 0.03
+  coreNits: 6500
+  intensity: 200
+}
+// The flaw's tint along its length, as red, green and blue in 0 .. 255: the keys stand evenly round the loop from its
+// start (the nave's west end, under the roof) and the tint eases from each to the next, slowly enough that no stretch
+// reads as a fixture's one colour: ice, violet, orchid, ember, mint, and back to ice where the loop closes.
+let lookFlawTint = [[120, 226, 255], [150, 128, 255], [236, 112, 236], [255, 170, 120], [118, 246, 196]]
+
+// The building's two lamps besides the flaw, each a glowing face whose light stands at it in its colour and gives what
+// the face shows (architecture.puck's glowSpotPower): `color` is the face's and the light's, `luminance` the face's in
+// nits. The lift car's luminous ceiling panel, a cool white over the cab; the south-west stair's pendant, a warm frosted
+// diffuser under a teal drum, hung from the soffit of level 2's half landing, and `off` its diffuser while level 1's
+// switch is off.
+let lookCarLamp = { color: "#F4F8FF", luminance: 120 }
+let lookStairPendant = { drum: lookTeal, cord: "#23262B", color: "#FFD9A8", luminance: 3000, off: "#C9BFB2" }
+
+// The collar fitted where the flaw passes through a slab: a short brass sleeve that fills the slab's opening, with a
+// bevelled ring on the floor and one on the ceiling. `bore` is the open hole's radius (wider than the flaw's sleeve, so
+// a dark ring of gap shows round the glow), `rim` the rings' outer radius, `lip` how far each stands proud of its face.
+// The slab's square opening (`lookFlawCollarCut`, its half-width) sits just outside the bore, and the collar's sleeve
+// reaches past the opening's corners, so the collar alone is seen.
+let lookFlawCollar = {
+  bore: 0.24
+  rim: 0.44
+  lip: 0.025
+  bevel: 0.008
+  color: lookBrass
+  roughness: 0.32
+}
+let lookFlawCollarCut = (lookFlawCollar.bore + 0.01)

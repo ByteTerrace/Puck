@@ -6,9 +6,10 @@ public sealed partial class WorldScopedReplayRuntime {
 
     // Arena dataflow does not describe world effects. Collect their conservative body targets too,
     // through every nested arm and decision option. -1 means an unbounded live target: refuse rather
-    // than rewind a shared latch whose other bindings belong to the rest of the world. A write keyed by
-    // $each in a sweep over the players is PlayerBody, which reaches the scope only through a body of the
-    // scope a player can hold (ScopeHoldsPlayerBody).
+    // than rewind a shared latch whose other bindings belong to the rest of the world. A write
+    // addressed to $each in a sweep over the players, by whichever spelling the effect carries (a
+    // keyed cell reference or a bound body reference), is PlayerBody, which reaches the scope only
+    // through a body of the scope a player can hold (ScopeHoldsPlayerBody).
     private void CollectBodyWrites(CompiledRule rule, HashSet<int> into) {
         var players = (rule.Iteration is WorldPlayerIteration);
 
@@ -26,13 +27,13 @@ public sealed partial class WorldScopedReplayRuntime {
         foreach (var effect in effects) {
             switch (effect) {
                 case WorldPoseEffect pose:
-                    into.Add(item: ((pose.KeyFrom is null) ? pose.Index : -1));
+                    into.Add(item: BodyTarget(literal: pose.Index, keyFrom: pose.KeyFrom, players: players));
                     break;
                 case WorldPoseCellEffect pose:
-                    CollectBodyWrite(body: pose.Body, into: into);
+                    CollectBodyWrite(body: pose.Body, into: into, players: players);
                     break;
                 case WorldRigidImpulseEffect impulse:
-                    CollectBodyWrite(body: impulse.Target, into: into);
+                    CollectBodyWrite(body: impulse.Target, into: into, players: players);
                     break;
                 case WorldBodyMotionEffect motion:
                     CollectBodyWrite(key: motion.Key, keyFrom: motion.KeyFrom, into: into, players: players);
@@ -48,12 +49,19 @@ public sealed partial class WorldScopedReplayRuntime {
             foreach (var arm in effect.Arms) { CollectBodyWrites(effects: arm, into: into, players: players); }
         }
     }
+    // The one reading of a body target: a literal index when nothing live addresses it, PlayerBody for $each in a
+    // sweep over the players, and -1 for any other live indirection.
+    private static int BodyTarget(int literal, CompiledCellRef? keyFrom, bool players) => ((keyFrom is null)
+        ? literal
+        : ((players && (keyFrom is { IsEach: true })) ? PlayerBody : -1));
     private void CollectBodyWrite(CellKey key, CompiledCellRef? keyFrom, HashSet<int> into, bool players) {
-        into.Add(item: ((keyFrom is null) && m_server.Arena.Keys.TryCandidateIndex(key: key, index: out var index))
-            ? index
-            : ((players && (keyFrom is { IsEach: true })) ? PlayerBody : -1));
+        into.Add(item: BodyTarget(
+            literal: (((keyFrom is null) && m_server.Arena.Keys.TryCandidateIndex(key: key, index: out var index)) ? index : -1),
+            keyFrom: keyFrom,
+            players: players
+        ));
     }
-    private void CollectBodyWrite(WorldBodyRef body, HashSet<int> into) {
+    private void CollectBodyWrite(WorldBodyRef body, HashSet<int> into, bool players) {
         if (body.Kind == CompiledBodyRefKind.Literal) {
             into.Add(item: body.Index);
         } else if (body.Kind == CompiledBodyRefKind.Placement) {
@@ -62,6 +70,8 @@ public sealed partial class WorldScopedReplayRuntime {
             } else {
                 into.Add(item: m_server.Population.BodyForPlacementOrdinal(ordinal: body.Index));
             }
+        } else if (players && (body.Kind == CompiledBodyRefKind.Binding) && (((BoundKey)body.Index) == BoundKey.Each)) {
+            into.Add(item: PlayerBody);
         } else {
             into.Add(item: -1);
         }

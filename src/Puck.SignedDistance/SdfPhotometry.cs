@@ -151,6 +151,23 @@ public static class SdfPhotometry {
     /// positive.</returns>
     public static float RangeOf(float weight, float exposure) =>
         (((weight > 0f) && (exposure > 0f)) ? MathF.Sqrt(x: ((weight * exposure) / RangeThreshold)) : 0f);
+    /// <summary>Returns a line light's range, measured from the nearest point of its segment: the range of a point light
+    /// carrying the whole segment's intensity (<paramref name="weight"/> times <paramref name="length"/>), since every
+    /// element of the segment lies at least as far as the nearest point, so the segment gives a point at most that
+    /// light (<see cref="SdfLightKind.Line"/>).</summary>
+    /// <param name="weight">The line's weight, its intensity per metre over π (<see cref="PositionalWeight"/>).</param>
+    /// <param name="length">The segment's length, in world units.</param>
+    /// <param name="exposure">The largest exposure multiplier the world adapts to.</param>
+    /// <returns>The range, in world units; zero when the light gives nothing.</returns>
+    public static float LineRangeOf(float weight, float length, float exposure) =>
+        RangeOf(exposure: exposure, weight: (weight * length));
+    /// <summary>Returns the luminous intensity per metre of a line light that emits a luminous power alike in every
+    /// direction from every element of its length (<see cref="SdfLightKind.Line"/>).</summary>
+    /// <param name="lumens">The luminous power of the whole segment, in lumens.</param>
+    /// <param name="length">The segment's length, in world units.</param>
+    /// <returns>The luminous intensity per metre, in candela per metre; zero for a segment of no length.</returns>
+    public static float LineIntensity(float lumens, float length) =>
+        ((length > 0f) ? (lumens / ((4f * MathF.PI) * length)) : 0f);
     /// <summary>Returns the windowed inverse-square falloff of a point or spot light at a distance:
     /// <c>saturate(1 − (d / r)^4)² / max(d, MinimumDistance)²</c>, smooth and exactly zero at the range.</summary>
     /// <param name="distance">The distance from the light, in world units.</param>
