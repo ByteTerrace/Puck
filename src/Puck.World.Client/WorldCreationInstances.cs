@@ -542,7 +542,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
     // WorldPlacementStamper.IsStaticStamp for a non-inhabited row — an inhabited row roots through the body-stamp census
     // instead.
     private static bool PoolRooted(WorldPlacement row, WorldPrototype creation) =>
-        ((row.Inhabit is null) && (WorldPlacementStamper.IsAnimated(creation: creation) || (row.Attach is not null) || (row.Turn is not null)));
+        ((row.Inhabit is null) && (WorldPlacementStamper.IsAnimated(creation: creation) || row.MovesRoot));
     // Whether the pool registers a row: one it roots that the rigid catalog does not copy. A responding row riding a body
     // is a rigid copy there (WorldRigidAssets.ReconcileStatic, which a reconcile runs first), so its responses swap a
     // template rather than recreating a registration and composing the program again.

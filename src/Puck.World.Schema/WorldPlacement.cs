@@ -766,6 +766,11 @@ public sealed record WorldPlacement(
     /// entry <see cref="Holding"/> marks, else the authored <see cref="PrototypeId"/>.</summary>
     [JsonIgnore]
     public string ShownPrototypeId => WorldPlacementResponse.Shown(placement: this);
+    /// <summary>Gets whether the row's root moves off its compiled frame from one tick or frame to the next: it rides a
+    /// body (<see cref="Attach"/>) or turns (<see cref="Turn"/>). Every reader of such a row poses it live: the drawn
+    /// copy every frame and a solid row's colliders every tick.</summary>
+    [JsonIgnore]
+    public bool MovesRoot => ((Attach is not null) || (Turn is not null));
     /// <summary>Gets whether the row has one static frame another row, a spawn point or a surface may compose over: no
     /// expanding distribution (a deal template's region lays out its children and stays one frame), no mirror, and no
     /// facet that moves the row off its compiled frame (<see cref="Attach"/>, <see cref="Inhabit"/>,
@@ -872,7 +877,7 @@ public static partial class WorldPlacementStamp {
         ArgumentNullException.ThrowIfNull(argument: placement);
         ArgumentNullException.ThrowIfNull(argument: creation);
 
-        return ((creation.Document.SizeBy is not null) || (placement.Attach is not null) || (placement.Turn is not null));
+        return ((creation.Document.SizeBy is not null) || placement.MovesRoot);
     }
     /// <summary>Returns the placement's shared reflection plane.</summary>
     public static CreationStampPlane? MirrorFor(WorldPlacement placement) => ((placement.Mirror is { } mirror)

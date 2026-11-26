@@ -5033,6 +5033,7 @@ public static partial class WorldModelShape {
                 M("pointer", typeof(global::Puck.World.WorldPointerSurface), typeof(global::Puck.World.WorldPlacement), "Pointer", Read | Write, static value => ((global::Puck.World.WorldPlacement)value).Pointer),
                 M("turn", typeof(global::Puck.World.WorldPlacementTurn), typeof(global::Puck.World.WorldPlacement), "Turn", Read | Write, static value => ((global::Puck.World.WorldPlacement)value).Turn),
                 M("shownPrototypeId", typeof(global::System.String), typeof(global::Puck.World.WorldPlacement), "ShownPrototypeId", None),
+                M("movesRoot", typeof(global::System.Boolean), typeof(global::Puck.World.WorldPlacement), "MovesRoot", None),
                 M("hasStaticFrame", typeof(global::System.Boolean), typeof(global::Puck.World.WorldPlacement), "HasStaticFrame", None),
             ],
             []),

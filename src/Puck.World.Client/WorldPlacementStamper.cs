@@ -1081,7 +1081,7 @@ public static partial class WorldPlacementStamper {
     /// <param name="placement">The placement row.</param>
     /// <param name="creation">The placement's resolved creation.</param>
     public static bool IsStaticStamp(WorldPlacement placement, WorldPrototype creation) =>
-        (!IsAnimated(creation: creation) && (placement.Inhabit is null) && (placement.Attach is null) && (placement.Turn is null) && (placement.Deal is null));
+        (!IsAnimated(creation: creation) && (placement.Inhabit is null) && !placement.MovesRoot && (placement.Deal is null));
     /// <summary>The total static stamp instances of a placement set (animated rows ride the constant replay pool and
     /// charge nothing here) — the apply-time measure's placement charge unit.</summary>
     /// <param name="definition">The world supplying canonical placement and surface dependencies.</param>

@@ -133,7 +133,7 @@ public sealed partial class WorldRigidAssets {
             var stamp = WorldPlacementStamp.Resolve(rows, placement, worldSeed: seed);
             if (stamp.Count == 0) { row.Stamp = stamp; row.Copies = []; continue; }
             // A riding or turning row is one copy rooted on its moving root; a pattern of occurrences stays with the stamp pool.
-            if (MovesRoot(placement: placement) && (stamp.Count != 1)) { next.Remove(key: key); m_staticUnsupported["riding-pattern"] = (m_staticUnsupported.GetValueOrDefault("riding-pattern") + 1); continue; }
+            if (placement.MovesRoot && (stamp.Count != 1)) { next.Remove(key: key); m_staticUnsupported["riding-pattern"] = (m_staticUnsupported.GetValueOrDefault("riding-pattern") + 1); continue; }
             // A responding row holds a template for every creation it can show, in its authored order, so a sweep that
             // moves its holding swaps the copies' template and leaves the template set, and the program, standing.
             if (placement.Respond is { Count: > 0 } responses) {
@@ -216,13 +216,10 @@ public sealed partial class WorldRigidAssets {
         (WorldPlacementStamper.IsStaticStamp(placement, creation) || (m_staticRiding && Rides(placement: placement, creation: creation, screens: (m_staticDefinition?.Screens ?? []))));
     // Whether the latest reconcile copies riding rows: only a catalog whose owner packs it (Pack) roots them on a body.
     private bool m_staticRiding;
-    // Whether a row's root moves off its static frame every frame: it rides a body, or it turns. Its copy is packed each
-    // frame (PackRiding) rather than placed once.
-    private static bool MovesRoot(WorldPlacement placement) => ((placement.Attach is not null) || (placement.Turn is not null));
     // A row a screen's carry lists stays with the stamp pool: its box draws that screen's material, which a template the
     // copies of other rows share cannot (WorldCreationInstances.CarriedScreenMaterials).
     private static bool Rides(WorldPlacement placement, WorldPrototype creation, IReadOnlyList<WorldScreen> screens) =>
-        (MovesRoot(placement: placement) && (placement.Respond is { Count: > 0 }) && (placement.Inhabit is null) && (placement.Deal is null) && !WorldPlacementStamper.IsAnimated(creation: creation) &&
+        (placement.MovesRoot && (placement.Respond is { Count: > 0 }) && (placement.Inhabit is null) && (placement.Deal is null) && !WorldPlacementStamper.IsAnimated(creation: creation) &&
         !WorldScreenCarry.Lists(screens: screens, placementId: placement.Id));
     // Admits the template of one creation a responding row can show, when that creation would be a rigid copy there.
     private void AdmitVariant(WorldDefinition definition, WorldPlacement placement, string prototypeId, Dictionary<string, StaticAsset> variants) {
@@ -324,7 +321,7 @@ public sealed partial class WorldRigidAssets {
             ((creation.Mesh is not null) ? "authored-mesh" :
             (document.HasGlass ? "glass" :
             ((document.Shapes is not { Count: > 0 }) ? "no-shapes" :
-            ((MovesRoot(placement: placement) && (document.Volumes is { Count: > 0 })) ? "riding-volumes" : null))))))));
+            ((placement.MovesRoot && (document.Volumes is { Count: > 0 })) ? "riding-volumes" : null))))))));
     }
     private struct StaticCopyVisitor(StaticCopy[] copies, StaticAsset asset, WorldPlacement placement, CompiledPlacementStamp stamp, string? scope, byte audience) : ICreationStampVisitor {
         private int m_ordinal;
@@ -407,7 +404,7 @@ public sealed partial class WorldRigidAssets {
             var scale = (occurrence.Placement.Scale / asset.BakeScale);
 
             m_carriedAudiences[occurrence.Audience] = true;
-            if (MovesRoot(placement: occurrence.Placement)) {
+            if (occurrence.Placement.MovesRoot) {
                 // A riding copy keeps the pose its body last gave it, a turning one starts from its static frame; the next
                 // pack reads the body or the turn again (PackRiding).
                 var held = ((occurrence.Placement.Attach is null) ? new DynamicTransform(occurrence.Position, occurrence.Orientation) : previous.Transform);
