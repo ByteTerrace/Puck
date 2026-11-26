@@ -12,7 +12,11 @@ The Linux concrete backends behind `Puck.Platform`'s contracts.
   and pointer is touch: the first `wl_seat`'s `wl_touch` on Wayland, and XInput
   2.2 touch events on X11 (`XcbNativeWindow.Touch`, through `libxcb-xinput`,
   which a system without it simply lacks), both into
-  `WindowInputQueue.EnqueueContact`. Neither has met a touchscreen yet.
+  `WindowInputQueue.EnqueueContact`. Neither has met a touchscreen yet. Live
+  placement (`*.Placement`): the X11 window sizes and moves through
+  `ConfigureWindow` and centres on its root screen; the Wayland window takes a
+  size and refuses `move` and `center`, since xdg-shell gives a client no
+  position to set. Neither has a fullscreen mode.
 - **Precise waiting**—`LinuxPrecisionWaiter`, a `clock_nanosleep` on
   `CLOCK_MONOTONIC` behind `Puck.Abstractions.Pacing.IPrecisionWaiter`
   (`AddLinuxPrecisionWaiter`), which the host loop's pacer sleeps on.

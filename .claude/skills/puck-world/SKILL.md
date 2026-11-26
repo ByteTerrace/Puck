@@ -235,6 +235,13 @@ accept capabilities absent from an older connected adapter. A windowed start's
 touching the document's `host` block, and `frameBar: "auto"` (or a device profile's
 name) opens it at that device's frame-bar size instead (`--frame-bar`, from
 `render.devices`' `frameBar`: 2560x1440 on the RTX 4070, 1920x1080 on the RTX 2060).
+A running window changes size and place without a restart, its session, seats and
+camera untouched: `puck_exec` sends `world.window size <w> <h>`, `world.window
+frame-bar [auto|<profile>]`, `world.window center`, `world.window move <x> <y>` or
+`world.window fullscreen [on|off]`, and a bare `world.window` reads the client size,
+its desktop position, the monitor and its work area
+([host pacing](../../../docs/reference/hosting.md#host-pacing)). A resize there is a
+mutation of what the owner sees, as `view.override` is.
 Where advertised,
 `captureTool: "pix"` forwards `--capture-tool pix` before device creation (windowed
 Direct3D 12); `"renderdoc"` selects RenderDoc. Both enable existing GPU object names.

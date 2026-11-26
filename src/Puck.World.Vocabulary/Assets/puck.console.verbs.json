@@ -387,6 +387,7 @@
     { "name": "world.volume", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.wait", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
     { "name": "world.watch", "bindable": false, "audience": "local", "valueKind": "digital", "wireArgs": true },
-    { "name": "world.why", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true }
+    { "name": "world.why", "bindable": false, "audience": "anyone", "valueKind": "digital", "wireArgs": true },
+    { "name": "world.window", "bindable": false, "audience": "local", "valueKind": "digital", "wireArgs": true }
   ]
 }

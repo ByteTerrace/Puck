@@ -6,7 +6,9 @@ plus the pieces that need no OS-specific code at all.
 ## What lives here
 
 - **Windowing contracts**—`INativeWindow`, `INativeWindowFactory`,
-  `INativeWindowBackend` (the seam `Puck.Platform.Windows`/`.Linux` register
+  `INativeWindowPlacement` (a running window's size, position, monitor and
+  fullscreen mode, which `world.window` drives through `Puck.Launcher`'s
+  `HostWindowPlacement`), `INativeWindowBackend` (the seam `Puck.Platform.Windows`/`.Linux` register
   their concrete window backends against), `IClipboardService`,
   `NativeDisplayEnvironment`/`NativeDisplayKindSelector` (pure environment-variable
   detection), `ConfiguredNativeWindow` (the headless stand-in),

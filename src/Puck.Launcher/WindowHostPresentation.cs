@@ -33,6 +33,7 @@ public sealed class WindowHostPresentation {
     private readonly TimeProvider m_time;
     private readonly HostFrameTimeline m_timeline;
     private readonly INativeWindowFactory m_windowFactory;
+    private readonly HostWindowPlacement m_windowPlacement;
 
     public WindowHostPresentation(
         IHostApplicationLifetime applicationLifetime,
@@ -50,6 +51,7 @@ public sealed class WindowHostPresentation {
         IEnumerable<FrameCaptureController> captureControllers,
         TerminalControl terminal,
         INativeWindowFactory windowFactory,
+        HostWindowPlacement windowPlacement,
         IEnumerable<GpuCreationFaults> faults,
         IEnumerable<GpuFrameCapture> gpuCaptures,
         TimeProvider time,
@@ -73,6 +75,7 @@ public sealed class WindowHostPresentation {
         ArgumentNullException.ThrowIfNull(rootHostContext);
         ArgumentNullException.ThrowIfNull(terminal);
         ArgumentNullException.ThrowIfNull(windowFactory);
+        ArgumentNullException.ThrowIfNull(windowPlacement);
 
         m_applicationLifetime = applicationLifetime;
         m_bufferedOutput = bufferedOutput;
@@ -114,9 +117,7 @@ public sealed class WindowHostPresentation {
         );
         m_terminal = terminal;
         m_windowFactory = windowFactory;
-
-
-
+        m_windowPlacement = windowPlacement;
     }
 
     // GENLOCK election watch: when plural rhythm sources are registered with no election to break the tie, nothing
@@ -227,6 +228,9 @@ public sealed class WindowHostPresentation {
                 var renderHeight = window.Height;
 
                 window.Show();
+                // Console lines drain on this thread, so a placement verb reaches the window through this door and its
+                // resize arrives in window.Width/Height below exactly as a drag of the window's edge does.
+                m_windowPlacement.Attach(window: window);
 
                 var frequency = m_time.TimestampFrequency;
                 // Display-aware presentation pacing. Active signal timing and explicit VRR capabilities are independent
@@ -726,6 +730,7 @@ public sealed class WindowHostPresentation {
 
                 throw;
             } finally {
+                m_windowPlacement.Detach();
                 LauncherHostRun.RunTeardown(
                     fault,
                     m_logger,
