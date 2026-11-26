@@ -16,6 +16,7 @@ documentId: "size-field-tests"
 
 import "../standard/bounds"
 import "../standard/size-field"
+import "../standard/size-hold"
 import "../standard/contexts/terminal"
 import "size"
 import "set-controls"
