@@ -648,15 +648,19 @@ surface probe and the chase arm's clearance sweeps answer through
 `EffectorProbe` array and in `WorldCameraClearance`'s one slot per question,
 never in a shared or thread-static ring. The query states its reuse bound
 (`IWorldFieldQuery.Covers`) and a reuse that cannot prove it marches. A surface
-probe (`WorldSurfaceQuery`) is reused only for bit-identical inputs, since a
-ray's hit is not continuous in its origin. A clearance sweep of eye radius `r`
+probe (`WorldSurfaceQuery`) is reused as held only for bit-identical inputs,
+since a ray's hit is not continuous in its origin; another ray is carried
+(`IWorldFieldQuery.TryProject`) onto the held hit's tangent plane while that
+point stays within half the reach of the hit and two point reads prove
+the surface there and a clear start, so a walking foot marches once per stretch
+of ground. A clearance sweep of eye radius `r`
 along a boom of length `L` is cast at `r + m` (`m` is `ReuseMargin` times the
 body's scale) and reused while `|Δtarget| + L·|Δdirection|`, plus a few Q48.16
 steps of rounding, stays within `m`; the reused room then lies between the
 rooms the current question finds at `r` and at `r + 2m`, so the eye never comes
 nearer geometry than `r`. A target inside geometry (the obstructed overlap
 test) keeps exact inputs. `world.counters world.field-queries` reads requests,
-skipped, reused and marched per family; a headless World poses no creation and
+skipped, reused, projected and marched per family; a headless World poses no creation and
 places no camera, so it counts none. The field itself is a regional evaluator
 (`SdfFieldEvaluator.IndexesRegions`): a march's samples walk the chains near
 them, not the whole static world, to the same answers. `world.counters
