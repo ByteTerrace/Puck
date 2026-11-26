@@ -115,7 +115,7 @@ public sealed partial class WorldEnvironmentResolve {
     private void ApplySunDiscLight(SdfLights lights, SdfSky sky) {
         if (m_sky?.Layers is not { } layers) { return; }
         for (var index = 0; ((index < layers.Count) && (index < m_skyLayerIndex.Length)); index++) {
-            if ((layers[index] is WorldRenderSkyLayer.SunDisc { Light: null }) && (m_skyLayerIndex[index] >= 0)) {
+            if ((layers[index] is WorldRenderSkyLayer.SunDisc { Light: null, Follows: null }) && (m_skyLayerIndex[index] >= 0)) {
                 sky.Parameters<SdfSkyDisc>(index: m_skyLayerIndex[index]).Light = ((lights.Key >= 0) ? lights.Key : FirstDirectional(lights: lights));
             }
         }

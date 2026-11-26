@@ -113,8 +113,8 @@ public sealed unsafe class VulkanMemoryArena {
         }
     }
     /// <summary>Holds what a sparse buffer let go of until the device's timeline passes a value: the pages a binding
-    /// took out of the buffer, or the buffer itself. Called on the device's submission thread, with values in the order
-    /// the timeline gave them.</summary>
+    /// took out of the buffer, or the buffer itself. Called by the device's sparse issue
+    /// (<see cref="VulkanLogicalDevice.QueueSparse"/>), with values in the order the timeline gave them.</summary>
     /// <param name="after">The timeline value the release waits for, or <see langword="null"/> when the timeline could
     /// give none (a binding of unknown outcome, a lost device): the release then runs at <see cref="FreeAll"/>.</param>
     /// <param name="release">What releases it.</param>
@@ -126,8 +126,15 @@ public sealed unsafe class VulkanMemoryArena {
             if (after is { } value) { m_sparseRetiring.Retire(after: value, item: release); } else { m_sparseStranded.Add(item: release); }
         }
     }
-    /// <summary>Releases what <see cref="RetireSparse"/> holds behind values the device's timeline has passed. Called on
-    /// the device's submission thread.</summary>
+    /// <summary>Gets whether <see cref="RetireSparse"/> holds anything behind a timeline value, which
+    /// <see cref="ReleaseSparse"/> then releases once the timeline passes it.</summary>
+    public bool HoldsSparseRetirements {
+        get {
+            lock (m_gate) { return (m_sparseRetiring.Count > 0); }
+        }
+    }
+    /// <summary>Releases what <see cref="RetireSparse"/> holds behind values the device's timeline has passed. Called by
+    /// the device's sparse issue, which passes it the timeline's completed value.</summary>
     /// <param name="completed">The timeline's completed value.</param>
     public void ReleaseSparse(ulong completed) {
         List<Action>? ready = null;

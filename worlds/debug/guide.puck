@@ -176,6 +176,10 @@ let guideCopy = {
     title: "GREY CARD"
     note: "Matte patches of 3 to 90% reflectance over red, green and blue: the 18% patch reads as middle grey."
   }
+  "shape-paint-tiles" {
+    title: "PAINT TILES"
+    note: "One box paint repeated on a 30 cm lattice: terracotta tiles with 1 cm joints, each tile's tone varied."
+  }
   "shape-glass" { title: "GLASS", note: "Tinted, thin, thick and frosted glass." }
 }
 let guideRadius = 1.29

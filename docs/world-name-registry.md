@@ -32,6 +32,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.lights[][directional].temperature` | State | Binding | Binding | `WorldRenderLight.Directional.Temperature` |
 | `render.lighting.lights[][directional].temperature.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][directional].temperature{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.lights[][directional].source.position` | State | Binding | Binding | `WorldRenderLightSource.Position` |
+| `render.lighting.lights[][directional].source.orbits[].clock` | Clock | Names | Read | `WorldRenderLightOrbit.Clock` |
 | `render.lighting.lights[][directional].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
 | `render.lighting.lights[][directional].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.lights[][directional].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -129,6 +131,8 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.keys[].lights{*}[directional].temperature` | State | Binding | Binding | `WorldRenderLight.Directional.Temperature` |
 | `render.lighting.keys[].lights{*}[directional].temperature.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[directional].temperature{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
+| `render.lighting.keys[].lights{*}[directional].source.position` | State | Binding | Binding | `WorldRenderLightSource.Position` |
+| `render.lighting.keys[].lights{*}[directional].source.orbits[].clock` | Clock | Names | Read | `WorldRenderLightOrbit.Clock` |
 | `render.lighting.keys[].lights{*}[directional].bounce` | State | Binding | Binding | `WorldRenderLight.Bounce` |
 | `render.lighting.keys[].lights{*}[directional].bounce.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
 | `render.lighting.keys[].lights{*}[directional].bounce{keys}.value….clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -2344,6 +2348,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `gravity.areas[].vector.z` | State | Names | Read | `WorldGravityAreaVector.Z` |
 | `gravity.orbits[].around` | Placement | Names | Read | `WorldGravityOrbit.Around` |
 | `gravity.orbits[].riding` | State | Names | Read | `WorldGravityOrbit.Riding` |
+| `gravity.orbits[].phaseBy` | State | Names | Read | `WorldGravityOrbit.PhaseBy` |
 | `gravity.tides[].placementId` | Placement | Names | Read | `WorldGravityTide.PlacementId` |
 | `gravity.tides[].scale` | State | Names | Read | `WorldGravityTide.Scale` |
 | `gravity.tideOrigin` | Placement | Names | Read | `WorldGravity.TideOrigin` |
@@ -2628,6 +2633,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].field.material.paints[].curve.b` | State | Binding | Binding | `ShapeCurveDocument.B` |
 | `state.world[].field.material.paints[].curve.c` | State | Binding | Binding | `ShapeCurveDocument.C` |
 | `state.world[].field.material.paints[].text.template` | State | Template | Binding | `PalettePaintTextDocument.Template` |
+| `state.world[].field.material.paints[].repeat.cell` | State | Binding | Binding | `PalettePaintRepeatDocument.Cell` |
 | `state.world[].field.paint[][draw].source` | Generator | Names | Read | `WorldLatticeFill.Draw.Source` |
 | `state.world[].witness` | State | Names | Read | `WorldStateRow.Witness` |
 | `state.world[].draw.source` | Generator | Names | Read | `Draw.Source` |
@@ -4641,6 +4647,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.lighting.keys[].lights{*}[occluder].name` | `WorldRenderLight.Occluder.Name` | a light name a section key addresses |
 | `render.sky.layers[][gradient].name` | `WorldRenderSkyLayer.Gradient.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][sunDisc].name` | `WorldRenderSkyLayer.SunDisc.Name` | a sky layer name a section key addresses |
+| `render.sky.layers[][sunDisc].follows` | `WorldRenderSkyLayer.SunDisc.Follows` | a light name a section key addresses |
 | `render.sky.layers[][stars].name` | `WorldRenderSkyLayer.Stars.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][clouds].name` | `WorldRenderSkyLayer.Clouds.Name` | a sky layer name a section key addresses |
 | `render.sky.layers[][aurora].name` | `WorldRenderSkyLayer.Aurora.Name` | a sky layer name a section key addresses |
@@ -4653,6 +4660,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `render.sky.layers[][far].name` | `WorldRenderSkyLayer.Far.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[gradient].name` | `WorldRenderSkyLayer.Gradient.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[sunDisc].name` | `WorldRenderSkyLayer.SunDisc.Name` | a sky layer name a section key addresses |
+| `render.sky.keys[].layers{*}[sunDisc].follows` | `WorldRenderSkyLayer.SunDisc.Follows` | a light name a section key addresses |
 | `render.sky.keys[].layers{*}[stars].name` | `WorldRenderSkyLayer.Stars.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[clouds].name` | `WorldRenderSkyLayer.Clouds.Name` | a sky layer name a section key addresses |
 | `render.sky.keys[].layers{*}[aurora].name` | `WorldRenderSkyLayer.Aurora.Name` | a sky layer name a section key addresses |
@@ -5929,6 +5937,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].field.material.paints[].parent` | `PalettePaintDocument.Parent` | a shape of the creation the paint's palette slot belongs to, local to that creation |
 | `state.world[].field.material.paints[].text.font` | `PalettePaintTextDocument.Font` | a font name |
 | `state.world[].field.material.paints[].text.align` | `PalettePaintTextDocument.Align` | a text alignment |
+| `state.world[].field.material.paints[].repeat.tone` | `PalettePaintRepeatDocument.Tone` | a color literal |
 | `state.world[].field.paint[].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].field.paint[][rect].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].field.paint[][noise].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |

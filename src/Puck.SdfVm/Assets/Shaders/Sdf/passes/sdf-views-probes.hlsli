@@ -98,9 +98,11 @@ static const uint SdfViewsProbeExtrasWord = SDF_VIEWS_PROBE_SLOT_WORDS;
 #endif
 
 // Whether a pixel shades with the irradiance volume: a hit of an ordinary material in a view that shades finally, or any
-// hit under the indirect debug view, which shows the volume's light on every surface.
+// hit under the indirect debug view, which shows the volume's light on every surface, or the shadow debug view, which
+// shows the key light's visibility where the probes answer it (sdfDebugKeyShadow).
 bool sdfViewsProbesWanted(int viewMode, int material) {
-    return (((material < SDF_SCREEN_MATERIAL) && worldFinalShadingMode(viewMode)) || (viewMode == SDF_DEBUG_VIEW_INDIRECT));
+    return (((material < SDF_SCREEN_MATERIAL) && worldFinalShadingMode(viewMode)) || (viewMode == SDF_DEBUG_VIEW_INDIRECT)
+        || (viewMode == SDF_DEBUG_VIEW_SHADOW));
 }
 
 // A cell's record: its place among every view's cells, raster order within a view.

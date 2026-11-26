@@ -614,6 +614,7 @@ internal sealed class FakePipelineGpu : IGpuDeviceContext,
 
     public long HeapReleaseRevision => (DescriptorHeap?.ReleaseRevision ?? 0L);
     public ulong MaxConstantBufferBytes => GpuDeviceCapabilities.DirectXConstantBufferBytes;
+    public ulong MaxStorageBufferBytes => uint.MaxValue;
 
     public nint CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name) {
         GpuDescriptorAdmission? admission = null;

@@ -554,9 +554,10 @@ measured.**
     unverified; then one built CLI
     ([the authoring loop](iteration/authoring-loop.md#build-order)'s step 9),
     which ends the stale global tool.
-13. [high] [Lighting and GI](#lighting-and-gi): the gallery's exhibits render
-    near-black in daylight on both backends. The gallery is the engine's
-    self-test, so every other look reading waits on this diagnosis.
+13. [high] [Lighting and GI](#lighting-and-gi): the probes read wrong surface
+    materials in some boots, which tints the closed gallery hall orange and
+    olive and darkens its bounce. The gallery is the engine's self-test, so
+    every other look reading waits on this diagnosis.
 
 **Then, each chosen for what it stresses.**
 
@@ -924,15 +925,35 @@ camera latch, and Vulkan's capture copy and record fork.
      anyway, so taking them before the restore point opens saves nothing
      else; the durable input's own writes of the submitted image need the
      same order first.
-   - **The host thread still composes every instance's wave from scratch.**
-     Before each step the thread that also runs the frame scans every body
-     slot of every instance against every seam face
-     (`WorldAdjacencyOwnership.Sweep`, which makes its answer's array on
-     every call), builds each mirrored session's body image whole
-     (`WorldSessionMirror.CaptureBodyImage`) and makes the observation
-     tables and the seam projections again
-     (`WorldPresentationCopy.Observations`,
-     `WorldAdjacencyFields.BuildProjections`). Built: the seam scan's
+   - **The host thread replays every delivery into every session mirror
+     whole.** The thread that also runs the frame spends about half of its
+     step taking the boot authority's deliveries into the mirrors that
+     observe it (`WorldOutputHub.Collect`): each state delivery makes a
+     mirror reload every row and bind the whole document again
+     (`WorldDocumentStateView.Adopt`) and compare every placement
+     (`WorldPlacementResponse.ComparePlacements`), and each snapshot fills
+     the mirror's published image with every body
+     (`WorldSessionMirror.ApplySnapshot`), which its readers then copy whole
+     (`WorldSessionMirror.CaptureBodyImage`). The debug world hands a
+     replica its whole document on every tick, so none of it is ever
+     skipped. The door is `WorldSessionSink.DeliverState`: a replica is owed
+     the document again when a delivery is not of values alone or its frame
+     moved (`WorldDeliveryCursor.FrameMoved`), and the frame is every
+     section but the state rows, digested with the rows its placements read
+     (`WorldStateDisclosed.PlacementReads`, kept only for a recipient some
+     row is withheld from). So a row a placement reads that a rule writes
+     every tick moves the frame every tick; which row is not yet named (the
+     card tables' dealt and zone rows are the candidates), and pausing the
+     rule that writes it while reading `WorldOutputHub.Collect`'s samples
+     names it. The structure is a replica that takes a moved frame as the
+     placement rows that moved, as a presentation observer already takes an
+     appearance (`IClientSink.DeliverPresentation`), and a mirror that
+     takes a snapshot by the bodies it names. A fifth of the step is the portal scan, every portal face
+     against every body slot (`WorldInstanceHost`'s `ScanInstancePortals`);
+     the seam scan beside it (`WorldAdjacencyOwnership.Sweep`) reads the
+     same way but costs little where few seams stand. A body at rest beyond
+     a face answers crossed on every scan, so a scan of the bodies that
+     moved must keep those it last found beyond one. Built: the seam scan's
      selection makes no closure for a slot that crossed nothing, a
      reference's document path is resolved once, and the site attention
      reads its faces by index, which halved what that thread allocates an
@@ -1057,6 +1078,28 @@ check missed is baked by that boot and listed under the record's
   pace, several times slower than a paused, tick-locked bake. Let the fill
   end when its ladders are whole. Under the ladder policy `world.wait ready`
   also times out.
+- [high · unconfirmed] The RTX 2060's player build drew the glacier's ice
+  edges and the rim slope as large flat facets up close: a floor, the
+  coarsest tier, drawn where a finer one was asked. Two causes fit, and the
+  code alone cannot tell them apart. A group that arrives in view draws its
+  stored floor at once and then owes its first detail; if the store holds
+  that tier it loads outside the budget, and if the store lacks it and holds
+  no tier between, nothing starts (`SdfMeshPathBake.StartReplacement`): the
+  tier waits its hold as an ordinary owed tier and bakes only when the detail
+  budget has room, so on a card whose budget is full the floor keeps drawing.
+  Or every tier is stored and the budget's bias has coarsened the demand to
+  the floor. Read, on the 2060 at the glacier: the log's `[sdf.mesh-bake]
+  rung-missed` lines (each names its group, the tier asked, the tier drawn
+  and the ladder), `world.counters sdf.mesh-cache` (`rungs-missed` less
+  `rungs-missed-live`, `groups-baked`, `dispatches`) and `world.residency`'s
+  tier line (`tiers-held-back`, `detail-bias`, `region-budget`,
+  `region-named`). Missed tiers with `tiers-held-back` above zero is a cache
+  gap the budget then holds: complete the fill (the item on a tick-locked
+  fill above; a ladder fills coarsest first, so a fill cut short lacks its
+  finest tiers), and decide whether a player's missed first detail is the
+  arrival's own bake again. No missed tier with a bias above zero is the
+  device budget: the card's fixed storage leaves detail too little room,
+  which is the device-memory items' work.
 - [medium] A residency no authored spawn point shows gets no ladder, so a
   player who opens one counts `rungs-missed`. Give such a place a spawn
   point, or give the fill a door that draws every residency a world can open.
@@ -2231,16 +2274,40 @@ check; this packet holds the defects beside it.
   passed its budget, and never recovered. Size these owners from the device's quality table and
   stream what is far or unseen, rather than holding them whole. Check: the same route on the 2060
   holds device memory under its cap, and the second loop matches the first.
-- [high] **Host memory: rebuilt programs and presentation fields churn the large object heap.**
-  On the 2060's player build the managed heap held 4.26 GB, 3.12 GB of it on the LOH. Each
-  presentation-field and program rebuild churns about 150–280 MB through it, and `SdfProgram`
-  allocates fresh managed arrays on every build (appearance sections, Lipschitz factors, side
-  tables, part-program offsets). Rebuild only what changed, into owned and reused storage. The
-  other managed holders: program words (about 22 MB, no owner), the probe-cache tables (93 MB,
-  held by reference; they need block indices), the trace hierarchy's pack and top-level content,
-  the bake's scratch arrays, an unidentified renter of 92–98 MB `ArrayPool.Shared` arrays, and
-  about 140 MB of trace-scene storage still rented managed. Check: the 2060's route ends under
-  its host bar with the LOH flat across loops.
+- [high] **Host memory: the large object heap is mostly gaps, held open by a few long-lived arrays.**
+  On the 2060's player build the managed heap held 4.4 GB, 2.8 GB of it on the LOH, while a heap
+  dump found about 0.2 GB of live objects of a megabyte or more: large rentals of differing sizes
+  come and go between a few long-lived arrays, and their gaps are never reused. The rule is in
+  [data and memory](../../.claude/skills/dotnet-performance/references/data-and-memory.md): scratch
+  and tables of reference-free elements are native (`OwnedBuffer<T>`, which no longer has a managed
+  mode), never rented arrays. Moved so far: every owned buffer, list and map; the simplifier's
+  tables (`SdfMeshCollapse`, `SdfMeshPlanarMerge`, `SdfMeshChunks`); the far product, which a boot
+  derived whole in managed arrays and now reads from the mesh store
+  ([decision](../decisions/rendering.md#a-far-viewer-draws-a-worlds-far-product)); the lighting
+  batch's answer words and saved hits and the probe service's part answers; and a goal field's
+  frozen junctions, shared across requests of one network (`NavigationRuntime.FrozenJunctions`).
+  What still allocates large managed arrays, largest first as the 2060's allocation trace read
+  them:
+  - `SdfProgram` allocates fresh arrays on every build (its words, appearance sections, Lipschitz
+    factors, side tables and part-program offsets, and the field evaluator's `CompiledInstruction`
+    and `RotationBounds` tables beside them), about 320 MiB over a route. Rebuild only what
+    changed, into owned and reused storage; a program is read from several threads and held by
+    several holders, so its storage needs an owner whose last reader frees it.
+  - The trace scene's hierarchy (`SdfMeshIrradianceScene.Hierarchy.BuildPacked` and its
+    `MemoryAccount.Owner.AllocateArray` calls for nodes, frames, braids and triangles, about 350 MiB)
+    and the geometry build's rented boxes are arrays; its traversal reads them as arrays, so the
+    move is the hierarchy's storage type and every reader's.
+  - The probe cache's publication columns (`PublishArena`, 42 arrays of 3.7 MB live) hold a
+    reference in each slot, so they need block indices before they can be native.
+  - The bake's frustum watches keep two value arrays that regrow (`SdfMeshPathBake.FrustumWatches`,
+    about 100 MiB of growth), and the lattice refinement (`SdfSampledLattice`) still rents arrays.
+  - A far product derived on a miss still builds its cluster's mesh, its chunks and its levels in
+    managed arrays before the library copies the result; only its tables are native.
+  - `RentedArrays`' pool of arrays past a mebibyte gives an idle array back after ten seconds, so
+    work that repeats more slowly allocates afresh each time. Retire the pool once the renters
+    above are moved, rather than tune it.
+  Check: the 2060's route ends under its host bar with the LOH flat across loops, and
+  `puck host heap` reads live large objects near the heap's large-object bytes.
 - [medium] **Read the native allocator's slack on the RTX 2060's route.** The 2060 read 1.83 GB
   committed against 810 MB named, with 8.6 GB reserved, when freed ranges were decommitted only by
   a later free and every size class committed its whole page. `MimallocAllocator`'s owner thread
@@ -2496,6 +2563,32 @@ holds the fixed poses and the approaches already rejected.
 
 The volume's cost and convergence:
 
+- [high] The probes read wrong surface materials, so a closed room takes
+  coloured light it does not hold. In the gallery hall at a pinned noon, with
+  the blinds down and the cascades shadowing every interior surface, one boot's
+  probes under the `ellipsoid` exhibit (`world.probe 35.55 0.85 16 -0.9 -0.4 0`)
+  published an orange bounce of about (121, 42, 18) while their neighbours
+  stayed near neutral, the blinds took an olive bounce, and the volume's whole
+  light ran near a tenth of another boot's; that boot's beauty showed an
+  orange blob in the exhibit and olive exhibits and blinds until well past a
+  minute. A second boot of the same tree published neutral cubes about ten
+  times brighter, while its CPU reference (`world.probe`'s `reference-*`
+  fields, which name the face the relights disagree on most and the material
+  the reference's hits there weigh most in) read the floor under those probes
+  as program material 0, albedo (1, 0.078, 0.005), and so an orange-red
+  bounce. Turning `world.rays off` and resetting the layout (`world.indirect
+  medium`, then `high`) gave a neutral hall where the same reset with rays on
+  gave the orange and olive tints again, but the second boot's hardware path
+  was neutral too, so the rays are not the cause alone. Both readers resolve a
+  hit as the draw's material base plus its traced geometry's triangle
+  materials (`SdfMeshIrradianceScene.Instance.MaterialOf`, `sdfProbeSurface`);
+  the trace geometry can be a group's floor or another tier
+  (`SdfMeshDraw.Trace`, `SdfMeshTraceJudge`), whose triangle materials need not
+  be numbered as the draw's base expects. Next: on a fresh boot whose probes
+  show the tint, compare the traced geometry's mesh with the draw's mesh for
+  the floor and the exhibit, and the material ids each reader resolves for one
+  hit, then make the trace geometry carry the materials its draw names, in
+  one place both readers read.
 - [medium] Faster probe convergence costs host time while the volume works.
   With several probe jobs in flight, one commit a batch and placement trials
   sharing rounds (`SdfMeshProbeGpuWork.Run`, `SdfMeshIrradiance.PlaceBatch`),
@@ -3415,6 +3508,24 @@ P1 last. The plan owns the feature end to end; these are the defects it does not
   moves away. Define the optical boundary for both.
 - [low · unchecked] Whether a state-bound water colour rebuilds the field
   program every frame while it moves (`WorldFieldEmitter.Emit`).
+
+### Stars
+
+Owner: a specialist a step · ordinary · Next: [the plan](stars.md#what-is-left)'s
+step 1, the seam that carries a ship from the moon's space to the sun. The
+star, its light at every distance, its outpost and its dangers are built
+([sun.md](../../worlds/debug/sun.md)).
+
+- [medium] A gravity orbit's `phaseBy` reads its clock row's sixteen
+  fractional bits, so the debug sun moves in steps of about 1.4 m
+  (`FixedWorldGravityOrbit.TurnOf`). The plan's step 3 reads the row's exact
+  phase.
+- [high] A star's ball shadows everything its light should reach, at any
+  distance, and no draw opts out of casting, so the debug sun's light casts
+  no shadows in its own world (the plan's step 4).
+- [high] Within about 3 km of the star, lit surfaces and the star itself pass
+  the range the frame's scene light holds and read as one grey (the plan's
+  step 5).
 
 ### Portals in play
 
@@ -5922,13 +6033,16 @@ screen and see the change hot reload.
 
 ### Media and capture
 
-Owner: media lane · ordinary · Next: let an unread capture feed idle.
+Owner: media lane · ordinary · Next: shrink the glow readback.
 
-- [medium] The desktop capture feed scales frames nobody reads: its thread
-  spends about a core in `Win32GraphicsCaptureDevice.ScaleMapped` in a World
-  started with `--devices none`, and a visible share of a cold bake's
-  processor samples. Find what subscribes it, let an unread feed idle, and
-  downscale on the GPU ahead of the readback.
+- [medium] The desktop capture feed's glow readback still box-scales the whole
+  source on the platform's callback thread (`Win32GraphicsCaptureDevice.ScaleMapped`),
+  once every `NativeImageGpuCaptureTargets.CpuReadbackDivisor` ticks, to produce
+  frames `WorldImageLight.Average` then samples one pixel in sixteen of. Read
+  the average on the GPU, or sample the mapped pixels in place, and the
+  scaler serves only the CPU route. That route is a Vulkan host's HDR display
+  and a render device that refuses the shared targets; the HDR conversion on
+  Vulkan waits on its external-image layout being proven.
 - [medium] `CaptureSink` is constructed nowhere in `src`: an unreached capture
   capability to wire, not delete (AGENTS.md).
 - [medium] The score is the listener's alone, and the authority keeps only

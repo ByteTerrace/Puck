@@ -887,14 +887,6 @@ render {
   lighting {
     lights: concat(
       [
-        directional(
-          name: "key",
-          direction: [3, 5, -4],
-          color: "#FFF0DC",
-          illuminance: 100000lx,
-          shadow: always,
-          angularRadius: 0.2
-        )
       ],
       map(range(0, length(cityLampSpots)), i => point(
         name: $"lamp-{i}",

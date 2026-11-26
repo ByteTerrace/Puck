@@ -178,7 +178,8 @@ key (`world.rates toggle`, F7). [range.md](range.md) says how to use it.
 ## Time of day
 
 [day.puck](day.puck) runs the standard's day cycle (`dayCycle` in
-[skies.puck](../standard/skies.puck)): the sun (the `key` light), its colour and
+[skies.puck](../standard/skies.puck)): the sun (the `key` light, a star that
+circles the valley and is a place of its own, [sun.md](sun.md)), its colour and
 the sky follow the `day` state row, which holds the day's phase and advances one
 day every 24 minutes from ten in the morning. At noon the sun stands 46 degrees
 up toward +x and -z. At night a deep-blue 6-lux moon (the `moon` light) stands

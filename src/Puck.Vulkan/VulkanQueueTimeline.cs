@@ -10,6 +10,15 @@ internal sealed class VulkanQueueTimeline(VulkanLogicalDevice device) : GpuQueue
 
     private bool m_bindingFailed;
 
+    // Whether every binding this timeline issued has a known outcome, so its values certify retirement.
+    internal bool Certifies => !m_bindingFailed;
+    // Whether a value is taken and its signal not yet on the queue, when the queue's door issues no sparse operation,
+    // since those signal values of their own (VulkanLogicalDevice.IssueSparse).
+    internal bool IsSignaling => Signaling;
+
+    // The queue's door: hands over the open batch and issues the queued sparse operations, whose values come before the
+    // checkpoint's.
+    protected override void BeforeCheckpoint() => _ = device.GraphicsQueue;
     protected override void Signal(ulong value) {
         RequireOrdered();
         m_submitter.Signal(device: device.Commands,
@@ -20,17 +29,24 @@ internal sealed class VulkanQueueTimeline(VulkanLogicalDevice device) : GpuQueue
         return VulkanSharedFence.ReadCompletedValue(device: device.Commands, semaphore: m_semaphore);
     }
 
-    internal ulong BindSparse(nint buffer, VkSparseMemoryBind[] bindings) {
-        var readers = Checkpoint(); // This queue door flushes an open graphics batch before signaling N.
+    // Binds each batch in order on the binding queue: a graphics checkpoint N after every earlier submission, each batch
+    // waiting the value before it and signaling the next, and one graphics wait on the last, which it returns. Only the
+    // device's sparse issue (VulkanLogicalDevice.IssueSparse) calls it, inside the door read that issues.
+    internal ulong BindSparse(ReadOnlySpan<(nint Buffer, VkSparseMemoryBind[] Bindings)> batches) {
+        var wait = Checkpoint(); // This queue door flushes an open graphics batch before signaling N.
 
         try {
-            var bound = SubmitCheckpoint(submit: value => m_submitter.BindSparse(device.Commands, device.SparseQueue!.Value,
-                buffer, bindings, m_semaphore, readers, value));
+            foreach (var (buffer, bindings) in batches) {
+                var after = wait;
+
+                wait = SubmitCheckpoint(submit: value => m_submitter.BindSparse(device.Commands, device.SparseQueue!.Value,
+                    buffer, bindings, m_semaphore, after, value));
+            }
             // An empty submission with a wait is intentional: all later graphics work, including batched work
-            // and the next timeline signal, follows N+1 even when the binding queue is a different family.
+            // and the next timeline signal, follows the last bind even when the binding queue is a different family.
             m_submitter.Submit(device.Commands, device.GraphicsQueue, [], fenceHandle: 0,
-                waitSemaphores: [m_semaphore], waitValues: [bound]);
-            return bound;
+                waitSemaphores: [m_semaphore], waitValues: [wait]);
+            return wait;
         } catch {
             // An unknown bind or join result cannot be bypassed by signaling a larger value on graphics.
             // Retain all physical placements until generation teardown instead of guessing completion.

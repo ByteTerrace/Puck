@@ -230,17 +230,30 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             }
 #endif
 
+            // The specular layer's directional albedo about the view (sdfMaterialEnvironmentBrdf): the share of the light
+            // arriving from every side that the specular reflection returns, which therefore never reaches the diffuse
+            // base. The diffuse terms below take the rest, so a surface reflects no more than the light it receives: the
+            // specular lobes and the reflected environment are added on top of a diffuse already weighted by it.
+            float3 specularAlbedo = 0.0;
+            if ((shadeMaterial.specular > 0.0) || (shadeMaterial.metal > 0.0)) {
+                float3 f0 = lerp(shadeMaterial.specular.xxx, shadeMaterial.albedo, shadeMaterial.metal);
+                specularAlbedo = saturate(sdfMaterialEnvironmentBrdf(f0, shadeMaterial.roughness, saturate(dot(normal, -p.rayDirection))));
+            }
+            float3 diffuseShare = (1.0 - specularAlbedo);
+            float3 emitted = (shadeMaterial.albedo * shadeMaterial.emissive);
+
             color = sdfMaterialShade(shadeMaterial, radiance, normal, p.rayDirection);
+            color = emitted + ((color - emitted) * diffuseShare);
 
             float3 indirect = sdfViewsIndirectSeen(probes, normal);
             float3 indirectTerm = indirect * passGroup.indirectApply.rgb * (shadeMaterial.receive * passGroup.indirectApply.w
                 * lerp(1.0, ambientOcclusion, passGroup.indirectContact));
-            color += indirectTerm * shadeMaterial.albedo * (1.0 - shadeMaterial.metal);
+            color += indirectTerm * shadeMaterial.albedo * (1.0 - shadeMaterial.metal) * diffuseShare;
             // Authored fill is the indirect-off look: a share of the key light's luminance on a white surface, where no
             // indirect light is applied. It never adds a second approximation to the volume's light.
             if (passGroup.indirectApply.w <= 0.0) {
                 float fill = 1.0 - max(dot(normal, keyDirection), 0.0);
-                color += shadeMaterial.albedo * shadeMaterial.fill * worldKeyRadiance() * fill * ambientOcclusion;
+                color += shadeMaterial.albedo * shadeMaterial.fill * worldKeyRadiance() * fill * ambientOcclusion * diffuseShare;
             }
 
             // The environment the specular lobe reflects, for a material with a specular response: the lighting-visible
@@ -252,14 +265,11 @@ float3 sdfLightStage(SdfPixel p, SdfSurfaceSample s, SdfMeshHit meshHit, float3 
             float3 reflectionTerm = 0.0;
 #if !defined(SDF_VIEWS_OMIT_REFLECTION)
             if ((shadeMaterial.specular > 0.0) || (shadeMaterial.metal > 0.0)) {
-                float3 f0 = lerp(float3(shadeMaterial.specular, shadeMaterial.specular, shadeMaterial.specular), shadeMaterial.albedo, shadeMaterial.metal);
-                float3 viewDirection = -p.rayDirection;
-                float nDotV = saturate(dot(normal, viewDirection));
                 float3 reflectDirection = reflect(p.rayDirection, normal);
                 float3 environment = sdfViewsReflectionSeen(probes, reflectDirection, worldEnvironmentReflection(reflectDirection, shadeMaterial.roughness));
 
                 reflectionTerm = environment;
-                environmentTerm = ((environment * sdfMaterialEnvironmentBrdf(f0, shadeMaterial.roughness, nDotV)) * ambientOcclusion);
+                environmentTerm = ((environment * specularAlbedo) * ambientOcclusion);
                 color += environmentTerm;
             }
 #endif

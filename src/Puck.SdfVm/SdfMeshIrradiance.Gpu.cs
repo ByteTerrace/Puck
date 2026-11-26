@@ -24,16 +24,41 @@ public sealed partial class SdfMeshIrradiance {
         var localError = 0f;
         var relightError = 0f;
         var skyError = 0f;
+        var worstFace = 0;
         var bits = 0;
         for (var i = 0; i < 6; i++) {
             for (var c = 0; c < 3; c++) {
                 localError = MathF.Max(localError, MathF.Abs(local[i][c] - probe.Local[i][c]) / MathF.Max(1, MathF.Abs(local[i][c])));
-                relightError = MathF.Max(relightError, MathF.Abs(radiance[i][c] - probe.Radiance[i][c]) / MathF.Max(1, MathF.Abs(radiance[i][c])));
+                var faceError = MathF.Abs(radiance[i][c] - probe.Radiance[i][c]) / MathF.Max(1, MathF.Abs(radiance[i][c]));
+                if (faceError > relightError) { relightError = faceError; worstFace = i; }
                 skyError = MathF.Max(skyError, MathF.Abs(sky[i][c] - probe.SkyLight[i][c]) / MathF.Max(1, MathF.Abs(sky[i][c])));
             }
         }
         for (var i = 0; i < visibility.Length; i++) { bits += BitOperations.PopCount(visibility[i] ^ probe.Lights[i]); }
-        return FormattableString.Invariant($" reference-local-error={localError:G5} reference-relight-error={relightError:G5} reference-sky-error={skyError:G5} reference-visibility-errors={bits}");
+        // The face the relights disagree on most, as each measured it: the cube face (+X, -X, +Y, -Y, +Z, -Z), the
+        // probe's published radiance and the CPU reference's, so a disagreement names its direction and colour.
+        var gpu = probe.Radiance[worstFace];
+        var cpu = radiance[worstFace];
+        // The material the reference's hits along that face weigh most in, its share of the face's weight and its albedo:
+        // what the relight reads the surfaces there as.
+        var directions = SdfMeshProbeDepth.RayDirections;
+        var weights = SdfMeshProbeDepth.RayWeights;
+        var shares = new Dictionary<int, float>();
+        var faceWeight = 0f;
+        for (var texel = 0; texel < SdfMeshProbeDepth.HitCount; texel++) {
+            var weight = weights[texel] * MathF.Max(0f, Vector3.Dot(directions[texel], Axes[worstFace]));
+            if (weight <= 0f) { continue; }
+            faceWeight += weight;
+            if (!SdfMeshProbeDepth.TryHit(hits, texel, out _, out _, out var material, out var back) || back) { continue; }
+            shares[material] = shares.GetValueOrDefault(material) + weight;
+        }
+        var dominant = -1;
+        var dominantShare = 0f;
+        foreach (var (material, share) in shares) {
+            if (share > dominantShare) { dominant = material; dominantShare = share; }
+        }
+        var albedo = (dominant >= 0) ? m_lighting!.MaterialAt(index: dominant).Albedo : Vector3.Zero;
+        return FormattableString.Invariant($" reference-local-error={localError:G5} reference-relight-error={relightError:G5} reference-sky-error={skyError:G5} reference-visibility-errors={bits} reference-worst-face={worstFace} published=({gpu.X:0.##}, {gpu.Y:0.##}, {gpu.Z:0.##}) reference=({cpu.X:0.##}, {cpu.Y:0.##}, {cpu.Z:0.##}) reference-face-material={dominant} share={((faceWeight > 0f) ? (dominantShare / faceWeight) : 0f):0.##} albedo=({albedo.X:0.###}, {albedo.Y:0.###}, {albedo.Z:0.###})");
     }
     // SlotWords is the sole mutation door. A job consumes these deltas under the volume gate, then owns them until
     // completion. Its GPU feedback is exactly the preceding completed batches, independent of display uploads.
@@ -45,7 +70,10 @@ public sealed partial class SdfMeshIrradiance {
     // read before the next job is submitted.
     private Vector4[] m_gpuOrigins = [];
     private uint[] m_gpuInput = [];
-    private uint[] m_gpuAnswer = [];
+    private OwnedBuffer<uint>? m_gpuAnswer;
+    // The native buffer a batch's selections, traces and relights answer into, one call after another, allocated at the
+    // batch's first call and freed when the batch ends (BatchEnded).
+    private OwnedBuffer<uint> GpuAnswer => (m_gpuAnswer ??= new OwnedBuffer<uint>(allocator: m_allocator));
     private uint[] m_gpuFresh = [];
     private int[] m_gpuDestinations = [];
     // The candidate each row of a selection answers for (ListGpu).
@@ -221,8 +249,7 @@ public sealed partial class SdfMeshIrradiance {
             return deferred;
         }
         var changes = (m_gpuSelectionRows = SelectionRows(changes: snapshot.Changes, geometry: snapshot.Geometry, layout: layout, rows: m_gpuSelectionRows));
-        var selected = GpuTrace!.Select(snapshot.Scene, origins.AsMemory(start: 0, length: selections), input.AsMemory(start: 0, length: selections * SdfMeshProbeRelight.SelectionInputWords), changes, GpuHitCapacity, reuse: m_gpuAnswer);
-        m_gpuAnswer = selected;
+        var selected = GpuTrace!.Select(snapshot.Scene, origins.AsMemory(start: 0, length: selections), input.AsMemory(start: 0, length: selections * SdfMeshProbeRelight.SelectionInputWords), changes, GpuHitCapacity, answer: GpuAnswer);
         for (var i = 0; i < selections; i++) { candidates[selectRows[i]] = candidates[selectRows[i]] with { Trace = selected[i] != 0 }; }
         OrderCandidates(candidates, all);
         return deferred;
@@ -377,12 +404,11 @@ public sealed partial class SdfMeshIrradiance {
             }
             m_gpuDirty.Clear();
         }
-        uint[] words;
+        ReadOnlySpan<uint> words;
         try {
             words = GpuTrace!.Relight(snapshot.Scene, origins.AsMemory(start: 0, length: count), input.AsMemory(start: 0, length: inputWords), rows, volumeWords, updates,
                 GpuHitCapacity, rays: m_gpuRelightRays.AsMemory(start: 0, length: count), destinations: m_gpuDestinations.AsMemory(start: 0, length: count),
-                geometry: snapshot.Geometry, window: snapshot.WindowVersion, reuse: m_gpuAnswer);
-            m_gpuAnswer = words;
+                geometry: snapshot.Geometry, window: snapshot.WindowVersion, answer: GpuAnswer);
         }
         catch (OperationCanceledException) {
             // A cancelled job may or may not have consumed the delta. Re-send a full snapshot on the next accepted job.
@@ -403,7 +429,7 @@ public sealed partial class SdfMeshIrradiance {
         for (var i = 0; i < count; i++) {
             var probe = probes[i];
             if (probe.Hits is null || probe.Invalid) { continue; }
-            var row = words.AsSpan(i * SdfMeshProbeRelight.ResultWords, SdfMeshProbeRelight.OutputWords);
+            var row = words.Slice(i * SdfMeshProbeRelight.ResultWords, SdfMeshProbeRelight.OutputWords);
             MemoryMarshal.Cast<uint, Vector3>(row[..18]).CopyTo(lights.Radiance(i));
             MemoryMarshal.Cast<uint, Vector3>(row.Slice(18, 18)).CopyTo(lights.Local(i));
             row.Slice(36, SdfMeshIrradianceProbe.LightWords).CopyTo(lights.Lights(i));

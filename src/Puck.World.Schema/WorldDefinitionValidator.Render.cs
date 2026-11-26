@@ -193,6 +193,10 @@ public static partial class WorldDefinitionValidator {
                                 errors.Add(item: $"{lightPath}.name is required when shadow is always or auto; a shadow-capable light needs a name.");
                             }
 
+                            if (directional.Source is { } source) {
+                                ValidateLightSource(definition: definition, errors: errors, path: $"{lightPath}.source", source: source);
+                            }
+
                             break;
                         }
                     case WorldRenderLight.Rim rim: {
@@ -524,6 +528,10 @@ public static partial class WorldDefinitionValidator {
                             RequireDeclaredScreen(definition: definition, errors: errors, path: $"{layerPath}.texture.screen", screen: texture.Screen);
                         }
 
+                        if ((disc.Follows is { } follows) && !(lighting?.Lights?.Any(predicate: light => ((light is WorldRenderLight.Directional) && string.Equals(a: light.LightName, b: follows, comparisonType: StringComparison.Ordinal))) ?? false)) {
+                            errors.Add(item: $"{layerPath}.follows '{follows}' names no directional light of render.lighting.lights.");
+                        }
+
                         if (disc.Light is { } lightIndex) {
                             var lights = lighting?.Lights;
 
@@ -797,6 +805,57 @@ public static partial class WorldDefinitionValidator {
 
                         break;
                     }
+            }
+        }
+    }
+    // A light's source: a finite place, a size zero or more, a positive reference distance, and orbits whose shapes
+    // the closed form settles for and whose clocks the timeline declares.
+    private static void ValidateLightSource(WorldDefinition definition, WorldRenderLightSource source, string path, List<string> errors) {
+        if ((source.Position?.Value is { } position) && !(float.IsFinite(f: position.X) && float.IsFinite(f: position.Y) && float.IsFinite(f: position.Z))) {
+            errors.Add(item: $"{path}.position must be finite.");
+        }
+
+        if (!float.IsFinite(f: source.Radius) || (source.Radius < 0f)) {
+            errors.Add(item: $"{path}.radius {source.Radius} must be zero or more.");
+        }
+
+        if ((source.Distance is { } distance) && (!float.IsFinite(f: distance) || !(distance > 0f))) {
+            errors.Add(item: $"{path}.distance {distance} must be positive: the distance at which the light gives its authored illuminance.");
+        }
+
+        if (source.Orbits is not { } orbits) {
+            return;
+        }
+
+        if (orbits.Count > WorldRenderLightSource.MaxOrbits) {
+            errors.Add(item: $"{path}.orbits carries {orbits.Count} orbits; a source rides at most {WorldRenderLightSource.MaxOrbits}.");
+        }
+
+        var maxEccentricity = ((float)((double)FixedConicOrbit.MaxEccentricity));
+
+        for (var index = 0; (index < orbits.Count); index++) {
+            var orbitPath = $"{path}.orbits[{index}]";
+
+            if (orbits[index] is not { } orbit) {
+                errors.Add(item: $"{orbitPath} must be an orbit.");
+
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(value: orbit.Clock) || !(definition.Timeline.Clocks ?? []).Any(predicate: candidate => string.Equals(a: candidate?.Name, b: orbit.Clock, comparisonType: StringComparison.Ordinal))) {
+                errors.Add(item: $"{orbitPath}.clock '{orbit.Clock}' names no clock in the timeline section.");
+            }
+
+            if (!float.IsFinite(f: orbit.SemiMajorAxis) || !(orbit.SemiMajorAxis > 0f)) {
+                errors.Add(item: $"{orbitPath}.semiMajorAxis {orbit.SemiMajorAxis} must be positive.");
+            }
+
+            if (!float.IsFinite(f: orbit.Eccentricity) || (orbit.Eccentricity < 0f) || (orbit.Eccentricity >= maxEccentricity)) {
+                errors.Add(item: $"{orbitPath}.eccentricity {orbit.Eccentricity} must be zero or more and below {maxEccentricity:0.##}: a closed orbit the fixed-point solve settles for.");
+            }
+
+            if (!float.IsFinite(f: orbit.InclinationDegrees) || !float.IsFinite(f: orbit.AscendingNodeDegrees) || !float.IsFinite(f: orbit.PeriapsisDegrees) || !float.IsFinite(f: orbit.Phase)) {
+                errors.Add(item: $"{orbitPath}'s angles and phase must be finite.");
             }
         }
     }

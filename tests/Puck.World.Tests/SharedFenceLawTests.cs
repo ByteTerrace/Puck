@@ -4,7 +4,6 @@ using Puck.DirectX;
 using Puck.DirectX.Apis;
 using Puck.DirectX.Interop;
 using Puck.Platform.Windows;
-using Puck.Testing;
 using Puck.Vulkan;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Factories;
@@ -108,7 +107,7 @@ public sealed unsafe class SharedFenceLawTests {
             warp: false
         );
         using var fence = new DirectXGpuSurfaceExportFactory(deviceContext: context).CreateExportableFence();
-        var allocator = new HeapAllocator();
+        var allocator = new Puck.Abstractions.Memory.SystemAllocator();
         var procedures = new VulkanProcResolver();
         VulkanInstance instance;
 

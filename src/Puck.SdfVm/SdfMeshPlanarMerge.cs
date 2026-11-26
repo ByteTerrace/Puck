@@ -209,14 +209,14 @@ public static class SdfMeshPlanarMerge {
         private readonly int m_triangles;
         private readonly int m_vertices;
         private readonly int[] m_site;
-        private readonly float[] m_u;
-        private readonly float[] m_w;
-        private readonly int[] m_corners;
-        private readonly int[] m_twins;
-        private readonly int[] m_regionOf;
-        private readonly bool[] m_alive;
-        private readonly int[] m_degree;
-        private readonly int[] m_leave;
+        private readonly OwnedBuffer<float> m_u;
+        private readonly OwnedBuffer<float> m_w;
+        private readonly OwnedBuffer<int> m_corners;
+        private readonly OwnedBuffer<int> m_twins;
+        private readonly OwnedBuffer<int> m_regionOf;
+        private readonly OwnedBuffer<bool> m_alive;
+        private readonly OwnedBuffer<int> m_degree;
+        private readonly OwnedBuffer<int> m_leave;
 
         private int m_removedTriangles;
 
@@ -250,25 +250,25 @@ public static class SdfMeshPlanarMerge {
 
             m_vertices = vertices;
             m_site = mesh.Sites();
-            m_u = scope.Rent<float>(minimumLength: vertices);
-            m_w = scope.Rent<float>(minimumLength: vertices);
+            m_u = scope.Buffer<float>(length: vertices);
+            m_w = scope.Buffer<float>(length: vertices);
             for (var vertex = 0; (vertex < vertices); vertex++) {
                 // Every vertex a region holds carries the region's normal, so its plane coordinates are the region's.
                 (m_u[vertex], m_w[vertex]) = Plane(normal: normals[vertex], position: positions[vertex]);
             }
 
-            m_corners = scope.Rent<int>(minimumLength: (3 * m_triangles));
-            m_twins = scope.Rent<int>(minimumLength: (3 * m_triangles));
-            m_regionOf = scope.Rent<int>(minimumLength: m_triangles);
-            m_alive = scope.Rent<bool>(minimumLength: m_triangles);
-            m_degree = scope.Rent<int>(minimumLength: vertices, clear: true);
-            m_leave = scope.Rent<int>(minimumLength: vertices, clear: true);
+            m_corners = scope.Buffer<int>(length: (3 * m_triangles));
+            m_twins = scope.Buffer<int>(length: (3 * m_triangles));
+            m_regionOf = scope.Buffer<int>(length: m_triangles);
+            m_alive = scope.Buffer<bool>(length: m_triangles);
+            m_degree = scope.Buffer<int>(length: vertices, clear: true);
+            m_leave = scope.Buffer<int>(length: vertices, clear: true);
             for (var half = 0; (half < indices.Length); half++) {
                 m_corners[half] = ((int)indices[half]);
                 m_degree[m_corners[half]]++;
                 m_leave[m_corners[half]] = half;
             }
-            m_alive.AsSpan(start: 0, length: m_triangles).Fill(value: true);
+            m_alive.GetSpan().Fill(value: true);
         }
 
         public SdfMesh Run() {
@@ -294,7 +294,7 @@ public static class SdfMeshPlanarMerge {
         private void Twins() {
             var vertices = m_vertices;
             var halves = (3 * m_triangles);
-            var starts = m_scope.Rent<int>(minimumLength: (vertices + 1), clear: true);
+            var starts = m_scope.Buffer<int>(length: (vertices + 1), clear: true);
 
             for (var half = 0; (half < halves); half++) {
                 starts[(m_corners[half] + 1)]++;
@@ -303,8 +303,8 @@ public static class SdfMeshPlanarMerge {
                 starts[(vertex + 1)] += starts[vertex];
             }
 
-            var outgoing = m_scope.Rent<int>(minimumLength: halves);
-            var filled = m_scope.Rent<int>(minimumLength: vertices, clear: true);
+            var outgoing = m_scope.Buffer<int>(length: halves);
+            var filled = m_scope.Buffer<int>(length: vertices, clear: true);
 
             for (var half = 0; (half < halves); half++) {
                 var from = m_corners[half];
@@ -337,7 +337,7 @@ public static class SdfMeshPlanarMerge {
             var normals = m_normals.Span;
             var materials = m_materials.Span;
             var members = m_mesh.VertexMembers.Span;
-            var eligible = m_scope.Rent<bool>(minimumLength: m_triangles);
+            var eligible = m_scope.Buffer<bool>(length: m_triangles);
             var queue = new Queue<int>();
             var regions = 0;
             var any = false;
@@ -355,7 +355,7 @@ public static class SdfMeshPlanarMerge {
                 );
             }
 
-            m_regionOf.AsSpan(start: 0, length: m_triangles).Fill(value: -1);
+            m_regionOf.GetSpan().Fill(value: -1);
             for (var seed = 0; (seed < m_triangles); seed++) {
                 if (!eligible[seed] || (m_regionOf[seed] >= 0)) { continue; }
 
@@ -415,11 +415,11 @@ public static class SdfMeshPlanarMerge {
             const int None = -1;
             const int Blocked = -2;
             var vertices = m_vertices;
-            var named = m_scope.Rent<int>(minimumLength: vertices);
-            var region = m_scope.Rent<int>(minimumLength: vertices);
+            var named = m_scope.Buffer<int>(length: vertices);
+            var region = m_scope.Buffer<int>(length: vertices);
             var candidates = m_scope.RentList<(uint Order, int Vertex)>(capacity: (vertices / 2));
 
-            named.AsSpan(start: 0, length: vertices).Fill(value: None);
+            named.GetSpan().Fill(value: None);
             for (var half = 0; (half < (3 * m_triangles)); half++) {
                 var vertex = m_corners[half];
                 var site = m_site[vertex];
@@ -663,10 +663,10 @@ public static class SdfMeshPlanarMerge {
             var remaining = (m_triangles - m_removedTriangles);
             var indices = new uint[(3 * remaining)];
             var triangleMaterials = (materials.IsEmpty ? [] : new uint[remaining]);
-            var remap = m_scope.Rent<int>(minimumLength: m_vertices);
+            var remap = m_scope.Buffer<int>(length: m_vertices);
             var at = 0;
 
-            remap.AsSpan(start: 0, length: m_vertices).Fill(value: -1);
+            remap.GetSpan().Fill(value: -1);
             for (var triangle = 0; (triangle < m_triangles); triangle++) {
                 if (!m_alive[triangle]) { continue; }
                 if (!materials.IsEmpty) { triangleMaterials[at] = materials[triangle]; }
@@ -684,8 +684,8 @@ public static class SdfMeshPlanarMerge {
             }
 
             var keptSites = new int[kept];
-            var firstKept = m_scope.Rent<int>(minimumLength: m_vertices);
-            firstKept.AsSpan(start: 0, length: m_vertices).Fill(value: -1);
+            var firstKept = m_scope.Buffer<int>(length: m_vertices);
+            firstKept.GetSpan().Fill(value: -1);
             var keptPositions = new Vector3[kept];
             var keptNormals = new Vector3[kept];
             var keptMembers = (members.IsEmpty ? [] : new byte[kept]);
