@@ -385,7 +385,10 @@ public sealed class WorldSeatDriver {
 
         // A remote seat steers from where it predicts its body, as a player steers the body they see; walls, the corridor
         // and the chapter's clock were judged above from what the authority delivered.
-        var steered = m_senses.Predict(reading: in read, slot: m_slot);
+        // A crossing walks straight on its heading and judges its arrival by the metres the body has walked, a judgement
+        // like the wall and the clock: it reads the delivered body, which a prediction running ahead of a slow delivery
+        // would count metres for before the authority walked them.
+        var steered = ((m_chapter.Steps[m_step] is WorldRouteStep.Cross) ? read : m_senses.Predict(reading: in read, slot: m_slot));
 
         m_delivered = read;
         if (steered.Predicted) {
