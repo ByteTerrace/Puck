@@ -22,14 +22,35 @@ static const uint SdfMeshDrawMask = ((1u << SDF_MESH_LEVEL_SHIFT) - 1u);
 uint sdfMeshRecord(uint draw) {
     return (draw * SDF_MESH_DRAW_WORDS);
 }
-// The first index of a draw's level of detail: zero for its mesh's own triangles, otherwise three times the level's first
-// triangle among the mesh's levelled triangles (SDF_MESH_LEVEL_TABLE_WORD). A draw of the level adds it to its vertex
-// id, which counts from zero on every backend, so the triangle a vertex names is the level's.
+// The first word of a draw's mesh's cluster table, after its level table (SdfMeshRecord.ClusterHeaderWords): the cluster
+// count, zero for a mesh drawn whole, then the clustered level count, each cluster's box and each clustered level's runs.
+uint sdfMeshClusterTable(uint record) {
+    uint table = sdfMeshRecordWord(record + SDF_MESH_LEVEL_TABLE_WORD);
+    uint count = sdfMeshRecordWord(record + SDF_MESH_LEVEL_TABLE_WORD + 1u);
+    return table + 3u * (count + 1u);
+}
+// The word of a cluster's run (first triangle, triangle count) at a clustered level, in a cluster table of `clusters`.
+uint sdfMeshClusterRun(uint clusterTable, uint clusters, uint level, uint cluster) {
+    return clusterTable + SDF_MESH_CLUSTER_HEADER_WORDS + SDF_MESH_CLUSTER_BOX_WORDS * clusters + SDF_MESH_CLUSTER_RUN_WORDS * (level * clusters + cluster);
+}
+// The segment a counted draw's identity names from bit SDF_MESH_LEVEL_SHIFT up for a cluster at a clustered level: past
+// the mesh's levels, level by level, cluster by cluster.
+uint sdfMeshClusterSegment(uint levels, uint clusters, uint level, uint cluster) {
+    return levels + 1u + level * clusters + cluster;
+}
+// The first index of the segment a draw draws: zero for its mesh's own triangles, three times a level's first triangle
+// among the mesh's levelled triangles (SDF_MESH_LEVEL_TABLE_WORD) for a level, or a cluster's at a clustered level for a
+// segment past the levels (sdfMeshClusterSegment). A draw of the segment adds it to its vertex id, which counts from zero
+// on every backend, so the triangle a vertex names is the segment's.
 uint sdfMeshLevelIndex(uint record, uint level) {
     if (level == 0u) { return 0u; }
     uint table = sdfMeshRecordWord(record + SDF_MESH_LEVEL_TABLE_WORD);
     uint count = sdfMeshRecordWord(record + SDF_MESH_LEVEL_TABLE_WORD + 1u);
-    return 3u * sdfMeshWord(table + 3u * min(level, count));
+    uint clusterTable = table + 3u * (count + 1u);
+    uint clusters = (level > count) ? sdfMeshWord(clusterTable) : 0u;
+    if (clusters == 0u) { return 3u * sdfMeshWord(table + 3u * min(level, count)); }
+    uint entry = min(level - count - 1u, clusters * sdfMeshWord(clusterTable + 1u) - 1u);
+    return 3u * sdfMeshWord(sdfMeshClusterRun(clusterTable, clusters, entry / clusters, entry % clusters));
 }
 
 // A hit a pass read from GPU data (a mesh or glass target's texel, a visibility record, the glass sums' front records),

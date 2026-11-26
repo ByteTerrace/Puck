@@ -9,6 +9,7 @@
 // control means which pointer act; the engine acts on a local pad's own press alone and refuses a document that tries
 // more.
 import "../standard/bounds"
+import "gallery/layout"
 
 // The capture's output extent and cadence, the pane's and the monitor's alike: the primary display at its own size and
 // shape (2560 by 1440), so its text stays sharp. The primary display rather than the one the World's window is on:
@@ -392,25 +393,25 @@ prototypes {
 placements {
   placement "desk" {
     prototype: "desk"
-    position [0, 0, 0]
+    position [galleryWestShift, 0, 0]
     solid
   }
   placement "desk-monitor" {
     prototype: "desk-monitor"
-    position [0, 0, 0]
+    position [galleryWestShift, 0, 0]
   }
   placement "desk-computer" {
     prototype: "desk-computer"
-    position [0, 0, 0]
+    position [galleryWestShift, 0, 0]
     solid
   }
   placement "desk-keyboard" {
     prototype: "desk-keyboard"
-    position [0, 0, 0]
+    position [galleryWestShift, 0, 0]
   }
   placement "desk-chair" {
     prototype: "desk-chair"
-    position [0, 0, 0]
+    position [galleryWestShift, 0, 0]
     solid
   }
 }
@@ -419,7 +420,7 @@ placements {
 screens [
   {
     index: 16
-    origin [glassFront, pictureY, pictureZ]
+    origin [(glassFront + galleryWestShift), pictureY, pictureZ]
     right [0, 0, -1]
     up [0, 1, 0]
     halfWidth: pictureHalfWidth

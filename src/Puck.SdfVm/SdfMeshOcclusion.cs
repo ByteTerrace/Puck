@@ -11,7 +11,9 @@ namespace Puck.SdfVm;
 /// residency's retained mesh records. Opaque occlusion draws the previous visible set, builds a conservative depth
 /// pyramid, and draws newly visible records in a second phase. A shadow entry (<see cref="SdfWorldShadows"/>) draws one
 /// entry phase, its back-face-culled twin, its exit lists and its glass extinction list, each from box classification
-/// alone; glass uses one entry phase.
+/// alone; glass uses one entry phase. A view draws a draw whose mesh is drawn in clusters (<see cref="SdfMeshClusters"/>)
+/// cluster by cluster wherever its box asks a clustered level, each cluster a command of its own in the phase's compact
+/// list, so each phase's list holds one command a draw plus <see cref="SdfWorldTables.MeshClusterCommands"/>.
 /// Level and surface generation persist per draw within
 /// one table owner, including across buffer growth;
 /// changing owners clears selection history, and a capture ignores prior levels.
@@ -64,6 +66,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
     // The tables the selection marks were staged under (ForgetSelectionMarks names this selection).
     private SdfWorldTables? m_historyOwner;
     private uint m_count;
+    // The commands each phase's compact list holds: one a candidate, and for a view, one more for every cluster past a
+    // draw's first that the staged draws' meshes are drawn in (SdfWorldTables.MeshClusterCommands).
+    private uint m_commands;
     private uint m_levels;
     private uint m_width;
     private uint m_height;
@@ -134,6 +139,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         public IGpuBuffer? SeedVisible;
         public bool VisibleCleared;
         public uint Capacity;
+        // The commands each phase's compact list holds, at least Capacity.
+        public uint Commands;
         public SdfWorldTables? HistoryOwner;
         public int Slot;
 
@@ -207,7 +214,12 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
         ((IGpuReadbackBuffer)slot.Buffer.Buffer!).Read(System.Runtime.InteropServices.MemoryMarshal.AsBytes(span: read));
         if (slot.Sight) { m_sight!.Complete(slot.Epoch, slot.Sightings, read.Slice(start: SdfKernelInterfaces.MeshSightCountBase, length: SdfPortalSight.Capacity)); }
-        if (slot.Marks) { slot.Tables?.ObserveSelectionMarks(draws: slot.Draws, epoch: slot.RowEpoch, marks: read[SdfKernelInterfaces.MeshMarkBase..], source: this); }
+        if (slot.Marks) {
+            // A view's compaction counts the triangles it drew by level (a cluster's at its own); a cascade's marks alone say.
+            var levelTriangles = (m_cascade ? ReadOnlySpan<uint>.Empty : read.Slice(start: SdfKernelInterfaces.MeshLevelTriangleBase, length: SdfKernelInterfaces.MeshLevelTriangleWords));
+
+            slot.Tables?.ObserveSelectionMarks(draws: slot.Draws, epoch: slot.RowEpoch, levelTriangles: levelTriangles, marks: read[SdfKernelInterfaces.MeshMarkBase..], source: this);
+        }
         if (slot.Measured && (Measured is { } measured)) {
             var vertices = 0UL;
 
@@ -239,6 +251,8 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         m_slot = slot;
         m_storage.Slot = slot;
         m_count = count;
+        // Only a view draws clusters (sdf-mesh-occlusion.comp.hlsl); every command a phase can emit has a place.
+        m_commands = checked(count + (splitExit ? 0u : tables.MeshClusterCommands));
         m_tag = tag;
         // The draws' indices are the mesh region's own words, read from the buffer the pass's sets bind at the region
         // (SdfWorldTables.WriteMeshTables reads the same store buffer, which only staging replaces).
@@ -266,9 +280,10 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             (NearChain(occlude: occlude) ? 128u : 0u) | (((uint)(slices - 1)) << 8) | (((uint)slice) << 16) | (((uint)audience) << SdfMeshAudience.ControlShift);
         detail.WriteGpu(rows: rows[1..4], held: held);
         cull.WriteGpu(rows: rows[4..]);
-        EnsureBuffers(depth: occlude, draws: count);
+        EnsureBuffers(commands: m_commands, depth: occlude, draws: count);
         var compact = (SdfKernelInterfaces.MeshCompactRow * 4);
 
+        words[(SdfKernelInterfaces.MeshCommandRow * 4)] = m_storage.Commands;
         words[compact] = m_storage.Capacity;
         words[compact + 1] = CompactFirstWord;
         words[compact + 2] = GroupFirstWord;
@@ -401,11 +416,11 @@ internal sealed class SdfMeshOcclusion : IDisposable {
         );
         recorder.DrawIndirectCount(
             argumentBufferHandle: m_storage.Draws.Buffer!.BufferHandle,
-            argumentBufferOffset: ((((ulong)(m_argumentPhases + ((uint)phase))) * m_storage.Capacity) * GpuDrawIndirectCommand.StrideBytes),
+            argumentBufferOffset: ((((ulong)m_argumentPhases * m_storage.Capacity) + (((ulong)phase) * m_storage.Commands)) * GpuDrawIndirectCommand.StrideBytes),
             commandBufferHandle: commandBuffer,
             countBufferHandle: m_storage.Counts.Buffer!.BufferHandle,
             countBufferOffset: (((ulong)phase) * sizeof(uint)),
-            maxDrawCount: m_count,
+            maxDrawCount: m_commands,
             pipelineLayoutHandle: pipeline.LayoutHandle
         );
     }
@@ -491,20 +506,22 @@ internal sealed class SdfMeshOcclusion : IDisposable {
 
         return words;
     }
-    // Grows the buffers to the frame's draws and render extent. History is copied; the new tail starts empty, so its
-    // first opaque occlusion frame tests every new candidate in the second phase.
-    private void EnsureBuffers(uint draws, bool depth) {
+    // Grows the buffers to the frame's draws, the commands a phase can emit and the render extent. History is copied; the
+    // new tail starts empty, so its first opaque occlusion frame tests every new candidate in the second phase.
+    private void EnsureBuffers(uint draws, uint commands, bool depth) {
         var capacity = Math.Max(val1: draws, val2: 1u);
         var candidateBytes = ((ulong)((HeaderWords + (16 * SdfPortalSight.Capacity)) * sizeof(uint)));
 
         m_candidates[m_slot].Fit(candidateBytes);
         var grown = (uint)GpuCapacity.Grown(m_storage.Capacity, capacity, uint.MaxValue, divisor: 1);
         var previous = m_storage.Visible.Buffer;
-        if (m_storage.Visible.Fit((ulong)grown * 4 * sizeof(uint))) {
+        // Each draw's two state rows (MeshOcclusionVisibleWritten): its own and its clusters'.
+        if (m_storage.Visible.Fit((ulong)grown * 8 * sizeof(uint))) {
             m_storage.SeedVisible = previous;
             m_storage.VisibleCleared = false;
         }
         m_storage.Capacity = grown;
+        m_storage.Commands = Math.Max(val1: grown, val2: (uint)GpuCapacity.Grown(m_storage.Commands, Math.Max(val1: commands, val2: capacity), uint.MaxValue, divisor: 1));
         m_storage.Draws.Fit((((ulong)GroupFirstWord) + (m_argumentPhases * GroupsOf(capacity: grown))) * sizeof(uint));
         m_storage.Counts.Fit(MarkedBytes(draws: grown));
 
@@ -548,9 +565,9 @@ internal sealed class SdfMeshOcclusion : IDisposable {
             groupCountY: groups.CeilingDivide(divisor: SdfKernelInterfaces.MeshSelectionGroupsPerRow), groupCountZ: 1u);
     }
     // The first word of each phase's compact list in the draws buffer, past every phase's slots, and of the group counts,
-    // past every compact list (sdfOcclusionCompact).
+    // past every compact list, each the commands a phase can emit long (sdfOcclusionCompact).
     private uint CompactFirstWord => checked(m_argumentPhases * m_storage.Capacity * GpuDrawIndirectCommand.StrideBytes / sizeof(uint));
-    private uint GroupFirstWord => checked(2u * CompactFirstWord);
+    private uint GroupFirstWord => checked(CompactFirstWord + (m_argumentPhases * m_storage.Commands * GpuDrawIndirectCommand.StrideBytes / sizeof(uint)));
     private static uint GroupsOf(uint capacity) => capacity.CeilingDivide(divisor: SdfKernelInterfaces.MeshSelectionGroupSize);
     // Compacts the phases the step just recorded emitted (the early step's, or the late step's second phase) into their
     // compact lists and draw counts, in staged order: each group counts its emitted commands, then copies them past the

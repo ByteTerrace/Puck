@@ -124,16 +124,37 @@ void sdfOcclusionEmit(uint phase, uint candidate, uint identity, uint vertices, 
 groupshared uint sdfCompactFlags[SDF_MESH_SELECTION_GROUP_SIZE];
 groupshared uint sdfCompactBase;
 
+// A draw's retained selection state (its first row) and its clusters' (its second): SdfKernelInterfaces'
+// MeshOcclusionVisibleWritten. The clusters' row holds their visible mask in the low 16 bits of x and their kept mask in the
+// high 16, two bits of each cluster's level in y, the clusters the latest step emitted in z, and in w whether this frame's
+// selection draws the draw in clusters.
+uint sdfOcclusionStateIndex(uint draw) { return (2u * draw); }
+uint sdfOcclusionClusterIndex(uint draw) { return ((2u * draw) + 1u); }
+uint sdfOcclusionClusterLevel(uint4 clusterState, uint cluster) { return ((clusterState.y >> (2u * cluster)) & 3u); }
+
+// Adds a command's triangles to its level's drawn-triangle word, on a view's marked frame (SDF_MESH_LEVEL_TRIANGLE_BASE).
+void sdfOcclusionCountLevel(uint level, uint triangles) {
+    InterlockedAdd(sdfMeshOcclusionCountsRW[(SDF_MESH_LEVEL_TRIANGLE_BASE + min(level, (SDF_MESH_LEVEL_TRIANGLE_WORDS - 1u)))], triangles);
+}
+
 // Counts (scatter false) or compacts (scatter true) one phase's commands for the group holding a candidate; every thread
-// of the group calls it, since it synchronizes the group.
+// of the group calls it, since it synchronizes the group. A candidate holds its slot's command, or for a draw a view draws
+// in clusters, one command for each cluster the step emitted (its state's z), in cluster order at the cluster's level; so
+// a phase's list holds its commands in staged draw order, each draw's clusters in theirs.
 void sdfOcclusionCompactPhase(uint candidate, uint local, uint phase, bool scatter) {
     uint4 row = sdfMeshOcclusionCandidates[SDF_COMPACT_ROW];
+    uint commands = sdfMeshOcclusionCandidates[SDF_COMMAND_ROW].x;
     uint count = sdfMeshOcclusionCandidates[0].x;
+    bool views = (sdfMeshOcclusionCandidates[0].z & 2u) == 0u;
+    bool marking = (sdfMeshOcclusionCandidates[0].w & 8u) != 0u;
     uint group = (candidate / SDF_MESH_SELECTION_GROUP_SIZE);
     uint slot = (((phase * row.x) + candidate) * SdfOcclusionCommandWords);
-    bool emitted = (candidate < count) && (sdfMeshOcclusionDrawsRW[(slot + 1u)] != 0u) && (sdfMeshOcclusionDrawsRW[(slot + 2u)] != 0u);
+    uint4 clusterState = (views && (candidate < count)) ? sdfMeshOcclusionVisibleRW[sdfOcclusionClusterIndex(candidate)] : uint4(0u, 0u, 0u, 0u);
+    bool clustered = clusterState.w != 0u;
+    bool emitted = !clustered && (candidate < count) && (sdfMeshOcclusionDrawsRW[(slot + 1u)] != 0u) && (sdfMeshOcclusionDrawsRW[(slot + 2u)] != 0u);
+    uint emits = clustered ? countbits(clusterState.z & 0xFFFFu) : (emitted ? 1u : 0u);
 
-    sdfCompactFlags[local] = (emitted ? 1u : 0u);
+    sdfCompactFlags[local] = emits;
     if (local == 0u) { sdfCompactBase = 0u; }
     GroupMemoryBarrierWithGroupSync();
 
@@ -161,24 +182,56 @@ void sdfOcclusionCompactPhase(uint candidate, uint local, uint phase, bool scatt
     GroupMemoryBarrierWithGroupSync();
 
     uint place = (sdfCompactBase + rank);
+    uint vertices = 0u;
 
-    if (emitted) {
-        uint word = (row.y + (((phase * row.x) + place) * SdfOcclusionCommandWords));
+    if (emitted && (place < commands)) {
+        uint word = (row.y + (((phase * commands) + place) * SdfOcclusionCommandWords));
 
         [unroll]
         for (uint part = 0u; (part < SdfOcclusionCommandWords); part++) {
             sdfMeshOcclusionDrawsRW[(word + part)] = sdfMeshOcclusionDrawsRW[(slot + part)];
         }
+        vertices = sdfMeshOcclusionDrawsRW[(slot + 1u)];
+        if (views && marking) { sdfOcclusionCountLevel((sdfMeshOcclusionDrawsRW[slot] >> SDF_MESH_LEVEL_SHIFT), (vertices / 3u)); }
+    }
+    if (clustered) {
+        uint record = sdfMeshRecord(candidate);
+        uint levels = sdfMeshRecordWord(record + SDF_MESH_LEVEL_TABLE_WORD + 1u);
+        uint clusterTable = sdfMeshClusterTable(record);
+        uint clusters = sdfMeshWord(clusterTable);
+        uint index = sdfMeshRecordWord(record + SDF_MESH_INDEX_WORD);
+        uint mask = clusterState.z & 0xFFFFu;
+        uint at = place;
+
+        [loop]
+        while ((mask != 0u) && (at < commands)) {
+            uint cluster = firstbitlow(mask);
+            uint level = sdfOcclusionClusterLevel(clusterState, cluster);
+            uint run = sdfMeshClusterRun(clusterTable, clusters, level, cluster);
+            uint triangles = sdfMeshWord(run + 1u);
+            uint word = (row.y + (((phase * commands) + at) * SdfOcclusionCommandWords));
+
+            mask &= (mask - 1u);
+            sdfMeshOcclusionDrawsRW[word] = candidate | (sdfMeshClusterSegment(levels, clusters, level, cluster) << SDF_MESH_LEVEL_SHIFT);
+            sdfMeshOcclusionDrawsRW[(word + 1u)] = 3u * triangles;
+            sdfMeshOcclusionDrawsRW[(word + 2u)] = 1u;
+            sdfMeshOcclusionDrawsRW[(word + 3u)] = index + 3u * sdfMeshWord(run);
+            sdfMeshOcclusionDrawsRW[(word + 4u)] = 0u;
+            sdfMeshOcclusionDrawsRW[(word + 5u)] = 0u;
+            vertices += 3u * triangles;
+            if (marking) { sdfOcclusionCountLevel(level, triangles); }
+            at++;
+        }
     }
     // The vertices the phase's kept commands rasterize, summed a wave at a time into its vertex word, which a pass reads
     // back as the work it drew (SdfKernelInterfaces.MeshVertexCountBase).
-    uint vertices = WaveActiveSum(emitted ? sdfMeshOcclusionDrawsRW[(slot + 1u)] : 0u);
+    vertices = WaveActiveSum(vertices);
 
     if (WaveIsFirstLane() && (vertices != 0u)) {
         InterlockedAdd(sdfMeshOcclusionCountsRW[(SDF_MESH_VERTEX_COUNT_BASE + phase)], vertices);
     }
     if ((local == (SDF_MESH_SELECTION_GROUP_SIZE - 1u)) && (group == ((count - 1u) / SDF_MESH_SELECTION_GROUP_SIZE))) {
-        sdfMeshOcclusionCountsRW[phase] = (place + sdfCompactFlags[local]);
+        sdfMeshOcclusionCountsRW[phase] = min((place + sdfCompactFlags[local]), commands);
     }
     GroupMemoryBarrierWithGroupSync();
 }
@@ -533,7 +586,15 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         bool filtered = (staticOnly && dynamicDraw) || (dynamicOnly && !dynamicDraw && ((a.w & 2u) == 0u)) ||
             ((drawAudience != 0u) && (drawAudience != audience)) || (splitExit && ((a.w & SDF_MESH_NO_SHADOW_FLAG) != 0u));
         if (absent || filtered) {
-            if (absent) { sdfMeshOcclusionVisibleRW[draw] = uint4(0u, 0u, 0u, 0u); }
+            if (absent) { sdfMeshOcclusionVisibleRW[sdfOcclusionStateIndex(draw)] = uint4(0u, 0u, 0u, 0u); }
+            // A draw a step leaves out emits no cluster; an absent one keeps no cluster history.
+            if (!splitExit) {
+                uint4 clusterState = absent ? uint4(0u, 0u, 0u, 0u) : sdfMeshOcclusionVisibleRW[sdfOcclusionClusterIndex(draw)];
+
+                clusterState.z = 0u;
+                clusterState.w = 0u;
+                sdfMeshOcclusionVisibleRW[sdfOcclusionClusterIndex(draw)] = clusterState;
+            }
             sdfOcclusionEmit(entryPhase, draw, draw, 0u, false);
             if (splitExit) { sdfOcclusionEmit((SDF_SHADOW_CULLED_ENTRY_PHASE + entryPhase), draw, draw, 0u, false); }
             if (splitExit && step == SDF_OCCLUSION_EARLY_STEP) {
@@ -548,11 +609,16 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         bool unboxed = (a.w & 1u) != 0u;
         float3 boxCenter, boxX, boxY, boxZ;
         sdfSelectionBox(record, a, b, c, d, boxCenter, boxX, boxY, boxZ);
-        uint4 state = sdfMeshOcclusionVisibleRW[draw];
+        uint4 state = sdfMeshOcclusionVisibleRW[sdfOcclusionStateIndex(draw)];
+        uint4 clusterState = splitExit ? uint4(0u, 0u, 0u, 0u) : sdfMeshOcclusionVisibleRW[sdfOcclusionClusterIndex(draw)];
         // Visibility and detail belong to this observed surface incarnation, including a rejected occupant.
-        if (state.z != c.w) { state = uint4(0u, 0u, c.w, 0u); }
+        if (state.z != c.w) {
+            state = uint4(0u, 0u, c.w, 0u);
+            clusterState = uint4(0u, 0u, 0u, 0u);
+        }
         bool occlude = (header.z & 1u) != 0u;
         bool kept = state.w != 0u;
+        bool glass = (a.w & 2u) != 0u;
         // A culled draw can retain another mesh's level in history; its current table may have fewer levels.
         uint level = min(state.y, d.w);
         if (step == SDF_OCCLUSION_EARLY_STEP) {
@@ -567,15 +633,95 @@ void CSMain(uint3 id : SV_DispatchThreadID, uint lane : SV_GroupIndex, uint3 gro
         }
         bool was = unboxed || state.x != 0u;
         bool emit = kept && (!occlude || was);
-        if (step == SDF_OCCLUSION_LATE_STEP) {
+        // A view whose own box asks a level its mesh draws in clusters (SdfMeshClusters) draws the draw cluster by
+        // cluster: each kept by the view, given the level its own box asks (no coarser than the clusters draw apart),
+        // and, in an occluding view, drawn in the first phase where it was visible and tested against the pyramid in the
+        // second; the draw's own slot stays empty. Every cluster draws one level of the chain whose seams it shares
+        // with its neighbours, so any mix of levels meets edge for edge.
+        bool clustered = false;
+        uint clusterTable = 0u;
+        uint clusters = 0u;
+        uint clusterVertices = 0u;
+        if (!splitExit) {
+            bool wasClustered = clusterState.w != 0u;
+            if (kept && !unboxed && !glass && (asfloat(sdfMeshOcclusionCandidates[1]).x == 1.0) && (sdfMeshDisplacementEntry(record) == SDF_FRAME_SAMPLED_NONE)) {
+                clusterTable = sdfMeshClusterTable(record);
+                clusters = min(sdfMeshWord(clusterTable), (uint)SDF_MESH_MOST_CLUSTERS);
+            }
+            uint clusterLevels = (clusters != 0u) ? min(sdfMeshWord(clusterTable + 1u), (uint)SDF_MESH_MOST_CLUSTER_LEVELS) : 0u;
+            if (step == SDF_OCCLUSION_EARLY_STEP) {
+                clustered = (clusterLevels != 0u) && (level < clusterLevels);
+                if (clustered) {
+                    uint visibleMask = wasClustered ? (clusterState.x & 0xFFFFu) : ((state.x != 0u) ? 0xFFFFu : 0u);
+                    uint keptMask = 0u;
+                    uint levels = 0u;
+                    [loop]
+                    for (uint cluster = 0u; (cluster < clusters); cluster++) {
+                        float3 clusterCenter, clusterX, clusterY, clusterZ;
+                        sdfSelectionClusterBox(record, clusterTable, cluster, clusterCenter, clusterX, clusterY, clusterZ);
+                        if (!sdfSelectionKeeps(clusterCenter, clusterX, clusterY, clusterZ)) { continue; }
+                        uint previous = wasClustered ? sdfOcclusionClusterLevel(clusterState, cluster) : level;
+                        uint own = sdfSelectionLevel(record, uint4(0u, previous, c.w, 0u), false, clusterCenter, clusterX, clusterY, clusterZ, asfloat(b.w), c.w, (clusterLevels - 1u));
+                        keptMask |= (1u << cluster);
+                        levels |= (own << (2u * cluster));
+                    }
+                    clusterState = uint4((visibleMask | (keptMask << 16u)), levels, (keptMask & (occlude ? visibleMask : 0xFFFFu)), 1u);
+                } else {
+                    clusterState = uint4(0u, 0u, 0u, 0u);
+                }
+            } else if (step == SDF_OCCLUSION_LATE_STEP) {
+                clustered = wasClustered && kept && (clusters != 0u);
+                if (clustered) {
+                    uint keptMask = (clusterState.x >> 16u);
+                    uint drawnEarly = (keptMask & clusterState.x & 0xFFFFu);
+                    uint seen = 0u;
+                    // A hidden draw box hides every cluster in it.
+                    if (sdfOcclusionMaySee(boxCenter, boxX, boxY, boxZ, header.y)) {
+                        uint testing = keptMask;
+                        [loop]
+                        while (testing != 0u) {
+                            uint cluster = firstbitlow(testing);
+                            float3 clusterCenter, clusterX, clusterY, clusterZ;
+                            testing &= (testing - 1u);
+                            sdfSelectionClusterBox(record, clusterTable, cluster, clusterCenter, clusterX, clusterY, clusterZ);
+                            if (sdfOcclusionMaySee(clusterCenter, clusterX, clusterY, clusterZ, header.y)) { seen |= (1u << cluster); }
+                        }
+                    }
+                    clusterState.x = (seen | (keptMask << 16u));
+                    clusterState.z = (seen & ~drawnEarly);
+                    state.x = (seen != 0u) ? 1u : 0u;
+                } else {
+                    clusterState.z = 0u;
+                    clusterState.w = 0u;
+                }
+            }
+            if (clustered) {
+                uint levels = sdfMeshRecordWord(record + SDF_MESH_LEVEL_TABLE_WORD + 1u);
+                uint emitting = (clusterState.z & 0xFFFFu);
+                uint finest = 3u;
+                [loop]
+                while (emitting != 0u) {
+                    uint cluster = firstbitlow(emitting);
+                    uint own = sdfOcclusionClusterLevel(clusterState, cluster);
+                    emitting &= (emitting - 1u);
+                    clusterVertices += 3u * sdfMeshWord(sdfMeshClusterRun(clusterTable, clusters, own, cluster) + 1u);
+                    finest = min(finest, own);
+                    draws++;
+                }
+                vertices += clusterVertices;
+                if (marking && (clusterVertices != 0u)) { sdfOcclusionMark(draw, finest); }
+            }
+            sdfMeshOcclusionVisibleRW[sdfOcclusionClusterIndex(draw)] = clusterState;
+        }
+        if (step == SDF_OCCLUSION_LATE_STEP && !clustered) {
             bool visible = kept && (unboxed || sdfOcclusionMaySee(boxCenter, boxX, boxY, boxZ, header.y));
             entryRejected = splitExit && kept && !was && !visible && (a.w & 2u) == 0u ? 1u : 0u;
             emit = visible && !was;
             state.x = visible ? 1u : 0u;
         }
-        sdfMeshOcclusionVisibleRW[draw] = state;
+        emit = emit && !clustered;
+        sdfMeshOcclusionVisibleRW[sdfOcclusionStateIndex(draw)] = state;
         uint count = sdfSelectionVertices(record, level);
-        bool glass = (a.w & 2u) != 0u;
         emit = emit && !(splitExit && glass && !optical);
         bool opaqueEmit = emit && !(splitExit && glass);
         // A cascade drawing one layer of a split refresh (SdfMeshOcclusion.Stage) emits and counts that layer's commands

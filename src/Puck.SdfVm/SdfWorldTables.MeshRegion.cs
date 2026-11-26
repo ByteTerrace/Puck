@@ -312,6 +312,14 @@ public sealed partial class SdfWorldTables {
 
     /// <summary>Gets the draws the latest frame's mesh passes rasterize in each view, the glass draws among them.</summary>
     public uint MeshDrawCount => m_meshDrawCount;
+    /// <summary>Gets the commands a view's selection can emit past one a staged draw: one for each cluster past the
+    /// first that each staged row's mesh is drawn in (<see cref="SdfMesh.Clusters"/>), which sizes every view's compact
+    /// command lists (<see cref="SdfMeshOcclusion"/>). Kept beside the rows' mesh claims, so it changes exactly where a
+    /// row's mesh does.</summary>
+    public uint MeshClusterCommands => ((uint)m_clusterCommands);
+    private long m_clusterCommands;
+    // The commands past the first a row naming a mesh adds to a view's selection.
+    private static long ClusterCommandsOf(SdfMesh mesh) => (((long)(mesh.Clusters?.Count ?? 1)) - 1L);
     /// <summary>Gets how many of <see cref="MeshDrawCount"/> are glass (<see cref="SdfMeshDraw.Glass"/>): the glass pass
     /// draws them, and the mesh pass and the shadow cascades draw the rest.</summary>
     public uint GlassDrawCount => m_glassDrawCount;
@@ -486,8 +494,8 @@ public sealed partial class SdfWorldTables {
                     if (ReferenceEquals(objA: old, objB: mesh)) { m_meshStore.TouchLanding(mesh: mesh); continue; }
                     // The new name is taken before the old one goes, so a mesh two rows swap keeps its place. The row's
                     // staged draw takes the new mesh when its record is packed below, which a changed mesh always is.
-                    if (mesh is not null) { m_meshStore.Name(client: this, mesh: mesh); m_meshClaims.Claim(mesh: mesh); m_rowsByMesh.Set(key: mesh, row: row); } else { m_rowsByMesh.Remove(row: row); }
-                    if (old is not null) { m_meshStore.Unname(client: this, mesh: old); m_meshClaims.Release(mesh: old); }
+                    if (mesh is not null) { m_meshStore.Name(client: this, mesh: mesh); m_meshClaims.Claim(mesh: mesh); m_rowsByMesh.Set(key: mesh, row: row); m_clusterCommands += ClusterCommandsOf(mesh: mesh); } else { m_rowsByMesh.Remove(row: row); }
+                    if (old is not null) { m_meshStore.Unname(client: this, mesh: old); m_meshClaims.Release(mesh: old); m_clusterCommands -= ClusterCommandsOf(mesh: old); }
                 }
             }
             m_meshStore.Plan(planner: this);
@@ -516,7 +524,7 @@ public sealed partial class SdfWorldTables {
     private void Unname(int row) {
         RowChanged(row: row);
         if (m_stagedDraws[row].IsStatic) { StaticDrawsChanged(); }
-        if (m_stagedDraws[row].Mesh is { } mesh) { m_meshStore.Unname(client: this, mesh: mesh); m_meshClaims!.Release(mesh: mesh); }
+        if (m_stagedDraws[row].Mesh is { } mesh) { m_meshStore.Unname(client: this, mesh: mesh); m_meshClaims!.Release(mesh: mesh); m_clusterCommands -= ClusterCommandsOf(mesh: mesh); }
         m_rowsByMesh.Remove(row: row); m_absentRows.Remove(item: row); m_glassIndices.Remove(item: row);
         m_stagedDraws[row] = default; m_stagedOccupancies[row] = 0; m_stagedCasterState[row] = CasterNeverStood;
     }

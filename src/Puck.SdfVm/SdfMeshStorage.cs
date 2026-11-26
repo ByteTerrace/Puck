@@ -6,7 +6,7 @@ namespace Puck.SdfVm;
 internal readonly record struct SdfMeshLevelShape(int Indices, int Materials, float Error);
 
 // The counts of one independently drawn mesh's planes: what a storage sizes its parts by before any plane exists.
-internal sealed record SdfMeshPieceShape(Vector3 BakeCell, int Vertices, int Normals, int Indices, int Materials, int Members, int VertexMembers, int Influences, SdfMeshLevelShape[] Levels) {
+internal sealed record SdfMeshPieceShape(Vector3 BakeCell, int Vertices, int Normals, int Indices, int Materials, int Members, int VertexMembers, int Influences, SdfMeshLevelShape[] Levels, SdfMeshClusters? Clusters) {
     // Triangles by the index plane; the mesh refuses an index count that is no multiple of three when it is built.
     public int Triangles => (Indices / 3);
 }
@@ -28,6 +28,7 @@ internal sealed record SdfMeshShape(bool Chunked, bool Encloses, SdfMeshPieceSha
             }
             pieces[index] = new SdfMeshPieceShape(
                 BakeCell: piece.BakeCell,
+                Clusters: piece.Clusters,
                 Indices: piece.IndexCount,
                 Influences: (chunked ? 0 : piece.Influences.Length),
                 Levels: levels,
@@ -160,6 +161,7 @@ internal sealed class SdfMeshManagedStorage : SdfMeshStorage {
             }
             meshes[index] = new SdfMesh(indices: piece.Indices, influences: piece.Influences, members: piece.Members, normals: piece.Normals, positions: piece.Positions, triangleMaterials: piece.Materials, vertexMembers: piece.VertexMembers) {
                 BakeCell = shape.Pieces[index].BakeCell,
+                Clusters = shape.Pieces[index].Clusters,
                 Levels = levels,
             };
         }
