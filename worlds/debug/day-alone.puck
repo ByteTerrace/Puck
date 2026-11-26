@@ -1,0 +1,25 @@
+// The day's whole sky for a root that stands one place alone (gallery-root.puck): the day cycle (day.puck) and the two
+// clocks it reads that other documents own in the debug world. There the launch field declares the height over the sky
+// seam (launch.puck's `altitude`) and sun-watch.puck adopts the pair's turn from the sun's world (`pair`). A root that
+// imports neither imports this document in day.puck's place: it declares the same height clock, and a `pair` row that
+// turns at the pair's own rate from zero and follows no other world, so the companion still rides the sky.
+
+import "moon-frame"
+import "day"
+
+state {
+  world [
+    { name: "pair", kind: "Fixed", value: "0", advance { perSecondNumerator: 1, perSecondDenominator: pairSeconds } }
+  ]
+}
+
+timeline {
+  clocks [
+    { name: "altitude", view { to: skySeamAltitude, axis [0, 1, 0] } }
+    { name: pair, state: pair, spanSeconds: pairSeconds }
+  ]
+}
+
+exports {
+  reads [day, pair, altitude]
+}

@@ -1287,12 +1287,12 @@ rule "gallery-inspect-off" {
   galleryFill[$"fill"] = 0
 }
 
-// One camera per bookmarked view (look.puck's lookViews), its eye and aim placed from the building's site when the
-// document compiles; `gallery.view` selects one.
-cameras: map(lookViews, view => {
-  name: $"gallery-view-{view.name}"
+// One camera per bookmarked viewpoint (look.puck's lookShots), its eye and aim placed from the building's site when the
+// document compiles; `gallery.shot` selects one.
+cameras: map(lookShots, view => {
+  name: $"gallery-shot-{view.name}"
   rig {
-    name: $"gallery-view-{view.name}"
+    name: $"gallery-shot-{view.name}"
     version: "puck.camera.program.v1"
     operations [
       { $type: "anchor", subject { $type: "worldPoint", point: galleryWorld(view.eye[0], view.eye[1], view.eye[2]) } }
@@ -1327,13 +1327,13 @@ commands [
     ]
   }
   {
-    name: "gallery.view"
-    help: "Films the gallery from a bookmarked viewpoint (look.puck's lookViews): hall is the level-zero hall painting's, hall-side its second angle, and the rest face what a kit sheet draws. view.override camera auto returns to the chase camera."
+    name: "gallery.shot"
+    help: "Films the gallery from a bookmarked viewpoint (look.puck's lookShots): hall is the level-zero hall painting's, hall-side its second angle, and the rest face what a kit sheet draws. view.override camera auto returns to the chase camera."
     parameters [
-      { name: "view", kind: Choice, values: map(lookViews, view => view.name), default: "hall" }
+      { name: "shot", kind: Choice, values: map(lookShots, shot => shot.name), default: "hall" }
     ]
     lines [
-      "view.override camera gallery-view-{view}"
+      "view.override camera gallery-shot-{shot}"
     ]
   }
   {

@@ -3,7 +3,7 @@
 // plan's sizes and spacings are layout.puck's, the kit pieces' forms the standard's (architecture.puck), and the
 // exhibits' own materials shapes.puck's (`exhibitSubjects`). A module library: it emits no document.
 //
-// Judge a change from a bookmarked view at a held time (`gallery.view hall`, `gallery.time`), beside
+// Judge a change from a bookmarked viewpoint at a held time (`gallery.shot hall`, `gallery.time`), beside
 // docs/game/art/gallery-kit-pack/level-zero-exhibit-hall.png.
 
 // Paint. The walls and ceilings are warm creams a step apart, the cladding ochre, the structure teal.
@@ -68,11 +68,11 @@ let lookFanTall = { radius: 2.5, leaves: 5, spread: 58, leaf: 0.26 }
 let lookNoon = 0.5
 let lookAfternoon = 0.62
 
-// The bookmarked views (`gallery.view <name>`), each an eye and an aim in the building's frame and a field of view in
+// The bookmarked viewpoints (`gallery.shot <name>`), each an eye and an aim in the building's frame and a field of view in
 // degrees. `hall` is the level-zero hall painting's viewpoint and `hall-side` its second angle; the rest face what a
 // kit sheet draws: a station, the arcade, a window bay, a balcony edge, the floor and the ceiling, the furniture, and
 // the two concept paintings' views of the entrance and the outside.
-let lookViews = [
+let lookShots = [
   { name: "hall", eye [37, 1.6, 14], aim [60, 3.9, 14], fov: 70 }
   { name: "hall-side", eye [40, 1.6, 9.6], aim [54, 4.6, 18], fov: 78 }
   { name: "plinth", eye [50.4, 1.6, 14.2], aim [53.4, 0.95, 10.9], fov: 55 }

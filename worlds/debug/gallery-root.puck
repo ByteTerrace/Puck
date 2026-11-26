@@ -1,12 +1,12 @@
 // The gallery on its own: the building (gallery/gallery.puck) and its exhibits (shapes.puck) under the debug world's
-// day, booted alone so a change to the gallery bakes and boots only the gallery. The debug world imports the same
+// day (day-alone.puck, the day with the clocks it reads), booted alone so a change to the gallery bakes and boots only the gallery. The debug world imports the same
 // module; this root exists for iterating on the building. Boot it with `--world worlds/debug/gallery-root.puck`.
 
 schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "gallery"
 
-import "day"
+import "day-alone"
 import "moon-frame"
 import "moth-controls"
 import "suit"
@@ -17,11 +17,6 @@ import "gallery/gallery"
 metadata {
   title: "Gallery"
   description: "The debug world's gallery and its exhibits alone, for iterating on the building."
-}
-
-// The sky and the camera's exposure key on the height the debug world's launch field declares (launch.puck).
-timeline {
-  clocks [{ name: "altitude", view { to: skySeamAltitude, axis [0, 1, 0] } }]
 }
 
 // The seat boots on the forecourt, facing the entrance; the module declares the building's own spawn points.
