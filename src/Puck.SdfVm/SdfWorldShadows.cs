@@ -255,6 +255,12 @@ internal sealed class SdfWorldShadows : IDisposable {
     /// <param name="entry">The entry, from zero below <see cref="SdfMeshShadowCascades.MaxEntries"/>.</param>
     /// <returns>The buffer, or <see langword="null"/>.</returns>
     public IGpuBuffer? OpticalOf(int view, int entry) => EntryOf(view: view, entry: entry)?.Optical;
+    /// <summary>Returns the block bounds of the layers a view's pass samples for an entry (<see cref="ViewOf"/>), or
+    /// <see langword="null"/> for an entry that holds no layers.</summary>
+    /// <param name="view">The view's index in <see cref="SdfFrame.Views"/>.</param>
+    /// <param name="entry">The entry, from zero below <see cref="SdfMeshShadowCascades.MaxEntries"/>.</param>
+    /// <returns>The buffer, or <see langword="null"/>.</returns>
+    public IGpuBuffer? BlocksOf(int view, int entry) => EntryOf(view: view, entry: entry)?.ReadBlocks;
     private int AnchorOf(int view) => (((view >= 0) && (view < m_viewAnchors.Length)) ? m_viewAnchors[view] : -1);
     private Entry? EntryOf(int view, int entry) => ((entry == SdfMeshShadowCascades.DistantEntry)
         ? m_distant
@@ -502,7 +508,9 @@ internal sealed class SdfWorldShadows : IDisposable {
 
         return (3L * (PairBytes(texels: texels) + (frame.Program.HasGlassShadows ? OpticalBytes(texels: texels) : 0L)));
     }
-    private static long PairBytes(int texels) => (2L * texels * texels * GpuPixelFormats.TexelBytes(format: SdfWorldPackage.MeshShadowDepthAttachment.Format));
+    // A pair's two layers and its block bounds.
+    private static long PairBytes(int texels) => ((2L * texels * texels * GpuPixelFormats.TexelBytes(format: SdfWorldPackage.MeshShadowDepthAttachment.Format)) +
+        (long)SdfWorldPackage.ShadowBlockBytes(side: (uint)texels));
     private static long OpticalBytes(int texels) => checked((long)((((ulong)texels * (ulong)texels * SdfWorldPackage.ShadowOpticalTexelWords) + SdfWorldPackage.ShadowOpticalBitmapWords(side: (uint)texels)) * sizeof(uint)));
     // Holds more bytes beside what the layers hold, refused where the pool has no room for them.
     private bool TryHold(long extra) => m_reservation.TryReserve(floor: m_bytes, peak: (m_bytes + extra));
@@ -591,8 +599,16 @@ internal sealed class SdfWorldShadows : IDisposable {
         }
     }
     private Pair CreatePair(int texels, string part) {
-        var pair = new Pair(depth: CreateLayer(texels: texels, part: part, detail: "depth"), exit: CreateLayer(texels: texels, part: part, detail: "exit"));
+        using var scope = new GpuCreationScope();
+        var depth = scope.Own(created: CreateLayer(texels: texels, part: part, detail: "depth"));
+        var exit = scope.Own(created: CreateLayer(texels: texels, part: part, detail: "exit"));
+        var blocks = scope.Own(created: m_gpu.BufferFactory.CreateDeviceLocal(
+            name: Name(part: part, detail: "blocks"),
+            sizeBytes: SdfWorldPackage.ShadowBlockBytes(side: (uint)texels),
+            usage: GpuBufferUsage.Storage));
+        var pair = new Pair(blocks: blocks, depth: depth, exit: exit);
 
+        scope.Complete();
         Hold(bytes: pair.Bytes);
 
         return pair;
@@ -818,13 +834,27 @@ internal sealed class SdfWorldShadows : IDisposable {
         }
     }
 
-    // An entry's depth and exit layers, which a redraw draws together and readers bind together.
-    private sealed class Pair(Layer depth, Layer exit) : IDisposable {
+    // An entry's depth and exit layers, which a redraw draws together and readers bind together, and their block bounds
+    // (SdfWorldPackage.MeshShadowNearBlocks), which the surface pass classifies receivers by.
+    //
+    // Invariant: whenever a view may read the pair, its block bounds describe its layers, or say nothing. One place
+    // keeps it, the entry's recording (Entry.Record, through Entry.Reduce): the bounds are zeroed before anything else
+    // touches a new pair, so no record says anything; the upload that completes a whole redraw into the pair reduces
+    // every block after its last drawing; and an upload that redraws a rectangle of a standing pair, or its glass
+    // extinction, reduces the blocks that drawing can change before the layers rest. A redraw spread over several
+    // uploads draws into a borrowed pair no view binds (ReadPair), whose bounds are never read meanwhile, or, for an
+    // entry that does not stand, over the entry's own pair, whose bounds each share before the last zeroes first.
+    private sealed class Pair(Layer depth, Layer exit, IGpuBuffer blocks) : IDisposable {
         public Layer Depth { get; } = depth;
         public Layer Exit { get; } = exit;
+        public IGpuBuffer Blocks { get; } = blocks;
+        // Whether the bounds are zeroed or reduced. False for a new buffer, which holds whatever its memory held, and for
+        // a pair whose layers a redraw is part way through drawing in place; the upload that finds it false zeroes them.
+        public bool BlocksZeroed { get; set; }
         public int Texels => (int)Depth.Image.Width;
         public long Bytes => PairBytes(texels: Texels);
         public void Dispose() {
+            Blocks.Dispose();
             Depth.Dispose();
             Exit.Dispose();
         }
@@ -1000,6 +1030,10 @@ internal sealed class SdfWorldShadows : IDisposable {
         private readonly IGpuBuffer?[][] m_glassSetBuffers;
         private readonly IGpuBuffer?[][] m_glassSetOcclusion;
         private readonly nint[] m_glassSetTargets;
+        // The block reduction's set a ring slot (Reduce), written again by each upload that reduces.
+        private readonly nint[] m_blockSets;
+        private long m_blockReductions;
+        private long m_blocksReduced;
         private readonly SdfShadowEntryCounts m_kinds;
         // The rectangles this entry owes in the texels of the camera receivers read; those this upload's work took from
         // them when decided, returned to them if the upload is decided again unsubmitted; and those a redraw under way
@@ -1074,6 +1108,9 @@ internal sealed class SdfWorldShadows : IDisposable {
                     sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.MeshOcclusion.Groups);
                 }
             }
+            for (var slot = 0; (slot < ring); slot++) {
+                sizes += GpuDescriptorPoolSizes.ForGroups(groups: SdfWorldTables.PipelineLayouts.ShadowBlocks.Groups);
+            }
             m_pool = gpu.Bindings.CreatePool(name: owner.Name(part: Part, detail: "descriptors"), sizes: sizes);
 
             // Every drawing of the entry selects into one storage: an upload records them one after another, each staging,
@@ -1103,7 +1140,13 @@ internal sealed class SdfWorldShadows : IDisposable {
 
             var meshLayout = tables.MeshPipeline.GroupLayoutHandles[((int)ShaderInterfaceGroup.Pass)];
             var occlusionLayout = tables.OcclusionPipeline.GroupLayoutHandles[((int)ShaderInterfaceGroup.Pass)];
+            var reductionLayout = tables.Pipeline(kernel: SdfKernel.ShadowBlocks).GroupLayoutHandles[((int)ShaderInterfaceGroup.Pass)];
             var blockBytes = (ulong)IGpuBindings.ConstantBufferBytes(blockBytes: (uint)SdfFrameBlock.SizeBytes);
+
+            m_blockSets = new nint[ring];
+            for (var slot = 0; (slot < ring); slot++) {
+                m_blockSets[slot] = gpu.Bindings.AllocateSet(descriptorSetLayoutHandle: reductionLayout, name: owner.Name(part: Part, detail: "blocks group", index: slot), poolHandle: m_pool);
+            }
 
             for (var kind = 0; (kind < Kinds); kind++) {
                 m_blocks[kind] = new IGpuStorageBuffer[ring];
@@ -1167,6 +1210,8 @@ internal sealed class SdfWorldShadows : IDisposable {
 
         // The layer receivers sample.
         public Layer? Read(bool exit) => ((ReadPair is { } pair) ? (exit ? pair.Exit : pair.Depth) : null);
+        // The block bounds of the layers receivers sample.
+        public IGpuBuffer? ReadBlocks => ReadPair?.Blocks;
         // Whether this upload's work draws anything.
         public bool Draws => (m_holds && (m_admitted || (m_work.Rectangles > 0) || m_work.Optical || (m_front?.Depth.Layout == GpuImageLayout.Undefined)));
         // Whether the entry wants a share of a redraw this upload.
@@ -1514,6 +1559,14 @@ internal sealed class SdfWorldShadows : IDisposable {
                     Clear(commandBuffer: commandBuffer, layer: layer);
                 }
             }
+            // A whole redraw spread over several uploads draws over the pair readers bind when its entry does not stand
+            // (Admit borrows a pair only for one that does), and that pair's layers are part drawn until its last share:
+            // each share before the last zeroes the bounds again, so they say nothing of layers the next share changes.
+            if (m_admitted && !m_work.Completes && ReferenceEquals(objA: target, objB: read)) {
+                target.BlocksZeroed = false;
+            }
+            ZeroBlocks(commandBuffer: commandBuffer, pair: front);
+            ZeroBlocks(commandBuffer: commandBuffer, pair: target);
 
             var whole = new GpuPixelRect(Height: (uint)m_texels, Width: (uint)m_texels, X: 0, Y: 0);
             var motion = (FollowsMotion ? SdfMeshMotion.Any : SdfMeshMotion.Static);
@@ -1543,6 +1596,101 @@ internal sealed class SdfWorldShadows : IDisposable {
             }
             Rest(commandBuffer: commandBuffer, layer: read.Depth);
             Rest(commandBuffer: commandBuffer, layer: read.Exit);
+
+            // The bounds of the pair receivers bind follow what this upload drew into it (Pair's invariant): every block
+            // where a whole redraw lands, else the blocks each rectangle can change and, under an extinction drawn again,
+            // every block's glass flag.
+            var reducing = false;
+
+            if (Completes) {
+                Reduce(commandBuffer: commandBuffer, slot: slot, pair: read, area: whole, flagsOnly: false, reducing: ref reducing);
+            } else {
+                for (var at = 0; (at < m_work.Rectangles); at++) {
+                    var rect = m_taken[at];
+
+                    Reduce(commandBuffer: commandBuffer, slot: slot, pair: read, flagsOnly: false, reducing: ref reducing,
+                        area: new GpuPixelRect(Height: (uint)(rect.Y1 - rect.Y0), Width: (uint)(rect.X1 - rect.X0), X: rect.X0, Y: rect.Y0));
+                }
+                if (m_work.Optical) {
+                    Reduce(commandBuffer: commandBuffer, slot: slot, pair: read, area: whole, flagsOnly: true, reducing: ref reducing);
+                }
+            }
+            if (reducing) {
+                m_owner.m_gpu.Recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: read.Blocks.BufferHandle,
+                    sourceAccessMask: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite), sourceStageMask: GpuStage.ComputeShader,
+                    destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
+            }
+        }
+        // Zeroes a pair's block bounds where they owe it (Pair.BlocksZeroed), before anything reads or reduces them: a zero
+        // record says nothing (frame/sdf-shadow-blocks.hlsli). Leaves them shader-readable.
+        private void ZeroBlocks(nint commandBuffer, Pair pair) {
+            if (pair.BlocksZeroed) { return; }
+
+            var recorder = m_owner.m_gpu.Recorder;
+
+            recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: pair.Blocks.BufferHandle,
+                sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: GpuStage.ComputeShader,
+                destinationAccessMask: GpuAccess.TransferWrite, destinationStageMask: GpuStage.Transfer);
+            recorder.ClearStorageBuffer(commandBufferHandle: commandBuffer, bufferHandle: pair.Blocks.BufferHandle, sizeBytes: pair.Blocks.SizeBytes);
+            recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: pair.Blocks.BufferHandle,
+                sourceAccessMask: GpuAccess.TransferWrite, sourceStageMask: GpuStage.Transfer,
+                destinationAccessMask: GpuAccess.ShaderRead, destinationStageMask: GpuStage.ComputeShader);
+            pair.BlocksZeroed = true;
+        }
+        // Reduces a pair's block bounds from its layers, which rest shader-readable, over the blocks whose bounds an area
+        // of its texels can change: each block whose own texels or apron meet the area (every block for the whole
+        // layer); or, with flagsOnly, rewrites those blocks' glass flags from the entry's extinction and leaves their
+        // planes and bounds. The first reduction of an upload binds the kernel and the slot's set and opens the bounds for
+        // writing, which the caller closes; each later one is ordered behind the one before it, since their blocks can
+        // overlap.
+        private void Reduce(nint commandBuffer, int slot, Pair pair, GpuPixelRect area, bool flagsOnly, ref bool reducing) {
+            var tables = m_owner.m_tables;
+            var gpu = m_owner.m_gpu;
+            var recorder = gpu.Recorder;
+            var pipeline = tables.Pipeline(kernel: SdfKernel.ShadowBlocks);
+            var edge = SdfWorldPackage.ShadowBlockEdge;
+            var apron = (uint)SdfKernelInterfaces.MeshShadowBlockApron;
+            var last = ((uint)m_texels - 1u);
+            var firstX = ((uint)Math.Max(val1: 0L, val2: ((long)area.X - apron)) / edge);
+            var firstY = ((uint)Math.Max(val1: 0L, val2: ((long)area.Y - apron)) / edge);
+            var lastX = (Math.Min(val1: last, val2: ((((uint)area.X + area.Width) - 1u) + apron)) / edge);
+            var lastY = (Math.Min(val1: last, val2: ((((uint)area.Y + area.Height) - 1u) + apron)) / edge);
+
+            if ((area.Width == 0u) || (area.Height == 0u) || (m_texels <= 0)) { return; }
+            if (!reducing) {
+                var set = m_blockSets[slot];
+                var layout = SdfWorldInterfaces.ShadowBlocksLayout;
+
+                gpu.Bindings.WriteSampledImage(arrayElement: 0, binding: SdfKernelInterfaces.BindingOf(layout: layout, member: SdfKernelInterfaces.ShadowBlocksDepth),
+                    descriptorSetHandle: set, imageViewHandle: pair.Depth.Image.ImageViewHandle);
+                gpu.Bindings.WriteSampledImage(arrayElement: 0, binding: SdfKernelInterfaces.BindingOf(layout: layout, member: SdfKernelInterfaces.ShadowBlocksExit),
+                    descriptorSetHandle: set, imageViewHandle: pair.Exit.Image.ImageViewHandle);
+                // An extinction no upload has cleared holds nothing to read: the filler, which ends before a tile bitmap,
+                // marks no glass.
+                tables.WriteInterfaceBuffer(buffer: ((m_opticalInitialized ? Optical : null) ?? tables.DummyBuffer), layout: layout, member: SdfKernelInterfaces.ShadowBlocksOptical, set: set);
+                tables.WriteInterfaceBuffer(buffer: pair.Blocks, layout: layout, member: SdfKernelInterfaces.ShadowBlocksWritten, set: set);
+                recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: pair.Blocks.BufferHandle,
+                    sourceAccessMask: GpuAccess.ShaderRead, sourceStageMask: GpuStage.ComputeShader,
+                    destinationAccessMask: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite), destinationStageMask: GpuStage.ComputeShader);
+                recorder.BindPipeline(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, pipelineHandle: pipeline.Handle);
+                recorder.BindDescriptorSet(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, descriptorSetHandle: set,
+                    group: ((uint)ShaderInterfaceGroup.Pass), pipelineLayoutHandle: pipeline.LayoutHandle);
+                reducing = true;
+            } else {
+                recorder.TransitionBuffer(commandBufferHandle: commandBuffer, bufferHandle: pair.Blocks.BufferHandle,
+                    sourceAccessMask: GpuAccess.ShaderWrite, sourceStageMask: GpuStage.ComputeShader,
+                    destinationAccessMask: (GpuAccess.ShaderRead | GpuAccess.ShaderWrite), destinationStageMask: GpuStage.ComputeShader);
+            }
+
+            Span<byte> pushed = stackalloc byte[sizeof(uint)];
+
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(destination: pushed,
+                value: ((firstX | (firstY << 8)) | (flagsOnly ? (1u << SdfKernelInterfaces.MeshShadowBlockFlagsOnlyShift) : 0u)));
+            recorder.PushConstants(bindPoint: GpuBindPoint.Compute, commandBufferHandle: commandBuffer, data: pushed, offset: 0,
+                pipelineLayoutHandle: pipeline.LayoutHandle, stageFlags: GpuShaderStage.Compute);
+            recorder.Dispatch(commandBufferHandle: commandBuffer, groupCountX: ((lastX - firstX) + 1u), groupCountY: ((lastY - firstY) + 1u), groupCountZ: 1u);
+            m_blockReductions++;
+            m_blocksReduced += (long)(((lastX - firstX) + 1u) * ((lastY - firstY) + 1u));
         }
         // Selects a drawing's draws on the GPU and draws them into a pair's two layers within an area of its texels: the
         // entry depth (back-face culled where the draw encloses a solid), then the exit layer. The light camera is the
@@ -1788,7 +1936,7 @@ internal sealed class SdfWorldShadows : IDisposable {
             m_rectDrawings++;
         }
         public string Describe() => string.Create(provider: System.Globalization.CultureInfo.InvariantCulture,
-            handler: $"shadow.{EntryNames[Index]}=half{m_camera.HalfHeight:0.#}m/texels{m_texels}/stands{(m_stands ? 1 : 0)}/held{m_heldUploads}/redraw{(m_redraw is { } r ? $"{r.Next}of{r.Slices}{((r.Target is null) ? string.Empty : "lent")}" : "-")}/owed{(m_owed.All ? "all" : $"{m_owed.Count}:{m_owed.Area}texels")}/tri{m_lastWholeVertices / 3}in{m_slicesDrawn}/rect-tri{((m_rectDrawings > 0) ? ((m_rectVertices / m_rectDrawings) / 3) : 0)}x{m_rectDrawings}/ended-turn{m_endedByTurn}-cell{m_endedByCell}-static{m_endedByStatic}-fit{m_endedByFit}-moved{m_endedByMotion}{((Optical is not null) ? "/optical" : string.Empty)}");
+            handler: $"shadow.{EntryNames[Index]}=half{m_camera.HalfHeight:0.#}m/texels{m_texels}/stands{(m_stands ? 1 : 0)}/held{m_heldUploads}/redraw{(m_redraw is { } r ? $"{r.Next}of{r.Slices}{((r.Target is null) ? string.Empty : "lent")}" : "-")}/owed{(m_owed.All ? "all" : $"{m_owed.Count}:{m_owed.Area}texels")}/tri{m_lastWholeVertices / 3}in{m_slicesDrawn}/rect-tri{((m_rectDrawings > 0) ? ((m_rectVertices / m_rectDrawings) / 3) : 0)}x{m_rectDrawings}/ended-turn{m_endedByTurn}-cell{m_endedByCell}-static{m_endedByStatic}-fit{m_endedByFit}-moved{m_endedByMotion}/blocks{m_blocksReduced}in{m_blockReductions}{((Optical is not null) ? "/optical" : string.Empty)}");
 
         public void Dispose() {
             ReleaseLayers();

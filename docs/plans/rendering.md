@@ -906,18 +906,7 @@ instance map and per-geometry, per-level ranges, never `instanceCount` alone.
      full rate. After step 1 a coarse tile lists a quarter of its samples and
      the saving is real; the classification's cost is then the item to cut
      (`sdfRateTile`). Check: the same two readings after step 1.
-  3. **Classify a receiver's shadow before filtering it.** The cascade filter
-     is half of the surface pass at the stage (`world.shadows off` against
-     `high`). A receiver whose whole search disk lies in front of every caster
-     is lit, and one whose whole filter disk lies behind every caster by more
-     than the filter's margins is in umbra; both answers are exact, and a
-     farthest and nearest depth for each block of a layer decides them from
-     four reads in place of the search's twelve taps and the filter's sixteen.
-     Build: a two-level reduction of each entry's depth, redrawn with the layer
-     and with each rectangle (`SdfWorldShadows`), bound beside it, and tested at
-     the head of `sdfMeshShadow`. Check: taps counted a pixel fall indoors and
-     on open ground, and a paused still stands within a level.
-  4. **Give a static fixture an authored way out of the volume's occlusion.**
+  3. **Give a static fixture an authored way out of the volume's occlusion.**
      An unanchored point or spot light is always traced
      (`WorldEnvironmentResolve`), and a traced light adds nothing where no
      probe sees it, so an author who wants a fixture to light through what the

@@ -556,6 +556,11 @@ to run several commands under one lease.
 
 Focused CPU-only laws with small fixtures can run directly; the heavy lease is
 for memory-heavy or broad suite runs, not every invocation of a test assembly.
+A whole class of rig laws is a suite run, however it is started: each law of
+`SdfWorldPassesLawTests` builds a residency and an irradiance volume on the
+fake device, and the class run as one process (`--filter-class` on the test
+assembly) holds many gigabytes with no lease to admit it. Name one law by
+`--filter-method`, or run the class under `puck lease heavy`.
 
 Take the heavy lease once per suite run: one `puck test` invocation (or one
 suite) per `puck lease heavy` acquisition, never a batch of runs under one hold,

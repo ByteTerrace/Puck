@@ -945,7 +945,12 @@ can share pairs horizontally or vertically, or one sample across a 2×2 cell.
 The sample rotates with the jitter. A cut, disocclusion or partial tile shades
 at full rate, as do screens and draws that moved or deformed. For the tile counts
 at each rate, read `world.counters gpu pass sdf.world$views-probes` and the
-`steps` for `tiles-1x1`, `tiles-2x1`, `tiles-1x2` and `tiles-2x2`.
+`steps` for `tiles-1x1`, `tiles-2x1`, `tiles-1x2` and `tiles-2x2`. The same
+reading counts what the probe lookup's slots gave up: `lights-rounded` is the
+traced lights a slot's list of eight had no room for and rounded to seen or
+unseen, and `groups-without-extras` the groups of cells whose extra gathers the
+pool had no room for (its `texels` the gathers they asked for), whose pixels
+then read their cells' representatives.
 
 Each view's history is its own fragment's: two versions at the output extent,
 two allocations each, the one the next frame reads through
@@ -1003,6 +1008,12 @@ Coverage stays in the color's
 alpha. The sky, the atmosphere's glow and the bounded media never enter the
 history: they composite after the resolve. The atmosphere's transmittance does,
 inside the lit color and the transport, as a property of each sample's surface.
+In a view that resolves, views also stores each sample's **air**
+(`SdfWorldPackage.SampleAir`): the atmosphere's in-scatter weights and the
+scaled inverse ray distance along the sample's own ray, from the one evaluation
+it makes for the transmittance. The resolve scales a sample's air by its
+coverage for the sample's transport, so it evaluates no atmosphere for a sample
+it gathers; only a pixel it copies whole from its one sample evaluates its own.
 
 The temporal resolve takes, for each output pixel, the 3x3 render samples
 nearest its center, each weighted by a Gaussian of its distance in output
