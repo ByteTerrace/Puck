@@ -1439,7 +1439,11 @@ outermost such frame, so recursion counts once), the `callee` paths of
 itself, each with its share of the focused samples. `--leaves <n>` names each
 focused sample by its `n` innermost frames instead, innermost first (`leaf`
 lines), so a copy, a clear or a wait is summed across every path that reached
-it and reads with the callers that asked for it. `--thread` reads one
+it and reads with the callers that asked for it. The runtime samples a thread
+where it can stop it, so a leaf that makes a native call (a block copy, a
+timestamp read, a wait) also collects samples of the managed code that ran
+before it: read a leaf's share beside a count of the work it names, and trust
+the callee paths of whole phases over single leaves. `--thread` reads one
 thread, and `--from` and `--to` read a window in seconds from the trace's
 start. A frame thread's parts read this way are attribution on a machine
 others share, never timings: for example `--focus
