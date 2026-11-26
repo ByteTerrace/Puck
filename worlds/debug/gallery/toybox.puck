@@ -26,7 +26,7 @@ import "layout"
 import "look"
 
 // The screens' indices: the debug world's other screens hold 0 to 17 (devices.puck, range.puck, alchemy.puck,
-// chess.puck, desktop.puck, granaries.puck), so the toybox's start at 20, two to a station.
+// chess.puck, desktop.puck, granaries.puck), so the toybox's start at 20, one to a station.
 let toyboxScreen = 20
 
 // Where a station stands in the building's frame, on its tile.
@@ -79,12 +79,7 @@ machines: map(toyboxStations, s => (deckMachine(s.machine, $"../cartridges/deck/
 // site (galleryWorld), as the gallery's other world-space pieces are. A station facing +z (the south gallery's) has the
 // picture's right along +x, one facing -z along -x.
 //
-// A station shows its picture twice, one screen for each of the deck's ports (machines.puck's deckPortRoutes), because a
-// screen's route seats its players on one port: the first engages the visible picture, and the second, a seat engaging
-// the station while the first is taken, the screen sunk 12 mm behind it inside the frame, which no view sees. The tube's
-// light is the visible screen's alone; the sunk one casts the least a screen may.
-let toyboxSunk = 0.012
-let toyboxSunkLuminance = 1nit
+// A station's one screen seats a player on each of the deck's ports (machines.puck's deckRoute).
 screens [
   for (s, i) in toyboxStations {
     let at = toyboxAt(s)
@@ -92,21 +87,19 @@ screens [
     let half = ((s.kind == "cabinet")
       ? cabinetPictureHalves(videoAspect(deckVideo))
       : televisionPictureHalves(videoAspect(deckVideo)))
-    for (route, p) in deckPortRoutes {
-      {
-        index: (toyboxScreen + (2 * i) + p)
-        origin: galleryWorld(at[0], (at[1] + picture[1]), (at[2] + (s.facing * (picture[2] - (p * toyboxSunk)))))
-        right [s.facing, 0, 0]
-        up [0, 1, 0]
-        halfWidth: half[0]
-        halfHeight: half[1]
-        halfDepth: 0.004
-        round: 0
-        source: machine(instance: s.machine, output: "video")
-        luminance: ((p == 0) ? lookCabinetLuminance : toyboxSunkLuminance)
-        material: crt
-        route: route
-      }
+    {
+      index: (toyboxScreen + i)
+      origin: galleryWorld(at[0], (at[1] + picture[1]), (at[2] + (s.facing * picture[2])))
+      right [s.facing, 0, 0]
+      up [0, 1, 0]
+      halfWidth: half[0]
+      halfHeight: half[1]
+      halfDepth: 0.004
+      round: 0
+      source: machine(instance: s.machine, output: "video")
+      luminance: lookCabinetLuminance
+      material: crt
+      route: deckRoute
     }
   }
 ]

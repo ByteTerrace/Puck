@@ -119,9 +119,9 @@ let daySkyHours = [
 ]
 
 // One degree in radians, pi / 180.
-let sunRadiansPerDegree = 3.141592653589793 / 180
+let sunRadiansPerDegree = pi / 180
 // Fifteen degrees in radians, one hour of the sun's turn (pi / 12).
-let sunRadiansPerHour = 3.141592653589793 / 12
+let sunRadiansPerHour = pi / 12
 
 // The sun's hour angle at clock hour `h`: zero at noon, a quarter turn at six.
 function sunHourAngle(h) = (h - 12) * sunRadiansPerHour
@@ -197,7 +197,7 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
       {
         name: clock
         kind: "Fixed"
-        value: $"{start / 24}"
+        value: (start / 24)
         advance { perSecondNumerator: 1, perSecondDenominator: daySeconds }
       }
     ]

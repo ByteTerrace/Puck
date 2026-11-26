@@ -186,14 +186,14 @@ test('diagnostics keep the newest publication per file and drop an older version
   sourceDiagnostics(messages).subscribe((published) => seen.push(published));
   const publish = (path, version, message) => messages.next({
     jsonrpc: '2.0', method: 'textDocument/publishDiagnostics',
-    params: { uri: sourceUri(path), version, diagnostics: message ? [{ range: { start: { line: 2, character: 4 }, end: { line: 2, character: 9 } }, severity: 1, code: 'PUCK040', message }] : [] },
+    params: { uri: sourceUri(path), version, diagnostics: message ? [{ range: { start: { line: 2, character: 4 }, end: { line: 2, character: 9 } }, severity: 1, code: 'PUCK121', message }] : [] },
   });
   publish('counter.puck', 2, 'newer');
   publish('counter.puck', 1, 'older');
   publish('other.puck', 1, null);
   messages.next({ jsonrpc: '2.0', id: 4, result: null });
   assert.deepEqual(seen.map((published) => [published.path, published.version]), [['counter.puck', 2], ['other.puck', 1]]);
-  assert.deepEqual(seen[0].diagnostics[0], { code: 'PUCK040', severity: 'error', message: 'newer', path: 'counter.puck', line: 3, column: 5, length: 5 });
+  assert.deepEqual(seen[0].diagnostics[0], { code: 'PUCK121', severity: 'error', message: 'newer', path: 'counter.puck', line: 3, column: 5, length: 5 });
 });
 
 test('the island check runs one composition at a time, keeps only the newest waiting revision, and drops stale results', async () => {

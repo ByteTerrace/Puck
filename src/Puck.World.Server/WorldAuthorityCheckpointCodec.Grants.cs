@@ -66,6 +66,7 @@ public static partial class WorldAuthorityCheckpointCodec {
         );
         writer.WriteString(value: (application.Kit ?? string.Empty));
         writer.WriteOptional(value: application.Reach, writeValue: static (w, value) => WorldWireCodec.WriteChannelSelection(selection: value, writer: w));
+        writer.WriteString(value: (application.Port ?? string.Empty));
     }
     private static ControlApplication ReadControlApplication(ref WireReader reader) {
         var target = WorldWireCodec.ReadSubject(reader: ref reader);
@@ -74,11 +75,18 @@ public static partial class WorldAuthorityCheckpointCodec {
             maxBytes: MaxStringBytes
         );
         var reach = reader.ReadOptional(readValue: static (ref WireReader r) => WorldWireCodec.ReadChannelSelection(reader: ref r));
+        var port = reader.ReadString(
+            field: "control application port",
+            maxBytes: MaxStringBytes
+        );
 
         return new ControlApplication(
             Kit: ((kit.Length == 0)
             ? null
             : kit),
+            Port: ((port.Length == 0)
+            ? null
+            : port),
             Reach: reach,
             Target: target
         );

@@ -1,71 +1,134 @@
-// A size field: a stretch of the world where a body's size is a function of where it stands. A module library: it
+// A size field: stretches of the world where a body's size is a function of where it stands. A module library: it
 // hands its importers one template and emits no document.
 //
-// A field runs along a path from `from` to `to`, two world points, and reaches `reach` metres either side of it. A body
-// within reach whose foot projects onto the path at progress t (0 at `from`, 1 at `to`) is given the size
+// A field is a list of zones. Each zone runs along a path from `from` to `to`, two world points, and holds a body that
+// stands inside it: within `reach` metres of the path (a capsule), inside its `box` (an axis-aligned box in world
+// metres), or both. A body inside a zone whose foot projects onto the path at progress t (0 at `from`, 1 at `to`, held
+// to the path's two ends) is given the size
 //
 //   start * power(end / start, t)
 //
 // in its size register every tick: `start` at `from`, `end` at `to`, and the same factor over every equal step between.
 // That is the curve a flight of stairs into a small place needs: a body a sixth its size takes steps a sixth as long, so
-// each tread costs it the same share of its stride all the way up. Outside the field the register keeps the size the body
-// last took, so leaving a field at its small end leaves the body small until a field (the same one walked back, or
-// another) grows it again.
+// each tread costs it the same share of its stride all the way up. A vertical path inside a box (from a storey's floor
+// to the next one's, over a stair's well or a lift's shaft) sizes a body by its height alone, whatever the stair's
+// form, a switchback's flights and a spiral's helix alike. A zone whose `from` and `to` meet (or that names neither)
+// gives `start` throughout: a whole floor held at one size.
+//
+// The first zone, in list order, that holds the body decides its size, so zones may overlap and the earlier wins: a
+// stair's well listed before the floor round it sizes a body on the stair by its height and one beside it by the floor.
+// Outside every zone the register keeps the size the body last took, so leaving a field at its small end leaves the
+// body small until a field (the same one walked back, or another) grows it again.
+//
+// `passes` names body registers (state.body): a body holding any of them nonzero is given the `passSize` size inside
+// every zone instead, so a pass a puzzle grants keeps a body its full size where the field would shrink it.
 //
 // The size is the body's own register, fixed point, written by a world rule from its live position (bodyPosition), so
-// it is world truth: its collider, speeds, step height, jump and gravity response follow it on the authority
-// (bodies.scale), and every observer, a window or another player or a spectator camera, reads the same register and
-// draws the body the size it is. Growth is held to the room about the body (WorldBody.SetScaleWithinClearance): a body
-// asked to grow under a low ceiling stays the largest size that fits, and grows on once it walks clear.
+// it is world truth: its collider, speeds, step height, jump, engage reach and gravity response follow it on the
+// authority (bodies.scale), and every observer, a window or another player or a spectator camera, reads the same
+// register and draws the body the size it is. Growth is held to the room about the body
+// (WorldBody.SetScaleWithinClearance): a body asked to grow under a low ceiling stays the largest size that fits, and
+// grows on once it walks clear.
 //
-// The field's tunable values live in a world table, `sizeField-<name>`, so a running World is retuned without a reload:
+// The field's sizes live in a world table, `sizeField-<name>`, keyed by the names `sizes` gives them, so a running World
+// is retuned without a reload:
 //
-//   world.state sizeField-<name>                       reads `start` and `end`
-//   world.state.cell.set sizeField-<name> end <size>   sets one; the field sizes bodies by it from the next tick
+//   world.state sizeField-<name>                        reads every named size
+//   world.state.cell.set sizeField-<name> <key> <size>  sets one; the field sizes bodies by it from the next tick
 //
-// or edit the template's arguments and let the watch reload.
-//
-// `start` and `end` are a look and feel, the author's: the standard sets no default for them.
+// or edit the template's arguments and let the watch reload. The sizes are a look and feel, the author's: the standard
+// sets no default for them.
 //
 // sizeField(
 //   name:     the field's name; names its rule `size-field-<name>` and its table `sizeField-<name>`
-//   from, to: the path's two world points, [x, y, z]; a body's progress is its foot's projection onto the path
-//   start:    the size at `from`, a multiplier of the body's authored size
-//   end:      the size at `to`
-//   reach:    how far either side of the path, in metres, the field holds a body
+//   zones:    the zones, first match wins, each { from, to, start, end, reach, box }:
+//               from, to   the path's two world points, [x, y, z] (both omitted: one size throughout)
+//               start, end keys of `sizes`: the size at `from` and at `to` (`end` omitted: `start` throughout)
+//               reach      how far either side of the path, in metres, the zone holds a body (omitted: no capsule)
+//               box        { x0, x1, y0, y1, z0, z1 }, world metres, the box the zone holds a body in (omitted: none)
+//   sizes:    the named sizes, [{ key, value }], each a multiplier of the body's authored size
 //   register: the body register its size lives in; the one bodies.scale names
+//   passes:   body registers that, nonzero, give a body `passSize` inside every zone
+//   passSize: the key of `sizes` a pass holder takes (omitted: the first size)
 // )
-template sizeField(name, from, to, start, end, reach, register = "size") {
+
+// A zone as the rule reads it: its box and capsule flags, which axes its path moves along, and the path's span and
+// squared length, whose quotient with the foot's offset dotted along the span is its progress. Every value here folds
+// at expansion.
+let sizeFieldNoBox = { x0: 0, x1: 0, y0: 0, y1: 0, z0: 0, z1: 0 }
+function sizeFieldZone(zone) = sizeFieldPrepared({ from [0, 0, 0], to [0, 0, 0], reach: 0, box: sizeFieldNoBox, end: zone.start } with zone)
+function sizeFieldPrepared(zone) = sizeFieldFolded(
+  zone,
+  [(zone.to[0] - zone.from[0]), (zone.to[1] - zone.from[1]), (zone.to[2] - zone.from[2])]
+)
+function sizeFieldFolded(zone, span) = sizeFieldSpanned(zone, span, ((span[0] * span[0]) + (span[1] * span[1]) + (span[2] * span[2])))
+function sizeFieldSpanned(zone, span, spanSquared) = zone with {
+  span: span
+  boxed: ((zone.box.x1 > zone.box.x0) ? 1 : 0)
+  capsule: ((zone.reach > 0) ? 1 : 0)
+  ax: (((spanSquared > 0) and (span[0] != 0)) ? 1 : 0)
+  ay: (((spanSquared > 0) and (span[1] != 0)) ? 1 : 0)
+  az: (((spanSquared > 0) and (span[2] != 0)) ? 1 : 0)
+  moving: ((spanSquared > 0) ? 1 : 0)
+  spanSquared: ((spanSquared > 0) ? spanSquared : 1)
+}
+
+template sizeField(name, zones, sizes, register = "size", passes = [], passSize = "") {
   state {
-    world [
-      {
+    world {
+      row {
         name: $"sizeField-{name}"
-        kind: "Fixed"
-        capacity: 2
-        cells [
-          { key: "start", value: $"{start}" }
-          { key: "end", value: $"{end}" }
-        ]
+        kind: Fixed
+        capacity: length(sizes)
+        cells: map(sizes, size => { key: size.key, value: size.value })
       }
-    ]
+    }
   }
 
-  // The path's span and its squared length, folded once at expansion.
-  let span = [(to[0] - from[0]), (to[1] - from[1]), (to[2] - from[2])]
-  let spanSquared = ((span[0] * span[0]) + (span[1] * span[1]) + (span[2] * span[2]))
+  let prepared = map(zones, zone => sizeFieldZone(zone))
+  let count = length(prepared)
+  let passKey = ((passSize == "") ? sizes[0].key : passSize)
 
   rule $"size-field-{name}" {
-    local px = bodyPosition(each, x) - from[0]
-    local py = bodyPosition(each, y) - from[1]
-    local pz = bodyPosition(each, z) - from[2]
-    // The foot's progress along the path, held to the path's two ends, and its squared distance from that point: the
-    // field is a capsule about the path, so a body stepping off either end within reach takes that end's size exactly.
-    local along = clamp(((px * span[0]) + (py * span[1]) + (pz * span[2])) / spanSquared, 0, 1)
-    local qx = px - (along * span[0])
-    local qy = py - (along * span[1])
-    local qz = pz - (along * span[2])
-    local target = $"sizeField-{name}".start * power($"sizeField-{name}".end / $"sizeField-{name}".start, along)
-    when ((qx * qx) + (qy * qy) + (qz * qz)) <= (reach * reach) and bodyState(each, register) != target
+    local px = bodyPosition(each, x)
+    local py = bodyPosition(each, y)
+    local pz = bodyPosition(each, z)
+    // Whether the body holds a pass: any of the named registers nonzero.
+    local held0 = 0
+    for (pass, f) in passes {
+      local $"held{f + 1}" = (bodyState(each, pass) != 0) or $"held{f}"
+    }
+    // The zones in order: `size{z}` the size the first of the first z zones that holds the body gives it, 0 while none
+    // does (every size is positive). Two locals a zone, so a field of thirty zones stays inside a rule's locals.
+    local size0 = 0.0
+    for (zone, z) in prepared {
+      // The foot's progress along the path, held to its two ends. The dot product is divided by the span's squared
+      // length here rather than multiplied by a folded reciprocal, so a foot at either end reads exactly 0 or 1.
+      local $"along{z}" = zone.moving ? clamp(
+          (
+            (zone.ax ? ((px - zone.from[0]) * zone.span[0]) : 0) + (zone.ay ? ((py - zone.from[1]) * zone.span[1]) : 0) +
+              (zone.az ? ((pz - zone.from[2]) * zone.span[2]) : 0)
+          ) / zone.spanSquared,
+          0,
+          1
+        ) : 0.0
+      // Inside the box, and within reach of the path's nearest point: a capsule, so a body stepping off either end
+      // within reach takes that end's size exactly.
+      local $"size{z + 1}" = ($"size{z}" != 0) ? $"size{z}" : (((zone.boxed ? (
+          (px >= zone.box.x0) and (px <= zone.box.x1) and (py >= zone.box.y0) and (py <= zone.box.y1) and (pz >= zone.box.z0) and
+            (pz <= zone.box.z1)
+        ) : 1) and (zone.capsule ? (
+          (
+            ((px - zone.from[0] - ($"along{z}" * zone.span[0])) * (px - zone.from[0] - ($"along{z}" * zone.span[0]))) +
+              ((py - zone.from[1] - ($"along{z}" * zone.span[1])) * (py - zone.from[1] - ($"along{z}" * zone.span[1]))) +
+              ((pz - zone.from[2] - ($"along{z}" * zone.span[2])) * (pz - zone.from[2] - ($"along{z}" * zone.span[2])))
+          ) <= (zone.reach * zone.reach)
+        ) : 1)) ? (
+          $"sizeField-{name}"[zone.start] * power($"sizeField-{name}"[zone.end] / $"sizeField-{name}"[zone.start], $"along{z}")
+        ) : 0.0)
+    }
+    local target = $"held{length(passes)}" ? $"sizeField-{name}"[passKey] : $"size{count}"
+    when ($"size{count}" != 0) and bodyState(each, register) != target
     mode: Level
     forEach: $players
     setBodyState(key: $each, state: register, expression: target)

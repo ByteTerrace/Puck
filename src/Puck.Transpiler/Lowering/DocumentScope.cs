@@ -362,6 +362,11 @@ public sealed partial class DocumentScope {
             key: name,
             value: out var expression
         )) {
+            // The language's named constants sit outside every scope, so a binding of the same name hides one.
+            if (DocumentBuiltins.NamedConstants.TryGetValue(key: name, value: out var named)) {
+                value = JsonValue.Create(value: named);
+                return true;
+            }
             return false;
         }
         var lexical = LexicalScopeOf(name: name);

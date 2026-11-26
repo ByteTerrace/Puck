@@ -269,13 +269,13 @@ public sealed class NamedMachineLifetimeLawTests {
             next: passive
         );
 
-        // An engageable display must name the port it drives, and the port must be the machine's.
+        // An engageable display must name the ports it drives, and each port must be the machine's.
         var engageable = new WorldScreenRoute(
             Engageable: true,
             EngageRadius: 1f
         );
 
-        foreach (var (route, refusal) in new[] { (engageable, "must name the one it drives"), (engageable with { Port = "port9" }, "does not have (port0, port1)") }) {
+        foreach (var (route, refusal) in new[] { (engageable, "must name the ports it drives"), (engageable with { Ports = ["port9"] }, "does not have (port0, port1)") }) {
             Assert.False(condition: host.TryPrepare(
                 candidate: headless with { ScreensRaw = [display with { Route = route }] },
                 current: passive,
@@ -290,7 +290,7 @@ public sealed class NamedMachineLifetimeLawTests {
             );
         }
 
-        var routed = headless with { ScreensRaw = [display with { Route = engageable with { Port = "port1" } }] };
+        var routed = headless with { ScreensRaw = [display with { Route = engageable with { Ports = ["port1"] } }] };
 
         Install(
             current: passive,
@@ -301,6 +301,7 @@ public sealed class NamedMachineLifetimeLawTests {
             840,
             new ScreenPadSnapshot[] { new(
                 Pad: MachinePadState.Neutral with { Buttons = MachineButtons.South },
+                Port: "port1",
                 ScreenIndex: 0
             ) }
         );

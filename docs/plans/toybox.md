@@ -49,22 +49,24 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
 
 ## Open work
 
-- The size field on the stairs, lift and branches; the full-size pass and its shortcuts; engagement that needs full
-  size (lane in progress).
+- A shrinking body cannot climb the corner stairs (gallery.md, "What is still open"): its step height falls with its
+  size and the risers do not. The stairs need to shrink with the body along the flight.
 - The rental stalls stand (worlds/debug/gallery/rentals.puck, worlds/debug/gallery.md "The rentals"): a rented
   device rides its renter's hip and its seat's pool machine runs, but nothing shows its picture. Open: a screen that
   follows a body, so the carried device shows its game and engages wherever its holder stands; creating a pool
-  machine's runtime only when its `runsWhen` first holds; adopting the full-size engage condition in
-  `rentalCanRent` once it lands.
+  machine's runtime only when its `runsWhen` first holds; reading the body's size in `rentalCanRent`, as a station's
+  `needs` does (worlds/standard/station.puck), so a small body cannot rent.
 - The flaw: the light tube, then its hollow interior, its openings and exits, and the imprint (light lane in
   progress; the interior and puzzle follow).
-- The central tree's look: the tree now has buttress fins, wandering bark shelves with shelf fungus and burls,
-  branches with collars, forks and knots, grain that follows each limb, and a crown of separate clusters, and it
-  collides analytically (gallery.md, "The central tree"). Still owed before it meets the visual bar: a trunk that
-  is not a perfect cone (fluting or a lean, and a silhouette that is not radially even), judged on captures from all
-  three levels at noon and night; the captures of this pass are the judge of whether the shelves read as grown and the
-  crown as a tree's. A body hugging the bark does not step up the shelves (the step-up near the trunk core's wall),
-  which wants a look from the physics side.
+- The central tree's look: the tree has buttress fins, wandering bark shelves with shelf fungus and burls, branches
+  with collars, forks and knots, bark grain that runs along each branch, and a crown of separate clusters, and it
+  collides analytically (gallery.md, "The central tree"). It still misses the visual bar: the trunk is a perfect cone
+  whose grain reads as fine speckle rather than twisting streaks; the crown's clusters read as smooth cartoon lobes
+  rather than foliage (no leaf-level breakup or skylight through them); each branch's fork ends in a bare point with
+  its leaf spray standing apart from it (the fork sweep's author-to-local carry wants checking); and the branch tips
+  on the balconies end blunt. Judge it on captures from all three levels at noon and night.
+- The tree's shelves: a body pressed against the bark does not step up them (the step-up beside the trunk core's
+  cylinders), so the walking line runs a little out from the bark; a look from the physics side.
 - The tree's level-1 branches shrink: a size field along each of `treeShrinkLimbs` (layout.puck), part of the size
   field work above. Until then the bay-6 gate lets a full-size body into the toybox.
 - Climbing: a real climbing mechanic at Breath of the Wild / Tears of the Kingdom quality or better, preceded by a

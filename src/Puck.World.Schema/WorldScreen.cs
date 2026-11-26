@@ -376,10 +376,14 @@ public enum WorldPadElement : byte {
 /// (<see cref="WorldScreenMappings"/>). <c>Passthrough</c> is refused by name: host passthrough exists only for a source
 /// the local user opened on their own machine, and a world document can never create one or send it input.
 /// <see langword="null"/> (the default) is <c>Presentation</c>. Omitted from the wire when null.</param>
-/// <param name="Port">The machine input port, by the provider's port name (<c>controls-2</c>), that a seat engaged on this
-/// screen drives; the machine's other ports hold neutral input unless another screen routes to them.
-/// <see langword="null"/> (the default) resolves only a machine with a sole input port, and a screen showing a machine
-/// with several is refused by name until its route names one. Omitted from the wire when null.</param>
+/// <param name="Ports">The machine input ports, by the provider's port names (<c>controls</c>, <c>controls-2</c>), that
+/// seats engaged on this screen drive, one seat a port: the first seat to engage takes the first port no other seat on
+/// the screen holds, the next the next, and leaving frees the port. Once every port is held the context button offers
+/// the screen to no one, and an engage by name shares the first port (the cabinet's merged pad). The machine's ports
+/// the list leaves out hold neutral input unless another screen routes to them. <see langword="null"/> (the default)
+/// resolves only a machine with a sole input port, which seats one player through the context button and merges every
+/// engage by name onto that port; a screen showing a machine with several is refused by name until its route names
+/// them. Omitted from the wire when null.</param>
 /// <param name="Display">How the window shows this screen to a seat engaged on it once its camera has framed the
 /// picture: what surrounds the matte (<see cref="WorldScreenDisplay"/>). <see langword="null"/> (the default) is
 /// <see cref="WorldScreenDisplay.Neutral"/>: a black matte. Omitted from the wire when null.</param>
@@ -404,7 +408,7 @@ public readonly record struct WorldScreenRoute(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Kit = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Puck.Commands.SourceDestination? Input = null,
     [property: DocumentText("a selector in the machine provider vocabulary")]
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Port = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? Ports = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenDisplay? Display = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenPadPointer? PadPointer = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPointerRegion>? Regions = null

@@ -4260,10 +4260,6 @@ Owner: language lane (transpiler) · medium · Next: the cost corpus, then the
   shared lexeme scanner, and the trivia printer's braced arms are listed by
   hand. Each is the next family for
   [code size](code-size.md#the-build-order)'s generators, not a patch.
-- [medium] A call's list argument cannot be written `name: [..]` or
-  `name [..]` (PUCK040), so an author spells it a clumsier way, against
-  ergonomic-is-optimal. Seen converting the standard's rhythm judge, and not
-  checked again since the author-wall lanes landed.
 - [low · unconfirmed] `puck compile --validate` once passed a fixture whose
   prototype documents `puck creation stats` refused as invalid. Find the
   check the validator lacks, now that validation is partitioned by unit. The

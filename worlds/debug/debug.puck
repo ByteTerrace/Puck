@@ -81,8 +81,6 @@ import "input-modes"
 import "bard"
 import "press"
 import "size"
-// A size field along level 1's north gallery, which shrinks her to Alice's size and back (size-walk.puck).
-import "size-walk"
 import "addon-hud"
 import "watchdog"
 import "guide"

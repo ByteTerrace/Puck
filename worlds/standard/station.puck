@@ -86,8 +86,11 @@ function pointerCapture(tapSources = ["mouse.button1"], restingPage = "base") = 
   }
 }
 
-// `stations` lists each station's `at` (a world point), `camera` (a camera program the seat eases to) and `spawn` (the
-// spawn point the body stands at while engaged). `margin` widens the reach a body must leave before it stops being in
+// `stations` lists each station's `at` (a world point), `camera` (a camera program the seat eases to), `spawn` (the
+// spawn point the body stands at while engaged) and, optionally, `needs`: the body registers a body must hold at least
+// a value of to use it, [{ register, atLeast }] (`register: "size"` for a station a small body cannot reach). A body
+// that falls short stands in no station's reach, so the context button does nothing there and a station it is engaged
+// with lets it go. `margin` widens the reach a body must leave before it stops being in
 // it, so standing on the edge does not flicker. `near` is the framing's near plane, which cuts away the engaged body
 // where it stands between the station's camera and what it frames. `seats` sizes the cells (bodies 0 to seats - 1 are
 // seeded; a visitor's body takes a cell when it first engages, up to `capacity`). The stations' controls come with
@@ -104,6 +107,7 @@ template stationPlay(stations, radius = 1.6, height = 2, margin = 0.25, near = 0
   "gamepad.buttonEast"
 ], restingPage = "base") {
   let count = length(stations)
+  let gated = map(stations, station => ({ needs [] } with station))
 
   state {
     body [
@@ -131,19 +135,26 @@ template stationPlay(stations, radius = 1.6, height = 2, margin = 0.25, near = 0
   }
 
   // Which station's reach each player's body stands in: a body leaves a station's reach `margin` past its radius, and
-  // takes the first station whose reach it then stands in.
+  // takes the first station whose reach it then stands in. A station's `needs` fold into `fit{i}n{k}`: whether the body
+  // holds the first k of them.
   rule "station-near" {
     forEach: $players
     local near = stationNear[$each]
     local px = bodyPosition(each, x)
     local py = bodyPosition(each, y)
     local pz = bodyPosition(each, z)
+    for (station, i) in gated {
+      local $"fit{i}n0" = 1
+      for (need, k) in station.needs {
+        local $"fit{i}n{k + 1}" = $"fit{i}n{k}" and (bodyState(each, need.register) >= need.atLeast)
+      }
+    }
     mode: Level
-    for (station, i) in stations {
-      if near == i + 1 and not stationReach(station, px, py, pz, radius + margin, height) {
+    for (station, i) in gated {
+      if near == i + 1 and not (stationReach(station, px, py, pz, radius + margin, height) and $"fit{i}n{length(station.needs)}") {
         stationNear[$each] = 0
       }
-      if near == 0 and stationReach(station, px, py, pz, radius, height) {
+      if near == 0 and stationReach(station, px, py, pz, radius, height) and $"fit{i}n{length(station.needs)}" {
         stationNear[$each] = i + 1
       }
     }
@@ -214,7 +225,7 @@ template stationPlay(stations, radius = 1.6, height = 2, margin = 0.25, near = 0
       document {
         version: "puck.input.bindings.v1"
         modifiers []
-        contexts: map(range(1, count), number => { family: "state:stationAt", state: $"{number}", group: "station" })
+        contexts: map(range(1, count + 1), number => { family: "state:stationAt", state: $"{number}", group: "station" })
         chords [
           {
             chord []

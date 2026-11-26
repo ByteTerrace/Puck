@@ -368,7 +368,7 @@ The two evaluators fold a name differently, on purpose:
   own `ExpressionArithmetic` rather than reimplemented here. Integers are exact in both evaluators, so delegating
   makes a numeric disagreement between a rule and a document impossible rather than merely unlikely.
 - Everything else the document language can fold—`absolute`, `ceiling`, `clamp`, `floor`, `maximum`, `minimum`,
-  `round`, `sign`, `sine`, `cosine`, `squareRoot`—uses `double` for fractional operations, while whole-number
+  `round`, `sign`, `sine`, `cosine`, `arcSine`, `arcCosine`, `arcTangent`, `arcTangent2`, `hypotenuse`, `squareRoot`—uses `double` for fractional operations, while whole-number
   inputs to integer-preserving functions retain their signed 64-bit precision. Routing an authored `0.7071068` through the
   rule language's `Q48.16` fixed point to agree with it bit-for-bit would quantize the authored value to 1/65536
   for no gain: the folded number is document DATA, baked into JSON at compile time, and never simulation state. The
@@ -446,7 +446,7 @@ cells: flatMap(["a", "b", "c"], (name, index) => [
 
 | Builtin | Reads | Lambda |
 |---|---|---|
-| `range(start, count)` | two whole numbers |—|
+| `range(start, end)` | two whole numbers, end never below start; the integers from start up to, not including, end |—|
 | `length(value)` | an array, object, or string |—|
 | `concat(a, b, ...)` | any number of arrays or values |—|
 | `map(array, lambda)` | an array | the item, or the item and its index |
@@ -480,6 +480,12 @@ written `angle * 1rad`.
 | `rotatePoint(rotation, point)` | the point turned about the origin |
 | `polarPoint(radius, degrees, y)` | `[radius * cos, y, radius * sin]`, measured from +X toward +Z; `y` defaults to 0 |
 | `fraction(x)` | `x - floor(x)` |
+| `overlaps(a, b)` | 1 when the spans `[low, high]` share a point (spans that only touch at an end do not), else 0 |
+| `within(x, span)` | 1 when `low <= x <= high`, else 0 |
+
+`pi` is a named constant every value reads at compile time, in a document value and in a rule expression alike
+(`2 * pi * radius`); a `let`, parameter or loop variable named `pi` hides it. The inverse trigonometric functions
+answer radians, so a rotation reads one as `arcTangent2(rise, run) * 1rad`.
 
 `+`, `-`, `*` and `/` on numeric arrays work element by element: two arrays of one length pair their elements
 (`a + b`, `p * [spread, height, spread]`), and a number scales every element of an array (`2 * p`, `p * 2`,
@@ -543,7 +549,8 @@ when non-empty, a present container is true, and an absent value is false.
 function syntax and a verbose, explanatory name over an operator glyph wherever the two would otherwise compete.
 
 The common mathematical abbreviations are accepted spellings of their canonical names, in both languages:
-`sqrt` (`squareRoot`), `abs` (`absolute`), `sin` (`sine`), `cos` (`cosine`), `ceil` (`ceiling`) and `pow` (`power`),
+`sqrt` (`squareRoot`), `abs` (`absolute`), `sin` (`sine`), `cos` (`cosine`), `asin` (`arcSine`), `acos` (`arcCosine`),
+`atan` (`arcTangent`), `atan2` (`arcTangent2`), `hypot` (`hypotenuse`), `ceil` (`ceiling`) and `pow` (`power`),
 from `ExpressionVocabulary.Aliases`, and in a document value `fract` and `frac` (`fraction`). Each lowers to the
 canonical name before anything reads the call, so the two spellings compile alike. `min` and `max` are not
 aliases: the rule language spells its reductions with them.
@@ -640,7 +647,7 @@ document (`DocumentDimensions`):
 |---|---|
 | A bare number | Free: it takes the dimension of what it is added to, and is read in its field's own unit |
 | `a * b`, `a / b` | The product or quotient of the two (`speed * 2s` is a length) |
-| `a + b`, `a - b`, `a % b`, a comparison, `c ? a : b`, `minimum`, `maximum`, `clamp` | The two must agree, or PUCK137 |
+| `a + b`, `a - b`, `a % b`, a comparison, `c ? a : b`, `minimum`, `maximum`, `clamp`, `hypotenuse` | The two must agree, or PUCK137 |
 | `absolute`, `floor`, `ceiling`, `round` | Their argument's |
 | `sine(x)`, `cosine(x)` | A pure number; `x` is an angle or a pure number, read in radians, or PUCK137 |
 | `squareRoot(x)` | Half of `x`'s powers, when they are even |

@@ -152,12 +152,12 @@ if (!fs.existsSync(mainMjs)) {
       assert.deepEqual(composed.diagnostics.filter((diagnostic) => diagnostic.severity === 'error'), []);
       assert.equal(JSON.parse(composed.composed).documentId, 'counter');
 
-      // A container never takes a colon (PUCK040), reported where it was written, 1-based.
-      await engine.writeSource('counter.puck', 'schema: "puck.world.definition.v1"\nstate: {\n}\n');
+      // An import that spells a file (PUCK121) is reported where it was written, 1-based.
+      await engine.writeSource('counter.puck', 'schema: "puck.world.definition.v1"\nimport "other.puck"\n');
       const refused = await engine.compileSource('counter.puck');
       assert.equal(refused.ok, false);
       assert.equal(refused.document, null);
-      assert.ok(refused.diagnostics.some((diagnostic) => diagnostic.code === 'PUCK040' && diagnostic.path === 'counter.puck' && diagnostic.line === 2 && diagnostic.column === 1));
+      assert.ok(refused.diagnostics.some((diagnostic) => diagnostic.code === 'PUCK121' &&diagnostic.path === 'counter.puck' && diagnostic.line === 2 && diagnostic.column === 1));
 
       const uncomposed = await engine.composeSource('counter.puck');
       assert.equal(uncomposed.ok, false);

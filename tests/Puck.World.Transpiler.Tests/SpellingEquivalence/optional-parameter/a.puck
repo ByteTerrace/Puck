@@ -1,0 +1,21 @@
+// An optional parameter defaults to null and is tested with `!= null`; a Fixed row written as an object takes numbers.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+template sized(name, start, end = null) {
+  state {
+    world [
+      {
+        name: name
+        kind: "Fixed"
+        capacity: 2
+        cells [
+          { key: "start", value: start }
+          { key: "end", value: ((end != null) ? end : (2 * start)) }
+        ]
+      }
+    ]
+  }
+}
+
+sized(name: "sizes", start: 0.5)

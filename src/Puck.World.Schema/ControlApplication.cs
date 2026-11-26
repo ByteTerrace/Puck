@@ -17,10 +17,15 @@ namespace Puck.World.Protocol;
 /// kit falls back to (the engine's two-movement-role default pad).</param>
 /// <param name="Reach">The logical names this application delivers, or null for every live action. An excluded action still drives the
 /// source body through its own-body application (when that member is present) but never reaches this target.</param>
-public readonly record struct ControlApplication(GrantSubject Target, string? Kit, WorldChannelSelection? Reach) {
-    /// <summary>Describes the target, kit and logical action selection.</summary>
+/// <param name="Port">The machine input port a screen application drives, chosen when it is composed from the screen
+/// route's <see cref="WorldScreenRoute.Ports"/> (the first port no other seat on the screen holds), or
+/// <see langword="null"/> for a route naming no ports and for every other target.</param>
+public readonly record struct ControlApplication(GrantSubject Target, string? Kit, WorldChannelSelection? Reach, string? Port = null) {
+    /// <summary>Describes the target, port, kit and logical action selection.</summary>
     /// <returns>The label.</returns>
-    public string Describe() => $"{Target.Describe()}{((Kit is { Length: > 0 } kit)
+    public string Describe() => $"{Target.Describe()}{((Port is { Length: > 0 } port)
+        ? $"@{port}"
+        : string.Empty)}{((Kit is { Length: > 0 } kit)
         ? $"/{kit}"
         : string.Empty)}(channels={((Reach is { } reach) ? string.Join(separator: ",", values: reach.Channels) : "all")})";
     /// <summary>Creates the own-body application — passthrough over every ordinal onto the participant's own body.

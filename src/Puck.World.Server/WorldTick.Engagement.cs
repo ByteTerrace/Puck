@@ -277,8 +277,9 @@ public sealed partial class WorldTick {
     /// <see cref="CheckScreenEngagePolicy"/>'s <see cref="ShowsEngageTarget"/> check over
     /// <see cref="IWorldMachineHost.HasMachine"/> — the authoritative server-side boot signal; the host boots and
     /// steps the machine in-process, so this project sees the real boot directly rather than a document-declared
-    /// proxy), names an <see cref="WorldScreenRoute.EngageChannel"/> this world's channel table resolves, carries no live occupant
-    /// (<see cref="WorldEngagement.PlayersOn"/> empty), sits within <see cref="WorldScreenRoute.EngageRadius"/> of the
+    /// proxy), names an <see cref="WorldScreenRoute.EngageChannel"/> this world's channel table resolves, has a seat
+    /// free (<see cref="WorldEngagement.TryFreeSeat"/>: a port of its route no live occupant holds, or no live occupant
+    /// at all for a route naming no ports), sits within <see cref="WorldScreenRoute.EngageRadius"/> of the
     /// seat's pre-move position (this tick's population has not advanced yet — <c>Step</c> calls this before
     /// <see cref="WorldPopulation.AdvanceSeats"/>), and would actually pass <see cref="WorldEngagement.CheckEngage"/>.
     /// <para>
@@ -359,7 +360,11 @@ public sealed partial class WorldTick {
                     continue;
                 }
 
-                if (Host.Engagement.HasPlayersOn(screenIndex: screen.Index)) {
+                if (!Host.Engagement.TryFreeSeat(
+                    except: principal,
+                    port: out _,
+                    screenIndex: screen.Index
+                )) {
                     continue;
                 }
 

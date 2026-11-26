@@ -142,9 +142,10 @@ The Humble Gaming Brick runs the Color model, which plays the forge's `cgb` and
 revision (`dmg`, `mgb`, `sgb`, `agb` and the rest). A Color-only cartridge on
 a `dmg` model holds on the firmware logo, since its speed switch parks a
 monochrome processor. The Humble Gaming Deck is the NTSC NES console, the
-television beside it showing the cartridge in its slot; its screen route names the
-controller port an engaged seat plays (`controls`, port one), since the console
-has two.
+television beside it showing the cartridge in its slot; its screen route names
+both controller ports (`controls` and `controls-2`), so the first seat to engage
+plays port one and a second seat that engages while the first plays takes port
+two.
 
 The shipped cartridges sit one folder per forge target, `cartridges/cgb/`,
 `cartridges/dmg/` and `cartridges/agb/`, each source beside its compiled
@@ -239,7 +240,8 @@ jump is A, flight is B, the Moth's `start` channel is start and her `select`
 channel is select. The controls are the seat's own whichever way the camera
 faces: right is right on the device, never turned by the room. `screen.state
 <screen>` prints the pad each device receives (`pad=<buttons>/stick(<x>, <y>)`,
-the stick's +X right and +Y up), and on a brick running a forged cartridge each
+the stick's +X right and +Y up; the deck's prints one per port,
+`pad=controls:<pad>;controls-2:<pad>`), and on a brick running a forged cartridge each
 control also lands in the joypad byte the cartridge copies to `0xC280` each
 frame (`screen.peek <screen> 0xC280`; a local folder default is not forged and
 leaves it alone):

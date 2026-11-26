@@ -159,10 +159,10 @@ identifier                                    // a bare flag statement, only whe
                                                // `solid { margin: 0 }`)
 ```
 
-A container value is written as a block and a scalar takes a colon—`host { }`, `cameras [ ]`, `documentId: "puck"`
-—at every depth and inside an object literal too. There is exactly one spelling per shape: a colon in front of a
-`{` or a `[` is PUCK040. A name that merely stands for a container keeps its colon (`origin: bounds`), because the
-rule is about the punctuation in front of a literal, not about what the value turns out to be; a call's named
+A container value is printed as a block and a scalar takes a colon—`host { }`, `cameras [ ]`, `documentId: "puck"`
+—at every depth and inside an object literal too. A colon in front of a `{` or a `[` (`host: { }`, `palette: [ ]`)
+reads as the container written without it: both spellings parse to one node, and the printer writes the form
+without the colon. A name that merely stands for a container keeps its colon (`origin: bounds`), and a call's named
 argument keeps its colon too (`worldPoint(point: [0, 1, 0])`), being call syntax rather than a statement.
 
 A section whose model holds a `rows` list beside optional policy members (`kits`, `looks`, `placements`,

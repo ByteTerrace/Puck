@@ -20,9 +20,9 @@ public static class DocumentBuiltins {
     /// each one's spelling and meaning, as the language server shows them, beside the evaluation a call runs.</summary>
     public static IReadOnlyDictionary<string, DocumentCollectionBuiltin> Collections { get; } = new Dictionary<string, DocumentCollectionBuiltin>(comparer: StringComparer.Ordinal) {
         ["range"] = new(
-            description: "Produces count consecutive integers beginning at start. Count must be nonnegative.",
+            description: "Produces the integers from start up to, but not including, end: range(1, 4) is [1, 2, 3]. End is never below start.",
             evaluate: static (call, scope, _) => Range(args: call.Arguments, call: call, scope: scope),
-            signature: "range(start, count)"
+            signature: "range(start, end)"
         ),
         ["length"] = new(
             description: "Returns the number of array elements, object properties, or UTF-16 string code units.",
@@ -79,6 +79,16 @@ public static class DocumentBuiltins {
             evaluate: static (call, scope, fieldKey) => DocumentVectors.Fraction(call: call, fieldKey: fieldKey, scope: scope),
             signature: "fraction(x)"
         ),
+        ["overlaps"] = new(
+            description: "Returns 1 when two spans [low, high] share a point, so spans that only touch at an end do not overlap, else 0.",
+            evaluate: static (call, scope, _) => DocumentVectors.Overlaps(call: call, scope: scope),
+            signature: "overlaps(a, b)"
+        ),
+        ["within"] = new(
+            description: "Returns 1 when x lies in the span [low, high], ends included, else 0.",
+            evaluate: static (call, scope, _) => DocumentVectors.Within(call: call, scope: scope),
+            signature: "within(x, span)"
+        ),
         ["rotate"] = new(
             description: "Returns the quaternion [x, y, z, w] turning degrees about axis, right-handed.",
             evaluate: static (call, scope, _) => DocumentVectors.Rotate(call: call, scope: scope),
@@ -99,6 +109,12 @@ public static class DocumentBuiltins {
             evaluate: static (call, scope, _) => DocumentVectors.PolarPoint(call: call, scope: scope),
             signature: "polarPoint(radius, degrees, y)"
         ),
+    };
+    /// <summary>The named numeric constants every value position reads at compile time, by name: <c>pi</c> is the
+    /// ratio of a circle's circumference to its diameter, in double precision. A <c>let</c>, a parameter or a loop
+    /// variable of the same name hides one.</summary>
+    public static IReadOnlyDictionary<string, double> NamedConstants { get; } = new Dictionary<string, double>(comparer: StringComparer.Ordinal) {
+        ["pi"] = Math.PI,
     };
     /// <summary>The abbreviations of the document language's own builtins, beside the shared ones of
     /// <see cref="ExpressionVocabulary.Aliases"/>: each is read as its canonical name before the call is evaluated.</summary>
@@ -498,7 +514,7 @@ public static class DocumentBuiltins {
         if (args.Count != 2) {
             return Refuse(
                 call: call,
-                message: "range(start, count) takes two arguments",
+                message: "range(start, end) takes two arguments",
                 scope: scope
             );
         }
@@ -516,38 +532,41 @@ public static class DocumentBuiltins {
                 expr: args[1].Value,
                 scope: scope
             ),
-            value: out var count
+            value: out var end
         )
         ) {
             return Refuse(
                 call: call,
-                message: "range(start, count) takes two whole numbers known at compile time",
+                message: "range(start, end) takes two whole numbers known at compile time",
                 scope: scope
             );
         }
 
-        if (count < 0) {
+        if (end < start) {
             return Refuse(
                 call: call,
-                message: "range count is never negative",
+                message: $"range(start, end) never runs backwards: its end {end} is below its start {start}",
                 scope: scope
             );
         }
 
-        scope.Budget.Collection(
-            count: count,
-            span: call.Span
-        );
-        if (
-            (count > 0) &&
-            (start > (long.MaxValue - (count - 1)))
-        ) {
+        // With end >= start the difference is at most 2^64 - 1, so it is exact as an unsigned number.
+        var span = unchecked((ulong)end - (ulong)start);
+
+        if (span > long.MaxValue) {
             return Refuse(
                 call: call,
                 message: "range exceeds the signed 64-bit integer range",
                 scope: scope
             );
         }
+
+        var count = (long)span;
+
+        scope.Budget.Collection(
+            count: count,
+            span: call.Span
+        );
 
         var arr = new JsonArray();
 

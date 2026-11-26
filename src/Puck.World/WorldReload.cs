@@ -142,13 +142,14 @@ internal sealed class WorldReload(WorldInstanceHost instances, WorldDeferredVerb
         m_retired.Clear();
     }
     // The verb's answer over every row: each row that changed or refused answers in its own line, and the rows still at
-    // the revision their authority holds share one. With unsubmittedOnly, only what no authority verdict will print.
+    // the revision their authority holds share one. With unsubmittedOnly, only what no authority verdict will print: the
+    // answers reached before submission, and the note a submitted refusal carries beside the authority's own line.
     private static CommandResult? Combine(List<RowReload> reloads, bool unsubmittedOnly) {
         if (reloads.Count == 1) {
             var only = reloads[0];
 
             return (unsubmittedOnly
-                ? ((only.Pending.Unsubmitted is { } unsubmitted) ? only.Tagged(result: unsubmitted) : null)
+                ? ((only.Pending.Unsubmitted is { } unsubmitted) ? only.Tagged(result: unsubmitted) : NoteOf(reload: only))
                 : only.Tagged(result: Settled(pending: only.Pending)));
         }
 
@@ -161,10 +162,9 @@ internal sealed class WorldReload(WorldInstanceHost instances, WorldDeferredVerb
                 unchanged.Add(item: reload.Row.Name);
                 continue;
             }
-            if (unsubmittedOnly && (reload.Pending.Unsubmitted is null)) { continue; }
-
-            var result = reload.Tagged(result: Settled(pending: reload.Pending));
-
+            if (((unsubmittedOnly && (reload.Pending.Unsubmitted is null)) ? NoteOf(reload: reload) : reload.Tagged(result: Settled(pending: reload.Pending))) is not { } result) {
+                continue;
+            }
             error |= result.IsError;
             if (!string.IsNullOrEmpty(value: result.Output)) { lines.Add(item: result.Output); }
         }
@@ -173,6 +173,11 @@ internal sealed class WorldReload(WorldInstanceHost instances, WorldDeferredVerb
         }
         return ((lines.Count == 0) ? null : new CommandResult(Output: string.Join(separator: '\n', values: lines)) { IsError = error });
     }
+    // The note a submitted row's refusal carries beside the authority's own line, which a session that prints that line
+    // and not the verdict owes the reader; null when there is none.
+    private static CommandResult? NoteOf(RowReload reload) => ((reload.Pending.Note is { } note)
+        ? reload.Tagged(result: CommandResult.Error(output: $"[{Verb}: {note}]"))
+        : null);
     // A settled row's verdict, read back from its settlement.
     private static CommandResult Settled(WorldReloadDoor.Pending pending) {
         var result = default(CommandResult);
@@ -207,8 +212,13 @@ internal sealed class WorldReload(WorldInstanceHost instances, WorldDeferredVerb
                 }
                 return null;
             },
+            // Off the pump, after a refusal: a running build older than the engine sources owes a restart before the
+            // source can apply, which the refusal's own text (a validation or compile fault) does not say.
+            explain: () => WorldBuildCurrency.RestartOwed(documentPath: path),
             verb: Verb
         );
+
+        if (pending.Queued) { Console.Error.WriteLine(value: $"[world.reload]{label} queued behind the reload in flight; it reads the source once that one settles"); }
 
         return new RowReload(Pending: pending, Row: row);
     }

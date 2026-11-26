@@ -172,6 +172,17 @@ public enum ExpressionOp : byte {
     Sine,
     /// <summary>The cosine of a fixed-point angle in radians; fixed expressions only.</summary>
     Cosine,
+    /// <summary>The angle in radians, in [-π/2, π/2], whose sine is a fixed-point value in [-1, 1]; fixed expressions only.</summary>
+    ArcSine,
+    /// <summary>The angle in radians, in [0, π], whose cosine is a fixed-point value in [-1, 1]; fixed expressions only.</summary>
+    ArcCosine,
+    /// <summary>The angle in radians, in (-π/2, π/2), whose tangent is a fixed-point value; fixed expressions only.</summary>
+    ArcTangent,
+    /// <summary>The angle in radians, in (-π, π], from the positive x axis to the point (x, y), read as (y, x); zero at
+    /// the origin; fixed expressions only.</summary>
+    ArcTangent2,
+    /// <summary>The length of the vector (x, y), √(x² + y²), without the intermediate overflow of squaring; fixed expressions only.</summary>
+    Hypotenuse,
     /// <summary>The shell-ordered index of the square cell at Gaussian coordinates (x, y); <c>squareX</c>/<c>squareY</c> invert it.</summary>
     SquareIndex,
     /// <summary>The x coordinate of a square index.</summary>
