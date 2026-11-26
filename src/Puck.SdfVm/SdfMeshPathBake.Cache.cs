@@ -15,9 +15,76 @@ namespace Puck.SdfVm;
 // Invariant, under SdfMeshCachePolicy.Ladder: the bake's detail is not settled (DetailSettled) while any geometry a
 // listed group draws has a rung between its finest and coarsest tiers that the store lacks. FillLadders is the one
 // place a ladder advances, and Retier, the one writer of the settle count, asks it at every decision.
+//
+// A group that arrives when no rung of its shape is held waits its turn to bake, drawing nothing, and a finer rung of
+// the same shape can land meanwhile: a far copy of a body queues behind everything near while the near copy's mesh
+// stands. Invariant: a listed group that has dispatched nothing and draws nothing takes, at the first frame after it
+// lands, the nearest finer rung of its shape a group of this bake landed, as an arrival takes a finer stored rung at its
+// plan (DemandRung). Draw, the one door a group's own product arrives by, queues each landed rung, and TakeLandedRungs,
+// run at every prepared frame, is the one place it is taken; the tier decisions then bring the group the tier its demand
+// asks, under the budget, as they do any group drawing finer than it asks. Where it stops: a rung another residency's
+// bake landed is found only at the group's own plan, and a group already sampling keeps its own bake.
 public sealed partial class SdfMeshPathBake {
     // The far distance of the latest prepared frame, which a rung planned outside a frame's own call is clamped by.
     private float m_farDistance;
+
+    // The rungs landed since TakeLandedRungs last ran, by shape and tier (Draw queues them, under the gate, on whichever
+    // thread finished the group), and each shape's tiers among them, one bit a tier, while a scan reads them.
+    private readonly List<(UInt128 Shape, int Tier)> m_landedRungs = [];
+    private readonly Dictionary<UInt128, uint> m_landedTiers = [];
+    // Puts the nearest finer rung of its shape landed since the last frame in the place of each listed group that still
+    // waits to bake with nothing to draw (above). A frame with no landing costs one read of the queue; one with any
+    // walks the group list once. Under the gate, on the frame's thread.
+    private void TakeLandedRungs(SdfFrame frame) {
+        if (m_landedRungs.Count == 0) { return; }
+
+        var landed = m_landedTiers;
+
+        landed.Clear();
+        foreach (var rung in m_landedRungs) {
+            ref var tiers = ref System.Runtime.InteropServices.CollectionsMarshal.GetValueRefOrAddDefault(dictionary: landed, exists: out _, key: rung.Shape);
+
+            tiers |= (1u << Math.Clamp(value: rung.Tier, min: 0, max: SdfMeshTier.Last));
+        }
+        m_landedRungs.Clear();
+        // The rungs a ladder bake fills land in the store alone, and a bake of selected groups draws what it was asked.
+        if ((Library.Policy == SdfMeshCachePolicy.Ladder) || (Selection is not null)) { return; }
+
+        var identity = Identity.Value;
+        var restarted = System.Diagnostics.Stopwatch.GetTimestamp();
+        var started = new PlaceCounts();
+        Dictionary<SdfMeshGeometry, Group>? leaders = null;
+
+        for (var index = 0; (index < m_groups.Count); index++) {
+            var group = m_groups[index];
+
+            if (group.Done || group.Retired || group.Live || group.Fill || (group.Replaces is not null) || (group.Shown is not null) ||
+                group.InFlight || group.Contouring || (group.TakenSamples != 0L) || !landed.TryGetValue(key: group.Shape, value: out var held)) { continue; }
+
+            // The landed tiers finer than the group's own, the nearest first: the highest bit under its tier's.
+            var finer = (held & ((1u << Math.Clamp(value: group.Tier, min: 0, max: SdfMeshTier.Last)) - 1u));
+            Group? taken = null;
+
+            while ((finer != 0u) && (taken is null)) {
+                var tier = System.Numerics.BitOperations.Log2(value: finer);
+
+                finer &= ~(1u << tier);
+                if (tier < group.FinestTier) { break; }
+                taken = StoredRungAt(identity: identity, planned: group, tier: tier);
+            }
+            if (taken is null) { continue; }
+            Library.Cache.Count(kind: SdfMeshCache.RungsShared);
+            _ = Place(group: taken, identity: identity, index: index, leaders: (leaders ??= Leaders(indices: null)), old: group, started: ref started);
+            if (!ReferenceEquals(objA: m_groups[index], objB: group)) {
+                m_retiredGroups.Add(item: group);
+                group.Retired = true;
+            }
+        }
+        if (leaders is null) { return; }
+        // A group that waited on one of the groups replaced starts its geometry itself.
+        BeginOrphans(indices: null, started: ref started);
+        BeginAccounts(cause: "rung", fresh: false, instances: frame.Program.Instances.Count, restarted: restarted, started: started);
+    }
 
     // How far a ladder bake has filled the other rungs of one geometry its groups draw: the next tier to look at,
     // counting down from the coarsest, and the rung in flight. Every group drawing the geometry shares the entry, so a

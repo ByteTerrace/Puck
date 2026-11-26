@@ -67,6 +67,8 @@ namespace Puck.Abstractions.Gpu;
 /// withheld them (<see cref="GpuDeviceOptions.Withheld"/>).</param>
 /// <param name="RaytracingTier">Direct3D 12's <c>D3D12_RAYTRACING_TIER</c> as reported (10 for 1.0, 11 for 1.1, 0 for
 /// none); zero on Vulkan.</param>
+/// <param name="MaxStorageBufferBytes">Vulkan's <c>maxStorageBufferRange</c>, the most bytes one storage-buffer view
+/// spans, which a buffer bound whole must fit; zero on Direct3D 12, whose views state no such limit.</param>
 public sealed record GpuDeviceCapabilities(
     string Backend,
     uint MaxBoundDescriptorSets,
@@ -93,7 +95,8 @@ public sealed record GpuDeviceCapabilities(
     uint ExecuteIndirectTier = 0U,
     GpuOptionalCapabilities Optional = GpuOptionalCapabilities.None,
     GpuOptionalCapabilities Withheld = GpuOptionalCapabilities.None,
-    uint RaytracingTier = 0U
+    uint RaytracingTier = 0U,
+    uint MaxStorageBufferBytes = 0U
 ) {
     /// <summary>Direct3D 12's 4,096 constant-buffer elements, each a 16-byte float4.</summary>
     public const uint DirectXConstantBufferBytes = (4096U * 16U);

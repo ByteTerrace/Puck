@@ -264,7 +264,7 @@ its rows stay absent. `GpuRegion` clips coalesced copy runs to this coverage and
 the proof again at recording, restaging stale requests and retaining unmapped debt.
 Mapping changes re-owe the host-known prefix and stale published meshes; a shrink
 re-lands survivors even without arena relocation. Destination replacements read
-the new buffer's authority. Native sparse mapping remains in the streaming plan.
+the new buffer's authority. A mapped destination changes its chunks' backing behind the same leases.
 Landing stages only its mesh's rows; the draw cursor remains usable while other meshes are owed.
 The staging door maintains the tables' glass row set. `RecordLanding` requires the service's actual
 queue to be the device's frame queue before it owes any words.
@@ -433,8 +433,11 @@ type the bake's closure reaches (`SdfMesh`, `SdfMeshLibrary`, `SdfMeshStore`, `S
 identity, and the next boot bakes the world cold.
 A staged region created `mapped` (the mesh region, the probe scene) asks `IGpuBufferFactory.TryCreateMapped` for a
 destination that reserves `GpuRegion.MaxByteCount` and backs 1 MiB chunks on demand (`IGpuMappedBuffer`; Direct3D 12's
-`DirectXGpuMappedBuffer` at reserved resources tier 2, tile runs from `DirectXHeapArena.PlaceTiles`; Vulkan answers
-none and keeps a contiguous destination). It grows and shrinks in place, with no carry and no second buffer, and the
+`DirectXGpuMappedBuffer` at reserved resources tier 2, tile runs from `DirectXHeapArena.PlaceTiles`; Vulkan's
+`VulkanGpuMappedBuffer`, a sparse buffer whose chunks bind page runs from `VulkanMemoryArena.PlacePages` through
+`VulkanLogicalDevice.BindSparse`). A device created without `GpuOptionalCapabilities.MappedBuffers` (the capability
+missing, or `--withhold-gpu mapped-buffers`, which is how the two paths are compared on one machine) answers none and
+keeps a contiguous destination. It grows and shrinks in place, with no carry and no second buffer, and the
 selector leaves no replacement room for it (`SdfResidencyGrant.Mapped`). Its buffer's length is the reserved range, so
 never map a region a kernel sizes with `GetDimensions` (the irradiance feedback). `SdfMeshRegionStore.Cover` is
 the one place the mesh region's interior backing follows the arena: a chunk no placement covers is
@@ -1590,8 +1593,13 @@ paired arithmetic. Carry author-facing parameters through
   then submits a graphics wait before returning. Both signals share the
   device's retirement timeline; a failed bind or join prevents further
   retirement proofs until teardown. `VulkanSubmissionBatchLawTests` covers
-  both queue arrangements and an open batch. This is the binding door only:
-  native sparse buffer ownership and mesh backing selection remain step 7.
+  both queue arrangements and an open batch. `VulkanGpuMappedBuffer` is the
+  one caller: it returns a chunk's pages and destroys the buffer only through
+  the arena's sparse retirement (`VulkanMemoryArena.RetireSparse`), behind the
+  timeline value the door answered, and a bind whose outcome is unknown strands
+  what it covered until the device is torn down. Its unbound chunks are read
+  by no kernel: a mesh word is read only through a record that names a placed
+  mesh.
 - The mesh region keeps no host copy of its meshes. Its host copy is the draw
   records alone (`GpuRegion.Shadow`). A landing job's words are packed from the
   `SdfMesh` buffers on a worker into a buffer of the landing's own and gathered into

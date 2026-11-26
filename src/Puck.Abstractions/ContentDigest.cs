@@ -7,8 +7,8 @@ namespace Puck.Abstractions;
 
 /// <summary>
 /// The one SHA-256 digest of bytes and of text for every project that cannot reach <c>Puck.Assets</c>'s
-/// <c>ContentPin</c>, which is built on it. Text is hashed as its UTF-8 bytes through a stack or pooled buffer, never a
-/// per-call byte array.
+/// <c>ContentPin</c>, which is built on it. Text is hashed as its UTF-8 bytes through a stack buffer or, a bounded chunk
+/// at a time, a small pooled one, never a byte array of the whole text.
 /// </summary>
 public static class ContentDigest {
     /// <summary>The length, in bytes, of a SHA-256 digest.</summary>
@@ -17,6 +17,8 @@ public static class ContentDigest {
     public const int HexLength = 2 * SizeInBytes;
 
     private const int StackBytes = 512;
+    // The bytes one chunk of a longer text is encoded into before it is hashed.
+    private const int ChunkBytes = (64 << 10);
     private static readonly SearchValues<char> HexDigits = SearchValues.Create(values: "0123456789abcdefABCDEF");
     private static readonly SearchValues<char> LowerHexDigits = SearchValues.Create(values: "0123456789abcdef");
 
@@ -54,24 +56,31 @@ public static class ContentDigest {
     /// <param name="text">The text to hash after the prefix.</param>
     /// <param name="digest">The destination, at least <see cref="SizeInBytes"/> bytes long.</param>
     public static void HashText(ReadOnlySpan<byte> prefix, ReadOnlySpan<char> text, Span<byte> digest) {
-        var byteCount = (prefix.Length + Encoding.UTF8.GetByteCount(chars: text));
-
-        if (byteCount <= StackBytes) {
+        // A UTF-16 unit is at most three UTF-8 bytes, so a short text is known to fit the stack without being counted.
+        if (((long)prefix.Length + (3L * text.Length)) <= StackBytes) {
             Span<byte> bytes = stackalloc byte[StackBytes];
 
             prefix.CopyTo(destination: bytes);
-            _ = Encoding.UTF8.GetBytes(bytes: bytes[prefix.Length..], chars: text);
+
+            var byteCount = (prefix.Length + Encoding.UTF8.GetBytes(bytes: bytes[prefix.Length..], chars: text));
+
             _ = SHA256.HashData(destination: digest, source: bytes[..byteCount]);
 
             return;
         }
 
-        var rented = ArrayPool<byte>.Shared.Rent(minimumLength: byteCount);
+        // A longer text is encoded and hashed a bounded chunk at a time: a buffer of the whole text's bytes would stand
+        // in the shared pool at the size of the largest text ever hashed, on every thread that hashed one.
+        using var hash = IncrementalHash.CreateHash(hashAlgorithm: HashAlgorithmName.SHA256);
+        var rented = ArrayPool<byte>.Shared.Rent(minimumLength: ChunkBytes);
 
         try {
-            prefix.CopyTo(destination: rented);
-            _ = Encoding.UTF8.GetBytes(bytes: rented.AsSpan(start: prefix.Length), chars: text);
-            _ = SHA256.HashData(destination: digest, source: rented.AsSpan(length: byteCount, start: 0));
+            var encoder = Encoding.UTF8.GetEncoder();
+
+            hash.AppendData(data: prefix);
+            AppendChunk(buffer: rented, chars: text, encoder: encoder, flush: false, hash: hash);
+            AppendChunk(buffer: rented, chars: default, encoder: encoder, flush: true, hash: hash);
+            _ = hash.GetHashAndReset(destination: digest);
         } finally {
             ArrayPool<byte>.Shared.Return(array: rented);
         }

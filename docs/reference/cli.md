@@ -414,12 +414,15 @@ the writer's set whole and evicts others past its bound.
 `tiersMissed`, `tiersMissedLive`, `loadsDeclined`, `tiersFilled`, `loaded`, and
 `missed`: each tier a check asked that the fill did not produce, with the place
 it stood at, the residency, the geometry and the tiers asked and drawn). It says
-`complete` only when every boot settled at every place, each backend's set still
-stands after the fills, and every check missed no tier and baked nothing but
-live geometry, which the world makes as it runs (a mesh that reads an operand's
-pose or a sampled field that moved, and the tiers asked of a field state the
-world then moved past) and no cache can hold; otherwise `incomplete` lists why,
-the verb exits 1, and `world caches produce` refuses the folder. Settling and baking are read apart: a boot can
+`complete` when every boot settled at every place and each backend's set still
+stands after the fills; otherwise `incomplete` lists why, the verb exits 1, and
+`world caches produce` refuses the folder. A shipped cache is a warm start, so
+a check that missed a tier or baked a group besides live geometry, which the
+world makes as it runs (a mesh that reads an operand's pose or a sampled field
+that moved, and the tiers asked of a field state the world then moved past)
+and no cache can hold, still settles, baking what its cache lacks as a
+player's machine does: each boot's `cacheWhole` says whether it did, and
+`cacheMisses` lists what the cache lacked, which the verb prints. Settling and baking are read apart: a boot can
 settle having baked, and can bake nothing while its detail still moves between
 stored tiers under a memory budget. With `--no-bake` (a machine without a GPU)
 one headless boot fills the device-free caches instead, and the mesh store

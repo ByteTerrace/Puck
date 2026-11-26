@@ -16,9 +16,11 @@ namespace Puck.Cli.Automation;
 /// (<see cref="Puck.SdfVm.SdfMeshCachePolicy.Ladder"/>): every tier of every mesh it draws, at every place the world's
 /// documents author, so the tiers a target's window size, distance or memory budget asks are all there, with no boot
 /// per target and no list of tiers kept here. Each <c>--target</c> is then booted as a player's build boots
-/// (<see cref="Puck.SdfVm.SdfMeshCachePolicy.Stored"/>), and the folder is complete only when every such boot settles
-/// at every place having dispatched no lattice, baked no group and missed no tier. The driver's own pipeline cache is
-/// per adapter and driver, so it is never shipped.</remarks>
+/// (<see cref="Puck.SdfVm.SdfMeshCachePolicy.Stored"/>), and the folder is complete when every such boot settles at
+/// every place. A shipped cache is a warm start, never a precondition: a tier a check boot asked that the fill did not
+/// produce is baked by that boot, as a player's machine bakes it, and is recorded and reported (each boot's
+/// <c>tiersMissed</c> and <c>missed</c>), never a reason to refuse the folder. The driver's own pipeline cache is per
+/// adapter and driver, so it is never shipped.</remarks>
 public static class WorldPlayerCommand {
     private const string Verb = "world player";
     // Written first as incomplete and last as complete; a rerun rebuilds only a folder that holds it.
@@ -96,13 +98,15 @@ public static class WorldPlayerCommand {
             worlds/<package> --cache-dir cache; `puck publish` turns it into a release and the installer installs that.
             Writes player.json first as incomplete and last with the commit, runtime, backends, targets and each boot's
             reading (places, settled, dispatches, groupsBaked, tiersMissed, tiersMissedLive, loadsDeclined, tiersFilled,
-            loaded, and missed: each tier a check asked that the fill did not produce, with the place, residency,
+            loaded, cacheWhole, and missed: each tier a check asked that the fill did not produce, with the place, residency,
             geometry and tiers asked and drawn), and prints each part's size. Before the fill it removes every mesh set
-            but this build's own from cache/meshes. The record says complete only when every boot settled at every place,
-            each backend's set still stands after the fills, and every check dispatched no lattice, baked no group and
-            missed no tier but a moved field's (live geometry); otherwise it lists why under incomplete, and
-            `puck world caches produce` refuses the folder. Each boot's logs are in player-logs/. Exit 0 wrote a whole
-            player build, 1 a step failed or the build is not complete, 2 invalid arguments.
+            but this build's own from cache/meshes. The record says complete when every boot settled at every place and
+            each backend's set still stands after the fills; otherwise it lists why under incomplete, and
+            `puck world caches produce` refuses the folder. A check that dispatched a lattice, baked a group or missed a
+            tier besides a moved field's (live geometry) still settles, baking what its cache lacks as a player's
+            machine does: the record lists it under cacheMisses and the verb prints it, and the folder stays complete,
+            since a shipped cache is a warm start. Each boot's logs are in player-logs/. Exit 0 wrote a whole player
+            build, 1 a step failed or the build is not complete, 2 invalid arguments.
             """);
         command.SetAction(action: parse => Run(
             backendNames: parse.GetValue(option: backends) ?? [],
@@ -203,9 +207,11 @@ public static class WorldPlayerCommand {
             var world = Path.Combine(path1: output, path2: "worlds", path3: Path.GetFileName(path: Path.TrimEndingDirectorySeparator(path: package)));
 
             var verified = new JsonObject();
-            // Why the folder is not a build a player may run: a boot that did not settle, or a check boot that asked its
-            // cache for more than a hit.
+            // Why the folder is not a build a player may run: a boot that did not settle, or a fill whose set is gone.
             var incomplete = new List<string>();
+            // What a player's machine derives at its first boot because the cache does not carry it: reported, never a
+            // reason to refuse the folder.
+            var misses = new List<string>();
 
             if (bake) {
                 // The places a body may be posed at, as the primary world's documents author them: each boot stands at
@@ -232,9 +238,10 @@ public static class WorldPlayerCommand {
                         incomplete.Add(item: $"fill {WorldBackendTokens.Token(backend: backend)}: its mesh set {Path.GetFileName(path: set)} is not in the store, which a later fill evicted past the store's bound");
                     }
                 }
-                // Then each backend and target boots as a player's build does, drawing stored tiers alone, on the target's
-                // profile and window, and stands at the same places: a whole cache settles everywhere with no lattice
-                // dispatched, no group baked and no tier missed.
+                // Then each backend and target boots as a player's build does, starting from its stored tiers, on the
+                // target's profile and window, and stands at the same places. A whole cache settles everywhere with no
+                // lattice dispatched, no group baked and no tier missed; a cache that is not whole still settles, by
+                // baking what it lacks as a player's machine would, and the boot's reading says what that was.
                 foreach (var backend in backends) {
                     foreach (var target in targets) {
                         var key = $"check {WorldBackendTokens.Token(backend: backend)}-{target}";
@@ -242,7 +249,7 @@ public static class WorldPlayerCommand {
 
                         verified[key] = reading.ToJson();
                         incomplete.AddRange(collection: reading.Unsettled.Select(selector: place => $"{key}: not settled at {place}"));
-                        if (!reading.Hits) { incomplete.Add(item: $"{key}: the cache missed ({reading.Describe()}){((reading.Missed.Count > 0) ? $"; the fill did not produce {reading.DescribeMissed(count: 4)}" : string.Empty)}"); }
+                        if (!reading.Hits) { misses.Add(item: $"{key}: the cache missed ({reading.Describe()}){((reading.Missed.Count > 0) ? $"; the fill did not produce {reading.DescribeMissed(count: 4)}" : string.Empty)}"); }
                     }
                 }
             } else {
@@ -256,6 +263,7 @@ public static class WorldPlayerCommand {
                 ["schema"] = "puck.player-build.v1",
                 ["complete"] = (incomplete.Count == 0),
                 ["incomplete"] = new JsonArray([.. incomplete.Select(selector: static reason => JsonValue.Create(value: reason))]),
+                ["cacheMisses"] = new JsonArray([.. misses.Select(selector: static reason => JsonValue.Create(value: reason))]),
                 ["commit"] = commit,
                 ["runtime"] = System.Runtime.InteropServices.RuntimeInformation.RuntimeIdentifier,
                 ["world"] = Puck.Abstractions.PuckPaths.Relative(path: world, relativeTo: output),
@@ -268,8 +276,12 @@ public static class WorldPlayerCommand {
                 ["checked"] = verified,
             });
             ReportSizes(output: output);
+            if (misses.Count > 0) {
+                Console.Error.WriteLine(value: $"{Verb}: the cache set is not whole, and {MarkerName} lists what it lacks under cacheMisses: a player's machine bakes these at its first boot.");
+                foreach (var reason in misses) { Console.Error.WriteLine(value: $"{Verb}:   {reason}"); }
+            }
             if (incomplete.Count == 0) { return 0; }
-            Console.Error.WriteLine(value: $"{Verb}: the folder is not complete, and {MarkerName} says so: its boots did not settle on a whole cache, so its cache set would leave players baking at their first boot.");
+            Console.Error.WriteLine(value: $"{Verb}: the folder is not complete, and {MarkerName} says so: a boot did not settle, or a fill's set is gone.");
             foreach (var reason in incomplete) { Console.Error.WriteLine(value: $"{Verb}:   {reason}"); }
             return 1;
         } catch (Exception exception) when (exception is InvalidOperationException or InvalidDataException or IOException or TimeoutException or UnauthorizedAccessException) {
@@ -521,6 +533,7 @@ public static class WorldPlayerCommand {
         public JsonObject ToJson() => new() {
             ["places"] = Places,
             ["settled"] = (Unsettled.Count == 0),
+            ["cacheWhole"] = Hits,
             ["unsettled"] = new JsonArray([.. Unsettled.Select(selector: static place => JsonValue.Create(value: place))]),
             ["dispatches"] = Dispatches,
             ["liveDispatches"] = LiveDispatches,

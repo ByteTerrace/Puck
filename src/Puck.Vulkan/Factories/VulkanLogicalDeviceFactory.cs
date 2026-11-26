@@ -570,11 +570,19 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
         );
         var queueFamilies = m_physicalDeviceApi.GetQueueFamilies(instance: instance.Commands, physicalDeviceHandle: physicalDevice.Handle);
         var sparseFamily = SparseFamilyOf(support, queueFamilies, physicalDevice.QueueFamilySelection.GraphicsFamilyIndex);
-        var featureIndices = FeatureIndicesOf(support: support, sparseBuffers: sparseFamily.HasValue);
 
         capabilities = (capabilities with {
             Backing = (capabilities.Backing ?? GpuBackingSupport.None) | BackingOf(instance: instance.Commands, physicalDeviceHandle: physicalDevice.Handle, support: support, families: queueFamilies),
-        }).WithOptional(reported: OptionalOf(instance: instance.Commands, physicalDeviceHandle: physicalDevice.Handle), withheld: Withheld);
+        }).WithOptional(
+            reported: (OptionalOf(instance: instance.Commands, physicalDeviceHandle: physicalDevice.Handle) | (sparseFamily.HasValue ? GpuOptionalCapabilities.MappedBuffers : GpuOptionalCapabilities.None)),
+            withheld: Withheld
+        );
+        // A device the host withholds mapped buffers from enables no sparse feature and asks for no binding queue, so
+        // every buffer it creates is contiguous.
+        if (!capabilities.Has(required: GpuOptionalCapabilities.MappedBuffers)) { sparseFamily = null; }
+
+        var featureIndices = FeatureIndicesOf(support: support, sparseBuffers: sparseFamily.HasValue);
+
         Console.Error.WriteLine(value: $"[gpu-optional] {GpuOptionalCapabilitiesSpelling.Of(capabilities: capabilities.Optional)} withheld={GpuOptionalCapabilitiesSpelling.Of(capabilities: capabilities.Withheld)}");
         Console.Error.WriteLine(value: $"[backing] {GpuDeviceCapabilities.BackingSpelling(backing: (capabilities.Backing ?? GpuBackingSupport.None))} sparse.address-space={capabilities.SparseAddressSpaceBytes} storage-buffer.offset-alignment={capabilities.StorageBufferOffsetAlignment}");
         Console.Error.WriteLine(value: $"[backing] sparse-buffer-features={(sparseFamily.HasValue ? "enabled" : "unavailable")} binding-queue-family={(sparseFamily?.ToString(provider: System.Globalization.CultureInfo.InvariantCulture) ?? "none")}");
