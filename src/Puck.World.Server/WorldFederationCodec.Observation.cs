@@ -10,8 +10,13 @@ namespace Puck.World.Server;
 /// <param name="Mobility">The committed traveler credential issued to that namespace.</param>
 /// <param name="Ceiling">The greatest document disclosure the requester may receive.</param>
 /// <param name="RemainingHops">The remaining local or remote forwarding hops, from 1 through 64.</param>
+/// <param name="Continuation">The stream the answer is one segment of, as the asking authority's lineage stands
+/// (<see cref="WorldStreamLineage.Lend"/>): the answering authority stamps its records as that stream's next
+/// generation and hands the stream back when the traveler moves on
+/// (<see cref="WorldFederationResponse.ProjectionMoved"/>). <see langword="null"/> from a recipient that asks for a
+/// stream of its own, which the answering authority then keeps open across its traveler's moves.</param>
 public readonly record struct WorldTravelerObservation(string SourceAuthority, WorldMobilityIdentity Mobility,
-    WorldDisclosureTier Ceiling = WorldDisclosureTier.Replica, byte RemainingHops = 64);
+    WorldDisclosureTier Ceiling = WorldDisclosureTier.Replica, byte RemainingHops = 64, WorldStreamStamp? Continuation = null);
 public static partial class WorldFederationCodec {
     /// <summary>Encodes one bounded traveler observation request.</summary>
     /// <param name="request">The source credential and forwarding limits.</param>
@@ -26,6 +31,12 @@ public static partial class WorldFederationCodec {
         );
         writer.WriteByte(value: ((byte)request.Ceiling));
         writer.WriteByte(value: request.RemainingHops);
+        writer.WriteBoolean(value: request.Continuation.HasValue);
+        if (request.Continuation is { } continuation) {
+            writer.WriteUInt64(value: continuation.Stream);
+            writer.WriteInt64(value: continuation.Generation);
+            writer.WriteInt64(value: continuation.Ordinal);
+        }
         return writer.ToArray();
     }
     /// <summary>Decodes exactly one traveler observation request and validates its forwarding limits.</summary>
@@ -39,6 +50,9 @@ public static partial class WorldFederationCodec {
         var mobility = WorldWireLeaves.ReadMobility(reader: ref reader);
         var ceiling = ((WorldDisclosureTier)reader.ReadByte());
         var hops = reader.ReadByte();
+        var continuation = (reader.ReadBoolean()
+            ? new WorldStreamStamp(Stream: reader.ReadUInt64(), Generation: reader.ReadInt64(), Ordinal: reader.ReadInt64())
+            : ((WorldStreamStamp?)null));
 
         if (
             !Enum.IsDefined(value: ceiling) ||
@@ -49,8 +63,15 @@ public static partial class WorldFederationCodec {
                 refusal: WireRefusal.PayloadMalformed
             );
         }
+        if (continuation is { } taken && (!taken.IsSpanned || (taken.Generation < 0L) || (taken.Ordinal < 0L))) {
+            reader.Fail(
+                detail: "observation continues a stream it does not name, or from a negative generation or ordinal",
+                refusal: WireRefusal.PayloadMalformed
+            );
+        }
         request = new(
             Ceiling: ceiling,
+            Continuation: continuation,
             Mobility: mobility,
             RemainingHops: hops,
             SourceAuthority: source

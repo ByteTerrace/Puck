@@ -21,9 +21,15 @@ namespace Puck.World.Server;
 /// <param name="server">The authority whose store, clock and document a presentation-tier feed reads; required at
 /// <see cref="WorldDisclosureTier.Presentation"/>.</param>
 /// <param name="view">An ingress-minted view with live admission, or null to mint it from the server and tier.</param>
+/// <param name="lineage">The stream this sink serves a segment of, or <see langword="null"/> for a stream of its own.
+/// A sink that takes up a stream another segment has stamped opens with a cut record, then its route, its whole
+/// disclosed document and a primer.</param>
+/// <param name="hasMoved">Reads, once <paramref name="isCurrent"/> has answered that the route no longer holds, whether
+/// that is because the recipient's traveler moved to another authority, where its stream goes on; or
+/// <see langword="null"/> for a projection that follows no traveler.</param>
 public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     Func<WorldSinkDisclosure> disclosure, Func<bool>? isCurrent = null, Principal? recipient = null, WorldServer? server = null,
-    WorldRecipientView? view = null) : IWorldDetachableSink, IWorldInterestSink, IWorldWatchingSink {
+    WorldRecipientView? view = null, WorldStreamLineage? lineage = null, Func<bool>? hasMoved = null) : IWorldDetachableSink, IWorldInterestSink, IWorldWatchingSink {
     /// <summary>The maximum encoded records one projection subscriber retains while its wire consumer is behind.</summary>
     public const int PendingDeliveryLimit = 256;
     /// <summary>The retained records at or below which a subscriber that fell behind is caught up: half the queue, so
@@ -36,6 +42,9 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     public const string BackpressureDetachReason = "world.observation.backpressure";
     /// <summary>The named reason for detaching a projection whose authority route is no longer current.</summary>
     public const string InvalidatedDetachReason = "world.observation.invalidated";
+    /// <summary>The named reason for detaching a segment of a traveler's stream whose traveler moved to another
+    /// authority. The stream is not over: its next segment goes on from the authority the traveler stands at.</summary>
+    public const string MovedDetachReason = "world.observation.moved";
     /// <summary>The named reason for detaching a projection whose dependencies are no longer disclosed.</summary>
     public const string DisclosureDetachReason = "world.observation.disclosure";
     /// <summary>The named reason for detaching a projection that composed a record over the receiver's cap for its kind
@@ -74,7 +83,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
             await output.FlushAsync(ct).ConfigureAwait(false);
         }
     }
-    private readonly WorldDeliveryCursor m_cursor = new();
+    private readonly WorldDeliveryCursor m_cursor = new(lineage: lineage);
     private readonly WorldDeliveryRows m_rows = new();
     private readonly WorldSolidScaleDisclosure m_scales = new();
     private readonly WorldRecipientView? m_view = (view ?? server?.DeliveryView(recipient, tier));
@@ -103,7 +112,7 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     private bool Current() {
         if (m_invalidated) { return false; }
         if (isCurrent?.Invoke() == false) {
-            End(reason: InvalidatedDetachReason);
+            End(reason: ((hasMoved?.Invoke() == true) ? MovedDetachReason : InvalidatedDetachReason));
 
             return false;
         }
@@ -132,21 +141,36 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
         Release();
         m_frames.Writer.TryComplete();
     }
-    private async Task PumpAsync(Stream output, CancellationToken ct) {
+    /// <summary>Writes the sink's queued records to <paramref name="output"/> in order until the sink ends, and writes
+    /// nothing after them: a caller that serves a segment of a longer stream decides from <see cref="DetachReason"/>
+    /// what follows (<see cref="WriteEndAsync"/>, or the stream's next segment).</summary>
+    /// <param name="output">The recipient's connection.</param>
+    /// <param name="ct">The stream's lifetime.</param>
+    /// <returns>A task that completes when the sink has ended and its last record is written.</returns>
+    public async Task PumpAsync(Stream output, CancellationToken ct) {
         await foreach (var item in m_frames.Reader.ReadAllAsync(cancellationToken: ct).ConfigureAwait(continueOnCapturedContext: false)) {
             await item.WriteAsync(output, ct).ConfigureAwait(false);
         }
-        if (m_invalidated) {
-            await WorldFederationCodec.WriteResponseAsync(
-                body: ((DetachReason is { } reason)
-                    ? Encoding.UTF8.GetBytes(s: reason)
-                    : ReadOnlyMemory<byte>.Empty),
-                ct: ct,
-                kind: WorldFederationResponse.ProjectionInvalidated,
-                stream: output
-            ).ConfigureAwait(continueOnCapturedContext: false);
-        }
     }
+    /// <summary>Writes the record that ends a projection stream by name
+    /// (<see cref="WorldFederationResponse.ProjectionInvalidated"/>).</summary>
+    /// <param name="output">The recipient's connection.</param>
+    /// <param name="reason">The named reason the stream ended, or <see langword="null"/> for none.</param>
+    /// <param name="ct">The stream's lifetime.</param>
+    /// <returns>A task that completes when the record is written.</returns>
+    public static Task WriteEndAsync(Stream output, string? reason, CancellationToken ct) =>
+        WorldFederationCodec.WriteResponseAsync(
+            body: ((reason is not null)
+                ? Encoding.UTF8.GetBytes(s: reason)
+                : ReadOnlyMemory<byte>.Empty),
+            ct: ct,
+            kind: WorldFederationResponse.ProjectionInvalidated,
+            stream: output
+        );
+    /// <summary>Takes the recipient's acknowledgement of one snapshot record this sink stamped, which later snapshots
+    /// are then sent as changes against. A stamp this sink did not issue is ignored.</summary>
+    /// <param name="stamp">The acknowledged stamp.</param>
+    public void Acknowledge(in WorldStreamStamp stamp) => m_history.Acknowledge(stamp: stamp);
     // Queues what the peer's feed owes it: a whole projection as a definition leaf, a delta as a projection delta leaf.
     private void Present(WorldProjectionDelivery delivery, WorldDocumentVersion version, ulong tick, ulong engineTick) {
         switch (delivery.Kind) {
@@ -433,8 +457,17 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) {
         if ((m_feed is not null) || !stamp.ArenaValues || ((m_view is not null) && m_cursor.FrameMoved(view: m_view))) { DeliverDocument(replaced: false); }
     }
+    /// <summary>Queues the route the stream's records describe a traveler along. A sink that owes its reader a cut
+    /// holds the route back and sends it behind the cut record, so the route is read under the generation it belongs
+    /// to.</summary>
+    /// <param name="route">The traveler's route at this authority.</param>
     public void PrimeRoute(in WorldAuthorityRouteDescription route) {
         m_route = route;
+        if (m_cursor.CutOwed) {
+            m_routeOwed = true;
+
+            return;
+        }
         WriteRecord(
             WorldFederationResponse.Route,
             WorldFederationCodec.EncodeRoute(route: in route, tier: tier)
@@ -446,13 +479,20 @@ public sealed class WorldFederationProjectionSink(WorldDisclosureTier tier,
         m_history.Clear();
         m_feed?.Release(); m_cursor.Release(); server?.DetachCursor(cursor: m_cursor, recipient: recipient);
     }
+    /// <summary>Serves the sink as a whole stream of its own: writes its records, reads the recipient's
+    /// acknowledgements, and ends the stream by name when the sink ends.</summary>
+    /// <param name="output">The recipient's connection.</param>
+    /// <param name="ct">The stream's lifetime.</param>
+    /// <returns>A task that completes when either half of the connection closes.</returns>
     public Task StreamAsync(Stream output, CancellationToken ct) =>
         WorldProjectionStream.RunAsync(
             output,
-            token => PumpAsync(
-                ct: token,
-                output: output
-            ),
+            async token => {
+                await PumpAsync(ct: token, output: output).ConfigureAwait(continueOnCapturedContext: false);
+                if (m_invalidated) {
+                    await WriteEndAsync(ct: token, output: output, reason: DetachReason).ConfigureAwait(continueOnCapturedContext: false);
+                }
+            },
             (stamp, _, _) => { m_history.Acknowledge(stamp); return ValueTask.CompletedTask; },
             ct
         );
