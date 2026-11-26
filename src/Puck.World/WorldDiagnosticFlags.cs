@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.Abstractions.Gpu;
 
 namespace Puck.World;
@@ -7,9 +8,9 @@ namespace Puck.World;
 /// [basic|full]</c>, the backend's validation level.
 /// </summary>
 public static class WorldDiagnosticFlags {
-    /// <summary>Parses the value of <c>--debug-layers</c>: no value or <c>basic</c> is <see cref="GpuValidation.Basic"/>,
-    /// <c>full</c> is <see cref="GpuValidation.Full"/>, and anything else is refused through
-    /// <paramref name="error"/>.</summary>
+    /// <summary>Parses the value of <c>--debug-layers</c>: no value is <see cref="GpuValidation.Basic"/>, a level's wire
+    /// name (<c>off</c>, <c>basic</c>, <c>full</c>, <see cref="EnumWireName{TEnum}"/>) is that level, and anything else
+    /// is refused through <paramref name="error"/>.</summary>
     /// <param name="token">The flag's value, or <see langword="null"/> for a bare flag.</param>
     /// <param name="error">The sink for the refusal of a value that names no level.</param>
     /// <returns>The level, or <see cref="GpuValidation.Off"/> once the value was refused.</returns>
@@ -18,8 +19,8 @@ public static class WorldDiagnosticFlags {
         ArgumentNullException.ThrowIfNull(error);
 
         if (token is null) { return GpuValidation.Basic; }
-        if (GpuValidationSpelling.TryParse(level: out var level, name: token)) { return level; }
-        error($"--debug-layers takes {string.Join(separator: " or ", values: GpuValidationSpelling.All)}, not '{token}'.");
+        if (EnumWireName<GpuValidation>.TryParse(name: token, value: out var level)) { return level; }
+        error($"--debug-layers takes basic or full, not '{token}'.");
 
         return GpuValidation.Off;
     }

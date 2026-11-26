@@ -211,7 +211,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 frameBar = named;
             } else if ((key == "withholdGpu") && (OperatorMcpServer.StringsOf(value: value) is { } withheld) && withheld.All(predicate: static name => Puck.Abstractions.Gpu.GpuOptionalCapabilitiesSpelling.TryParse(capability: out _, name: name)) && (withheld.Distinct(comparer: StringComparer.Ordinal).Count() == withheld.Length)) {
                 withheldGpu = withheld;
-            } else if ((key == "debugLayers") && (value.ValueKind == JsonValueKind.String) && Puck.Abstractions.Gpu.GpuValidationSpelling.TryParse(level: out var level, name: value.GetString())) {
+            } else if ((key == "debugLayers") && (value.ValueKind == JsonValueKind.String) && Puck.Abstractions.Documents.EnumWireName<Puck.Abstractions.Gpu.GpuValidation>.TryParse(name: (value.GetString() ?? string.Empty), value: out var level)) {
                 debugLayers = level;
             } else if ((key == "timeoutSeconds") &&(value.ValueKind == JsonValueKind.Number) && value.TryGetInt32(value: out var parsed) && (parsed is >= 1 and <= MaxStartSeconds)) {
                 seconds = parsed;
