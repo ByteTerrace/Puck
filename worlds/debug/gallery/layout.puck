@@ -261,11 +261,12 @@ let flawCrossings = loopCrossings(flawRoute, flawCuts)
 // across the nave on the two showcase rows, each console toward the centre aisle (yaw 180 faces +z, yaw 0 faces -z).
 let showcaseRows = [{ row: showcaseRowSouth, yaw: 180 }, { row: showcaseRowNorth, yaw: 0 }]
 let displaySouth = 4.4
-// A display is the standard's display plinth (architecture.puck) stamped at `displayScale`, its cap's top 1.05 m up,
-// and the exhibit on its turntable stands at `displayExhibitScale`, set down so the plinth's cap of the exhibits' own
-// frame (0.75 m) meets the turntable: a 0.5 m sphere stands 2 m across.
-let displayScale = 1.4
-let displayExhibitScale = 2
+// A display is the standard's display plinth (architecture.puck) stamped at `displayScale`, so its cap spans about four
+// fifths of its pad's width (look.puck's lookPadTiles) with a cream margin round it, and the exhibit on its turntable
+// stands at `displayExhibitScale`, in proportion, set down so the plinth's cap of the exhibits' own frame (0.75 m) meets
+// the turntable.
+let displayScale = 1.75
+let displayExhibitScale = 2.5
 // How far, in metres, an exhibit floats clear of its turntable: the exhibits were authored resting on the old plinths'
 // cap, some dipping a little under it, so each stands this much higher and reads as a specimen held over the light.
 let displayExhibitLift = 0.3
