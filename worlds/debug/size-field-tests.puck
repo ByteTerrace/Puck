@@ -1,0 +1,107 @@
+// The size field (standard/size-field.puck) on a bare floor: a body's size is a pure function of where it stands, and
+// growth is held to the room about it. `puck test worlds/debug/size-field-tests.puck`, and `--reproduce` to show two runs
+// agree.
+//
+//   the shrink field   x 0, from z 0 (full size) to z -12 (`shrinkEnd`), reaching 3 m either side
+//   the grow field     x 20, from z 0 to z -6, full size along its length: a body anywhere in it is asked to grow to one
+//   the canopy         a slab over the grow field's first two metres, its underside 1 m up: half the Moth's height
+//
+// Size is the body's `size` register (size.puck), read back with bodyState. The middle of the shrink field is the
+// geometric mean of its two ends, the square root of `shrinkEnd`, not their average.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "size-field-tests"
+
+import "../standard/bounds"
+import "../standard/size-field"
+import "size"
+
+let shrinkEnd = 0.15
+
+sizeField(name: "shrink", from: [0, 0, 0], to: [0, 0, -12], start: 1, end: shrinkEnd, reach: 3)
+sizeField(name: "grow", from: [20, 0, 0], to: [20, 0, -6], start: 1, end: 1, reach: 3)
+
+prototypes {
+  prototype "floor" {
+    document {
+      name: "floor"
+      palette [{ color: "#C9BFAE" }]
+      schema: "puck.creation.v1"
+      boundsBox(label: "ground", x0: -10, x1: 30, y0: -1, y1: 0, z0: -20, z1: 10, slot: 0)
+      boundsBox(label: "canopy", x0: 17, x1: 23, y0: 1, y1: 1.25, z0: -1, z1: 2, slot: 0)
+    }
+  }
+}
+
+test "the field's ends and middle give the authored sizes" {
+  when {
+    seat1: body.pose 0 0 0 0 0 0 0
+    ticks 5
+    seat1: body.pose 0 0 -6 0 0 0 0
+    ticks 5
+  }
+  expect {
+    bodyState(body, 0, size) > 0.3872
+    bodyState(body, 0, size) < 0.3874
+  }
+}
+
+test "walking the field's length shrinks her to its small end" {
+  when {
+    seat1: body.pose 0 0 1 0 0 0 0
+    ticks 5
+    // Forward is -Z for a headless seat; her pace falls with her size, so the far end takes her longest: about seven
+    // seconds to the end, and the rest at under a sixth of her pace, short of the floor's edge at z -20.
+    seat1: body.fly 1 0 0 0 0 0 11 0
+    ticks 360
+  }
+  expect {
+    bodyPosition(body, 0, z) < -12
+    bodyState(body, 0, size) == shrinkEnd
+    fact(body, 0, Grounded) == 1
+  }
+}
+
+test "beside the field her size stands as it was" {
+  when {
+    seat1: body.pose 0 0 -12 0 0 0 0
+    ticks 5
+    seat1: body.pose 8 0 -6 0 0 0 0
+    ticks 5
+  }
+  expect {
+    bodyState(body, 0, size) == shrinkEnd
+  }
+}
+
+// Small, she is set down under the canopy in the grow field: she grows only as far as the room under it allows, stays
+// on the floor, and grows to full size once she stands clear of it.
+test "under a low ceiling she grows only as far as fits, and on once clear" {
+  when {
+    seat1: body.pose 0 0 -12 0 0 0 0
+    ticks 5
+    seat1: body.pose 20 0 0.5 0 0 0 0
+    ticks 30
+  }
+  expect {
+    bodyState(body, 0, size) > shrinkEnd
+    bodyState(body, 0, size) < 0.5
+    bodyPosition(body, 0, y) > -0.05
+    bodyPosition(body, 0, y) < 0.05
+  }
+}
+
+test "clear of the canopy she grows to the field's size" {
+  when {
+    seat1: body.pose 0 0 -12 0 0 0 0
+    ticks 5
+    seat1: body.pose 20 0 0.5 0 0 0 0
+    ticks 30
+    seat1: body.pose 20 0 -4 0 0 0 0
+    ticks 5
+  }
+  expect {
+    bodyState(body, 0, size) == 1
+    fact(body, 0, Grounded) == 1
+  }
+}

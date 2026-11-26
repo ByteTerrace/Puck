@@ -656,6 +656,21 @@ public static partial class ExpressionArithmetic {
                         );
                     }
                 case ExpressionOp.Power:
+                    if (kind == CellKind.Fixed) {
+                        // A real power: any exponent of a positive base, and a whole exponent of a negative one. Zero
+                        // raised to a negative exponent and a negative base raised to a fraction have no real answer
+                        // and fail rather than saturate or read as zero.
+                        var fixedBase = FixedQ4816.FromRawBits(value: arguments[0]);
+                        var exponent = FixedQ4816.FromRawBits(value: arguments[1]);
+                        var whole = (exponent == FixedQ4816.Floor(value: exponent));
+
+                        if (
+                            ((arguments[0] == 0L) && (arguments[1] < 0L)) ||
+                            ((arguments[0] < 0L) && !whole)
+                        ) { return false; }
+                        value = FixedQ4816.Pow(x: fixedBase, y: exponent).Value;
+                        return true;
+                    }
                     // A negative exponent is refused by the kernel's own guard, which names it.
                     return arguments[0].TryExponentiate(
                         exponent: arguments[1],

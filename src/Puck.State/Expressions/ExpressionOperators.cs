@@ -1168,7 +1168,7 @@ public static class ExpressionOperators {
             name: "power",
             operation: ExpressionOp.Power,
             payload: PayloadShape.None,
-            signature: ExpressionSignature.Int,
+            signature: ExpressionSignature.Numeric,
             symbol: null
         ),
         Define(
