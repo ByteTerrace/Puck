@@ -723,8 +723,9 @@ public sealed partial class WorldPopulation {
     // The bodies the tick's possession list names (SyncPossession), by slot.
     private readonly Puck.Abstractions.Collections.MarkedIndexSet m_possessedNow = new();
     // Run the named producer before motion. Live and Idle name no producer, and a producer that stands down runs as
-    // none does. It writes only this body's own entry, so a partition may stage it.
-    private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks, ProducerWork work) {
+    // none does. It writes only this body's own entry, so a partition may stage it. Answers whether a producer ran, so
+    // the producer runs a population counts are runs, never the inert intent staged for a body that names none.
+    private bool StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks, ProducerWork work) {
         // A kit partition's steer fork is measured whole (RunKitPartitions), not body by body.
         using var measure = (work.Partitioned ? default : Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickProducers));
 
@@ -754,7 +755,7 @@ public sealed partial class WorldPopulation {
             // wakes it when a retune brings the producer back.
             body.NoteProducerRest(rests: (entry.ProducerState.StandDown != BodyProducerStandDown.None));
             body.StageProducerIntent(intent: default);
-            return;
+            return false;
         }
 
         var before = entry.ProducerState;
@@ -833,6 +834,7 @@ public sealed partial class WorldPopulation {
             stepTicks: stepTicks
         );
         body.NoteProducerRest(rests: ProducerRests(before: in before, body: body, entry: entry, producer: producer, sensors: in sensors));
+        return true;
     }
     // PRODUCERS AT REST. A producer's run is a function of its program, its state, its sensors and the body's pose, so a
     // run that answered the neutral intent and moved none of its state answers the same on every later run while its
@@ -935,7 +937,7 @@ public sealed partial class WorldPopulation {
                     continue;
                 }
 
-                StageProducer(
+                _ = StageProducer(
                     body: body,
                     entry: entry,
                     index: slot,
@@ -1147,15 +1149,16 @@ public sealed partial class WorldPopulation {
         }
 
         if (step.SteeringDue) {
-            StageProducer(
+            var ran = StageProducer(
                 body: player,
                 entry: entry,
                 index: index,
                 stepTicks: step.SteeringTicks,
                 work: m_serialWork
             );
+
             SeedSteering(entry: entry, motionPeriod: step.MotionPeriod, player: player, steeringPeriod: step.SteeringPeriod, work: m_serialWork);
-            BodySteers++;
+            if (ran) { BodySteers++; }
         }
         if (!step.Moves) {
             return;

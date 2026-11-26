@@ -479,9 +479,10 @@ public sealed partial class WorldPopulation {
             var entry = m_entries[index];
             var body = entry.Body!;
 
-            StageProducer(body: body, entry: entry, index: index, stepTicks: partition.Steps[at].SteeringTicks, work: partition.Work);
+            var ran = StageProducer(body: body, entry: entry, index: index, stepTicks: partition.Steps[at].SteeringTicks, work: partition.Work);
+
             SeedSteering(entry: entry, motionPeriod: partition.Steps[at].MotionPeriod, player: body, steeringPeriod: partition.Steps[at].SteeringPeriod, work: partition.Work);
-            partition.Steered++;
+            if (ran) { partition.Steered++; }
         }
     }
     // A moving body's part of the input pass: the staged steering a batched body keeps between refreshes, then the
