@@ -74,6 +74,10 @@ public sealed class WorldSessionFrameSource(SdfCompositionFrameSource inner, Act
     }
 
     private readonly SdfFrame.Writer m_frameWriter = new();
+
+    /// <inheritdoc/>
+    /// <remarks>The residency built over this source is its one reader, so its frame's claim goes with it.</remarks>
+    public void ReleaseFrames() => m_frameWriter.Release();
     /// <inheritdoc/>
     /// <remarks>The time a device loss takes to recover must not land as one giant smoothing delta on the next
     /// frame.</remarks>

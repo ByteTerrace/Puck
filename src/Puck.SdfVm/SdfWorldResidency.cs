@@ -483,6 +483,10 @@ public sealed partial class SdfWorldResidency : IDisposable {
             m_packLane?.Dispose();
             MeshPathBake.Retire();
             m_ownedLibrary?.Dispose();
+            // Its frames' claims on their programs go last, after every holder that reads them through a frame.
+            foreach (var capture in m_captures) { capture.Release(); }
+            m_frozen.Release();
+            m_frameSource.ReleaseFrames();
         }
     }
 

@@ -86,4 +86,8 @@ public sealed class WorldInfinityViewScene : ISdfFrameDresser {
     }
 
     private readonly SdfFrame.Writer m_frameWriter = new();
+
+    /// <summary>Releases the claim the scene's frame holds on its program (<see cref="SdfFrame.Writer.Release"/>), once
+    /// its owner dresses no frame through it again.</summary>
+    public void Release() => m_frameWriter.Release();
 }

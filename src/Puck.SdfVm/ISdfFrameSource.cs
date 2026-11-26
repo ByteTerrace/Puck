@@ -10,6 +10,10 @@ public interface ISdfFrameSource {
     /// <summary>Drops any device-owned resources held outside the main engine. The next produced frame rebuilds them
     /// against the replacement device. Default no-op for CPU-only frame sources.</summary>
     void NotifyDeviceLost() { }
+    /// <summary>Releases the claims the source's own frames hold on their programs (<see cref="SdfFrame.Writer.Release"/>),
+    /// called by the residency that captures from it at its final release. Only a source that residency alone reads lets
+    /// them go; the default keeps them, for a source shared beyond it.</summary>
+    void ReleaseFrames() { }
     /// <summary>Captures the scene, cameras, and per-entity transforms for one rendered frame. It never waits for work
     /// another thread does for the frame (a program or a field still building): it films nothing, or a frame that does not
     /// yet show what its content calls for, and names that work in <see cref="Waiting"/>.</summary>

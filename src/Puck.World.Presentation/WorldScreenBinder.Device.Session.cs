@@ -23,7 +23,8 @@ public sealed partial class WorldScreenBinder {
         ) { SkyLayers = SkyLayers, Session = Settings, ViewName = feed.RegistrationName };
         var frameSource = new SdfCompositionFrameSource(
             dresser: emitter,
-            emitters: [emitter]
+            emitters: [emitter],
+            storage: SdfCompositionFrameSource.ProcessStorage
         );
 
         feed.FrameSource = frameSource;
@@ -221,6 +222,7 @@ public sealed partial class WorldScreenBinder {
         feed.Emitter = null;
         feed.EnvelopeRegistration?.Dispose();
         feed.EnvelopeRegistration = null;
+        feed.FrameSource?.Dispose();
         feed.FrameSource = null;
     }
     // An infinity layer's residency, holding content delivered under wider access than the layer has now, goes with

@@ -1110,10 +1110,14 @@ public sealed partial class SdfProgramBuilder {
     /// <param name="replaces">The program the result replaces, or <see langword="null"/>: when the builder holds the field
     /// it was derived from, the result shares that derivation and packs only its own appearance
     /// (<see cref="SdfProgram.Of"/>).</param>
-    /// <returns>The program; <paramref name="replaces"/> itself when the builder holds exactly what it was built from.</returns>
+    /// <param name="storage">Where the program holds its words, appearance section and instructions: native blocks its
+    /// claims own, which the caller releases (<see cref="SdfProgram.Release"/>), or managed arrays when
+    /// <see langword="null"/>.</param>
+    /// <returns>The program, holding one claim for the caller; <paramref name="replaces"/> itself, claimed again, when the
+    /// builder holds exactly what it was built from.</returns>
     /// <exception cref="InvalidOperationException">An instance, field scope or material scope is still open, or a shape
     /// names a material, a screen or a positional recolor window the program does not declare.</exception>
-    public SdfProgram Build(SdfProgram? replaces = null) {
+    public SdfProgram Build(SdfProgram? replaces = null, SdfProgramStorage? storage = null) {
         if (m_openInstanceFirst >= 0) {
             throw new InvalidOperationException(message: "Build was called with an instance still open (unbalanced Begin/EndInstance).");
         }
@@ -1235,6 +1239,7 @@ public sealed partial class SdfProgramBuilder {
             replaces: replaces,
             sampledBindings: m_sampledBindings,
             reservedPathWords: m_reservedPathWords,
+            storage: storage,
             sweepCurves: m_sweepCurves
         );
     }

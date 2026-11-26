@@ -10,11 +10,13 @@ public sealed partial class SdfProgram {
     // with a global bound; a relief after an operation with no global continuous derivative bound (a fold that jumps at a
     // seam, a reach-dependent warp) is refused by name, since no step bound covers it. Indexed by instruction; empty for a
     // program with no relief.
-    private static float[] AnalyzeReliefPointFactors(SdfInstruction[] instructions) {
-        if (!Array.Exists(
-            array: instructions,
-            match: static i => (SdfFieldOps.ReliefPointFactorOf(value: i.Op) == SdfReliefPointFactorAction.SampleRelief)
-        )) { return []; }
+    private static float[] AnalyzeReliefPointFactors(Span<SdfInstruction> instructions) {
+        var sampled = false;
+
+        foreach (var instruction in instructions) {
+            if (SdfFieldOps.ReliefPointFactorOf(value: instruction.Op) == SdfReliefPointFactorAction.SampleRelief) { sampled = true; break; }
+        }
+        if (!sampled) { return []; }
         var factors = new float[instructions.Length];
         var factor = 1f;
         (SdfOp Op, int Index)? unsupported = null;

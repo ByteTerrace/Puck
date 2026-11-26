@@ -422,6 +422,9 @@ public sealed partial class SdfMeshPathBake {
 
     private readonly Stopwatch m_clock = new();
 
+    // The program the bake meshes, under the bake's claim (SdfProgram.Exchange) from Adopt to Retire: everything that reads
+    // it under the gate reads it claimed, and pool work that reads it outside the gate takes a claim of its own
+    // (ClaimProgram).
     private SdfProgram? m_program;
     // The field m_program derives, counted: it moves when the bake adopts a program that does not share the held one's
     // field (SdfProgram.SharesField), and only then. A group's checkpoint keys name the field they were taken from by this
@@ -431,7 +434,14 @@ public sealed partial class SdfMeshPathBake {
     // Under the gate: holds a program, moving the field count when its field is not the held one's.
     private void Adopt(SdfProgram program) {
         if (!program.SharesField(other: m_program)) { Volatile.Write(location: ref m_field, value: (m_field + 1L)); }
-        m_program = program;
+        SdfProgram.Exchange(held: ref m_program, next: program);
+    }
+    // A claim on the program the bake meshes, for pool work that reads it outside the gate, while its field is still the
+    // one the work was queued for; null once the bake adopted another field or was retired. The caller releases it.
+    private SdfProgram? ClaimProgram(long field) {
+        using (EnterGate(site: BakeGate.Read)) {
+            return (((m_program is { } program) && (Volatile.Read(location: ref m_field) == field) && program.TryAcquire()) ? program : null);
+        }
     }
 
     // The baked sampled set the groups were planned at (SdfSampledSet.Baked): a frame carrying another resamples the groups

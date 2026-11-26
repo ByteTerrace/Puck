@@ -33,5 +33,9 @@ public sealed partial class WorldFramePresenter {
         m_environment.Dispose();
         m_adjacencies.Dispose();
         foreach (var scene in m_routedScenes.Values) { scene.Dispose(); }
+        // The composition's claim and the frames' claims on the programs they carry (SdfProgram.Exchange).
+        m_composed.Dispose();
+        m_frameWriter.Release();
+        m_convergedWriter.Release();
     }
 }

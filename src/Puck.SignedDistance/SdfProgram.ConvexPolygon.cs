@@ -22,7 +22,7 @@ public sealed partial class SdfProgram {
                 WriteVector4(
                     baseIndex: entryBase,
                     w: second.Y,
-                    words: m_words,
+                    words: PackedWords,
                     x: first.X,
                     y: first.Y,
                     z: second.X

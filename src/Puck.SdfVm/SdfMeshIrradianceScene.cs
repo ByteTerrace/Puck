@@ -71,7 +71,7 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
     // rather than another renter's words. Every reader of a scene therefore holds a scene claim (Acquire), as its mesh
     // claims already require.
     private sealed class Content {
-        private int m_claims = 1;
+        private ClaimCount m_claims = new(claims: 1);
 
         public readonly MemoryAccount.Owner Memory = MemoryAccount.Shared.CreateOwner(name: "sdf.mesh-gi.trace-scene", memoryClass: MemoryClass.Elastic);
         // The entries' and nodes' native storage, charged to Memory and freed at the last release.
@@ -89,16 +89,11 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         public ReadOnlySpan<Node> Nodes => ((NodeStorage is { } storage) ? storage.GetSpan() : default);
 
         public Content Acquire() {
-            var count = Interlocked.Increment(location: ref m_claims);
-
-            if (count <= 1) { throw new InvalidOperationException(message: "A scene's arrays were shared after their last release."); }
+            m_claims.Acquire(owner: this);
             return this;
         }
         public void Release() {
-            var count = Interlocked.Decrement(location: ref m_claims);
-
-            if (count < 0) { throw new InvalidOperationException(message: "A scene's arrays were released twice."); }
-            if (count > 0) { return; }
+            if (!m_claims.Release()) { return; }
 
             var instances = Instances;
 
@@ -881,17 +876,13 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
         private static readonly Dictionary<GeometryKey, Geometry> SharedGeometries = [];
         private static readonly Lock SharedGate = new();
 
-        private int m_claims = 1;
+        private ClaimCount m_claims = new(claims: 1);
         private GeometryKey? m_sharedAs;
 
         // Takes a claim on the geometry another scene built over the same mesh buffers; false when none stands.
         internal static bool TryAcquireShared(GeometryKey key, [NotNullWhen(true)] out Geometry? geometry) {
             lock (SharedGate) {
-                if (SharedGeometries.TryGetValue(key: key, value: out geometry)) {
-                    for (var claims = Volatile.Read(location: ref geometry.m_claims); (claims > 0); claims = Volatile.Read(location: ref geometry.m_claims)) {
-                        if (Interlocked.CompareExchange(location1: ref geometry.m_claims, value: (claims + 1), comparand: claims) == claims) { return true; }
-                    }
-                }
+                if (SharedGeometries.TryGetValue(key: key, value: out geometry) && geometry.m_claims.TryAcquire()) { return true; }
             }
             geometry = null;
             return false;
@@ -903,9 +894,9 @@ public sealed partial class SdfMeshIrradianceScene : IDisposable {
                 SharedGeometries[key] = geometry;
             }
         }
-        internal void Acquire() => Interlocked.Increment(ref m_claims);
+        internal void Acquire() => m_claims.Acquire(owner: this);
         internal void Release() {
-            if (Interlocked.Decrement(ref m_claims) != 0) { return; }
+            if (!m_claims.Release()) { return; }
             if (m_sharedAs is { } key) {
                 lock (SharedGate) {
                     if (SharedGeometries.TryGetValue(key: key, value: out var listed) && ReferenceEquals(objA: listed, objB: this)) { _ = SharedGeometries.Remove(key: key); }

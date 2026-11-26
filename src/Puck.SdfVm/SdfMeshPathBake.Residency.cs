@@ -554,6 +554,8 @@ public sealed partial class SdfMeshPathBake {
             }
             foreach (var (_, _, room, _) in m_parked) { room.Dispose(); }
             m_parked.Clear();
+            // Pool work still reading the program holds a claim of its own (ClaimProgram).
+            Puck.SignedDistance.SdfProgram.Exchange(held: ref m_program, next: null);
         }
         lock (WorkGate) { _ = WorkQueue.RemoveAll(match: item => { if (!item.Group.Retired) { return false; } item.Group.EndWork(); return true; }); }
         Refinement.Drop(bake: this);

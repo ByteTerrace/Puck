@@ -80,7 +80,7 @@ public sealed partial class SdfProgram {
 
         scopes[0] = new DistanceBound(Gain: UnconstrainedGain, Sag: 0f);
         for (var cursor = instance.First; (cursor < instance.End); cursor++) {
-            var instruction = m_instructions[cursor];
+            var instruction = InstructionRows[cursor];
 
             switch (SdfFieldOps.DistanceGainOf(value: instruction.Op)) {
                 case SdfDistanceGainAction.ResetPoint:

@@ -13,6 +13,23 @@ namespace Puck.World.Client;
 /// answers the union: the nearer hit, any overlap, and the normal of the part nearer the point.
 /// </summary>
 public sealed class WorldQueryField {
+    /// <summary>Compiles one part's regional contact evaluator from a builder's emission. The program is built into native
+    /// storage and released once the evaluator has compiled it, since the evaluator keeps none of the program's storage, so
+    /// a rebuild of the field leaves no program on the managed heap.</summary>
+    /// <param name="builder">The builder holding the part's emission, free for another emission once this returns.</param>
+    /// <returns>The evaluator.</returns>
+    /// <exception cref="ArgumentException">The emission holds an instruction the contact evaluator does not interpret.</exception>
+    public static SdfFieldEvaluator PartOf(Puck.SignedDistance.SdfProgramBuilder builder) {
+        ArgumentNullException.ThrowIfNull(argument: builder);
+        var program = builder.Build(storage: Puck.SdfVm.SdfCompositionFrameSource.ProcessStorage);
+
+        try {
+            return new SdfFieldEvaluator(program: program, reading: SdfFieldReading.Contact, regional: true);
+        } finally {
+            program.Release();
+        }
+    }
+
     /// <summary>Initializes a new instance of the <see cref="WorldQueryField"/> class.</summary>
     /// <param name="fixedPart">The part that changes only with a definition delivery.</param>
     /// <param name="responding">The part a response sweep moves, or <see langword="null"/> when no responding solid row

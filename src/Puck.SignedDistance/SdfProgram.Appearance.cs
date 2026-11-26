@@ -36,8 +36,12 @@ public sealed partial class SdfProgram {
     /// read the same inputs it read, the result shares its field derivation (<see cref="SharesField"/>): it is
     /// <paramref name="replaces"/> itself when the appearance is its own in every material and screen surface, and
     /// otherwise a program sharing its field's words with this appearance packed into a section of its own, so a look
-    /// value costs a pack of the appearance section rather than a field build or a copy of the field.</param>
-    /// <returns>The program.</returns>
+    /// value costs a pack of the appearance section rather than a field build or a copy of the field. Only a program whose
+    /// storage is of the kind <paramref name="storage"/> names, and whose last claim stands, is reused.</param>
+    /// <param name="storage">Where the program holds its words, appearance section and instructions: native blocks its
+    /// claims own (<see cref="OwnsNativeStorage"/>), or managed arrays when <see langword="null"/>.</param>
+    /// <returns>The program, holding one claim for the caller, which releases it (<see cref="Release"/>); a program
+    /// reused whole (<paramref name="replaces"/>) is claimed again.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="instructions"/> or <paramref name="appearance"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">An instruction's opcode, shape, blend, or material lane is outside the domain
@@ -47,37 +51,55 @@ public sealed partial class SdfProgram {
     /// two instance ranges claim one instruction.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="glyphStroke"/> or an instance bound is not finite and non-negative, or a trapezoid's
     /// profile slant vanishes in the deterministic field's representation.</exception>
-    public static SdfProgram Of(IReadOnlyList<SdfInstruction> instructions, SdfAppearance appearance, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0, IReadOnlyList<SdfSampledBinding>? sampledBindings = null, ulong glyphAtlas = 0, float glyphStroke = 0f, SdfProgram? replaces = null) {
+    public static SdfProgram Of(IReadOnlyList<SdfInstruction> instructions, SdfAppearance appearance, IReadOnlyList<SdfInstanceRange>? instances = null, IReadOnlyList<(int InstructionIndex, Vector2[] Vertices)>? convexPolygonProfiles = null, IReadOnlyList<SdfSweepCurve>? sweepCurves = null, IReadOnlyList<SdfCompiledPath>? paths = null, int reservedPathWords = 0, IReadOnlyList<SdfSampledBinding>? sampledBindings = null, ulong glyphAtlas = 0, float glyphStroke = 0f, SdfProgram? replaces = null, SdfProgramStorage? storage = null) {
         ArgumentNullException.ThrowIfNull(argument: instructions);
         ArgumentNullException.ThrowIfNull(argument: appearance);
 
         // Read before the constructor patches its own copy of the instructions.
         var key = InstructionsKey(instructions: instructions);
 
-        if ((replaces is not null) && replaces.FieldInputsMatch(appearance: appearance.Outline, convexPolygonProfiles: convexPolygonProfiles, glyphAtlas: glyphAtlas, glyphStroke: glyphStroke, instances: instances, instructions: instructions, instructionsKey: key, paths: paths, reservedPathWords: reservedPathWords, sampledBindings: sampledBindings, sweepCurves: sweepCurves)) {
-            return (replaces.HasAppearance(appearance: appearance) ? replaces : replaces.WithAppearance(appearance: appearance));
+        // The claim taken here keeps the replaced program's storage readable through the comparison and the copy, and is
+        // the caller's claim when the program is reused whole.
+        if ((replaces is not null) && (replaces.OwnsNativeStorage == (storage is not null)) && replaces.TryAcquire()) {
+            if (replaces.FieldInputsMatch(appearance: appearance.Outline, convexPolygonProfiles: convexPolygonProfiles, glyphAtlas: glyphAtlas, glyphStroke: glyphStroke, instances: instances, instructions: instructions, instructionsKey: key, paths: paths, reservedPathWords: reservedPathWords, sampledBindings: sampledBindings, sweepCurves: sweepCurves)) {
+                if (replaces.HasAppearance(appearance: appearance)) { return replaces; }
+                try { return replaces.WithAppearance(appearance: appearance); } finally { replaces.Release(); }
+            }
+            replaces.Release();
         }
 
-        var program = new SdfProgram(
-            appearance: appearance.Outline,
-            convexPolygonProfiles: convexPolygonProfiles,
-            glyphAtlas: glyphAtlas,
-            glyphStroke: glyphStroke,
-            instances: instances,
-            instructions: instructions,
-            paths: paths,
-            reservedPathWords: reservedPathWords,
-            sampledBindings: sampledBindings,
-            sweepCurves: sweepCurves
-        );
+        var field = new FieldStorage(instructions: instructions, storage: storage);
+        SdfProgram program;
 
-        var section = new uint[program.m_appearanceWordCount];
+        try {
+            program = new SdfProgram(
+                appearance: appearance.Outline,
+                convexPolygonProfiles: convexPolygonProfiles,
+                field: field,
+                glyphAtlas: glyphAtlas,
+                glyphStroke: glyphStroke,
+                instances: instances,
+                instructions: instructions,
+                paths: paths,
+                reservedPathWords: reservedPathWords,
+                sampledBindings: sampledBindings,
+                sweepCurves: sweepCurves
+            );
+        } catch {
+            field.Release();
+            throw;
+        }
 
-        appearance.Pack(materialVector: ((int)program.m_words[ProgramMaterialOffsetLane]), section: section);
-        program.m_appearanceWords = section;
+        try {
+            appearance.Pack(materialVector: ((int)program.PackedWords[ProgramMaterialOffsetLane]), section: program.NewAppearanceSection());
+        } catch {
+            program.Release();
+            throw;
+        }
         program.m_appearance = appearance;
         program.m_instructionsKey = key;
         program.m_reservedPathWords = reservedPathWords;
+        program.MeasureAppearance();
 
         return program;
     }
@@ -127,12 +149,12 @@ public sealed partial class SdfProgram {
     /// <exception cref="ArgumentOutOfRangeException">The range lies outside the instruction stream.</exception>
     public bool IsGlassRange(int first, int end) {
         ArgumentOutOfRangeException.ThrowIfNegative(value: first);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: end, other: m_instructions.Length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(value: end, other: InstructionRows.Length);
 
         var shapes = 0;
 
         for (var index = first; (index < end); index++) {
-            var instruction = m_instructions[index];
+            var instruction = InstructionRows[index];
 
             if (instruction.Op != SdfOp.ShapeBlend) { continue; }
             if (!IsGlassMaterial(material: unchecked((int)instruction.Material))) { return false; }
@@ -142,9 +164,15 @@ public sealed partial class SdfProgram {
         return (shapes > 0);
     }
 
+    // Measures what the attached appearance asks of the instructions while the maker's claim stands, so a holder that
+    // keeps the program for identity reads the answers without reading its storage.
+    private void MeasureAppearance() {
+        m_hasGlass = MeasureGlass();
+        m_hasGlassShadows = MeasureGlass(shadows: true);
+    }
     private bool MeasureGlass(bool shadows = false) {
-        for (var index = 0; (index < m_instructions.Length); index++) {
-            var instruction = m_instructions[index];
+        for (var index = 0; (index < InstructionRows.Length); index++) {
+            var instruction = InstructionRows[index];
 
             if ((instruction.Op == SdfOp.ShapeBlend) && IsGlassMaterial(material: unchecked((int)instruction.Material)) &&
                 (!shadows || Appearance.Materials[(int)instruction.Material].Glass is { ShadowDensity: > 0f })) {

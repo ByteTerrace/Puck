@@ -11,7 +11,7 @@ public sealed partial class SdfProgram {
         var maximum = 1f;
 
         for (var index = (end - 1); (index >= first); index--) {
-            var instruction = m_instructions[index];
+            var instruction = InstructionRows[index];
 
             if (instruction.Op == SdfOp.PopField) {
                 parents[depth++] = current;
@@ -46,8 +46,8 @@ public sealed partial class SdfProgram {
         var depth = 0;
         var shapes = 0;
 
-        for (var index = 0; (index < m_instructions.Length); index++) {
-            var instruction = m_instructions[index];
+        for (var index = 0; (index < InstructionRows.Length); index++) {
+            var instruction = InstructionRows[index];
 
             switch (SdfFieldOps.ScopeClampOf(value: instruction.Op)) {
                 case SdfScopeClampAction.PushField:

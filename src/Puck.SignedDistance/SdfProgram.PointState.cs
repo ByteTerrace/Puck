@@ -32,13 +32,13 @@ public sealed partial class SdfProgram {
         var mover = -1;
 
         foreach (var (first, last) in ranges) {
-            var startsWithReset = (m_instructions[first].Op == SdfOp.ResetPoint);
+            var startsWithReset = (InstructionRows[first].Op == SdfOp.ResetPoint);
             var firstMover = -1;
             var hasShape = false;
             var readsPoint = false;
 
             for (var index = first; (index <= last); index++) {
-                var op = m_instructions[index].Op;
+                var op = InstructionRows[index].Op;
 
                 hasShape |= (op == SdfOp.ShapeBlend);
                 readsPoint |= SdfFieldOps.ReadsPointOf(value: op);
@@ -58,7 +58,7 @@ public sealed partial class SdfProgram {
                 readsPoint
             ) {
                 throw new ArgumentException(
-                    message: $"Instruction {first} ({m_instructions[first].Op}) begins {((instructionOwners[first] < 0) ? "a world segment" : $"a segment of instance {instructionOwners[first]}")} without a ResetPoint, and instruction {mover} ({m_instructions[mover].Op}) may have moved the point it would inherit. A segment starts from the world point, since it can be culled or compiled apart from its neighbours and a skipped one passes the state before it along, so begin it with a ResetPoint.",
+                    message: $"Instruction {first} ({InstructionRows[first].Op}) begins {((instructionOwners[first] < 0) ? "a world segment" : $"a segment of instance {instructionOwners[first]}")} without a ResetPoint, and instruction {mover} ({InstructionRows[mover].Op}) may have moved the point it would inherit. A segment starts from the world point, since it can be culled or compiled apart from its neighbours and a skipped one passes the state before it along, so begin it with a ResetPoint.",
                     paramName: paramName
                 );
             }

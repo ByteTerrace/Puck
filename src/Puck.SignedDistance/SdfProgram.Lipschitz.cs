@@ -37,7 +37,7 @@ public sealed partial class SdfProgram {
     //     including both nested and sequential scopes.
     // The diagnostic names the largest contribution still present at the root. A shape or scope clamp
     // has already accounted for its own contribution.
-    private SdfStepScaleBinder? AnalyzeStepScaleBinder(SdfInstruction[] instructions, SdfInstanceRange[] instances, List<float> chainFactors, float[]? reliefCharges) {
+    private SdfStepScaleBinder? AnalyzeStepScaleBinder(Span<SdfInstruction> instructions, SdfInstanceRange[] instances, List<float> chainFactors, float[]? reliefCharges) {
         // Reuse admission's chain factors: AnalyzeLipschitz only patches PopField.Data1.Y, which the chain
         // analysis ignores. Repeating that analysis here would walk the full capacity-probe program twice.
         SdfStepScaleBinder? best = null;
@@ -129,7 +129,7 @@ public sealed partial class SdfProgram {
     // maskSlopes: per instruction, the summed slope of a masked relief's masks per unit of the frame it samples (the
     // door's ReliefMaskSlopes), null when none is masked. reliefCharges: per instruction, what each relief added to its
     // accumulator, for AnalyzeStepScaleBinder; null for a program with no relief.
-    private static float AnalyzeLipschitz(SdfInstruction[] instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves, float[]? maskSlopes, HashSet<int>? rawExcerptShapes, out List<float> chainFactors, out float[]? reliefCharges, out float[]? shapeStepScales) {
+    private static float AnalyzeLipschitz(Span<SdfInstruction> instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves, float[]? maskSlopes, HashSet<int>? rawExcerptShapes, out List<float> chainFactors, out float[]? reliefCharges, out float[]? shapeStepScales) {
         chainFactors = AnalyzeChainLipschitz(
             convexPolygonProfiles: convexPolygonProfiles,
             instructions: instructions,
@@ -288,7 +288,7 @@ public sealed partial class SdfProgram {
     //
     // A blend's own factor is deliberately ABSENT here: composition is not a property of the chain a candidate was
     // built in, and folding chamfer in at this level is precisely the latch AnalyzeLipschitz's remarks retire.
-    private static List<float> AnalyzeChainLipschitz(SdfInstruction[] instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves) {
+    private static List<float> AnalyzeChainLipschitz(Span<SdfInstruction> instructions, (int InstructionIndex, Vector2[] Vertices)[] convexPolygonProfiles, SdfSweepCurve[] sweepCurves) {
         var chainFactors = new List<float>();
         var chainHasShapeBlend = false;
         // Every reach on this chain is kept in the chain's OUTERMOST frame (the frame before its first Scale op): a

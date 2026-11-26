@@ -99,7 +99,7 @@ public sealed partial class SdfProgram {
             var entryBase = (curveOffsets[curveIndex] * WordsPerVector);
 
             WriteVector4(
-                words: m_words,
+                words: PackedWords,
                 baseIndex: entryBase,
                 w: curve.RadiusStart,
                 x: curve.A.X,
@@ -107,7 +107,7 @@ public sealed partial class SdfProgram {
                 z: curve.A.Z
             );
             WriteVector4(
-                words: m_words,
+                words: PackedWords,
                 baseIndex: (entryBase + WordsPerVector),
                 w: curve.RadiusEnd,
                 x: curve.B.X,
@@ -115,7 +115,7 @@ public sealed partial class SdfProgram {
                 z: curve.B.Z
             );
             WriteVector4(
-                words: m_words,
+                words: PackedWords,
                 baseIndex: (entryBase + (2 * WordsPerVector)),
                 w: curve.Bulge,
                 x: curve.C.X,

@@ -76,7 +76,7 @@ public sealed partial class SdfProgram {
         // (possibly already-merged) entry immediately to the right of the index under test.
         // Only a program shorter than SegmentMergeInstructionLimit merges; a longer one keeps one directory entry per
         // segment range.
-        if ((segments.Count > 1) && (m_instructions.Length < SegmentMergeInstructionLimit)) {
+        if ((segments.Count > 1) && (InstructionRows.Length < SegmentMergeInstructionLimit)) {
             var compacted = new List<BoundRecord>(capacity: segments.Count);
             var accumulator = segments[^1];
 
@@ -118,7 +118,7 @@ public sealed partial class SdfProgram {
         var firstShapeBound = shapeBounds.Count;
 
         for (var index = segmentStart; (index <= segmentEnd); index++) {
-            var instruction = m_instructions[index];
+            var instruction = InstructionRows[index];
 
             switch (SdfFieldOps.SkipSphereOf(value: instruction.Op)) {
                 case SdfSkipSphereAction.ResetPoint: {
@@ -347,12 +347,12 @@ public sealed partial class SdfProgram {
         var boundaries = BuildInstanceBoundaries();
         var start = 0;
 
-        while (start < m_instructions.Length) {
+        while (start < InstructionRows.Length) {
             var end = start;
 
             while (
-                ((end + 1) < m_instructions.Length) &&
-                (m_instructions[(end + 1)].Op != SdfOp.ResetPoint) &&
+                ((end + 1) < InstructionRows.Length) &&
+                (InstructionRows[(end + 1)].Op != SdfOp.ResetPoint) &&
                 !boundaries.Contains(item: (end + 1))
             ) {
                 end++;

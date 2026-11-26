@@ -153,7 +153,7 @@ public sealed partial class SdfMeshPathBake {
 
         var lattice = (final?.Lattice ?? next);
 
-        if ((lattice.Samples < BoundLeastSamples) || !Boundable(group: group) || (m_program is not { } program)) {
+        if ((lattice.Samples < BoundLeastSamples) || !Boundable(group: group) || (m_program is null)) {
             if (final is null) { group.Next = (next with { Bounded = true }); }
             return false;
         }
@@ -163,7 +163,7 @@ public sealed partial class SdfMeshPathBake {
         var request = next;
 
         group.Contouring = true;
-        Enqueue(group: group, urgent: true, work: () => Bound(field: field, final: final, group: group, program: program, request: request));
+        Enqueue(group: group, urgent: true, work: () => Bound(field: field, final: final, group: group, request: request));
         return true;
     }
 
@@ -206,9 +206,16 @@ public sealed partial class SdfMeshPathBake {
 
     // On the pool, holding the group: classifies the lattice's blocks and gives the group the lattice it samples next (the
     // coarse lattice's blocks, or the final lattice's first slab), or finishes the group as empty when no block can hold the
-    // surface.
-    private void Bound(Group group, FinalLattice? final, in SdfMeshBakeRequest request, SdfProgram program, long field) {
-        var evaluator = CpuField(field: field, group: group, program: program);
+    // surface. The program is read under a claim of the job's own, and only while the bake still meshes the field the job
+    // was queued for; a field adopted since leaves the lattice unbounded, as a moved field does below.
+    private void Bound(Group group, FinalLattice? final, in SdfMeshBakeRequest request, long field) {
+        SdfFieldEvaluator? evaluator = null;
+
+        if ((group.BoundField is { } held) && (group.BoundFieldVersion == field)) {
+            evaluator = held.Evaluator;
+        } else if (ClaimProgram(field: field) is { } program) {
+            try { evaluator = CpuField(field: field, group: group, program: program); } finally { program.Release(); }
+        }
         var walks = 0L;
         var blocks = ((evaluator is null) ? null : Classify(evaluator: evaluator, lattice: (final?.Lattice ?? request), walks: out walks));
         var empty = (blocks is { Sampled: 0 });

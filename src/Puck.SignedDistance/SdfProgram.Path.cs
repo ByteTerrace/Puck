@@ -11,11 +11,11 @@ public sealed partial class SdfProgram {
         foreach (var path in m_paths) {
             var index = path.InstructionIndex;
 
-            if ((((uint)index) >= ((uint)m_instructions.Length)) || !owners.Add(item: index) ||
-                (m_instructions[index].Op != SdfOp.ShapeBlend) || (m_instructions[index].Shape != ((uint)SdfShapeType.Path))) {
+            if ((((uint)index) >= ((uint)InstructionRows.Length)) || !owners.Add(item: index) ||
+                (InstructionRows[index].Op != SdfOp.ShapeBlend) || (InstructionRows[index].Shape != ((uint)SdfShapeType.Path))) {
                 throw new ArgumentException(message: "Each path table must own exactly one Path instruction.");
             }
-            var instruction = m_instructions[index];
+            var instruction = InstructionRows[index];
 
             if ((path.Edges.Count is < 1 or > SdfPathProfile.MaxEdges) || (instruction.Data0.Y != path.Edges.Count) ||
                 !float.IsFinite(f: instruction.Data0.W) || (instruction.Data0.W <= 0f) ||
@@ -42,8 +42,8 @@ public sealed partial class SdfProgram {
                 throw new ArgumentException(message: $"Path instruction {index} carries reach {instruction.Data0.Z} in Data0.z, but its edges derive {reach}.");
             }
         }
-        for (var i = 0; (i < m_instructions.Length); i++) {
-            if ((m_instructions[i].Op == SdfOp.ShapeBlend) && (m_instructions[i].Shape == ((uint)SdfShapeType.Path)) && !owners.Contains(item: i)) {
+        for (var i = 0; (i < InstructionRows.Length); i++) {
+            if ((InstructionRows[i].Op == SdfOp.ShapeBlend) && (InstructionRows[i].Shape == ((uint)SdfShapeType.Path)) && !owners.Contains(item: i)) {
                 throw new ArgumentException(message: $"Path instruction {i} has no edge table.");
             }
         }
@@ -51,8 +51,8 @@ public sealed partial class SdfProgram {
     private void PackPaths(int offset) {
         foreach (var path in m_paths) {
             foreach (var edge in path.Edges) {
-                WriteVector4(m_words, (offset * WordsPerVector), edge.A.X, edge.A.Y, edge.B.X, edge.B.Y);
-                WriteVector4(m_words, ((offset + 1) * WordsPerVector), edge.RadiusA, edge.RadiusB, 0f, 0f);
+                WriteVector4(PackedWords, (offset * WordsPerVector), edge.A.X, edge.A.Y, edge.B.X, edge.B.Y);
+                WriteVector4(PackedWords, ((offset + 1) * WordsPerVector), edge.RadiusA, edge.RadiusB, 0f, 0f);
                 offset += 2;
             }
         }

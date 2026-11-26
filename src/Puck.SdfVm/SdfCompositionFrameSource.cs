@@ -52,7 +52,7 @@ public interface ISdfFrameDresser {
     IReadOnlyDictionary<int, Func<SdfScreenSurfaceTransform?>>? ScreenSurfaceTransforms => null;
 }
 /// <summary>Composes geometry sources, allocating their actual encoded transforms and rigid-copy roots. Only geometry revisions rebuild the field program; copy membership and poses do not.</summary>
-public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
+public sealed partial class SdfCompositionFrameSource : ISdfFrameSource, IDisposable {
     /// <summary>Gets the generic "far below anything" fallback park position — a host that needs a matching literal
     /// outside a live <see cref="SdfEmitContext"/> (a construction-time capacity probe, say) reads this rather than
     /// carrying its own copy.</summary>
@@ -110,7 +110,12 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private Puck.Abstractions.Presentation.FrameCaptureRequest? m_convergence;
     private float m_interpolationAlpha;
     private Vector3 m_packedParkPosition;
+    // The program the frames carry, under the composition's claim: a background build reads it as the program it replaces
+    // (SdfProgram.Of, SdfProgramDelta.Between) until the frame thread adopts what the build made (Adopt).
     private SdfProgram? m_program;
+    // Where the programs it builds hold their words and instructions (SdfProgramStorage), or null for managed arrays.
+    private readonly SdfProgramStorage? m_storage;
+    private bool m_disposed;
     // The snapshots of the held program's sampled fields the latest frame carried.
     private SdfSampledSet? m_sampled;
     // The words the held program differs in from the one held before it, when its background build measured them.
@@ -167,6 +172,47 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     // The revision component the code revision occupies, after every emitter's own.
     private int CodeComponent => m_revisionOffsets[m_emitters.Count];
 
+    // The account owner every composition's native programs are charged to.
+    private static readonly Lazy<Puck.Hosting.Jobs.MemoryAccount.Owner> ProgramOwner = new(valueFactory: static () => Puck.Hosting.Jobs.MemoryAccount.Shared.CreateOwner(name: "sdf-programs"));
+
+    /// <summary>Gets a storage for a composition's programs (<see cref="SdfProgramStorage"/>): native blocks of the
+    /// process's allocator, charged to the process account's program owner, which the composition and every frame that
+    /// carries a program claim and the last claim frees. A composition built with it is disposed when its owner lets it
+    /// go.</summary>
+    public static SdfProgramStorage ProcessStorage => new(Allocator: Puck.Abstractions.Memory.ProcessAllocator.Current, Observer: ProgramOwner.Value);
+
+    // The one door the composition's program changes through: the program a build made, whose maker's claim is the
+    // composition's own once it is held. The program it replaces keeps whatever claims frames hold on it.
+    private void Adopt(SdfProgram built) {
+        SdfProgram.Exchange(held: ref m_program, next: built);
+        built.Release();
+    }
+    /// <summary>Releases the composition's claim on the program it holds, once a background build still reading it has
+    /// finished, and the claim of whatever that build made. Frames written from the composition keep their own claims.</summary>
+    public void Dispose() {
+        if (m_disposed) { return; }
+        m_disposed = true;
+
+        var held = m_program;
+
+        m_program = null;
+        m_programDelta = null;
+        if (m_building is not { } building) {
+            held?.Release();
+            return;
+        }
+        m_building = null;
+        _ = building.ContinueWith(
+            continuationAction: static (finished, state) => {
+                if (finished.IsCompletedSuccessfully) { finished.Result.Program.Release(); }
+                ((SdfProgram?)state)?.Release();
+            },
+            cancellationToken: CancellationToken.None,
+            continuationOptions: TaskContinuationOptions.ExecuteSynchronously,
+            scheduler: TaskScheduler.Default,
+            state: held
+        );
+    }
     // Counts an adopted build against the program it replaced.
     private void CountBuild(SdfProgram built, SdfProgram? held) {
         if (ReferenceEquals(objA: built, objB: held)) { return; }
@@ -209,11 +255,16 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     /// ranges are assigned — see the type remarks). Copied defensively; mutating the source list afterward has no
     /// effect.</param>
     /// <param name="dresser">Builds each frame's <see cref="SdfFrame"/> from the composed program/transforms.</param>
+    /// <param name="storage">Where the programs it builds hold their words and instructions: native blocks the composition
+    /// and every frame that carries one claim (<see cref="SdfProgram.Exchange"/>), freed by the last claim, which
+    /// <see cref="Dispose"/> lets go of; managed arrays when <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="emitters"/> or <paramref name="dresser"/> is
     /// <see langword="null"/>, or <paramref name="emitters"/> contains a <see langword="null"/> entry.</exception>
-    public SdfCompositionFrameSource(IReadOnlyList<ISdfSceneEmitter> emitters, ISdfFrameDresser dresser) {
+    public SdfCompositionFrameSource(IReadOnlyList<ISdfSceneEmitter> emitters, ISdfFrameDresser dresser, SdfProgramStorage? storage = null) {
         ArgumentNullException.ThrowIfNull(emitters);
         ArgumentNullException.ThrowIfNull(dresser);
+
+        m_storage = storage;
 
         m_emitters = [.. emitters];
         m_dresser = dresser;
@@ -292,7 +343,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     // takes that program's derivation with its own appearance, or is that program (SdfProgram.Of).
     private SdfProgram Build(SdfProgramBuilder builder, SdfProgram? replaces) {
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
-        var program = builder.Build(replaces: replaces);
+        var program = builder.Build(replaces: replaces, storage: m_storage);
 
         Volatile.Write(location: ref m_buildMilliseconds, value: System.Diagnostics.Stopwatch.GetElapsedTime(startingTimestamp: started).TotalMilliseconds);
         return program;
@@ -316,9 +367,11 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         if ((m_building is { } building) && building.IsCompleted) {
             m_building = null;
             var held = m_program;
+            var (built, delta) = building.GetAwaiter().GetResult();
 
-            (m_program, m_programDelta) = building.GetAwaiter().GetResult();
-            CountBuild(built: m_program, held: held);
+            Adopt(built: built);
+            m_programDelta = delta;
+            CountBuild(built: built, held: held);
             m_programLayout = m_buildingLayout;
             Array.Copy(
                 sourceArray: m_buildingRevisions,
@@ -654,6 +707,11 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
 
     // Program adoption and emitter preparation run before a fork. The host may latch shared presentation inputs here.
     internal bool PrepareCapture(float deltaSeconds, float interpolationAlpha, out bool rebuilt) {
+        // A disposed composition builds nothing again, whose claim nothing would release, and films nothing.
+        if (m_disposed) {
+            rebuilt = false;
+            return false;
+        }
         m_time += MathF.Max(
             x: deltaSeconds,
             y: 0f
@@ -724,8 +782,8 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             if (!BuildsInBackground) {
                 var held = m_program;
 
-                m_program = Build(builder: builder, replaces: held);
-                CountBuild(built: m_program, held: held);
+                Adopt(built: Build(builder: builder, replaces: held));
+                CountBuild(built: m_program!, held: held);
                 m_programDelta = null;
                 m_programLayout = m_buildingLayout;
                 Array.Copy(

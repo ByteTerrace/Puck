@@ -608,9 +608,17 @@ public sealed record SdfFrame(
     /// </summary>
     public sealed class Writer {
         private SdfFrame? m_frame;
+        // The program the written frame carries, under the writer's claim (SdfProgram.Exchange), so a frame kept past its
+        // source's next build (a residency's capture, a frozen settled frame) keeps its program's storage readable.
+        private SdfProgram? m_program;
 
         /// <summary>Gets the frame, or <see langword="null"/> before the first write.</summary>
         public SdfFrame? Frame => m_frame;
+
+        /// <summary>Releases the writer's claim on the program its frame carries, for an owner that writes no frame again:
+        /// the frame keeps naming the program, whose storage the last claim frees, so nothing reads the frame's program
+        /// afterward. A later write claims its own program again.</summary>
+        public void Release() => SdfProgram.Exchange(held: ref m_program, next: null);
 
         /// <summary>Writes a frame of the producer's own: this content and these settings, and no composition or
         /// dressing.</summary>
@@ -665,7 +673,10 @@ public sealed record SdfFrame(
 
             return frame;
         }
+        // The one door the written frame's content changes through, so its program is claimed before the one it replaces
+        // is let go.
         private SdfFrame Open(in SdfFrameContent content) {
+            SdfProgram.Exchange(held: ref m_program, next: content.Program);
             if (m_frame is not { } frame) {
                 frame = new SdfFrame(Program: content.Program, ProgramChanged: content.ProgramChanged, Time: content.Time, Views: content.Views);
                 m_frame = frame;

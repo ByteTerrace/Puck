@@ -25,8 +25,13 @@ namespace Puck.World.Client;
 /// The world's text screens draw through its own font catalog (<see cref="GlyphAtlas"/>, <see cref="ScreenDecals"/>).
 /// </summary>
 public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
-    /// <summary>Releases this scene's delivered-tick subscription.</summary>
-    public void Dispose() => m_emitter.Dispose();
+    /// <summary>Releases this scene's delivered-tick subscription, and the claims its composition and its frame hold on
+    /// the programs they carry (<see cref="SdfProgram.Exchange"/>).</summary>
+    public void Dispose() {
+        m_emitter.Dispose();
+        FrameSource.Dispose();
+        m_frameWriter.Release();
+    }
     /// <summary>Reads this authority's last presented shadow slots.</summary>
     /// <param name="authority">The queried authority's document version.</param>
     /// <returns>The census, or <see langword="null"/> for another authority or before a frame.</returns>
@@ -111,7 +116,8 @@ public sealed class WorldRoutedScene : ISdfFrameDresser, IDisposable {
         ) { SkyLayers = skyLayers, Session = session };
         FrameSource = new SdfCompositionFrameSource(
             dresser: this,
-            emitters: [m_emitter]
+            emitters: [m_emitter],
+            storage: SdfCompositionFrameSource.ProcessStorage
         ) { BuildsInBackground = buildsInBackground };
     }
 

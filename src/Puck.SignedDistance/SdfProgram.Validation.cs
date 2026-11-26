@@ -56,7 +56,7 @@ public sealed partial class SdfProgram {
     // Every ConvexPolygon shape instruction must have exactly one matching vertex-list profile (PatchConvexPolygonProfileOffsets
     // has nowhere else to read the table offset it patches into Data0.x from), every claimed instruction index must
     // be a real ConvexPolygon instruction and claimed at most once, and every profile's vertex count must sit in the
-    // supported range. Run early (before AnalyzeBounds/packing touch m_instructions) so a caller mistake fails with
+    // supported range. Run early (before AnalyzeBounds/packing touch InstructionRows) so a caller mistake fails with
     // a message naming the instruction, not a confusing crash deep in the packer.
     private void ValidateConvexPolygonProfiles(string paramName) {
         var claimed = new HashSet<int>();
@@ -64,15 +64,15 @@ public sealed partial class SdfProgram {
         foreach (var (instructionIndex, vertices) in m_convexPolygonProfiles) {
             if (
                 (instructionIndex < 0) ||
-                (instructionIndex >= m_instructions.Length)
+                (instructionIndex >= InstructionRows.Length)
             ) {
                 throw new ArgumentException(
-                    message: $"A convex-polygon profile names instruction index {instructionIndex}, outside this program's {m_instructions.Length} instructions.",
+                    message: $"A convex-polygon profile names instruction index {instructionIndex}, outside this program's {InstructionRows.Length} instructions.",
                     paramName: paramName
                 );
             }
 
-            var instruction = m_instructions[instructionIndex];
+            var instruction = InstructionRows[instructionIndex];
 
             if (
                 (instruction.Op != SdfOp.ShapeBlend) ||
@@ -102,8 +102,8 @@ public sealed partial class SdfProgram {
             }
         }
 
-        for (var index = 0; (index < m_instructions.Length); index++) {
-            var instruction = m_instructions[index];
+        for (var index = 0; (index < InstructionRows.Length); index++) {
+            var instruction = InstructionRows[index];
 
             if (
                 (instruction.Op == SdfOp.ShapeBlend) &&
@@ -128,15 +128,15 @@ public sealed partial class SdfProgram {
 
             if (
                 (instructionIndex < 0) ||
-                (instructionIndex >= m_instructions.Length)
+                (instructionIndex >= InstructionRows.Length)
             ) {
                 throw new ArgumentException(
-                    message: $"A Sweep curve names instruction index {instructionIndex}, outside this program's {m_instructions.Length} instructions.",
+                    message: $"A Sweep curve names instruction index {instructionIndex}, outside this program's {InstructionRows.Length} instructions.",
                     paramName: paramName
                 );
             }
 
-            var instruction = m_instructions[instructionIndex];
+            var instruction = InstructionRows[instructionIndex];
 
             if (
                 (instruction.Op != SdfOp.ShapeBlend) ||
@@ -156,8 +156,8 @@ public sealed partial class SdfProgram {
             }
         }
 
-        for (var index = 0; (index < m_instructions.Length); index++) {
-            var instruction = m_instructions[index];
+        for (var index = 0; (index < InstructionRows.Length); index++) {
+            var instruction = InstructionRows[index];
 
             if (
                 (instruction.Op == SdfOp.ShapeBlend) &&
@@ -227,8 +227,8 @@ public sealed partial class SdfProgram {
         var scopeDepth = 0;
         var scopeOwner = -1;
 
-        for (var index = 0; (index < m_instructions.Length); index++) {
-            var instruction = m_instructions[index];
+        for (var index = 0; (index < InstructionRows.Length); index++) {
+            var instruction = InstructionRows[index];
 
             if (
                 (scopeDepth > 0) &&
@@ -396,8 +396,8 @@ public sealed partial class SdfProgram {
     private (int[] Owners, List<(int Start, int End)> Ranges) ValidatePackedContract(string instancesParamName, string instructionsParamName) {
         var materialCount = m_outline.Materials;
 
-        for (var index = 0; (index < m_instructions.Length); index++) {
-            var instruction = m_instructions[index];
+        for (var index = 0; (index < InstructionRows.Length); index++) {
+            var instruction = InstructionRows[index];
 
             RequireFiniteOperands(
                 index: index,
@@ -464,12 +464,12 @@ public sealed partial class SdfProgram {
         foreach (var instance in m_instances) {
             if (
                 (instance.First < 0) ||
-                (instance.End > m_instructions.Length) ||
+                (instance.End > InstructionRows.Length) ||
                 (instance.First > instance.End)
             ) {
                 throw new ArgumentOutOfRangeException(
                     paramName: instancesParamName,
-                    message: $"An instance range must satisfy 0 <= First <= End <= {m_instructions.Length}; got [{instance.First}, {instance.End})."
+                    message: $"An instance range must satisfy 0 <= First <= End <= {InstructionRows.Length}; got [{instance.First}, {instance.End})."
                 );
             }
             if (
@@ -505,8 +505,8 @@ public sealed partial class SdfProgram {
     }
 
     public void ValidateIsa() {
-        for (var index = 0; (index < m_instructions.Length); index++) {
-            var opcode = m_instructions[index].Op;
+        for (var index = 0; (index < InstructionRows.Length); index++) {
+            var opcode = InstructionRows[index].Op;
 
             if (!Enum.IsDefined(value: opcode)) {
                 var raw = ((uint)opcode);

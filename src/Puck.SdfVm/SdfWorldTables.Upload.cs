@@ -178,7 +178,7 @@ public sealed partial class SdfWorldTables {
         if (m_meshStoreCopies) { m_meshStoreCopies = false; m_meshStore.SubmittedOwed(); }
         if (m_probeSceneCopies) { m_probeSceneCopies = false; m_meshStore.ProbeScenesIfCreated?.SubmittedOwed(); }
         m_uploadedBindingRevision = m_bindingRevision;
-        m_backgroundProgram = m_liveProgram;
+        Puck.SignedDistance.SdfProgram.Exchange(held: ref m_backgroundProgram, next: m_liveProgram);
         ServiceRetirements();
     }
 

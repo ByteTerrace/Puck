@@ -13,7 +13,7 @@ public sealed partial class SdfProgram {
 
     // A hard blend reads only signs for the zero set. Walk backwards to mark any candidate whose magnitude can
     // reach a later soft blend or field edit, including one that consumes the candidate's enclosing scope.
-    private static bool[] FindMagnitudeReaders(SdfInstruction[] instructions) {
+    private static bool[] FindMagnitudeReaders(Span<SdfInstruction> instructions) {
         var readers = new bool[instructions.Length];
         Span<bool> readsMagnitude = stackalloc bool[SdfProgramBuilder.MaxFieldScopeDepth + 1];
         var depth = 0;

@@ -771,19 +771,20 @@ public sealed partial class SdfFieldEvaluator {
     // function of the instruction alone, so the enclosure an expansion reads is the one it would have formed itself.
     private static (int[] Slots, RotationBounds[] Bounds) BuildRotationBounds(CompiledInstruction[] instructions) {
         var slots = new int[instructions.Length];
-        var bounds = new List<RotationBounds>();
+        var count = 0;
 
+        // Numbered first, so the table is allocated once at its size.
         for (var index = 0; (index < instructions.Length); index++) {
-            if (instructions[index].Op != SdfOp.Rotate) {
-                slots[index] = -1;
-                continue;
-            }
-
-            slots[index] = bounds.Count;
-            bounds.Add(item: RotationBounds.Of(instruction: in instructions[index]));
+            slots[index] = ((instructions[index].Op == SdfOp.Rotate) ? count++ : -1);
         }
 
-        return (slots, bounds.ToArray());
+        var bounds = new RotationBounds[count];
+
+        for (var index = 0; (index < instructions.Length); index++) {
+            if (slots[index] >= 0) { bounds[slots[index]] = RotationBounds.Of(instruction: in instructions[index]); }
+        }
+
+        return (slots, bounds);
     }
     // FixedQuaternion.Rotate's two fused stages over the conjugate, each stage's three-term sum enclosed by the sum of its
     // outward-rounded products: t = u×v + w·v, then d = u×t, then v + 2d.

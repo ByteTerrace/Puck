@@ -174,9 +174,11 @@ public sealed partial class SdfWorldTables : IDisposable {
     private readonly (int Start, int Length)[] m_decalRuns = new (int Start, int Length)[MaxScreenSurfaces];
     // The bounded-volume table (views and sky), packed here every frame and written into its region.
     private readonly byte[] m_volumeScratch = new byte[(MaxVolumes * VolumeByteLength)];
-    private SdfProgram m_liveProgram = null!;
+    // The program the tables uploaded, and the one their last published upload bound (BackgroundProgram), each under the
+    // tables' claim (SdfProgram.Exchange): the next upload compares its words with them, and background work reads it.
+    private SdfProgram? m_liveProgram;
 
-    internal uint[] CopyLiveProgramWords() => m_liveProgram.CopyWords();
+    internal uint[] CopyLiveProgramWords() => m_liveProgram!.CopyWords();
 
     /// <summary>Gets or sets the debug-group label wrapping each upload the tables record — the outer scope a GPU capture
     /// (RenderDoc / PIX / Nsight) shows around its copies. Presentation-only; defaults to
@@ -476,6 +478,8 @@ public sealed partial class SdfWorldTables : IDisposable {
         // No idle wait: the views' submissions, which the tables' own fences cannot see, read every table, so the owner
         // disposes the tables only once they have completed (the residency through GpuDeviceRetirement) or after a loss.
         m_gpuWork.Dispose();
+        SdfProgram.Exchange(held: ref m_backgroundProgram, next: null);
+        SdfProgram.Exchange(held: ref m_liveProgram, next: null);
         // The rows' names and the names ahead leave the store with the residency; the last one to leave disposes it.
         m_meshStore.Detach(ahead: m_meshesAhead, client: this);
         m_meshClaims?.Dispose(); m_meshClaims = null;
