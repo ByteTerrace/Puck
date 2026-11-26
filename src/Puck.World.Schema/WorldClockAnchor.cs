@@ -55,7 +55,7 @@ public sealed record WorldClockAnchor(
     // The parsed curve, keyed by the coefficients it was parsed from, so a `with` copy that replaces them parses again.
     private ParsedCurve? m_parsed;
 
-    private sealed record ParsedCurve(IReadOnlyList<string>? Source, RationalPolynomial? Polynomial);
+    private sealed record ParsedCurve(IReadOnlyList<string>? Source, RationalPolynomial? Polynomial, RationalPolynomial Slope);
 
     /// <summary>Gets whether the anchor is well formed: no curve, or a curve of exact rational coefficients, at most
     /// <see cref="MaxCurveCoefficients"/>, whose value at the anchor's tick is the anchor's phase.</summary>
@@ -120,8 +120,8 @@ public sealed record WorldClockAnchor(
 
         return PhaseOf(kind: CellKind.Fixed, raw: Truncated(curve: curve, elapsed: new Rational(Numerator: (engineTick - Tick), Denominator: BigInteger.One)));
     }
-    /// <summary>Returns the phase a frame presents at a presented tick, as a share of a turn: the curve's exact value at
-    /// the presented tick, its fraction of an engine tick included. A frame before the anchor, interpolating toward the
+    /// <summary>Returns the phase a frame presents at a presented tick, as a share of a turn: the prediction at its whole
+    /// tick, moved on along the curve's slope over its fraction. A frame before the anchor, interpolating toward the
     /// delivery that brought it, presents the anchor's own phase: the latest authoritative tick the recipient was told
     /// about.</summary>
     /// <param name="tick">The presented tick.</param>
@@ -130,18 +130,20 @@ public sealed record WorldClockAnchor(
         if (tick.Whole < Tick) {
             return ToTurn(phase: Phase);
         }
-        if (Parsed() is not { } curve) {
+        if (Parsed() is null) {
             return ToTurn(phase: Phase);
         }
 
-        // The whole tick's value is exact and its fraction of a turn taken exactly; only the sub-tick motion, along the
-        // curve's slope there, is a double.
-        var elapsed = new Rational(Numerator: (tick.Whole - Tick), Denominator: BigInteger.One);
-        var whole = ((new Rational(Numerator: Base, Denominator: BigInteger.One) + curve.Evaluate(x: elapsed)) / RawPerUnit).Fraction().ToDouble();
-        var turn = ((tick.Fraction == 0d)
-            ? whole
-            : (whole + ((curve.Derivative().Evaluate(x: elapsed).ToDouble() / ((double)RawPerUnit)) * tick.Fraction))
-        );
+        // The whole tick presents the prediction, the authority's own read; only the sub-tick motion, along the curve's
+        // slope there, is a double.
+        var whole = ToTurn(phase: Predict(engineTick: tick.Whole));
+
+        if (tick.Fraction == 0d) {
+            return whole;
+        }
+
+        var slope = m_parsed!.Slope.Evaluate(x: new Rational(Numerator: (tick.Whole - Tick), Denominator: BigInteger.One)).ToDouble();
+        var turn = (whole + ((slope / ((double)RawPerUnit)) * tick.Fraction));
 
         return (turn - Math.Floor(d: turn));
     }
@@ -152,7 +154,7 @@ public sealed record WorldClockAnchor(
     /// <returns><see langword="true"/> when both anchors stand at one tick and phase and carry one base and curve.</returns>
     public bool Equals(WorldClockAnchor? other) =>
         ((other is not null) && (Tick == other.Tick) && (Phase == other.Phase) && (Base == other.Base) &&
-            (ReferenceEquals(objA: Curve, objB: other.Curve) || ((Curve is not null) && (other.Curve is not null) && Curve.SequenceEqual(second: other.Curve, comparer: StringComparer.Ordinal))));
+            SequenceEqualityComparer<string>.Instance.Equals(x: Curve, y: other.Curve));
     /// <inheritdoc />
     public override int GetHashCode() => HashCode.Combine(
         value1: Tick,
@@ -176,7 +178,9 @@ public sealed record WorldClockAnchor(
         var parsed = m_parsed;
 
         if ((parsed is null) || !ReferenceEquals(objA: parsed.Source, objB: Curve)) {
-            parsed = new ParsedCurve(Polynomial: Parse(curve: Curve), Source: Curve);
+            var polynomial = Parse(curve: Curve);
+
+            parsed = new ParsedCurve(Polynomial: polynomial, Slope: (polynomial?.Derivative() ?? RationalPolynomial.Zero), Source: Curve);
             m_parsed = parsed;
         }
 

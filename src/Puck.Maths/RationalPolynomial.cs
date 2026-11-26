@@ -185,19 +185,11 @@ public sealed class RationalPolynomial : IEquatable<RationalPolynomial> {
     );
 
     /// <inheritdoc />
-    public bool Equals(RationalPolynomial? other) => ((other is not null) && m_coefficients.AsSpan().SequenceEqual(other: other.m_coefficients));
+    public bool Equals(RationalPolynomial? other) => ((other is not null) && SequenceEqualityComparer<Rational>.Instance.Equals(x: m_coefficients, y: other.m_coefficients));
     /// <inheritdoc />
     public override bool Equals(object? obj) => Equals(other: (obj as RationalPolynomial));
     /// <inheritdoc />
-    public override int GetHashCode() {
-        var hash = new HashCode();
-
-        foreach (var coefficient in m_coefficients) {
-            hash.Add(value: coefficient);
-        }
-
-        return hash.ToHashCode();
-    }
+    public override int GetHashCode() => SequenceHash.Of(elements: (ReadOnlySpan<Rational>)m_coefficients);
     /// <inheritdoc />
     /// <remarks>The coefficients print constant term first, each as <see cref="Rational.ToString"/> writes it, between
     /// brackets: <c>[1, 0, -1/2]</c> is <c>1 - x²/2</c>.</remarks>
@@ -243,18 +235,7 @@ public sealed class RationalPolynomial : IEquatable<RationalPolynomial> {
     /// <param name="left">The minuend.</param>
     /// <param name="right">The subtrahend.</param>
     /// <returns>The difference.</returns>
-    public static RationalPolynomial operator -(RationalPolynomial left, RationalPolynomial right) {
-        ArgumentNullException.ThrowIfNull(argument: left);
-        ArgumentNullException.ThrowIfNull(argument: right);
-
-        var result = new Rational[Math.Max(val1: left.m_coefficients.Length, val2: right.m_coefficients.Length)];
-
-        for (var power = 0; (power < result.Length); ++power) {
-            result[power] = (left[power] - right[power]);
-        }
-
-        return new(coefficients: result);
-    }
+    public static RationalPolynomial operator -(RationalPolynomial left, RationalPolynomial right) => (left + (-right));
     /// <summary>Negates a polynomial.</summary>
     /// <param name="value">The polynomial.</param>
     /// <returns>The negation.</returns>

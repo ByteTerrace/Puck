@@ -184,12 +184,22 @@ public sealed record StateAdvance(
     public Rational ExactValue(StateRow row, long baseValue, ulong currentEngineTick, long epochEngineTick, IStateClockCells? cells, int depth = 0) {
         ArgumentNullException.ThrowIfNull(argument: row);
 
+        ClockReads? reads = null;
+
+        return ExactValueWith(baseValue: baseValue, cells: cells, currentEngineTick: currentEngineTick, depth: depth, epochEngineTick: epochEngineTick, reads: ref reads, row: row);
+    }
+
+    // The exact value, with the reads of this evaluation's parents shared: a nested value reads its parent at its own
+    // epoch and at the read, and the parent its own parent at those and at its epoch, so without sharing a chain would
+    // read its root once per path, twice for every link; shared, each row is read once per distinct tick.
+    private Rational ExactValueWith(StateRow row, long baseValue, ulong currentEngineTick, long epochEngineTick, IStateClockCells? cells, int depth, ref ClockReads? reads) {
         var scale = CarrierScale(kind: row.Kind);
         var value = (new Rational(Numerator: baseValue, Denominator: scale) + ExactAccumulation(
             cells: cells,
             currentEngineTick: currentEngineTick,
             depth: depth,
-            epochEngineTick: epochEngineTick
+            epochEngineTick: epochEngineTick,
+            reads: ref reads
         ));
 
         if ((row.Min is { } lo) && (value < new Rational(Numerator: lo, Denominator: scale))) {
@@ -276,13 +286,28 @@ public sealed record StateAdvance(
     public static bool TryReadExactClock(IStateClockCells cells, string row, ulong engineTick, int depth, out Rational value) {
         ArgumentNullException.ThrowIfNull(argument: cells);
 
+        ClockReads? reads = null;
+
+        return TryReadExactClockWith(cells: cells, depth: depth, engineTick: engineTick, reads: ref reads, row: row, value: out value);
+    }
+
+    private static bool TryReadExactClockWith(IStateClockCells cells, string row, ulong engineTick, int depth, ref ClockReads? reads, out Rational value) {
         value = Rational.Zero;
 
+        if (reads?.TryGet(engineTick: engineTick, row: row, value: out value) == true) { return true; }
         if ((depth > MaxNestingDepth) || !cells.TryClockCell(row: row, cell: out var cell)) { return false; }
 
-        value = ((cell.Advance is { } advance)
-            ? advance.ExactValue(baseValue: cell.Base, cells: cells, currentEngineTick: engineTick, depth: depth, epochEngineTick: cell.EpochEngineTick, row: cell.Row)
-            : new Rational(Numerator: cell.Base, Denominator: CarrierScale(kind: cell.Row.Kind)));
+        if (cell.Advance is not { } advance) {
+            value = new Rational(Numerator: cell.Base, Denominator: CarrierScale(kind: cell.Row.Kind));
+
+            return true;
+        }
+
+        // Only a parent that is itself nested is read again below, so only then is the sharing worth its table.
+        if (advance.IsNested) { reads ??= new ClockReads(); }
+
+        value = advance.ExactValueWith(baseValue: cell.Base, cells: cells, currentEngineTick: engineTick, depth: depth, epochEngineTick: cell.EpochEngineTick, reads: ref reads, row: cell.Row);
+        reads?.Add(engineTick: engineTick, row: row, value: value);
 
         return true;
     }
@@ -323,6 +348,11 @@ public sealed record StateAdvance(
     // The exact accumulation from the epoch to the read: the engine's seconds for an affine advance, the parent's exact
     // value at both ends for a nested one, which reads nothing when the parent does not read.
     private Rational ExactAccumulation(ulong currentEngineTick, long epochEngineTick, IStateClockCells? cells, int depth) {
+        ClockReads? reads = null;
+
+        return ExactAccumulation(cells: cells, currentEngineTick: currentEngineTick, depth: depth, epochEngineTick: epochEngineTick, reads: ref reads);
+    }
+    private Rational ExactAccumulation(ulong currentEngineTick, long epochEngineTick, IStateClockCells? cells, int depth, ref ClockReads? reads) {
         var epoch = ((ulong)Math.Max(val1: epochEngineTick, val2: 0L));
 
         if ((PerSecondNumerator == 0L) || (currentEngineTick <= epoch)) { return Rational.Zero; }
@@ -334,8 +364,8 @@ public sealed record StateAdvance(
         }
         if (
             (cells is null) || (depth >= MaxNestingDepth) ||
-            !TryReadExactClock(cells: cells, depth: (depth + 1), engineTick: epoch, row: By!, value: out var from) ||
-            !TryReadExactClock(cells: cells, depth: (depth + 1), engineTick: currentEngineTick, row: By!, value: out var to)
+            !TryReadExactClockWith(cells: cells, depth: (depth + 1), engineTick: epoch, reads: ref reads, row: By!, value: out var from) ||
+            !TryReadExactClockWith(cells: cells, depth: (depth + 1), engineTick: currentEngineTick, reads: ref reads, row: By!, value: out var to)
         ) {
             return Rational.Zero;
         }
@@ -575,7 +605,7 @@ public sealed record StateAdvance(
     /// compiled caches are runtime acceleration and never part of the record's identity.</summary>
     public bool Equals(StateAdvance? other) =>
         ((other is not null) && (PerSecondNumerator == other.PerSecondNumerator) && (PerSecondDenominator == other.PerSecondDenominator) &&
-            string.Equals(a: By, b: other.By, comparisonType: StringComparison.Ordinal) && StateRatePiece.SequenceEquals(left: Rate, right: other.Rate));
+            string.Equals(a: By, b: other.By, comparisonType: StringComparison.Ordinal) && SequenceEqualityComparer<StateRatePiece>.Instance.Equals(x: Rate, y: other.Rate));
     /// <inheritdoc />
     public override int GetHashCode() => HashCode.Combine(
         value1: PerSecondNumerator,
@@ -591,6 +621,15 @@ public sealed record StateAdvance(
     private ShapeCache? m_shape;
 
     private sealed record ShapeCache(IReadOnlyList<StateRatePiece>? Pieces, PeriodicPiecewisePolynomial? Shape);
+
+    // The exact values one evaluation has read, by row and engine tick, so a chain of nested clocks reads each row once
+    // per distinct tick it is asked about.
+    private sealed class ClockReads {
+        private readonly Dictionary<(string Row, ulong Tick), Rational> m_values = [];
+
+        public void Add(string row, ulong engineTick, Rational value) => m_values[(row, engineTick)] = value;
+        public bool TryGet(string row, ulong engineTick, out Rational value) => m_values.TryGetValue(key: (row, engineTick), value: out value);
+    }
 
     private sealed class CompiledMeasureCache(long PerSecondNumerator, long PerSecondDenominator) {
         private CompiledDiscreteMeasure64? m_fixed;
@@ -637,19 +676,12 @@ public sealed record StateRatePiece(
     /// <returns><see langword="true"/> when both spell the same piece.</returns>
     public bool Equals(StateRatePiece? other) =>
         ((other is not null) && string.Equals(a: From, b: other.From, comparisonType: StringComparison.Ordinal) &&
-            (Coefficients ?? []).SequenceEqual(second: (other.Coefficients ?? []), comparer: StringComparer.Ordinal));
+            SequenceEqualityComparer<string>.Instance.Equals(x: Coefficients, y: other.Coefficients));
     /// <inheritdoc />
     public override int GetHashCode() => HashCode.Combine(
         value1: StringComparer.Ordinal.GetHashCode(obj: (From ?? string.Empty)),
         value2: (Coefficients?.Count ?? 0)
     );
-
-    /// <summary>Tests two shapes for equality piece by piece, either absent equal only to the other absent.</summary>
-    /// <param name="left">The first shape, or <see langword="null"/>.</param>
-    /// <param name="right">The second shape, or <see langword="null"/>.</param>
-    /// <returns><see langword="true"/> when both are absent or hold equal pieces in order.</returns>
-    public static bool SequenceEquals(IReadOnlyList<StateRatePiece>? left, IReadOnlyList<StateRatePiece>? right) =>
-        (ReferenceEquals(objA: left, objB: right) || ((left is not null) && (right is not null) && left.SequenceEqual(second: right)));
 }
 /// <summary>What a nested advance reads of a document row's slot: the row, the advance governing the slot (or none),
 /// its stored raw base and the engine tick its clock was settled at.</summary>
