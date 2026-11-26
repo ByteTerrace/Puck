@@ -46,27 +46,43 @@ public static class WorldDevices {
     public static string MeshStore(string? cacheRoot) => Path.GetFullPath(path: ((cacheRoot is null)
         ? Puck.Abstractions.PuckUserDirectory.Resolve(name: "meshes")
         : Path.Join(path1: cacheRoot, path2: "meshes")));
-    /// <summary>Predicts whether the mesh store a World boots with is warm: the store is the <c>meshes</c> folder of its
-    /// <c>--cache-dir</c> (the per-user device-cache root when it names none), and a store with no entry in it bakes every
-    /// mesh. The prediction is made once, at launch, and the World's own report of baking corrects it
+    /// <summary>Predicts whether the mesh store a World boots with is warm for the bake it will run: the store is the
+    /// <c>meshes</c> folder of its <c>--cache-dir</c> (the per-user device-cache root when it names none), and a World reads
+    /// and fills only the set its own bake identity names (<see cref="MeshBuildIdentity.ValueOf"/>), so a store full of
+    /// another build's sets bakes every mesh as an empty one does. The store is warm when one of
+    /// <paramref name="sets"/> holds an entry; with no set named (the build's identity could not be read) it is cold, since
+    /// a cold start judged as warm can exhaust the machine's memory and one judged as cold only waits for more headroom. The
+    /// prediction is made once, at launch, and the World's own report of baking corrects a warm one
     /// (<see cref="WorldReadiness.Observe"/>).</summary>
     /// <param name="arguments">The World's command-line arguments.</param>
-    /// <param name="start">The index of the first argument to read.</param>
-    /// <returns><see cref="StoreWarmth.Cold"/> when the store holds nothing, otherwise <see cref="StoreWarmth.Warm"/>.</returns>
-    public static StoreWarmth StoreOf(IReadOnlyList<string> arguments, int start = 0) {
+    /// <param name="sets">The names of the store sets the World's bake may key its meshes by, one per backend it may boot
+    /// on (<see cref="MeshBuildIdentity.ValueOf"/>); empty when none could be read.</param>
+    /// <returns><see cref="StoreWarmth.Warm"/> when a named set holds an entry, otherwise <see cref="StoreWarmth.Cold"/>.</returns>
+    public static StoreWarmth StoreOf(IReadOnlyList<string> arguments, IEnumerable<string> sets) {
+        var meshes = MeshStore(cacheRoot: CacheRootOf(arguments: arguments));
+
+        foreach (var set in sets) {
+            try {
+                var directory = Path.Join(path1: meshes, path2: set);
+
+                if (Directory.Exists(path: directory) && Directory.EnumerateFileSystemEntries(path: directory).Any()) { return StoreWarmth.Warm; }
+            } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
+                // A set that cannot be listed cannot be shown to hold what the World loads.
+            }
+        }
+
+        return StoreWarmth.Cold;
+    }
+    // The cache root a World's arguments name (--cache-dir, as one argument or two; the last one wins), or null for the
+    // per-user store.
+    private static string? CacheRootOf(IReadOnlyList<string> arguments) {
         string? cacheRoot = null;
 
-        for (var index = start; (index < arguments.Count); index++) {
+        for (var index = 0; (index < arguments.Count); index++) {
             if (string.Equals(a: arguments[index], b: "--cache-dir", comparisonType: StringComparison.OrdinalIgnoreCase) && ((index + 1) < arguments.Count)) { cacheRoot = arguments[index + 1]; }
             else if (arguments[index].StartsWith(value: "--cache-dir=", comparisonType: StringComparison.OrdinalIgnoreCase)) { cacheRoot = arguments[index]["--cache-dir=".Length..]; }
         }
 
-        var meshes = MeshStore(cacheRoot: cacheRoot);
-
-        try {
-            return (Directory.Exists(path: meshes) && Directory.EnumerateFileSystemEntries(path: meshes).Any() ? StoreWarmth.Warm : StoreWarmth.Cold);
-        } catch (Exception exception) when ((exception is IOException or UnauthorizedAccessException)) {
-            return StoreWarmth.Warm;
-        }
+        return cacheRoot;
     }
 }
