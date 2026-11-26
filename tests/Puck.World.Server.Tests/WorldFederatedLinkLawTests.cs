@@ -101,6 +101,6 @@ public sealed class WorldFederatedLinkLawTests {
         var refusal = Assert.IsType<WorldSubmissionResult.Refusal>(@object: await answered.Task.WaitAsync(cancellationToken: TestContext.Current.CancellationToken));
 
         Assert.Equal(actual: refusal.Code, expected: WorldFederatedServerLink.CompletionUnavailableCode);
-        Assert.Contains(expectedSubstring: "did not answer Submission within 10s", actualString: refusal.Detail);
+        Assert.Contains(expectedSubstring: $"did not answer Submission within {WorldRemoteAuthority.RoutedRequestDeadline.TotalSeconds:0.#}s", actualString: refusal.Detail);
     }
 }

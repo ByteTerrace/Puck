@@ -632,13 +632,21 @@ is a real divergence, never rounding.
   continuation into a local seat slot (`WorldPopulation.RestorePredicted`, the
   body half of a checkpoint restore shared with `WorldPopulation.Restore`) and
   steps it with `WorldPopulation.AdvanceSeats`.
-- *The input.* The client keeps every batch a remote seat sends, timed on its
-  own seat clock (`WorldClient.SeatClockSeconds`, the simulated time the seat
-  views have advanced through, which runs on through a stalled delivery). An
-  answer names the authority tick a batch was taken at; less that batch's send
-  time it gives the offset from the seat clock to the authority tick an input
-  sent now lands at. A prediction steps from the continuation's tick to that
-  tick, taking at each tick the batches sent by then, folded and written through
+- *The input.* The client keeps every batch a remote seat sends, stamped with
+  the authority tick it was sent at. The seat clock
+  (`WorldClient.SeatClockSeconds`, which runs on through a stalled delivery) is
+  mapped onto the authority's ticks by the deliveries themselves
+  (`WorldAuthorityClock`): each delivered tick anchors the mapping, and it
+  carries the least delayed delivery of the last half second forward, never the
+  seat clock alone over a run, since each process drops the steps it cannot
+  keep up with and the two clocks drift apart without bound. An answer names
+  the authority tick a batch was taken at; less that batch's stamp it gives the
+  lead, the link's delay in authority ticks, and the tick an input sent now
+  lands at is the mapped tick plus the lead. A prediction steps from the
+  continuation's tick to that tick, ending before any step through a portal
+  door (`WorldFaceCatalog.PortalDoors`), where the authority hands the body to a
+  world the prediction does not hold, and taking at each tick the batches sent
+  by then, folded and written through
   the same doors the authority uses (`WorldAcceptedInput.Fold`,
   `WorldBody.TakeOwnerInput`), and holding the last one, its relative movement
   spent, on a tick with none, as `WorldTick.ApplyFederatedIntents` does.

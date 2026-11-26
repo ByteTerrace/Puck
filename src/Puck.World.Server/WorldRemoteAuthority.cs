@@ -48,7 +48,7 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
     public ValueTask<byte[]?> FetchPrototypeAsync(ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops) =>
         authority.FetchPrototypeAsync(pin: pin, traveler: new WorldTravelerObservation(credential.SourceAuthority, credential.Mobility, ceiling, remainingHops));
     /// <inheritdoc/>
-    public Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
+    public Task<WorldProjectionOutcome> StreamProjectionAsync(WorldProjectionSession session, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
         authority.RelayProjectionAsync(
             new(
                 credential.SourceAuthority,
@@ -56,7 +56,7 @@ public sealed class WorldRemoteForwardedAuthority(WorldRemoteAuthority authority
                 ceiling,
                 remainingHops
             ),
-            output,
+            session,
             ct
         );
     /// <inheritdoc/>

@@ -928,7 +928,9 @@ public sealed partial class SessionObservationLawTests {
     }
     // A sink that, on its first tick delivery (its attach primer is not a fan-out), tries to observe the same world as a
     // session from inside the delivery.
-    private sealed class NestedObserver(WorldServer server) : IClientSink {
+    // Inline, so it is handed the tick's snapshot inside the fan-out itself; a deferred sink is handed it when the host
+    // collects, after the fan-out, where an attach is admitted like any other.
+    private sealed class NestedObserver(WorldServer server) : IWorldInlineSink {
         private bool m_primed;
 
         public bool Attempted { get; private set; }

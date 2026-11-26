@@ -3235,14 +3235,15 @@ puck benchmark compare <baseline report.json or directory> <candidate report.jso
   bar matches, naming the profiles that author one.
 - **Topology and seats.** `--remote local` stages a delta over the world's entry beside it (its own namespace, a
   wildcard arrival row admitting one remote player, and a row pinning the pair's own federation key), boots it as a
-  listening authority headless, boots the measured World with `--connect` to it, and waits on `world.benchmark topology`
+  listening authority headless, boots the measured World with `--connect` to it and `--connect-authority` naming the
+  namespace the staged authority proves, and waits on `world.benchmark topology`
   until the seat's body is delivered by the remote authority; a reservation the authority refuses ends the wait at once
   with its line, and the staged document is removed when the leg ends. `--remote issued` stages the same authority
   without the key row and runs it with an issuer (`--issuer-config-file`, a fresh root and one `puck.accounts`
   account), and the measured World signs in through it with `--authentication-config-file` and holds no key the
   document pins, as a hosted world's player does. `--remote <ip:port>` connects to an authority already listening,
-  signing in with `--authentication-config-file <file>` (a deployment's `world-authentication.json`). The measured World
-  expects that authority to prove the namespace its own `--world` document declares; a World run by hand against an
+  signing in with `--authentication-config-file <file>` (a deployment's `world-authentication.json`). Against such an
+  authority the measured World expects the namespace its own `--world` document declares; a World run by hand against an
   authority whose namespace its document does not declare names it with `Puck.World`'s `--connect-authority <namespace>`.
   A client of a remote authority boots running, since a paused boot commits no transfer, so its runs
   are `attached`. `--seats <n>` plays the route on that many seats of one client (`world.benchmark run ... seats <n>`).

@@ -1,3 +1,4 @@
+using Puck.Abstractions.Collections;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.Networking;
@@ -371,11 +372,12 @@ public sealed partial class WorldTick {
                 };
                 state = state with { Pending = new[] { published } };
             } else {
-                var pending = new IntentSubmission[(state.Pending.Length + 1)];
+                // Checkpoints and the tape keep the windows they captured, so an append writes only past them.
+                ref var storage = ref m_federatedPending[published.EntityIndex];
 
-                state.Pending.Span.CopyTo(destination: pending);
-                pending[^1] = published;
-                state = state with { Pending = pending };
+                state = state with {
+                    Pending = AppendOnlyWindows.Append(end: ref storage.End, item: published, storage: ref storage.Storage, window: state.Pending),
+                };
             }
         });
     }
