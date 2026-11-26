@@ -143,6 +143,44 @@ public sealed partial class WorldTick {
         return (hasMachine || (screen.Source is WorldScreenSource.Producer));
     }
 
+    // A placement-carried screen engages its holder alone (TryEngageCentre), so an engagement on one whose device was
+    // put down, returned or handed to another body leaves: every application on it dissolves, and the holder engages
+    // again with the context button.
+    private void ReleaseCarriedScreens() {
+        var screens = Host.Document.Definition.Screens;
+
+        for (var row = 0; (row < screens.Count); row++) {
+            var screen = screens[row];
+
+            if (screen.Carry is not { RidesPlacement: true }) {
+                continue;
+            }
+
+            m_carriedEngagers.Clear();
+            Host.GrantTable.CollectApplicationHolders(
+                into: m_carriedEngagers,
+                target: GrantSubject.Screen(index: screen.Index)
+            );
+
+            if (m_carriedEngagers.Count == 0) {
+                continue;
+            }
+
+            _ = TryEngageCentre(centre: out _, holder: out var holder, screen: screen);
+
+            foreach (var engager in m_carriedEngagers) {
+                if (engager.Index != holder) {
+                    Host.Engagement.DissolveScreen(screenIndex: screen.Index);
+
+                    break;
+                }
+            }
+        }
+
+        m_carriedEngagers.Clear();
+    }
+    // The principals engaged on one carried screen, reused across ticks (ReleaseCarriedScreens).
+    private readonly List<Principal> m_carriedEngagers = [];
     // Where a screen's engage radius is measured from this tick, and the body that alone may engage it: the authored
     // origin of a screen that stays put (holder -1), or the device of a placement-carried screen and the body holding it
     // (WorldScreenHolding). False for a placement-carried screen nobody holds, which engages no one.

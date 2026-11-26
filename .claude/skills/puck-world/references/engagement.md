@@ -474,8 +474,13 @@ carried-screen revision component). The authority engages a placement-carried
 screen for its holder alone, wherever the holder stands, measuring the engage
 radius from the carrying row's attachment (`WorldScreenHolding.TryHolder`,
 read by `WorldTick.TryEngageCentre` in the policy and the context button's
-probe); a look-carried screen engages from its authored frame, since a pose is
-presentation. Rules read an engagement through `engaged(each, <screen>)`
+probe), and once the response sweep leaves a placement-carried screen's
+engager not holding it (the device returned or handed on), every engagement on
+it dissolves that tick (`WorldTick.ReleaseCarriedScreens`). The holder's press
+of the context button engages its device before any rule reads the press, so a
+world that takes the device back on a press reads the engagement instead (the
+rentals' return rule reads `rentalShown`). A look-carried screen engages from
+its authored frame, since a pose is presentation. Rules read an engagement through `engaged(each, <screen>)`
 (`$engaged:<bodyRef>:<screen>`, `WorldEngagement.Applies`; a literal body is
 `body:<n>`). The debug world's Humble Gaming Brick is the look example:
 `brick-pick-up` (`devices.puck`) sets the out-of-suit, full-size Moth's
