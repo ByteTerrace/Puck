@@ -134,16 +134,8 @@ public sealed class SdfMeshCluster : IDisposable {
         m_materials.Dispose();
     }
 
-    // The number of a pair in a map that numbers each pair it meets from zero, in the order it met them.
-    private static int Numbered(OwnedLongMap<int> map, int high, int low) {
-        var key = PackedIntPair.Pack(high: high, low: low);
-
-        if (!map.TryGetValue(key: key, value: out var number)) {
-            number = map.Count;
-            map.Add(key: key, value: number);
-        }
-        return number;
-    }
+    // The number of a pair in a map that numbers each pair it meets (OwnedLongMapNumbering.NumberOf).
+    private static int Numbered(OwnedLongMap<int> map, int high, int low) => map.NumberOf(key: PackedIntPair.Pack(high: high, low: low));
     private static int BinOf(Vector3 normal) {
         var best = 0;
         var most = float.NegativeInfinity;

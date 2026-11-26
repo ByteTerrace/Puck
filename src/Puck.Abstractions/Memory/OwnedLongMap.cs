@@ -122,3 +122,24 @@ public sealed class OwnedLongMap<TValue> : IDisposable where TValue : unmanaged 
         }
     }
 }
+/// <summary>Numbering over an <see cref="OwnedLongMap{TValue}"/>: a map that gives each key it meets the next number
+/// from zero, so keys become dense indices into a table kept beside it. A key wider than a word is numbered by a chain
+/// of such maps, each numbering a pair of the one before's number and the key's next part, which is exact where a hash
+/// of the whole key is not.</summary>
+public static class OwnedLongMapNumbering {
+    /// <summary>Returns a key's number: the one the map holds for it, or the map's count, which the map then holds for
+    /// it. The map must hold nothing but numbers this method gave.</summary>
+    /// <param name="map">The numbering map.</param>
+    /// <param name="key">The key.</param>
+    /// <returns>The key's number, in the order the map first met its keys.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="map"/> is <see langword="null"/>.</exception>
+    public static int NumberOf(this OwnedLongMap<int> map, long key) {
+        ArgumentNullException.ThrowIfNull(argument: map);
+
+        if (!map.TryGetValue(key: key, value: out var number)) {
+            number = map.Count;
+            map.Add(key: key, value: number);
+        }
+        return number;
+    }
+}
