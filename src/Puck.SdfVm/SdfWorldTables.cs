@@ -26,11 +26,12 @@ namespace Puck.SdfVm;
 /// </para>
 /// </summary>
 public sealed partial class SdfWorldTables : IDisposable {
-    private const int DecalBufferCells = (SurfaceTextBase + ((SdfSurfaceTextLayout.MaxTexts * SdfSurfaceTextLayout.MaxGlyphs) * SdfSurfaceTextLayout.EntriesPerGlyph));
+    private const int DecalBufferCells = (SurfaceTextBase + SdfSurfaceTextLayout.PoolEntries);
     // The decal buffer's leading DESCRIPTOR band (one uint4 per screen slot, then one per surface text slot) precedes the
-    // screens' cell pool, from which a screen holding a glyph grid claims a run of its grid's cells (m_decalRuns), and a
-    // surface text's glyph run starts at SurfaceTextBase + slot * MaxGlyphs * EntriesPerGlyph. Each descriptor carries its
-    // run's first entry, which is all the kernels read of this layout (sdfSampleGlyphDecal, sdfSurfaceTextInk).
+    // screens' cell pool, from which a screen holding a glyph grid claims a run of its grid's cells (m_decalRuns), and the
+    // surface texts' pool, from which a slot holding glyphs claims a run of its glyphs and their grid (m_textRuns). Each
+    // descriptor carries its run's first entry, which is all the kernels read of this layout (sdfSampleGlyphDecal,
+    // sdfSurfaceTextInk).
     private const int DecalDescriptorCount = (MaxScreenSurfaces + SdfSurfaceTextLayout.MaxTexts);
     // The screens' cell pool: room for MaxScreenDecalScreens grids at the per-screen budget at once, whatever the screen
     // count, so the pool's bytes do not grow with MaxScreenSurfaces.
@@ -172,6 +173,10 @@ public sealed partial class SdfWorldTables : IDisposable {
     // length holds none.
     private readonly GpuRangeAllocator m_decalPool = new(size: ScreenDecalPoolCells);
     private readonly (int Start, int Length)[] m_decalRuns = new (int Start, int Length)[MaxScreenSurfaces];
+    // The surface texts' pool (SdfSurfaceTextLayout.PoolEntries) and the run each slot holds in it, in pool entries; a
+    // zero length holds none.
+    private readonly GpuRangeAllocator m_textPool = new(size: SdfSurfaceTextLayout.PoolEntries);
+    private readonly (int Start, int Length)[] m_textRuns = new (int Start, int Length)[SdfSurfaceTextLayout.MaxTexts];
     // The bounded-volume table (views and sky), packed here every frame and written into its region.
     private readonly byte[] m_volumeScratch = new byte[(MaxVolumes * VolumeByteLength)];
     // The program the tables uploaded, and the one their last published upload bound (BackgroundProgram), each under the

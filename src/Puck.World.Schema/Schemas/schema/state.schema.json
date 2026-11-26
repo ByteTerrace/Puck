@@ -944,6 +944,14 @@
                           "$ref": "./common.schema.json#/$defs/PalettePaintRepeatDocument",
                           "description": "The lattice the paint repeats on, or null for a paint drawn once; a text paint cannot repeat.",
                           "default": null
+                        },
+                        "softness": {
+                          "description": "The width, in the frame\u0027s units (metres in world space), the paint\u0027s edge feathers over, centred on the primitive\u0027s surface (or the stroke\u0027s edge), so a path fades into the ground about it; null or zero for an edge as crisp as the pixel.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
+                          "default": null
                         }
                       },
                       "required": [

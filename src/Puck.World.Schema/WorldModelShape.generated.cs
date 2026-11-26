@@ -1948,6 +1948,7 @@ public static partial class WorldModelShape {
                 M("curve", typeof(global::Puck.World.Authoring.ShapeCurveDocument), typeof(global::Puck.World.Authoring.PalettePaintDocument), "Curve", Read | Write, static value => ((global::Puck.World.Authoring.PalettePaintDocument)value).Curve),
                 M("text", typeof(global::Puck.World.Authoring.PalettePaintTextDocument), typeof(global::Puck.World.Authoring.PalettePaintDocument), "Text", Read | Write, static value => ((global::Puck.World.Authoring.PalettePaintDocument)value).Text),
                 M("repeat", typeof(global::Puck.World.Authoring.PalettePaintRepeatDocument), typeof(global::Puck.World.Authoring.PalettePaintDocument), "Repeat", Read | Write, static value => ((global::Puck.World.Authoring.PalettePaintDocument)value).Repeat),
+                M("softness", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.Authoring.PalettePaintDocument), "Softness", Read | Write, static value => ((global::Puck.World.Authoring.PalettePaintDocument)value).Softness),
             ],
             []),
         T(typeof(global::Puck.World.Authoring.PalettePaintRepeatDocument), true, JsonTypeInfoKind.Object, null,
