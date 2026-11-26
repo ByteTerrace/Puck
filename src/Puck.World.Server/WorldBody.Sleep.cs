@@ -90,7 +90,21 @@ public sealed partial class WorldBody {
         m_asleepSinceTick = 0UL;
         IdleSleepGravity = null;
         m_sleepIdleTicks = 0UL;
+        m_producerRests = false;
     }
+    // Whether the body's producer was found at rest at its last run and nothing has woken the body since: the one
+    // condition under which a body whose source names a producer counts toward its idle floor. Continuation state,
+    // since a batched body's motion steps between two producer runs read the verdict of the run before them. Written
+    // by NoteProducerRest and withdrawn by WakeUp, the door every change to what a producer reads passes.
+    private bool m_producerRests;
+
+    /// <summary>Gets whether the body's producer was found at rest at its last run and nothing has woken the body
+    /// since.</summary>
+    internal bool ProducerRests => m_producerRests;
+    /// <summary>Records what the population found of the body's producer at the run that just finished
+    /// (<see cref="WorldPopulation"/>'s <c>ProducerRests</c>).</summary>
+    /// <param name="rests">Whether the producer is at rest.</param>
+    internal void NoteProducerRest(bool rests) => m_producerRests = rests;
     /// <summary>Gets how far past its broadphase radius, in metres, a contact-field change can still decide this idle
     /// body's next step: the farthest of its holds' reach, its ground snap and its step height, at its scale or at one,
     /// whichever is farther. The population grows a sleeper's bounds by this before testing a change against it, so a
@@ -109,6 +123,16 @@ public sealed partial class WorldBody {
     /// <param name="contactFieldVersion">The population's <see cref="WorldPopulation.ContactFieldVersion"/> the
     /// settlement observed.</param>
     internal void ObserveContactField(ulong contactFieldVersion) => m_lastContactFieldVersion = contactFieldVersion;
+    /// <summary>Gets whether this body is asleep and nothing this tick wakes it: what
+    /// <see cref="TryDeferSleepingAdvance"/> answers, read without waking a body that is due to wake or moving its
+    /// observation, which already equals <paramref name="contactFieldVersion"/> whenever this answers
+    /// <see langword="true"/>. A caller may pass such a body by before it decides how the body's step would run.</summary>
+    /// <param name="contactFieldVersion">The population's current <see cref="WorldPopulation.ContactFieldVersion"/>.</param>
+    /// <returns><see langword="true"/> when the body sleeps through the tick.</returns>
+    internal bool SleepsThrough(ulong contactFieldVersion) => (
+        (m_asleepSinceTick != 0UL) && (contactFieldVersion == m_lastContactFieldVersion) &&
+        (m_tapeCount == 0) && !InputImages.HasSubmitted && !InputImages.HasProducer
+    );
     /// <summary>Returns <see langword="true"/> when this body is asleep and nothing this tick wakes it, so the
     /// caller may skip <see cref="Advance"/> outright. Wakes (and returns <see langword="false"/>) on a
     /// <paramref name="contactFieldVersion"/> this body never observed or a tape/submitted/producer intent staged for
@@ -141,14 +165,15 @@ public sealed partial class WorldBody {
 
     // Folds one ordinary Advance's outcome into the idle floor. Called at the end of Advance, after every effect the
     // program could have fired this tick, so "moved" reflects where the body actually ended up. A body driven by a
-    // producer never counts idle: its producer reads the world (a target, a sensor, a route) only while the body
-    // advances, so a producer resting at its goal would sleep through the goal moving away.
+    // producer counts idle only while its population found the producer at rest (m_producerRests, decided by
+    // WorldPopulation's ProducerRests): a producer reads the world (a target, a sensor, a route) only while the body
+    // advances, so one that could answer differently with nothing waking the body must keep it awake.
     private void UpdateSleepEligibility(ulong tick, ulong stepTicks, ulong sleepAfterTicks, ulong contactFieldVersion, bool hadIncomingIntent, bool moved) {
         m_lastContactFieldVersion = contactFieldVersion;
 
         if (
             (sleepAfterTicks == 0UL) ||
-            InputImages.Source.IsProducer ||
+            (InputImages.Source.IsProducer && !m_producerRests) ||
             m_timedMove.IsActive ||
             hadIncomingIntent ||
             moved

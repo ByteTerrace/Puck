@@ -94,6 +94,7 @@ public sealed partial class WorldGrants {
     // embodied in and the input its viewer last forwarded. Its rows were restored with every other grantee's.
     private void RestoreSessions(IReadOnlyList<WorldSessionCheckpoint> sessions) {
         m_sessions.Clear();
+        NoteInputFactsMoved();
 
         foreach (var session in sessions) {
             if (session.Session.Kind != PrincipalKind.Session) {
@@ -169,6 +170,7 @@ public sealed partial class WorldGrants {
     internal void MarkObserverEnded(Principal session) {
         if (IsAdmittedSession(principal: session)) {
             m_sessions[session.Index].ObserverEnded = true;
+            NoteInputFactsMoved();
         }
     }
     /// <summary>Admits an unembodied session: the world's own <c>admission</c> policy decides, through the arrival
@@ -346,6 +348,7 @@ public sealed partial class WorldGrants {
             principal: session,
             templates: admitted.Templates
         ) { Tier = admitted.Tier };
+        NoteInputFactsMoved();
 
         foreach (var grant in admitted.MintedGrants.OrderByDescending(keySelector: static row => row.Capability == WorldCapability.Operate)) {
             _ = TryApplyGrant(grant: grant, actor: Principal.World);
@@ -380,6 +383,7 @@ public sealed partial class WorldGrants {
         }
 
         _ = m_sessions.Remove(key: ended.Session.Index);
+        NoteInputFactsMoved();
         Host.DetachSessionSink(reason: "world.session.ended", session: ended.Session);
     }
     /// <summary>Describes every live session as the events that would re-establish it as it stands: its admission,
@@ -542,6 +546,7 @@ public sealed partial class WorldGrants {
     internal void EndSessionsForRebuild() {
         foreach (var session in m_sessions.Values) { Host.Input.Reset(session.Principal); }
         m_sessions.Clear();
+        NoteInputFactsMoved();
         Host.DetachSessionSinks(reason: "world.session.rebuilt");
     }
     /// <summary>Revokes the rows any session holds over a body a later generation now occupies, and forgets that

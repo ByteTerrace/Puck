@@ -82,8 +82,17 @@ same change.
   reach goes through the body's `WorldBodyStepLog` or makes the body serial.
   Producers read other bodies only through the frozen perception image. The
   navigation runtime is read-only during the forks
-  (`NavigationRuntime.EnterReadOnly`): bake every domain a partition reads, and
-  resolve its goal fields, in the serial plan.
+  (`NavigationRuntime.EnterReadOnly`), the plan's own fork included: a
+  partition's plan lists the bodies whose goal field is owed, and the serial
+  settlement that follows it (`PlanKitStep`) bakes every domain a partition
+  reads and resolves the fields. A partition's plan writes its own bodies,
+  their entries and its own lists; a wake goes through the bound step log.
+- **A producer at rest lets its body sleep.** A producer-driven body counts
+  toward `bodies.sleepAfterSeconds` only while its producer's last run found it
+  at rest (`WorldPopulation`'s `ProducerRests`: the neutral intent, no state
+  moved, and sensors that read only what wakes the body when it changes). A new
+  sensor source rests only once it is named there with its waking door, and
+  every wake withdraws the verdict (`WorldBody.WakeUp`).
 - **One door for every moving sweep.** `WorldBody.SweepContact` is the
   dispatch every sweep that moves a body goes through; an
   `IEntityContactField` (today `WorldAdjacencyContactField`) learns which
