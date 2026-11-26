@@ -53,6 +53,8 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     private const int Running = 0;
     private const int Stopped = 2;
     private const int Stopping = 1;
+    // The least time a feed keeps copying and reading back after its consumer last asked for a frame (TryCapture).
+    private static readonly long ConsumerIdleTicks = Stopwatch.Frequency;
 
     private static readonly Guid GraphicsCaptureItemGuid = new(g: "79C3F95B-31F7-4EC2-A464-632EF5D30760");
 
@@ -178,6 +180,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
     private GraphicsCaptureItem? m_captureItem;
     private GraphicsCaptureSession? m_captureSession;
     private long m_consumedRevision;
+    private long m_lastConsumerTicks;
     private int m_cleanupQueued;
     private int m_cpuReadbackCounter;
     private Win32GraphicsCaptureDevice? m_device;
@@ -365,6 +368,7 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
         m_targetHeight = height;
         m_targetKind = targetKind;
         m_targetWidth = width;
+        m_lastConsumerTicks = Stopwatch.GetTimestamp();
         if (targetKind == CaptureTargetKind.Window) {
             m_ownerThreadId = User32.GetWindowThreadProcessId(
                 processId: out m_ownerProcessId,
@@ -460,6 +464,10 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 
     /// <inheritdoc/>
     public bool TryCapture(out Surface surface) {
+        Volatile.Write(
+            location: ref m_lastConsumerTicks,
+            value: Stopwatch.GetTimestamp()
+        );
         if (IsEnded) {
             surface = default;
             return false;
@@ -639,7 +647,16 @@ public sealed class Win32GraphicsCaptureFeed : INativeImageCaptureFeed {
 
         var now = Stopwatch.GetTimestamp();
 
-        if (now < m_nextCaptureTicks) {
+        // A feed nobody has asked a frame of for a second, or for two of its own periods when those are longer, idles: no
+        // copy, readback or scale until its consumer asks again, so a screen that is out of view costs the callback thread
+        // nothing.
+        if (
+            (now < m_nextCaptureTicks) ||
+            ((now - Volatile.Read(location: ref m_lastConsumerTicks)) > Math.Max(
+                val1: ConsumerIdleTicks,
+                val2: (2L * m_refreshPeriodTicks)
+            ))
+        ) {
             return;
         }
 

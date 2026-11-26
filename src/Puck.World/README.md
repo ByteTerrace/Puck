@@ -1751,15 +1751,18 @@ The engine ships five producers, each with its settings record in
 | `qr` | `payload`, `ecLevel` (`M`), `quietZoneModules` (4) | uploaded | deterministic |
 | `color` | `color` (`#RRGGBB`) | uploaded | deterministic |
 | `camera` | `sensor` (`Color`), `seat`, `profile`, `controls` | imported | external |
-| `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (a staged copy under Vulkan) | external |
+| `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (a staged copy under Vulkan for an HDR display) | external |
 
 A capture selects its format and encoding from its display when it opens. An
 HDR toggle, a move to a display that differs in it, or failed display discovery
 ends the feed, which the consumer reopens with fresh metadata; unknown discovery
 refuses the open. An SDR
-display is captured in B8G8R8A8 sRGB, which a Direct3D 12 host copies into
-shared targets the screen samples and a Vulkan host converts through
-`source-rgba`. An HDR display is captured in half-float scRGB, which a
+display is captured in B8G8R8A8 sRGB, which either host copies on the GPU into
+shared targets the screen samples (a Vulkan host imports the textures a headless
+Direct3D 12 device made, as it does a camera's), with no readback beyond the
+divided-cadence frames that light the room. A render device that refuses the
+targets takes the CPU route, which converts through `source-rgba`. An HDR
+display is captured in half-float scRGB, which a
 Direct3D 12 host copies into half-float shared targets and converts on the GPU
 through `source-scrgb`, and a Vulkan host converts on its CPU tier through
 `source-transfer`, both into working values at the host section's

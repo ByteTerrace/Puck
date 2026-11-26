@@ -98,7 +98,8 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     /// render-graph packages so a source instance opens through the same producers.</summary>
     public WorldImageProducers Producers => m_producers;
 
-    // Whether the host exports shared Direct3D 12 surfaces: a Direct3D 12 host on a platform that has them.
+    // Whether the host exports shared Direct3D 12 surfaces, on either backend (a Direct3D 12 host samples them directly, a
+    // Vulkan host imports them), on a platform that has them. A capture rides the GPU transport only where this holds.
     private readonly bool m_exportsSurfaces;
     // The backend-neutral surface-transfer factory — the Vulkan host's camera GPU tier imports its shared camera
     // targets through it (the D3D12 host samples its own resources directly and never calls it for the camera).
@@ -221,9 +222,10 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
     /// <param name="perception">The per-seat perception anchor a seat-relative camera anchor resolves through.</param>
     /// <param name="facts">The overlay facts a ranked camera anchor list selects through (resolved on first use).</param>
     /// <param name="speech">The speech clock a seat-relative camera anchor resolves a speaker's pose through.</param>
-    /// <param name="hostsOnDirectX">Whether the host backend is Direct3D 12 — selects the GPU capture transport for
-    /// window/monitor captures (the Vulkan host keeps their CPU-pixel path). The shared camera rides its GPU tier on
-    /// both hosts; this flag only picks how its shared targets are allocated and sampled.</param>
+    /// <param name="hostsOnDirectX">Whether the host backend is Direct3D 12. Window and monitor captures and the shared
+    /// camera ride their GPU tier on both hosts; this flag picks how the shared targets are allocated and sampled, and
+    /// that only the Direct3D 12 host converts an HDR display's half-float copies on the device (a Vulkan host reads an
+    /// HDR display through the CPU route).</param>
     /// <param name="roster">The player roster — resolves a seat to its bound camera device.</param>
     /// <param name="renderProbe">The render probe each offscreen view's GPU work is registered with while the view
     /// is registered, so <c>world.counters gpu</c> reports it; <see langword="null"/> when nothing reads it (a headless
@@ -281,9 +283,8 @@ public sealed partial class WorldScreenBinder : IDisposable, IWorldScreenPresent
         m_paperWhiteNits = DisplayOutput.RequirePaperWhite(nits: paperWhiteNits);
         m_roster = roster;
         m_surfaceExports = surfaceExports;
-        // Windows-10240 guarded because the shared surfaces are; hostsOnDirectX already implies that floor (Program.cs
-        // rejects the D3D12 backend below it), so the check only satisfies the analyzer.
-        m_exportsSurfaces = (hostsOnDirectX && (surfaceExports is not null) && OperatingSystem.IsWindowsVersionAtLeast(
+        // Windows-10240 guarded because the shared surfaces are (the composition root hands none below it).
+        m_exportsSurfaces = ((surfaceExports is not null) && OperatingSystem.IsWindowsVersionAtLeast(
             major: 10,
             minor: 0,
             build: 10240
