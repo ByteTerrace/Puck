@@ -442,6 +442,9 @@ public static partial class BenchmarkCommand {
                 Arguments = [
                     // A client of a remote authority runs from its boot: a paused boot commits no transfer.
                     .. ((connect is null) ? new[] { "--paused" } : ["--connect", connect]),
+                    // A pair's client names the authority it expects at the endpoint rather than leaving it to the
+                    // document it boots.
+                    .. (local ? new[] { "--connect-authority", pair!.Namespace } : []),
                     .. SizeArguments(options: options, parse: parse, shape: shape),
                     .. (parse.GetValue(options.Cache) is { } cache ? new[] { "--cache-dir", Path.GetFullPath(cache) } : []),
                     .. (issued
