@@ -12,7 +12,7 @@ export read skirmish, skirmishTurn, skirmishVerdict, skirmishUnits, skirmishPos,
 export read skirmishView, skirmishSeen1, skirmishSeen2, skirmishKnows1, skirmishKnows2, skirmishOrder1, skirmishOrder2
 export read skirmishSharpOn, skirmishSharpRevision, skirmishSharpBest, skirmishFairOn, skirmishFairRevision, skirmishFairBest
 
-let skirmishTable = [67, boardRoomFloor - 0.5, 36.5]
+let skirmishTable = [60, boardRoomFloor - 0.5, 17.2]
 let skirmishCellSize = 0.1
 
 state {

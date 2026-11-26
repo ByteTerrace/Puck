@@ -579,7 +579,7 @@ work and its order are [S9](../plans/state-and-language.md#s9--the-authoring-con
 A keyed scalar's key may hold keys of its own on another clock, so one value
 follows as many clocks as its keys nest. Exposure by altitude is keys on the
 viewer's height whose ground keys hold the day's keys
-([hall.puck](../../worlds/debug/hall.puck)). Each axis is an authored
+([gallery/gallery.puck](../../worlds/debug/gallery/gallery.puck)). Each axis is an authored
 `timeline.clocks` row (a tick, a state row, the viewer's distance from a point
 or along an axis), so a new axis is never engine work.
 
@@ -1007,7 +1007,7 @@ members in the same order (rule 4).
 **Evidence.** `world.budget.rules` and `world.budget.rules --spent` on a headless
 debug world price and count each rule over a set as one line;
 `worlds/debug/moon-door-tests.puck` (the doors and the beacon switch),
-`worlds/debug/hall-tests.puck` (the lift's car buttons) and
+`worlds/debug/gallery-tests.puck` (the lift's car buttons) and
 `worlds/debug/suit-tests.puck` (a second seat's toggle) pass and reproduce.
 
 **Enforcement.** A sweep's set is collected through one door per kind

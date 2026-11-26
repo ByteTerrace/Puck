@@ -24,7 +24,25 @@ state {
     { name: "sunMass", kind: "Fixed", value: "1", follows { destination: "sun", delaySeconds: sunDelayPlanet } }
     // The moon's received light, read here as the moon reads it, to compare the two arrivals.
     { name: "moonSunLight", kind: "Fixed", value: "1", follows { destination: "moon", row: "sunLight" } }
+    // The pair's turn (moon-frame.puck's `companionTurn`), adopted from the sun's world, which owns it; the valley's
+    // companion light and disc ride it (day.puck).
+    {
+      name: "pair"
+      kind: "Fixed"
+      value: "0"
+      advance { perSecondNumerator: 1, perSecondDenominator: pairSeconds }
+      follows { destination: "sun" }
+    }
   ]
+}
+
+timeline {
+  clocks [{ name: pair, state: pair, spanSeconds: pairSeconds }]
+}
+
+// The valley's sky reads the pair's clock (day.puck's companion).
+exports {
+  reads [pair]
 }
 
 commands [

@@ -10,9 +10,9 @@ import "reach"
 
 // The plate stands on the wing's south wall, left of the moon painting as a viewer facing the painting sees it, its
 // face toward +Z; the reach box is the floor before it.
-let beaconPlateX = 63.9
-let beaconPlateZ = 12.6
-let beaconReach = { x0: 63.3, x1: 64.5, z0: 12.6, z1: 13.8, y0: -0.5, y1: 1 }
+let beaconPlateX = 56.4
+let beaconPlateZ = 12.3
+let beaconReach = { x0: 55.8, x1: 57, z0: 12.3, z1: 13.5, y0: -0.5, y1: 1 }
 let beaconStates = [
   { name: "off", indicator: "#3A6B4A", glow: 40 }
   { name: "on", indicator: "#FFB347", glow: 300 }

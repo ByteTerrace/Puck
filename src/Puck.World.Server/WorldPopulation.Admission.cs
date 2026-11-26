@@ -844,10 +844,15 @@ public sealed partial class WorldPopulation {
             value: -1
         );
 
+        m_placementToBody.Clear();
+
         for (var index = 0; (index < m_entries.Length); index++) {
             if (m_entries[index].PlacementId is not { } placementId) {
                 continue;
             }
+
+            // Ascending, so the lowest body inhabiting a placement is the one its id names.
+            _ = m_placementToBody.TryAdd(key: placementId, value: index);
 
             for (var ordinal = 0; (ordinal < placements.Count); ordinal++) {
                 if (string.Equals(
@@ -863,6 +868,18 @@ public sealed partial class WorldPopulation {
         }
 
         PlacementTableVersion++;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Reads the table the last inhabitant reconcile built, then confirms the slot is still active.</remarks>
+    public bool TryInhabitantBody(string placementId, out int index) {
+        if (m_placementToBody.TryGetValue(key: placementId, value: out index) && m_entries[index].Active) {
+            return true;
+        }
+
+        index = -1;
+
+        return false;
     }
 
     /// <summary>Gets a count that moves every time the placement table <see cref="BodyForPlacementOrdinal"/> reads is

@@ -70,7 +70,7 @@ surfaces and positions come from the existing authored tables.
 
 The existing implementation and functions are mapped by
 [Debug world shape gallery](../../../../worlds/debug/shapes.md),
-[hall.puck](../../../../worlds/debug/hall.puck),
+[gallery.puck](../../../../worlds/debug/gallery/gallery.puck),
 [paintings.puck](../../../../worlds/debug/paintings.puck) and
 [chess.puck](../../../../worlds/debug/chess.puck) and
 [go.puck](../../../../worlds/debug/go.puck). The

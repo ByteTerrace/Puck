@@ -116,14 +116,14 @@ public sealed class SdfAppearance {
         for (var index = 0; (index < screens.Length); index++) {
             screens[index] = m_screenSurfacesByIndex[index].ScreenIndex;
         }
-        var glass = new bool[m_materials.Length];
+        var classes = new byte[m_materials.Length];
         var shadeCount = 0;
         var shadeReads = SdfShadeReads.None;
 
-        for (var index = 0; (index < glass.Length); index++) {
+        for (var index = 0; (index < classes.Length); index++) {
             var material = m_materials[index];
 
-            glass[index] = material.IsGlass;
+            classes[index] = (byte)((material.IsGlass ? SdfAppearanceOutline.GlassClass : 0) | (material.CastsNoShadow ? SdfAppearanceOutline.ShadowlessClass : 0));
             if (material.Shade is { } shade) {
                 shadeCount++;
                 shadeReads |= shade.Reads;
@@ -146,7 +146,7 @@ public sealed class SdfAppearance {
         Materials = Array.AsReadOnly(array: m_materials);
         ScreenSurfaces = Array.AsReadOnly(array: m_screenSurfaces);
         ShadingPrograms = Array.AsReadOnly(array: m_shadingPrograms);
-        Outline = new SdfAppearanceOutline(glass: glass, screens: screens, vectors: VectorsOf(materials: m_materials));
+        Outline = new SdfAppearanceOutline(classes: classes, screens: screens, vectors: VectorsOf(materials: m_materials));
     }
 
     /// <summary>Gets the immutable material values, in material-identifier order. Nested reveal and paint lists are
@@ -537,23 +537,27 @@ public sealed class SdfAppearance {
 /// <summary>
 /// What a program's field derivation may know of its appearance (<see cref="SdfAppearance.Outline"/>): the material
 /// count, the vectors the appearance section spans, which materials are glass (a glass shape bakes into a group of its
-/// own) and which screen indices are declared. The field constructor validates material and screen references against
-/// it and sizes the stream by it; it holds no material value, so no appearance value or packing code reaches the field
-/// or the mesh bake's identity through it. Immutable.
+/// own), which cast no shadow (so do those shapes) and which screen indices are declared. The field constructor validates
+/// material and screen references against it and sizes the stream by it; it holds no material value, so no appearance
+/// value or packing code reaches the field or the mesh bake's identity through it. Immutable.
 /// </summary>
 public readonly struct SdfAppearanceOutline {
-    private readonly bool[]? m_glass;
+    // Each material's classes, one byte a material: the bits the field derivation reads of it.
+    internal const byte GlassClass = 1;
+    internal const byte ShadowlessClass = 2;
+
+    private readonly byte[]? m_classes;
 
     private readonly int[]? m_screens;
 
-    internal SdfAppearanceOutline(bool[] glass, int[] screens, int vectors) {
-        m_glass = glass;
+    internal SdfAppearanceOutline(byte[] classes, int[] screens, int vectors) {
+        m_classes = classes;
         m_screens = screens;
         Vectors = vectors;
     }
 
     /// <summary>Gets the number of materials in the palette.</summary>
-    public int Materials => (m_glass?.Length ?? 0);
+    public int Materials => (m_classes?.Length ?? 0);
     /// <summary>Gets the vectors the appearance section spans (<see cref="SdfAppearance.VectorsOf"/>).</summary>
     public int Vectors { get; }
     /// <summary>Gets the declared screen indices, ascending: any number of screens, each an identity below
@@ -564,15 +568,22 @@ public readonly struct SdfAppearanceOutline {
     /// opaque.</summary>
     /// <param name="material">The material id.</param>
     /// <returns><see langword="true"/> for a glass material.</returns>
-    public bool IsGlass(int material) => ((m_glass is { } glass) && (material >= 0) && (material < glass.Length) && glass[material]);
+    public bool IsGlass(int material) => Has(material: material, flag: GlassClass);
+    /// <summary>Returns whether a material id names a material that casts no shadow (<see cref="SdfMaterial.CastsNoShadow"/>);
+    /// a screen sentinel or an id past the palette casts.</summary>
+    /// <param name="material">The material id.</param>
+    /// <returns><see langword="true"/> for a material whose shapes cast no shadow.</returns>
+    public bool IsShadowless(int material) => Has(material: material, flag: ShadowlessClass);
+    private bool Has(int material, byte flag) => ((m_classes is { } classes) && (((uint)material) < ((uint)classes.Length)) && ((classes[material] & flag) != 0));
     /// <summary>Returns whether a screen index is declared.</summary>
     /// <param name="screenIndex">The screen index.</param>
     /// <returns><see langword="true"/> when a screen surface declares it.</returns>
     public bool DeclaresScreen(int screenIndex) => (Screens.BinarySearch(screenIndex) >= 0);
-    /// <summary>Returns whether another outline tells a field everything this one does alike: the same glass materials in
-    /// the same palette length, the same declared screens and the same appearance section size.</summary>
+    /// <summary>Returns whether another outline tells a field everything this one does alike: the same glass and
+    /// shadowless materials in the same palette length, the same declared screens and the same appearance section
+    /// size.</summary>
     /// <param name="other">The other outline.</param>
     /// <returns><see langword="true"/> when the two are interchangeable to a field derivation.</returns>
     public bool Matches(in SdfAppearanceOutline other) =>
-        (Screens.SequenceEqual(other: other.Screens) && (Vectors == other.Vectors) && (m_glass ?? []).AsSpan().SequenceEqual(other: (other.m_glass ?? [])));
+        (Screens.SequenceEqual(other: other.Screens) && (Vectors == other.Vectors) && (m_classes ?? []).AsSpan().SequenceEqual(other: (other.m_classes ?? [])));
 }

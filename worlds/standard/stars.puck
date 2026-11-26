@@ -145,7 +145,8 @@ function starPull(of, placement, reach, blend = 0, priority = 1) = {
 
 // The star's body, a creation document: one ball of the star's radius whose surface shines by its own light, with
 // darker cells that drift across it. Expand it inside a prototype's `document`, and attach a placement of that
-// prototype to the body that rides the star's rail. `churn` is how fast the cells drift, in metres a second,
+// prototype to the body that rides the star's rail. The ball casts no shadow: it stands on the line from every surface
+// toward its own light, so a ball that cast would shadow everything it lights. `churn` is how fast the cells drift, in metres a second,
 // `cells` how many of them span the radius and `cover` the share of the surface they darken. `lane` is a render lane
 // whose value scales the surface's light, for a star that can dim; absent, it shines whole.
 template starSurface(of, name = "star", churn = 6, cells = 5, cover = 0.35, lane = null) {
@@ -158,6 +159,7 @@ template starSurface(of, name = "star", churn = 6, cells = 5, cover = 0.35, lane
       specular: 0
       emissive: of.glow
       emissiveLane: lane
+      castsShadow: false
       flow {
         frame: Object
         velocity [churn, (churn * 0.4), 0]

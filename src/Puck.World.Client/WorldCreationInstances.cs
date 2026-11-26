@@ -1417,7 +1417,7 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         // applies before hiding the render stamp below the floor, so no reader treats a stale carrier pose as the row's.
         if (
             (live.Row?.Attach is { } attach) &&
-            (!WorldBodiesLimits.IsBodyIndex(index: attach.BodyIndex) || !client.IsActive(index: attach.BodyIndex))
+            !WorldAttachedPose.IsRiding(attach: attach, source: client)
         ) {
             pose = default;
 

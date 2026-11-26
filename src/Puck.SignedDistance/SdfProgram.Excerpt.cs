@@ -37,9 +37,9 @@ public sealed partial class SdfProgram {
             var before = instructions.Count;
 
             if (rewrite is null) {
-                instructions.Add(item: m_instructions[index]);
+                instructions.Add(item: InstructionRows[index]);
             } else {
-                instructions.AddRange(collection: rewrite(arg1: index, arg2: m_instructions[index]));
+                instructions.AddRange(collection: rewrite(arg1: index, arg2: InstructionRows[index]));
             }
 
             for (var added = before; (added < instructions.Count); added++) { sources.Add(item: index); }
@@ -47,9 +47,9 @@ public sealed partial class SdfProgram {
 
         foreach (var index in indices) {
             ArgumentOutOfRangeException.ThrowIfNegative(value: index, paramName: nameof(indices));
-            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: index, other: m_instructions.Length, paramName: nameof(indices));
+            ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(value: index, other: InstructionRows.Length, paramName: nameof(indices));
 
-            var source = m_instructions[index];
+            var source = InstructionRows[index];
 
             if ((SdfFieldOps.StreamOf(value: source.Op) == SdfReliefStreamRole.ReliefOwner) && (source.Material > 0u)) {
                 var rows = ((int)source.Material);

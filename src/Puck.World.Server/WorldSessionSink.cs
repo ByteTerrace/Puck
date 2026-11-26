@@ -1,6 +1,6 @@
-using Puck.World.Protocol;
-
 using Puck.Commands;
+using Puck.World.Client;
+using Puck.World.Protocol;
 
 namespace Puck.World.Server;
 
@@ -12,7 +12,11 @@ namespace Puck.World.Server;
 /// clocks' anchors at the ticks its predictions miss; a withheld span or the end of the observation releases what the
 /// feed holds. The answers, compositions and levers this world's hub fans out belong to its own clients and never
 /// reach a session. An observer that throws, or that ends its own subscription as an
-/// <see cref="IWorldDetachableSink"/>, ends its observation; the hub detaches it.</summary>
+/// <see cref="IWorldDetachableSink"/>, ends its observation; the hub detaches it.
+/// <para>A replica stream whose observer shares (<see cref="WorldImageClasses"/>) is judged at every delivery before it
+/// records anything: while another stream of this world is disclosed alike, its observer presents that stream's mirror
+/// and this stream composes and delivers nothing, so a snapshot is applied once for every observer disclosed
+/// alike.</para></summary>
 internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSink {
     private readonly WorldServer m_server;
     private readonly WorldSessionObservation m_observation;
@@ -31,6 +35,10 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
     private readonly WorldSolidScaleDisclosure m_scales = new();
     private readonly WorldDeclaredRoster m_roster = new();
     private readonly WorldRecipientView m_view;
+    // The stream's place among this world's disclosure classes, or null for an observer that never shares; and whether
+    // its last snapshot carried a record addressed to its recipient alone, which no shared image may carry.
+    private readonly WorldImageMember? m_member;
+    private bool m_owns;
 
     /// <summary>Initializes a new instance of the <see cref="WorldSessionSink"/> class.</summary>
     /// <param name="server">The observed world.</param>
@@ -42,6 +50,7 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
         m_inner = server.Output.RouteTo(sink: observer, fault: EndAfterDeferredFault);
         m_feed = new(recipient: observation.Session, seeds: server.ClockSeeds);
         m_view = observation.View;
+        m_member = server.ImageClasses.Admit(observer: observer);
     }
 
     private WorldDocumentVersion Version => m_server.DocumentVersion with { Sequence = m_cursor.Sequence };
@@ -228,13 +237,42 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
         m_cursor.ObserveBodies(bodies.Policy);
         return bodies;
     }
+    // Judges the stream for the delivery in hand, before it records anything (WorldImageClasses.Judge): true when it
+    // follows the leader of its disclosure class, whose mirror its observer presents, so it composes and delivers
+    // nothing. A judgement that leaves the observer presenting its own mirror again owes that mirror a cut and the whole
+    // disclosed document, which the delivery's own cut path announces.
+    private bool Follows() {
+        if (m_member is not { } member) {
+            return false;
+        }
+
+        var judged = m_server.ImageClasses.Judge(member: member, view: m_view,
+            eligible: ((DetachReason is null) && !m_streamEnded && !m_withheld && !m_owns && !m_cursor.CutOwed));
+
+        if (judged.Reprime) {
+            m_cursor.Release();
+            m_roster.Forget();
+            if (!m_cursor.CutOwed) { m_server.ImageClasses.Cut(member: member); }
+        }
+        return judged.Follows;
+    }
+    // What a follower's delivery settles in place of delivering: the scene its observer presents is its class's.
+    private void Followed(ulong tick) {
+        m_observation.SettleSceneProof(tick: tick);
+        FollowObserverDetach();
+    }
+    // The one door a cut record leaves the stream through: the observer drops what it held and refills from this stream.
+    private void RecordCut(bool terminal) {
+        m_inner.DeliverCut(stream: m_cursor.Stamp(), terminal: terminal);
+        if (m_member is { } member) { m_server.ImageClasses.Cut(member: member); }
+    }
     // Sends the record a cut the cursor decided owes, once: the new generation, with no content. True when one was sent,
     // after which the stream owes its whole disclosed document and a primer before anything newer.
     private bool AnnounceCut() {
         if (!m_cursor.TakeCut()) {
             return false;
         }
-        m_inner.DeliverCut(stream: m_cursor.Stamp(), terminal: false);
+        RecordCut(terminal: false);
 
         return true;
     }
@@ -276,10 +314,11 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
         _ = m_cursor.TakeCut();
 
         try {
-            m_inner.DeliverCut(stream: m_cursor.Stamp(), terminal: true);
+            RecordCut(terminal: true);
         } catch (Exception exception) {
             Fault ??= exception;
         }
+        if (m_member is { } member) { m_server.ImageClasses.Leave(member: member); }
     }
     // Ends a withheld span: the observer takes the current disclosed definition before anything newer.
     private void Resume() {
@@ -319,7 +358,7 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
     }
     // Sends a cut the cursor already took, then the whole disclosed document and a primer under its generation.
     private void Reprime() {
-        m_inner.DeliverCut(stream: m_cursor.Stamp(), terminal: false);
+        RecordCut(terminal: false);
         m_cursor.ForgetDocument();
         if (m_cursor.DeliverDefinition(view: m_view) is { } whole) {
             m_inner.DeliverDefinition(definition: whole, stream: m_cursor.Stamp(), version: Version);
@@ -412,6 +451,10 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
             m_server.AttachCursor(m_observation.Session, m_cursor);
             _ = ObserveBodies();
 
+            if (Follows()) {
+                Followed(tick: m_server.DeliveryTime.Tick);
+                return;
+            }
             if (Tier == WorldDisclosureTier.Replica) {
                 DeliverReplicaDocument(delivered: DiscloseToReplica(definition: definition));
                 m_observation.SettleSceneProof(tick: m_server.DeliveryTime.Tick);
@@ -434,8 +477,10 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
 
     public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (!Discloses()) { return; }
+        // A fallback delivers the document as it stands when the fallback reads it, under the version it stands at:
+        // the rows may be replayed after later installs.
         if (m_withheld) {
-            DeliverDefinition(m_server.Definition, version, in stream);
+            DeliverDefinition(m_server.Definition, m_server.DocumentVersion, in stream);
             return;
         }
         try {
@@ -443,13 +488,17 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
             // the edit owes a cut, which the row path refuses so the document door primes it.
             m_server.AttachCursor(m_observation.Session, m_cursor);
             _ = ObserveBodies();
+            if (Follows()) {
+                Followed(tick: m_server.DeliveryTime.Tick);
+                return;
+            }
             if (Tier != WorldDisclosureTier.Replica) {
                 var time = m_server.DeliveryTime;
                 Present(ComposeProjection(out var cut, rows), Version, time.Tick, time.EngineTick);
                 if (cut) { PrimeSnapshot(); }
                 FollowObserverDetach();
             } else if (!m_cursor.TryDeliverPresentation(m_view, rows, out var moved)) {
-                DeliverDefinition(m_server.Definition, version, in stream);
+                DeliverDefinition(m_server.Definition, m_server.DocumentVersion, in stream);
             } else if (moved) {
                 m_inner.DeliverPresentation(rows, Version, m_cursor.Stamp());
                 WorldOutputHub.CountPresentationRows(rows);
@@ -465,16 +514,16 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
     private WorldInputPublication[] m_inputDisclosure = [];
     private WorldInputAnswer[] m_answerDisclosure = [];
 
-    public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) {
-        DeliverSnapshot(snapshot, WorldInterestFrame.ForPrimer(snapshot));
-    }
-    public void DeliverSnapshot(in WorldSnapshot snapshot, WorldInterestFrame frame) {
+    // A snapshot the outbox replays, or a primer, shares the interest frame of every sink its hub replays the same
+    // entries to (WorldOutputHub.InterestFor), taken only once the stream is judged to deliver.
+    public void DeliverSnapshot(in WorldSnapshot snapshot, in WorldStreamStamp stream) => Deliver(snapshot: in snapshot, frame: null);
+    public void DeliverSnapshot(in WorldSnapshot snapshot, WorldInterestFrame frame) => Deliver(snapshot: in snapshot, frame: frame);
+    private void Deliver(in WorldSnapshot snapshot, WorldInterestFrame? frame) {
         if (!Discloses()) {
             return;
         }
 
         var bodies = ObserveBodies();
-        var redacted = snapshot with { Entries = frame.Project(bodies) };
         var tick = snapshot.Tick;
         var engineTick = snapshot.EngineTick;
 
@@ -483,6 +532,17 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
             Resume();
 
             if (DetachReason is not null) {
+                return;
+            }
+
+            // Records addressed to the recipient alone keep the stream its own (WorldImageClasses).
+            var inputs = WorldOwnedRecords.ForOwner(snapshot.Inputs, m_observation.Session, ref m_inputDisclosure);
+            var answers = WorldOwnedRecords.ForOwner(snapshot.InputAnswers, m_observation.Session, ref m_answerDisclosure);
+
+            m_owns = (!inputs.IsEmpty || !answers.IsEmpty);
+            if (Follows()) {
+                WorldBootWork.Count(WorldBootWork.SessionSnapshotsFollowed);
+                Followed(tick: tick);
                 return;
             }
 
@@ -501,14 +561,16 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
                 }
             }
 
+            frame ??= m_server.Output.InterestFor(snapshot: in snapshot);
+            var redacted = snapshot with { Entries = frame.Project(bodies) };
             var cells = redacted.FieldCells;
             var replica = (Tier == WorldDisclosureTier.Replica);
 
             redacted = redacted with {
                 FieldCells = m_rows.Advance(m_view, m_cursor, cells, replica),
                 SolidScales = m_scales.Filter(m_view, redacted.SolidScales),
-                Inputs = WorldOwnedRecords.ForOwner(redacted.Inputs, m_observation.Session, ref m_inputDisclosure),
-                InputAnswers = WorldOwnedRecords.ForOwner(redacted.InputAnswers, m_observation.Session, ref m_answerDisclosure),
+                Inputs = inputs,
+                InputAnswers = answers,
                 OwnBodies = default,
             };
             // A cut the rows or the body policy decided primes the observer alone, and this snapshot completes it: its
@@ -548,6 +610,10 @@ internal sealed class WorldSessionSink : IWorldDetachableSink, IWorldInterestSin
         try {
             m_server.AttachCursor(m_observation.Session, m_cursor);
             _ = ObserveBodies();
+            if (!m_withheld && Follows()) {
+                Followed(tick: stamp.Tick);
+                return;
+            }
             if (Tier != WorldDisclosureTier.Replica) {
                 m_withheld = false;
                 Present(

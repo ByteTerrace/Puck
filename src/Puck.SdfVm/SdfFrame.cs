@@ -219,8 +219,8 @@ public sealed record SdfFrame(
     private struct Composition {
         public ISdfPickMap? PickMap;
         public IReadOnlyList<int>? MeshAssetSlots;
-        public IReadOnlyList<SdfMeshTemplateRange>? MeshTemplateRanges;
         public IReadOnlyList<SdfMeshInstance>? MeshInstances;
+        public IReadOnlyList<SdfMeshTemplateRange>? MeshTemplateRanges;
         public SdfSampledSet? Sampled;
         public GpuRowChanges? MeshCopyChanges;
         public long MeshCopyChangesSerial;
@@ -279,22 +279,22 @@ public sealed record SdfFrame(
         m_dressedPickMap = picks;
     }
 
-    /// <summary>Sets the geometry the composition publishes beside the program's: the baked template slots and fixed
-    /// template ranges, the rigid copies, the sampled-field snapshots and the slot ranges drawn on both sides of a portal.
-    /// Composition calls it once for the frame it was dressed into.</summary>
+    /// <summary>Sets the geometry the composition publishes beside the program's: the baked template slots, the rigid
+    /// copies, the sampled-field snapshots and the slot ranges drawn on both sides of a portal. Composition calls it once
+    /// for the frame it was dressed into.</summary>
     /// <param name="meshAssetSlots">The baked template slots.</param>
-    /// <param name="meshTemplateRanges">The program instance ranges emitted as fixed copy templates.</param>
     /// <param name="meshInstances">The copies of local geometry assets.</param>
+    /// <param name="meshTemplateRanges">The instance ranges that hold static templates.</param>
     /// <param name="sampled">The snapshots the program's sampled fields hold this frame.</param>
     /// <param name="slotClips">The slot ranges every emitter's stamp pool draws on both sides of a portal.</param>
     /// <param name="copyChanges">The journal of the copies that changed in <paramref name="meshInstances"/>, or
     /// <see langword="null"/> when a consumer must compare the whole list.</param>
     /// <param name="copyChangesSerial">The journal's endpoint captured with <paramref name="meshInstances"/>.</param>
-    internal void Compose(IReadOnlyList<int> meshAssetSlots, IReadOnlyList<SdfMeshTemplateRange> meshTemplateRanges, IReadOnlyList<SdfMeshInstance> meshInstances, SdfSampledSet sampled,
+    internal void Compose(IReadOnlyList<int> meshAssetSlots, IReadOnlyList<SdfMeshInstance> meshInstances, IReadOnlyList<SdfMeshTemplateRange> meshTemplateRanges, SdfSampledSet sampled,
         IReadOnlyList<SdfSlotClip> slotClips, GpuRowChanges? copyChanges = null, long copyChangesSerial = 0) {
         m_composition.MeshAssetSlots = meshAssetSlots;
-        m_composition.MeshTemplateRanges = meshTemplateRanges;
         m_composition.MeshInstances = meshInstances;
+        m_composition.MeshTemplateRanges = meshTemplateRanges;
         m_composition.Sampled = sampled;
         m_composition.MeshCopyChanges = copyChanges;
         m_composition.MeshCopyChangesSerial = copyChangesSerial;
@@ -371,8 +371,8 @@ public sealed record SdfFrame(
         get => (m_composition.MeshAssetSlots ?? []);
         init => m_composition.MeshAssetSlots = value;
     }
-    /// <summary>Gets the program instance ranges emitted as fixed copy templates, which draw only through
-    /// <see cref="MeshInstances"/>: a group inside one that no copy names draws nothing.</summary>
+    /// <summary>Gets the instance ranges that hold static templates, which draw only through the copies in
+    /// <see cref="MeshInstances"/> that name them.</summary>
     public IReadOnlyList<SdfMeshTemplateRange> MeshTemplateRanges {
         get => (m_composition.MeshTemplateRanges ?? []);
         init => m_composition.MeshTemplateRanges = value;
@@ -617,9 +617,17 @@ public sealed record SdfFrame(
     /// </summary>
     public sealed class Writer {
         private SdfFrame? m_frame;
+        // The program the written frame carries, under the writer's claim (SdfProgram.Exchange), so a frame kept past its
+        // source's next build (a residency's capture, a frozen settled frame) keeps its program's storage readable.
+        private SdfProgram? m_program;
 
         /// <summary>Gets the frame, or <see langword="null"/> before the first write.</summary>
         public SdfFrame? Frame => m_frame;
+
+        /// <summary>Releases the writer's claim on the program its frame carries, for an owner that writes no frame again:
+        /// the frame keeps naming the program, whose storage the last claim frees, so nothing reads the frame's program
+        /// afterward. A later write claims its own program again.</summary>
+        public void Release() => SdfProgram.Exchange(held: ref m_program, next: null);
 
         /// <summary>Writes a frame of the producer's own: this content and these settings, and no composition or
         /// dressing.</summary>
@@ -674,7 +682,10 @@ public sealed record SdfFrame(
 
             return frame;
         }
+        // The one door the written frame's content changes through, so its program is claimed before the one it replaces
+        // is let go.
         private SdfFrame Open(in SdfFrameContent content) {
+            SdfProgram.Exchange(held: ref m_program, next: content.Program);
             if (m_frame is not { } frame) {
                 frame = new SdfFrame(Program: content.Program, ProgramChanged: content.ProgramChanged, Time: content.Time, Views: content.Views);
                 m_frame = frame;

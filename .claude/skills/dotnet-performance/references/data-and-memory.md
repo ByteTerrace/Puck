@@ -260,10 +260,11 @@ holding its place so no group behind it is admitted first, and a group that
 does not fit when nothing of its bake is admitted is admitted anyway as the
 process's one forced job (`MemoryAccount.Owner.TryReserveForced`,
 `[sdf.mesh-bake] admitted alone`), or waits while another bake holds that
-allowance. So a bake under `host.memory budget 1`, or on a machine with little
-free memory, which the account reads itself, still settles, one group at a
-time in the whole process, and a lockstep World never holds its frame
-forever. Transient scratch that a cache's read needs (a mesh store entry and
+allowance. The forced job and a progress floor still leave the machine its
+floor (`MemoryAccount.FitsMachine`: nothing while the system signals low
+memory, nothing past its free physical memory less the headroom), so on a
+machine with little free memory a bake waits, one group at a time in the whole
+process, rather than exhausting it, and settles as memory comes back. Transient scratch that a cache's read needs (a mesh store entry and
 its expanded planes) reserves through `MemoryAccount.Owner.TryReserveWithin`:
 admitted with room or as the forced job, and otherwise after a bounded wait,
 past which the read is a miss. Device storage states a class (`MemoryClass`): elastic and workspace
@@ -315,6 +316,15 @@ and after collection, rather than treating every returned buffer as freed.
 Reference-bearing contour roots stay managed under their existing ownership.
 `SdfSampledLattice.Refine` fills the group's owned fine-sample indexes directly,
 using admission's exact distinct-sample count; no worker retains a second copy.
+
+Storage several holders read across threads is freed by its last claim, counted by
+`ClaimCount` (`Puck.Abstractions.Memory`), never by a hand-written interlocked counter.
+A composed program built with an `SdfProgramStorage` keeps its words, appearance section
+and instructions natively; every holder that reads them after the call that handed the
+program over (the composition, every `SdfFrame.Writer`, the tables, the bake) takes its
+claim at one door, `SdfProgram.Exchange`, and its owner releases it at its end; a reference
+kept for identity takes none. A large `PublishArena` of plain values takes an allocator and
+is disposed by its owner after the reader epochs hand it back.
 
 `SdfMesh.Storage` owns each published mesh's blocks. Cache, residency, dressed
 frame, upload arena and GI scene claims are specific to that resource; the last

@@ -54,6 +54,10 @@ public static class SdfMeshRecord {
     /// <summary>The selection flag for a box held in the draw's frame slot's frame: a draw riding its slot, whose world
     /// box every reader derives from the slot's row as its vertices are (<c>sdfSelectionBox</c>, <c>SdfMeshBox.Ridden</c>).</summary>
     public const uint SlotBoxFlag = 32u;
+    /// <summary>The selection flag for a draw that casts no shadow (<c>SdfMeshDraw.CastsNoShadow</c>): every shadow
+    /// drawing (each cascade's layers, the distant map, the glass extinction) leaves it out, so a body standing between
+    /// the surfaces and its own light (a star's ball, a lamp's bulb) shadows nothing.</summary>
+    public const uint NoShadowFlag = 64u;
     /// <summary>The bit of the selection flags word (<see cref="SelectionWord"/> + 3) the draw's audience tag starts at
     /// (<see cref="SdfMeshAudience"/>, eight bits): the views that may select the draw.</summary>
     public const int AudienceShift = 8;

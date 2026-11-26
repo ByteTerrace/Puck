@@ -154,8 +154,8 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     /// or null for the process's.</param>
     public SdfMeshIrradiance(IAllocator? allocator = null) {
         m_allocator = allocator;
-        m_levels = CreateLevels(blocks: m_blocks);
-        m_cacheOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: MemoryBacking.Managed, memoryClass: MemoryClass.Cached, name: "sdf.mesh-gi.probe-cache", read: CacheTableBytes);
+        m_levels = CreateLevels(allocator: (allocator ?? ProcessAllocator.Current), blocks: m_blocks);
+        m_cacheOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: MemoryBacking.NativeAllocator, memoryClass: MemoryClass.Cached, name: "sdf.mesh-gi.probe-cache", read: CacheTableBytes);
         m_blockOwner = Puck.Hosting.Jobs.MemoryAccount.Shared.CreateSampledOwner(backing: MemoryBacking.NativeAllocator, memoryClass: MemoryClass.Cached, name: "sdf.mesh-gi.probe-blocks", read: () => Interlocked.Read(location: ref m_blockBytes));
     }
 
@@ -220,7 +220,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_snapshotClaims.Dispose();
             // Native storage has no collector to fall back on: every block an entry names and the volume's words go to
             // the reader epochs, which free them once no reader's hold can reach them.
-            foreach (var level in m_levels) { level.Cache.Clear(); }
+            foreach (var level in m_levels) {
+                level.Cache.Clear();
+                level.Cache.Close();
+            }
             RetireVolume(next: VolumeWords.None);
             m_volumeOwner.Dispose();
             m_gpuAnswer?.Dispose();
@@ -430,10 +433,10 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // once no hold that could read them is open (ProbeStorage).
     private readonly ReaderEpochs<Reclaimable> m_blocks = new();
 
-    private static Level[] CreateLevels(ReaderEpochs<Reclaimable> blocks) {
+    private static Level[] CreateLevels(IAllocator allocator, ReaderEpochs<Reclaimable> blocks) {
         var levels = new Level[SdfMeshIrradianceProbe.Levels];
 
-        for (var index = 0; (index < levels.Length); index++) { levels[index] = new Level(index: index, blocks: blocks); }
+        for (var index = 0; (index < levels.Length); index++) { levels[index] = new Level(allocator: allocator, index: index, blocks: blocks); }
         return levels;
     }
 
@@ -2945,7 +2948,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         var previous = probe;
 
         // A listed probe either traced against this geometry or holds hits no change since its own geometry reaches.
-        probe = (probe with { Geometry = geometry, LightIndex = index, Moved = false, Sweep = sweep, Lighting = lighting.Version, LocalVersion = lighting.LocalVersion, LitAt = lighting.CapturedAt, Passes = passes, Shading = lights });
+        probe = (probe with { Geometry = geometry, LightIndex = index, Moved = false, Sweep = sweep, Lighting = lighting.Version, LocalVersion = lighting.LocalVersion, LitAt = lighting.CapturedAt, Passes = passes, ShadingBlock = lights.Index });
         if (!probe.Invalid && (GpuTrace is null)) {
             var origin = ((new Vector3(x: (candidate.Cell.X + 0.5f), y: (candidate.Cell.Y + 0.5f), z: (candidate.Cell.Z + 0.5f)) * layout.SpacingOf(level: candidate.Level)) + probe.Offset);
 
@@ -3578,10 +3581,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // LightBlock, the lighting version and capture time it was relit under, and the relights it holds under that
     // version, the sweep it was last relit in and whether that relight moved it past the convergence bound). A batch
     // allocates one block of each rather than arrays a probe; a landed block is never written again, so
-    // readers outside the gate read it whole.
-    private readonly record struct ProbeData(int Geometry, ProbeBlock? Hits, int HitIndex, bool Invalid, Vector3 Offset, float Inside,
-        LightBlock? Shading = null, int LightIndex = 0, int Lighting = 0, long LitAt = 0L, int Passes = 0, int Sweep = 0, bool Moved = false, int LocalVersion = 0, uint GpuSlot = 0, ulong GpuToken = 0,
+    // readers outside the gate read it whole. The blocks are named by their registry indices (ProbeStorage.Index), so a
+    // probe holds no reference and the probe cache keeps its entries natively.
+    private readonly record struct ProbeData(int Geometry, int HitsBlock, int HitIndex, bool Invalid, Vector3 Offset, float Inside,
+        int ShadingBlock = 0, int LightIndex = 0, int Lighting = 0, long LitAt = 0L, int Passes = 0, int Sweep = 0, bool Moved = false, int LocalVersion = 0, uint GpuSlot = 0, ulong GpuToken = 0,
         float Reach = 0f, bool ReceivesSurface = false, ulong OpenSkyGroups = 0) {
+        public ProbeBlock? Hits => ProbeStorage.Find<ProbeBlock>(index: HitsBlock);
+        public LightBlock? Shading => ProbeStorage.Find<LightBlock>(index: ShadingBlock);
         public ReadOnlySpan<float> Sky => Hits!.Sky(index: HitIndex);
         public ReadOnlySpan<uint> HitWords => Hits!.Hits(index: HitIndex);
         public ReadOnlySpan<uint> Depth => Hits!.Depth(index: HitIndex);
@@ -3619,10 +3625,54 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         public override void Reclaim() => m_words.Dispose();
     }
+    //
+    // Every block is registered by an index while its words live, so a probe names its blocks by index (ProbeData) and is
+    // a value of no references, which the probe cache's arenas hold natively. Invariant: an index names one block from its
+    // registration until the reader epochs reclaim it, and is reused only after: a reader that took a probe under a hold
+    // finds the block the probe named, whatever registered since. Enforced: the one door that frees an index is Reclaim,
+    // which the epochs call once no hold that could have read the block is open.
     private abstract class ProbeStorage : Reclaimable {
+        // The registered blocks by index; zero names none. Readers index it without a lock: a growth publishes a copy, and
+        // an entry a reader may still read is never cleared before its block's reclamation.
+        private static ProbeStorage?[] Registered = new ProbeStorage?[256];
+        private static readonly Stack<int> FreeIndices = new();
+        private static readonly Lock RegistryGate = new();
+        private static int NextIndex = 1;
+
         private int m_references = 1;
 
-        protected ProbeStorage(int length, IAllocator? allocator) => m_floats = OwnedBuffer<float>.OfLength(allocator: allocator, clear: true, length: length);
+        protected ProbeStorage(int length, IAllocator? allocator) {
+            m_floats = OwnedBuffer<float>.OfLength(allocator: allocator, clear: true, length: length);
+            Index = Register(block: this);
+        }
+
+        // The block's index in the registry, which the probes that name it carry.
+        public int Index { get; }
+
+        // The block an index names, or null for zero.
+        public static T? Find<T>(int index) where T : ProbeStorage => ((index == 0) ? null : (T?)Volatile.Read(location: ref Registered)[index]);
+        private static int Register(ProbeStorage block) {
+            lock (RegistryGate) {
+                var index = ((FreeIndices.Count > 0) ? FreeIndices.Pop() : NextIndex++);
+                var registered = Registered;
+
+                if (index >= registered.Length) {
+                    var grown = new ProbeStorage?[(registered.Length * 2)];
+
+                    registered.CopyTo(array: grown, index: 0);
+                    registered = grown;
+                }
+                registered[index] = block;
+                Volatile.Write(location: ref Registered, value: registered);
+                return index;
+            }
+        }
+        private void Unregister() {
+            lock (RegistryGate) {
+                Registered[Index] = null;
+                FreeIndices.Push(item: Index);
+            }
+        }
 
         protected readonly OwnedBuffer<float> m_floats;
         // The volume whose block bytes this block is counted in (Charge), until it returns its words.
@@ -3653,11 +3703,13 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             m_references--;
             if (m_references == 0) { epochs.Retire(item: this); }
         }
-        // Returns the words to the pool; the reader epochs call it once no hold can still read them.
+        // Returns the words to the pool and the index to the registry; the reader epochs call it once no hold can still read
+        // them.
         public override void Reclaim() {
             Recharge(change: -Bytes);
             m_volume = null;
             m_floats.Dispose();
+            Unregister();
         }
         // A borrow of the block's floats, which ends when the block is reclaimed.
         protected Span<float> Floats(int start, int length) => m_floats.GetSpan().Slice(start: start, length: length);
@@ -3730,25 +3782,41 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
     // A table the cache stops publishing (Clear, Retain, Grow) is retired to the same epochs once its entries are released
     // or moved, and comes back as the cache's spare once no hold that could still read it is open, so the next table of
     // its size reuses its arrays instead of allocating them.
-    private sealed class ProbeCache(ReaderEpochs<Reclaimable> blocks) {
+    private sealed class ProbeCache(ReaderEpochs<Reclaimable> blocks, IAllocator allocator) {
         private const int InitialCapacity = (1 << 16);
 
         private Table? m_table;
         private Table? m_spare;
         private int m_capacity = InitialCapacity;
+        // Set once the volume is released: a table the epochs hand back is freed rather than kept as the spare.
+        private volatile bool m_closed;
 
-        // A table of the size asked for: the spare, emptied, when it has that size.
+        // A table of the size asked for: the spare, emptied, when it has that size; a spare of another size is freed.
         private Table NewTable(int capacity, int entries = 0) {
             var spare = Interlocked.Exchange(location1: ref m_spare, value: null);
             var arena = ((entries == 0) ? (capacity / 2) : entries);
 
-            if ((spare is not null) && (spare.Keys.Length == capacity) && (spare.Values.Capacity == arena)) {
+            if ((spare is not null) && (spare.Capacity == capacity) && (spare.Values.Capacity == arena)) {
                 spare.Reset();
                 return spare;
             }
-            return new Table(capacity: capacity, owner: this, entries: entries);
+            spare?.Dispose();
+            return new Table(allocator: allocator, capacity: capacity, owner: this, entries: entries);
         }
-        private void Recycle(Table table) => Volatile.Write(location: ref m_spare, value: table);
+        // Keeps a table the epochs handed back (no hold can read it) as the spare, freeing the spare it replaces, or frees it
+        // once the volume is released.
+        private void Recycle(Table table) {
+            if (m_closed) {
+                table.Dispose();
+                return;
+            }
+            Interlocked.Exchange(location1: ref m_spare, value: table)?.Dispose();
+        }
+        // Frees the spare, and every table the epochs hand back from now on; the volume's release calls it after Clear.
+        public void Close() {
+            m_closed = true;
+            Interlocked.Exchange(location1: ref m_spare, value: null)?.Dispose();
+        }
 
         // The probes cached.
         public int Count => (Volatile.Read(location: ref m_table)?.Count ?? 0);
@@ -3757,24 +3825,28 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // volume's running figure (ProbeStorage.Charge). The volume gate is held.
         public (long Table, int Capacity) Bytes() {
             if (m_table is not { } table) { return (32, 0); }
-            // x64: cache 32, table 56, three array headers 72, plus each key, used flag and dense-entry index.
+            // x64: cache 32, table 56, three buffer owners 72, plus each key, used flag and dense-entry index.
             var hashStride = (System.Runtime.CompilerServices.Unsafe.SizeOf<(int, int, int)>() + (2 * sizeof(int)));
 
-            return (((((32L + 56L) + 72L) + (table.Keys.LongLength * hashStride)) + table.Values.InlineStorageBytes), table.Keys.Length);
+            return (((((32L + 56L) + 72L) + (((long)table.Capacity) * hashStride)) + table.Values.InlineStorageBytes), table.Capacity);
         }
         // Forgets every probe; the next write starts a table of the capacity the cache last reached.
         public void Clear() {
             if (m_table is not { } table) { return; }
-            m_capacity = table.Keys.Length;
+            m_capacity = table.Capacity;
             Volatile.Write(location: ref m_table, value: null);
             ReleaseEntries(source: table, keep: null, low: default, high: default);
             blocks.Retire(item: table);
         }
         // Releases the blocks of every entry of a table no longer published, except those a kept box still holds.
         private void ReleaseEntries(Table source, Table? keep, (int X, int Y, int Z) low, (int X, int Y, int Z) high) {
-            for (var slot = 0; (slot < source.Keys.Length); slot++) {
-                if ((source.Used[slot] == 0) || ((keep is not null) && Inside(high: high, key: source.Keys[slot], low: low))) { continue; }
-                if (source.Values.TrySnapshot(entry: source.Entries[slot], value: out var value)) { ProbeStorage.Release(epochs: blocks, probe: in value); }
+            var keys = source.Keys;
+            var used = source.Used;
+            var entries = source.Entries;
+
+            for (var slot = 0; (slot < keys.Length); slot++) {
+                if ((used[slot] == 0) || ((keep is not null) && Inside(high: high, key: keys[slot], low: low))) { continue; }
+                if (source.Values.TrySnapshot(entry: entries[slot], value: out var value)) { ProbeStorage.Release(epochs: blocks, probe: in value); }
             }
         }
         // Forgets the probes outside a box of cells, from low inclusive to high exclusive, once the cache holds more probes
@@ -3789,9 +3861,11 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             if (table.Count <= cells) { return; }
 
             var kept = 0;
+            var keys = table.Keys;
+            var used = table.Used;
 
-            for (var slot = 0; (slot < table.Keys.Length); slot++) {
-                if ((table.Used[slot] != 0) && Inside(high: high, key: table.Keys[slot], low: low)) { kept++; }
+            for (var slot = 0; (slot < keys.Length); slot++) {
+                if ((used[slot] != 0) && Inside(high: high, key: keys[slot], low: low)) { kept++; }
             }
 
             var capacity = InitialCapacity;
@@ -3864,7 +3938,7 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
 
         // Grows dense storage, and the hash table too once half full, before the write that needed it.
         private Table Grow(Table table) {
-            var capacity = ((((table.Count + 1) * 2) > table.Keys.Length) ? (table.Keys.Length * 2) : table.Keys.Length);
+            var capacity = ((((table.Count + 1) * 2) > table.Capacity) ? (table.Capacity * 2) : table.Capacity);
             var grown = NewTable(capacity: capacity, entries: Math.Min(val1: (capacity / 2), val2: (table.Values.Capacity * 2)));
 
             CopyEntries(high: default, low: default, retain: false, source: table, target: grown);
@@ -3874,11 +3948,15 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
             return grown;
         }
         private static void CopyEntries(Table source, Table target, bool retain, (int X, int Y, int Z) low, (int X, int Y, int Z) high) {
-            for (var slot = 0; (slot < source.Keys.Length); slot++) {
-                var key = source.Keys[slot];
+            var keys = source.Keys;
+            var used = source.Used;
+            var entries = source.Entries;
 
-                if ((source.Used[slot] == 0) || (retain && !Inside(high: high, key: key, low: low))) { continue; }
-                _ = source.Values.TrySnapshot(entry: source.Entries[slot], value: out var value);
+            for (var slot = 0; (slot < keys.Length); slot++) {
+                var key = keys[slot];
+
+                if ((used[slot] == 0) || (retain && !Inside(high: high, key: key, low: low))) { continue; }
+                _ = source.Values.TrySnapshot(entry: entries[slot], value: out var value);
                 Insert(table: target, slot: ~Find(key: key, table: target), key: key, value: value);
             }
         }
@@ -3892,38 +3970,64 @@ public sealed partial class SdfMeshIrradiance : IDisposable {
         // The slot holding a key, or the complement of the free slot it would take: linear probing from the key's hash,
         // over a table never more than half full.
         private static int Find((int X, int Y, int Z) key, Table table) {
-            var mask = (table.Keys.Length - 1);
+            var used = table.Used;
+            var keys = table.Keys;
+            var mask = (keys.Length - 1);
 
             for (var slot = Hash(key: key) & mask; ; slot = (slot + 1) & mask) {
-                if (Volatile.Read(location: ref table.Used[slot]) == 0) { return ~slot; }
-                if (table.Keys[slot] == key) { return slot; }
+                if (Volatile.Read(location: ref used[slot]) == 0) { return ~slot; }
+                if (keys[slot] == key) { return slot; }
             }
         }
         private static int Hash((int X, int Y, int Z) key) => unchecked(((key.X * 73856093) ^ (key.Y * 19349663)) ^ (key.Z * 83492791));
 
-        private sealed class Table(int capacity, ProbeCache owner, int entries = 0) : Reclaimable {
-            public readonly (int X, int Y, int Z)[] Keys = new (int X, int Y, int Z)[capacity];
-            public readonly int[] Used = new int[capacity];
-            public readonly int[] Entries = new int[capacity];
-            public readonly PublishArena<ProbeData> Values = new(capacity: ((entries == 0) ? (capacity / 2) : entries));
+        // A table's keys, used flags, dense-entry indices and entry arena, all native: read under a hold while the cache
+        // publishes the table or a reader that entered before its retirement may still read it, and freed (Dispose) only
+        // once the epochs handed it back (Reclaim) and the cache keeps it no longer as its spare.
+        private sealed class Table : Reclaimable, IDisposable {
+            private readonly ProbeCache m_owner;
+            private readonly OwnedBuffer<(int X, int Y, int Z)> m_keys;
+            private readonly OwnedBuffer<int> m_used;
+            private readonly OwnedBuffer<int> m_entries;
+
+            public Table(IAllocator allocator, int capacity, ProbeCache owner, int entries = 0) {
+                m_owner = owner;
+                m_keys = OwnedBuffer<(int X, int Y, int Z)>.OfLength(allocator: allocator, clear: true, length: capacity);
+                m_used = OwnedBuffer<int>.OfLength(allocator: allocator, clear: true, length: capacity);
+                m_entries = OwnedBuffer<int>.OfLength(allocator: allocator, clear: true, length: capacity);
+                Values = new PublishArena<ProbeData>(allocator: allocator, capacity: ((entries == 0) ? (capacity / 2) : entries));
+                Capacity = capacity;
+            }
+
+            public int Capacity { get; }
+            public Span<(int X, int Y, int Z)> Keys => m_keys.GetSpan();
+            public Span<int> Used => m_used.GetSpan();
+            public Span<int> Entries => m_entries.GetSpan();
+            public PublishArena<ProbeData> Values { get; }
 
             public int Count;
 
             // Empties the table for its cache to publish again; no reader can reach it (it came back reclaimed).
             public void Reset() {
-                Array.Clear(array: Used);
+                Used.Clear();
                 Values.Reset();
                 Count = 0;
             }
-            public override void Reclaim() => owner.Recycle(table: this);
+            public override void Reclaim() => m_owner.Recycle(table: this);
+            public void Dispose() {
+                Values.Dispose();
+                m_keys.Dispose();
+                m_used.Dispose();
+                m_entries.Dispose();
+            }
         }
     }
     // One level of the volume: its probes by cell, its window's first cell, the slots of its window still lacking a
     // measurement of their own cell, the slots composed since its last publication, and the window views read. Its
     // state is the volume's gate's, except the cache, which readers take through its published entries.
-    private sealed class Level(int index, ReaderEpochs<Reclaimable> blocks) {
+    private sealed class Level(int index, ReaderEpochs<Reclaimable> blocks, IAllocator allocator) {
         public int Index { get; } = index;
-        public ProbeCache Cache { get; } = new(blocks: blocks);
+        public ProbeCache Cache { get; } = new(allocator: allocator, blocks: blocks);
         public MarkedIndexSet Changed { get; } = new();
 
         public (int X, int Y, int Z) Low;

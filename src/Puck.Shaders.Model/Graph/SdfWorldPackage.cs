@@ -80,6 +80,11 @@ public static partial class SdfWorldPackage {
     /// luminance it shades to the display by before its display pass, and the display-referred terms (an ink line, the editor
     /// grid, an unbound screen's glass) are divided by (<c>float</c>).</summary>
     public const string Exposure = "exposure";
+    /// <summary>The pass-group value holding the scale the view's stored light carries (<c>SdfPhotometry.StoredLightScale</c>):
+    /// the views, glass and resolve passes store luminance in nits times it in their half-float images, and the composite
+    /// divides it out before applying <see cref="Exposure"/>, so light far past the half-float range in nits (a star's
+    /// surface) still fits (<c>float</c>).</summary>
+    public const string LightScale = "lightScale";
     /// <summary>The measurement lever selecting admitted shading programs rather than legacy material layers.</summary>
     public const string ShadePrograms = "shadePrograms";
     /// <summary>The world default's owned code and runtime-parameter ranges in the appearance words.</summary>
@@ -341,6 +346,7 @@ public static partial class SdfWorldPackage {
         Value(name: LightCount, type: ShaderValueType.Uint),
         Value(name: LightMask, type: ShaderValueType.Uint4),
         Value(name: Exposure, type: ShaderValueType.Float),
+        Value(name: LightScale, type: ShaderValueType.Float),
         Value(name: ShadePrograms, type: ShaderValueType.Uint),
         Value(name: ShadeDefault, type: ShaderValueType.Uint4),
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: ShadeIdentity, type: ShaderValueType.Uint4, length: 2),

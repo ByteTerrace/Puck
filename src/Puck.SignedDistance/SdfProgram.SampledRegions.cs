@@ -208,10 +208,10 @@ public sealed partial class SdfProgram {
 
         foreach (var (index, field) in m_sampledBindings) {
             ArgumentNullException.ThrowIfNull(argument: field);
-            if ((index < 0) || (index >= m_instructions.Length) || !bound.Add(item: index)) {
+            if ((index < 0) || (index >= InstructionRows.Length) || !bound.Add(item: index)) {
                 throw new ArgumentException(message: "A sampled binding must name one unique instruction.");
             }
-            var instruction = m_instructions[index];
+            var instruction = InstructionRows[index];
 
             if ((instruction.Op != SdfOp.ShapeBlend) || ((SdfShapeType)instruction.Shape != SdfShapeType.SampledRegion) ||
                 (BitConverter.SingleToUInt32Bits(value: instruction.Data1.Y) != field.PackedDims)) {
@@ -222,12 +222,12 @@ public sealed partial class SdfProgram {
                 handles.Add(key: field, value: handle);
                 fields.Add(item: field);
             }
-            m_instructions[index] = instruction with {
+            InstructionRows[index] = instruction with {
                 Data1 = instruction.Data1 with { Z = BitConverter.UInt32BitsToSingle(value: (uint)handle) },
             };
         }
-        for (var index = 0; (index < m_instructions.Length); index++) {
-            var instruction = m_instructions[index];
+        for (var index = 0; (index < InstructionRows.Length); index++) {
+            var instruction = InstructionRows[index];
 
             if ((instruction.Op == SdfOp.ShapeBlend) && ((SdfShapeType)instruction.Shape == SdfShapeType.SampledRegion) && !bound.Contains(item: index)) {
                 throw new ArgumentException(message: "A sampled instruction requires its field.");

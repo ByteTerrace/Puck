@@ -168,6 +168,7 @@ public sealed partial class WorldInputOwner {
         if ((((uint)pattern) >= ((uint)m_patterns.Length)) || (match.Epoch > Epoch) || (match.First == 0) || (match.Last < match.First) || (match.Last > m_eventId)) { return false; }
         var claims = m_claimed[m_patterns[pattern].Group];
 
+        TouchRetained();
         Array.Clear(array: m_matchCached);
         var found = false;
 

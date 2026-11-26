@@ -70,7 +70,7 @@ public static partial class WorldDefinitionValidator {
         }
 
         var places = new HashSet<string>(collection: definition.Placements.Where(predicate: static placement => (placement?.Region is not null)).Select(selector: static placement => placement.Id), comparer: StringComparer.Ordinal);
-        var spawns = new HashSet<string>(collection: definition.SpawnPoints.Select(selector: static spawn => spawn.Id), comparer: StringComparer.Ordinal);
+        var spawns = new HashSet<string>(collection: (definition.SpawnPointsRaw ?? definition.SpawnPoints).Select(selector: static spawn => spawn.Id), comparer: StringComparer.Ordinal);
         var names = new HashSet<string>(comparer: StringComparer.Ordinal);
 
         for (var index = 0; (index < definition.Routes.Count); index++) {
@@ -185,11 +185,12 @@ public static partial class WorldDefinitionValidator {
                             if (!(fly.Within > 0f)) {
                                 errors.Add(item: $"{at}.within must be above zero.");
                             }
-                            if (fly.Lands && (fly.Enters is not null)) {
-                                errors.Add(item: $"{at} names at most one of lands and enters.");
+                            if ((fly.Lands ? 1 : 0) + ((fly.Enters is null) ? 0 : 1) + ((fly.Until is null) ? 0 : 1) > 1) {
+                                errors.Add(item: $"{at} names at most one of lands, enters and until.");
                             }
                             World(world: fly.World);
                             World(world: fly.Enters);
+                            Place(member: "until", place: fly.Until, world: fly.World);
                             break;
                         case WorldRouteStep.Rest rest:
                             if (!(rest.Seconds > 0f)) {

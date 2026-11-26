@@ -550,10 +550,13 @@ public static partial class WorldFactsCompiler {
             !VectorFunctions.IsFinite(vector: effect.Offset) || !float.IsFinite(f: effect.RollDegrees) || !float.IsFinite(f: effect.PitchDegrees)) {
             throw new RuleException(detail: "poseCell requires a declared topology, a finite offset, a finite roll and a finite pitch", refusal: WorldRuleRefusal.PoseAmbiguous, ruleName: ruleName);
         }
+        if ((effect.Frame is { } frame) && (WorldDefinitionRows.FindPlacement(placements: context.Definition.Placements, id: frame) is not { Attach: null, Inhabit: null })) {
+            throw new RuleException(detail: $"poseCell frame '{frame}' must name a declared placement that neither attaches nor inhabits", refusal: WorldRuleRefusal.PoseAmbiguous, ruleName: ruleName);
+        }
         var expression = RuleCompiler.CompileExpression(context: context, expression: effect.Expression, kind: CellKind.Int, ruleName: ruleName, verb: "poseCell");
 
         return new WorldPoseCellEffect(context.Ordinals(body: in body), effect.Topology, expression,
-            FixedVector3.FromVector3(value: effect.Offset), effect.Glide, FixedQ4816.FromDegrees(degrees: effect.RollDegrees), FixedQ4816.FromDegrees(degrees: effect.PitchDegrees));
+            FixedVector3.FromVector3(value: effect.Offset), effect.Glide, FixedQ4816.FromDegrees(degrees: effect.RollDegrees), FixedQ4816.FromDegrees(degrees: effect.PitchDegrees), effect.Frame);
     }
     internal static IRuleEffect ResolvePose(WorldEffect.Pose effect, string ruleName, WorldFactsCompileContext context) {
         CompiledCellRef? keyFrom = null;

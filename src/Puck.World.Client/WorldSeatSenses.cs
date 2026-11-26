@@ -482,7 +482,7 @@ public sealed class WorldSeatSenses(WorldSeatAuthorityRouter routes, WorldClient
             shape = row.StaticShape;
             return true;
         }
-        if (!endpoint.Mirror.TryReadBody(body: out var carrier, index: attach.BodyIndex)) {
+        if (!attach.TryCarrier(inhabitants: endpoint.Mirror, index: out var carrierIndex) || !endpoint.Mirror.TryReadBody(body: out var carrier, index: carrierIndex)) {
             shape = default;
             return false;
         }

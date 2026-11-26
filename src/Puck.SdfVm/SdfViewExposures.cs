@@ -37,6 +37,8 @@ public sealed class SdfViewExposures {
         internal bool SampleOwed;
         internal bool MeterOwed;
         internal float Multiplier;
+        // The scale the view's stored light carries (SdfPhotometry.StoredLightScale), zero before the view first stages.
+        internal float LightScale;
         internal float AirLight;
         internal LightRows Light;
         internal bool Sampled;
@@ -208,6 +210,7 @@ public sealed class SdfViewExposures {
             m_views[index].SampleSource = "elsewhere";
             m_views[index].MeterSource = "elsewhere";
             m_views[index].Multiplier = SdfPhotometry.ExposureOf(ev100: (float.IsFinite(f: m_views[index].Ev100) ? m_views[index].Ev100 : exposure.Ev100));
+            m_views[index].LightScale = SdfPhotometry.StoredLightScale(held: m_views[index].LightScale, multiplier: m_views[index].Multiplier);
             return;
         }
         SampleCamera(index: index, irradiance: irradiance, view: view);
@@ -228,6 +231,7 @@ public sealed class SdfViewExposures {
         }
         m_views[index].Ev100 = ev100;
         m_views[index].Multiplier = SdfPhotometry.ExposureOf(ev100: ev100);
+        m_views[index].LightScale = SdfPhotometry.StoredLightScale(held: m_views[index].LightScale, multiplier: m_views[index].Multiplier);
 
         // The meter eases toward the reading it follows; once it arrives, the band holds again.
         if (!snap && !m_views[index].MeterOwed && float.IsFinite(f: m_views[index].HeldEv)) {
@@ -297,6 +301,16 @@ public sealed class SdfViewExposures {
         StageView(index: view);
         return m_views[view].Multiplier;
     }
+    /// <summary>Returns the scale a view's stored light carries (<see cref="SdfPhotometry.StoredLightScale"/>), staging the
+    /// view on its first read in the frame: a power of two that follows the view's exposure by whole steps of at least
+    /// <see cref="SdfPhotometry.StoredLightBand"/> stops, so it holds while the exposure eases.</summary>
+    /// <param name="view">The view's index in the frame's views.</param>
+    /// <returns>The scale; one for a view the frame does not hold or that has not staged.</returns>
+    public float LightScaleOf(int view) {
+        if ((view < 0) || (view >= m_count)) { return 1f; }
+        StageView(index: view);
+        return ((m_views[view].LightScale > 0f) ? m_views[view].LightScale : 1f);
+    }
     /// <summary>Returns the share of the sky the air about a view's camera sees open, which scales the sky's in-scatter
     /// into the view's atmosphere, staging the view on its first read in the frame: one in the open, held at its last
     /// sample while the volume cannot answer.</summary>
@@ -352,7 +366,7 @@ public sealed class SdfViewExposures {
             // A view without a fresh camera sample names what the sample waits for now.
             var wait = (((m_views[index].SampleSource is "none" or "held") && (m_irradiance is { } irradiance)) ? $" wait={irradiance.CameraSampleWait()}" : string.Empty);
 
-            lines.Add(item: $"view {index}: ev100={m_views[index].Ev100:0.00} multiplier={m_views[index].Multiplier:G4} meter={reading} source={m_views[index].MeterSource} camera={m_views[index].SampleSource}{wait} air={m_views[index].AirLight:0.###}");
+            lines.Add(item: $"view {index}: ev100={m_views[index].Ev100:0.00} multiplier={m_views[index].Multiplier:G4} stored=2^{MathF.Log2(x: ((m_views[index].LightScale > 0f) ? m_views[index].LightScale : 1f)):0} meter={reading} source={m_views[index].MeterSource} camera={m_views[index].SampleSource}{wait} air={m_views[index].AirLight:0.###}");
         }
 
         return lines;

@@ -1718,8 +1718,8 @@ public static partial class WorldDefinitionValidator {
 
                 foreach (var variantId in SolidVariantIds(placement: placement)) {
                     if (!TryFindRow(key: variantId, map: creationsById, row: out var variantCreation)) { continue; }
-                    if ((StateBinding.Parse(token: variantCreation.Document.SizeBy) is { Key: StateBinding.BodyKey }) && (placement.Attach is null)) {
-                        errors.Add(item: $"{path}.solid creation '{variantId}' sizeBy needs an attached body for '$body'.");
+                    if ((StateBinding.Parse(token: variantCreation.Document.SizeBy) is { Key: StateBinding.BodyKey }) && (placement.Attach?.BodyIndex is null)) {
+                        errors.Add(item: $"{path}.solid creation '{variantId}' sizeBy needs a body attached by 'bodyIndex' for '$body'.");
                     }
                     _ = RefuseSolidVariantShapes(creation: variantCreation, errors: errors, path: path, variantId: variantId);
                 }
@@ -1818,11 +1818,14 @@ public static partial class WorldDefinitionValidator {
             // Distribution/mirror and inhabit stay refused (a row cannot both spawn its own bodies and ride
             // another's); FaceSources stays permitted (a content selector, not a transform).
             if (placement.Attach is { } attach) {
-                if (
-                    (attach.BodyIndex < 0) ||
-                    (attach.BodyIndex >= definition.Population.Capacity)
-                ) {
-                    errors.Add(item: $"{path}.attach.bodyIndex {attach.BodyIndex} is outside 0..{(definition.Population.Capacity - 1)} for the authored population capacity (0-based entity index — body:1 is player.* seat 2, not body index 1).");
+                if ((attach.BodyIndex is null) == (attach.Placement is null)) {
+                    errors.Add(item: $"{path}.attach names its carrier once: 'bodyIndex', or the inhabited 'placement' whose body the row rides.");
+                } else if (attach.BodyIndex is { } bodyIndex) {
+                    if ((bodyIndex < 0) || (bodyIndex >= definition.Population.Capacity)) {
+                        errors.Add(item: $"{path}.attach.bodyIndex {bodyIndex} is outside 0..{(definition.Population.Capacity - 1)} for the authored population capacity (0-based entity index — body:1 is player.* seat 2, not body index 1).");
+                    }
+                } else if (WorldDefinitionRows.FindPlacement(placements: definition.Placements, id: attach.Placement!) is not { Inhabit: not null }) {
+                    errors.Add(item: $"{path}.attach.placement '{attach.Placement}' names no inhabited placement: the row rides the body that placement's inhabit facet spawns.");
                 }
 
                 if (!VectorFunctions.IsFinite(vector: attach.LocalOffset)) {

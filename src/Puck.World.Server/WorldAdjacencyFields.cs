@@ -29,6 +29,21 @@ public sealed partial class WorldAdjacencyFields : IWorldAdjacencySource, IDispo
     internal bool HasTickImage { get; private set; }
     private readonly Lock m_publicationGate = new();
     private WorldAdjacencyRead? m_published;
+    private ImmutableArray<WorldAdjacencyProjection> m_publishedProjections;
+    // Moves whenever a handle is attached or dropped, which changes what a key resolves to outside a boundary.
+    private int m_handlesVersion;
+
+    // One neighbour read the last pinned projection build made: the key, the handle and the source document it read
+    // through, and what the read answered. The build stands while the document, the departed set and the held handles
+    // stand and every read answers the same pinned neighbour, which a handle hands back while its image stands
+    // (Handle.Read), so a presentation publish whose neighbours delivered nothing new builds nothing.
+    private readonly record struct BuiltRead(Handle? Handle, WorldDefinition Source, PinnedNeighbour? Neighbour);
+    private readonly List<BuiltRead> m_builtReads = [];
+    private readonly List<BuiltRead> m_buildingReads = [];
+    private WorldDefinition? m_builtDefinition;
+    private ImmutableHashSet<Protocol.WorldEntityAddress>? m_builtDeparted;
+    private int m_builtHandles = -1;
+    private ImmutableArray<WorldAdjacencyProjection> m_built;
 
     /// <summary>Initializes the source.</summary>
     /// <param name="instances">The process's running world instances — the one observation door an adjacency's
@@ -43,8 +58,38 @@ public sealed partial class WorldAdjacencyFields : IWorldAdjacencySource, IDispo
         m_sourceInstanceName = sourceInstanceName;
     }
 
+    // Whether the last pinned build stands for this publish (BuiltRead), reading each neighbour as the build would.
+    private bool BuildStands(WorldDefinition definition, ImmutableHashSet<Protocol.WorldEntityAddress> departed) {
+        if (m_resolving || !ReferenceEquals(objA: definition, objB: m_builtDefinition) || (m_builtHandles != m_handlesVersion) ||
+            (m_builtDeparted is not { } built) || !departed.SetEquals(other: built)) {
+            return false;
+        }
+        foreach (var read in m_builtReads) {
+            if (!ReferenceEquals(objA: read.Handle?.Read(read.Source, departed, pin: true), objB: read.Neighbour)) { return false; }
+        }
+        return true;
+    }
     private ImmutableArray<WorldAdjacencyProjection> BuildProjections(WorldInstance source, WorldDefinition definition,
         ImmutableHashSet<Protocol.WorldEntityAddress> departed, bool pin) {
+        if (pin && BuildStands(definition: definition, departed: departed)) { return m_built; }
+
+        var reads = ((pin && !m_resolving) ? m_buildingReads : null);
+
+        reads?.Clear();
+        var built = Build(source, definition, departed, pin, reads);
+
+        if (reads is not null) {
+            m_builtReads.Clear();
+            m_builtReads.AddRange(collection: reads);
+            m_builtDefinition = definition;
+            m_builtDeparted = departed;
+            m_builtHandles = m_handlesVersion;
+            m_built = built;
+        }
+        return built;
+    }
+    private ImmutableArray<WorldAdjacencyProjection> Build(WorldInstance source, WorldDefinition definition,
+        ImmutableHashSet<Protocol.WorldEntityAddress> departed, bool pin, List<BuiltRead>? reads) {
         var rows = definition.Adjacencies!;
         var visuals = ImmutableArray.CreateBuilder<WorldAdjacencyProjection>();
         var direct = new Dictionary<string, WorldAdjacencyProjection>(StringComparer.Ordinal);
@@ -53,7 +98,7 @@ public sealed partial class WorldAdjacencyFields : IWorldAdjacencySource, IDispo
             if (row is not { Boundary: { } boundary }) { continue; }
             var frame = boundary.CompileFrame();
             if (Resolve(source, row.Name.Value, row.Destination, row.Counterpart, frame,
-                definition, departed, pin) is not { } neighbour ||
+                definition, departed, pin, reads) is not { } neighbour ||
                 !WorldAdjacencyPolicy.TryDeriveOverlap(local: definition, neighbour: neighbour.Definition, depth: out var depth, reason: out _)) {
                 continue;
             }
@@ -110,7 +155,7 @@ public sealed partial class WorldAdjacencyFields : IWorldAdjacencySource, IDispo
                 if (
                     (cornerDestination is null) ||
                     Resolve(source, $"corner:{leftRow.Name.Value}+{rightRow.Name.Value}", cornerDestination,
-                    leftEdge.Counterpart, leftEdge.Boundary.CompileFrame(), leftNeighbour.Definition, departed, pin) is not { } corner ||
+                    leftEdge.Counterpart, leftEdge.Boundary.CompileFrame(), leftNeighbour.Definition, departed, pin, reads) is not { } corner ||
                     !WorldAdjacencyPolicy.TryDeriveOverlap(
                     local: leftNeighbour.Definition,
                     neighbour: corner.Definition,
@@ -159,9 +204,13 @@ public sealed partial class WorldAdjacencyFields : IWorldAdjacencySource, IDispo
         y: FixedQ4816.FromDouble(value: adjacency.Hysteresis)
     );
     private PinnedNeighbour? Resolve(WorldInstance source, string key, string destination, string counterpart,
-        WorldFaceFrame sourceFrame, WorldDefinition definition, ImmutableHashSet<Protocol.WorldEntityAddress> departed, bool pin) {
+        WorldFaceFrame sourceFrame, WorldDefinition definition, ImmutableHashSet<Protocol.WorldEntityAddress> departed, bool pin,
+        List<BuiltRead>? reads) {
         var handle = ResolveHandle(source, key, destination, counterpart, sourceFrame);
-        return (handle is null) ? null : handle.Read(definition, departed, pin);
+        var neighbour = handle?.Read(definition, departed, pin);
+
+        reads?.Add(item: new BuiltRead(Handle: handle, Source: definition, Neighbour: neighbour));
+        return neighbour;
     }
 
     private Handle? ResolveHandle(WorldInstance source, string key, string destination, string counterpart, WorldFaceFrame sourceFrame) {
@@ -183,6 +232,7 @@ public sealed partial class WorldAdjacencyFields : IWorldAdjacencySource, IDispo
         var mirror = new WorldSessionMirror(placeholder: definition);
         handle = new Handle(identity, LinkAuthorityFor(key, destination, counterpart), mirror, attach(mirror), m_instances.Narration, $"{m_sourceInstanceName}/{key}");
         m_handles.Add(key, handle);
+        m_handlesVersion++;
         return handle;
     }
 
@@ -254,6 +304,8 @@ public sealed partial class WorldAdjacencyFields : IWorldAdjacencySource, IDispo
                 departed?.ToImmutable() ?? ImmutableHashSet<Protocol.WorldEntityAddress>.Empty, pin: true);
         }
 
+        // The same projections published again hold the same images: the read published for them stands.
+        if ((m_published is not null) && (projections == m_publishedProjections)) { return; }
         foreach (var projection in projections) { ((PinnedNeighbour)projection.Neighbour).RetainImage(); }
         var next = new WorldAdjacencyRead(projections, () => {
             foreach (var projection in projections) { ((PinnedNeighbour)projection.Neighbour).ReleaseImage(); }
@@ -261,6 +313,7 @@ public sealed partial class WorldAdjacencyFields : IWorldAdjacencySource, IDispo
         WorldAdjacencyRead? previous;
 
         lock (m_publicationGate) { (previous, m_published) = (m_published, next); }
+        m_publishedProjections = projections;
         previous?.Dispose();
     }
 
@@ -274,11 +327,16 @@ public sealed partial class WorldAdjacencyFields : IWorldAdjacencySource, IDispo
         WorldAdjacencyRead? previous;
 
         lock (m_publicationGate) { (previous, m_published) = (m_published, null); }
+        m_publishedProjections = default;
         previous?.Dispose();
         foreach (var handle in m_handles.Values) {
             handle.Dispose();
         }
         m_handles.Clear();
+        m_handlesVersion++;
+        m_builtReads.Clear();
+        m_builtDefinition = null;
+        m_built = default;
         m_linkAuthorities.Clear();
         ReleaseFollows();
     }
@@ -318,12 +376,19 @@ public sealed partial class WorldAdjacencyFields : IWorldAdjacencySource, IDispo
         // image was read under.
         private readonly GpuSharedChangedRows m_entities = new(stableRows: true);
         private ImmutableHashSet<Protocol.WorldEntityAddress> m_departed = ImmutableHashSet<Protocol.WorldEntityAddress>.Empty;
+        // Whether a pinned read has run, so m_pinned is what the held image, document and departures answer.
+        private bool m_read;
 
         public PinnedNeighbour? Read(WorldDefinition source, ImmutableHashSet<Protocol.WorldEntityAddress> departed, bool pin) {
             if (!pin && m_pinned is { } previous) { return previous; }
 
             var held = m_image;
             var image = mirror.CaptureBodyImage(held);
+            // Nothing the pinned neighbour was built from moved: it is the answer again, and nothing is published.
+            if (m_read && ReferenceEquals(objA: image, objB: held) && ReferenceEquals(objA: source, objB: m_builtSource) &&
+                ReferenceEquals(objA: image.Definition, objB: m_builtDefinition) && departed.SetEquals(other: m_departed)) {
+                return m_pinned;
+            }
             if (!ReferenceEquals(source, m_builtSource) || !ReferenceEquals(image.Definition, m_builtDefinition)) {
                 Refresh(source, image.Definition);
                 m_builtSource = source;
@@ -347,6 +412,7 @@ public sealed partial class WorldAdjacencyFields : IWorldAdjacencySource, IDispo
             m_pinned = (m_frameResolved && authority.Settle(image.Authority))
                 ? new PinnedNeighbour(authority.Value, image, m_frame, m_field, m_fieldReason, departed, m_entities, serial)
                 : null;
+            m_read = true;
             return m_pinned;
         }
 

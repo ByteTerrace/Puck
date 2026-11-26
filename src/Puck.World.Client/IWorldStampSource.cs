@@ -10,7 +10,7 @@ namespace Puck.World.Client;
 /// <see cref="WorldSessionStampSource"/>, over the destination's mirror, is the other, so a session screen draws its
 /// destination's animated, inhabited and attached creations through the same pool the local scene does.
 /// </summary>
-public interface IWorldStampSource {
+public interface IWorldStampSource : IWorldInhabitants {
     /// <summary>Gets the definition the stamps are registered from.</summary>
     WorldDefinition Definition { get; }
     /// <summary>Gets the state mirror a look's lanes and a body's live scale read.</summary>
@@ -94,9 +94,4 @@ public interface IWorldStampSource {
     /// <param name="index">The 0-based entity index.</param>
     /// <returns>The position.</returns>
     Vector3 Position(int index);
-    /// <summary>Resolves the active entity a placement's first inhabited body occupies.</summary>
-    /// <param name="placementId">The placement row id.</param>
-    /// <param name="index">The 0-based entity index, or -1 when no active entity inhabits it.</param>
-    /// <returns><see langword="true"/> when an active entity inhabits the placement.</returns>
-    bool TryInhabitantBody(string placementId, out int index);
 }

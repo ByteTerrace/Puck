@@ -58,6 +58,16 @@ let sharedSunHeading = 37
 let sunStar = star(radius: 140, distance: 15000, pull: 30)
 let sunTurn = dayTurn(clock: "day", distance: sunStar.distance, heading: sharedSunHeading, noonElevation: sharedNoonElevation)
 
+// The sun's companion: a small red star that circles it once every `pairSeconds`, `pairSeparation` metres out, in the
+// plane of the day's turn. Every line from the valley floor to the sun lies in that plane, so from the valley the
+// companion swings across the sun's disc and behind it twice a turn. The two make the system a binary: every world of
+// it lights itself from both, the sun's world rides a body on the companion's turn about the sun's, and that world
+// owns the pair's clock (`pair`), which the valley and the moon follow.
+let companionStar = star(radius: 60, distance: 15000, illuminance: 12000, color: "#FF9A66", light: "companion", surface: "#FFB088", spots: "#7A2408", pull: 14)
+let pairSeparation = 2000
+let pairSeconds = 600
+let companionTurn = pairTurn(clock: "pair", separation: pairSeparation, inclination: sharedNoonElevation, node: (0 - sharedSunHeading))
+
 // How fast the sun's light and its pull cross the system. Each world reads the sun's rows that long after the sun
 // wrote them (sun.puck, a followed row's `delaySeconds`), from where the sun stands at the day's start, so the moon,
 // then the nearer of the two, meets a change first.
@@ -83,6 +93,15 @@ let sunOutpost = map(
   axis => axis * (sunStar.distance - sunPassGap)
 )
 let sunSystemCentre = map(sunOutpost, axis => 0 - axis)
+
+// The seam over the moon into the sun's world: a level plane `sunSeamHeight` metres above the moon's centre, clear of
+// the moon's reach and of the moon trip's crossing (moon-route.puck flies 300 m over the reach), that wide and deep.
+// Under it a body is the moon's, over it the sun's, so a ship climbing away from the moon flies on toward the star.
+// The span keeps the plane clear of the star's own path, which no seam may hand on. `moonInSun` is the moon's centre
+// in the sun's coordinates: a point at `p` in the moon's world stands at `p + moonInSun` in the sun's.
+let sunSeamHeight = (moonReach + 600)
+let sunSeamSpan = 12000
+let moonInSun = [(moonCentre[0] - sunOutpost[0]), (moonCentre[1] - sunOutpost[1]), (moonCentre[2] - sunOutpost[2])]
 
 // The launch field's pad on the valley floor (launch.puck), where the trip starts and ends: its centre over the ground,
 // the height of its top, and the heading the ship on it faces.

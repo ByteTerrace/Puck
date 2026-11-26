@@ -53,10 +53,12 @@ namespace Puck.World.Client;
 /// </para>
 /// </remarks>
 public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresser, IDisposable {
-    /// <summary>Releases the environment's delivered-tick subscription.</summary>
+    /// <summary>Releases the environment's delivered-tick subscription and the claim its frame holds on its program
+    /// (<see cref="SdfFrame.Writer.Release"/>).</summary>
     public void Dispose() {
         m_shadowObservation.Dispose();
         m_environment.Dispose();
+        m_frameWriter.Release();
     }
     /// <summary>Reads the last presented slot census of this session when it presents the queried authority, matched by
     /// the delivered version's activation.</summary>
@@ -740,7 +742,7 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
             m_dressedFieldProgram = program;
 
             try {
-                m_dressedField = new WorldQueryField(fixedPart: new SdfFieldEvaluator(program: builder.Build(), reading: SdfFieldReading.Contact, regional: true));
+                m_dressedField = new WorldQueryField(fixedPart: WorldQueryField.PartOf(builder: builder));
             } catch (ArgumentException) {
                 // A static placement the fixed-point evaluator does not interpret (a path, a non-uniform scale).
                 m_dressedField = null;
@@ -795,8 +797,9 @@ public sealed class WorldSessionSceneEmitter : ISdfSceneEmitter, ISdfFrameDresse
     }
 
     public IReadOnlyList<int> MeshAssetSlots => m_pool.Rigid.Slots;
-    public IReadOnlyList<SdfMeshTemplateRange> MeshTemplateRanges => m_pool.Rigid.TemplateRanges;
     public IReadOnlyList<SdfMeshInstance> MeshInstances => m_pool.Rigid.Copies;
+    /// <inheritdoc/>
+    public IReadOnlyList<SdfMeshTemplateRange> MeshTemplateRanges => m_pool.Rigid.TemplateRanges;
     /// <inheritdoc/>
     public IReadOnlyList<int> MeshInstanceChanges => m_pool.Rigid.ChangedCopies;
     /// <inheritdoc/>
