@@ -315,10 +315,10 @@ let rentalMachines = flatMap(rentalBodies, b => [$"rental-hgb-{b}", $"rental-agb
 // envelope (size.puck), and Alice's 0.15 is wider still. The panels stand on the balustrades' line (`balconyInset`).
 let toyLatticePitch = (galleryTile / 16)
 let toyLatticeBar = 0.025
-// The toybox's net: the lattice's bars and rails give way to a diamond net of rope strands over a clear pane that holds
-// every body (architecture.puck's `lattice` net): a diamond every 18 cm; the strands are off (`strand: 0`) until the bake
-// draws a rotated repeated strand along its whole length.
-let toyLatticeNet = { strand: 0, pitch: 0.18 }
+// The toybox's net: the lattice's bars and rails give way to a diamond net of rope strands threaded through a clear pane
+// that holds every body (architecture.puck's `lattice` net): 3.5 cm rope, knot to knot every 30 cm, a climbing net's
+// mesh rather than a fence's.
+let toyLatticeNet = { strand: 0.035, pitch: 0.3 }
 // The loose panels: one panel on each edge that a rule can open, move or swap (gallery.md, "The lattice"), each named
 // `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: a south and a north bay, and the bridge's middle
 // tile on the nave's axis.

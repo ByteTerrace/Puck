@@ -111,13 +111,18 @@ draws one copy per sector, as contact expands it; content wider than a sector
 is still cut at the sector walls. A mirrored polar fold reflects across the
 plane through the axis and the shape.
 
-Cell centres lie at multiples of spacing from `origin`; a primitive displaced
-half a cell from that lattice can be sliced. Centre the fold on the primitive
-in the fold's coordinate frame and leave enough cell width for its extent.
-The current `CreationFrame` converts symmetry normals but leaves repeat/polar
-origins unchanged, so for an unrotated placement an author-space position
-`[x,y,z]` needs origin `[-x,y,-z]` to coincide with its engine-space centre.
-Do not blindly copy a nonzero author X/Z position into `origin`.
+A repeat centres its middle cell on the shape's own position
+(`SdfDomainOps.CentreOf`): `origin` (default the creation origin) only says
+where the cell walls fall, half a spacing either side of it and every spacing
+on, and the copies always sit at whole spacings from the shape, in render as
+in contact. Each copy is still drawn only inside its own cell, so leave the
+cell wide enough for the shape's extent on every repeated axis: a shape that
+crosses its cell walls (a long diagonal in an axis-aligned lattice, a primitive
+parked against a wall by its `origin`) draws as the slices of it each cell
+holds. A strand set at an angle is a mirror fold whose mirrors lie along the
+strands (a `wallpaper` P4M's diagonals), not a repeat of a rotated shape.
+`CreationFrame` converts symmetry normals but leaves repeat/polar origins
+unchanged, so an author-space point `[x,y,z]` is origin `[-x,y,-z]`.
 
 A shape carrying folds may not also carry a swing or a slide, may not carry a
 `panel`, may not be the reference of a trim, and may not be a chain bone: a fold

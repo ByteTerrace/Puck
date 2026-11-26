@@ -1166,12 +1166,45 @@ function latticePalette(frame, bar, rail) = [
   { color: rail, roughness: 0.4, specular: 0.05 }
   { color: "#EEF6F8", roughness: 0.03, glass { depth: 0.008, ior: 1.5 } }
 ]
-// `net`, when set, fills the frame with a net instead of bars and rails: a thin panel `net.thickness` thick whose
-// Worley F2-minus-F1 cell relief (`net.frequency` cells a metre, `net.depth` deep, `net.randomness`, `net.seed`)
-// hollows each cell's centre through the panel and leaves its walls as the strands, so it reads as an organic net while
-// its contact stays the flat panel (a cell relief keeps the base shape for contact), blocking every body.
+// `net`, when set, fills the frame with a net instead of bars and rails: a clear pane holds every body, and over it a
+// diamond net of rope strands `net.strand` thick, knot to knot `net.pitch` apart, the two sets in the bar and rail
+// colours with a knot in the frame colour where they cross. The strands are drawn only (`detail`); the pane collides.
 template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0.05, rails = 6, upright = 1, sill = 1, net = null) {
   let length = (cells * pitch)
+  if (net != null) and (upright == 1) and (net.strand > 0) {
+    // The strands lie along the diagonals of a P4M fold's square cells, which are its mirrors, so one cell's diagonal
+    // draws the whole net: the diagonals join cell to cell into two sets of straight lines at right angles, `cell`·√2
+    // apart. The fold's checkerboard parity takes the two sets to the bar and rail colours (`materialStride`). Its
+    // cells centre on the creation root, so the limits reach the panel's ends and top, and the clip after cuts the net
+    // to the posts' and the sill's and head's middles, where they hide its ends. The net comes before every other shape,
+    // so its intersection clips the net alone.
+    let cell = (net.pitch * 0.70710678)
+    let fold = { cell: [cell, cell], limit: [ceiling(((length / 2) / cell)), ceiling((height / cell))] }
+    shape Box "lattice-net-strand" {
+      material: (base + latticeBar)
+      rotation: rotate([0, 0, 1], 45deg)
+      scale [(cell * 0.72), (net.strand / 2), (net.strand / 2)]
+      rounding: (net.strand * 0.45)
+      domain [wallpaper(cell: fold.cell, group: P4M, plane: XY, limit: fold.limit, materialStride: (latticeRail - latticeBar))]
+      detail: true
+    }
+    for corner in [-1, 1] {
+      shape Sphere $"lattice-net-knot-{corner}" {
+        material: (base + latticeFrame)
+        position [((corner * cell) / 2), ((corner * cell) / 2), 0]
+        scale [(net.strand * 0.8), (net.strand * 0.8), (net.strand * 0.8)]
+        domain [wallpaper(cell: fold.cell, group: P4M, plane: XY, limit: fold.limit)]
+        detail: true
+      }
+    }
+    shape Box "lattice-net-clip" {
+      blend: Intersection
+      material: (base + latticeBar)
+      position [0, (height / 2), 0]
+      scale [(length / 2), ((height - frame) / 2), frame]
+      detail: true
+    }
+  }
   for side in [-1, 1] {
     shape Box $"lattice-post-{side}" {
       material: (base + latticeFrame)
@@ -1195,31 +1228,11 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
     }
   }
   if (net != null) and (upright == 1) {
-    // A clear pane holds every body; the net's strands in front of it are drawn only.
+    // A clear pane holds every body; the net threaded through it is drawn only.
     shape Box "lattice-pane" {
       material: (base + latticeGlass)
       position [0, (height / 2), 0]
       scale [(length / 2), (height / 2), 0.004]
-    }
-    for (turn, i) in ((net.strand > 0) ? [45, -45] : []) {
-      shape Box $"lattice-strands-{i}" {
-        material: (base + ((i == 0) ? latticeBar : latticeRail))
-        position [0, (height / 2), ((i == 0) ? 0.02 : 0.035)]
-        rotation: rotate([0, 0, 1], (turn * 1deg))
-        scale [((length + height) / 1.4), (net.strand / 2), (net.strand / 2)]
-        rounding: (net.strand / 2.5)
-        domain [repeat(spacing: [(4 * (length + height)), (net.pitch * 1.4142), (4 * (length + height))], limit: [0, ceiling((((length + height) / net.pitch) / 2.8)), 0])]
-        detail: true
-      }
-    }
-    if net.strand > 0 {
-    shape Box "lattice-net-clip" {
-      blend: Intersection
-      material: (base + latticeBar)
-      position [0, (height / 2), 0]
-      scale [((length / 2) + frame), (height / 2), frame]
-      detail: true
-    }
     }
   }
   if (net == null) and (upright == 1) {
@@ -1239,7 +1252,6 @@ template lattice(base, cells, pitch, height, bar = 0.025, frame = 0.09, rail = 0
       domain [repeat(spacing: [1, (height / rails), 1], limit: [0, ((rails / 2) - 1), 0], origin: [0, (height / 2), 0])]
     }
   }
-
 }
 
 // A pendant lamp hung from a ceiling at `at` (the ceiling point, +Y up): a rose against the ceiling, a cord down to a

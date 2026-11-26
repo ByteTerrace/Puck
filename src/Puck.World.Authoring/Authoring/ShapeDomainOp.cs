@@ -41,9 +41,10 @@ public abstract record ShapeDomainOp {
     /// builder's own floor).</param>
     /// <param name="Limit">The per-axis repeat-cell limit — the lattice spans cell indices -limit..+limit (null =
     /// <see cref="SdfDomainOps.UnboundedRepeatLimit"/> per axis, a lattice with no edge).</param>
-    /// <param name="Origin">The point the lattice folds around, creation units (null = the creation origin, the
-    /// fold this op has always used). Cell selection centres on this point instead of the creation root — the
-    /// lattice of physical copies is unchanged, so a null origin is byte-identical to today's fold.</param>
+    /// <param name="Origin">The point the lattice's cell walls are laid about, creation units (null = the creation
+    /// origin): a wall at half a spacing either side of it and every spacing on. The fold centres on the cell of that
+    /// lattice the shape's own position lies in (<see cref="SdfDomainOps.CentreOf"/>), so the copies sit at whole
+    /// spacings from the shape wherever the origin lies, in render as in contact.</param>
     public sealed record Repeat(DocumentVector3 Spacing, DocumentVector3? Limit = null, DocumentVector3? Origin = null) : ShapeDomainOp {
         /// <summary>Whether the lattice has no edge: its limit, or an absent one, reaches
         /// <see cref="SdfDomainOps.UnboundedRepeatLimit"/> on any axis. The program's own answer
@@ -147,7 +148,8 @@ public static class ShapeDomainOps {
             ShapeDomainOp.Repeat repeat => new SdfDomainOp.Repeat(
             Limit: (repeat.Limit ?? new Vector3(value: SdfDomainOps.UnboundedRepeatLimit)),
             Origin: (repeat.Origin?.Value ?? Vector3.Zero),
-            Spacing: repeat.Spacing
+            Spacing: repeat.Spacing,
+            Subject: subject
         ),
             ShapeDomainOp.Polar polar => new SdfDomainOp.Polar(
             Axis: (polar.Axis ?? SdfAxis.Y),
@@ -190,7 +192,8 @@ public static class ShapeDomainOps {
     /// <param name="chain">The builder chain, already advanced past the creation/placement frame prefix.</param>
     /// <param name="domain">The shape's domain ops, or null/empty for no-op.</param>
     /// <param name="subject">The shape's own position, in the frame the folds act in: the point a polar fold centres
-    /// its first sector on (<see cref="SdfDomainOp.Polar.Subject"/>).</param>
+    /// its first sector on (<see cref="SdfDomainOp.Polar.Subject"/>) and a repeat its middle cell on
+    /// (<see cref="SdfDomainOp.Repeat.Subject"/>).</param>
     /// <returns><paramref name="chain"/>, for further chaining.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="chain"/> is <see langword="null"/>.</exception>
     public static SdfProgramBuilder Apply(SdfProgramBuilder chain, IReadOnlyList<ShapeDomainOp>? domain, Vector3 subject) {
