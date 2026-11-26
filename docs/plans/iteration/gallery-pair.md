@@ -49,7 +49,11 @@ relit.
   (`worlds/debug/gallery-root.puck`, or the debug world when the view out
   matters) on the slice's commit before the session, lets it bake and settle,
   and keeps that one World for the whole session. A restart is a bake and a
-  settle; an edit is not.
+  settle; an edit is not. When a merged change needs a restart (engine code,
+  shaders, or a document the running build can't execute), the lead restarts
+  without asking (the owner's standing instruction for pair sessions), puts
+  back the session's pins (time, exposure, window, pose and view) and says
+  what changed.
 - **Owner input** on the same World: `ownerPlay` (`--devices all`) when the
   owner wants to walk it.
 - **Bookmarks.** Named camera poses that match each reference panel (the
@@ -94,6 +98,20 @@ Measured on the gallery root, warm, with `world.watch on` (`world.iteration` per
 - **Duplicated look values defeat edits.** The display screen's colour was written twice (the plinth kit and the
   screen overlay in `shapes.puck`), so editing the kit changed nothing on screen. The overlay now reads the kit's
   material.
+
+Found in the grid and toybox session:
+
+- **A superseded reload can be lost.** An edit made in two steps (a reload that failed on a half-written edit, then
+  one superseded by a newer reload) ended with the newest reporting "the source is unchanged" and applying nothing,
+  so the world may never have taken the final source. A reload that supersedes another must compare against the
+  last applied source, not the last attempted one.
+- **A reload that needs a newer engine is refused with no path forward.** After merging lanes that added rule
+  functions (`power` over fixed point), every reload refused with `EffectSourceAmbiguous ... admitted in kind=Int
+  expressions only`. Refusing is correct; a reload should name that the running build predates the document so the
+  operator knows a restart is owed, instead of a validation fault.
+- **Session state the owner set is lost on a restart**: time hold, exposure pin, noclip, camera and pose. A restart
+  should be able to carry the session's pins forward (a saved operator session replayed on boot).
+- **Window size needed a restart**: fixed during the session; `world.window` sizes, centres and moves the live window.
 
 Fixed during the session: `view.override camera <name>` now takes the seat's own view in the play layout, so
 `gallery.shot` and `gallery.station` work.

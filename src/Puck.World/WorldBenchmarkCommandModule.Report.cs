@@ -283,6 +283,7 @@ public sealed partial class WorldBenchmarkCommandModule {
             node["chargedTicks"] = chapter.ChargedTicks;
             node["authorityTicks"] = chapter.AuthoritySpan;
             node["predictedTicks"] = chapter.PredictedTicks;
+            node["doorsAvoided"] = chapter.DoorsAvoided;
             node["prediction"] = chapter.Prediction;
             node["controlLines"] = chapter.ControlLines;
             node["visits"] = new JsonArray([.. chapter.Visited.Select(selector: static visit => (JsonNode)new JsonObject { ["tick"] = visit.Tick, ["place"] = visit.Place })]);

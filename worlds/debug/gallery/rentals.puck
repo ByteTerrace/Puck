@@ -33,10 +33,6 @@ import "../reach"
 import "layout"
 import "look"
 
-// The seats' bodies: four local seats and eight visitors (shapes.puck's seatPopulation and visitorPopulation), bodies 0
-// to 11.
-let rentalBodies = range(0, 12)
-
 // The stalls, each by its L's corner in the plan and its turn: 0 for the south-east, whose arms run south and east
 // from the corner, 180 for the north-west, turned half round. `sign` turns the stall's own frame into the plan's.
 let rentalStallInset = 0.9

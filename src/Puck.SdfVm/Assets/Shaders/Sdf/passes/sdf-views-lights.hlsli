@@ -251,7 +251,7 @@ SdfLightMasks sdfViewsTileLights(SdfPixel p, bool shades, bool lit, float3 surfa
             SdfLight light = sdfLights[index];
             bool keep = true;
 
-            if ((light.Kind == SDF_LIGHT_POINT) || (light.Kind == SDF_LIGHT_OCCLUDER)) {
+            if (sdfLightPositional(light.Kind)) {
                 float3 position = worldPointLightPosition(light);
 
                 keep = ((nearHeld && sdfLightReachesBox(light, position, nearLow, nearHigh))

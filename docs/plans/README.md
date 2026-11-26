@@ -96,6 +96,7 @@ Decisions: [rendering](../decisions/rendering.md), [residency](../decisions/resi
 
 Decisions: [runtime and delivery](../decisions/runtime-and-delivery.md), [machines and cartridges](../decisions/machines-and-cartridges.md).
 
+- [The toybox](toybox.md): the gallery's Wonderland floor: arriving small, the full-size puzzle through the flaw, the deck stations, the rental stalls, the central climbing tree and climbing.
 - [Iteration](iteration.md): the loops an author and a developer go round, how each is timed edit to frame, and the work that makes each fast; [the authoring loop memo](iteration/authoring-loop.md) holds its build order.
 - [Code size](code-size.md): where the source's lines are, the families of hand-written code that one definition could generate, the lanes that remove them, and how each wave keeps size falling.
 - [The engine job system](engine-job-system.md): one scheduler and its classes, the deterministic parallel tick, parallel view recording, memory ownership and background work proportional to change.

@@ -189,6 +189,29 @@ public sealed class WorldDeliveryCursor {
     }
     /// <summary>Records the images a presentation delivery actually carried.</summary>
     public void Delivered(WorldRecipientView view) { Seed(view); Delivered(); }
+    /// <summary>Records the images a presentation delivery carried when only <paramref name="rows"/> can differ from
+    /// what the stream holds: the rows whose versions or dependencies moved since its last delivery, under an unchanged
+    /// audience and row layout. Every other row stands as the stream held it, so it is not imaged again; each named row
+    /// is decided exactly as <see cref="Delivered(WorldRecipientView)"/> decides it, a lost cell cutting the
+    /// stream.</summary>
+    /// <param name="view">The stream's view.</param>
+    /// <param name="rows">The authored rows that can have moved, each once.</param>
+    public void Delivered(WorldRecipientView view, ReadOnlySpan<int> rows) {
+        if (!m_seeded) { Delivered(view); return; }
+        using (view.Admit()) {
+            m_operator = view.IsAuthority;
+            WorldProjectionWork.Count(amount: rows.Length, kind: WorldProjectionWork.SeededRows);
+            var cut = false;
+            foreach (var row in rows) {
+                var name = view.Arena.Rows[row].Name.Value;
+                var holds = m_rows.Remove(name, out var held);
+                _ = m_metadataPrimers.Remove(row);
+                cut |= SeedRow(view: view, row: row, name: name, holds: holds, held: in held);
+            }
+            if (cut) { Cut(cause: WorldProjectionWork.CutsLost); }
+        }
+        Delivered();
+    }
     /// <summary>Records one observable delivery, preserving the sequence across a withheld span.</summary>
     public void Delivered() => Sequence = checked(Sequence + 1);
     /// <summary>Records the body policy a delivery is redacted under, and cuts when it changes to one that redacts: a
@@ -197,7 +220,7 @@ public sealed class WorldDeliveryCursor {
     /// <param name="policy">The live body policy; its cadence never cuts.</param>
     public void ObserveBodies(WorldObserverDisclosure policy) {
         var (mode, radius) = (policy.Mode, policy.Radius);
-        if (m_bodyMode is { } held && ((held != mode) || (m_bodyRadius != radius)) && (mode != WorldObserverDisclosureMode.All)) { Cut(); }
+        if (m_bodyMode is { } held && ((held != mode) || (m_bodyRadius != radius)) && (mode != WorldObserverDisclosureMode.All)) { Cut(cause: WorldProjectionWork.CutsBodies); }
         m_bodyMode = mode;
         m_bodyRadius = radius;
     }
@@ -227,15 +250,18 @@ public sealed class WorldDeliveryCursor {
     /// <summary>Decides a cut because the stream's reader missed records: a transport that could not keep up dropped
     /// them, so nothing the reader holds is known to be whole. The stream owes the cut, the whole disclosed document and
     /// a primer under the new generation, as after any cut and by the same path (<see cref="TakeCut"/>).</summary>
-    public void Lapse() => Cut();
+    public void Lapse() => Cut(cause: WorldProjectionWork.CutsLapsed);
     // A cursor whose stream another segment has opened decides nothing for it: the next segment's cut already ended
     // everything this one delivered.
-    private void Cut() {
+    // Counts each cut it decides under its cause, since every cut owes the reader its whole disclosed document again.
+    private void Cut(Puck.Abstractions.Counting.WorkKind cause) {
         if (m_lineage.Cut(owner: this)) {
             m_cutOwed = true;
+            WorldProjectionWork.Count(kind: cause);
         }
     }
     private void Seed(WorldRecipientView view) {
+        using var hold = view.Admit();
         m_operator = view.IsAuthority;
         var cut = false;
         var seeded = m_seeded;
@@ -250,22 +276,26 @@ public sealed class WorldDeliveryCursor {
             var held = default(HeldRow);
             var holds = seeded && (previous is not null) && previous.Remove(name, out held);
 
-            if (view.HoldsWhole(row)) {
-                m_rows[name] = new HeldRow(Image: null, Keys: view.Images.Members(view, row));
-                continue;
-            }
-            var image = view.Image(row);
-            // The definition carries no observation header, including when its hidden count is zero. Whether
-            // the following primer is owed depends on the row's policy, never on its current hidden members.
-            if ((view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica) && (image.Observation is not null)) { m_metadataPrimers.Add(row); }
-            m_rows[name] = new HeldRow(Image: image, Keys: WorldRowMembers.Empty);
-            if (holds) { cut |= Loses(held, image); }
+            cut |= SeedRow(view: view, row: row, name: name, holds: holds, held: in held);
         }
         if (previous is not null) {
             foreach (var held in previous.Values) { cut |= (!held.Whole && held.ReadCells); }
         }
         m_seeded = true;
-        if (cut) { Cut(); }
+        if (cut) { Cut(cause: WorldProjectionWork.CutsLost); }
+    }
+    // Holds one row as the stream is delivered it now, answering whether the stream lost a cell of it.
+    private bool SeedRow(WorldRecipientView view, int row, string name, bool holds, in HeldRow held) {
+        if (view.HoldsWhole(row)) {
+            m_rows[name] = new HeldRow(Image: null, Keys: view.Images.Members(view, row));
+            return false;
+        }
+        var image = view.Image(row);
+        // The definition carries no observation header, including when its hidden count is zero. Whether
+        // the following primer is owed depends on the row's policy, never on its current hidden members.
+        if ((view.Ceiling == Puck.World.Protocol.WorldDisclosureTier.Replica) && (image.Observation is not null)) { m_metadataPrimers.Add(row); }
+        m_rows[name] = new HeldRow(Image: image, Keys: WorldRowMembers.Empty);
+        return holds && Loses(held, image);
     }
     // Whether an image now lacks a cell the stream read in the row as it held it: a cell withheld or removed, which a
     // row that can withhold must not let the recipient tell apart. A row the stream read whole held every cell it had,
@@ -290,6 +320,7 @@ public sealed class WorldDeliveryCursor {
         return false;
     }
     internal IReadOnlyList<WorldRowReplacement> Advance(WorldRecipientView view, ReadOnlySpan<int> rows) {
+        using var hold = view.Admit();
         // Nothing changed and no primer is owed: no row can need a replacement, so the audience is not composed.
         var authorityChanged = m_operator != view.IsAuthority;
         if (!authorityChanged && rows.IsEmpty && (m_metadataPrimers.Count == 0)) { return []; }
@@ -331,7 +362,7 @@ public sealed class WorldDeliveryCursor {
             m_rows[name] = new HeldRow(Image: image, Keys: WorldRowMembers.Empty);
             (result ??= []).Add(new(row, image));
         }
-        if (cut) { Cut(); }
+        if (cut) { Cut(cause: WorldProjectionWork.CutsLost); }
         if (result is null) { return []; }
         DeliveredRows(view);
         return result;
@@ -346,7 +377,7 @@ public sealed class WorldDeliveryCursor {
     /// it was delivered is lost to it. A resumed delivery seeds it again under the new generation, while the stream's
     /// sequence continues.</summary>
     public void Release() {
-        if (m_seeded) { Cut(); }
+        if (m_seeded) { Cut(cause: WorldProjectionWork.CutsReleased); }
         m_rows.Clear(); m_metadataPrimers.Clear(); m_definition = null; m_fields = null; m_seeded = false; m_rest = null; m_placements = null; m_placementsHeader = null;
     }
 }

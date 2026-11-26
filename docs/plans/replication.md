@@ -473,7 +473,7 @@ section's version stands (`WorldBody.HeldDigests`).
 **An option the reports set aside: bodies as anchors.** Puck already sends a state clock
 as an anchor (`StateCellClock`: a value, a rate and the tick they hold from), lets the recipient
 extrapolate, and sends again "at exactly the authoritative ticks a prediction misses, so a steady
-sky sends nothing" (`src/Puck.World.Schema/WorldProjectionFeed.cs:45-47`). Applied to a body, a
+sky sends nothing" (`WorldProjectionFeed`). Applied to a body, a
 sample carries its exact velocity, both ends run the same integer extrapolation from the held
 sample, and the wire carries only the difference between the true pose and the extrapolated one.
 For a body moving steadily that difference is zero or a few raw units. This is dead reckoning
