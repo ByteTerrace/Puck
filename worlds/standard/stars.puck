@@ -38,10 +38,12 @@ function sunlight(direction = [3, 5, -4], color = "#FFF0DC", illuminance = 10000
 )
 
 // A star: a ball `radius` metres in radius that gives `illuminance` lux at `distance` metres, in `color`. `light` names
-// the directional light every world of the system gives it, `surface` and `spots` colour its body, `glow` is the
-// luminance of that body's surface in nits, and `pull` is the acceleration a body feels at its surface, which with the
-// radius is its mass.
-function star(radius = 250, distance = 15000, illuminance = 100000, color = "#FFF0DC", light = "key", surface = "#FFE2B0", spots = "#B4410F", glow = 120000, pull = 30) = {
+// the directional light every world of the system gives it, `surface` and `spots` colour its body, and `pull` is the
+// acceleration a body feels at its surface, which with the radius is its mass. `glow` is the luminance of the body's
+// surface in nits; absent, it is the luminance a ball of that size has to show to give that light at that distance
+// (the illuminance times the distance squared, over pi times the radius squared), so the surface is as bright
+// beside what it lights as a real one.
+function star(radius = 250, distance = 15000, illuminance = 100000, color = "#FFF0DC", light = "key", surface = "#FFE2B0", spots = "#B4410F", glow = null, pull = 30) = {
   radius: radius
   distance: distance
   illuminance: illuminance
@@ -49,7 +51,7 @@ function star(radius = 250, distance = 15000, illuminance = 100000, color = "#FF
   light: light
   surface: surface
   spots: spots
-  glow: glow
+  glow: (glow ?? (((illuminance * distance) * distance) / ((3.141592653589793 * radius) * radius)))
   pull: pull
 }
 

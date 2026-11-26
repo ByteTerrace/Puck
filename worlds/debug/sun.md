@@ -20,7 +20,7 @@ Walk back into the frame to return.
 | Do this | And see |
 |---|---|
 | Stand on the pad | The star as a disc across the void, as wide as it looks from there: it grows as it comes. The star casts no shadows here, since its own ball would shadow everything ([the plan](../../docs/plans/stars.md#what-is-left), step 4). |
-| `world.state.cell.set day $value 0.6` in the valley, then wait | The star arriving. It passes the rock at three in the afternoon (`day` 0.625), 380 m of void between its surface and the pad. |
+| `world.state.cell.set day $value 0.59` in the valley, then wait | The star arriving: a white ball in its own glow, 3 km out. It passes the rock at three in the afternoon (`day` 0.625), 380 m of void between its surface and the pad. Inside about 3 km the pad and the star read as one grey, an engine limit ([the plan](../../docs/plans/stars.md#what-is-left), step 5). |
 | Hold the day near the pass (`world.row.set state day advance {"perSecondNumerator":0,"perSecondDenominator":1}` in the valley) | The star standing beside the rock, its surface churning. |
 | Step off the rock's far side during the pass | The star's pull takes whatever the rock's does not hold. |
 | Fly toward it | Within 300 m of its centre a body is burned and wakes on the pad (`world.state sunBurned` counts them, `world.state sunHeat` reads how near the first seat is to that). |

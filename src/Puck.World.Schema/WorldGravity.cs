@@ -673,6 +673,55 @@ public readonly record struct FixedWorldGravityOrbit(
     /// <param name="clock">The clock value; one whole unit is one turn.</param>
     /// <returns>The turn.</returns>
     public static ulong TurnOf(FixedQ4816 clock) => (unchecked((ulong)clock.Value) << (64 - FixedQ4816.FractionBitCount));
+    /// <summary>Returns a turn's fractional part as a fraction of one turn scaled by 2^64: an authored phase, or a
+    /// presentation clock's.</summary>
+    /// <param name="turn">The finite turn count; only its fractional part places a body.</param>
+    /// <returns>The turn.</returns>
+    public static ulong TurnOf(double turn) => unchecked((ulong)((turn - Math.Floor(d: turn)) * 18446744073709551616d));
+    /// <summary>Lowers an orbit's authored shape and plane to its conic: the one lowering an authority's orbit row and
+    /// a presentation's light source share, so both place a body on the same curve.</summary>
+    /// <param name="semiMajorAxis">The semi-major axis, in world units.</param>
+    /// <param name="eccentricity">The eccentricity.</param>
+    /// <param name="inclinationDegrees">The tilt of the plane about its line of nodes, in degrees.</param>
+    /// <param name="ascendingNodeDegrees">The heading of the line of nodes about +Y from +X, in degrees.</param>
+    /// <param name="periapsisDegrees">The angle in the plane from the line of nodes to the periapsis, in degrees.</param>
+    /// <param name="conic">The conic on return.</param>
+    /// <returns><see langword="true"/> when every element is finite, the axis is positive and the eccentricity lies in
+    /// zero up to <see cref="FixedConicOrbit.MaxEccentricity"/>.</returns>
+    public static bool TryConic(float semiMajorAxis, float eccentricity, float inclinationDegrees, float ascendingNodeDegrees, float periapsisDegrees, out FixedConicOrbit conic) {
+        conic = default;
+
+        if (
+            !float.IsFinite(f: semiMajorAxis) || !(semiMajorAxis > 0f) ||
+            !float.IsFinite(f: eccentricity) || (eccentricity < 0f) ||
+            !float.IsFinite(f: inclinationDegrees) || !float.IsFinite(f: ascendingNodeDegrees) || !float.IsFinite(f: periapsisDegrees)
+        ) {
+            return false;
+        }
+
+        try {
+            var shape = FixedQ4816.FromDouble(value: eccentricity);
+            var axis = FixedQ4816.FromDouble(value: semiMajorAxis);
+
+            if ((shape >= FixedConicOrbit.MaxEccentricity) || (axis <= FixedQ4816.Zero)) {
+                return false;
+            }
+
+            conic = FixedConicOrbit.FromAngles(
+                argumentOfPeriapsis: FixedQ4816.FromDegrees(degrees: periapsisDegrees),
+                ascendingNode: FixedQ4816.FromDegrees(degrees: ascendingNodeDegrees),
+                eccentricity: shape,
+                inclination: FixedQ4816.FromDegrees(degrees: inclinationDegrees),
+                semiMajorAxis: axis
+            );
+
+            return true;
+        } catch (OverflowException) {
+            conic = default;
+
+            return false;
+        }
+    }
 
     /// <summary>Attempts to lower an authored orbit to fixed point.</summary>
     internal static bool TryCompile(WorldGravityOrbit orbit, WorldPlacement placement, CompiledPlacementFrame frame, out FixedWorldGravityOrbit compiled) {
@@ -680,50 +729,34 @@ public readonly record struct FixedWorldGravityOrbit(
 
         if (
             string.IsNullOrWhiteSpace(value: orbit.Name) ||
-            !float.IsFinite(f: orbit.SemiMajorAxis) ||
-            !(orbit.SemiMajorAxis > 0f) ||
-            !float.IsFinite(f: orbit.Eccentricity) ||
-            (orbit.Eccentricity < 0f) ||
-            !float.IsFinite(f: orbit.InclinationDegrees) ||
-            !float.IsFinite(f: orbit.AscendingNodeDegrees) ||
-            !float.IsFinite(f: orbit.PeriapsisDegrees) ||
             !float.IsFinite(f: orbit.Phase) ||
             !float.IsFinite(f: orbit.JoinSpeed) ||
             (orbit.JoinSpeed < 0f) ||
             (orbit.BodyIndex is < 0) ||
             !FixedTickConversion.TryDurationEngineTicksExact(seconds: orbit.PeriodSeconds, ticks: out var periodTicks) ||
-            (periodTicks == 0UL)
+            (periodTicks == 0UL) ||
+            !TryConic(
+                ascendingNodeDegrees: orbit.AscendingNodeDegrees,
+                conic: out var conic,
+                eccentricity: orbit.Eccentricity,
+                inclinationDegrees: orbit.InclinationDegrees,
+                periapsisDegrees: orbit.PeriapsisDegrees,
+                semiMajorAxis: orbit.SemiMajorAxis
+            )
         ) {
             return false;
         }
 
         try {
-            var eccentricity = FixedQ4816.FromDouble(value: orbit.Eccentricity);
-            var semiMajorAxis = FixedQ4816.FromDouble(value: orbit.SemiMajorAxis);
-
-            if (
-                (eccentricity >= FixedConicOrbit.MaxEccentricity) ||
-                (semiMajorAxis <= FixedQ4816.Zero)
-            ) {
-                return false;
-            }
-
             compiled = new FixedWorldGravityOrbit(
                 Attach: placement.Attach,
                 AuthoredCenter: FixedVector3.FromVector3(value: frame.Position),
                 BodyIndex: (orbit.BodyIndex ?? -1),
                 JoinSpeed: FixedQ4816.FromDouble(value: orbit.JoinSpeed),
                 Name: orbit.Name,
-                Orbit: FixedConicOrbit.FromAngles(
-                    argumentOfPeriapsis: FixedQ4816.FromDegrees(degrees: orbit.PeriapsisDegrees),
-                    ascendingNode: FixedQ4816.FromDegrees(degrees: orbit.AscendingNodeDegrees),
-                    eccentricity: eccentricity,
-                    inclination: FixedQ4816.FromDegrees(degrees: orbit.InclinationDegrees),
-                    semiMajorAxis: semiMajorAxis
-                ),
+                Orbit: conic,
                 PeriodTicks: periodTicks,
-                // The authored phase is a fraction of a turn; only its fractional part places the body.
-                PhaseOffset: ((ulong)(((double)(orbit.Phase - MathF.Floor(x: orbit.Phase))) * 18446744073709551616d)),
+                PhaseOffset: TurnOf(turn: orbit.Phase),
                 PhaseRow: orbit.PhaseBy,
                 RidingRow: orbit.Riding
             );

@@ -80,16 +80,28 @@ In the order it matters. Each names the check that closes it.
    about 1.4 m. The exact phase is the row's base and epoch under its advance
    (`StateAdvance`), which the orbit can read once the reader exposes them.
    *Check:* the star's speed between ticks is constant in `body.where`.
-4. **A body that does not shadow its own light.** A star's ball stands between
-   its light's direction and the viewer, so it would shadow her from inside
-   the shadow cascades' caster reach. No draw can opt out of casting.
-   *Check:* a body 100 m from the star's surface is lit.
-5. **A moving seam.** A star-centred system, where planets orbit, needs an
+4. **A body that does not shadow its own light.** A star's ball stands on the
+   line from every surface toward its light, and it shadowed everything on
+   the outpost at every distance tried, 2.4 km and 14 km. No draw can opt out
+   of casting, so the star's light casts no shadows in `sun.puck`
+   (`shadow: never`). The fix is a draw that the cascades' selection leaves
+   out, authored on the creation or the placement. *Check:* with
+   `shadow: always` on the star's light, the pad is lit and the frame's posts
+   shadow it.
+5. **Scene light past the frame's range.** Within about 3 km of the star
+   the lit rock and the star's surface show as one flat grey: a surface 520 m
+   from the star takes 83 million lux, and both it and the star pass what the
+   frame's scene light holds, so the exposure meter reads them alike. Past
+   3 km the star is white against a correctly exposed pad. The frame needs a
+   range a star fits in (light stored against the view's exposure, or a wider
+   format). *Check:* a capture at the pass shows a lit grey pad under a white
+   star.
+6. **A moving seam.** A star-centred system, where planets orbit, needs an
    adjacency whose frame relation rides a clock; `WorldFrameIsometry` is
    fixed. The debug system avoids it by letting the star circle the planet.
-6. **The planet from the star.** A sky view's draw distance is capped below
+7. **The planet from the star.** A sky view's draw distance is capped below
    the 15 km between Perihelion and the valley, so the outpost's sky shows no
    planet.
-7. **The valley's sun dims with the switch.**
+8. **The valley's sun dims with the switch.**
    [Cross-world, left open 1](cross-world.md#left-open): the valley follows
    `sunLight` and its key light does not read it.

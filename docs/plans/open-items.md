@@ -3411,8 +3411,12 @@ star, its light at every distance, its outpost and its dangers are built
   fractional bits, so the debug sun moves in steps of about 1.4 m
   (`FixedWorldGravityOrbit.TurnOf`). The plan's step 3 reads the row's exact
   phase.
-- [medium] A star's ball can shadow its own light inside the cascades' caster
-  reach; no draw opts out of casting (the plan's step 4).
+- [high] A star's ball shadows everything its light should reach, at any
+  distance, and no draw opts out of casting, so the debug sun's light casts
+  no shadows in its own world (the plan's step 4).
+- [high] Within about 3 km of the star, lit surfaces and the star itself pass
+  the range the frame's scene light holds and read as one grey (the plan's
+  step 5).
 
 ### Portals in play
 

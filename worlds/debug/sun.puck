@@ -5,8 +5,8 @@
 //
 // This world is centred on that outpost, Perihelion: a rock `sunPassGap` metres inside the star's path, which the
 // star passes once a day at `sunPassHour`. The sun painting in the debug world's painting wing (paintings.puck) opens
-// onto the frame on its pad. Most of the day the star is a disc far across the void; near the pass it fills a third
-// of the sky, its pull reaches for whatever leaves the rock, and its heat burns a body that comes within
+// onto the frame on its pad. Most of the day the star is a disc far across the void; near the pass it stands thirty
+// degrees wide, its pull reaches for whatever leaves the rock, and its heat burns a body that comes within
 // `sunLethal` metres of its centre. sun.md beside this file says how to get here and what to look at.
 //
 // The star owns two values the worlds about it follow, its light and its mass (sun-watch.puck for the debug world,

@@ -32,26 +32,22 @@ public sealed partial class WorldEnvironmentResolve {
             var admitted = true;
 
             for (var ordinal = 0; (admitted && (ordinal < orbits.Length)); ordinal++) {
+                var conic = default(FixedConicOrbit);
+
                 admitted = (
-                    (authored[ordinal] is { Clock: not null } orbit) &&
-                    float.IsFinite(f: orbit.SemiMajorAxis) && (orbit.SemiMajorAxis > 0f) &&
-                    float.IsFinite(f: orbit.Eccentricity) && (orbit.Eccentricity >= 0f) && (FixedQ4816.FromDouble(value: orbit.Eccentricity) < FixedConicOrbit.MaxEccentricity) &&
-                    float.IsFinite(f: orbit.InclinationDegrees) && float.IsFinite(f: orbit.AscendingNodeDegrees) && float.IsFinite(f: orbit.PeriapsisDegrees) && float.IsFinite(f: orbit.Phase)
+                    (authored[ordinal] is { Clock: not null } stated) &&
+                    float.IsFinite(f: stated.Phase) &&
+                    FixedWorldGravityOrbit.TryConic(
+                        ascendingNodeDegrees: stated.AscendingNodeDegrees,
+                        conic: out conic,
+                        eccentricity: stated.Eccentricity,
+                        inclinationDegrees: stated.InclinationDegrees,
+                        periapsisDegrees: stated.PeriapsisDegrees,
+                        semiMajorAxis: stated.SemiMajorAxis
+                    )
                 );
                 if (admitted) {
-                    var stated = authored[ordinal];
-
-                    orbits[ordinal] = new SourceOrbit(
-                        Clock: stated.Clock,
-                        Conic: FixedConicOrbit.FromAngles(
-                            argumentOfPeriapsis: FixedQ4816.FromDegrees(degrees: stated.PeriapsisDegrees),
-                            ascendingNode: FixedQ4816.FromDegrees(degrees: stated.AscendingNodeDegrees),
-                            eccentricity: FixedQ4816.FromDouble(value: stated.Eccentricity),
-                            inclination: FixedQ4816.FromDegrees(degrees: stated.InclinationDegrees),
-                            semiMajorAxis: FixedQ4816.FromDouble(value: stated.SemiMajorAxis)
-                        ),
-                        PhaseOffset: TurnOf(turn: stated.Phase)
-                    );
+                    orbits[ordinal] = new SourceOrbit(Clock: authored[ordinal].Clock, Conic: conic, PhaseOffset: FixedWorldGravityOrbit.TurnOf(turn: authored[ordinal].Phase));
                 }
             }
 
@@ -71,9 +67,6 @@ public sealed partial class WorldEnvironmentResolve {
 
         return (sources?.ToArray() ?? []);
     }
-    // A fraction of a turn as the conic reads it: its fractional part scaled by 2^64.
-    private static ulong TurnOf(double turn) => unchecked((ulong)((turn - Math.Floor(d: turn)) * 18446744073709551616d));
-
     // Places each sourced light from where its body and the frame's first view stand, every call: the body rides its
     // clocks and the viewer moves between resolutions, so neither is part of the cached resolution. A light one of
     // whose clocks reads no phase, or a mirror no view has drawn from, keeps the light as resolved.
@@ -96,7 +89,7 @@ public sealed partial class WorldEnvironmentResolve {
                     break;
                 }
 
-                position += orbit.Conic.PositionAt(phase: unchecked((TurnOf(turn: phase) + orbit.PhaseOffset))).ToVector3();
+                position += orbit.Conic.PositionAt(phase: unchecked((FixedWorldGravityOrbit.TurnOf(turn: phase) + orbit.PhaseOffset))).ToVector3();
             }
 
             if (!placed) {
