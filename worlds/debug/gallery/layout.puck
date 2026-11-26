@@ -7,6 +7,7 @@
 // yaw of a row here is the row's own, with yaw 0 facing -z (south) and yaw 180 facing +z, as a placement's does.
 
 import "../../standard/paths"
+import "../../standard/limbs"
 
 // Where the debug world stands the building: its root placement's position. A document that stands something in the
 // building by world coordinates (a table's lattice, a painting's door) adds it to a plan position with `galleryWorld`.
@@ -317,3 +318,59 @@ let toyLatticeBar = 0.025
 // `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: a south and a north bay, and the bridge's middle
 // tile on the nave's axis.
 let toyLatticeLooseBay = 8
+
+// The central tree (tree.puck): a giant tree at the hall's exact centre, bay 6 (the middle rest bay) on the nave's
+// centre row, its trunk filling the nine tiles a display's pad does. A spiral of treads climbs its trunk, and two
+// branches reach each of levels 1 to 3, one to each balcony edge in the tree's bay: level 1's through a gate in that
+// bay's lattice panel (shell.puck), level 2's through a gap in its balustrade, level 3's onto its open edge.
+// `treeLandings` is where along x each level's pair meets its edges; level 2's stands on a balustrade length's middle
+// (x 30: shell.puck's 4 m lengths centre there), so the gap leaves a tile of balustrade either side.
+let treeBay = 6
+let treeX = bayX(treeBay)
+let treeZ = naveMid
+let treeLandings = [treeX, treeX, 30, treeX]
+let treeRailGap = 30
+// Level 1's gate: the lattice panel in the tree's bay stands as two side panels and a head over an opening
+// `treeGateCells` of the lattice's pitch wide (1.875 m) and `treeGateHeight` metres tall, so the branch passes through
+// it and nothing passes beside it.
+let treeGateCells = 24
+let treeGateHeight = 2.6
+// The trunk: a cone `base` metres in radius at the floor whose taper would close `apex` metres up, cut off at `top`
+// inside the canopy. Its treads climb from `treeTreadStart` degrees round it (from +x toward +z in the plan, so the first
+// stands just south of east, facing the hall's long axis), one every `treeTreadStep` degrees and `treeTreadRise` metres,
+// a storey a turn in risers under the Moth's 0.3 m step.
+let treeTrunk = { base: 2.1, apex: 34, top: 17.1 }
+let treeTreadStart = -12
+let treeTreadStep = 18
+let treeTreadRise = 0.225
+// The branches: each leaves the trunk from a tread and walks out to its level's edge, a pair to each level. Each pair
+// leaves two treads (36 degrees) further round than the pair below, so the canopy turns as it climbs; a level's south
+// branch leaves from below its floor and rises to it, its north branch from half a turn higher and falls to it. A
+// branch's walking line ends `treeOverhang` metres onto its balcony, `treeLandingLift` over the floor, so the branch's tip lies
+// on the floor's edge rather than tucking under it, where a foot crossing from the bark to the floor would meet a crease.
+let treeLimbs = [
+  { level: 1, side: "south", tread: 14 }
+  { level: 1, side: "north", tread: 24 }
+  { level: 2, side: "south", tread: 36 }
+  { level: 2, side: "north", tread: 46 }
+  { level: 3, side: "south", tread: 58 }
+  { level: 3, side: "north", tread: 68 }
+]
+let treeTreadCount = (treeLimbs[(length(treeLimbs) - 1)].tread + 1)
+let treeOverhang = 0.7
+let treeLandingLift = 0.08
+// A tread's angle round the trunk in degrees and its top's height over the hall's floor, and the plan point on its
+// middle line `out` metres from the bark.
+function treeTreadAngle(k) = (treeTreadStart + (treeTreadStep * k))
+function treeTreadTop(k) = (treeTreadRise * (k + 1))
+function treeTreadPlan(k, out) = ([treeX, galleryFloor[0], treeZ] + polarPoint(
+  (trunkRadius(treeTrunk.base, treeTrunk.apex, treeTreadTop(k)) + out),
+  treeTreadAngle(k),
+  treeTreadTop(k)
+))
+// Where a branch's walking line starts (just inside the bark, over its tread) and ends (on its balcony), in the plan.
+function treeBranchFrom(b) = treeTreadPlan(b.tread, -0.2)
+function treeBranchTo(b) = [treeLandings[b.level], (galleryFloor[b.level] + treeLandingLift), ((b.side == "south") ? (naveSouth - treeOverhang) : (naveNorth + treeOverhang))]
+// The hook for level 1's size: the two branches into the toybox, each a path from treeBranchFrom to treeBranchTo that a
+// size field (standard/size-field.puck) lays along so the branch shrinks a body as the corner stairs do.
+let treeShrinkLimbs = filter(treeLimbs, b => (b.level == toyboxLevel))

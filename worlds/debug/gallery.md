@@ -42,7 +42,7 @@ aisles.
 | Storeys | level k's floor top at 4.5k + 0.05 | slab 0.3 m, ceiling 4.2 m over the floor, roof at 18.05 |
 | Nave | x 12 to the east wall, z 9 to 29 | 20 m wide, 47.7 m long, open from level 0 to three skylights |
 | Arcades | piers every 5 m, 0.4 m behind each balcony edge | a branched pier on every level, 4.2 m tall, one wide bay between each pair |
-| Balcony edges | round the nave's void on levels 1 to 3 | level 1: a toy lattice from floor to fascia ([the lattice](#the-lattice)); level 2: glass balustrade, brass rail 1.1 m up |
+| Balcony edges | round the nave's void on levels 1 to 3 | level 1: a toy lattice from floor to fascia ([the lattice](#the-lattice)); level 2: glass balustrade, brass rail 1.1 m up; level 3: open. Each opens in bay 6 where [the central tree](#the-central-tree)'s branches land |
 | Stairs | one in each corner of the aisles, in the end bays (0 and 12), every one serving every storey: switchbacks south-west and north-east, spirals south-east and north-west, so the plan reads the same turned half round | eighteen 0.25 m risers a storey. A switchback fills 4 by 5 tiles (5 by 6.25 m): two 2.4 m flights of eight 0.47 m treads either side of a spine, a 2.5 m half landing against the long wall. A spiral fills 4 by 4 tiles round a 0.5 m newel, one turn a storey, its treads 0.52 m deep 1.5 m out; each floor rails its well but where the stair arrives |
 | Lift | car centre (18.8, -1.65), in a glass tower outside the south wall | car 2.8 by 3.1 m, door 1.8 m wide in the wall |
 | Entrance | x 24 to 28 in the south wall | 4 m wide, 3.3 m high, under the first arch |
@@ -59,7 +59,7 @@ of headroom over every tread.
 
 | Level | South of the nave | The nave | North of the nave |
 |---|---|---|---|
-| 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay | The north aisle, open, between the north-west and north-east stairs |
+| 0 | The south-west stair; west hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); lift and lobby; the painting wing east of the lobby; the south-east stair | The showcase: twelve displays, a pair across the nave in each odd arcade bay, and the central tree at its centre | The north aisle, open, between the north-west and north-east stairs |
 | 1 | The toybox: a lounge beside the south-west stair; its game stations; the rail round the endless fall's well | void | The toybox's other game stations, facing the south ones across the void |
 | 2 | The board game room, from the lift's landing east and out into the projecting wing | void | The motion and motion II displays |
 | 3 | The terrace, with the south-west stair's head | void | The north gallery, open |
@@ -167,6 +167,13 @@ landing's plate, a car button, `gallery.lift 1`), so the car passes level 1
 without stopping, and `lift-toybox-doors` keeps a car standing there shut. A
 rule that sets `toyboxLift` to 1 serves level 1 as any other level.
 
+**The tree's gate.** The lattice panel in bay 6, where the central tree's two
+level-1 branches arrive ([the central tree](#the-central-tree)), stands as two
+side panels and a head over a 1.875 m opening (layout.puck's `treeGateCells`
+and `treeGateHeight`), each branch's tip passing through it onto the floor. The
+gate is a way in at full size until the size field goes along those branches
+(below).
+
 The other ways in, checked: the window bays and skylights are solid glass;
 the endless fall's hole in level 1's floor is covered from below by its
 ceiling painting, a portal back to the floor painting, so a body flying up the
@@ -189,6 +196,53 @@ a pool advanced brick (`rental-hgb-<body>`, `rental-agb-<body>`) whose
 most one handheld runs per player. `machine.state rental-hgb-0` reads
 `running`. The rented device's picture is not yet shown: a screen cannot follow
 a body, so the pool machine runs with no display (see "What is still open").
+
+## The central tree
+
+The owner's ruling: a giant, natural tree grows at the hall's exact centre, a
+diegetic tutorial that teaches players they can climb and then walk its
+branches to the other floors. [gallery/tree.puck](gallery/tree.puck) grows it
+on tile (26, 14), bay 6 on the nave's centre row (layout.puck's `treeX`,
+`treeZ`), as two creations on one spot:
+
+- `gallery-tree`, solid: a tapering trunk 4.2 m across at the floor with a
+  flare and six buttress roots, a spiral of treads round it, and six walkable
+  branches. Everything a body stands on or will climb is built from shapes
+  contact admits, the standard's [limbs.puck](../standard/limbs.puck): a
+  branch is a chain of flattened superellipsoids along a curve (`limb`), the
+  treads are shelves round the trunk's taper (`spiralTreads`). Smooth blends
+  and one bark relief (creation `noise`) join them, so the tree collides as
+  drawn, through one field collider.
+- `gallery-tree-canopy`, not solid: the crown's leaf masses high in the void
+  under the skylights, the limbs carrying them, and a leafy twig off each
+  branch, one tuft in three blossoming in the toybox's candy pink.
+
+**Climbing it.** The treads start on the trunk's east side, just south of
+east, and climb a storey a turn: one every 18 degrees, each 0.225 m above the
+last, under the Moth's 0.3 m step (`treeTreadStart`, `treeTreadStep`,
+`treeTreadRise`). `debug.go` has no stop yet; in the gallery root,
+`body.pose spawn:tree 0` stands her at their foot.
+
+**The branches.** Two reach each of levels 1 to 3, one to each balcony edge in
+bay 6 (`treeLimbs`, `treeLandings`). Each leaves the trunk from a tread, so the
+walker steps off the spiral onto it, and each pair leaves two treads further
+round than the pair below, so the canopy turns as it climbs. A level's south
+branch rises to its floor from a little below it, its north branch falls to it
+from half a turn higher. Level 1's pair pass through the lattice's gate,
+level 2's through a 1.5 m gap in the balustrade (`treeRailGap`), and level 3's
+step onto its open edge. Each branch's tip lies on the floor's edge, a few
+centimetres proud of it (`treeLandingLift`).
+
+**The hook for level 1's size.** The owner's ruling makes the level-1 branches
+shrink a body as the corner stairs do. `treeShrinkLimbs` names those two
+branches; each one's path runs from `treeBranchFrom` to `treeBranchTo`
+(layout.puck), and the size field (standard/size-field.puck) is laid along
+that path. The branches are walkable now, and real climbing (grab, climb,
+mantle) is a separate engine plan; every surface of the trunk and branches is
+solid for it.
+
+The tree's colours, bark relief and leaf clumping are look.puck's `lookTree`.
+`gallery.shot hall` stands just east of the roots.
 
 ## The displays
 
