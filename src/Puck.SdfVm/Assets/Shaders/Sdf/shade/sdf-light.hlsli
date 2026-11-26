@@ -8,6 +8,7 @@
 #ifndef SHADE_SDF_LIGHT_HLSLI
 #define SHADE_SDF_LIGHT_HLSLI
 #include "Shared/luma.hlsli"
+#include "../frame/sdf-lights.hlsli"
 #include "../frame/sdf-work.hlsli"
 #include "sdf-mesh-irradiance.hlsli"
 #include "sdf-toon.hlsli"
@@ -252,6 +253,46 @@ SdfLightMasks sdfViewLightMasks() {
 
     masks.lights = passGroup.lightMask;
     masks.screens = uint4(0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu, 0xFFFFFFFFu);
+
+    return masks;
+}
+// The view's masks narrowed to the lights that can reach a point any active lane of the wave shades, `position` this
+// lane's: the box about the active lanes' points, and every light of the view's mask that sdfLightReachesBox keeps over
+// it (a directional or a rim reaches everything and is kept), its lights shared out among the active lanes and their
+// answers joined across the wave, with no group memory and no barrier. Every active lane must call it, each with the
+// point its walk shades, and walk the masks it answers; the screens stay the view's. A light it leaves out adds nothing
+// at any of those points, on the rule a views tile leaves one out by (sdfViewsTileLights). Views' tiles bound their
+// walks as tightly already (a wave's box narrowed a hall's visits by under one in a hundred), so glass alone reads it.
+SdfLightMasks sdfWaveLightMasks(float3 position) {
+    SdfLightMasks masks = sdfViewLightMasks();
+    float3 low = WaveActiveMin(position);
+    float3 high = WaveActiveMax(position);
+    uint rank = WavePrefixCountBits(true);
+    uint active = WaveActiveCountBits(true);
+    uint count = worldLightCount();
+    uint4 kept = uint4(0u, 0u, 0u, 0u);
+
+    [loop]
+    for (uint first = 0u; (first < count); first += active) {
+        uint index = (first + rank);
+        uint4 bit = uint4(0u, 0u, 0u, 0u);
+
+        if (index < count) {
+            uint word = (index / 32u);
+            uint flag = (1u << (index % 32u));
+
+            if ((sdfComponent(masks.lights, word) & flag) != 0u) {
+                SdfLight light = sdfLights[index];
+
+                if (((light.Kind != SDF_LIGHT_POINT) && (light.Kind != SDF_LIGHT_OCCLUDER))
+                    || sdfLightReachesBox(light, worldPointLightPosition(light), low, high)) {
+                    bit = uint4(((word == 0u) ? flag : 0u), ((word == 1u) ? flag : 0u), ((word == 2u) ? flag : 0u), ((word == 3u) ? flag : 0u));
+                }
+            }
+        }
+        kept |= WaveActiveBitOr(bit);
+    }
+    masks.lights = kept;
 
     return masks;
 }
