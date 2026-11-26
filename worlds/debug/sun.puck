@@ -338,8 +338,9 @@ prototypes {
 }
 
 // Vacuum: the star, a black sky of stars, and no air between the eye and the fire. The light comes from where the
-// star stands, and its strength rises as the square of its nearness. It casts no shadows here: the star's own ball
-// stands on the line from every surface toward its light, and a ball that cast would shadow all of them.
+// star stands, and its strength rises as the square of its nearness. Its shadows are as soft as the star is wide from
+// where they fall, so the frame's posts throw hard lines while the star is far and blurred ones as it passes; the
+// star's own ball casts none (`starSurface`).
 render {
   farDistance: 8000
   lanes ["state.sunLight"]
@@ -350,8 +351,7 @@ render {
         turns: [sunTurn],
         focus: sunSystemCentre,
         illuminance: "state.sunLux",
-        color: "#FFF4E2",
-        shadow: never
+        color: "#FFF4E2"
       )
     ]
   }
@@ -376,11 +376,12 @@ render {
       density: 0
     }
   }
-  // A camera in vacuum meters what the star lights, not the black sky round it, and stops down as the star nears.
+  // A camera in vacuum meters what the star lights, not the black sky round it, and stops down as the star nears, as far
+  // as the star's own surface filling the frame from beside it.
   exposure {
     mode: Auto
     minimum: 11
-    maximum: 26
+    maximum: 30
     adaptation: 0.75
     local: 0.5
     band: 0.75

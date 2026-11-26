@@ -18,5 +18,11 @@ bool sdfDebugPreservesScene(uint mode) {
 bool sdfDebugComposesFinal(uint mode) {
     return (sdfDebugPreservesScene(mode) || (mode == SDF_DEBUG_VIEW_RATES) || (mode == SDF_DEBUG_VIEW_RATE_FLASH));
 }
+// The scale the views, glass and resolve passes store scene light at, in a mode whose composite composes it (lightScale,
+// SdfPhotometry.StoredLightScale): a writer multiplies its nits by it and the glass and the composite divide it out as
+// they read, so a star's surface fits the half-float images. A debug image that is its own picture is stored as it is.
+float sdfStoredLightScale(uint mode, float lightScale) {
+    return ((sdfDebugComposesFinal(mode) || (mode == SDF_DEBUG_VIEW_SKY_COST)) ? max(lightScale, 1.0e-30) : 1.0);
+}
 
 #endif
