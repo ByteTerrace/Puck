@@ -498,9 +498,10 @@ measured.**
     unverified; then one built CLI
     ([the authoring loop](iteration/authoring-loop.md#build-order)'s step 9),
     which ends the stale global tool.
-13. [high] [Lighting and GI](#lighting-and-gi): the gallery's exhibits render
-    near-black in daylight on both backends. The gallery is the engine's
-    self-test, so every other look reading waits on this diagnosis.
+13. [high] [Lighting and GI](#lighting-and-gi): the probes read wrong surface
+    materials in some boots, which tints the closed gallery hall orange and
+    olive and darkens its bounce. The gallery is the engine's self-test, so
+    every other look reading waits on this diagnosis.
 
 **Then, each chosen for what it stresses.**
 
@@ -2297,6 +2298,32 @@ holds the fixed poses and the approaches already rejected.
 
 The volume's cost and convergence:
 
+- [high] The probes read wrong surface materials, so a closed room takes
+  coloured light it does not hold. In the gallery hall at a pinned noon, with
+  the blinds down and the cascades shadowing every interior surface, one boot's
+  probes under the `ellipsoid` exhibit (`world.probe 35.55 0.85 16 -0.9 -0.4 0`)
+  published an orange bounce of about (121, 42, 18) while their neighbours
+  stayed near neutral, the blinds took an olive bounce, and the volume's whole
+  light ran near a tenth of another boot's; that boot's beauty showed an
+  orange blob in the exhibit and olive exhibits and blinds until well past a
+  minute. A second boot of the same tree published neutral cubes about ten
+  times brighter, while its CPU reference (`world.probe`'s `reference-*`
+  fields, which name the face the relights disagree on most and the material
+  the reference's hits there weigh most in) read the floor under those probes
+  as program material 0, albedo (1, 0.078, 0.005), and so an orange-red
+  bounce. Turning `world.rays off` and resetting the layout (`world.indirect
+  medium`, then `high`) gave a neutral hall where the same reset with rays on
+  gave the orange and olive tints again, but the second boot's hardware path
+  was neutral too, so the rays are not the cause alone. Both readers resolve a
+  hit as the draw's material base plus its traced geometry's triangle
+  materials (`SdfMeshIrradianceScene.Instance.MaterialOf`, `sdfProbeSurface`);
+  the trace geometry can be a group's floor or another tier
+  (`SdfMeshDraw.Trace`, `SdfMeshTraceJudge`), whose triangle materials need not
+  be numbered as the draw's base expects. Next: on a fresh boot whose probes
+  show the tint, compare the traced geometry's mesh with the draw's mesh for
+  the floor and the exhibit, and the material ids each reader resolves for one
+  hit, then make the trace geometry carry the materials its draw names, in
+  one place both readers read.
 - [medium] Faster probe convergence costs host time while the volume works.
   With several probe jobs in flight, one commit a batch and placement trials
   sharing rounds (`SdfMeshProbeGpuWork.Run`, `SdfMeshIrradiance.PlaceBatch`),
