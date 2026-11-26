@@ -17,8 +17,7 @@ orders, verifying a change by building and running it, and fixing a defect at it
 
 - Re-read this worktree's AGENTS.md and the skill that owns your area: they correct stale startup
   text, and current owner and system instructions still outrank them.
-- Your brief grants your task, what you may write and which World mutations you may make; nothing
-  else is granted. Reuse the mechanisms it names.
+- Your brief grants your task, and what you may write; nothing else is granted. Reuse the mechanisms it names.
 - Read [the recurring hazards](../../../docs/development/hazards.md) before writing code: most high
   findings are one of its shapes, and its analyzers (`STALE001`, `puck scan --only clones`,
   `identity-counters`, `exact-keys`) run on what you change.
@@ -32,29 +31,25 @@ orders, verifying a change by building and running it, and fixing a defect at it
 
 ## Build and run
 
-- Build only the projects you touch (`dotnet build <project> -c Release -m:2 -nodeReuse:false`) and
-  boot the debug world once. Beyond that, run only the focused checks your brief asks for, scenario
-  files by name with `puck test <file> --jobs 1`: no `Puck.slnx` build, full suite, `worlds/debug`
-  sweep, benchmark route or GPU leg unless your brief grants it.
+- Build only the projects you touch (`dotnet build <project> -c Release -m:2 -nodeReuse:false`).
+  A lane boots no World, headless or windowed: it writes the code and hands off, and the lead builds,
+  runs and judges it in real time. Beyond the build, run only the checks that read your tree
+  (`puck compile --validate`, schema and shader checks) and any focused check your brief names (a
+  scenario file by name, `puck test <file> --jobs 1`, boots its own World, so a brief grants one
+  deliberately): no `Puck.slnx` build, full suite, `worlds/debug` sweep, benchmark route or GPU leg
+  unless your brief grants it.
 - Run `puck` verbs from a lane-named private copy of your worktree's built CLI, rebuilt after every
   merge of the integration tip ([verification](../verification/SKILL.md#run-verbs-from-your-own-cli-copy)).
 - Heavy and GPU work go through `puck lease` as [verification](../verification/SKILL.md#what-uses-the-gpu)
   says: one `puck test` per heavy hold, and Git Bash by its full path,
   `"C:/Program Files/Git/usr/bin/bash.exe" <script>`, since a bare `bash` is WSL's and has no .NET.
   Keep working while a ticket waits.
-- To see your edits running, start a World with `puck_world_start` and end it with `puck_world_stop`
-  ([the live World is shared](../puck-world/SKILL.md#the-live-world-is-shared)). `windowed: true`
-  holds the GPU lease: use it only on a granted GPU leg, and stop it once its captures are in, never
-  keeping it open across code edits.
-  Keep the source fixed while a start is pending, including its build-lease wait: a source change
-  makes the isolated build discard itself. Finish edits and generated catalogs before starting it.
-- Your finish line is headless unless your brief says seeing or measuring a windowed World is the
-  work itself (a look you iterate on, a GPU or memory attribution). The GPU, the machine's memory
-  and quiet time are shared and scheduled by the lead: a windowed check that only confirms your change
-  goes in your hand-back as a **verification request** (the World, the view or stop, the commands, the
-  settle state, what you expect to see and what decides it), and the lead runs it in a batched
-  window. Use the shared mesh store: pass a fresh `--cache-dir` (a cold bake, about a minute at full
-  CPU and up to 18 GB) only when your brief asks for one.
+- Your finish line is the build and the checks that read your tree. The GPU, the machine's memory
+  and quiet time are shared and scheduled by the lead, so every run, look or feel check (a headless
+  boot, a windowed view, a capture, a benchmark) goes in your hand-back as a **verification request**
+  (the World, the view or stop, the commands, the settle state, what you expect to see and what
+  decides it), and the lead runs it in its live World. Pass a fresh `--cache-dir` (a cold bake,
+  about a minute at full CPU and up to 18 GB) to a check you run only when your brief asks for one.
 
 ## Shell under the worktree guard
 
@@ -110,10 +105,10 @@ orders, verifying a change by building and running it, and fixing a defect at it
   first under **Needs you** with the author or player case it blocks. Two lanes in one batch closed
   defects this way (non-operator row declaration, a solid creation's `sizeBy`), each noted only in
   passing, and the owner had to ask.
-- Done is a state: every job you started has exited, its watcher is stopped, your Worlds are stopped,
+- Done is a state: every job you started has exited, its watcher is stopped,
   your leases are released and the output that must survive is preserved. A pending run is in
   progress or blocked, never done. Every hand-back reaches this state, a blocked one and one a stop
-  order forces included: stopping means your own jobs, watchers and Worlds stop too, not that they
+  order forces included: stopping means your own jobs and watchers stop too, not that they
   are left running for the lead. Keep one watcher per running job, ending on success, failure or
   exit; no `sleep` timers and no polling a job that reports its own exit
   ([your harness](../orchestration/references/lane-work.md#running-long-tasks)). A foreground wait
@@ -130,7 +125,7 @@ orders, verifying a change by building and running it, and fixing a defect at it
   counters, hashes, bytes, executes, laws, captures. Report no timing as a result. A timing
   question goes in your hand-back as a measurement request (frozen before and after builds, the
   command, what decides it) for the lead's quiet window. Where your brief asks for a check beyond
-  the build and the boot, use filtered laws and a reproduce of only the scenarios the step reaches;
+  the build, use filtered laws and a reproduce of only the scenarios the step reaches;
   the lead runs the full suites once per batch.
 - A build takes no lease beyond the build lease a `puck` verb takes itself: `puck lease heavy` is
   for the memory-heavy test assemblies and reproduce replicas, and a build queued behind them waits
@@ -140,21 +135,20 @@ orders, verifying a change by building and running it, and fixing a defect at it
   checkout is building, or run it as `puck lease build -- dotnet build …`. Two builds writing one
   checkout at once leave a half-written reference assembly (`CS0009`).
 - Code first (AGENTS.md, "Code first, verification after"). Write the change properly, build what
-  you touched, boot the debug world once, and hand back. Windowed runs, benchmarks, look critics and
-  broad testing are the lead's batched passes after landing, not your gate: ask for them under
-  **Needs you** as a verification request instead of running them, unless your brief makes one your
-  finish line. Never re-run the same check to gain confidence.
+  you touched, and hand back. Boots, windowed runs, benchmarks, look critics and broad testing are
+  the lead's passes after landing, not your gate: ask for them under **Needs you** as a verification
+  request instead of running them. Never re-run the same check to gain confidence.
 - Code first defers verification, never code quality. Writing the change properly includes the
   search before you build a mechanism (Start, and AGENTS.md rule 7) and fixing the duplicates you
   read or write in the same change (AGENTS.md, vigilance against duplication); one too large for
   your change goes into the refactoring packet with its file and line, and under **Found**. The two
   checks below that only read your tree, `puck scan --only duplicates` and `puck docs links`, need
-  no GPU and no windowed run, so no brief or deadline makes them optional.
+  no World and no GPU, so no brief or deadline makes them optional.
 - Once your finish line holds on the merged head, hand back. Start no review or hardening round of
   your own (a self-review, extra guards, fuzzing beyond the brief): the lead's area fix passes and any
   invariant review run beside your next work, and what else you noticed goes under **Found**.
 - Take each piece of evidence you report once, on the final content: merge the integration tip
-  last, then build, boot and run the two scans below and any check your brief names, all before your
+  last, then build and run the two scans below and any check your brief names, all before your
   final commit, so no later merge of yours can bring in a duplicate or a broken link unseen. If you
   merge again after the `Brief:` commit (the lead resumes you after the tip moved), repeat them on
   the new merged head and report that; a failure the merge brought in goes under **Needs you** with

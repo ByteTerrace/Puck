@@ -1,5 +1,5 @@
 ---
-description: "AGENTS.md 'Code first, verification after' and delegate 'Build and run' and 'Finish': a lane hands back after a build of what it touched and one headless boot of the debug world; a windowed check that only confirms its change, a benchmark and a look critic are the lead's batched passes, asked for as a verification request under Needs you."
+description: "AGENTS.md 'Code first, verification after' and delegate 'Build and run' and 'Finish': a lane hands back after a build of what it touched and boots no World, headless or windowed; every run, a benchmark and a look critic are the lead's, asked for as a verification request under Needs you."
 max_turns: 8
 allowed_tools: [Read, Glob, Grep, Skill]
 tags: [capability]

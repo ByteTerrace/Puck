@@ -49,10 +49,11 @@ Procedures loaded by [orchestration](../SKILL.md) for branches, delegation and l
 When you delegate, inventory the work first, assign each agent explicit file
 ownership and its skills, and sequence edits to shared files. Each brief holds
 the whole task, the integration branch, a finish line, a stopping condition,
-and whether it grants the GPU. The finish line is the code written, a build of
-what the lane touched and one boot of the debug world, plus a named command or
-state only where the brief says seeing or measuring it is the work (AGENTS.md,
-"Code first, verification after"). A stopping condition is for a product call
+and whether it grants the GPU. The finish line is the code written and a build of
+what the lane touched, plus a named check that only reads its tree where the
+change needs one; a lane boots no World, headless or windowed, and hands each
+run, look or feel check back as a verification request (AGENTS.md, "Code first,
+verification after"). A stopping condition is for a product call
 (what the engine should do) or an owner-only action, never a look value, which
 is the lane's and the lead's to decide (AGENTS.md, Authors rule); it never protects a file format, replay, checkpoint, ABI
 or recorded hash, since the owner rules those change freely (AGENTS.md). The

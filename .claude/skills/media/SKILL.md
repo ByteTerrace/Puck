@@ -142,7 +142,7 @@ this file is corrected in the same change.
 
 - Unit laws: `tests/Puck.Audio.Tests` (mixer, synth, `MusicClock`,
   `MusicDirector`, `VoiceBabbler`), `tests/Puck.Recording.Tests`.
-- Headless speech: boot the debug world and run the reference's
+- Headless speech (the lead's run, requested by a lane): boot the debug world and run the reference's
   `audio.render` recipe ([text speech](../../../docs/reference/audio.md#text-speech))
   twice; two exports of unchanged text and voice are byte-identical. The guide
   and the map sign in `worlds/debug/guide.puck` are the live examples.
