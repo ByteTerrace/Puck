@@ -269,7 +269,7 @@ public static partial class WorldSubmissionCodec {
                     TargetPrincipal: ReadPrincipal(reader: ref reader)
                 );
             case 9:
-                return ReadDurableState(
+                return ReadStageRegisters(
                     entity: entity,
                     principal: principal,
                     reader: ref reader
@@ -313,13 +313,13 @@ public static partial class WorldSubmissionCodec {
                 ));
         }
     }
-    private static WorldCommand.LoadDurableState ReadDurableState(ref WireReader reader, Principal principal, int entity) {
+    private static WorldCommand.StageRegisters ReadStageRegisters(ref WireReader reader, Principal principal, int entity) {
         var tick = reader.ReadUInt64();
         var values = reader.ReadArray(
-            field: "LoadDurableState.Values",
+            field: "StageRegisters.Values",
             maximum: MaxDurableStateValues,
             readItem: static (ref WireReader r) => {
-                var name = r.ReadRequiredString(field: "LoadDurableState.Values.Name");
+                var name = r.ReadRequiredString(field: "StageRegisters.Values.Name");
                 var value = r.ReadFixed();
                 var timerTicks = r.ReadUInt64();
 
@@ -336,13 +336,14 @@ public static partial class WorldSubmissionCodec {
             (values.Length == 0)
         ) {
             throw new LeafCodecException(failure: Fail(
-                detail: $"durable state value count 0 is outside 1..{MaxDurableStateValues}",
+                detail: $"register value count 0 is outside 1..{MaxDurableStateValues}",
                 refusal: WorldCodecRefusal.PayloadMalformed
             ));
         }
 
-        return new WorldCommand.LoadDurableState(
+        return new WorldCommand.StageRegisters(
             EntityIndex: entity,
+            Operator: reader.ReadBoolean(),
             Principal: principal,
             Tick: tick,
             Values: values
@@ -1050,13 +1051,13 @@ public static partial class WorldSubmissionCodec {
                     value.TargetPrincipal
                 );
                 break;
-            case WorldCommand.LoadDurableState value:
+            case WorldCommand.StageRegisters value:
                 if (
                     (value.Values.Count < 1) ||
                     (value.Values.Count > MaxDurableStateValues)
                 ) {
                     throw new LeafCodecException(failure: Fail(
-                        detail: $"durable state value count {value.Values.Count} is outside 1..{MaxDurableStateValues}",
+                        detail: $"register value count {value.Values.Count} is outside 1..{MaxDurableStateValues}",
                         refusal: WorldCodecRefusal.PayloadMalformed
                     ));
                 }
@@ -1068,12 +1069,13 @@ public static partial class WorldSubmissionCodec {
                         WriteRequiredString(
                             w,
                             state.Name,
-                            "LoadDurableState.Values.Name"
+                            "StageRegisters.Values.Name"
                         );
                         w.WriteFixed(value: state.Value);
                         w.WriteUInt64(value: state.TimerTicks);
                     }
                 );
+                writer.WriteBoolean(value: value.Operator);
                 break;
             case WorldCommand.RigidImpulse value:
                 writer.WriteByte(value: 10);

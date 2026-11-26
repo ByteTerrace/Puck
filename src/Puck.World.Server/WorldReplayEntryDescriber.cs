@@ -59,7 +59,7 @@ public static class WorldReplayEntryDescriber {
             ? " exclusive"
             : "")} as {compose.TargetPrincipal.Describe()}",
             WorldCommand.DissolveControl dissolve => $"disengage {entity} as {dissolve.TargetPrincipal.Describe()}",
-            WorldCommand.LoadDurableState durable => $"durable {entity} tick={durable.Tick} values={durable.Values.Count}",
+            WorldCommand.StageRegisters registers => $"{(registers.Operator ? "registers" : "durable")} {entity} tick={registers.Tick} values={registers.Values.Count}",
             _ => $"{command.GetType().Name} {entity}",
         };
 

@@ -607,9 +607,10 @@ public sealed partial class WorldGrants {
             }
         }
         if (values.Count > 0) {
-            _ = body.TryStageDurableState(
+            _ = body.TryStageRegisters(
                 tick: Host.NextInputTick,
                 values: values,
+                operatorWrite: false,
                 requirePlayerWritable: false,
                 writer: $"world:{profile.Id}",
                 reason: out _

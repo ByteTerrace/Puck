@@ -204,6 +204,15 @@ internal sealed partial class PlayerCommandModule(PlayerRoster roster, WorldScre
             ackOnly: true
         );
         yield return CommandDefinition.WithWireArgs(
+            audience: CommandAudience.Operator,
+            bindability: CommandBindability.Unbindable,
+            name: "body.register",
+            description: $"Writes one body register for the next simulation tick, as an operator: {BodyRegisterForms.Spelling}. Any declared register (state.body) of any body, an ephemeral one a rule keeps included (the debug world's noclip), unlike body.state-load's player-writable durable values. A counter takes its exact decimal value and a timer its whole engine ticks, the forms body.state reads back; the register's envelope refuses a value outside it. The write is tick-stamped and recorded on the replay authority tape, and the authority refuses it, by name on stderr, from anyone but an operator. world.pins writes this line for each seat register that differs from its initial value or that an operator wrote.",
+            forms: BodyRegisterForms,
+            handler: RegisterHandler,
+            ackOnly: true
+        );
+        yield return CommandDefinition.WithWireArgs(
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Bindable,
             name: "body.stop",

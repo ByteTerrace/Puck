@@ -192,21 +192,27 @@ public sealed partial class WorldBody {
         value = StateCounter(slot: slot);
         return true;
     }
-    /// <summary>Stages durable values for one explicit simulation tick. Repeated inputs in that tick compose by
-    /// submission order; the last value for a slot wins.</summary>
-    internal bool TryStageDurableState(ulong tick, IReadOnlyList<DurableStateValue> values, bool requirePlayerWritable, string writer, out string reason) {
-        if (Profile is null) {
+    /// <summary>Stages register values for one explicit simulation tick. Repeated inputs in that tick compose by
+    /// submission order; the last value for a slot wins. A player's write reaches only the durable registers of a body
+    /// with an identity; an operator's (<paramref name="operatorWrite"/>) reaches any declared register of any body,
+    /// ephemeral ones included, and is held to each register's envelope as a player-writable write is.
+    /// <paramref name="requirePlayerWritable"/> holds a player's write to the registers the identity may submit.</summary>
+    internal bool TryStageRegisters(ulong tick, IReadOnlyList<DurableStateValue> values, bool operatorWrite, bool requirePlayerWritable, string writer, out string reason) {
+        if (!operatorWrite && (Profile is null)) {
             reason = "the body has no player identity";
             return false;
         }
 
+        var checkEnvelope = (operatorWrite || requirePlayerWritable);
+
         foreach (var value in values) {
             var slot = FindActionState(name: value.Name);
 
-            if (
-                (slot < 0) ||
-                (m_actionStateDefinitions[slot].Lifetime != ActionStateLifetime.Durable)
-            ) {
+            if (slot < 0) {
+                reason = $"state '{value.Name}' names no declared register";
+                return false;
+            }
+            if (!operatorWrite && (m_actionStateDefinitions[slot].Lifetime != ActionStateLifetime.Durable)) {
                 reason = $"state '{value.Name}' names no durable slot";
                 return false;
             }
@@ -230,7 +236,7 @@ public sealed partial class WorldBody {
             );
 
             if (
-                requirePlayerWritable &&
+                checkEnvelope &&
                 (m_actionStateDefinitions[slot].Envelope is { } envelope) &&
                 !envelope.Contains(value: raw)
             ) {
@@ -327,7 +333,7 @@ public sealed partial class WorldBody {
                 slot: slot,
                 requested: requested,
                 writer: rows[slot].Writer,
-                reason: "tick-stamped durable input"
+                reason: "tick-stamped register input"
             );
         }
         ClearDurableInput();
@@ -820,6 +826,58 @@ public sealed partial class WorldBody {
         role: role
     );
 
+    /// <summary>The writer an operator's register write (<c>body.register</c>) records in a register's read-back.</summary>
+    public const string OperatorWriter = "operator";
+
+    /// <summary>Appends each register a restart would not give back, as the value text <see cref="TryParseRegister"/>
+    /// reads: one whose value differs from its initial value, or that an operator wrote last.</summary>
+    /// <param name="registers">The list the registers' names and value texts are appended to, in declaration order.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="registers"/> is <see langword="null"/>.</exception>
+    public void AppendSessionRegisters(List<(string Name, string Value)> registers) {
+        ArgumentNullException.ThrowIfNull(argument: registers);
+
+        for (var slot = 0; (slot < m_actionStateDefinitions.Length); slot++) {
+            var definition = m_actionStateDefinitions[slot];
+            var raw = ((definition.Kind == ActionStateKind.Counter) ? StateCounter(slot: slot).Value : unchecked((long)StateTimer(slot: slot)));
+
+            if ((raw != InitialRaw(definition: in definition)) || string.Equals(a: m_actionStateLastWriter[slot], b: OperatorWriter, comparisonType: StringComparison.Ordinal)) {
+                registers.Add(item: (definition.Name, ((definition.Kind == ActionStateKind.Counter)
+                    ? FixedQ4816.FromRawBits(value: raw).ToString(format: null, formatProvider: CultureInfo.InvariantCulture)
+                    : unchecked((ulong)raw).ToString(provider: CultureInfo.InvariantCulture))));
+            }
+        }
+    }
+    /// <summary>Reads a register value as <c>body.register</c> takes it and <see cref="AppendSessionRegisters"/> writes
+    /// it: a counter as its exact decimal, a timer as its whole engine ticks, the forms <c>body.state</c> reads back.</summary>
+    /// <param name="name">The register's declared name.</param>
+    /// <param name="text">The value text.</param>
+    /// <param name="value">The value to stage, when this returns <see langword="true"/>.</param>
+    /// <param name="refusal">Why the value cannot be read, when this returns <see langword="false"/>.</param>
+    /// <returns>Whether <paramref name="name"/> names a declared register and <paramref name="text"/> spells a value of its kind.</returns>
+    public bool TryParseRegister(string name, string text, out DurableStateValue value, out string? refusal) {
+        var slot = FindActionState(name: name);
+
+        value = default!;
+        if (slot < 0) {
+            refusal = $"state '{name}' names no declared register";
+            return false;
+        }
+        if (m_actionStateDefinitions[slot].Kind == ActionStateKind.Counter) {
+            if (!FixedQ4816.TryParse(s: text, provider: CultureInfo.InvariantCulture, result: out var counter)) {
+                refusal = $"counter '{name}' takes a decimal value, not '{text}'";
+                return false;
+            }
+            value = new DurableStateValue(Name: name, Value: counter, TimerTicks: 0UL);
+        } else {
+            if (!ulong.TryParse(s: text, style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var ticks) || (ticks > long.MaxValue)) {
+                refusal = $"timer '{name}' takes whole engine ticks (body.state reads them), not '{text}'";
+                return false;
+            }
+            value = new DurableStateValue(Name: name, Value: FixedQ4816.Zero, TimerTicks: ticks);
+        }
+        refusal = null;
+        return true;
+    }
     /// <summary>Reads one declared action-state slot without changing it.</summary>
     /// <param name="name">The slot name.</param>
     /// <param name="kind">The storage kind.</param>
