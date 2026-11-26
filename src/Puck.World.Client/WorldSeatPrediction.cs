@@ -62,7 +62,10 @@ public sealed class WorldSeatSentInput {
     public WorldAuthorityEndpoint? Endpoint { get; private set; }
     /// <summary>Gets the seat clock's mapping onto the ticks of the authority the batches were sent to.</summary>
     public WorldAuthorityClock Clock { get; } = new();
-    // The owner incarnation (WorldSeatInput.OwnerIncarnation) the held batches were sent under.
+    /// <summary>Gets the owner incarnation (<see cref="WorldSeatInput.OwnerIncarnation"/>) the held batches were sent
+    /// under: an answer is timed only against batches of the incarnation it answers, since every owner numbers its input
+    /// epochs and event sequences afresh.</summary>
+    public long Incarnation => m_incarnation;
     private long m_incarnation;
 
     /// <summary>Records a batch as it is sent, after noting the authority's latest delivered tick on the seat's clock. A
@@ -104,22 +107,27 @@ public sealed class WorldSeatSentInput {
     /// <param name="position">The 0-based position, below <see cref="Count"/>.</param>
     /// <returns>The batch.</returns>
     public ref readonly Sent At(int position) => ref m_sent[(((m_next - m_count) + position + Capacity) % Capacity)];
-    /// <summary>Finds the authority tick the batch carrying an answered event was sent at (<see cref="Sent.Tick"/>).</summary>
+    /// <summary>Finds the held batch carrying an answered event, by its position (<see cref="At"/>). A
+    /// batch is answered after it is sent, and the seat clock maps a send onto the authority's ticks to within the drift
+    /// of one <see cref="WorldAuthorityClock.Window"/>, so a batch the clock places more than that window after the
+    /// answer's tick is not the one answered: it carries the same epoch and sequence in another stream (a seat whose
+    /// input restarted its numbering under the same owner), and timing the answer against it gives a lead below zero.</summary>
     /// <param name="epoch">The answered input epoch.</param>
     /// <param name="sequence">The answered event sequence.</param>
-    /// <param name="tick">The send tick, when this returns <see langword="true"/>.</param>
-    /// <returns><see langword="true"/> when a held batch of that epoch carries the sequence.</returns>
-    public bool TryFindSent(ulong epoch, uint sequence, out long tick) {
-        for (var position = (m_count - 1); (position >= 0); position--) {
+    /// <param name="answeredAt">The authority tick the answer names.</param>
+    /// <param name="position">The batch's 0-based position, oldest first, when this returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when a held batch of that epoch that the answer can follow carries the
+    /// sequence.</returns>
+    public bool TryFindSent(ulong epoch, uint sequence, ulong answeredAt, out int position) {
+        for (position = (m_count - 1); (position >= 0); position--) {
             ref readonly var sent = ref At(position: position);
 
-            if ((sent.Submission.Input.Epoch == epoch) && (sent.Sequence == sequence) && (sequence != 0U)) {
-                tick = sent.Tick;
+            if ((sent.Submission.Input.Epoch == epoch) && (sent.Sequence == sequence) && (sequence != 0U) &&
+                (sent.Tick <= ((long)answeredAt + WorldAuthorityClock.Window))) {
                 return true;
             }
         }
 
-        tick = 0L;
         return false;
     }
 }
