@@ -53,8 +53,6 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
   level 0 into level 1 shrinking to 0.15 and from level 1 to level 2 growing to full size, and walks down both), and
   the spirals' risers keep the same 1.2 margin by construction, but a body walked round the south-east spiral by
   chords stalled at about 1.1 m up at size 0.65. Walk it tangentially and name the cause.
-- A switchback's second flight arrives against the arcade's end pier over half its width (gallery.md, "What is still
-  open"): move the pier or narrow the arrival.
 - The rental stalls stand (worlds/debug/gallery/rentals.puck, worlds/debug/gallery.md "The rentals"): a rented
   device rides its renter's hip, shows its pool machine's game and plays in its renter's hands. Open: creating a pool
   machine's runtime only when its `runsWhen` first holds; reading the body's size in `rentalCanRent`, as a station's

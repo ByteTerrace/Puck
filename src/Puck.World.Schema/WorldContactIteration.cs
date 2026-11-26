@@ -1,12 +1,13 @@
 using Puck.Commands;
 using Puck.State.Rules;
+using Puck.World.Protocol;
 
 namespace Puck.World;
 
-/// <summary>The authority's view of the tick's pointing contacts on its screens: what a rule sweeping
-/// <c>forEach: $contacts:&lt;screen&gt;</c> binds and what <c>contact(each, …)</c> reads.</summary>
+/// <summary>The authority's view of the tick's pointing contacts on its pointer surfaces: what a rule sweeping
+/// <c>forEach: contacts(&lt;surface&gt;)</c> binds and what <c>contact(each, …)</c> reads.</summary>
 public interface IWorldSurfaceContacts : IFacet {
-    /// <summary>Appends the key of every contact event this tick whose ray lands on the sweep's screen and whose
+    /// <summary>Appends the key of every contact event this tick whose ray lands on the sweep's surface and whose
     /// participant holds <c>Control</c> over it: the local seats in order, then the live sessions by ordinal, each
     /// participant's events in the order they happened.</summary>
     /// <param name="sweep">The sweep.</param>
@@ -18,18 +19,24 @@ public interface IWorldSurfaceContacts : IFacet {
     /// <returns>The generation.</returns>
     long ContactGeneration(CellKey key);
 }
-/// <summary>A compiled <c>forEach: $contacts:&lt;screen&gt;</c> sweep: one binding of <c>$each</c> per pointing-contact
-/// event this tick (a finger, a pen tip, or the mouse while its primary button is held) whose ray lands on one
-/// <c>Simulation</c> screen. Mouse and touch arrive through this one door and differ only in their device, so a screen's
-/// rules answer a tap the same way whichever made it. A binding's key is its participant's slot times
-/// <see cref="SurfaceContact.MaximumPerTick"/> plus the event's position in that participant's tick.</summary>
-/// <param name="ScreenIndex">The screen the rays map through, which a participant must hold <c>Control</c> over.</param>
-/// <param name="Mapping">The screen row's source-normalized mapping (<see cref="WorldScreenMappings.Normalized"/>),
-/// already validated, so the tick maps every ray in fixed point from document data.</param>
+/// <summary>A compiled <c>forEach: contacts(&lt;surface&gt;)</c> sweep (also spelled <c>$contacts:&lt;surface&gt;</c>):
+/// one binding of <c>$each</c> per pointing-contact event this tick (a finger, a pen tip, or the mouse while its primary
+/// button is held) whose ray lands on one pointer surface: a <c>Simulation</c> screen by its index, or a placement
+/// carrying a <see cref="WorldPointerSurface"/> by its id, the surfaces a <c>pointer(…)</c> read names. Mouse and touch
+/// arrive through this one door and differ only in their device, so a surface's rules answer a tap the same way
+/// whichever made it. A binding's key is its participant's slot times <see cref="SurfaceContact.MaximumPerTick"/> plus
+/// the event's position in that participant's tick.</summary>
+/// <param name="Surface">The surface as authored: a screen's index or a placement's id.</param>
+/// <param name="Subject">What a participant must hold <c>Control</c> over for its contacts to reach the sweep: the
+/// screen, or the placement carrying the surface.</param>
+/// <param name="Mapping">The surface's source-normalized mapping, already validated, so the tick maps every ray in
+/// fixed point from document data.</param>
+/// <param name="Regions">The surface's named regions a <c>contact(each, region|row, &lt;id&gt;)</c> read hit-tests, or
+/// <see langword="null"/> for none.</param>
 /// <param name="Participants">The participants one sweep can visit: the document's local seats plus its network
 /// players.</param>
-public sealed record WorldContactIteration(int ScreenIndex, SourceMapping Mapping, int Participants) : RuleIteration(Participants * SurfaceContact.MaximumPerTick) {
-    /// <summary>The reserved channel the sweep's spelling <c>$contacts:&lt;screen&gt;</c> parses to.</summary>
+public sealed record WorldContactIteration(string Surface, GrantSubject Subject, SourceMapping Mapping, IReadOnlyList<WorldPointerRegion>? Regions, int Participants) : RuleIteration(Participants * SurfaceContact.MaximumPerTick) {
+    /// <summary>The reserved channel the sweep's spelling <c>contacts(&lt;surface&gt;)</c> parses to.</summary>
     public const string Channel = "contacts";
 
     /// <summary>Returns the participant slot and event position a key's index encodes.</summary>
@@ -62,27 +69,44 @@ public enum ContactFacet : byte {
     X,
     /// <summary>The source-normalized vertical fraction where the ray lands, <c>y</c> down, in <c>[0, 1)</c>.</summary>
     Y,
+    /// <summary><c>1</c> while the ray lands inside one named region of the surface, <c>0</c> otherwise.</summary>
+    Region,
+    /// <summary>The row of one named region the ray lands in, counted from the top (<see cref="WorldPointerRegion.RowOf"/>),
+    /// or <c>-1</c> while it lands outside the region.</summary>
+    Row,
 }
-/// <summary>One facet of the contact event a <c>$contacts:&lt;screen&gt;</c> sweep bound to <c>$each</c>.</summary>
+/// <summary>One facet of the contact event a <c>contacts(&lt;surface&gt;)</c> sweep bound to <c>$each</c>.</summary>
 public sealed class ContactOperand : WorldOperandFact {
     /// <summary>Initializes a new instance of the <see cref="ContactOperand"/> class.</summary>
     /// <param name="facet">The facet read.</param>
-    /// <param name="sweep">The sweep whose binding is read, which names the screen the ray maps through.</param>
-    public ContactOperand(ContactFacet facet, WorldContactIteration sweep) : base((facet is ContactFacet.X or ContactFacet.Y) ? CellKind.Fixed : CellKind.Int) {
+    /// <param name="sweep">The sweep whose binding is read, which names the surface the ray maps through.</param>
+    /// <param name="region">The region a <see cref="ContactFacet.Region"/> or <see cref="ContactFacet.Row"/> read
+    /// hit-tests, or <see langword="null"/> for any other facet.</param>
+    /// <exception cref="ArgumentException"><paramref name="facet"/> is <see cref="ContactFacet.Region"/> or
+    /// <see cref="ContactFacet.Row"/> and <paramref name="region"/> is <see langword="null"/>.</exception>
+    public ContactOperand(ContactFacet facet, WorldContactIteration sweep, WorldPointerRegion? region = null) : base((facet is ContactFacet.X or ContactFacet.Y) ? CellKind.Fixed : CellKind.Int) {
+        if ((facet is ContactFacet.Region or ContactFacet.Row) && (region is null)) {
+            throw new ArgumentException(message: $"A {facet} read names the region it hit-tests.", paramName: nameof(region));
+        }
+
         Facet = facet;
+        Region = region;
         Sweep = sweep;
     }
 
     /// <summary>Gets the facet read.</summary>
     public ContactFacet Facet { get; }
+    /// <summary>Gets the region a <see cref="ContactFacet.Region"/> or <see cref="ContactFacet.Row"/> read hit-tests,
+    /// or <see langword="null"/>.</summary>
+    public WorldPointerRegion? Region { get; }
     /// <summary>Gets the sweep whose binding is read.</summary>
     public WorldContactIteration Sweep { get; }
 
     /// <summary>Returns the facet's raw value for a contact event its participant made.</summary>
     /// <param name="contact">The contact event.</param>
     /// <param name="seat">The participant's number, as <see cref="ContactFacet.Seat"/> reads it.</param>
-    /// <returns>The raw value in <see cref="WorldOperandFact.ValueKind"/>'s encoding; zero for a coordinate of a ray
-    /// that does not land on the screen.</returns>
+    /// <returns>The raw value in <see cref="WorldOperandFact.ValueKind"/>'s encoding; for a ray that does not land on
+    /// the surface, <c>-1</c> for a row and zero for every other place facet.</returns>
     public long Read(in SurfaceContact contact, int seat) {
         switch (Facet) {
             case ContactFacet.Seat:
@@ -97,8 +121,15 @@ public sealed class ContactOperand : WorldOperandFact {
 
         var hit = Sweep.Mapping.MapRay(ray: contact.Ray);
 
-        return (hit.IsOnSource
-            ? ((Facet == ContactFacet.X) ? hit.Coordinate.X.Value : hit.Coordinate.Y.Value)
-            : 0L);
+        if (!hit.IsOnSource) {
+            return ((Facet == ContactFacet.Row) ? -1L : 0L);
+        }
+
+        return Facet switch {
+            ContactFacet.X => hit.Coordinate.X.Value,
+            ContactFacet.Y => hit.Coordinate.Y.Value,
+            ContactFacet.Region => ((Region!.RowOf(point: hit.Coordinate) >= 0L) ? 1L : 0L),
+            _ => Region!.RowOf(point: hit.Coordinate),
+        };
     }
 }

@@ -24,8 +24,8 @@ let traversalStudioGoals = [
 // south-west switchback (gallery/layout.puck): its first flight climbs the east half, its second the west half.
 let traversalGalleryGoals = [
   { x: 10.175, y: 0.05, z: 19.875 } // south-west stair approach, before the first flight's foot
-  { x: 10.175, y: 2.3, z: 14.075 } // first flight and half landing
-  { x: 7.575, y: 2.3, z: 14.075 } // cross the landing round the spine
+  { x: 10.175, y: 2.3, z: 13.5 } // first flight and half landing
+  { x: 7.575, y: 2.3, z: 13.5 } // cross the landing round the spine
   { x: 8.525, y: 4.55, z: 21.175 } // second flight to level 1, out past the end pier onto the bridge
   { x: 14.5, y: 4.55, z: 21.175 } // north of the first arcade pier
   { x: 14.5, y: 4.55, z: 18.575 } // into the south gallery between the first two piers
