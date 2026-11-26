@@ -976,7 +976,7 @@ open.
   commits, so a group rewind does not reach back into the client), then admit it
   at the boundary. `puck benchmark --remote local` and `--remote issued` never
   reach this: neither starts a silo. Check: the RTX 2060's player install
-  joins `play.puck.byteterrace.com:7825` and its seat's body arrives in the
+  joins the hosted authority (play.puck.byteterrace.com, port 7825) and its seat's body arrives in the
   hosted world.
 - [medium] A manifest's member is fetched whole and the whole manifest is sent
   each time ([decision 4](remote-content.md#decision-4-the-document-travels-as-a-manifest)).
