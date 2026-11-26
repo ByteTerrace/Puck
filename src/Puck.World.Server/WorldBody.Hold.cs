@@ -17,6 +17,10 @@ public sealed partial class WorldBody {
     private FixedVector3 m_holdNormal;
 
     private FixedRateAccumulator m_holdSpendAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+    private FixedRateAccumulator m_holdRestoreAccumulator = new(ticksPerSecond: EngineTicksPerSecond);
+
+    // How long the body has stood driving into a face whose row it has not taken yet (FixedBodyHold.DriveDwellTicks).
+    private ulong m_holdDriveDwellTicks;
 
     // The axis the body is DRAWN standing on, carried across ticks so a pull's lean is reached by turning over the
     // body's own span rather than by snapping — see SteerAttitudeToward. Zero until the first resolve seats it.
@@ -160,7 +164,13 @@ public sealed partial class WorldBody {
     // face by its own drive sits flush with it, and a march that starts on (or a hair inside) a surface has no
     // distance to march: backing the origin off guarantees the ray begins in open space, and the extra length is
     // added back so the reach the world authored is the reach actually searched.
-    private bool TryCastHold(in FixedVector3 direction, FixedQ4816 reach, out FixedSurfaceAttachCandidate candidate) {
+    private bool TryCastHold(in FixedVector3 direction, FixedQ4816 reach, out FixedSurfaceAttachCandidate candidate) => TryCastHoldFrom(
+        candidate: out candidate,
+        direction: in direction,
+        origin: HoldProbeOrigin,
+        reach: reach
+    );
+    private bool TryCastHoldFrom(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 reach, out FixedSurfaceAttachCandidate candidate) {
         candidate = default;
 
         if (m_contactField is not { } field) {
@@ -174,7 +184,7 @@ public sealed partial class WorldBody {
             direction: in direction,
             grantedByOverride: out _,
             maxDistance: (reach + backoff),
-            origin: (HoldProbeOrigin - (direction.Normalize() * backoff))
+            origin: (origin - (direction.Normalize() * backoff))
         );
     }
     private static bool ChannelHeld(in PlayerIntent intent, int ordinal, FixedQ4816 threshold) => ((ordinal >= 0) && (intent[ordinal] >= threshold));
@@ -183,13 +193,26 @@ public sealed partial class WorldBody {
         : -1
     );
     // Whether a row may be taken (or kept) at all this tick, before any geometry is probed: its release channel is
-    // not held down, and whatever it spends still has something to spend.
-    private bool HoldEligible(in FixedBodyHold hold, in PlayerIntent intent) {
+    // not held down, its own gate is open, and whatever it spends still has something to spend.
+    private bool HoldEligible(int index, in PlayerIntent intent) {
+        var hold = m_holds[index];
+
         if (ChannelHeld(
             intent: in intent,
             ordinal: hold.ReleaseOrdinal,
             threshold: hold.ReleaseThreshold
         )) {
+            return false;
+        }
+        if (
+            (m_tuning.HoldGates is { } gates) &&
+            (index < gates.Length) &&
+            !GateOpen(
+            gate: gates[index],
+            intent: in intent,
+            recencyLane: -1
+        )
+        ) {
             return false;
         }
 
@@ -200,21 +223,26 @@ public sealed partial class WorldBody {
             (StateCounter(slot: slot) > FixedQ4816.Zero)
         );
     }
-    // Drains one step of what the current hold spends. The remainder carries in the hold's own accumulator, so a
-    // rate that does not divide the step evenly still drains exactly the authored amount over time.
-    private void SpendHold(in FixedBodyHold hold, ulong stepTicks) {
+    // Drains one step of what the current hold spends, at its moving rate while the body is commanded and its resting
+    // rate otherwise. The remainder carries in the hold's own accumulator, so a rate that does not divide the step
+    // evenly still drains exactly the authored amount over time.
+    private void SpendHold(in FixedBodyHold hold, in PlayerIntent intent, ulong stepTicks) {
         var slot = HoldSpendSlot(hold: in hold);
+        var rate = (TryCommandedDirection(direction: out _, intent: in intent)
+            ? hold.SpendPerSecond
+            : hold.SpendRestingPerSecond
+        );
 
         if (
             (slot < 0) ||
-            (hold.SpendPerSecond <= FixedQ4816.Zero)
+            (rate <= FixedQ4816.Zero)
         ) {
             return;
         }
 
         var drained = m_holdSpendAccumulator.Integrate(
             elapsedTicks: stepTicks,
-            ratePerSecond: hold.SpendPerSecond
+            ratePerSecond: rate
         );
 
         if (drained <= FixedQ4816.Zero) {
@@ -229,42 +257,63 @@ public sealed partial class WorldBody {
         );
         MarkDurableDirty(slot: slot);
     }
+    // Refills one step of what the current hold restores, up to the slot's own envelope, while the restore's own gate
+    // is open. A slot already full is left unwritten, so a body resting under a restoring row with nothing to restore
+    // writes no register.
+    private void RestoreHold(int index, in PlayerIntent intent, ulong stepTicks) {
+        var hold = m_holds[index];
+
+        if (
+            (hold.RestoreState is not { Length: > 0 } name) ||
+            (hold.RestorePerSecond <= FixedQ4816.Zero)
+        ) {
+            return;
+        }
+
+        var slot = FindActionState(name: name);
+
+        if (slot < 0) {
+            return;
+        }
+        if (
+            ((m_actionStateDefinitions[slot].Envelope is { Values: null } envelope) && (StateCounter(slot: slot).Value >= envelope.Maximum)) ||
+            ((m_tuning.HoldRestoreGates is { } gates) && (index < gates.Length) && !GateOpen(
+                gate: gates[index],
+                intent: in intent,
+                recencyLane: -1
+            ))
+        ) {
+            m_holdRestoreAccumulator.Reset();
+
+            return;
+        }
+
+        var gained = m_holdRestoreAccumulator.Integrate(
+            elapsedTicks: stepTicks,
+            ratePerSecond: hold.RestorePerSecond
+        );
+
+        if (gained <= FixedQ4816.Zero) {
+            return;
+        }
+
+        ApplyRawState(
+            reason: hold.Name,
+            requested: (StateCounter(slot: slot) + gained).Value,
+            slot: slot,
+            writer: "hold"
+        );
+        MarkDurableDirty(slot: slot);
+    }
     // Re-reads the held face along its own inward normal and reports whether the same face, inside the same row's
     // cone, is still there. Distance alone cannot answer that: at a ledge, at a wall's foot, and at an outside corner
     // there is always some geometry within reach, facing a different way.
-    private bool TryTrackHold(in FixedBodyHold hold, in FixedVector3 up, out FixedSurfaceAttachCandidate candidate) {
-        candidate = default;
-
-        if (m_holdNormal == FixedVector3.Zero) {
-            return false;
-        }
-        if (!TryCastHold(
-            candidate: out var nearest,
-            direction: -m_holdNormal,
-            reach: (hold.Reach * m_scale)
-        )) {
-            return false;
-        }
-
-        var normal = nearest.Normal.Normalize();
-
-        if (FixedVector3.Dot(
-            left: normal,
-            right: m_holdNormal
-        ) < HoldTrackAlignment) {
-            return false;
-        }
-        if (!hold.ConeAdmits(alignment: FixedVector3.Dot(
-            left: normal,
-            right: up
-        ))) {
-            return false;
-        }
-
-        candidate = (nearest with { Normal = normal });
-
-        return true;
-    }
+    private bool TryTrackHold(in FixedBodyHold hold, in FixedVector3 up, out FixedSurfaceAttachCandidate candidate) => TryFaceBehind(
+        candidate: out candidate,
+        hold: in hold,
+        origin: HoldProbeOrigin,
+        up: in up
+    );
     // Takes a surface row by an active drive: probe along the commanded direction, and require both that the face
     // sits inside the row's cone and that the drive is pushing into it rather than sliding along it.
     private bool TryTakeHoldOnDrive(in FixedBodyHold hold, in FixedVector3 drive, in FixedVector3 up, out FixedSurfaceAttachCandidate candidate) {
@@ -422,13 +471,19 @@ public sealed partial class WorldBody {
     // Whether a held surface row has been outlived by the body simply standing: the contact resolve has stood the
     // body on something walkable and the body has stopped pulling itself along the face. A body still driving up a
     // face keeps holding it however close the ground is, which is what lets a hold be taken at a wall's foot.
-    private bool HoldOutlivedByStanding(in FixedBodyHold hold, in PlayerIntent intent) => (m_grounded && (PlanarIntent(intent: in intent).Forward <= FixedQ4816.Zero) && (hold.Bond == BodyHoldBond.Surface) && (m_holdNormal != FixedVector3.Zero) && !WalkableUnderHoldUp(normal: m_holdNormal));
+    private bool HoldOutlivedByStanding(in FixedBodyHold hold, in PlayerIntent intent) => (m_grounded && (HoldAdvance(intent: in intent, normal: in m_holdNormal, up: HoldGravityUp) <= FixedQ4816.Zero) && (hold.Bond == BodyHoldBond.Surface) && (m_holdNormal != FixedVector3.Zero) && !WalkableUnderHoldUp(normal: m_holdNormal));
     // The ResolveHold operation. What the body is actively driving into outranks what it happens to be resting on,
     // so the drive pass runs first. Otherwise the ordered list decides, first match wins, with the row already held
     // evaluated by whether its own face is still there rather than by a fresh take — so the list order is a
     // preference and a row authored EARLIER still wins from where the body stands.
     private void ResolveHold(ref BodyMotionScratch scratch) {
         if (m_holds.Length == 0) {
+            return;
+        }
+        if (Mantling) {
+            // The mantle owns the body's translation until it lands, so no row is taken, tracked or spent meanwhile.
+            SetFreeAttitude(scratch: ref scratch);
+
             return;
         }
 
@@ -446,6 +501,8 @@ public sealed partial class WorldBody {
         // Whether the face the body was holding has ENDED, as opposed to the row having been released, spent out, or
         // outlived by the body standing. Only an ended face is worth reaching past.
         var lostFace = false;
+        // Whether the drive pass found a face this tick, taken or still dwelling; the dwell lasts only while it does.
+        var driving = false;
 
         if (TryCommandedDirection(
             direction: out var drive,
@@ -457,7 +514,7 @@ public sealed partial class WorldBody {
                 if (
                     !candidateHold.OnDrive ||
                     !HoldEligible(
-                    hold: in candidateHold,
+                    index: index,
                     intent: in scratch.Intent
                 )
                 ) {
@@ -469,6 +526,25 @@ public sealed partial class WorldBody {
                     hold: in candidateHold,
                     up: in up
                 )) {
+                    driving = true;
+
+                    // A body on the ground takes a row it does not hold only after driving into its face for the
+                    // row's dwell; until then the ordinary pass stands it where it is.
+                    if (
+                        (index != previousIndex) &&
+                        m_grounded &&
+                        (candidateHold.DriveDwellTicks != 0UL)
+                    ) {
+                        m_holdDriveDwellTicks = Math.Min(
+                            val1: candidateHold.DriveDwellTicks,
+                            val2: (m_holdDriveDwellTicks + scratch.StepTicks)
+                        );
+
+                        if (m_holdDriveDwellTicks < candidateHold.DriveDwellTicks) {
+                            break;
+                        }
+                    }
+
                     anchor = driven.Point;
                     chosen = index;
                     normal = driven.Normal;
@@ -477,12 +553,15 @@ public sealed partial class WorldBody {
                 }
             }
         }
+        if (!driving || (chosen >= 0)) {
+            m_holdDriveDwellTicks = 0UL;
+        }
         if (chosen < 0) {
             for (var index = 0; (index < m_holds.Length); index++) {
                 var hold = m_holds[index];
 
                 if (!HoldEligible(
-                    hold: in hold,
+                    index: index,
                     intent: in scratch.Intent
                 )) {
                     continue;
@@ -542,7 +621,11 @@ public sealed partial class WorldBody {
         }
         if (
             lostFace &&
-            (PlanarIntent(intent: in scratch.Intent).Forward > FixedQ4816.Zero)
+            (HoldAdvance(
+                intent: in scratch.Intent,
+                normal: in previousNormal,
+                up: in up
+            ) > FixedQ4816.Zero)
         ) {
             // The body was travelling along a face whose edge it has just cleared, so what it is arriving at is past
             // that edge, not under its feet. This outranks the ordinary pass, whose probes cannot see past an edge
@@ -553,7 +636,7 @@ public sealed partial class WorldBody {
                 if (
                     (hold.Bond != BodyHoldBond.Surface) ||
                     !HoldEligible(
-                    hold: in hold,
+                    index: index,
                     intent: in scratch.Intent
                 )
                 ) {
@@ -578,6 +661,7 @@ public sealed partial class WorldBody {
 
         if (chosen != m_holdIndex) {
             m_holdSpendAccumulator.Reset();
+            m_holdRestoreAccumulator.Reset();
             CarryPullMomentum(
                 next: chosen,
                 up: in up
@@ -614,6 +698,12 @@ public sealed partial class WorldBody {
 
         SpendHold(
             hold: in held,
+            intent: in scratch.Intent,
+            stepTicks: scratch.StepTicks
+        );
+        RestoreHold(
+            index: chosen,
+            intent: in scratch.Intent,
             stepTicks: scratch.StepTicks
         );
         SetHoldFrame(
@@ -621,6 +711,391 @@ public sealed partial class WorldBody {
             hold: in held,
             scratch: ref scratch
         );
+        GuardHeldFace(
+            gravityUp: in up,
+            hold: in held,
+            scratch: ref scratch
+        );
+    }
+    // The directions along a held face, in the face's own frame: up it, down it, and to either side across it.
+    [Flags]
+    private enum FaceEdges : byte {
+        None = 0,
+        Up = (1 << 0),
+        Down = (1 << 1),
+        Left = (1 << 2),
+        Right = (1 << 3),
+    }
+
+    // How many heights between the body's middle and a mantle's reach are probed for the end of the face. The lowest
+    // that misses bounds the edge from above, so the raise the mantle proves overshoots the edge by at most one gap.
+    private const int MantleLipSamples = 4;
+
+    // Whether a mantle is carrying the body: the exclusive move TryBeginMantle starts, with no row held while it runs.
+    private bool Mantling => ((m_holdIndex < 0) && m_timedMove.IsActive && m_timedMove.Motion.Exclusive);
+
+    // The commanded planar direction in world space, before any surface bends it: a world-framed pair is the seat's own
+    // world axes carried into the body's up frame, a heading-framed pair is the body's forward and right.
+    private FixedVector3 PlanarCommand(FixedQ4816 forward, FixedQ4816 strafe, in FixedQuaternion orientation) {
+        var world = (m_tuning.MoveFrame == MotionMoveFrame.World);
+        var facing = (world
+            ? m_frame.Rotate(vector: -FixedVector3.UnitZ)
+            : orientation.Rotate(vector: -FixedVector3.UnitZ)
+        );
+        var right = (world
+            ? m_frame.Rotate(vector: FixedVector3.UnitX)
+            : orientation.Rotate(vector: FixedVector3.UnitX)
+        );
+
+        return ((facing * forward) + (right * strafe));
+    }
+    // The level direction into a face: its inward normal with the part along up removed. A floor or a flat ceiling has
+    // none.
+    private static bool TryFaceInto(in FixedVector3 normal, in FixedVector3 up, out FixedVector3 into) {
+        into = FixedVector3.Zero;
+
+        return ((normal != FixedVector3.Zero) && (-normal).TryRejectNormalized(
+            length: out _,
+            unit: out into,
+            unitAxis: up
+        ));
+    }
+    // A command in a held face's own frame, as (up the face, across it). A heading-framed pair already is one. A
+    // world-framed pair is laid onto the face: the part pushing level into the face climbs it, the part pulling away
+    // descends, and the part along the wall traverses, so the command's length is kept and only its plane changes.
+    // `right` is the face frame's level axis (SetHoldFrame's Right), which stands across `into`.
+    private (FixedQ4816 Along, FixedQ4816 Across) CommandOnFace(FixedQ4816 forward, FixedQ4816 strafe, in FixedVector3 into, in FixedVector3 right) {
+        if (into == FixedVector3.Zero) {
+            return (forward, strafe);
+        }
+
+        var command = PlanarCommand(
+            forward: forward,
+            orientation: in m_orientation,
+            strafe: strafe
+        );
+
+        return (FixedVector3.Dot(left: command, right: into), FixedVector3.Dot(left: command, right: right));
+    }
+    // Removes the parts of a face-frame command an edge guard refuses.
+    private static (FixedQ4816 Along, FixedQ4816 Across) GuardFace((FixedQ4816 Along, FixedQ4816 Across) command, FaceEdges guard) {
+        if (guard == FaceEdges.None) {
+            return command;
+        }
+
+        var (along, across) = command;
+
+        if (
+            ((along > FixedQ4816.Zero) && ((guard & FaceEdges.Up) != 0)) ||
+            ((along < FixedQ4816.Zero) && ((guard & FaceEdges.Down) != 0))
+        ) {
+            along = FixedQ4816.Zero;
+        }
+        if (
+            ((across > FixedQ4816.Zero) && ((guard & FaceEdges.Right) != 0)) ||
+            ((across < FixedQ4816.Zero) && ((guard & FaceEdges.Left) != 0))
+        ) {
+            across = FixedQ4816.Zero;
+        }
+
+        return (along, across);
+    }
+    // How hard the command drives the body up the face it holds: a heading-framed pair's advance, or the part of a
+    // world-framed command pushing level into the face.
+    private FixedQ4816 HoldAdvance(in PlayerIntent intent, in FixedVector3 normal, in FixedVector3 up) {
+        var (forward, strafe) = PlanarIntent(intent: in intent);
+
+        if (
+            (m_tuning.MoveFrame != MotionMoveFrame.World) ||
+            !TryFaceInto(
+            into: out var into,
+            normal: in normal,
+            up: in up
+        )
+        ) {
+            return forward;
+        }
+
+        return FixedVector3.Dot(
+            left: PlanarCommand(
+                forward: forward,
+                orientation: in m_orientation,
+                strafe: strafe
+            ),
+            right: into
+        );
+    }
+    // Whether the held face is still there, the same face and inside the row's cone, behind a point. The track probe
+    // asks it of the body's middle, the edge guard of the points the body is about to move over.
+    private bool TryFaceBehind(in FixedBodyHold hold, in FixedVector3 origin, in FixedVector3 up, out FixedSurfaceAttachCandidate candidate) {
+        candidate = default;
+
+        if (m_holdNormal == FixedVector3.Zero) {
+            return false;
+        }
+        if (!TryCastHoldFrom(
+            candidate: out var nearest,
+            direction: -m_holdNormal,
+            origin: in origin,
+            reach: (hold.Reach * m_scale)
+        )) {
+            return false;
+        }
+
+        var normal = nearest.Normal.Normalize();
+
+        if (FixedVector3.Dot(
+            left: normal,
+            right: m_holdNormal
+        ) < HoldTrackAlignment) {
+            return false;
+        }
+        if (!hold.ConeAdmits(alignment: FixedVector3.Dot(
+            left: normal,
+            right: up
+        ))) {
+            return false;
+        }
+
+        candidate = (nearest with { Normal = normal });
+
+        return true;
+    }
+    // A pull row with a mantle keeps its body on the face. Each direction the command would move it is probed one
+    // body extent ahead: where the face ends above within the mantle's reach, a landing is proven and the mantle
+    // begins; where it ends and nothing is proven, that part of the command is refused for the step, so the body
+    // hangs at the edge instead of walking off it.
+    private void GuardHeldFace(in FixedBodyHold hold, in FixedVector3 gravityUp, ref BodyMotionScratch scratch) {
+        if (
+            !hold.Mantle.Exists ||
+            (hold.Kind != BodyHoldKind.Pull) ||
+            (HoldTangentForward(normal: in m_holdNormal, up: in gravityUp) == FixedVector3.Zero) ||
+            ((m_tuning.MoveFrame == MotionMoveFrame.World) && (scratch.FaceInto == FixedVector3.Zero))
+        ) {
+            return;
+        }
+
+        var (forward, strafe) = PlanarIntent(intent: in scratch.Intent);
+        var (along, across) = CommandOnFace(
+            forward: forward,
+            into: in scratch.FaceInto,
+            right: in scratch.Right,
+            strafe: strafe
+        );
+        var guard = FaceEdges.None;
+
+        if (along > FixedQ4816.Zero) {
+            var middle = HoldProbeHeight;
+            var top = (hold.Mantle.Height * m_scale);
+
+            for (var sample = 1; (sample <= MantleLipSamples); sample++) {
+                var height = (middle + (((top - middle) * FixedQ4816.FromInteger(value: sample)) / FixedQ4816.FromInteger(value: MantleLipSamples)));
+
+                if (TryFaceBehind(
+                    candidate: out _,
+                    hold: in hold,
+                    origin: (m_position + (m_up * height)),
+                    up: in gravityUp
+                )) {
+                    continue;
+                }
+                // The tight raise first: just over the edge. The full reach second, which clears what stands on the
+                // edge (a rail) when the tight one is blocked.
+                if (
+                    TryBeginMantle(hold: in hold, raise: height, scratch: ref scratch) ||
+                    ((height < top) && TryBeginMantle(hold: in hold, raise: top, scratch: ref scratch))
+                ) {
+                    return;
+                }
+                if (sample == 1) {
+                    guard |= FaceEdges.Up;
+                }
+
+                break;
+            }
+        } else if (
+            (along < FixedQ4816.Zero) &&
+            !TryFaceBehind(
+            candidate: out _,
+            hold: in hold,
+            origin: (m_position + (m_up * (HoldStandoff / FixedQ4816.FromInteger(value: 2L)))),
+            up: in gravityUp
+        )
+        ) {
+            guard |= FaceEdges.Down;
+        }
+        if (across != FixedQ4816.Zero) {
+            var side = ((across > FixedQ4816.Zero)
+                ? (scratch.Right * HoldStandoff)
+                : -(scratch.Right * HoldStandoff)
+            );
+
+            if (!TryFaceBehind(
+                candidate: out _,
+                hold: in hold,
+                origin: (HoldProbeOrigin + side),
+                up: in gravityUp
+            )) {
+                guard |= ((across > FixedQ4816.Zero)
+                    ? FaceEdges.Right
+                    : FaceEdges.Left
+                );
+            }
+        }
+
+        scratch.FaceGuard = guard;
+    }
+    // Begins a mantle over the edge above the body, when the body's own sweep proves one: raised by `raise`, stepped
+    // the mantle's depth into the face, and lowered onto walkable support (FixedStepUp.TryStep, the step a kerb
+    // takes). The landing it proves is the only place a mantle carries a body, which is what keeps a mantle from
+    // putting one inside geometry. The body lets go of its row and travels as an exclusive timed move: a parabola
+    // through the top of the raise at its middle, so it rises beside the face before it moves in over the edge.
+    private bool TryBeginMantle(in FixedBodyHold hold, FixedQ4816 raise, ref BodyMotionScratch scratch) {
+        if (
+            !CanStartTimedMove ||
+            (hold.Mantle.DurationTicks == 0UL) ||
+            (m_contactField is not { } field) ||
+            (m_collider is null) ||
+            !TryFaceInto(
+            into: out var into,
+            normal: in m_holdNormal,
+            up: in scratch.Up
+        )
+        ) {
+            return false;
+        }
+
+        var start = m_position;
+        var still = FixedVector3.Zero;
+        var step = new BodyContactStep(
+            entityIndex: scratch.EntityIndex,
+            field: field,
+            memo: ref scratch.SupportMemo,
+            orientation: scratch.Orientation,
+            up: scratch.Up,
+            volumes: ScaledColliderVolumes(),
+            volumesRevision: BroadphaseRadiusComputations
+        );
+
+        if (!FixedStepUp.TryStep(
+            blocked: in start,
+            intended: (start + (into * (hold.Mantle.Depth * m_scale))),
+            result: out var landing,
+            start: in start,
+            step: ref step,
+            stepHeight: raise,
+            up: in scratch.Up,
+            velocity: in still
+        )) {
+            return false;
+        }
+
+        var travel = (landing.Position - start);
+
+        m_timedMove = new(
+            ElapsedTicks: 0UL,
+            Motion: new FixedTimedMove(
+                Arc: ((scratch.Up * raise) - (travel / FixedQ4816.FromInteger(value: 2L))),
+                Curve: BodyMotionCurve.Smoothstep,
+                Displacement: travel,
+                DurationTicks: hold.Mantle.DurationTicks,
+                Exclusive: true,
+                Yaw: FixedQ4816.Zero
+            ),
+            StartYaw: FixedQ4816.Zero
+        );
+
+        if (
+            (hold.Mantle.State is { Length: > 0 } name) &&
+            (FindActionState(name: name) is var slot and >= 0)
+        ) {
+            ApplyRawState(
+                reason: "mantle",
+                requested: checked((long)hold.Mantle.DurationTicks),
+                slot: slot,
+                writer: "hold"
+            );
+            MarkDurableDirty(slot: slot);
+        }
+
+        m_holdSpendAccumulator.Reset();
+        m_holdRestoreAccumulator.Reset();
+        m_holdAnchor = FixedVector3.Zero;
+        m_holdIndex = -1;
+        m_holdNormal = FixedVector3.Zero;
+        m_planarVelocity = FixedVector3.Zero;
+        m_verticalVelocity = FixedQ4816.Zero;
+        m_verticalVelocityAccumulator.Reset();
+        ClearBallisticTangent();
+        scratch.FaceGuard = FaceEdges.None;
+        scratch.FaceInto = FixedVector3.Zero;
+
+        return true;
+    }
+    // An impulse fired while a pull holds the body lies in the held face: the commanded direction laid onto the face
+    // when the effect follows the move direction, else the authored body direction with its part through the face
+    // removed, else up the face.
+    private bool TryImpulseOnFace(in CompiledBodyInstruction instruction, in PlayerIntent intent, FixedQuaternion orientation, out FixedVector3 direction) {
+        direction = FixedVector3.Zero;
+
+        if (
+            !HoldOwnsVerticalChannel ||
+            (m_holdNormal == FixedVector3.Zero)
+        ) {
+            return false;
+        }
+
+        var up = HoldGravityUp;
+        var facing = HoldTangentForward(
+            normal: in m_holdNormal,
+            up: in up
+        );
+
+        if (facing == FixedVector3.Zero) {
+            return false;
+        }
+        if (instruction.UseMoveDirection) {
+            var right = FixedVector3.Cross(
+                left: facing,
+                right: m_holdNormal
+            );
+            var into = FixedVector3.Zero;
+
+            if (
+                (m_tuning.MoveFrame == MotionMoveFrame.World) &&
+                !TryFaceInto(
+                into: out into,
+                normal: in m_holdNormal,
+                up: in up
+            )
+            ) {
+                return false;
+            }
+
+            var (forward, strafe) = PlanarIntent(intent: in intent);
+            var (along, across) = CommandOnFace(
+                forward: forward,
+                into: in into,
+                right: in right,
+                strafe: strafe
+            );
+            var commanded = ((facing * along) + (right * across));
+
+            if (commanded != FixedVector3.Zero) {
+                direction = commanded.WithLength(length: FixedQ4816.One);
+
+                return true;
+            }
+        }
+
+        var authored = orientation.Rotate(vector: instruction.Direction).RejectFrom(unitAxis: m_holdNormal);
+
+        direction = ((authored != FixedVector3.Zero)
+            ? authored.WithLength(length: FixedQ4816.One)
+            : facing
+        );
+
+        return true;
     }
     // The direction "along the face, away from down" — gravity-up projected onto the face's tangent plane, zero for
     // a face whose normal is parallel to gravity-up (a floor or a flat ceiling says nothing about forward).
@@ -699,11 +1174,24 @@ public sealed partial class WorldBody {
 
         scratch.AttitudeUp = attitude;
 
-        if (gravityUp.TryRejectNormalized(
+        // A heading-framed command rides any tilted face: its advance is "up the face". A world-framed command is the
+        // seat's own direction, so only a pull's face takes it over, laid on through FaceInto (CommandOnFace); ground
+        // a world-framed body merely stands on keeps the axes the frame operation gave it.
+        var into = FixedVector3.Zero;
+
+        if (
+            gravityUp.TryRejectNormalized(
             length: out _,
             unit: out var forward,
             unitAxis: normal
-        )) {
+        ) &&
+            ((m_tuning.MoveFrame != MotionMoveFrame.World) || ((hold.Kind == BodyHoldKind.Pull) && TryFaceInto(
+            into: out into,
+            normal: in normal,
+            up: in gravityUp
+        )))
+        ) {
+            scratch.FaceInto = into;
             scratch.Facing = forward;
             scratch.Right = FixedVector3.Cross(
                 left: forward,
@@ -868,6 +1356,7 @@ public sealed partial class WorldBody {
             ? commanded
             : FixedVector3.Zero),
             BodyHoldForward.Velocity => m_planarVelocity,
+            BodyHoldForward.Surface => -m_holdNormal,
             _ => FixedVector3.Zero,
         });
 
@@ -1411,7 +1900,11 @@ public sealed partial class WorldBody {
         if (commanded.LengthSquared <= FixedQ4816.Zero) {
             var (forward, strafe) = PlanarIntent(intent: in intent);
 
-            commanded = ((m_orientation.Rotate(vector: -FixedVector3.UnitZ) * forward) + (m_orientation.Rotate(vector: FixedVector3.UnitX) * strafe));
+            commanded = PlanarCommand(
+                forward: forward,
+                orientation: in m_orientation,
+                strafe: strafe
+            );
         }
 
         direction = commanded.Normalize();

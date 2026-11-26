@@ -50,6 +50,8 @@ public sealed partial class WorldBody {
             HoldIndex: m_holdIndex,
             HoldNormal: m_holdNormal,
             HoldSpendRemainder: m_holdSpendAccumulator.Remainder,
+            HoldRestoreRemainder: m_holdRestoreAccumulator.Remainder,
+            HoldDriveDwellTicks: m_holdDriveDwellTicks,
             Home: m_home,
             InMedium: m_inMedium,
             MediumThrustRampRemainder: m_mediumThrustRampAccumulator.Remainder,
@@ -318,6 +320,8 @@ public sealed partial class WorldBody {
             zRemainder: motion.OverlayRemainder.Z
         );
         m_holdSpendAccumulator = FixedRateAccumulator.FromRemainder(remainder: motion.HoldSpendRemainder, ticksPerSecond: EngineTicksPerSecond);
+        m_holdRestoreAccumulator = FixedRateAccumulator.FromRemainder(remainder: motion.HoldRestoreRemainder, ticksPerSecond: EngineTicksPerSecond);
+        m_holdDriveDwellTicks = motion.HoldDriveDwellTicks;
         m_attitudeTurnAccumulator = FixedRateAccumulator.FromRemainder(remainder: motion.AttitudeTurnRemainder, ticksPerSecond: EngineTicksPerSecond);
         m_planarFollower = new SecondOrderState3(
             X: SecondOrderState.FromRawBits(positionRaw: motion.PlanarFollowerPosition.X, velocityRaw: motion.PlanarFollowerVelocity.X),

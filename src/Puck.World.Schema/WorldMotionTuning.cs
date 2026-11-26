@@ -2,6 +2,7 @@ using Puck.Abstractions.Documents;
 using System.Text.Json.Serialization;
 using Puck.Maths;
 using Puck.Physics.Motion;
+using Puck.State.Rules;
 
 namespace Puck.World;
 
@@ -350,8 +351,10 @@ public static class WorldMotionTuningFactory {
     /// <param name="dynamics">The world's declared <c>dynamics</c> rows a shaping row may name.</param>
     /// <param name="simulationRateHz">The world's own simulation rate — a named dynamics row's step-width
     /// divisor.</param>
+    /// <param name="stateSlots">The world's body register ordinals by name, which a hold row's <c>when</c> gate
+    /// resolves its register and timer predicates against, or <see langword="null"/> when no row names one.</param>
     /// <returns>The compiled tuning.</returns>
-    public static FixedMotionTuning Compile(WorldMotion tuning, WorldChannelTable channels, IReadOnlyList<DynamicsRow> dynamics, int simulationRateHz) {
+    public static FixedMotionTuning Compile(WorldMotion tuning, WorldChannelTable channels, IReadOnlyList<DynamicsRow> dynamics, int simulationRateHz, IReadOnlyDictionary<string, int>? stateSlots = null) {
         if (!FixedTickConversion.TryDurationEngineTicksExact(
             seconds: tuning.Obstruction.GraceSeconds,
             ticks: out var obstructionGraceTicks
@@ -372,6 +375,28 @@ public static class WorldMotionTuningFactory {
             recencyFacts: recencyFacts,
             recencyWindows: recencyWindows
         );
+        // A hold row's gate shares the shaping table's recency clocks, which the step refreshes before any operation
+        // runs, so ResolveHold reads the same tick's answer the shaping row does.
+        var holdGates = new GateToken[(tuning.Holds?.Count ?? 0)][];
+        var holdRestoreGates = new GateToken[holdGates.Length][];
+
+        for (var index = 0; (index < holdGates.Length); index++) {
+            holdGates[index] = BodyActionSpecFactory.CompileGate(
+                channels: channels,
+                predicate: tuning.Holds![index]?.When,
+                recencyFacts: recencyFacts,
+                recencyWindows: recencyWindows,
+                stateSlots: stateSlots
+            );
+            holdRestoreGates[index] = BodyActionSpecFactory.CompileGate(
+                channels: channels,
+                predicate: tuning.Holds[index]?.Restore?.When,
+                recencyFacts: recencyFacts,
+                recencyWindows: recencyWindows,
+                stateSlots: stateSlots
+            );
+        }
+
         var heldOrdinal = (((tuning.Speed.Held?.Channel is { Length: > 0 } held) && channels.TryGetOrdinal(
             name: held,
             ordinal: out var heldResolved
@@ -399,6 +424,8 @@ public static class WorldMotionTuningFactory {
             Shaping: shaping,
             ShapingRecencyFacts: recencyFacts.ToArray(),
             ShapingRecencyWindows: recencyWindows.ToArray(),
+            HoldGates: holdGates,
+            HoldRestoreGates: holdRestoreGates,
             MoveFrame: tuning.MoveFrame,
             FacingSnap: tuning.FacingSnap,
             UpTurn: new FixedUpTurnRates(

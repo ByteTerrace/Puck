@@ -1189,6 +1189,7 @@ public static partial class WorldDefinitionValidator {
                     }
 
                     ValidateActionSpec(
+                        channelNames: heldChannelNames,
                         errors: errors,
                         path: $"{path}.actions[{channelName}]",
                         spec: spec,

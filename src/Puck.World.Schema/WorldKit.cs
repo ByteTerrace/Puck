@@ -334,7 +334,8 @@ public readonly record struct FixedWorldKit(
                 spec: spec,
                 stateSlots: stateSlots,
                 program: program,
-                actionName: $"{kit.Name}.{name}"
+                actionName: $"{kit.Name}.{name}",
+                channels: channels
             );
         }
 
@@ -390,6 +391,7 @@ public readonly record struct FixedWorldKit(
             channels: channels,
             dynamics: dynamics,
             simulationRateHz: simulationRateHz,
+            stateSlots: stateSlots,
             tuning: kit.Motion
         );
 

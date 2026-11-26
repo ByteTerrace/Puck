@@ -146,3 +146,141 @@ template dashAbility(kit, speed = 14, duration = 0.2, cooldown = 0.8) {
     }
   ]
 }
+
+// Climbing, authored into the named kit: she takes a wall by walking or falling into it, climbs it the way the stick
+// points, hangs for free, leaps on it for a chunk of stamina, lets go on the run channel, and pulls herself up over
+// the top. `cone` is the faces that are walls (degrees from gravity-up); `speed` her pace on the face. On the ground
+// she takes a wall only after pushing into it for `driveSeconds`, so brushing one is not a grab; in the air she takes
+// it at once. Stamina is the
+// `stamina` body Counter, `staminaMax` full: `moveSpend` a second drains while she moves on the face and `restSpend`
+// while she hangs still, and a jump on the face costs `jumpCost` and carries her `jumpSpeed` metres a second for
+// `jumpSeconds`. Emptied, she is `winded`: she lets go, and cannot climb again until the wheel has refilled. Letting
+// go starts the `climbRest` timer, `regrabSeconds` long, so the wall she dropped from does not take her straight back.
+// At the top, where the face ends within `mantleHeight` of her feet, she is carried `mantleDepth` in over the edge in
+// `mantleSeconds` (the `mantling` timer runs meanwhile); where a face ends with nowhere to stand she hangs at its edge.
+//
+// Expand it in a document of its own that the kit's document imports, so the climb row composes ahead of the kit's own
+// ground and fall rows. Stamina refills under the rows she rests under, so the kit authors `restore: staminaRestore()`
+// on its ground and fall rows. Which surfaces can be climbed is the world's `collision.defaultHold` and a placement's
+// `grip { holdable }`.
+template climbAbility(kit, speed = 2.2, cone = [60, 120], reach = 0.8, pull = 6, driveAlignment = 0.5, driveSeconds = 0.2, staminaMax = 10, moveSpend = 1, restSpend = 0, jumpCost = 2, jumpSpeed = 9, jumpSeconds = 0.2, regrabSeconds = 0.4, mantleHeight = 2.3, mantleDepth = 0.8, mantleSeconds = 0.5) {
+  state {
+    body [
+      {
+        name: "stamina"
+        kind: "Counter"
+        initial: staminaMax
+        envelope { $type: "range", minimum: 0, maximum: staminaMax }
+      }
+      {
+        name: "winded"
+        kind: "Counter"
+        initial: 0
+        envelope { $type: "range", minimum: 0, maximum: 1 }
+      }
+      { name: "climbRest", kind: "Timer", initial: 0 }
+      { name: "mantling", kind: "Timer", initial: 0 }
+    ]
+  }
+
+  kits [
+    {
+      name: kit
+      motion {
+        holds [
+          {
+            name: "climb"
+            bond: Surface
+            hold: Pull
+            cone: cone
+            pull: pull
+            reach: reach
+            speed: speed
+            upLean: 0
+            forward: Surface
+            onDrive: true
+            driveAlignment: driveAlignment
+            driveSeconds: driveSeconds
+            when: all(predicates: [
+              timerElapsed(state: "climbRest")
+              compareState(state: winded, comparison: Equal, value: 0)
+            ])
+            spend {
+              state: "stamina"
+              ratePerSecond: moveSpend
+              restingRatePerSecond: restSpend
+            }
+            mantle {
+              height: mantleHeight
+              depth: mantleDepth
+              seconds: mantleSeconds
+              state: "mantling"
+            }
+          }
+        ]
+      }
+      // The ability's triggers are fact triggers, which fire on the body's state whatever channel's binding carries
+      // them, and they are all carried under `run`: a kit's own binding for a channel replaces an imported one, and an
+      // avatar authors its own jump. An avatar that authors a `run` action of its own lists these rows in it.
+      actions {
+        run {
+          onFact: concat(
+            [
+              // A jump press on the face is a leap along it: the trigger fires on the edge of "on a face and jump
+              // held", which is the press, and never off a face.
+              {
+                fact: "HoldingUnwalkable"
+                mode: "Edge"
+                gate: all(predicates: [
+                  held(channel: "jump")
+                  compareState(state: stamina, comparison: GreaterOrEqual, value: jumpCost)
+                ])
+                effects [
+                  planarImpulse(bodyDirection: [0, 1, 0], speed: jumpSpeed, durationSeconds: jumpSeconds, useMoveDirection: true)
+                  addState(state: stamina, value: -jumpCost)
+                ]
+              }
+              {
+                fact: "HoldingUnwalkable"
+                mode: "Edge"
+                gate: held(channel: "run")
+                effects [
+                  startTimer(state: climbRest, seconds: regrabSeconds)
+                ]
+              }
+              {
+                fact: "Grounded"
+                mode: "Level"
+                gate: all(predicates: [
+                  compareState(state: winded, comparison: Equal, value: 1)
+                  compareState(state: stamina, comparison: GreaterOrEqual, value: staminaMax)
+                ])
+                effects [
+                  setState(state: winded, value: 0)
+                ]
+              }
+            ],
+            map(["Grounded", "Airborne"], fact => {
+              fact: fact
+              mode: "Level"
+              gate: all(predicates: [
+                compareState(state: winded, comparison: Equal, value: 0)
+                compareState(state: stamina, comparison: Equal, value: 0)
+              ])
+              effects [
+                setState(state: winded, value: 1)
+              ]
+            })
+          )
+        }
+      }
+    }
+  ]
+}
+
+// What a row a climber rests under restores: `rate` of stamina a second, while she stands on ground.
+function staminaRestore(rate = 3) = {
+  state: "stamina"
+  ratePerSecond: rate
+  when: now(fact: Grounded)
+}

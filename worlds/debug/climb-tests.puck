@@ -1,0 +1,229 @@
+// The Moth's climbing on two walls of her studio, with her own kit and bindings. The east wall is a thin holdable face
+// 6 m tall in front of a plain block whose top is ordinary floor, so the top is a mantle onto ground no hold can take.
+// The west wall is 30 m tall, more than one wheel of stamina climbs. Both face along X, which a camera-framed walker
+// reads as her strafe axis, so each climb also proves the command is laid onto the face. She is posed facing the wall
+// (yaw 270 faces +X, 90 faces -X) and the keys are hers: W drives where she faces, D to her right, Space jumps, Left
+// Shift runs. `puck test worlds/debug/climb-tests.puck --reproduce`.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "climb-tests"
+
+import "moth-controls"
+
+prototypes {
+  prototype "climb-face" {
+    document {
+      schema: "puck.creation.v1"
+      name: "climb-face"
+      palette [{ color: "#8A7F72" }]
+      shape Box {
+        position [0, 0, 0]
+        scale [0.2, 3, 4]
+        material: 0
+      }
+    }
+  }
+  prototype "climb-block" {
+    document {
+      schema: "puck.creation.v1"
+      name: "climb-block"
+      palette [{ color: "#B9B2A6" }]
+      shape Box {
+        position [0, 0, 0]
+        scale [2, 3, 4]
+        material: 0
+      }
+    }
+  }
+  prototype "climb-tower" {
+    document {
+      schema: "puck.creation.v1"
+      name: "climb-tower"
+      palette [{ color: "#8A7F72" }]
+      shape Box {
+        position [0, 0, 0]
+        scale [0.2, 15, 4]
+        material: 0
+      }
+    }
+  }
+}
+
+placements {
+  // The east face stands from x 6.0 to 6.4 and the block behind it to 10.4, both 6 m tall and 8 m wide.
+  placement "climb-face" {
+    prototype: "climb-face"
+    position [6.2, 3, 0]
+    grip {
+      holdable: true
+    }
+    solid
+  }
+  placement "climb-block" {
+    prototype: "climb-block"
+    position [8.4, 3, 0]
+    solid
+  }
+  // The west face stands at x -6.0, 30 m tall.
+  placement "climb-tower" {
+    prototype: "climb-tower"
+    position [-6.2, 15, 0]
+    grip {
+      holdable: true
+    }
+    solid
+  }
+}
+
+test "walking into a wall takes it and driving on climbs it" {
+  when {
+    ticks 15
+    seat1: body.pose 5 0.05 0 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 45
+    seat1: player.signal keyboard.w release
+  }
+  expect {
+    bodyPosition(body, 0, y) > 2
+    bodyPosition(body, 0, y) < 3.3
+    bodyPosition(body, 0, x) > 5.5
+    bodyPosition(body, 0, x) < 5.8
+    fact(body, 0, HoldingUnwalkable) == 1
+    bodyState(body, 0, stamina) < 9.5
+  }
+}
+
+test "brushing a wall for a moment is not a grab" {
+  when {
+    ticks 15
+    seat1: body.pose 5.6 0.05 0 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 4
+    seat1: player.signal keyboard.w release
+    ticks 10
+  }
+  expect {
+    fact(body, 0, HoldingUnwalkable) == 0
+    fact(body, 0, Grounded) == 1
+    bodyState(body, 0, stamina) == 10
+  }
+}
+
+test "hanging still spends nothing and holds her where she is" {
+  when {
+    ticks 15
+    seat1: body.pose 5 0.05 0 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 45
+    seat1: player.signal keyboard.w release
+    ticks 120
+  }
+  expect {
+    bodyPosition(body, 0, y) > 2
+    bodyPosition(body, 0, y) < 3.3
+    fact(body, 0, HoldingUnwalkable) == 1
+    bodyState(body, 0, stamina) > 8.5
+  }
+}
+
+test "the top of the wall is a mantle onto plain floor" {
+  when {
+    ticks 15
+    seat1: body.pose 5 0.05 0 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 80
+    seat1: player.signal keyboard.w release
+    ticks 30
+  }
+  expect {
+    bodyPosition(body, 0, y) > 5.9
+    bodyPosition(body, 0, y) < 6.2
+    bodyPosition(body, 0, x) > 6.1
+    bodyPosition(body, 0, x) < 10
+    fact(body, 0, Grounded) == 1
+    fact(body, 0, HoldingUnwalkable) == 0
+  }
+}
+
+test "jump on the wall leaps up it for a fifth of the wheel" {
+  when {
+    ticks 15
+    seat1: body.pose 5 0.05 0 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 20
+    seat1: player.signal keyboard.space press
+    ticks 3
+    seat1: player.signal keyboard.space release
+    ticks 12
+    seat1: player.signal keyboard.w release
+  }
+  expect {
+    bodyPosition(body, 0, y) > 3.3
+    fact(body, 0, HoldingUnwalkable) == 1
+    bodyState(body, 0, stamina) < 7.5
+    bodyState(body, 0, flightFuel) == 0
+  }
+}
+
+test "run lets go and the wall does not take her straight back" {
+  when {
+    ticks 15
+    seat1: body.pose 5 0.05 0 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 45
+    seat1: player.signal keyboard.shiftLeft press
+    ticks 6
+  }
+  expect {
+    fact(body, 0, HoldingUnwalkable) == 0
+    bodyState(body, 0, climbRest) > 0
+  }
+}
+
+test "sideways she stops at the face's edge instead of walking off it" {
+  when {
+    ticks 15
+    seat1: body.pose 5 0.05 2.5 270 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 40
+    seat1: player.signal keyboard.w release
+    seat1: player.signal keyboard.d press
+    ticks 90
+    seat1: player.signal keyboard.d release
+  }
+  expect {
+    bodyPosition(body, 0, z) > 3.3
+    bodyPosition(body, 0, z) < 4.1
+    bodyPosition(body, 0, y) > 1.5
+    fact(body, 0, HoldingUnwalkable) == 1
+  }
+}
+
+test "an emptied wheel lets go, and she cannot climb again until it refills" {
+  when {
+    ticks 15
+    seat1: body.pose -5 0.05 0 90 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 420
+  }
+  expect {
+    bodyState(body, 0, winded) == 1
+    fact(body, 0, HoldingUnwalkable) == 0
+    bodyPosition(body, 0, y) < 1
+  }
+}
+
+test "the ground refills the wheel and clears winded" {
+  when {
+    ticks 15
+    seat1: body.pose -5 0.05 0 90 0 0 0
+    seat1: player.signal keyboard.w press
+    ticks 420
+    seat1: player.signal keyboard.w release
+    ticks 150
+  }
+  expect {
+    bodyState(body, 0, winded) == 0
+    bodyState(body, 0, stamina) == 10
+  }
+}

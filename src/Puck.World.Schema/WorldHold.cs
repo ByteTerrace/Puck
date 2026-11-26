@@ -6,13 +6,48 @@ using Puck.Physics.Motion;
 
 namespace Puck.World;
 
-/// <summary>What a hold spends while it is held: a body-lane state slot and the rate it drains at. The hold releases
-/// the tick the slot can no longer pay; refilling it, or trading for it, is a world's own rules' business.</summary>
+/// <summary>What a hold spends while it is held: a body-lane state slot and the rates it drains at. The hold releases
+/// the tick the slot can no longer pay; a <see cref="WorldHoldRestore"/> row or a world's own rules refill it.</summary>
 /// <param name="State">The declared <c>state.body</c> slot name.</param>
-/// <param name="RatePerSecond">The positive rate the slot drains at, per second.</param>
+/// <param name="RatePerSecond">The positive rate the slot drains at, per second, while the body is commanded to
+/// move.</param>
+/// <param name="RestingRatePerSecond">The rate the slot drains at, per second, while nothing is commanded: zero holds
+/// the slot where it is, so a climber hanging still tires no further. <see langword="null"/> drains at
+/// <paramref name="RatePerSecond"/> whether the body moves or not.</param>
 public sealed record WorldHoldSpend(
     [property: DocumentText("a per-body slot name")] string State,
-    float RatePerSecond
+    float RatePerSecond,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? RestingRatePerSecond = null
+);
+/// <summary>What a hold refills while it is held: a body-lane state slot and the rate it fills at, bounded by the
+/// slot's own envelope. A row a body rests under restores what a wall row spends.</summary>
+/// <param name="State">The declared <c>state.body</c> slot name.</param>
+/// <param name="RatePerSecond">The positive rate the slot fills at, per second.</param>
+/// <param name="When">The gate that must hold for the slot to fill, or <see langword="null"/> to fill whenever the row
+/// holds. A fall row that restores only <c>now(fact: Grounded)</c> refills a body standing on any ground and not one
+/// in the air.</param>
+public sealed record WorldHoldRestore(
+    [property: DocumentText("a per-body slot name")] string State,
+    float RatePerSecond,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? When = null
+);
+/// <summary>How a body climbing a <see cref="BodyHoldKind.Pull"/> row gets over the end of its face. While the body
+/// is driven up the face and the face ends within <paramref name="Height"/> above its feet, the body's own sweep
+/// proves a place to stand <paramref name="Depth"/> past the edge (raise, step in, lower onto walkable support), and
+/// the body travels there over <paramref name="Seconds"/>, rising first and then stepping in. Where the face ends and
+/// nothing is proven, in any direction, the part of the command that would carry the body off the face is removed, so
+/// a row with a mantle holds the body at its edges.</summary>
+/// <param name="Height">The greatest height above the body's feet, world units at unit scale, at which the edge is
+/// felt and over which the body is raised. Positive.</param>
+/// <param name="Depth">How far past the face the body steps in, world units at unit scale. Positive.</param>
+/// <param name="Seconds">How long the mantle takes. Positive.</param>
+/// <param name="State">A declared <c>state.body</c> Timer slot the mantle starts for its own length, so rules and a
+/// rig can tell a mantle from a climb, or <see langword="null"/>.</param>
+public sealed record WorldHoldMantle(
+    float Height,
+    float Depth,
+    float Seconds,
+    [property: DocumentText("a per-body slot name")] [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? State = null
 );
 /// <summary>What the medium does to a body standing in it — the authored half of a <see cref="BodyHoldBond.Medium"/>
 /// hold. Required for that bond and refused on every other. <see cref="SettleRate"/> is the one law that turns the
@@ -99,6 +134,15 @@ public sealed record WorldHoldEnvelope(
 /// isotropic. A non-<see cref="BodyHoldBond.Medium"/> row commanding thrust takes the vertical channel outright for
 /// the tick, clearing the ballistic carry; a medium row folds it into the medium's own displacement before that
 /// law's convergence runs.</param>
+/// <param name="Restore">What the row refills while held, or <see langword="null"/> for a row that restores
+/// nothing.</param>
+/// <param name="When">The gate that must hold for the row to be taken or kept: facts, body registers, timers and
+/// held channels. <see langword="null"/> is a row with no condition of its own.</param>
+/// <param name="Mantle">How a body climbing off the end of this row's face gets onto what lies past it. Admitted on
+/// a <see cref="BodyHoldKind.Pull"/> row only.</param>
+/// <param name="DriveSeconds">How long a body standing on ground must keep driving into a face before
+/// <paramref name="OnDrive"/> takes it, so brushing a wall is not a grab. A body in the air takes it at once. Zero,
+/// the default, takes it at once on the ground too.</param>
 public sealed record WorldHold(
     [property: DocumentText("a hold name, local to its kit")] string Name,
     BodyHoldBond Bond,
@@ -117,7 +161,11 @@ public sealed record WorldHold(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldMedium? Medium = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldGravity? Gravity = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldEnvelope? Envelope = null,
-    float Thrust = 0f
+    float Thrust = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldRestore? Restore = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ActionPredicate? When = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldHoldMantle? Mantle = null,
+    float DriveSeconds = 0f
 );
 /// <summary>The one-time compilation of an authored hold list into the fixed-point form simulation reads. Channel
 /// names resolve through the world's compiled channel table here, the same resolved-outside/consumed-as-ordinal
@@ -156,6 +204,7 @@ public static class WorldHoldFactory {
                 ConeCosFar: FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: cone.Y)),
                 ConeCosNear: FixedQ4816.Cos(angle: FixedQ4816.FromDegrees(degrees: cone.X)),
                 DriveAlignment: FixedQ4816.FromDouble(value: hold.DriveAlignment),
+                DriveDwellTicks: FixedTickConversion.DurationEngineTicks(seconds: ((decimal)hold.DriveSeconds)),
                 Envelope: CompileEnvelope(envelope: hold.Envelope),
                 Forward: hold.Forward,
                 Gravity: CompileGravity(gravity: hold.Gravity),
@@ -171,7 +220,18 @@ public static class WorldHoldFactory {
                 : FixedQ4816.Zero),
                 Medium: CompileMedium(medium: hold.Medium),
                 Speed: FixedQ4816.FromDouble(value: (hold.Speed ?? 0f)),
+                Mantle: ((hold.Mantle is { } mantle)
+                ? new FixedBodyMantle(
+                    Depth: FixedQ4816.FromDouble(value: mantle.Depth),
+                    DurationTicks: FixedTickConversion.DurationEngineTicks(seconds: ((decimal)mantle.Seconds)),
+                    Height: FixedQ4816.FromDouble(value: mantle.Height),
+                    State: mantle.State
+                )
+                : default),
+                RestorePerSecond: FixedQ4816.FromDouble(value: (hold.Restore?.RatePerSecond ?? 0f)),
+                RestoreState: hold.Restore?.State,
                 SpendPerSecond: FixedQ4816.FromDouble(value: (hold.Spend?.RatePerSecond ?? 0f)),
+                SpendRestingPerSecond: FixedQ4816.FromDouble(value: (hold.Spend?.RestingRatePerSecond ?? hold.Spend?.RatePerSecond ?? 0f)),
                 SpendState: hold.Spend?.State,
                 Thrust: FixedQ4816.FromDouble(value: hold.Thrust),
                 UpLean: FixedQ4816.FromDouble(value: hold.UpLean)

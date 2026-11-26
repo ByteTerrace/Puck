@@ -56,7 +56,7 @@ public static partial class BodyActionSpecFactory {
                     break;
                 case WorldPredicate.Held held:
                     if ((body.Channels is not { } channels) || !channels.TryGetOrdinal(name: held.Channel, ordinal: out var channel)) {
-                        throw new InvalidOperationException(message: $"Predicate 'held' names channel '{held.Channel}', which does not resolve against the world's channel table — 'held' is legitimate only inside a kit's shaping-row gate.");
+                        throw new InvalidOperationException(message: $"Predicate 'held' names channel '{held.Channel}', which does not resolve against the world's channel table.");
                     }
                     operand = new ActionGateOperand.Held(channel: channel);
                     break;

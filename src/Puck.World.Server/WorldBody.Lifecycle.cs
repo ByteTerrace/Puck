@@ -168,6 +168,7 @@ public sealed partial class WorldBody {
             m_holdAnchor = FixedVector3.Zero;
             m_holdNormal = FixedVector3.Zero;
             m_holdSpendAccumulator.Reset();
+            m_holdRestoreAccumulator.Reset();
         }
 
         m_tuning = tuning;

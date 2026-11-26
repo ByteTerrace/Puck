@@ -68,7 +68,8 @@ first open gate wins; `when` admits the shaping-gate predicate vocabulary —
 body-fact kinds (`now`/`recently`/`all`/`any`/`not`) plus `held` (`{ "held":
 "<channel>" }` — the named composition channel's own live read at or above
 its declared threshold, resolved against the world's channel table at
-kit-compile time; legitimate only here). Exactly one of `along` or `dynamics`
+kit-compile time; a hold row's `when` and an action trigger's gate admit it
+too, and those also read body registers and timers). Exactly one of `along` or `dynamics`
 is authored per row; `across` is legitimate only beside `along`. An omitted
 convergence rate means exact, immediate convergence. An explicit rate must be
 positive; zero is never a hidden spelling of "instant" or "disabled". `reversalRate`
@@ -493,9 +494,42 @@ far a surface row's probes search; required positive), `onDrive` +
 `driveAlignment` (take the row by driving into a face in its cone), `release`
 (a declared channel whose HELD read drops the row — no latch, so holding it
 down keeps the body off the face), and `spend` (drain a body-lane Counter
-slot at a rate; the row becomes ineligible the tick the slot cannot pay, and
-a world's own rules refill it or trade for it — the engine has no stamina
-concept of its own).
+slot at a rate; the row becomes ineligible the tick the slot cannot pay — the
+engine has no stamina concept of its own). `spend.restingRatePerSecond` is the
+drain while nothing is commanded: zero lets a climber hang still for free, and
+omitted it equals `ratePerSecond`. `restore { state, ratePerSecond, when }`
+refills a Counter slot while the row holds, up to the slot's range envelope
+(which it must declare), and only while its own `when` gate is open: a fall row
+that restores `when: now(fact: Grounded)` refills a body standing on any ground
+and not one in the air. `when` on the row itself is a gate over facts, body
+registers, timers and held channels (`now`, `recently`, `compareState`,
+`timerElapsed`, `held`, `all`/`any`/`not`); a row whose gate is closed is neither
+taken nor kept, which is how "not while winded" and "not for a moment after
+letting go" are authored. `driveSeconds` is how long a body standing on ground
+must keep driving into a face before `onDrive` takes it, so brushing a wall is
+not a grab; a body in the air takes it at once.
+
+**A world-framed command on a held face.** A kit on `moveFrame: World` sends
+its move already turned into world axes. On a `Pull` row's face that command is
+laid onto the face: the part pushing level into the wall climbs it, the part
+pulling away descends, and the part along the wall traverses, so with the
+camera behind the body the stick's up is up the wall, whichever way the wall
+faces. A `Gravity` row leaves a world-framed body's axes alone; a
+heading-framed kit's advance is "up the face" on either. A `planarImpulse`
+fired while a pull holds lies in the face, along the command with
+`useMoveDirection`.
+
+**`mantle { height, depth, seconds, state }` (a `Pull` row only).** While the
+body is driven up the face and the face ends within `height` above its feet,
+the body's own sweep proves a place to stand `depth` past the edge
+(`FixedStepUp.TryStep`: raise, step in, lower onto walkable support, holdable
+or not), and the body is carried there over `seconds` as an exclusive timed
+move that rises first and then moves in. `state` names a Timer slot the mantle
+starts for its own length. A row with a mantle also guards its edges: where
+the face ends above, below or to a side and nothing is proven, the part of the
+command that would carry the body off the face is removed for the step, so the
+body hangs at the edge. `worlds/standard/abilities.puck`'s `climbAbility` is
+the worked use, and `worlds/debug/climb-tests.puck` its scenarios.
 
 A pull owns the whole tangent-plane velocity, rise included; the tick it ends
 (released, spent out, or its face lost) that rise is split against gravity-up
@@ -538,8 +572,10 @@ the contact resolve has stood the body on something walkable and the body has
 stopped pulling itself along the face. When a held face ENDS while the body is
 still driving forward, one further pass reaches PAST the edge — up the last
 tangent by a body span and in past the face by a body width — and the body
-arrives one body span off whatever it finds there; that is the whole of the
-ledge transition, with no mantle phase.
+arrives one body span off whatever it finds there. That pass sees holdable
+faces only and places the body at once; a row authoring `mantle` (below) gets
+over an edge onto any walkable ground, over time, before its middle reaches the
+edge.
 
 Every probe is DIRECTED, for the same reason a pull's always was: an undirected
 nearest-surface query on a world whose floor, walls, ramps and overhangs are one

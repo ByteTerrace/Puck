@@ -580,6 +580,8 @@ public sealed partial class WorldBody {
         HoldIndex: m_holdIndex,
         HoldNormal: m_holdNormal,
         HoldSpendRemainder: m_holdSpendAccumulator.Remainder,
+        HoldRestoreRemainder: m_holdRestoreAccumulator.Remainder,
+        HoldDriveDwellTicks: m_holdDriveDwellTicks,
         AttitudeUp: m_attitudeUp,
         AttitudeTurnRemainder: m_attitudeTurnAccumulator.Remainder,
         AttitudeLeaned: m_attitudeLeaned,
@@ -664,6 +666,11 @@ public sealed partial class WorldBody {
             remainder: residue.HoldSpendRemainder,
             ticksPerSecond: EngineTicksPerSecond
         );
+        m_holdRestoreAccumulator = FixedRateAccumulator.FromRemainder(
+            remainder: residue.HoldRestoreRemainder,
+            ticksPerSecond: EngineTicksPerSecond
+        );
+        m_holdDriveDwellTicks = residue.HoldDriveDwellTicks;
         m_attitudeUp = residue.AttitudeUp;
         m_attitudeLeaned = residue.AttitudeLeaned;
         m_attitudeTurnAccumulator = FixedRateAccumulator.FromRemainder(

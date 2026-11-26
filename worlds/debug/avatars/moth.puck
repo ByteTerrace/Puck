@@ -5,12 +5,14 @@ import "../../standard/motion"
 import "../../standard/styles"
 import "../../standard/tones"
 import "../../standard/kits"
+import "../../standard/abilities"
 import "../../standard/camera"
 import "../../standard/mirror"
 import "../../standard/rig"
 import "moth-head"
 import "moth-dash"
 import "moth-jetpack"
+import "moth-climb"
 import "moth-camera"
 import "../../standard/stars"
 
@@ -243,6 +245,8 @@ template mothLimbs(side, isRight) {
         wave: "linear"
         phase: 8
       }
+      // On a wall both arms reach forward and up to it; the hand effectors plant each palm in turn as she climbs.
+      swing("cling", [1, 0, 0], -2.2, mirrorX(isRight, [0.295, 1.4515, 0])) with { wave: "constant" }
     ]
   }
 
@@ -326,6 +330,13 @@ template mothLimbs(side, isRight) {
         "run",
         signed(isRight, [0.660568, -0.349483, -0.664463], [1, -1, -1]),
         -0.7,
+        mirrorX(isRight, [0.336, 1.2201, 0.004])
+      ) with { wave: "constant", phase: 0 }
+      // Her elbows stay bent on a wall, so her hands meet it ahead of her face.
+      swing(
+        "cling",
+        signed(isRight, [0.660568, -0.349483, -0.664463], [1, -1, -1]),
+        -0.6,
         mirrorX(isRight, [0.336, 1.2201, 0.004])
       ) with { wave: "constant", phase: 0 }
       swing(
@@ -2261,24 +2272,26 @@ kits [
     // surfaces her. A world with no medium never offers it. Flight mode is the standard's jetpack (moth-jetpack.puck),
     // whose rows lead hers while it is on: on the ground the rise channel lifts her off, and in the air she hovers and
     // thrusts. Out of flight mode she walks and falls with no hover and no thrust, and jumps instead. She walks at 5 m/s and runs at 10 while the run channel is
-    // held, and steps up to knee height: a kerb or the test room's raised floor, and nothing taller.
+    // held, and steps up to knee height: a kerb or the test room's raised floor, and nothing taller. She climbs by the
+    // standard's ability (moth-climb.puck), whose row leads these, and the ground she rests on refills its stamina.
     motion: walkerMotion with {
       holds [
         swimHold(equilibriumOffset: 1.25, settleRate: 2.5, speed: 2.5)
-        groundHold
-        fallHold
+        groundHold with { restore: staminaRestore() }
+        fallHold with { restore: staminaRestore() }
       ]
       speed: walkerMotion.speed with { value: 5 }
     }
     // Out of flight mode, south or space jumps: 5.1 m/s peaks about 1.2 m under the rise the world's 18 m/s² gravity
     // makes of the holds' 28:46 arc, a second press in the air fires the boot jets for one more, and letting go while still rising cuts the
-    // arc short. North or F switches flight mode.
+    // arc short. On a wall the press is the climb's leap instead. North or F switches flight mode.
     actions {
       jump {
         onPress {
           gate: all(predicates: [
             compareState(state: flightFuel, comparison: Equal, value: 0)
             compareState(state: jumps, comparison: Greater, value: 0)
+            { $type: "not", predicate: now(fact: HoldingUnwalkable) }
           ])
           latchSeconds: 0
           effects [
@@ -3487,6 +3500,10 @@ prototypes {
       drivers [
         // A gentle tread while the medium hold carries her shoulders at the surface.
         { name: "swim", signal: "time", cadence: 3.2, blendInSeconds: 0.3, blendOutSeconds: 0.2, when ["InMedium"] }
+        // On a wall: the reach she holds, and the cycle her hands and feet plant on, one round every metre and a half
+        // of travel along the face.
+        { name: "cling", signal: "time", cadence: 1, blendInSeconds: 0.15, blendOutSeconds: 0.2, when ["HoldingUnwalkable"] }
+        { name: "climb", signal: "travel", cadence: 4.2, when ["HoldingUnwalkable", "moving"] }
         {
           name: "dash"
           signal: "state.dashPose.$body"
@@ -3892,6 +3909,32 @@ prototypes {
               distance: 0.09
               seconds: 0.2
               height: 0.07
+            }
+          }
+        }
+        // On a wall her palms find the face ahead of her. Each is planted for half of the climb's cycle and reaches
+        // for the next spot in the other half. Her legs keep the tuck the air pose gives them: a second effector on
+        // a leg would fight the foot's own.
+        for limb in [
+          { name: "hand-left", chain ["upperArm-left", "forearm-left"], tip: "palm-left", reach: 0.75, standoff: 0.04, window [0, 3.1415925] }
+          { name: "hand-right", chain ["upperArm-right", "forearm-right"], tip: "palm-right", reach: 0.75, standoff: 0.04, window [3.1415925, 6.28] }
+        ] {
+          {
+            name: limb.name
+            chain: limb.chain
+            tip: limb.tip
+            when [
+              "HoldingUnwalkable"
+            ]
+            target {
+              kind: "surface"
+              direction [0, 0, 1]
+              reach: limb.reach
+              standoff: limb.standoff
+            }
+            plant {
+              driver: "climb"
+              window: limb.window
             }
           }
         }
