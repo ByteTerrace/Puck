@@ -1137,12 +1137,31 @@ printf 'world.status\nbody.where 0\nworld.grants console\n' |
   that can show one carries no distribution or mirror. Each of the gallery's
   display stations can show every exhibit of the catalog, motion ones included,
   this way (`displayPlacements` in `worlds/debug/shapes.puck`).
+- A placement turns about its own up axis with a `turn` facet
+  (`WorldPlacementTurn`): `clock`, `rate` and `phase`, each a literal or a
+  numeric state binding, give `phase + rate × clock` turns on top of its yaw.
+  Nothing integrates it: a clock slot carrying `advance(perSecond:)` turns it
+  with no rule a tick, a rate of 0 holds it, and a rule that changes the rate
+  rebases the phase in the same write (`phase += (rate − new) × clock`) so the
+  angle stays where it stood. The drawn copy turns every frame over the
+  presented values (`WorldTurnedPose`, the stamp pool and the rigid copies), a
+  solid row's colliders every tick in fixed point
+  (`WorldPlacementTurn.YawRadiansAt`, the moving rows
+  `WorldPlacementStamp.MovesColliders` names), so a body rides it. A turning row
+  carries no distribution, mirror, inhabit, deal, board, pointer, spatial or
+  surface facet and parents nothing (`WorldPlacement.HasStaticFrame`).
+  `world.turns` reads each turning row's angle. The gallery's twelve
+  turntables are the worked example (gallery.md, "Display consoles").
 - A placement can carry a pointer surface (`pointer`, `WorldPointerSurface`): a
   rectangle in its frame that a seat's pointer ray maps onto in fixed point, with
   named regions (a list region divides into rows). Rules read it through the
   `$pointer:` operand as they read a `Simulation` screen's face
   ([engagement](references/engagement.md#worldscreenrouteinput--where-a-pointer-hit-on-the-screen-goes)).
-  The gallery's display consoles are the worked example.
+  The gallery's display consoles are the worked example: each sweeps the
+  contacts on its glass (`forEach: contacts(display-<id>-screen)` with
+  `contact(each, region|row, <id>)`), the one door a finger, a pen and a mouse
+  click share, so no console reads `pointer(…, press, tap)` beside it and a click
+  never answers twice.
 - A moving carrier, a solid response swap or a field lattice's step wakes only
   the parked rigid bodies whose bounds, grown by the contact reach (two contact
   skins) and the rigid support probe's travel, meet the box its changed

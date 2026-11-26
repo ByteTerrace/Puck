@@ -1851,6 +1851,25 @@ public static partial class WorldDefinitionValidator {
                 }
             }
 
+            // The TURN facet turns the row about its own up axis by an angle read from state (see WorldPlacementTurn). Its
+            // members are read exactly by the authority, so they take no keys. The drawn copy and a solid row's colliders
+            // read the turned pose; the facets that read the row's static frame stay refused beside it.
+            if (placement.Turn is { } turn) {
+                foreach (var (member, value) in turn.Members()) {
+                    if ((value.Keys is not null) || !value.IsAuthorable(definition: definition)) {
+                        errors.Add(item: $"{path}.turn.{member} {value} must be a finite number or state.<row>[.<key>] naming a Fixed or Int cell; the authority reads a turn exactly, so it takes no keys.");
+                    }
+                }
+
+                if ((placement.Distribution is not null) || (placement.Mirror is not null) || (placement.Inhabit is not null) || (placement.Deal is not null)) {
+                    errors.Add(item: $"{path} TURNS — a turning row is one copy turning about its own origin: it carries no distribution, mirror, inhabit or deal facet.");
+                }
+
+                if ((placement.Board is not null) || (placement.Pointer is not null) || (placement.Spatial is not null) || (placement.Surface is not null)) {
+                    errors.Add(item: $"{path} TURNS — its board, pointer, spatial and surface facets read the row's static frame, which a turn leaves behind; put them on a row that stands still.");
+                }
+            }
+
             // The CONTRIBUTION facet: a host-authored slot a federation partner fills (see WorldPlacementContribution).
             if (placement.Contribution is { } slotContribution) {
                 ValidateContribution(

@@ -10806,6 +10806,10 @@ export type WorldPlacement = {
    * The placement's pointer surface (see WorldPointerSurface): a rectangle in the row's frame that a seat's pointer ray maps onto, with named regions a rule hit-tests, or null for none. Omitted from the wire when null.
    */
   pointer?: WorldPointerSurface | null;
+  /**
+   * The placement's turn facet (see WorldPlacementTurn): the row turns about its own up axis by an angle read from state, a turntable, or null for a row that keeps its authored yaw. Omitted from the wire when null.
+   */
+  turn?: WorldPlacementTurn | null;
 };
 
 /**
@@ -11338,6 +11342,24 @@ export type WorldPlacementSurface = {
  * An opaque stored placement translation: a dealt child's displacement from its slot, otherwise an authored local offset. Geometry reads a resolved frame through WorldPlacementFrameCompilation, never this value as a position. Fixed-point writes and their JSON round trips retain every Q48.16 bit.
  */
 export type WorldPlacementTranslation = [number, number, number] | string;
+
+/**
+ * A placement's turn facet: the row turns about its own up axis, through its origin, by phase + rate × clock turns added to its YawDegrees, a turntable driven from state. Each member is a literal or a numeric state binding, never keys, so the authority evaluates the angle exactly from the arena at a tick and a presentation reads the same formula over the cells its mirror presents. Nothing is integrated or stored: the angle is a function of the three values at the moment asked, so a clock row that advances on its own (a slot carrying advance(perSecond:)) turns the row continuously without a rule firing, a rate of zero holds it at its phase, and a rule that changes the rate keeps the angle continuous by rebasing the phase in the same write (phase += (rate − newRate) × clock). Absent (null) is a row that keeps its authored yaw.
+ */
+export type WorldPlacementTurn = {
+  /**
+   * The clock the rate multiplies, in the clock's own unit (gallery seconds, say); usually a state binding to a slot that advances.
+   */
+  clock: BindableScalar;
+  /**
+   * The turns per clock unit; positive turns the row the way a growing YawDegrees does. Absent is one turn per unit.
+   */
+  rate?: BindableScalar;
+  /**
+   * The turns added before the rate's share. Absent is zero.
+   */
+  phase?: BindableScalar;
+};
 
 export type WorldPlacementsSection = {
   /**

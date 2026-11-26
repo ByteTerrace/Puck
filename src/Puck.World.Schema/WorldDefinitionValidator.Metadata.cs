@@ -1516,10 +1516,9 @@ public static partial class WorldDefinitionValidator {
             }
             if (
                 (WorldDefinitionRows.FindPlacement(placements: definition.Placements, id: parentId) is not { } parent) ||
-                ((parent.Distribution is not null) && (parent.Deal is null)) || (parent.Mirror is not null) ||
-                (parent.Attach is not null) || (parent.Inhabit is not null)
+                !parent.HasStaticFrame
             ) {
-                errors.Add(item: $"spawnPoints[{index}].parent '{parentId}' must name a declared placement with a static single frame (no distribution, mirror, attach or inhabit facet).");
+                errors.Add(item: $"spawnPoints[{index}].parent '{parentId}' must name a declared placement with a static single frame (no distribution, mirror, attach, inhabit or turn facet).");
             }
         }
     }

@@ -149,7 +149,7 @@ public static partial class WorldPlacementStamp {
             m_recording++;
             try {
                 if (row.Parent is { Length: > 0 } parentId) {
-                    if (!Lookup(parentId, out var parent) || parent.Attach is not null || parent.Inhabit is not null ||
+                    if (!Lookup(parentId, out var parent) || parent.Attach is not null || parent.Inhabit is not null || parent.Turn is not null ||
                         !LiteralRoot(parent)) {
                         reason = $"placement '{row.Id}' requires a declared literal static parent frame '{parentId}'.";
                     } else if (parent.Surface is not null && SingleRoot(parent)) {
