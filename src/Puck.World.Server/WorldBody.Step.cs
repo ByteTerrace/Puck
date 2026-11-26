@@ -217,6 +217,9 @@ public sealed partial class WorldBody {
     // Resolve the accepted tick's movement resultant through the same surface projection as locomotion.
     // Normalization gives a fixed overlay speed even at partial stick deflection.
     private FixedVector3 ImpulseDirection(in CompiledBodyInstruction instruction, in PlayerIntent intent, FixedQuaternion orientation) {
+        if (TryImpulseOnFace(direction: out var onFace, instruction: in instruction, intent: in intent, orientation: orientation)) {
+            return onFace;
+        }
         if (instruction.UseMoveDirection) {
             var scratch = default(BodyMotionScratch);
             FixedVector3 direction;
@@ -227,10 +230,8 @@ public sealed partial class WorldBody {
 
             if (!TryCommandedMoveDirection(direction: out direction, scratch: ref scratch)) {
                 var (forward, strafe) = PlanarIntent(intent: in intent);
-                var facing = ((m_tuning.MoveFrame == MotionMoveFrame.World) ? m_frame.Rotate(vector: -FixedVector3.UnitZ) : orientation.Rotate(vector: -FixedVector3.UnitZ));
-                var right = ((m_tuning.MoveFrame == MotionMoveFrame.World) ? m_frame.Rotate(vector: FixedVector3.UnitX) : orientation.Rotate(vector: FixedVector3.UnitX));
 
-                direction = ((facing * forward) + (right * strafe)).RejectFrom(unitAxis: m_up);
+                direction = PlanarCommand(forward: forward, orientation: in orientation, strafe: strafe).RejectFrom(unitAxis: m_up);
             }
             if (direction != FixedVector3.Zero) { return direction.WithLength(length: FixedQ4816.One); }
         }
@@ -274,6 +275,16 @@ public sealed partial class WorldBody {
             scratch.TargetVelocity = (direction * effectiveMoveSpeed);
         } else {
             var (forward, strafe) = PlanarIntent(intent: in scratch.Intent);
+
+            (forward, strafe) = GuardFace(
+                command: CommandOnFace(
+                    forward: forward,
+                    into: in scratch.FaceInto,
+                    right: in scratch.Right,
+                    strafe: strafe
+                ),
+                guard: scratch.FaceGuard
+            );
 
             scratch.TargetVelocity = (((scratch.Facing * forward) + (scratch.Right * strafe)) * effectiveMoveSpeed);
         }
@@ -643,6 +654,13 @@ public sealed partial class WorldBody {
                 if (m_sweepRefusal != ContactRefusal.None) { return; }
             }
         }
+
+        // What the hold spends is settled by where the step left the body, before the seat below corrects it along the
+        // face normal.
+        SpendHold(
+            intent: in scratch.Intent,
+            stepTicks: stepTicks
+        );
 
         // The grip's inward standoff lands after the pose is committed, for the same reason the contact resolve
         // lands after integration: it is a correction to where the body ended up, not a term in how it got there.
@@ -1958,6 +1976,11 @@ public sealed partial class WorldBody {
         public FixedVector3 AttitudeUp;
         public FixedVector3 Facing;
         public FixedVector3 Right;
+        // The level direction into the face a pull holds, set only for a world-framed kit: the command is then laid
+        // onto the face (WorldBody.Hold.cs's CommandOnFace) with Facing up the face and Right along it. Zero otherwise.
+        public FixedVector3 FaceInto;
+        // The directions along the held face its edge guard refuses this step (WorldBody.Hold.cs's FaceEdges).
+        public FaceEdges FaceGuard;
         public FixedVector3 TargetVelocity;
         public FixedQ4816 DirectVerticalVelocity;
         public FixedVector3 Velocity;

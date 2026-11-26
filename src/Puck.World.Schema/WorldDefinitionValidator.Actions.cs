@@ -8,7 +8,7 @@ public static partial class WorldDefinitionValidator {
         WorldPredicate.TimerElapsed => "timerElapsed",
         _ => "?",
     };
-    private static void ValidateActionSpec(ActionSpec? spec, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, string path, List<string> errors) {
+    private static void ValidateActionSpec(ActionSpec? spec, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, ISet<string> channelNames, string path, List<string> errors) {
         if (spec is null) {
             return;
         }
@@ -18,6 +18,7 @@ public static partial class WorldDefinitionValidator {
             stateSlots: stateSlots,
             targetRegisterNames: targetRegisterNames,
             stateRows: stateRows,
+            channelNames: channelNames,
             latchLegitimate: true,
             path: $"{path}.onPress",
             errors: errors
@@ -27,6 +28,7 @@ public static partial class WorldDefinitionValidator {
             stateSlots: stateSlots,
             targetRegisterNames: targetRegisterNames,
             stateRows: stateRows,
+            channelNames: channelNames,
             latchLegitimate: false,
             path: $"{path}.onRelease",
             errors: errors
@@ -50,6 +52,7 @@ public static partial class WorldDefinitionValidator {
                 ValidatePredicate(
                     predicate: rule.Gate,
                     stateSlots: stateSlots,
+                    channelNames: channelNames,
                     path: $"{path}.onFact[{index}].gate",
                     errors: errors
                 );
@@ -448,7 +451,7 @@ public static partial class WorldDefinitionValidator {
         }
 
     }
-    private static void ValidateTrigger(ActionTrigger? trigger, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, bool latchLegitimate, string path, List<string> errors) {
+    private static void ValidateTrigger(ActionTrigger? trigger, IReadOnlyDictionary<string, ActionStateSlot> stateSlots, ISet<string> targetRegisterNames, IReadOnlyDictionary<string, WorldStateRow> stateRows, ISet<string> channelNames, bool latchLegitimate, string path, List<string> errors) {
         if (trigger is null) {
             return;
         }
@@ -472,6 +475,7 @@ public static partial class WorldDefinitionValidator {
         ValidatePredicate(
             predicate: trigger.Gate,
             stateSlots: stateSlots,
+            channelNames: channelNames,
             path: $"{path}.gate",
             errors: errors
         );

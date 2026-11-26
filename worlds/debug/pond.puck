@@ -188,8 +188,9 @@ template houndLeg(side, sign, shift, e, end) {
 template pond() {
   state {
     body [
+      // The spiders' own register, apart from the `stamina` a climbing avatar's wheel is.
       {
-        name: "stamina"
+        name: "crawlStamina"
         kind: "Counter"
         initial: 3
         resetFact: "Grounded"

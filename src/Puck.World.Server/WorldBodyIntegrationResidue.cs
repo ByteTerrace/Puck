@@ -54,6 +54,8 @@ namespace Puck.World.Server;
 /// <param name="HoldNormal">The held surface's unit normal, on the same terms as
 /// <paramref name="HoldAnchor"/>.</param>
 /// <param name="HoldSpendRemainder">The hold spend rate accumulator's signed remainder.</param>
+/// <param name="HoldRestoreRemainder">The hold restore rate accumulator's signed remainder.</param>
+/// <param name="HoldDriveDwellTicks">How long, in engine ticks, the body has driven into a face it has not taken.</param>
 /// <param name="AttitudeUp">The axis the body is drawn standing on, carried so a grip's lean is turned into rather than snapped to.</param>
 /// <param name="AttitudeTurnRemainder">The drawn-axis turn accumulator's signed remainder.</param>
 /// <param name="AttitudeLeaned">Whether a surface hold has leaned the drawn axis, which decides whether leaving
@@ -102,6 +104,8 @@ public readonly record struct WorldBodyIntegrationResidue(
     FixedVector3 HoldAnchor,
     FixedVector3 HoldNormal,
     long HoldSpendRemainder,
+    long HoldRestoreRemainder,
+    ulong HoldDriveDwellTicks,
     FixedVector3 AttitudeUp,
     long AttitudeTurnRemainder,
     bool AttitudeLeaned,

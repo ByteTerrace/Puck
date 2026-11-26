@@ -41,13 +41,18 @@ public readonly record struct FixedBodyShaping(
 /// this form.</summary>
 /// <remarks><see cref="Shaping"/> is simulation-affecting: it selects the slice of the tuning the velocity-shaping
 /// stage reads. <see cref="ShapingRecencyFacts"/>/<see cref="ShapingRecencyWindows"/> are the shared recency-clock
-/// table across every row's <c>recently</c> gate, and the per-tick clock updater walks it.</remarks>
+/// table across every row's <c>recently</c> gate, and the per-tick clock updater walks it. <see cref="HoldGates"/>
+/// holds one flattened <c>when</c> gate per row of the kit's hold list, in list order and empty for a row with no
+/// condition, and <see cref="HoldRestoreGates"/> the same for each row's <c>restore.when</c>; their <c>recently</c>
+/// gates share the same clock table.</remarks>
 public readonly record struct FixedMotionTuning(
     FixedSpeed Speed,
     FixedTurn Turn,
     FixedBodyShaping[] Shaping,
     ActionFact[] ShapingRecencyFacts,
     ulong[] ShapingRecencyWindows,
+    GateToken[][] HoldGates,
+    GateToken[][] HoldRestoreGates,
     MotionMoveFrame MoveFrame,
     bool FacingSnap,
     FixedUpTurnRates UpTurn,

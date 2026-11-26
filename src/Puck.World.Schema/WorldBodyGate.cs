@@ -55,10 +55,14 @@ public static partial class BodyActionSpecFactory {
                     body.Windows.Add(item: DurationTicks(seconds: recently.WindowSeconds));
                     break;
                 case WorldPredicate.Held held:
-                    if ((body.Channels is not { } channels) || !channels.TryGetOrdinal(name: held.Channel, ordinal: out var channel)) {
-                        throw new InvalidOperationException(message: $"Predicate 'held' names channel '{held.Channel}', which does not resolve against the world's channel table — 'held' is legitimate only inside a kit's shaping-row gate.");
+                    if (body.Channels is not { } channels) {
+                        throw new InvalidOperationException(message: $"Predicate 'held' names channel '{held.Channel}', and this gate has no channel table to resolve it against.");
                     }
-                    operand = new ActionGateOperand.Held(channel: channel);
+                    // A kit compiles once per input mapping, and a mapping carries only the channels its mode tuple
+                    // offers: a declared channel it leaves out has no ordinal, and is never held under it.
+                    operand = new ActionGateOperand.Held(channel: (channels.TryGetOrdinal(name: held.Channel, ordinal: out var channel)
+                        ? channel
+                        : -1));
                     break;
                 case WorldPredicate.TimerElapsed elapsed:
                     operand = new ActionGateOperand.Elapsed(slot: ResolveState(name: elapsed.State, stateSlots: body.Slots));

@@ -42,6 +42,7 @@ public sealed partial class WorldBody {
         public bool Recently(int slot) => (((Lane < 0) ? body.m_motionRecency[slot] : body.LaneRecency(lane: Lane)[slot]) > 0);
         public FixedQ4816 Counter(int slot) => body.StateCounter(slot: slot);
         public bool TimerElapsed(int slot) => (body.StateTimer(slot: slot) == 0);
-        public bool Held(int channel) => (Intent[channel] >= body.m_channelThresholds[channel]);
+        // A negative ordinal is a channel the kit's input mapping does not carry, which is never held under it.
+        public bool Held(int channel) => ((channel >= 0) && (Intent[channel] >= body.m_channelThresholds[channel]));
     }
 }

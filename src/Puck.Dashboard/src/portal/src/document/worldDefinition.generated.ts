@@ -1049,7 +1049,7 @@ export type BoardCombineOp = "Copy" | "Fill" | "Clear" | "And" | "Or" | "Xor" | 
 
 export type BodyHoldBond = "Surface" | "Free" | "Medium";
 
-export type BodyHoldForward = "Heading" | "Intent" | "Velocity";
+export type BodyHoldForward = "Heading" | "Intent" | "Velocity" | "Surface";
 
 export type BodyHoldKind = "None" | "Gravity" | "Pull" | "Lift";
 
@@ -8979,6 +8979,22 @@ export type WorldHold = {
    * The fraction of the kit's resolved move speed the MoveUp role commands vertically while this row holds, in every bond — 0 (the default) is no vertical thrust at all, 1 is fully isotropic. A non-Medium row commanding thrust takes the vertical channel outright for the tick, clearing the ballistic carry; a medium row folds it into the medium's own displacement before that law's convergence runs.
    */
   thrust?: number;
+  /**
+   * What the row refills while held, or null for a row that restores nothing.
+   */
+  restore?: WorldHoldRestore | null;
+  /**
+   * The gate that must hold for the row to be taken or kept: facts, body registers, timers and held channels. null is a row with no condition of its own.
+   */
+  when?: ActionPredicateNullable2 | null;
+  /**
+   * How a body climbing off the end of this row's face gets onto what lies past it. Admitted on a Pull row only.
+   */
+  mantle?: WorldHoldMantle | null;
+  /**
+   * How long a body standing on ground must keep driving into a face before OnDrive takes it, so brushing a wall is not a grab. A body in the air takes it at once. Zero, the default, takes it at once on the ground too.
+   */
+  driveSeconds?: number;
 };
 
 export type WorldHoldEnvelope = {
@@ -9003,6 +9019,25 @@ export type WorldHoldGravity = {
   fall: number;
 };
 
+export type WorldHoldMantle = {
+  /**
+   * The greatest height above the body's feet, world units at unit scale, at which the edge is felt and over which the body is raised. Positive.
+   */
+  height: number;
+  /**
+   * How far past the face the body steps in, world units at unit scale. Positive.
+   */
+  depth: number;
+  /**
+   * How long the mantle takes. Positive.
+   */
+  seconds: number;
+  /**
+   * A declared state.body Timer slot the mantle starts for its own length, so rules and a rig can tell a mantle from a climb, or null.
+   */
+  state?: string | null;
+};
+
 export type WorldHoldMedium = {
   /**
    * The idle vertical drift velocity below the equilibrium band, signed (u/s).
@@ -9018,15 +9053,34 @@ export type WorldHoldMedium = {
   settleRate: number;
 };
 
+export type WorldHoldRestore = {
+  /**
+   * The declared state.body slot name.
+   */
+  state: string;
+  /**
+   * The positive rate the slot fills at, per second.
+   */
+  ratePerSecond: number;
+  /**
+   * The gate that must hold for the slot to fill, or null to fill whenever the row holds. A fall row that restores only now(fact: Grounded) refills a body standing on any ground and not one in the air.
+   */
+  when?: ActionPredicateNullable2 | null;
+};
+
 export type WorldHoldSpend = {
   /**
    * The declared state.body slot name.
    */
   state: string;
   /**
-   * The positive rate the slot drains at, per second.
+   * The positive rate the slot drains at, per second, while the body is commanded to move.
    */
   ratePerSecond: number;
+  /**
+   * The rate the slot drains at, per second, while nothing is commanded: zero holds the slot where it is, so a climber hanging still tires no further. null drains at RatePerSecond whether the body moves or not.
+   */
+  restingRatePerSecond?: number | null;
 };
 
 export type WorldHostDefaults = {

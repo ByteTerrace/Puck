@@ -217,6 +217,16 @@ the input channel and timer states and owns its tuning and rig response. The
 Moth's [dash document](../debug/avatars/moth-dash.puck) supplies its burst; West/J activates it on Move.
 Run remains Shift while held, with N/left-stick press switching run on and off.
 
+`climbAbility(kit, ...)` authors climbing into a kit: a `climb` hold row taken by
+walking or falling into a holdable wall, a `stamina` register spent while moving
+on the face and held while hanging, a leap on the jump channel for a chunk of
+it, letting go on the run channel, the winded lock once it empties, and the
+mantle over a wall's top. The kit's own ground and fall rows author
+`restore: staminaRestore()` so standing on ground refills it. Every number is a
+template parameter; the Moth's [climb document](../debug/avatars/moth-climb.puck)
+takes the defaults. [The climbing plan](../../docs/plans/climbing.md) holds the
+design and the open work.
+
 `motion.puck` supplies `walkMotion()` and `easedTimedMove`. Use the latter
 in a kit action to specify its travel, signed yaw and duration with a smooth
 start and end. [Timed moves](../../.claude/skills/puck-world/references/documents-motion.md#timed-moves)
