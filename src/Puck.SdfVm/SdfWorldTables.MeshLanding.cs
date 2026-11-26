@@ -7,9 +7,9 @@ namespace Puck.SdfVm;
 // whichever residency's service has room for them, under that service's byte, host-time and GPU-share rates. The jobs
 // are the store's: a job any residency's service took lands a mesh for every residency that names it.
 public sealed partial class SdfWorldTables {
-    /// <summary>The stages that read the tables' regions and the mesh region: what a region copy hands its buffer
-    /// to.</summary>
-    internal const GpuStage RegionReaders = SdfMeshRegionStore.Readers;
+    /// <summary>The stages that read the tables' regions: what a region copy hands its buffer to. The mesh region's
+    /// readers are the store's (<see cref="SdfMeshRegionStore.Readers"/>), which also read its indices.</summary>
+    internal const GpuStage RegionReaders = (GpuStage.ComputeShader | GpuStage.VertexShader | GpuStage.FragmentShader);
 
     // The background GPU work's client that lands the store's owed words. Every call runs on the frame thread; the
     // jobs' words are packed on a worker ahead of the take (SdfMeshRegionStore.TryTakePackedLanding).

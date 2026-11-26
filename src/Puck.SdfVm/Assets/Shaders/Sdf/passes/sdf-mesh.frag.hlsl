@@ -10,12 +10,12 @@
 #include "../frame/sdf-stamp-fade.hlsli"
 
 // Discard must precede depth writes: an early-depth annotation would leave invisible avatar depth in the holes.
-float4 PSMain(MeshRasterVertex input) : SV_Target0 {
+float4 PSMain(MeshRasterVertex input, uint primitive : SV_PrimitiveID) : SV_Target0 {
     sdfStampFade(input.draw, uint2(input.position.xy));
     ViewportData view = worldView();
     float3 relative = (input.world - view.position.xyz);
 
     puckCountFragmentWork(0u, 1u);
 
-    return float4(length(relative), float(input.draw + 1u), float(input.triangleIndex), dot(relative, view.forward.xyz));
+    return float4(length(relative), float(input.draw + 1u), float(sdfMeshRasterTriangle(input, primitive)), dot(relative, view.forward.xyz));
 }

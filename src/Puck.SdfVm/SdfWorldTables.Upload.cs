@@ -89,7 +89,7 @@ public sealed partial class SdfWorldTables {
         // residency staged alone opens, records and submits in turn), and the store's gate hands the copies to the first
         // upload that opens after they were owed, so no upload submitted earlier draws a mesh at words a later one fills.
         // Never record them in RecordUpload, which runs side by side with other residencies' recordings in no order.
-        m_meshStoreCopies = m_meshStore.RecordOwed(client: this, commandBuffer: commandBuffer, readers: RegionReaders, recorder: recorder);
+        m_meshStoreCopies = m_meshStore.RecordOwed(client: this, commandBuffer: commandBuffer, readers: SdfMeshRegionStore.Readers, recorder: recorder);
         // The probe scenes' words ride the same door, under the same invariant: a probe job of any residency recorded
         // after this upload opens reads a region whose words and growth this upload carries, and no client publishes
         // a root until the upload that carried it has completed (SdfMeshProbeScenes.Upload.Rooted).

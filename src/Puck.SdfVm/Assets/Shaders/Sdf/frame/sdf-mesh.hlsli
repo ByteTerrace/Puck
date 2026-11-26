@@ -164,9 +164,13 @@ int sdfMeshHitFrameSlot(SdfMeshHit hit) {
 uint sdfMeshIndexAt(uint record, uint k) {
     return sdfMeshWord(sdfMeshRecordWord(record + SDF_MESH_INDEX_WORD) + k);
 }
+// The first word of a draw's vertex `vertex`, the vertex an index of its mesh names.
+uint sdfMeshVertexWord(uint record, uint vertex) {
+    return (sdfMeshRecordWord(record + SDF_MESH_VERTEX_WORD) + (SDF_MESH_VERTEX_WORDS * vertex));
+}
 // The first word of the vertex a draw's index `k` names.
 uint sdfMeshVertexAt(uint record, uint k) {
-    return (sdfMeshRecordWord(record + SDF_MESH_VERTEX_WORD) + (SDF_MESH_VERTEX_WORDS * sdfMeshIndexAt(record, k)));
+    return sdfMeshVertexWord(record, sdfMeshIndexAt(record, k));
 }
 // The first of a skinned vertex's SDF_MESH_SKIN_VERTEX_WORDS words (SdfMeshRecord.SkinVertexWords): its first member,
 // then its second member and share, its gradient's X and Y, and its gradient's Z (SdfMeshInfluence).
@@ -315,22 +319,30 @@ float3 sdfMeshDisplaced(uint record, float3 p, bool previous, inout float3 norma
     return p;
 }
 #include "sdf-mesh-skin.hlsli"
-// The world position and normal of a draw's index `k`: the vertex it names displaced by a height field's heights
-// (sdfMeshDisplaced), skinned under its members' slots in this frame (sdfMeshSkinCurrent), then under the draw's pose in
-// this view (sdfMeshPoseOf: its basis and origin, the normal through its normal rows), and its portal carry. The normal
-// is meaningful only for a mesh that carries normals.
-void sdfMeshWorldVertex(uint record, uint k, out float3 position, out float3 normal) {
+// The world position and normal of a draw's vertex `vertex` (sdfMeshWorldVertex takes an index `k` and reads the vertex
+// it names): displaced by a height field's heights (sdfMeshDisplaced), skinned under its members' slots in this frame
+// (sdfMeshSkinCurrent), then under the draw's pose in this view (sdfMeshPoseOf: its basis and origin, the normal through
+// its normal rows), and its portal carry. The normal is meaningful only for a mesh that carries normals.
+void sdfMeshWorldVertexOf(uint record, uint vertex, out float3 position, out float3 normal) {
     SdfMeshPose pose = sdfMeshPoseOf(record);
-    normal = asfloat(sdfMeshWords3(sdfMeshVertexAt(record, k) + 3u));
-    float3 object = sdfMeshDisplaced(record, sdfMeshObjectPosition(record, k), false, normal);
-    object = sdfMeshSkinCurrent(record, k, object, normal, sdfMeshPoseScale(pose));
+    uint word = sdfMeshVertexWord(record, vertex);
+    normal = asfloat(sdfMeshWords3(word + 3u));
+    float3 object = sdfMeshDisplaced(record, asfloat(sdfMeshWords3(word)), false, normal);
+    object = sdfMeshSkinCurrent(record, vertex, object, normal, sdfMeshPoseScale(pose));
     position = sdfMeshCarryPoint(record, mul(object, pose.basis) + pose.origin);
     normal = sdfMeshCarryDirection(record, mul(normal, pose.normals));
 }
-float3 sdfMeshWorldPosition(uint record, uint k) {
+void sdfMeshWorldVertex(uint record, uint k, out float3 position, out float3 normal) {
+    sdfMeshWorldVertexOf(record, sdfMeshIndexAt(record, k), position, normal);
+}
+// The world position of a draw's vertex `vertex`, as an indexed raster draw's vertex stage reads it by its vertex id.
+float3 sdfMeshWorldPositionOf(uint record, uint vertex) {
     float3 position, normal;
-    sdfMeshWorldVertex(record, k, position, normal);
+    sdfMeshWorldVertexOf(record, vertex, position, normal);
     return position;
+}
+float3 sdfMeshWorldPosition(uint record, uint k) {
+    return sdfMeshWorldPositionOf(record, sdfMeshIndexAt(record, k));
 }
 float3 sdfMeshWorldNormal(uint record, uint k) {
     float3 position, normal;

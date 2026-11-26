@@ -85,6 +85,9 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // The 0-based VkPhysicalDeviceFeatures flag index of shaderClipDistance: the SDF mesh and shadow passes' vertex stages
     // write a clip distance, which clips a body straddling a portal at the portal's glass.
     private const uint ClipDistanceFeatureIndex = 37u;
+    // The 0-based VkPhysicalDeviceFeatures flag index of geometryShader, which a fragment stage's PrimitiveId needs (the
+    // SPIR-V Geometry capability): the SDF mesh and glass passes' indexed draws name the triangle a fragment covers by it.
+    private const uint GeometryShaderFeatureIndex = 4u;
     // Optional storage-buffer indexing, retained as a support reading only.
     private const uint StorageBufferArrayDynamicIndexingFeatureIndex = 35u;
     // The sparse flags among VkPhysicalDeviceFeatures (sparseBinding, sparseResidencyBuffer, sparseResidencyAliased),
@@ -126,6 +129,7 @@ public sealed class VulkanLogicalDeviceFactory : IVulkanLogicalDeviceFactory {
     // The base features every device is created with, in index order, the order they are enabled in, each with its name and what needs
     // it; a device reporting any of them absent is refused naming it.
     private static readonly (uint Index, string Feature, string Need)[] RequiredBaseFeatures = [
+        (GeometryShaderFeatureIndex, "geometryShader", "the SDF mesh and glass passes' fragments read the triangle they cover as their primitive id"),
         (FragmentStoresAndAtomicsFeatureIndex, "fragmentStoresAndAtomics", "the SDF mesh pass's fragments need to count the texels they write"),
         (StorageImageExtendedFormatsFeatureIndex, "shaderStorageImageExtendedFormats", "the shadow handoff texture needs R8 and R8G8 storage images"),
         (SampledImageArrayDynamicIndexingFeatureIndex, "shaderSampledImageArrayDynamicIndexing", "the SDF screen shading needs to index its screen sources and samplers"),

@@ -16,6 +16,8 @@ public static class VulkanAccessFlags {
     public const uint HostRead = 0x00002000;
     /// <summary>The <c>VK_ACCESS_INDIRECT_COMMAND_READ_BIT</c> value.</summary>
     public const uint IndirectCommandRead = 0x00000001;
+    /// <summary>The <c>VK_ACCESS_INDEX_READ_BIT</c> value.</summary>
+    public const uint IndexRead = 0x00000002;
     /// <summary>The <c>VK_ACCESS_SHADER_READ_BIT</c> value.</summary>
     public const uint ShaderRead = 0x00000020;
     /// <summary>The <c>VK_ACCESS_SHADER_WRITE_BIT</c> value.</summary>
