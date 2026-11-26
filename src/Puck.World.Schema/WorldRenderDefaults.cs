@@ -673,6 +673,57 @@ public sealed record WorldRenderLightingKey(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyDictionary<string, WorldRenderLight>? Lights = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderCurvature? Curvature = null
 );
+/// <summary>The body a directional light comes from (<see cref="WorldRenderLight.Directional.Source"/>): a sphere
+/// standing at a place of the world's frame, or riding closed-form orbits about that place. Each frame the
+/// presentation reads where the body stands and where the frame's first view stands, and from the two derives the
+/// light's direction (toward the body), its illuminance (the authored illuminance at <paramref name="Distance"/>,
+/// falling with the square of the distance) and, for a light that authors no angular radius, the angular radius the
+/// body shows. A sun disc drawn about the light that authors no radius shows the same angular radius, so the disc is
+/// the body's own outline wherever the body's geometry is too far to draw. While no view has been placed, or an
+/// orbit's clock reads no phase, the light keeps its authored direction and illuminance.</summary>
+/// <remarks>The derivation is one per world a frame, from the frame's first view, as a view clock's reading is
+/// (<see cref="WorldClockView"/>): a second view far from the first is lit from the first's direction.</remarks>
+/// <param name="Position">Where the body stands, or the focus of the first of its <paramref name="Orbits"/>, in
+/// the world's coordinates. Absent is the origin.</param>
+/// <param name="Orbits">The orbits the body rides, at most <see cref="MaxOrbits"/>: the first about
+/// <paramref name="Position"/>, and each further one about the point the orbits before it reach, so a star of a
+/// pair rides the pair's orbit and then its own about their common centre. Absent stands still.</param>
+/// <param name="Radius">The body's radius, in metres, zero or more. Zero is a point, which shows no size.</param>
+/// <param name="Distance">The distance from the body, in metres, at which the light gives its authored
+/// illuminance. Absent is the first orbit's semi-major axis; absent with no orbit, the light gives its authored
+/// illuminance at every distance.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldRenderLightSource(
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DocumentVector3? Position = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldRenderLightOrbit>? Orbits = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float Radius = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Distance = null
+) {
+    /// <summary>The most orbits one source rides.</summary>
+    public const int MaxOrbits = 4;
+}
+/// <summary>A closed-form orbit a light's source rides: the conic a <c>gravity.orbits</c> row of the same elements
+/// places a body on (<see cref="WorldGravityOrbit"/>), read on a presentation clock, so a recipient that holds the
+/// render section and the clock places the source with no simulation state.</summary>
+/// <param name="Clock">The clock, by name in the <c>timeline</c> section, whose phase is the orbit's: one turn of
+/// the clock is one period.</param>
+/// <param name="SemiMajorAxis">The positive semi-major axis, in metres.</param>
+/// <param name="Eccentricity">The eccentricity, zero for a circle and below
+/// <c>FixedConicOrbit.MaxEccentricity</c>.</param>
+/// <param name="InclinationDegrees">The tilt of the orbit's plane from the world's XZ plane, about its line of nodes.</param>
+/// <param name="AscendingNodeDegrees">The heading of the line of nodes about +Y from +X.</param>
+/// <param name="PeriapsisDegrees">The angle in the plane from the line of nodes to the periapsis.</param>
+/// <param name="Phase">The fraction of a turn past the periapsis at the clock's phase zero.</param>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record WorldRenderLightOrbit(
+    [property: DocumentName(WorldNameKind.Clock, WorldNameRole.Names)] string Clock,
+    float SemiMajorAxis,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float Eccentricity = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float InclinationDegrees = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float AscendingNodeDegrees = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float PeriapsisDegrees = 0f,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float Phase = 0f
+);
 /// <summary>One light. The <c>$type</c> string is the JSON discriminator; a new kind is a new derived record, its
 /// <see cref="JsonDerivedTypeAttribute"/> line, and its kind in <c>SdfLightKind</c>.</summary>
 [JsonDerivedType(typeof(WorldRenderLight.Directional), typeDiscriminator: "directional")]
@@ -712,6 +763,10 @@ public abstract record WorldRenderLight {
     /// <param name="Temperature">The light's colour as a black body's at this temperature, in kelvin, in
     /// <c>[1000, 40000]</c>: noon sunlight about 5,500, a sunset about 3,000. Refused beside
     /// <paramref name="Color"/>.</param>
+    /// <param name="Source">The body the light comes from, a place in the world's frame: the light's direction is
+    /// then toward that place from where the viewer stands, its illuminance falls with the square of the distance,
+    /// and its angular radius is the body's as seen from there. Absent is a light at infinity, which
+    /// <paramref name="Direction"/> alone places.</param>
     public sealed record Directional(
         BindableDirection? Direction = null,
         BindableColor? Color = null,
@@ -720,7 +775,8 @@ public abstract record WorldRenderLight {
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldShadowMode? Shadow = null,
         [property: DocumentText("a light name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Temperature = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableScalar? Temperature = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderLightSource? Source = null
     ) : WorldRenderLight {
         /// <inheritdoc/>
         public override string? LightName => Name;
@@ -983,13 +1039,17 @@ public abstract record WorldRenderSkyLayer {
     /// <paramref name="Texture"/> the image a screen shows across the disc.</summary>
     /// <param name="Light">The <see cref="WorldRenderLighting.Lights"/> slot of a directional light. Absent is the
     /// shadow light, or the first directional when none shadows.</param>
-    /// <param name="Radius">The disc's angular half-radius, in <c>(0, π/2]</c> radians. Absent is the engine
-    /// default.</param>
+    /// <param name="Radius">The disc's angular half-radius, in <c>(0, π/2]</c> radians. Absent is the angular radius
+    /// of the body its light comes from (<see cref="WorldRenderLightSource"/>), or the engine default for a light
+    /// that names no body with a size.</param>
     /// <param name="Intensity">The peak additive brightness. Absent is zero, which draws nothing.</param>
     /// <param name="Name">The name a section key addresses the layer by, unique among the layers.</param>
     /// <param name="Color"><see cref="BindableColor"/>'s grammar: the disc's tint. Absent is white.</param>
     /// <param name="Texture">The <c>texture</c> body shape: the screen whose image the disc shows. Absent is the
     /// glow.</param>
+    /// <param name="Follows">The name of the directional light the disc is drawn about, which outranks
+    /// <paramref name="Light"/>: a name stays true when another document's lights merge in ahead of it. A name no
+    /// directional light carries draws nothing.</param>
     public sealed record SunDisc(
         int? Light = null,
         BindableAngle? Radius = null,
@@ -997,7 +1057,9 @@ public abstract record WorldRenderSkyLayer {
         [property: DocumentText("a sky layer name a section key addresses")]
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Name = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BindableColor? Color = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderSkyTexture? Texture = null
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldRenderSkyTexture? Texture = null,
+        [property: DocumentText("a light name a section key addresses")]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Follows = null
     ) : WorldRenderSkyLayer {
         /// <inheritdoc/>
         public override string? LayerName => Name;

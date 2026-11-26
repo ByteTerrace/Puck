@@ -109,6 +109,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             objB: m_definition?.Render
         )) {
             m_lighting = WorldRenderKeys.Expand(lighting: definition.Render.Lighting);
+            m_sources = SourcesOf(lighting: m_lighting);
             m_sky = WorldRenderKeys.Expand(sky: definition.Render.Sky);
             m_skyLabels = WorldSkyLayers.LabelsOf(layers: (m_sky?.Layers ?? []));
         }
@@ -152,6 +153,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
 
         ApplyShadows(lights: lights, mirror: mirror);
         ApplySunDiscLight(lights: lights, sky: sky);
+        ApplySources(lights: lights, mirror: mirror, sky: sky);
         return new WorldResolvedEnvironment(Indirect: m_indirect, Lights: lights, Sky: sky, Exposure: m_exposure, Lanes: m_lanes);
     }
 
@@ -259,6 +261,18 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
                     : light with { DynamicSlot = SdfProgram.NoDynamicTransformSlot, Weight = 0f })
             );
         }
+    }
+    // The directional light of a name (a disc's `follows`), or -1 when the section carries none, which draws no disc.
+    private int NamedDirectional(string name) {
+        if (m_lighting?.Lights is { } lights) {
+            for (var index = 0; (index < Math.Min(val1: lights.Count, val2: SdfLights.MaxLights)); index++) {
+                if ((lights[index] is WorldRenderLight.Directional) && string.Equals(a: lights[index].LightName, b: name, comparisonType: StringComparison.Ordinal)) {
+                    return index;
+                }
+            }
+        }
+
+        return -1;
     }
     private static int FirstDirectional(SdfLights lights) {
         for (var index = 0; (index < lights.Count); index++) {
@@ -939,7 +953,7 @@ public sealed partial class WorldEnvironmentResolve : IDisposable {
             field: WorldValueFields.SunDiscIntensity,
             site: site
         ),
-        Light = (disc.Light ?? FirstDirectional(lights: lights)),
+        Light = ((disc.Follows is { } follows) ? NamedDirectional(name: follows) : (disc.Light ?? FirstDirectional(lights: lights))),
         Radius = Angle(
             angle: disc.Radius,
             fallback: SdfSkyDisc.DefaultRadius,

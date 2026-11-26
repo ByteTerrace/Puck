@@ -9,6 +9,7 @@
 //   north wall, x = 64             the night field: a snowfield under stars (night.puck)
 //   south wall, x = 60             the city: a town on a river bend (city.puck)
 //   south wall, x = 66             the moon: the pale moon that hangs over the valley (moon.puck)
+//   east wall, z = 18              the sun: an outpost on a rock the system's star passes once a day (sun.puck)
 //   west and east walls, z = 34.5  two paintings facing each other: step into either and step out of the other
 //   floor and ceiling, (66, 22.6)  the endless fall: a painting in the floor under its twin in the ceiling, in this
 //                                  world itself, so a body that steps onto the floor glass drops out of the ceiling
@@ -49,6 +50,7 @@ let fallbackCity = "#E8C48A"
 let fallbackMoon = "#CFC8BC"
 let fallbackGalaxy = "#02030A"
 let fallbackGlobe = "#1B2330"
+let fallbackSun = "#02030A"
 
 // Shape rotations, as authored quaternions [x, y, z, w]: a quarter turn about +X lays a canvas (its +Z face) flat. The
 // floor turns it to face up and the ceiling to face down; the ceiling placement's half turn about up then lines its right
@@ -105,6 +107,10 @@ let wallPaintings = [
   {
     name: "globe", x: wingX0, z: 18, yaw: 270, frame: ornate, destination: "globe", counterpart: "arrival/glass", fallback: fallbackGlobe
     title: "THE BOTTLE WORLD", note: "A room whose gravity this gallery owns. Press the lever before it and watch which way the marbles fall; step in and someone out here can turn you over."
+  }
+  {
+    name: "sun", x: wingX1, z: 18, yaw: 90, frame: brass, destination: "sun", counterpart: "arrival/glass", fallback: fallbackSun
+    title: "PERIHELION", note: "A rock the sun passes once a day, the same sun that lights the valley. Step in and watch it come; keep to the rock while it passes, and do not fly to it."
   }
   {
     name: "link-west", x: wingX0, z: 34.5, yaw: 270, frame: brass, destination: "self", counterpart: "painting-link-east/glass", fallback: fallbackSelf
@@ -607,6 +613,7 @@ spawnPoints [
   { id: "portal-city", position [60, wingFloor, 15.7], yawDegrees: 0 }
   { id: "portal-moon", position [66, wingFloor, 15.7], yawDegrees: 0 }
   { id: "portal-galaxy", position [54, wingFloor, 15.7], yawDegrees: 0 }
+  { id: "portal-sun", position [(wingX1 - 3.1), wingFloor, 18], yawDegrees: 270 }
   { id: "portal-globe", position [54.4, wingFloor, 18], yawDegrees: 90 }
   { id: "portal-link", position [54.5, wingFloor, 34.5], yawDegrees: 90 }
   { id: "portal-fall", position [fallX, wingFloor, (fallZ - 4)], yawDegrees: 180 }

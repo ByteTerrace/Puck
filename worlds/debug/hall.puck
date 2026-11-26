@@ -1462,7 +1462,7 @@ let hallDayKey = {
   ]
 }
 
-// The hall's lights. The Moth basis's sun stays (a lights list replaces its basis's whole), and the ceilings' fixtures
+// The hall's lights. The sun is the debug world's (day.puck), and the ceilings' fixtures
 // light the inside: a downlight every 12 m along each strip, a pendant in the stairwell, a lamp riding the lift
 // car's body under its ceiling, and the painting wing's downlights and washes (Wonderland next door is lit by its own
 // ceiling strips, wonderland.puck). A level's
@@ -1477,25 +1477,6 @@ render {
   lighting {
     lights: concat(
       [
-        // The day turns the sun and dims it below the horizon (day.puck, skies.puck's `sunIlluminance`); above the
-        // valley the horizon falls away, so from 300 m the sun's light rises with the viewer's height (launch.puck's
-        // `altitude` clock) to the full strength the moon's sun has all the way round, and a night crossing of the sky
-        // seam keeps the light it had.
-        directional(
-          name: "key",
-          direction: [3, 5, -4],
-          color: "#FFF0DC",
-          illuminance: {
-            clock: altitude
-            keys [
-              { at: 0, value: sunIlluminance("day") }
-              { at: 300, value: sunIlluminance("day") }
-              { at: 2250, value: 100000, ease: Step }
-            ]
-          },
-          shadow: always,
-          angularRadius: 0.2
-        )
         // The inspection fill (`gallery.inspect`): five unshadowed neutral lights, one from overhead and four low
         // from the sides, each at the `galleryFill.fill` illuminance, zero while the lever is Off. They reach every
         // surface that faces them, shadowed or not, so no exhibit sits in the dark.

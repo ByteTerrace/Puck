@@ -1,5 +1,6 @@
 // The standard's sky presets, a library: each template lowers to the ordinary `render.sky` or `render.atmosphere` rows
-// it spells, so a look needs no runtime concept and a world overrides any field after applying one. Import the module
+// it spells, so a look needs no runtime concept and a world overrides any field after applying one. The day cycle's
+// sun is a star of the standard's (stars.puck). Import the module
 // and expand a sky preset inside a world's `sky` block, which then holds the preset's layers, and its air inside the
 // `atmosphere` block:
 //
@@ -16,6 +17,8 @@
 // A layer's colours are in units of its `luminance`, in nits. A day preset takes the default, a clear day's 10,000 nits,
 // so its pale horizon shows about 7,000 and its sky stands beside a 100,000-lux sun as the real one does; a night preset
 // passes its own, a dark sky's few nits, for a world whose exposure adapts down to night.
+
+import "stars"
 
 // A clear day: a pale horizon under a deep zenith, a sun disc about the first shadowed light, and a cloud layer whose
 // coverage is the cloudiness, drawn from `cloudTier` up. Its air is `clearDayAir`.
@@ -153,22 +156,28 @@ function sunDirection(h, heading, noonElevation) = [
   ) * cosine(heading * sunRadiansPerDegree)))
 ]
 
-// The time of day as one clock: the sun's direction, colour and illuminance on the light named `key`, and the sky about
-// it (`clearDay`'s gradient, disc and clouds, and stars that come out at night behind them), all keyed on a state clock whose row of
-// the same name holds the day's phase, advancing one day every `daySeconds`. Expand it in a document fragment of its own
-// that the world imports, beside the document authoring the `key` directional's other fields, since one source's second
-// `render` block replaces the first's members. The sun rises due east of `heading` at six, culminates at
-// `noonElevation` degrees at noon and sets at eighteen, at `peak` lux times the cosine of its hour angle, and casts no
-// light below the horizon; it is `horizonColor` until seven and from seventeen, and `noonColor` between. The day starts
-// at `start` hours. The template authors the moon, a directional named `moon` whose `shadow: auto` lets it take a shadow
-// slot once the sun has set; a world restyles it with `moonPeak`, `moonColor` and `moonAngularRadius` (the soft edge of
-// its shadows, in radians: a light with no size is a point source), or overrides the row by its name. It
+// The time of day as one clock: a sun that circles the world once a day, and the sky about it (`clearDay`'s gradient,
+// disc and clouds, and stars that come out at night behind them), all on a state clock whose row of the same name holds
+// the day's phase, advancing one day every `daySeconds`. The template authors the sun itself, the directional light
+// named `key` (the Moth basis's sun, which it restyles): a star (`stars.puck`'s `star`, or the caller's own as `daystar`)
+// on a day's turn (`dayTurn`), so the light comes from where the star stands and the disc is as wide as the star
+// looks. The sun rises due east of `heading` at six, culminates at `noonElevation` degrees at noon and sets at
+// eighteen, `sunDistance` metres away; it gives `peak` lux times the cosine of its hour angle, and none below the
+// horizon, at that distance, and more nearer the star (a viewer who climbs toward it). It is `horizonColor` until
+// seven and from seventeen, and `noonColor` between; its shadows' edge is `softness` radians soft. The day starts at
+// `start` hours. A world that keys the sun's strength itself (a horizon that falls away with the viewer's height)
+// passes its own `illuminance`, nesting `sunIlluminance(clock)` as a key's value where the day should still dim it.
+// Expand the template in a document fragment of its own that the world imports, since one source's second `render`
+// block replaces the first's members. The template also authors the moon, a directional named `moon` whose
+// `shadow: auto` lets it take a shadow slot once the sun has set; a world restyles it with `moonPeak`, `moonColor`
+// and `moonAngularRadius` (the soft edge of its shadows, in radians: a light with no size is a point source), or
+// overrides the row by its name. It
 // stands opposite the sun, at `moonPeak` lux times the cosine of its hour angle, in `moonColor`. The night sky's gradient shows at `nightLuminance` nits and its stars
 // at `starLuminance`, `starDensity` cells to an axis, `starBrightness` at their peak, hashed from `starSeed`; their
 // opacity follows the hour (`nightStars`), and a world that keys `starOpacity` itself replaces the hour's with its own
 // keys, nesting `nightStars(clock)` as a key's value where the night should still show, so one star field answers both
-// the night and the viewer's height. A world that keys the `key` light's illuminance itself does the same with
-// `sunIlluminance`. Writing the row moves the time (`world.state.cell.set <clock> $value 0.5` is noon), and its
+// the night and the viewer's height. Writing the row moves the time (`world.state.cell.set <clock> $value 0.5` is
+// noon), and its
 // advance holds the sun (`world.row.set state <clock> advance {"perSecondNumerator":0,"perSecondDenominator":1}`) and
 // runs it again (the numerator back to one over `daySeconds`). `bodies` are layers of the world's own that hang in the
 // sky behind the clouds and before the stars and the sun's disc: a moon, a planet, another world seen from here.
@@ -177,7 +186,8 @@ function sunDirection(h, heading, noonElevation) = [
 // height for a sky that thins to space as she climbs (`timeline.clocks`' `view`). The
 // exposure is the world's to key on the same clock
 // (`render.exposure`'s `minimum`, `maximum`, `compensation` and `ev100` take `{ clock, keys }`).
-template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 60, heading = 0, peak = 100000, noonColor = "#FFF0DC", horizonColor = "#FFB278", cloudiness = 0.25, cloudTier = low, sunLight = 0, moonPeak = 0.25, moonColor = "#C8D4FF", moonAngularRadius = 0.11, nightLuminance = 2, starLuminance = 2, starDensity = 48, starBrightness = 1.2, starSeed = 7, starOpacity = 0, bodies = [], space = [], airOpacity = 1, cloudOpacity = 1) {
+template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 60, heading = 0, peak = 100000, noonColor = "#FFF0DC", horizonColor = "#FFB278", cloudiness = 0.25, cloudTier = low, daystar = null, sunDistance = 15000, sunRadius = 140, softness = 0.2, illuminance = null, moonPeak = 0.25, moonColor = "#C8D4FF", moonAngularRadius = 0.11, nightLuminance = 2, starLuminance = 2, starDensity = 48, starBrightness = 1.2, starSeed = 7, starOpacity = 0, bodies = [], space = [], airOpacity = 1, cloudOpacity = 1) {
+  let daySun = (daystar ?? star(radius: sunRadius, distance: sunDistance, illuminance: peak, color: noonColor))
   timeline {
     clocks [{ name: clock, state: clock, spanSeconds: 24h }]
   }
@@ -194,6 +204,13 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
   render {
     lighting {
       lights [
+        starLight(
+          of: daySun,
+          turns: [dayTurn(clock: clock, distance: daySun.distance, heading: heading, noonElevation: noonElevation)],
+          illuminance: (illuminance ?? sunIlluminance(clock, peak)),
+          color: noonColor,
+          softness: softness
+        )
         directional(
           name: "moon",
           direction: [0, 1, 0],
@@ -207,11 +224,7 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
       keys: map(range(0, 24), h => {
         at: h * 3600
         lights {
-          key: directional(
-            direction: sunDirection(h, heading, noonElevation),
-            color: ((h <= 7) or (h >= 17)) ? horizonColor : noonColor,
-            illuminance: sunHourIlluminance(h, peak)
-          )
+          key: directional(color: ((h <= 7) or (h >= 17)) ? horizonColor : noonColor)
           moon: directional(
             direction: map(sunDirection(h, heading, noonElevation), component => component * (0 - 1)),
             color: moonColor,
@@ -231,7 +244,7 @@ template dayCycle(clock = "day", daySeconds = 1440, start = 10, noonElevation = 
             { elevation: 1, color: dayStops[3] }
           ])
           stars(name: "stars", luminance: starLuminance, density: starDensity, brightness: starBrightness, seed: starSeed, opacity: starOpacity)
-          sunDisc(name: "sun", light: sunLight, radius: 0.53deg, intensity: 12, color: "#FFF1D6")
+          starDisc(of: daySun)
         ],
         bodies,
         [

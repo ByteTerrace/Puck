@@ -7914,10 +7914,6 @@ export type WorldEffectPoseCell = {
    * The pitch a teleport stands the body at, about its right axis: a creation authored standing on its edge (a playing card, whose face looks along its forward axis) is laid flat at 90 or -90. A glide keeps the body's attitude and ignores it.
    */
   pitchDegrees?: number;
-  /**
-   * The placement whose composed frame the topology's cells and Offset are read in, or null for the world: the cell centre plus the offset is turned by the frame's yaw, scaled by its scale and added to its position, so a topology authored beside a group of rows under one root placement moves and turns with that root.
-   */
-  frame?: string | null;
 };
 
 /**
@@ -8655,6 +8651,10 @@ export type WorldGravityOrbit = {
    * The speed, in world units per second, at which a body away from the orbit closes on it once it rides again, on top of the orbit's own motion: it catches the rails rather than jumping onto them. Zero, the default, puts the body on the orbit at once.
    */
   joinSpeed?: number;
+  /**
+   * A Fixed state row whose value's fractional part is the orbit's phase, in place of the engine tick: one whole unit of the row is one turn, and Phase is added to it. The row is the orbit's clock, so a row another world owns and this one follows places the orbit where that world's clock says, and writing or holding the row moves or holds the body. PeriodSeconds then states the period the row's own advance gives and places nothing. Absent reads the engine tick.
+   */
+  phaseBy?: string | null;
 };
 
 export type WorldGravityPoint = {
@@ -10690,9 +10690,9 @@ export type WorldPlacement = {
  */
 export type WorldPlacementAttach = {
   /**
-   * The 0-based population entity index the placement rides — the same indexing Entity and the console's body:<n> grant subject use, not the 1-based player.* seat number (body:1 is "player 2"). Validated within 0..the world's authored population capacity; the target need not be active at author time (see remarks — an inactive body at runtime makes the row contribute nothing, it does not refuse). Absent when Placement names the carrier; a row authors exactly one of the two.
+   * The 0-based population entity index the placement rides — the same indexing Entity and the console's body:<n> grant subject use, not the 1-based player.* seat number (body:1 is "player 2"). Validated within 0..the world's authored population capacity; the target need not be active at author time (see remarks — an inactive body at runtime makes the row contribute nothing, it does not refuse).
    */
-  bodyIndex: number | null;
+  bodyIndex: number;
   /**
    * The stamp's position offset in the body's own local frame, world units.
    */
@@ -10701,10 +10701,6 @@ export type WorldPlacementAttach = {
    * The stamp's yaw offset from the body's own heading, degrees. Zero rides the body's exact facing.
    */
   localYawDegrees?: number;
-  /**
-   * The inhabited placement whose body the row rides, named by its Id: the lowest active entity that placement's inhabit facet spawned. The population assigns a body its index when it admits it, so a module that names its carrier this way rides it in whatever world composes the module and in whatever order. While no body inhabits the placement the row contributes nothing.
-   */
-  placement?: string | null;
 };
 
 /**
@@ -12201,6 +12197,10 @@ export type WorldRenderLightDirectional = {
    * The light's colour as a black body's at this temperature, in kelvin, in [1000, 40000]: noon sunlight about 5,500, a sunset about 3,000. Refused beside Color.
    */
   temperature?: BindableScalar;
+  /**
+   * The body the light comes from, a place in the world's frame: the light's direction is then toward that place from where the viewer stands, its illuminance falls with the square of the distance, and its angular radius is the body's as seen from there. Absent is a light at infinity, which Direction alone places.
+   */
+  source?: WorldRenderLightSource | null;
   lightName?: string | null;
   /**
    * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
@@ -12241,7 +12241,41 @@ export type WorldRenderLightOccluder = {
 };
 
 /**
- * A point light, such as a bulb: its luminous intensity alike in every direction, falling off as the inverse square of the distance under a window that ends it smoothly and exactly at its range, the distance past which its light would show below SdfPhotometry.RangeThreshold of display white at the world's brightest exposure. An unanchored light is static, so the irradiance volume traces it: its light bounces off the static meshes, and each probe records whether it sees the light, so a surface the volume covers takes the light only where the probes about it see it, and a fixture lights nothing through the wall or slab between them. A light anchored to the root of a placement no body carries (no shape, and a row without an attach, inhabit or deal facet) stands where the document puts that row and is static too. Any other anchored light moves with its anchor, lights through every wall and bounces nothing.
+ * A closed-form orbit a light's source rides: the conic a gravity.orbits row of the same elements places a body on (WorldGravityOrbit), read on a presentation clock, so a recipient that holds the render section and the clock places the source with no simulation state.
+ */
+export type WorldRenderLightOrbit = {
+  /**
+   * The clock, by name in the timeline section, whose phase is the orbit's: one turn of the clock is one period.
+   */
+  clock: string;
+  /**
+   * The positive semi-major axis, in metres.
+   */
+  semiMajorAxis: number;
+  /**
+   * The eccentricity, zero for a circle and below FixedConicOrbit.MaxEccentricity.
+   */
+  eccentricity?: number;
+  /**
+   * The tilt of the orbit's plane from the world's XZ plane, about its line of nodes.
+   */
+  inclinationDegrees?: number;
+  /**
+   * The heading of the line of nodes about +Y from +X.
+   */
+  ascendingNodeDegrees?: number;
+  /**
+   * The angle in the plane from the line of nodes to the periapsis.
+   */
+  periapsisDegrees?: number;
+  /**
+   * The fraction of a turn past the periapsis at the clock's phase zero.
+   */
+  phase?: number;
+};
+
+/**
+ * A point light, such as a bulb: its luminous intensity alike in every direction, falling off as the inverse square of the distance under a window that ends it smoothly and exactly at its range, the distance past which its light would show below SdfPhotometry.RangeThreshold of display white at the world's brightest exposure. An unanchored light is static, so the irradiance volume traces it: its light bounces off the static meshes, and each probe records whether it sees the light, so a surface the volume covers takes the light only where the probes about it see it, and a fixture lights nothing through the wall or slab between them. An anchored light moves with its anchor, lights through every wall and bounces nothing.
  */
 export type WorldRenderLightPoint = {
   $type?: "point";
@@ -12306,6 +12340,28 @@ export type WorldRenderLightRim = {
    * Gets the finite nonnegative gain of this light's diffuse contribution to indirect transport. Absent is one; zero excludes it from the traced indirect light while leaving direct shading unchanged. Rim and attenuation-only lights have no diffuse contribution. Literals, state bindings and keys use the same domain.
    */
   bounce?: BindableScalar;
+};
+
+/**
+ * The body a directional light comes from (Source): a sphere standing at a place of the world's frame, or riding closed-form orbits about that place. Each frame the presentation reads where the body stands and where the frame's first view stands, and from the two derives the light's direction (toward the body), its illuminance (the authored illuminance at Distance, falling with the square of the distance) and, for a light that authors no angular radius, the angular radius the body shows. A sun disc drawn about the light that authors no radius shows the same angular radius, so the disc is the body's own outline wherever the body's geometry is too far to draw. While no view has been placed, or an orbit's clock reads no phase, the light keeps its authored direction and illuminance.
+ */
+export type WorldRenderLightSource = {
+  /**
+   * Where the body stands, or the focus of the first of its Orbits, in the world's coordinates. Absent is the origin.
+   */
+  position?: DocumentVector3;
+  /**
+   * The orbits the body rides, at most MaxOrbits: the first about Position, and each further one about the point the orbits before it reach, so a star of a pair rides the pair's orbit and then its own about their common centre. Absent stands still.
+   */
+  orbits?: (WorldRenderLightOrbit | null)[] | null;
+  /**
+   * The body's radius, in metres, zero or more. Zero is a point, which shows no size.
+   */
+  radius?: number;
+  /**
+   * The distance from the body, in metres, at which the light gives its authored illuminance. Absent is the first orbit's semi-major axis; absent with no orbit, the light gives its authored illuminance at every distance.
+   */
+  distance?: number | null;
 };
 
 /**
@@ -13143,7 +13199,7 @@ export type WorldRenderSkyLayerSunDisc = {
    */
   light?: number | null;
   /**
-   * The disc's angular half-radius, in (0, π/2] radians. Absent is the engine default.
+   * The disc's angular half-radius, in (0, π/2] radians. Absent is the angular radius of the body its light comes from (WorldRenderLightSource), or the engine default for a light that names no body with a size.
    */
   radius?: BindableAngle;
   /**
@@ -13162,6 +13218,10 @@ export type WorldRenderSkyLayerSunDisc = {
    * The texture body shape: the screen whose image the disc shows. Absent is the glow.
    */
   texture?: WorldRenderSkyTexture | null;
+  /**
+   * The name of the directional light the disc is drawn about, which outranks Light: a name stays true when another document's lights merge in ahead of it. A name no directional light carries draws nothing.
+   */
+  follows?: string | null;
   layerName?: string | null;
   /**
    * Gets how the layer composes over the colour beneath it. Absent is its kind's: over for a gradient, clouds, noise, a pattern and a panorama, add for stars, a sun disc, an aurora and a panel.
@@ -14785,17 +14845,13 @@ export type WorldSpawnPoint = {
    */
   id?: string;
   /**
-   * The seat's spawn position: in the world, or in Parent's frame.
+   * The seat's spawn position.
    */
   position?: DocumentVector3;
   /**
-   * The spawn yaw about +Y, in degrees, added to Parent's yaw when it has one.
+   * The spawn yaw about +Y, in degrees.
    */
   yawDegrees?: number;
-  /**
-   * The placement whose composed frame the pose is authored in, or null for a world-space pose. SpawnPoints hands every reader the pose resolved into the world with this member cleared, so a group of rows placed under one root placement keeps its spawn points when the root moves or turns.
-   */
-  parent?: string | null;
 };
 
 export type WorldSpeaker = WorldSpeakerFixed | WorldSpeakerAnchored | WorldSpeakerBed | null;

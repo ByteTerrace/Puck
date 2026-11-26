@@ -198,6 +198,10 @@ public static partial class WorldDefinitionValidator {
             if ((orbit.Riding is { } riding) && (WorldDefinitionRows.FindStateRow(name: riding, rows: state) is not { IsSlot: true, Kind: CellKind.Int or CellKind.Bool or CellKind.Fixed })) {
                 errors.Add(item: $"{path}.riding '{riding}' must name an Int, Bool or Fixed slot row.");
             }
+
+            if ((orbit.PhaseBy is { } phaseBy) && (WorldDefinitionRows.FindStateRow(name: phaseBy, rows: state) is not { IsSlot: true, Kind: CellKind.Fixed })) {
+                errors.Add(item: $"{path}.phaseBy '{phaseBy}' must name a Fixed slot row: its fractional part is the orbit's turn.");
+            }
         }
     }
     // Tides (SIM-AFFECTING): each source names exactly one of a placement and an orbit, states a positive mass in the

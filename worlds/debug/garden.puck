@@ -25,6 +25,7 @@ import "place-kit"
 import "../standard/visitors"
 // The pond plot west of the frames: a hound pack, stalking spiders, dragonflies and fish (pond.puck).
 import "garden-pond"
+import "../standard/stars"
 
 // The garden draws no HUD panels; controls.puck supplies its cursor.
 hud {
@@ -284,14 +285,7 @@ render {
   farDistance: 120
   lighting {
     lights [
-      directional(
-        name: "key",
-        direction: [3, 5, -4],
-        color: "#FFC27A",
-        illuminance: 2000lx,
-        shadow: always,
-        angularRadius: 0.2
-      )
+      sunlight(color: "#FFC27A", illuminance: 2000lx)
     ]
   }
   sky {

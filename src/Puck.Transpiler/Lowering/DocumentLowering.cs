@@ -458,6 +458,9 @@ public static partial class DocumentLowering {
                 );
 
             case BinaryExpressionNode bin:
+                // A coalescence answers one of its operands as it stands, which may be a binding's own value.
+                owned = (bin.Operator != "??");
+
                 return EvaluateBinary(
                     bin: bin,
                     fieldKey: fieldKey,

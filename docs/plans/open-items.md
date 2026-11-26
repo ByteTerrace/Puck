@@ -3447,6 +3447,24 @@ P1 last. The plan owns the feature end to end; these are the defects it does not
 - [low · unchecked] Whether a state-bound water colour rebuilds the field
   program every frame while it moves (`WorldFieldEmitter.Emit`).
 
+### Stars
+
+Owner: a specialist a step · ordinary · Next: [the plan](stars.md#what-is-left)'s
+step 1, the seam that carries a ship from the moon's space to the sun. The
+star, its light at every distance, its outpost and its dangers are built
+([sun.md](../../worlds/debug/sun.md)).
+
+- [medium] A gravity orbit's `phaseBy` reads its clock row's sixteen
+  fractional bits, so the debug sun moves in steps of about 1.4 m
+  (`FixedWorldGravityOrbit.TurnOf`). The plan's step 3 reads the row's exact
+  phase.
+- [high] A star's ball shadows everything its light should reach, at any
+  distance, and no draw opts out of casting, so the debug sun's light casts
+  no shadows in its own world (the plan's step 4).
+- [high] Within about 3 km of the star, lit surfaces and the star itself pass
+  the range the frame's scene light holds and read as one grey (the plan's
+  step 5).
+
 ### Portals in play
 
 Owner: a specialist a step, the design reviewed · ordinary, and ahead of
