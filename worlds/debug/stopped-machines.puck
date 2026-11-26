@@ -1,13 +1,13 @@
 // A scenario fixture imports this when none of its claims reads a machine: every device of the debug world stays
 // mounted, engageable and swappable, but the host does not advance it, so a scenario does not pay for emulating
 // cartridges it never looks at. A machine added to the debug world (devices.puck, range.puck, gallery/toybox.puck) is
-// added here too.
+// added here too; the toybox's decks come by name from the plan that places them (gallery/layout.puck).
+import "gallery/layout"
+
 machines: map(
-  [
-    "humble-gaming-brick", "advanced-gaming-brick", "humble-gaming-deck",
-    "range-deck-9", "range-deck-24", "range-deck-50",
-    "toybox-tetromino", "toybox-tetromino-mono", "toybox-bounce", "toybox-bounce-north", "toybox-test-card",
-    "toybox-test-card-mono"
-  ],
+  concat(
+    ["humble-gaming-brick", "advanced-gaming-brick", "humble-gaming-deck", "range-deck-9", "range-deck-24", "range-deck-50"],
+    toyboxMachines
+  ),
   name => { name: name, running: false }
 )

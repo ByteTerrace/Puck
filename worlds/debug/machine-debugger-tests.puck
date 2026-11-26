@@ -3,10 +3,12 @@ schema: "puck.world.definition.v1"
 basis: "debug"
 documentId: "machine-debugger-tests"
 
+import "gallery/layout"
+
 // Schedules act as seat1. Positioning another body requires the same explicit Drive grant as live play.
 grants: map(range(14, 3), i => { grantee: "seat1", budget: 64, capability: Drive, subject: $"body:{i}" })
 
-machines [
+machines: concat([
   {
     name: "humble-gaming-brick"
     engine: "gaming-brick"
@@ -38,17 +40,11 @@ machines [
     contentFolders ["cartridges/deck"]
     preferFolderDefault: false
   }
-  // The range's televisions and the gallery toybox's cabinets are no part of these checks: mounted, but not advanced.
+  // The range's televisions and the gallery toybox's decks are no part of these checks: mounted, but not advanced.
   { name: "range-deck-9", running: false }
   { name: "range-deck-24", running: false }
   { name: "range-deck-50", running: false }
-  { name: "toybox-tetromino", running: false }
-  { name: "toybox-tetromino-mono", running: false }
-  { name: "toybox-bounce", running: false }
-  { name: "toybox-bounce-north", running: false }
-  { name: "toybox-test-card", running: false }
-  { name: "toybox-test-card-mono", running: false }
-]
+], map(toyboxMachines, name => { name: name, running: false }))
 
 test "every machine passes the six checks on bundled diagnostic cartridges" {
   when {

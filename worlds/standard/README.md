@@ -126,9 +126,10 @@ and which a game's own rule collects. The games in [`../games/`](../games/README
 
 `architecture.puck` is a library of building pieces in the canyon-workshop language, each a template a creation
 expands with the palette slot its materials start at: the display plinth, the branched pier, the window bay, the fan
-shade (leaves on one driver that follows a state cell), the balustrade, the planter, the bench and the banner. The
-debug world's gallery is built from it (`../debug/gallery.md`), and `../debug/gallery-kit.puck` holds one of each for
-`puck mesh preview`.
+shade (leaves on one driver that follows a state cell), the balustrade, the planter, the bench and the banner. Its toy
+pieces are the arcade cabinet (for one player or two), the television set (a television on a low stand, a console on
+its shelf and a cabled pad for each player) and the lounge (a rug and two beanbags). The debug world's gallery is built
+from it (`../debug/gallery.md`), and `../debug/gallery-kit.puck` holds one of each canyon piece for `puck mesh preview`.
 
 `bounds.puck` is a library of boxes given their bounds (`boundsBox` for a world-space box in a creation at the origin,
 `localBox` for one in the creation's own frame, `barRing` for the three bars round a canvas), for shells, furniture and
