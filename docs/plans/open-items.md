@@ -892,8 +892,9 @@ stored one tier of each mesh. The replacement is built: the producer fills
 every tier (`SdfMeshCachePolicy.Ladder`), a player's build starts from its
 stored tiers and bakes only what they lack, on its play bar
 (`SdfMeshCachePolicy.Stored`, a warm start by the owner's ruling), and `puck
-world player` refuses a folder whose check boots did not settle with no tier
-missed.
+world player` refuses a folder only when a check boot did not settle: a tier a
+check missed is baked by that boot and listed under the record's
+`cacheMisses`.
 
 - [high] Both backends' fills and all four target checks
   (`rtx2060@1920x1080`, `rtx4070@2560x1440`) have run complete on the RTX
@@ -2214,11 +2215,34 @@ check; this packet holds the defects beside it.
   them. A group that waits to bake takes a finer rung of its shape only when a
   group of its own bake lands it (`SdfMeshPathBake.TakeLandedRungs`); a rung
   another residency's bake landed is found at the group's plan alone.
-- [medium] Step 2's heap walk on a headless debug world names two large-object
-  tenants the plan's [large host owners](streaming-and-memory.md#the-large-host-owners)
-  table bounds by no step: `FieldCellDelta[]` arrays held by
-  `WorldDeliveryRows` (9 objects, 33 MB) and by `WorldDocument` (3.7 MB). They
-  need an owner and a bound, or a reason they stay named only.
+- [medium] A headless debug world's heap walk (`puck host heap --pid <pid>
+  --min-mib 2 --depth 2`, with the authority in the process) still names
+  three large-object tenants the plan's
+  [large host owners](streaming-and-memory.md#the-large-host-owners) table
+  bounds by no step. The composed documents' bytes
+  (`WorldComposedDocument`, about 36 MB in 5 arrays) and their layers
+  (`ComposedLayer`, about 10 MB) stand for the whole run so that a reload
+  composes only what changed; a player's process, which reloads nothing, could
+  let them go once it has booted. One `FieldCellDelta[]` of about 4 MB is held
+  by `WorldSnapshotStorage`. And for as long as the process runs no two gen2
+  collections half a minute apart, the shared byte pool keeps the arrays a
+  boot rented from it, 2, 4, 8, 16 and 64 MiB, in one thread's slots
+  (`SharedArrayPoolThreadLocalArray`): the jump past 32 MiB is the shape of one
+  `System.Text.Json` write of a string or raw value of about 13 million
+  characters through the serializer's pooled writer, which no site has been
+  matched to yet (`ContentDigest.HashText` was ruled out by bounding it). Find
+  that write with a trace taken from process start, and write it through a
+  stream.
+- [medium] A reload or a boot serializes whole documents into growing byte
+  buffers: `puck host allocations` over one `world.reload` of the headless
+  debug world sampled about 520 MiB, 208 MiB of it large objects, led by
+  `CanonicalJsonDocument.SerializeCompact` (128 MiB of `byte[]`: the
+  writer's own buffer, the `MemoryStream` it is flushed to and the array that
+  is copied out of it), `CreationDocumentJsonConverter.Write` (64 MiB) and
+  `CreationDocumentJson.Read` (57 MiB). A serialization whose reader only
+  hashes or compares the bytes needs no array of them. Owner: the document
+  and state code, with the iteration plan, since this is the edit loop's
+  garbage.
 - [low] Step 2 names the trace scene's current hierarchy only: a scene a job
   still borrows after a rebuild sits in the managed row's residual until its
   last claim ends (`SdfMeshIrradiance`'s sampled owners).

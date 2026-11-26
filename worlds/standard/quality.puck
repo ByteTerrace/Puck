@@ -64,7 +64,11 @@ render {
   // render scale, so every world's shadows on the card hold a quarter of what they would. Every nested view takes the 2060's render scale as its ceiling, and
   // its own nested table gives up more than the world's: a view up to half the display's height draws half-size
   // cascades, one up to a third quarter-size cascades, and one smaller than a postcard draws none and renders at half
-  // its size, where the fixed cost of a view dominates its pixels.
+  // its size, where the fixed cost of a view dominates its pixels. The world behind a view up to a third of the display's
+  // height measures the irradiance volume's far level alone, where the world's own table keeps the storey level too: a
+  // world's lighting stores (its hit cache and its published and feedback tables) are sized by the levels it measures,
+  // the storey level is half a volume's probes, and every world a painting shows holds them on a card whose whole
+  // device bar is 4.5 GiB.
   devices [
     { name: "rtx4070", match: "RTX 4070", quality: high, deviceMemoryMiB: 8192, hostMemoryMiB: 8192, frameBar { width: 2560, height: 1440, hertz: 60 } }
     {
@@ -97,7 +101,7 @@ render {
         rayQueries: true
         nested [
           { share: 0.125, shadows: Off, ambientOcclusion: false, indirectLevels: 1, renderScale: 0.5 }
-          { share: 0.33, shadows: Low, indirectLevels: 2 }
+          { share: 0.33, shadows: Low, indirectLevels: 1 }
           { share: 0.5, shadows: Medium, indirectLevels: 2 }
         ]
       }
