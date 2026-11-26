@@ -27,6 +27,7 @@
 import "../standard/bounds"
 import "../standard/kits"
 import "../standard/skies"
+import "../standard/architecture"
 import "place-kit"
 import "reach"
 import "shapes"
@@ -36,20 +37,20 @@ exports {
 }
 
 let storey = galleryStorey
+// The arcade's half spacing: piers stand twice this apart, so each arch meets its neighbour's.
+let hallPierSpan = 2
+let hallPierXs = map(range(0, 8), i => (20 + ((2 * hallPierSpan) * i)))
 let hallTop = 18.05
 let parapet = 18.6
 
-// The hall is the gallery's inspection room, a debug tool for a person looking and an agent capturing, so its light is
-// chosen for reading surfaces, not for mood. Every surface the light reaches before an exhibit is a neutral grey, so the
-// light reflected onto an exhibit carries no tint and an albedo reads as itself: light grey walls, a white ceiling, a mid
-// grey floor (light enough to fill an exhibit's underside), near-black trim. The light itself is a neutral 6500 K, the
-// display's own white, and comes from overhead area light: the strips' wide luminous bands lit through the irradiance
-// volume, with the downlights over them as a soft key, at an inspection level (EN 12464-1 asks 750 lux for inspection
-// work) that keeps a lit level above the darkest exposure the world adapts to, so a lit room never exposes darker than
-// its light. The blinds stay down by default, as a gallery keeps daylight off its exhibits: daylight through three
-// window walls is many times the electric light and changes with the view, which pushed the exposure several stops
-// between neighbouring exhibits. The light is still physical: shadows, occlusion and the traced bounce all stay, so a
-// leak or a lighting bug shows as it would anywhere else.
+// The hall's surfaces follow the selected canyon-workshop direction (docs/game/art/canyon-workshop-pack): warm cream
+// walls and ceiling, a terracotta floor and deep teal trim, the palette of the building outside carried in. The light is
+// the fixtures' overhead area light through the irradiance volume, with the downlights over them as a soft key, at an
+// inspection level (EN 12464-1 asks 750 lux for inspection work) that keeps a lit level above the darkest exposure the
+// world adapts to. Reading an exhibit's albedo without the room's tint is the inspection lever's job (`gallery.inspect`,
+// below): it adds neutral fill from every side and pins the exposure. The blinds stay down by default, as a gallery keeps
+// daylight off its exhibits. The light is physical: shadows, occlusion and the traced bounce all stay, so a leak or a
+// lighting bug shows as it would anywhere else.
 let hallWall = 0
 let hallFloor = 1
 let hallTrim = 2
@@ -58,14 +59,14 @@ let hallBoard = 4
 let hallCeiling = 5
 let hallCarLight = 6
 let hallPalette = [
-  galleryCel({ color: "#D4D4D4", roughness: 0.85, specular: 0.04 })
-  galleryCel({ color: "#9A9A9A", roughness: 0.7, specular: 0.08 })
-  galleryCel({ color: "#3E3F42", roughness: 0.6, specular: 0.15 })
+  galleryCel({ color: "#EADBBE", roughness: 0.85, specular: 0.04 })
+  galleryCel({ color: "#B85A3C", roughness: 0.35, specular: 0.25 })
+  galleryCel({ color: "#2C5A63", roughness: 0.6, specular: 0.15 })
   // The strips' diffuser, a linear LED fixture's luminance, enough that a lit level meters above the darkest daytime
   // exposure (the `exposure` section below).
   { color: "#FFFFFF", roughness: 0.5, emissive: 4000nit }
-  galleryCel({ color: "#EEEEEB", roughness: 0.6 })
-  galleryCel({ color: "#E8E8E8", roughness: 0.9, specular: 0.02 })
+  galleryCel({ color: "#F1E6CF", roughness: 0.6 })
+  galleryCel({ color: "#F3E9D4", roughness: 0.9, specular: 0.02 })
   // The lift car's luminous ceiling: the car's light spread over nearly its whole ceiling, dim enough to read as a
   // bright white panel at the darkest exposure rather than a glare.
   { color: "#FFFFFF", roughness: 0.5, emissive: 120nit }
@@ -408,6 +409,15 @@ let galleryOrder = flatMap(galleryRows, row => row.names)
 let galleryLast = (length(galleryOrder) - 1)
 
 prototypes {
+  // The teal branched piers of level 0's arcade (architecture.puck), one creation every pier stamps.
+  prototype "hall-pier" {
+    document {
+      name: "hall-pier"
+      schema: "puck.creation.v1"
+      palette: structurePalette
+      branchedPier(base: 0, height: (storey - 0.3), span: hallPierSpan)
+    }
+  }
   // The outer walls, full height, with the entrance in the south face at x 14 .. 18.
   prototype "hall-shell" {
     document {
@@ -1141,6 +1151,21 @@ prototypes {
 }
 
 placements {
+  // Level 0's arcade: a branched pier every two spans along the inner faces of the south and north walls, each turned to
+  // face into the hall, from the lobby's edge to the painting wing's partition.
+  for x in hallPierXs {
+    placement $"hall-pier-south-{x}" {
+      prototype: "hall-pier"
+      position [x, galleryFloor[0], (12.3 + 0.34)]
+      yawDegrees: 180
+      solid
+    }
+    placement $"hall-pier-north-{x}" {
+      prototype: "hall-pier"
+      position [x, galleryFloor[0], (39.7 - 0.34)]
+      solid
+    }
+  }
   placement "hall-shell" {
     prototype: "hall-shell"
     position [0, 0, 0]

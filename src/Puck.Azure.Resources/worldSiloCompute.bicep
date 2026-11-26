@@ -4,13 +4,24 @@
 import { worldSiloConfigType } from 'ts/bvm:ptn_platform_world-silo:0.0.8'
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Types
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+@description('The custom script extension\'s protected settings that install the host release.')
+@secure()
+type bootstrapType = {
+  @description('The host release installer\'s address.')
+  fileUris: string[]
+  @description('The command that verifies and runs the installer, then hands the bootstrap to the installed CLI.')
+  commandToExecute: string
+}
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Parameters
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 param configuration worldSiloConfigType
 param identityResourceId string
 @description('The protected bootstrap: the host release installer\'s fileUris and the command that installs the release and hands its bootstrap to the installed CLI.')
-@secure()
-param bootstrap object
+param bootstrap bootstrapType
 @description('The engine the release runs: its host release\'s payload identity.')
 param release string
 param sshPublicKey string

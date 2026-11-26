@@ -19,6 +19,7 @@
 // to. This file is a library: debug.puck and hall.puck expand its templates and lets.
 import "../standard/styles"
 import "../standard/rig"
+import "../standard/architecture"
 
 // The hall's storey height and each level's floor top: level k's floor stands at 4.5k + 0.05 (hall.puck).
 let galleryStorey = 4.5
@@ -240,20 +241,16 @@ let accent = { color: "#D9822B", roughness: 0.45, specular: 0.3 }
 template exhibit(label, extra = [], runs = [], note = "") {
   name: label
   schema: "puck.creation.v1"
-  palette: concat(galleryPalette, extra)
-  shape Box "plinth" {
-    material: 1
-    position [0, 0.15, 0]
-    scale [0.6, 0.15, 0.25]
-  }
+  palette: concat(galleryPalette, extra, plinthPalette)
+  exhibitPlinth(base: (3 + length(extra)))
   textRuns: concat(
     [
       {
         text: label
-        position [0, 0.19, 0.25]
-        rotation [0, 0, 0, 1]
-        emHeight: 0.085
-        depth: 0.006
+        position: plinthOnFace(0, 0.1, 0.014)
+        rotation: plinthFace
+        emHeight: 0.06
+        depth: 0.004
         mode: "emboss"
         material: 2
         align: "center"
@@ -262,14 +259,14 @@ template exhibit(label, extra = [], runs = [], note = "") {
     ((note == "") ? [] : [
       {
         text: note
-        position [0, 0.085, 0.25]
-        rotation [0, 0, 0, 1]
-        emHeight: 0.03
-        depth: 0.004
+        position: plinthOnFace(0, 0.035, 0.014)
+        rotation: plinthFace
+        emHeight: 0.024
+        depth: 0.003
         mode: "emboss"
         material: 2
         align: "center"
-        maxWidth: 1.12
+        maxWidth: 0.98
         lineSpacing: 1.15
       }
     ]),
