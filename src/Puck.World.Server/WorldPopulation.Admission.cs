@@ -195,7 +195,7 @@ public sealed partial class WorldPopulation {
         entry.NavigationState.Clear();
         ClearDesignations(entry: entry);
     }
-    private bool TryAdmitTransferredEntityAtCore(int slot, IntentSource source, bool remoteHuman, bool authorityTransferred, WorldTransferredOccupant? occupant, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal) {
+    private bool TryAdmitTransferredEntityAtCore(int slot, IntentSource source, bool remoteHuman, bool authorityTransferred, WorldTransferredOccupant? occupant, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal, int? generation = null) {
         ArgumentNullException.ThrowIfNull(argument: grantTemplates);
 
         if (
@@ -234,6 +234,7 @@ public sealed partial class WorldPopulation {
         }
 
         ActivateSimulated(
+            generation: generation,
             index: slot,
             remoteHuman: remoteHuman,
             source: source
@@ -1170,10 +1171,13 @@ public sealed partial class WorldPopulation {
     /// <returns><see langword="true"/> on success.</returns>
     /// <param name="occupant">What a transferred traveler brings, which the admitted event records; <see langword="null"/>
     /// for a connection.</param>
-    public bool TryAdmitRemotePeerAt(int slot, IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal, bool authorityTransferred = false, WorldTransferredOccupant? occupant = null) {
+    /// <param name="generation">The generation the body is admitted at, for a traveler that returns to the index it
+    /// left with that generation; <see langword="null"/> for the index's next generation.</param>
+    public bool TryAdmitRemotePeerAt(int slot, IntentSource source, IReadOnlyList<WorldAdmissionGrant> grantTemplates, string identityDomain, string identitySubject, out WorldPeerEventEntry admitted, out string refusal, bool authorityTransferred = false, WorldTransferredOccupant? occupant = null, int? generation = null) {
         return TryAdmitTransferredEntityAtCore(
             admitted: out admitted,
             authorityTransferred: authorityTransferred,
+            generation: generation,
             grantTemplates: grantTemplates,
             identityDomain: identityDomain,
             identitySubject: identitySubject,

@@ -43,13 +43,14 @@ public interface IWorldForwardedAuthority {
     WorldForwardingDestination DescribeForCheckpoint();
     /// <summary>Fetches a prototype disclosed through this authenticated hop.</summary>
     ValueTask<byte[]?> FetchPrototypeAsync(Puck.Assets.ContentPin pin, WorldDisclosureTier ceiling, byte remainingHops);
-    /// <summary>Streams the current owner's projection through this authenticated hop without closing the output stream.</summary>
-    /// <param name="output">The caller-owned downstream stream.</param>
+    /// <summary>Serves one segment of the traveler's observation stream through this authenticated hop, from the
+    /// authority the traveler stands at, without closing the connection.</summary>
+    /// <param name="session">The stream: its connection, and the lineage the segment stamps from.</param>
     /// <param name="ceiling">The maximum document disclosure admitted upstream.</param>
     /// <param name="remainingHops">The remaining forwarding work bound.</param>
     /// <param name="ct">The observation lifetime cancellation.</param>
-    /// <returns>A refusal before streaming, or null after the stream ends.</returns>
-    Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct);
+    /// <returns>How the segment came out.</returns>
+    Task<WorldProjectionOutcome> StreamProjectionAsync(WorldProjectionSession session, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct);
     /// <summary>Tells the traveler's next authority whether its source still attends to it: the body parks there when
     /// the source went away and resumes when it returned. Returns without waiting for the next authority.</summary>
     /// <param name="present">Whether the source attends to the traveler.</param>
@@ -284,18 +285,18 @@ public sealed class WorldLocalForwardedAuthority : IWorldForwardedAuthority, IDi
         WorldProjectionPrototypeFetch.FetchAsync(server: m_server, pin: pin, sourceAuthority: m_sourceAuthority, ceiling: ceiling,
             traveler: new WorldTravelerObservation(Ceiling: ceiling, Mobility: m_mobility, RemainingHops: remainingHops, SourceAuthority: m_sourceAuthority));
     /// <inheritdoc/>
-    public Task<string?> StreamProjectionAsync(Stream output, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
-        WorldTravelerProjection.StreamAsync(
-            m_server,
-            new(
+    public Task<WorldProjectionOutcome> StreamProjectionAsync(WorldProjectionSession session, WorldDisclosureTier ceiling, byte remainingHops, CancellationToken ct) =>
+        WorldTravelerProjection.RelayAsync(
+            ct: ct,
+            endpoint: m_endpoint,
+            request: new(
                 Ceiling: ceiling,
                 Mobility: m_mobility,
                 RemainingHops: remainingHops,
                 SourceAuthority: m_sourceAuthority
             ),
-            m_endpoint,
-            output,
-            ct
+            server: m_server,
+            session: session
         );
     // Call under the destination authority gate. Resolve, stamp, and publish there so the resolved principal
     // cannot be detached or replaced between authentication and publishing. An onward hop gets the stamped intent.

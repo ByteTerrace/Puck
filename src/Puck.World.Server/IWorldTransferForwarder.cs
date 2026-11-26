@@ -49,11 +49,19 @@ public interface IWorldTransferForwarder {
     ValueTask<(WorldAuthorityRouteDescription? Route, string Reason)> DescribeForwardingAsync(WorldServer source, WorldMobilityIdentity mobility);
     /// <summary>Fetches a prototype through the departed traveler's current projection.</summary>
     ValueTask<byte[]?> FetchForwardedPrototypeAsync(WorldServer source, WorldTravelerObservation request, Puck.Assets.ContentPin pin);
-    /// <summary>Streams the current owner's projection for an already authenticated departed traveler.</summary>
+    /// <summary>Serves one segment of an already authenticated departed traveler's observation stream from the
+    /// authority it stands at, along <paramref name="source"/>'s committed onward route.</summary>
     /// <param name="source">The authority whose committed onward route is followed.</param>
     /// <param name="request">The credential and remaining disclosure/work bounds.</param>
-    /// <param name="output">The caller-owned downstream stream.</param>
+    /// <param name="session">The stream, writing through <paramref name="source"/>'s view of the connection.</param>
     /// <param name="ct">The observation lifetime cancellation.</param>
-    /// <returns>A refusal before streaming, or null after the stream ends.</returns>
-    Task<string?> StreamForwardedProjectionAsync(WorldServer source, WorldTravelerObservation request, Stream output, CancellationToken ct);
+    /// <returns>How the segment came out.</returns>
+    Task<WorldProjectionOutcome> StreamForwardedProjectionAsync(WorldServer source, WorldTravelerObservation request, WorldProjectionSession session, CancellationToken ct);
+    /// <summary>Tells the host that a traveler landed at <paramref name="destination"/>: a route that authority kept
+    /// from an earlier departure of the same traveler leads nowhere the traveler will stand, so the host drops it and
+    /// nothing is forwarded along it again. Called under the landing authority's gate, so the host defers the work to
+    /// its own loop.</summary>
+    /// <param name="destination">The authority the traveler landed at.</param>
+    /// <param name="mobility">The traveler's incarnation and the ownership epoch it landed with.</param>
+    void TravelerLanded(WorldServer destination, in WorldMobilityIdentity mobility);
 }

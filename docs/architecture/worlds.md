@@ -913,7 +913,13 @@ snapshot behind the cut record, so a slow observer catches up on the stream it h
 The queued records keep their order ahead of the cut. A subscriber whose wire has not drained within
 `StalledDeliveryLimit` deliveries is stalled: it detaches with `world.observation.backpressure`, the stream ends
 with a projection invalidation, and the peer reopens for a fresh primer. A retired authority route detaches with
-`world.observation.invalidated`, and a composition its recipient's disclosure refuses
+`world.observation.invalidated`. A traveler that moves to another authority ends only the segment that served it,
+with `world.observation.moved`: the authority that holds the recipient's connection keeps the stream open and
+opens its next segment where the traveler stands, its own view or the other authority's relayed along the
+committed route (`WorldTravelerProjection`). Every segment stamps from the stream's one lineage
+(`WorldStreamLineage`), so the handoff reaches the recipient as a cut record of the stream it is bound to, then
+the route, the whole document and a primer, and its ingress orders both authorities' records as one stream. A
+composition its recipient's disclosure refuses
 (`WorldDisclosureException`) with `world.observation.disclosure`. A record the receiver's cap for its kind
 (`WorldFederationCodec.MaxResponseBytes`) would refuse detaches with `world.observation.oversize` instead of
 being sent; a snapshot's cap is the federation frame ceiling, which a primer's cells and the rest of the
@@ -1356,7 +1362,9 @@ traveler, in or out of a closed group: a forwarding route stands only while its 
 credential for the traveler. Across a socket the forwarding world tells its next hop of the source's
 absence and of a retirement (`WorldFederationRequest.Presence`, `WorldFederationRequest.Retire`), and a
 next hop that retired the traveler says so the next time it is asked
-(`WorldFederationRefusal.TravelerUnknown`), which ends the asking world's route.
+(`WorldFederationRefusal.TravelerUnknown`), which ends the asking world's route. A route also ends when its
+traveler lands at the route's own world again (`IWorldTransferForwarder.TravelerLanded`): the traveler is
+served where it stands, and the route it next leaves by replaces the one it left by before.
 
 Every crossing step a peer can see is written ahead to the authority's crossing log
 (`IWorldCrossingLog`) before the step happens:
@@ -1459,7 +1467,11 @@ traveler. The entry carries the reservation, the body indices and the commit, en
 leaf the destination's crossing log writes, and the commit's outcome: the generation each traveler
 landed at, and whether the commit rolled its landings back. A commit rolls back when a member is
 refused, or when its arrival record cannot be made durable; the rollback is taped because a landing
-advances its index's generation even when it is undone. Each traveler lands with the identity
+advances its index's generation even when it is undone. One landing does not advance it: a peer that
+lands on the index it left this world from, while no one was admitted there since, lands at the
+generation it left with, so it is the same peer principal and its admission mints the rows it held
+(`WorldGrants.AdmitTransferredPeer`). The reservation gives a returning traveler that index and gives
+it to another arrival only when no other is free. Each traveler lands with the identity
 projection its commit carried, which holds its facts and records, and nothing of its owned
 document. A traveler's admission is part of its landing: a local seat joins its session, and a
 transferred peer or entity is admitted inline, even inside an ordered submission's completion, so
