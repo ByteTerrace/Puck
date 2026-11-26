@@ -63,6 +63,9 @@ public static partial class CreationCanonicalizer {
             if ((paint.Stroke is { } stroke) && (!float.IsFinite(f: stroke) || (stroke < 0f))) {
                 Refuse(field: "stroke", message: "stroke must be finite and non-negative.");
             }
+            if ((paint.Softness is { } softness) && (!float.IsFinite(f: softness) || (softness < 0f))) {
+                Refuse(field: "softness", message: "softness must be finite and non-negative.");
+            }
             if ((paint.Type == SdfSolidPrimitive.Sweep) != (paint.Curve is not null)) {
                 Refuse(field: "curve", message: "a Sweep paint requires a curve, and only a Sweep paint carries one.");
             }

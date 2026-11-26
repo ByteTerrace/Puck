@@ -334,8 +334,8 @@ template exhibit(label, extra = [], runs = [], subject = galleryPalette[0]) {
 }
 
 // Each exhibit's copy, which its display's screen shows while the exhibit stands on the turntable: its name, and what it
-// shows and what to look for. A screen line draws at most 64 glyphs (SdfSurfaceTextLayout.MaxGlyphs), so a note stays
-// under that.
+// shows and what to look for. The note strip wraps over two lines, so a note of up to about 180 characters reads at its
+// full size.
 let galleryCopy = {
   "shape-sphere" { title: "SPHERE", note: "The sphere primitive at a uniform scale." }
   "shape-box" { title: "BOX", note: "The box primitive at a uniform scale." }
@@ -356,9 +356,9 @@ let galleryCopy = {
   "shape-ellipsoid-xyz" { title: "ELLIPSOID XYZ", note: "An ellipsoid scaled unevenly." }
   "shape-round-cone-xyz" { title: "ROUND CONE XYZ", note: "A round cone scaled unevenly." }
   "shape-cone-xz" { title: "CONE XZ", note: "A cone with X and Z scaled differently." }
-  "shape-superellipsoid-xyz" { title: "SUPER XYZ", note: "A superellipsoid at exponent 3, scaled unevenly." }
-  "shape-stretch-cut" { title: "STRETCH CUT", note: "A stretched capsule, cone and torus cut from a slab." }
-  "shape-stretch-smooth" { title: "STRETCH SMOOTH", note: "The same three cut smoothly: each fillet one width." }
+  "shape-superellipsoid-xyz" { title: "SUPER XYZ", note: "A stretched capsule, cone and torus cut from a slab: each rim sharp, each wall smooth." }
+  "shape-stretch-cut" { title: "STRETCH CUT", note: "A stretched capsule, cone and torus cut from a slab: each rim sharp, each wall smooth." }
+  "shape-stretch-smooth" { title: "STRETCH SMOOTH", note: "The same three cut smoothly at 0.04 m: each rim's fillet one width all the way round." }
   "shape-trapezoid" { title: "TRAPEZOID", note: "A trapezoid profile, extruded." }
   "shape-rounded-rectangle" { title: "ROUNDED RECT", note: "A rounded rectangle profile, extruded." }
   "shape-polygon-6" { title: "POLYGON 6", note: "A hexagon profile, extruded." }
@@ -376,60 +376,60 @@ let galleryCopy = {
   "shape-revolve-ellipse" { title: "REV ELLIPSE", note: "An ellipse revolved into a ring." }
   "shape-revolve-chamfered-rectangle" { title: "REV CHAMFER", note: "A chamfered rectangle revolved into a ring." }
   "shape-revolve-convex" { title: "REV CONVEX", note: "A convex pentagon revolved into a ring." }
-  "shape-sweep" { title: "SWEEP", note: "A round tube of one radius along a quadratic curve." }
-  "shape-sweep-tapered" { title: "SWEEP TAPER", note: "A swept tube tapering, with a mid-span bulge." }
-  "shape-sweep-strands" { title: "SWEEP STRANDS", note: "Three strands twisted round a curve: a rope." }
-  "shape-rounding" { title: "ROUNDING", note: "A cylinder with its rim rounded 0.12 m." }
-  "shape-chamfer" { title: "CHAMFER", note: "A box bevelled 0.1 m on every edge." }
-  "shape-onion" { title: "ONION", note: "A 4 cm shell of a sphere, a window cut in it." }
-  "shape-dilate" { title: "DILATE", note: "A box inflated 0.1 m: rounded, no creases." }
-  "shape-flare" { title: "FLARE", note: "A cylinder whose section scales along its height." }
-  "shape-shear" { title: "SHEAR", note: "A box sheared into a curving lean." }
-  "shape-bumps" { title: "BUMPS", note: "Two gaussian pushes: a swelling and a dent." }
-  "shape-cells-f1" { title: "CELLS F1", note: "Worley F1 relief: raised cells with creased walls." }
-  "shape-cells-f2" { title: "CELLS F2 F1", note: "F2 minus F1 relief: ridges along the cell walls." }
-  "shape-polar-fold" { title: "POLAR FOLD", note: "One box folded into six sectors about Y." }
-  "shape-blend-union" { title: "UNION", note: "Box and sphere unioned: a hard crease at the seam." }
-  "shape-blend-subtraction" { title: "SUBTRACTION", note: "The sphere carved out of the box." }
-  "shape-blend-intersection" { title: "INTERSECTION", note: "Only where the box and the sphere overlap." }
-  "shape-blend-xor" { title: "XOR", note: "Either but not both: the overlap cut away." }
-  "shape-smooth-union" { title: "SMOOTH UNION", note: "A 0.15 m fillet where the sphere meets the box." }
-  "shape-smooth-subtraction" { title: "SMOOTH SUBTRACT", note: "The carve's rim rounded over 0.1 m." }
+  "shape-sweep" { title: "SWEEP", note: "A tube of one radius along a quadratic curve: the exact closed-form nearest point. a uniform round cable." }
+  "shape-sweep-tapered" { title: "SWEEP TAPER", note: "The radius tapers 0.14 to 0.04 with a mid-span bulge; the gap search picks the nearest sphere. no bulge seam, no pinch." }
+  "shape-sweep-strands" { title: "SWEEP STRANDS", note: "Three strands orbiting the curve, 1.5 turns of twist: a rope. strands stay apart and evenly spaced." }
+  "shape-rounding" { title: "ROUNDING", note: "A cylinder with its edge rounded 0.12 m: a curved rim, the flat top and side intact." }
+  "shape-chamfer" { title: "CHAMFER", note: "A box with 0.1 m 45 degree bevels on every edge and corner; flat bevel faces, not a round." }
+  "shape-onion" { title: "ONION", note: "A 4 cm shell of a sphere, a window cut to see inside: both skins render, the wall is even." }
+  "shape-dilate" { title: "DILATE", note: "A 0.3 box inflated by 0.1: rounded by the inflation, 0.4 across, no creases." }
+  "shape-flare" { title: "FLARE", note: "A cylinder whose cross-section scales along y: amount 0.8 and a 0.2 bulge from the top down. the bake cell is coarse here." }
+  "shape-shear" { title: "SHEAR", note: "A box whose x slides by 0.3 y + 0.6 y squared: a lean that curves. faces stay flat along z." }
+  "shape-bumps" { title: "BUMPS", note: "Two gaussian pushes of the point: a swelling on the upper right, a dent lower left. smooth, no ring." }
+  "shape-cells-f1" { title: "CELLS F1", note: "Worley F1 relief, amplitude 0.18: raised cells with creased walls, like chitin." }
+  "shape-cells-f2" { title: "CELLS F2 F1", note: "F2 minus F1 relief: ridges along the cell walls, hollows at their centres." }
+  "shape-polar-fold" { title: "POLAR FOLD", note: "One box authored at the front, folded into six sectors about y: six blades, one shape. no seam between sectors." }
+  "shape-blend-union" { title: "UNION", note: "Min of the two fields: a hard crease where they meet, the sphere's orange winning its own surface." }
+  "shape-blend-subtraction" { title: "SUBTRACTION", note: "The sphere carved out of the box: the bowl wears the sphere's colour, the rim stays sharp." }
+  "shape-blend-intersection" { title: "INTERSECTION", note: "Only where both overlap: a box with spherical corners, the sphere's colour on its own faces." }
+  "shape-blend-xor" { title: "XOR", note: "Either but not both: the overlap is cut away, leaving a void you can see into from the seam." }
+  "shape-smooth-union" { title: "SMOOTH UNION", note: "A 0.15 m fillet where sphere meets box; the fillet should be a smooth saddle with no step." }
+  "shape-smooth-subtraction" { title: "SMOOTH SUBTRACT", note: "The carve's rim rounded over 0.1 m into the box." }
   "shape-smooth-intersection" { title: "SMOOTH INTERSECT", note: "The intersection's edges rounded over 0.1 m." }
-  "shape-chamfer-union" { title: "CHAMFER UNION", note: "A flat 45 degree bevel along the seam." }
+  "shape-chamfer-union" { title: "CHAMFER UNION", note: "A flat 45 degree bevel along the seam, 0.1 m wide, instead of a fillet." }
   "shape-chamfer-subtraction" { title: "CHAMFER SUBTRACT", note: "The carve's rim bevelled at 45 degrees." }
   "shape-chamfer-intersection" { title: "CHAMFER INTERSECT", note: "The intersection's edges bevelled at 45 degrees." }
-  "shape-groove-union" { title: "GROOVE UNION", note: "A round groove cut along the seam." }
-  "shape-pipe-union" { title: "PIPE UNION", note: "A round bead laid along the seam." }
+  "shape-groove-union" { title: "GROOVE UNION", note: "A round groove cut along the seam curve, 0.05 m: a recessed line following the join." }
+  "shape-pipe-union" { title: "PIPE UNION", note: "A round bead laid along the seam curve, 0.04 m: a raised weld following the join." }
   "shape-groove-subtraction" { title: "GROOVE SUBTRACT", note: "A groove cut along the carve's rim." }
   "shape-pipe-subtraction" { title: "PIPE SUBTRACT", note: "A bead laid along the carve's rim." }
-  "shape-symmetry" { title: "SYMMETRY", note: "A tilted capsule mirrored across x = 0: a V." }
-  "shape-repeat" { title: "REPEAT 5", note: "One sphere repeated 0.25 m apart: five copies." }
+  "shape-symmetry" { title: "SYMMETRY", note: "One tilted capsule mirrored across x = 0: a V, the pair exactly symmetric." }
+  "shape-repeat" { title: "REPEAT 5", note: "One sphere repeated 0.25 m apart, limit 2: five copies, the field exact at each." }
   "shape-repeat-grid" { title: "REPEAT 3X3", note: "One box on a 3 by 3 lattice in x and z." }
-  "shape-repeat-even" { title: "REPEAT EVEN", note: "A symmetry over a repeat: four spheres." }
-  "shape-repeat-clipped" { title: "REPEAT CLIPPED", note: "An unbounded lattice of spheres clipped by a box." }
-  "shape-polar-mirror" { title: "POLAR MIRROR", note: "Five mirrored sectors: a kaleidoscope." }
-  "shape-polar-z" { title: "POLAR Z", note: "Eight copies about Z through an origin: a wheel." }
-  "shape-polar-stride" { title: "POLAR STRIDE", note: "Six sectors, each a palette row: six colours." }
-  "shape-wallpaper-pmm" { title: "WALLPAPER PMM", note: "A tile mirrored across both cell axes." }
-  "shape-wallpaper-p4m" { title: "WALLPAPER P4M", note: "Square symmetry: eight images per cell." }
-  "shape-wallpaper-p3m1" { title: "WALLPAPER P3M1", note: "A hex lattice of mirrors, clipped by a hexagon." }
-  "shape-wallpaper-p6m" { title: "WALLPAPER P6M", note: "The richest hex group: twelve images per cell." }
-  "shape-wallpaper-stride" { title: "WALLPAPER STRIDE", note: "P4M with a material stride: a checkerboard." }
+  "shape-repeat-even" { title: "REPEAT EVEN", note: "An even count from a symmetry over an odd repeat: four spheres, the middle gap closed." }
+  "shape-repeat-clipped" { title: "REPEAT CLIPPED", note: "An unbounded lattice of spheres clipped by a box on the cell walls: a block of whole beads, none cut." }
+  "shape-polar-mirror" { title: "POLAR MIRROR", note: "Five sectors, each reflected across its bisector: a kaleidoscope, mirror pairs meeting at the walls." }
+  "shape-polar-z" { title: "POLAR Z", note: "Eight copies about z through an origin above the plinth: a wheel facing you." }
+  "shape-polar-stride" { title: "POLAR STRIDE", note: "Six sectors, each striding the palette one row: six colours, one sphere." }
+  "shape-wallpaper-pmm" { title: "WALLPAPER PMM", note: "A tile mirrored across both cell axes, limit 1: a 3 by 3 field of mirror images." }
+  "shape-wallpaper-p4m" { title: "WALLPAPER P4M", note: "Square symmetry with mirrors through the 4-fold centres: eight images per cell." }
+  "shape-wallpaper-p3m1" { title: "WALLPAPER P3M1", note: "A hex lattice with mirrors through the corners, clipped by a hexagon on mirror planes: flat cut faces, no creases." }
+  "shape-wallpaper-p6m" { title: "WALLPAPER P6M", note: "The richest hex group, twelve images per cell, clipped on its mirror planes: the tiles meet cleanly." }
+  "shape-wallpaper-stride" { title: "WALLPAPER STRIDE", note: "P4m with a material stride: cells alternate colour by parity, a checkerboard." }
   "shape-erode" { title: "ERODE", note: "A lane erodes the sphere, here halfway through." }
-  "shape-noise-mask" { title: "RELIEF MASK", note: "A mask keeps the pressed bowl smooth; the slab stays rough." }
-  "shape-noise" { title: "NOISE", note: "Creation noise lumps the whole sphere." }
+  "shape-noise-mask" { title: "RELIEF MASK", note: "The bowl stays smooth; the slab around it stays rough." }
+  "shape-noise" { title: "NOISE", note: "FBm noise lumps the sphere; the plinth stays clean." }
   "motion-spin" { title: "SPIN", note: "A rigid rotation on a linear wave." }
   "motion-rock" { title: "ROCK", note: "A sine swing about a pivot." }
   "motion-slide" { title: "SLIDE", note: "A translation on the gallery clock." }
   "motion-chain" { title: "PARENT CHAIN", note: "A chain of parented swings." }
-  "motion-smooth-blend" { title: "MOVING BLEND", note: "A skinned fillet stretching as the sphere slides." }
+  "motion-smooth-blend" { title: "MOVING BLEND", note: "A skinned fillet: the sphere slides 6 cm and the fillet stretches with it, never tearing, stepping or popping." }
   "motion-state-blend" { title: "STATE BLEND", note: "The blend placed by state; each write rebakes." }
-  "motion-carve" { title: "MOVING CUT", note: "A smooth cut whose bowl follows a sliding tool." }
+  "motion-carve" { title: "MOVING CUT", note: "A smooth cut by a sliding tool: the box bakes again as the cutter moves, so the orange bowl and its soft rim follow it." }
   "motion-mirror" { title: "MOVING MIRROR", note: "A mirrored shape riding a yawing hinge." }
   "motion-polar" { title: "MOVING POLAR", note: "A polar-folded blade spinning on its hub." }
-  "motion-nod" { title: "NODDING BLEND", note: "A head nodding; the throat fillet bends with it." }
-  "motion-three" { title: "THREE OWNERS", note: "Three moving owners: rigid parts, creased joins." }
+  "motion-nod" { title: "NODDING BLEND", note: "A head nods on its neck: the throat fillet bends with the nod, no crack, spike or fold at either extreme." }
+  "motion-three" { title: "THREE OWNERS", note: "Three moving owners meet: the bake splits them into rigid parts, so expect creases where they join, never tears." }
   "motion-paint" { title: "MOVING PAINT", note: "Paints riding a swinging panel." }
   "motion-inset" { title: "MOVING INSET", note: "An eye inset that turns with its shape." }
   "motion-twist" { title: "TWIST", note: "A twist, drawn on the stamp-pool path." }
@@ -439,16 +439,16 @@ let galleryCopy = {
   "motion-volume" { title: "MOVING VOLUME", note: "A plume riding a tilting nozzle." }
   "motion-ik" { title: "IK REACH", note: "A two-bone arm reaching for a state point." }
   "motion-frames" { title: "FRAMES", note: "Timeline frames stepped on the render clock." }
-  "motion-seam-paint" { title: "PAINT ACROSS A SEAM", note: "Expected to swim on the fillet until step 4." }
-  "shape-warp" { title: "DOMAIN WARP", note: "A sphere warped by sines: a smooth wobble." }
-  "shape-displace" { title: "SINE RELIEF", note: "A sine product added to a box's field." }
-  "shape-elongate" { title: "ELONGATE", note: "A sphere elongated into an exact rounded slab." }
-  "shape-jitter" { title: "JITTER", note: "Each cell moves and recolours its sphere by hash." }
-  "shape-jitter-tumble" { title: "JITTER TUMBLE", note: "Boxes tumbled on a blue-noise lattice." }
-  "shape-log-sphere" { title: "LOG SPHERE", note: "Self-similar shells spiralling inward." }
-  "shape-stairs-union" { title: "STAIRS UNION", note: "A seam that climbs four steps." }
-  "shape-stairs-subtraction" { title: "STAIRS SUBTRACT", note: "A carve whose rim steps three times." }
-  "shape-morph" { title: "MORPH", note: "The box's and sphere's fields averaged: a soft cube." }
+  "motion-seam-paint" { title: "PAINT ACROSS A SEAM", note: "Expected to fail until step 4: the stripe holds on box and sphere but slides across the fillet as the sphere moves." }
+  "shape-warp" { title: "DOMAIN WARP", note: "A sphere whose point is warped by sines of the next axis: a smooth wobble, not relief. normals stay smooth, no creases." }
+  "shape-displace" { title: "SINE RELIEF", note: "A box with a sine product added to its field: real relief that shadows itself. look for even dimples on every face." }
+  "shape-elongate" { title: "ELONGATE", note: "A sphere swept over a box of half-extents: an exact rounded slab. the field stays a distance everywhere." }
+  "shape-jitter" { title: "JITTER", note: "A repeat whose every cell moves and recolours its sphere by a hash. no two cells alike, none crossing a cell wall." }
+  "shape-jitter-tumble" { title: "JITTER TUMBLE", note: "Boxes tumbled by a hashed rotation on a blue-noise lattice. every box a different tilt, the pattern de-clumped." }
+  "shape-log-sphere" { title: "LOG SPHERE", note: "Self-similar shells about the centre: each copy half the last and turned 0.6 rad. a spiral of shrinking spheres inward." }
+  "shape-stairs-union" { title: "STAIRS UNION", note: "A union whose seam climbs four steps over its 0.2 m radius: a staircase around the join, not a fillet." }
+  "shape-stairs-subtraction" { title: "STAIRS SUBTRACT", note: "A carve whose rim steps three times over 0.15 m: terraces into the cut." }
+  "shape-morph" { title: "MORPH", note: "The box's and the sphere's fields averaged: lane 0 reads 0, halfway. a soft cube, neither shape's edge." }
   "shape-superellipsoid-2" { title: "SUPER EXP 2", note: "A superellipsoid at exponent 2." }
   "shape-superellipsoid-8" { title: "SUPER EXP 8", note: "A superellipsoid at exponent 8, nearly a box." }
   "shape-prism-triangle" { title: "TAPER 0", note: "A prism at taper 0." }
@@ -481,11 +481,11 @@ let galleryCopy = {
   "shape-volume-flow" { title: "VOLUME FLOW", note: "A flow volume pulsing from a nozzle." }
   "shape-volume-cloud" { title: "VOLUME CLOUD", note: "A cloud volume." }
   "shape-state-color" { title: "STATE COLOR", note: "A colour bound to state: galleryInputs.tint." }
-  "shape-cel" { title: "CEL STYLE", note: "Left: a cel style with its shadow kept under the band; right: continuous." }
+  "shape-cel" { title: "CEL STYLE", note: "Left: its own cel style, the shadow kept under the band; right: continuous." }
   "shape-cel-hard" { title: "CEL HARD", note: "Left: the band over light and shadow together; right: continuous." }
-  "shape-grey-card" { title: "GREY CARD", note: "Matte 3 to 90% patches: the 18% patch reads as middle grey." }
-  "shape-paint-tiles" { title: "PAINT TILES", note: "One box paint on a 30 cm lattice: tiles, each tone hashed." }
-  "shape-glass" { title: "GLASS", note: "Tinted, thin, thick and frosted glass." }
+  "shape-grey-card" { title: "GREY CARD", note: "18% grey reads sRGB 118 where white maps to display white; the wedge steps evenly." }
+  "shape-paint-tiles" { title: "PAINT TILES", note: "One box paint repeated on a 30 cm lattice: 1 cm joints, each tile's tone hashed." }
+  "shape-glass" { title: "GLASS", note: "Orange box holds a sphere; one window glass thin and thick; a frosted pane. Depth deepens tint, panes shift the rods." }
 }
 
 // A display's screen: dark glass over the console's three panes and a strip under them, each a little proud of the
@@ -502,13 +502,14 @@ let displayGlassOut = 0.003
 let displayInk = "#FFC46A"
 let displayInkDim = "#C9B79A"
 // One text paint on the screen, `across` and `up` its box's centre on the console's face, `half` its half-extents.
-function displayText(display, across, up, half, template, ink, em) = {
+// A `wrap` text breaks its lines at the box's width, as the note strip's two lines do.
+function displayText(display, across, up, half, template, ink, em, wrap = false) = {
   type: "Box"
   position: displayWorld(display, plinthOnFace(across, up, (displayGlassOut + 0.012)))
   rotation: displayFaceTurn(display)
   scale [(displayScale * half[0]), (displayScale * half[1]), 0.03]
   color: ink
-  text { template: template, emHeight: em, fit: true }
+  text { template: template, emHeight: em, fit: true, wrap: wrap }
 }
 function displayScreenPaints(display) = [
   displayText(display, displayPanes[0], displayPaneUp, displayPaneHalf, $"{{state.galleryScreenBefore.{display.id}}}", displayInkDim, 0.045)
@@ -522,7 +523,7 @@ function displayScreenPaints(display) = [
     0.06
   )
   displayText(display, displayPanes[2], displayPaneUp, displayPaneHalf, $"{{state.galleryScreenAfter.{display.id}}}", displayInkDim, 0.045)
-  displayText(display, 0, displayNoteUp, displayNoteHalf, $"{{state.galleryScreenNote.{display.id}}}", displayInkDim, 0.032)
+  displayText(display, 0, displayNoteUp, displayNoteHalf, $"{{state.galleryScreenNote.{display.id}}}", displayInkDim, 0.022, wrap: true)
 ]
 template displayScreen(display) {
   prototype $"gallery-screen-{display.id}" {

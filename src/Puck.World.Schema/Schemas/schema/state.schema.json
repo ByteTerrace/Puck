@@ -576,7 +576,10 @@
                         "default": 0
                       },
                       "lane": {
-                        "type": "integer",
+                        "type": [
+                          "integer",
+                          "string"
+                        ],
                         "default": 0
                       },
                       "deposit": {
@@ -765,7 +768,8 @@
                     "description": "The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body\u0027s own look lanes (a placement without them reads zero), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the emissive static.",
                     "type": [
                       "integer",
-                      "null"
+                      "null",
+                      "string"
                     ],
                     "default": null
                   },
@@ -943,6 +947,14 @@
                         "repeat": {
                           "$ref": "./common.schema.json#/$defs/PalettePaintRepeatDocument",
                           "description": "The lattice the paint repeats on, or null for a paint drawn once; a text paint cannot repeat.",
+                          "default": null
+                        },
+                        "softness": {
+                          "description": "The width, in the frame\u0027s units (metres in world space), the paint\u0027s edge feathers over, centred on the primitive\u0027s surface (or the stroke\u0027s edge), so a path fades into the ground about it; null or zero for an edge as crisp as the pixel.",
+                          "type": [
+                            "number",
+                            "null"
+                          ],
                           "default": null
                         }
                       },

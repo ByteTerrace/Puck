@@ -8,7 +8,7 @@
 |---|---|---|---|
 | `color` | `#RRGGBB` or `state.<row>[.<key>]` | required | linear-RGB albedo; also the metallic reflectance tint |
 | `emissive` | finite ≥ 0 | 0 | `albedo × emissive` added after shading, so it glows through shadow |
-| `emissiveLane` | [0, 7] | absent | scales `emissive` by `saturate(lane)` at shading time ([render lanes](#render-lanes): 0 to 3 a body's own, 4 to 7 the world's); absent keeps `emissive` static. A body lane on a placement without lanes reads zero and stays dark |
+| `emissiveLane` | [0, 7] or a world lane's name | absent | scales `emissive` by `saturate(lane)` at shading time ([render lanes](#render-lanes): 0 to 3 a body's own, 4 to 7 the world's); absent keeps `emissive` static. A body lane on a placement without lanes reads zero and stays dark |
 | `specular` | finite ≥ 0 | 0 | dielectric reflectance at normal incidence. With `metal` also 0 the GGX term is skipped entirely |
 | `roughness` | [0, 1] | 0.202 | 0 is a mirror-tight highlight, 1 the broadest lobe |
 | `sheen` | [0, 1] | 0 | fresnel edge lift multiplied into the lit color — a painted catch along a bevel, never a halo |
@@ -67,7 +67,7 @@ something to reflect — see the environment section below.
 | `seed` | uint | 0 | |
 | `scale` | ≥ 0 | 1 | pattern frequency |
 | `floor` | [0, 1] | 0 | coverage shown independent of the lane |
-| `lane` | [0, 7] | 0 | which [render lane](#render-lanes) drives the amount |
+| `lane` | [0, 7] or a world lane's name | 0 | which [render lane](#render-lanes) drives the amount |
 | `under` | 0 to 2 stages | null | what shows through |
 | `deposit` | surface | null | the settle material |
 
@@ -202,12 +202,14 @@ frames make the same local inset correct.
 Surface detail that is colour rather than form (a stripe, a trim, a mouth line,
 a panel) is a paint, never a sculpted copy proud of its plate: relief under the
 bake's cell (5 mm refined, 15 mm on smooth parts) frays into jagged steps and
-speckled material. `palette[].paints` holds up to eight paints, each drawn over
+speckled material. `palette[].paints` holds up to `SdfAppearance.MaxPaintsPerMaterial` paints, each drawn over
 the one before on every surface of the slot. A paint is one primitive of the
 shape vocabulary placed like a shape; the surface takes `color` inside it, or,
 with a `stroke`, within the stroke of its surface, the edge antialiased over the
-pixel's footprint. The views pass draws it at the hit alone, so it never changes
-the field or the bake.
+pixel's footprint. A `softness` (a width in the frame's units, metres on a
+static placement) feathers the edge over that width instead, centred on it, so
+a path fades into the turf about it. The views pass draws it at the hit alone,
+so it never changes the field or the bake.
 
 ```puck
 paints [
@@ -321,7 +323,11 @@ proportional, kerned, one Unicode scalar a glyph.
 
 Limits: a world draws at most `SdfSurfaceTextLayout.MaxTexts` distinct text
 paints (the validator counts them; paints equal in every field share one), and
-a text draws its first `SdfSurfaceTextLayout.MaxGlyphs` glyphs. A text is the
+a text draws its first `SdfSurfaceTextLayout.MaxGlyphs` glyphs; the texts share
+one pool of `SdfSurfaceTextLayout.PoolEntries` entries, and a text it has no room
+for draws nothing that frame (`SdfWorldTables.DegradedSurfaceTexts` counts them).
+A pixel tests only the glyphs its cell of the text's grid lists, so a long text
+costs a pixel no more than a short one. A text is the
 world's, not a body's: every copy of a creation shows the same words. A static
 placement draws an unparented text paint in world space, as any paint, and no
 parented one. A world shown through a screen or a portal draws none of its
@@ -363,8 +369,8 @@ body lane on a placement without lanes stands still), `coverageLane` (none: a
 render lane in [0, 7] whose value, saturated to [0, 1], scales `coverage`) and
 `frame` (`Object`, or `World`). A world lane drives a flow on any placement,
 static copies included: the debug world's falls thins its foam with the chain's
-discharge through `coverageLane: 4` under `render { lanes
-["state.fallsFlow"] }`. Keep the travel of one cycle
+discharge through `coverageLane: "fallsFlow"` under `render { lanes
+[{ name: "fallsFlow", value: "state.fallsFlow" }] }`. Keep the travel of one cycle
 (`|velocity| × cycle`) under about a third of a pattern feature along the flow
 (`stretch / scale`), or the pattern visibly smears before it fades.
 
@@ -389,15 +395,32 @@ with its revealed surface, lit diffusely.
 A shading-time consumer names one of eight lanes (`SdfLanes`): 0 to 3 are the
 surface's own **body lanes**, 4 to 7 the **world lanes**.
 
-**World lanes.** `render.lanes` holds up to four bindable scalars, each a
-literal, a `state.<row>[.<key>]` binding or keys on a clock, the spelling of
-every other bindable render value:
+**World lanes.** `render.lanes` holds up to four named rows, each a `name` and
+a bindable `value` (a literal, a `state.<row>[.<key>]` binding or keys on a
+clock, the spelling of every other bindable render value). A creation's lane
+member (`emissiveLane`, `flow.lane`, `flow.coverageLane`, `weathering.lane`,
+`volumes[].intensityLane`, `erode.lane`, `morph.lane`) names a world lane by
+that name; a number still selects any lane, and 0 to 3 are only ever numbers:
 
 ```puck
 render {
-  lanes ["state.fallsFlow"]   // lane 4
+  lanes [{ name: "fallsFlow", value: "state.fallsFlow" }]
 }
+// in a creation's palette
+{ color: "#E8F0F4", emissive: 40, emissiveLane: "fallsFlow" }
 ```
+
+Rows merge across imports by name like any keyed row, so each document
+declares the lanes it uses and the importing world restates nothing; two
+imports collide only when they author one name differently. The load numbers
+the composed list in its order, the first row lane 4
+(`WorldRenderLaneNames`), and replaces each name with its index before the
+document is read, so the canonical creation document and a bake's identity
+hold only the index. A fifth lane, a name declared twice or a name no row
+declares is refused by name: `puck compile` reports PUCK139 for a document's
+own rows and PUCK138 for an unknown name in a document that composes nothing,
+and the load refuses the composed document for the same reasons. A shade
+program still reads a world lane by index (`lanes.world0` is lane 4).
 
 The client resolves them at each frame's presented tick through the state
 mirror, as it resolves the sky, and every surface and volume reads them alike,

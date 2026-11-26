@@ -161,6 +161,8 @@ prototypes {
     paving: "#9A7650",
     paths: lawnPaths,
     pathWidth: lawnPathWidth,
+    // Trodden earth feathers into the turf over most of a metre rather than ending at a cut edge.
+    pathSoftness: 0.9,
     holes: [poolHole, plungeHole, reservoirHole, riverHole]
   )
   broadleafTree(id: "lawn-oak-0")

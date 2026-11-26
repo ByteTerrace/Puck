@@ -194,6 +194,7 @@ public static class WorldModelShapeSource {
             var spelling = member.NameField is { } field
                 ? $", kind: WorldNameKind.{field.Kind}, role: WorldNameRole.{field.Role}, facet: WorldExportFacet.{field.Facet}"
                 : member.TextPurpose is { } purpose ? $", text: {Literal(purpose)}" : string.Empty;
+            if (member.RenderLane) { spelling += ", lane: true"; }
             _ = text.Append(value: $"                M({Literal(text: member.Name)}, typeof({CSharpName(type: member.Type)}), typeof({CSharpName(type: member.DeclaringType)}), {Literal(text: member.Member)}, {AccessText(access: member.Access)}{getter}{spelling}),\n");
         }
         _ = text.Append(value: "            ]");

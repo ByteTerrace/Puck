@@ -19,7 +19,9 @@ namespace Puck.SignedDistance.Queries;
 // The carriers name every operation as the fixed carriers do (FixedQ4816, FixedVector2, FixedVector3,
 // FixedQuaternion), which is what lets the wide lowering be the fixed lowering's text. What the formulas call that is
 // no formula (a shape with a hand-written reader, the lattice noises, the ellipse's root) is read a lane at a time
-// through the fixed-point reader, so the wide reader adds no second statement of any of them.
+// through the fixed-point reader, so the wide reader adds no second statement of any of them, with one exception: a
+// sweep's curve search (SdfSweepWide), dozens of curve points a read, which a lane at a time made the cost of every
+// presentation normal taken near a swept trunk or root.
 public sealed partial class SdfFieldEvaluator {
     /// <summary>Gets the kind counting wide walks, each one tape read at up to a vector's lanes of points.</summary>
     public static WorkKind WideWalks { get; } = new(name: "sdf.wide.walks", unit: "count", workClass: WorkClass.Pacing);
@@ -132,9 +134,13 @@ public sealed partial class SdfFieldEvaluator {
 
     // Walks a tape at every lane's point and answers each lane's distance, or refuses a tape that holds an op the wide
     // reader has no lowering for (a warp, a render-only op). One accumulator a lane across the tape's ranges, as the
-    // point walk holds; no skip, no root frame and no material.
+    // point walk holds; no root frame and no material. It skips a chain as the point walk does (SkippedChainsEnd), on
+    // the chain's certificate at every point of the box the lanes span (BoxReachTest) against the interval of the
+    // lanes' answers widened by WideSkipSlack, so a skipped chain's candidates clear every lane's answer and leave it as
+    // a walk of the chain would.
     private bool TryWalkWide(ReadOnlySpan<int> tape, Wide3 world, out Wide distance) {
         var instructions = m_instructions;
+        var segmentSlots = m_segmentSlots;
         var far = ((Wide)((double)FarDistance));
         var result = far;
         var local = world;
@@ -142,88 +148,97 @@ public sealed partial class SdfFieldEvaluator {
         Span<Wide> scopes = stackalloc Wide[SdfProgramBuilder.MaxFieldScopeDepth];
         var scopeDepth = 0;
         var visited = 0;
+        var test = new BoxReachTest(query: new BoxQuery(box: LaneBox(world: world)), regional: true);
+        var (index, end, tapeAt) = (tape.IsEmpty ? (0, 0, 0) : (tape[0], tape[1], 2));
 
         distance = far;
 
-        for (var range = 0; (range < tape.Length); range += 2) {
-            for (var index = tape[range]; (index < tape[(range + 1)]); index++) {
-                ref readonly var compiled = ref instructions[index];
-                var instruction = new WideOperands(compiled: in compiled);
+        for (; NextLive(at: ref tapeAt, end: ref end, index: ref index, tape: tape); index++) {
+            ref readonly var compiled = ref instructions[index];
+            var instruction = new WideOperands(compiled: in compiled);
 
-                ++visited;
+            ++visited;
 
-                switch (compiled.PointAction) {
-                    case SdfPointAction.ResetPoint: {
-                            local = world;
-                            distanceScale = Wide.One;
-                            break;
-                        }
-                    case SdfPointAction.Translate: {
-                            local = TranslatePoint(instruction: in instruction, p: local);
-                            break;
-                        }
-                    case SdfPointAction.Rotate: {
-                            local = RotatePoint(instruction: in instruction, p: local);
-                            break;
-                        }
-                    case SdfPointAction.Scale: {
-                            local = ScalePoint(instruction: in instruction, p: local);
-                            distanceScale = ScaleDistance(distanceScale: distanceScale, instruction: in instruction);
-                            break;
-                        }
-                    case SdfPointAction.Fold: {
-                            local = MapPoint(instruction: in instruction, p: local);
-                            break;
-                        }
-                    case SdfPointAction.EditField: {
-                            result = EditField(distance: result, instruction: in instruction, p: local);
-                            break;
-                        }
-                    case SdfPointAction.WeightedRelief: {
-                            result = NoiseDisplaceField(
-                                distance: result,
-                                instruction: in instruction,
-                                p: local,
-                                weight: ((compiled.ReliefMasks is { } masks) ? MaskProduct(masks: masks, q: local) : Wide.One)
-                            );
-                            break;
-                        }
-                    case SdfPointAction.Identity: {
-                            break;
-                        }
-                    case SdfPointAction.PushField: {
-                            scopes[scopeDepth++] = result;
-                            result = far;
-                            break;
-                        }
-                    case SdfPointAction.PopField: {
-                            result = BlendShape(
-                                blend: compiled.Blend,
-                                candidate: instruction.ScaleScope(candidate: result),
-                                current: scopes[--scopeDepth],
-                                operand: PopOperand(instruction: in instruction),
-                                smoothRadius: instruction.Data1X
-                            );
-                            break;
-                        }
-                    case SdfPointAction.ShapeBlend: {
-                            if (compiled.Detail) {
-                                break;
+            switch (compiled.PointAction) {
+                case SdfPointAction.ResetPoint: {
+                        local = world;
+                        distanceScale = Wide.One;
+
+                        if (segmentSlots[index] is var segment and >= 0) {
+                            var (below, above) = LaneRange(value: result);
+
+                            if ((above < FarDistance) && (SkippedChainsEnd(above: above, below: below, segment: segment, test: in test) is var skipped and >= 0)) {
+                                index = (skipped - 1);
                             }
+                        }
 
-                            result = BlendShape(
-                                blend: compiled.Blend,
-                                candidate: instruction.ScaleScope(candidate: (EvaluateShape(instruction: in instruction, p: local) * distanceScale)),
-                                current: result,
-                                operand: Wide.Zero,
-                                smoothRadius: instruction.Data1X
-                            );
+                        break;
+                    }
+                case SdfPointAction.Translate: {
+                        local = TranslatePoint(instruction: in instruction, p: local);
+                        break;
+                    }
+                case SdfPointAction.Rotate: {
+                        local = RotatePoint(instruction: in instruction, p: local);
+                        break;
+                    }
+                case SdfPointAction.Scale: {
+                        local = ScalePoint(instruction: in instruction, p: local);
+                        distanceScale = ScaleDistance(distanceScale: distanceScale, instruction: in instruction);
+                        break;
+                    }
+                case SdfPointAction.Fold: {
+                        local = MapPoint(instruction: in instruction, p: local);
+                        break;
+                    }
+                case SdfPointAction.EditField: {
+                        result = EditField(distance: result, instruction: in instruction, p: local);
+                        break;
+                    }
+                case SdfPointAction.WeightedRelief: {
+                        result = NoiseDisplaceField(
+                            distance: result,
+                            instruction: in instruction,
+                            p: local,
+                            weight: ((compiled.ReliefMasks is { } masks) ? MaskProduct(masks: masks, q: local) : Wide.One)
+                        );
+                        break;
+                    }
+                case SdfPointAction.Identity: {
+                        break;
+                    }
+                case SdfPointAction.PushField: {
+                        scopes[scopeDepth++] = result;
+                        result = far;
+                        break;
+                    }
+                case SdfPointAction.PopField: {
+                        result = BlendShape(
+                            blend: compiled.Blend,
+                            candidate: instruction.ScaleScope(candidate: result),
+                            current: scopes[--scopeDepth],
+                            operand: PopOperand(instruction: in instruction),
+                            smoothRadius: instruction.Data1X
+                        );
+                        break;
+                    }
+                case SdfPointAction.ShapeBlend: {
+                        if (compiled.Detail) {
                             break;
                         }
-                    default: {
-                            return false;
-                        }
-                }
+
+                        result = BlendShape(
+                            blend: compiled.Blend,
+                            candidate: instruction.ScaleScope(candidate: (EvaluateShape(instruction: in instruction, p: local) * distanceScale)),
+                            current: result,
+                            operand: Wide.Zero,
+                            smoothRadius: instruction.Data1X
+                        );
+                        break;
+                    }
+                default: {
+                        return false;
+                    }
             }
         }
 
@@ -232,6 +247,40 @@ public sealed partial class SdfFieldEvaluator {
         distance = result;
 
         return true;
+    }
+    // The raws a wide answer may stand from the fixed one, which a skip widens the lanes' answers by before it asks a
+    // fixed certificate to clear them: double arithmetic rounds where fixed point does not, a few raws apart.
+    private const long WideSkipSlack = 16L;
+
+    // The box, in raws, that holds every live lane's point, a raw wider on each side than the rounded lanes.
+    private static IntervalVector3 LaneBox(Wide3 world) {
+        static FixedInterval Axis(Wide value) {
+            var (lower, upper) = LaneExtent(value: value);
+
+            return new FixedInterval(
+                lower: FixedQ4816.FromRawBits(value: (LaneToFixed(value: lower).Value - 1L)),
+                upper: FixedQ4816.FromRawBits(value: (LaneToFixed(value: upper).Value + 1L))
+            );
+        }
+
+        return new(X: Axis(value: world.X), Y: Axis(value: world.Y), Z: Axis(value: world.Z));
+    }
+    // The least and the greatest of the live lanes' values.
+    private static (double Lower, double Upper) LaneExtent(Wide value) {
+        var (lower, upper) = (double.PositiveInfinity, double.NegativeInfinity);
+
+        for (var lane = 0; (lane < WideLanes); lane++) {
+            lower = Math.Min(val1: lower, val2: value.Lanes[lane]);
+            upper = Math.Max(val1: upper, val2: value.Lanes[lane]);
+        }
+
+        return (lower, upper);
+    }
+    // The least and the greatest of the live lanes' answers, each widened outward by WideSkipSlack raws.
+    private static (FixedQ4816 Below, FixedQ4816 Above) LaneRange(Wide value) {
+        var (lower, upper) = LaneExtent(value: value);
+
+        return (FixedQ4816.FromRawBits(value: (LaneToFixed(value: lower).Value - WideSkipSlack)), FixedQ4816.FromRawBits(value: (LaneToFixed(value: upper).Value + WideSkipSlack)));
     }
     // The product of a masked relief's weights at each lane's point: per mask, the least distance of its regions, read
     // against the band's shared formula. The point walk's early exits change no value, so the wide walk takes none.
@@ -265,6 +314,14 @@ public sealed partial class SdfFieldEvaluator {
     private static FixedVector3 LaneToFixed(Wide3 value, int lane) =>
         new(X: LaneToFixed(value: value.X.Lanes[lane]), Y: LaneToFixed(value: value.Y.Lanes[lane]), Z: LaneToFixed(value: value.Z.Lanes[lane]));
     private static Wide EvaluateShapeEscape(in WideOperands instruction, Wide3 p) {
+        ref readonly var compiled = ref instruction.Compiled;
+
+        // A sweep with no strand offset reads its curve search across the lanes (SdfSweepWide); an offset strand's
+        // tangent frame is stated only by the fixed reader, so that sweep is read a lane at a time like the rest.
+        if ((compiled.ShapePointAction == SdfShapePointAction.Sweep) && (compiled.Data0W == FixedQ4816.Zero) && (compiled.SweepCurve is { } curve)) {
+            return SdfSweepWide(curve: curve, p: p);
+        }
+
         Span<double> lanes = stackalloc double[Vector<double>.Count];
 
         lanes.Clear();
@@ -285,6 +342,103 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         return new Wide(lanes: new Vector<double>(values: lanes));
+    }
+    // KEEP IN SYNC with SdfSweep (SdfFieldEvaluator.cs) for a sweep with no strand offset, where every strand's centre is
+    // the centreline's and the strands read one answer: the same candidates, halving probes, samples and golden-section
+    // rounds at the same parameters, compared per lane, so a wide answer stands within the search's resolution of the
+    // fixed one. A sample's parameter is shared by every lane; a probe's is each lane's own, so a golden-section round
+    // probes one parameter a lane, the side each lane keeps chosen by its own compare.
+    private static Wide SdfSweepWide(SweepCurveFixed curve, Wide3 p) {
+        var a = new Wide3(X: ((double)curve.A.X), Y: ((double)curve.A.Y), Z: ((double)curve.A.Z));
+        var b = new Wide3(X: ((double)curve.B.X), Y: ((double)curve.B.Y), Z: ((double)curve.B.Z));
+        var c = new Wide3(X: ((double)curve.C.X), Y: ((double)curve.C.Y), Z: ((double)curve.C.Z));
+        var radiusStart = ((double)curve.RadiusStart);
+        var radiusEnd = ((double)curve.RadiusEnd);
+        var bulge = ((double)curve.Bulge);
+
+        Wide SquaredOffset(Wide t) {
+            var offset = (p - Wide3.Lerp(from: Wide3.Lerp(from: a, to: b, amount: t), to: Wide3.Lerp(from: b, to: c, amount: t), amount: t));
+
+            return Wide3.Dot(left: offset, right: offset);
+        }
+        Wide Gap(Wide t) {
+            var radius = Wide.Lerp(from: radiusStart, to: radiusEnd, amount: t);
+
+            if (bulge != 0.0) {
+                radius += (((Wide)bulge) * Wide.Pow(x: Wide.Max(x: Wide.Sin(angle: (t * Math.PI)), y: Wide.Zero), y: ((double)SweepBulgeExponent)));
+            }
+
+            return (Wide.Sqrt(value: SquaredOffset(t: t)) - radius);
+        }
+
+        if ((curve.RadiusStart == curve.RadiusEnd) && (curve.Bulge == FixedQ4816.Zero)) {
+            var bestT = Wide.Zero;
+            var bestSquare = SquaredOffset(t: Wide.Zero);
+
+            void Consider(Wide t) {
+                var square = SquaredOffset(t: t);
+                var nearer = (square < bestSquare);
+
+                bestSquare = Wide.Select(mask: nearer, whenClear: bestSquare, whenSet: square);
+                bestT = Wide.Select(mask: nearer, whenClear: bestT, whenSet: t);
+            }
+
+            foreach (var fraction in SweepSampleFractions) {
+                Consider(t: ((double)fraction));
+            }
+
+            var step = ((double)SweepInitialStep);
+
+            for (var round = 0; (round < 5); round++) {
+                Consider(t: Wide.Min(x: Wide.One, y: (bestT + step)));
+                Consider(t: Wide.Max(x: Wide.Zero, y: (bestT - step)));
+                step *= 0.5;
+            }
+
+            return (Wide.Sqrt(value: bestSquare) - radiusStart);
+        }
+
+        var spacing = (1.0 / SweepSamples);
+        var goldenLow = ((double)SweepGoldenLow);
+        var goldenHigh = ((double)SweepGoldenHigh);
+        var nearest = Wide.Zero;
+        var best = Gap(t: Wide.Zero);
+
+        for (var index = 1; (index <= SweepSamples); index++) {
+            var t = (spacing * index);
+            var gap = Gap(t: t);
+            var nearer = (gap < best);
+
+            best = Wide.Select(mask: nearer, whenClear: best, whenSet: gap);
+            nearest = Wide.Select(mask: nearer, whenClear: nearest, whenSet: t);
+        }
+
+        var low = Wide.Max(x: (nearest - spacing), y: Wide.Zero);
+        var high = Wide.Min(x: (nearest + spacing), y: Wide.One);
+        var left = Wide.Lerp(from: low, to: high, amount: goldenLow);
+        var right = Wide.Lerp(from: low, to: high, amount: goldenHigh);
+        var leftGap = Gap(t: left);
+        var rightGap = Gap(t: right);
+
+        for (var round = 0; (round < SweepRounds); round++) {
+            best = Wide.Min(x: best, y: Wide.Min(x: leftGap, y: rightGap));
+
+            // A lane whose left probe is nearer keeps [low, right] and probes a new left; any other keeps [left, high]
+            // and probes a new right.
+            var keepsLeft = (leftGap < rightGap);
+            var nextLow = Wide.Select(mask: keepsLeft, whenClear: left, whenSet: low);
+            var nextHigh = Wide.Select(mask: keepsLeft, whenClear: high, whenSet: right);
+            var probe = Wide.Select(mask: keepsLeft, whenClear: Wide.Lerp(from: nextLow, to: nextHigh, amount: goldenHigh), whenSet: Wide.Lerp(from: nextLow, to: nextHigh, amount: goldenLow));
+            var probeGap = Gap(t: probe);
+            var nextLeft = Wide.Select(mask: keepsLeft, whenClear: right, whenSet: probe);
+            var nextLeftGap = Wide.Select(mask: keepsLeft, whenClear: rightGap, whenSet: probeGap);
+            var nextRight = Wide.Select(mask: keepsLeft, whenClear: probe, whenSet: left);
+            var nextRightGap = Wide.Select(mask: keepsLeft, whenClear: probeGap, whenSet: leftGap);
+
+            (low, high, left, leftGap, right, rightGap) = (nextLow, nextHigh, nextLeft, nextLeftGap, nextRight, nextRightGap);
+        }
+
+        return Wide.Min(x: best, y: Wide.Min(x: leftGap, y: rightGap));
     }
     private static Wide SampleCells(Wide3 point, uint seed, SdfCellMode mode, Wide randomness) {
         Span<double> lanes = stackalloc double[Vector<double>.Count];
@@ -373,6 +527,16 @@ public sealed partial class SdfFieldEvaluator {
         }
         // x to the y for x at or above zero: zero where x is zero, as the fixed-point power answers.
         public static Wide Pow(Wide x, Wide y) => new(lanes: System.Numerics.Vector.Exp((y.Lanes * System.Numerics.Vector.Log(x.Lanes))));
+        // The sine of each lane, a lane at a time: the hardware vector carries no sine.
+        public static Wide Sin(Wide angle) {
+            Span<double> lanes = stackalloc double[Vector<double>.Count];
+
+            for (var lane = 0; (lane < lanes.Length); lane++) {
+                lanes[lane] = Math.Sin(a: angle.Lanes[lane]);
+            }
+
+            return new(lanes: new Vector<double>(values: lanes));
+        }
         public static Wide Select(WideMask mask, Wide whenSet, Wide whenClear) => new(lanes: System.Numerics.Vector.ConditionalSelect(condition: mask.Bits, left: whenSet.Lanes, right: whenClear.Lanes));
 
         public override bool Equals(object? obj) => throw new NotSupportedException();
@@ -429,6 +593,7 @@ public sealed partial class SdfFieldEvaluator {
             Y: Wide.Clamp(maximum: maximum.Y, minimum: minimum.Y, value: value.Y),
             Z: Wide.Clamp(maximum: maximum.Z, minimum: minimum.Z, value: value.Z)
         );
+        public static Wide3 Lerp(Wide3 from, Wide3 to, Wide amount) => (from + ((to - from) * amount));
         public static Wide3 Multiply(Wide3 left, Wide3 right) => new(X: (left.X * right.X), Y: (left.Y * right.Y), Z: (left.Z * right.Z));
         public static Wide3 Divide(Wide3 left, Wide3 right) => new(X: (left.X / right.X), Y: (left.Y / right.Y), Z: (left.Z / right.Z));
         public static Wide Dot(Wide3 left, Wide3 right) => (((left.X * right.X) + (left.Y * right.Y)) + (left.Z * right.Z));

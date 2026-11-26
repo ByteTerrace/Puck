@@ -66,6 +66,7 @@ public sealed record PaletteEntryDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Bleed = null,
     float? Receive = null,
     IReadOnlyList<PalettePaintDocument>? Paints = null,
+    [property: DocumentRenderLane]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? EmissiveLane = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PaletteGlassDocument? Glass = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ToonStyleDocument? Toon = null,

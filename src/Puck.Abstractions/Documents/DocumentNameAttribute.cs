@@ -101,6 +101,12 @@ public sealed class DocumentNameAttribute(WorldNameKind kind, WorldNameRole role
     public WorldExportFacet Facet { get; } = facet;
 }
 
+/// <summary>Marks an integer property that selects a render lane: 0 to 3 a body's own lanes, 4 to 7 the world's. An
+/// authored document may write a world lane by the name its <c>render.lanes</c> row declares instead of its index; the
+/// load resolves every such name to its index before the document is read, so the read model holds only indices.</summary>
+[AttributeUsage(AttributeTargets.Property)]
+public sealed class DocumentRenderLaneAttribute : Attribute;
+
 /// <summary>Identifies literal text or a name in a vocabulary outside module qualification.</summary>
 /// <param name="purpose">What the property holds, including the vocabulary of a local name.</param>
 [AttributeUsage(AttributeTargets.Property)]

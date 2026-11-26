@@ -12,11 +12,9 @@ import "glacier-site"
 
 let compassRadians = 3.141592653589793 / 180
 
-// The world's render lanes, which every surface reads as lanes 4 to 7 however it is placed: lane 4 is the falls' discharge,
-// and the falls' foam covers its sheets by it.
-let fallsLane = 4
+// The falls' discharge, on a world lane every surface reads however it is placed: the falls' foam covers its sheets by it.
 render {
-  lanes ["state.fallsFlow"]
+  lanes [{ name: "fallsFlow", value: "state.fallsFlow" }]
 }
 
 // The wall's own sector frame: a placement of yaw (compass + 180) turns the creation's +Z out from the ring's centre.
@@ -93,8 +91,10 @@ prototypes {
     profile: fallsProfile,
     width: 8,
     standoff: 8,
-    flow: fallsFlowLayer with { coverageLane: fallsLane },
-    coverageLane: fallsLane
+    flow: fallsFlowLayer with { coverageLane: "fallsFlow" },
+    // The flow's shade program reads a world lane by its index: `fallsFlow` is this document's first lane, render lane 4,
+    // and debug.puck keeps it first.
+    coverageLane: 4
   )
   glacierMass(
     id: "glacier",

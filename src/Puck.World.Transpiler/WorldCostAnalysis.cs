@@ -12,9 +12,12 @@ public static class WorldCostAnalysis {
     /// or cannot be decoded and compiled as a world definition.</exception>
     public static WorldCostReport Generate(WorldCompilation compilation) {
         ArgumentNullException.ThrowIfNull(compilation);
+        if (!WorldRenderLaneNames.TryResolve(utf8: System.Text.Encoding.UTF8.GetBytes(s: compilation.RequireJson().ToJsonString()), resolved: out var named, reason: out var laneReason)) {
+            throw new InvalidOperationException(message: laneReason);
+        }
         if (!WorldJsonPayload.TryParse(
             deferDrawSites: true,
-            json: compilation.RequireJson().ToJsonString(),
+            json: System.Text.Encoding.UTF8.GetString(bytes: named.Span),
             info: WorldJsonContext.Authored.WorldDefinition,
             value: out var definition,
             error: out var reason)) {

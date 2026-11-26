@@ -107,6 +107,21 @@ A document's `schema:` field selects its vocabulary, never the filename.
   call **PUCK041**; a `for` over something not known at compile time
   **PUCK044**.
   `range(start, count)` takes a count: `range(16, 16)` emits 16 through 31.
+  Every `for` body binds its own `let`s (a shade program's loop excepted, whose `let`s are runtime values).
+- **`if cond { } else { }` in document or section position emits one branch's rows**
+  (`DocumentLowering.ExpandConditionalStatements`, the one expansion every section calls); a branch may hold `let`s
+  and, unlike a `for` body, field assignments, so one member of a row can be conditional. A row written or left out is
+  an `if`, never `for k in range(0, cond ? 1 : 0)`. A rule body's `if` is the rule's own, evaluated when it runs.
+- **Rotation and vector builtins** (`DocumentVectors`): `rotate(axis, degrees)` gives a quaternion `[x, y, z, w]`,
+  `compose(outer, inner, ...)` multiplies them (the last turns a point first), `rotatePoint(rotation, point)`,
+  `polarPoint(radius, degrees, y)` and `fraction(x)`. Angles read in degrees (`DocumentDimensions.DegreesArgument`), so a
+  radians value is `a * 1rad`. `+ - * /` on numeric arrays are element-wise, and a number scales an array.
+- **A clock's name is bare**, as its `state:` reference is (`clocks [{ name: fiber, state: fiber }]`); a quoted one
+  is PUCK110 (`WorldCallArguments.FormOf`, `Declares` of kind Clock or State). Write the state row it follows bare too
+  (`name: fiber`), which the state section admits.
+- **Aliases lower to one name.** `sqrt`, `abs`, `sin`, `cos`, `ceil` and `pow` are `ExpressionVocabulary.Aliases`,
+  read as their canonical names by both languages; `fract`/`frac` are the document's (`DocumentBuiltins.Canonical`).
+  `min`/`max` stay the rule language's reductions.
 - **A `for` inside a rule body unrolls into the body.** A loop
   over an n-element array that declares `local $"name{i}" = …` compiles to a
   rule carrying n separate locals, `name0` through `name<n-1>`, each with its

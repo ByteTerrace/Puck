@@ -9,13 +9,13 @@ import "day"
 
 state {
   world [
-    { name: "pair", kind: "Fixed", value: "0", advance { perSecondNumerator: 1, perSecondDenominator: pairSeconds } }
+    { name: pair, kind: "Fixed", value: "0", advance { perSecondNumerator: 1, perSecondDenominator: pairSeconds } }
   ]
 }
 
 timeline {
   clocks [
-    { name: "altitude", view { to: skySeamAltitude, axis [0, 1, 0] } }
+    { name: altitude, view { to: skySeamAltitude, axis [0, 1, 0] } }
     { name: pair, state: pair, spanSeconds: pairSeconds }
   ]
 }

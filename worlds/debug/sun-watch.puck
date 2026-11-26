@@ -27,7 +27,7 @@ state {
     // The pair's turn (moon-frame.puck's `companionTurn`), adopted from the sun's world, which owns it; the valley's
     // companion light and disc ride it (day.puck).
     {
-      name: "pair"
+      name: pair
       kind: "Fixed"
       value: "0"
       advance { perSecondNumerator: 1, perSecondDenominator: pairSeconds }

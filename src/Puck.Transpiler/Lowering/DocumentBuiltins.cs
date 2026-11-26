@@ -74,14 +74,51 @@ public static class DocumentBuiltins {
             evaluate: static (call, scope, fieldKey) => GroupBy(args: call.Arguments, call: call, fieldKey: fieldKey, scope: scope),
             signature: "groupBy(array, (item, index) => key)"
         ),
+        ["fraction"] = new(
+            description: "Returns the part of a number above its floor, x - floor(x), in [0, 1).",
+            evaluate: static (call, scope, fieldKey) => DocumentVectors.Fraction(call: call, fieldKey: fieldKey, scope: scope),
+            signature: "fraction(x)"
+        ),
+        ["rotate"] = new(
+            description: "Returns the quaternion [x, y, z, w] turning degrees about axis, right-handed.",
+            evaluate: static (call, scope, _) => DocumentVectors.Rotate(call: call, scope: scope),
+            signature: "rotate(axis, degrees)"
+        ),
+        ["compose"] = new(
+            description: "Multiplies rotations: the result turns a point by the last rotation first and the first rotation last.",
+            evaluate: static (call, scope, _) => DocumentVectors.Compose(call: call, scope: scope),
+            signature: "compose(outer, inner, ...)"
+        ),
+        ["rotatePoint"] = new(
+            description: "Turns a point [x, y, z] about the origin by a rotation [x, y, z, w].",
+            evaluate: static (call, scope, _) => DocumentVectors.RotatePoint(call: call, scope: scope),
+            signature: "rotatePoint(rotation, point)"
+        ),
+        ["polarPoint"] = new(
+            description: "Returns the point radius out from the vertical axis at degrees around it, from +X toward +Z, at height y (0 when omitted).",
+            evaluate: static (call, scope, _) => DocumentVectors.PolarPoint(call: call, scope: scope),
+            signature: "polarPoint(radius, degrees, y)"
+        ),
     };
-    /// <summary>Every name reserved in value position: the collection builtins, plus every named function of the
-    /// shared expression vocabulary.</summary>
+    /// <summary>The abbreviations of the document language's own builtins, beside the shared ones of
+    /// <see cref="ExpressionVocabulary.Aliases"/>: each is read as its canonical name before the call is evaluated.</summary>
+    private static readonly Dictionary<string, string> OwnAliases = new(comparer: StringComparer.Ordinal) {
+        ["frac"] = "fraction",
+        ["fract"] = "fraction",
+    };
+    /// <summary>Every name reserved in value position: the document language's own builtins, every named function of
+    /// the shared expression vocabulary, and the abbreviations either admits.</summary>
     public static IReadOnlySet<string> Names { get; } =
         new HashSet<string>(
-        collection: Collections.Keys.Concat(second: ExpressionVocabulary.Functions.Keys),
+        collection: Collections.Keys.Concat(second: ExpressionVocabulary.Functions.Keys).Concat(second: ExpressionVocabulary.Aliases.Keys).Concat(second: OwnAliases.Keys),
         comparer: StringComparer.Ordinal
     );
+
+    /// <summary>Returns the canonical spelling of a value-position function name: the builtin an abbreviation stands
+    /// for (<c>sqrt</c> is <c>squareRoot</c>, <c>fract</c> is <c>fraction</c>), or the name itself.</summary>
+    /// <param name="name">The name as written.</param>
+    /// <returns>The canonical spelling.</returns>
+    public static string Canonical(string name) => (OwnAliases.TryGetValue(key: name, value: out var own) ? own : ExpressionVocabulary.Canonical(name: name));
 
     /// <summary>Returns the one spelling a refusal may name for a call written as an abbreviation of it: the first
     /// value-position name, in ordinal order, that begins with <paramref name="written"/>. It is a hint in a refusal's
@@ -579,7 +616,7 @@ public static class DocumentBuiltins {
 
         return accumulated;
     }
-    private static JsonNode? Refuse(DocumentScope scope, CallExpressionNode call, string message) {
+    internal static JsonNode? Refuse(DocumentScope scope, CallExpressionNode call, string message) {
         scope.Diagnostics.ReportError(
             code: PuckDiagnosticCodes.BuiltinRefused,
             message: message,
@@ -747,6 +784,9 @@ public static class DocumentBuiltins {
 
         if (!Names.Contains(item: call.Name)) {
             return false;
+        }
+        if (Canonical(name: call.Name) is var canonical && !string.Equals(a: canonical, b: call.Name, comparisonType: StringComparison.Ordinal)) {
+            call = (call with { Name = canonical });
         }
 
         result = (Collections.TryGetValue(key: call.Name, value: out var collection)

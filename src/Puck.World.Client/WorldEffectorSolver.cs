@@ -223,7 +223,8 @@ public static class WorldEffectorSolver {
     }
     /// <summary>Probes a query field for the surface an effector's tip is reaching toward.</summary>
     /// <param name="answer">The effector's held probe answer (<see cref="WorldSurfaceQuery"/>): reused for
-    /// bit-identical inputs over the same field, and replaced by every probe that marches.</param>
+    /// bit-identical inputs over the same field, carried to a nearby ray over the same smooth surface
+    /// (<see cref="WorldSurfaceQuery.TryProject"/>), and replaced by every probe that marches.</param>
     /// <param name="field">The static-scene query field, or <see langword="null"/> when none is resolved.</param>
     /// <param name="origin">The tip's world position — where the probe starts.</param>
     /// <param name="towards">The probe direction in the creation's own frame; rotated by
@@ -294,9 +295,18 @@ public readonly record struct WorldSurfaceAnswer(bool Hit, Vector3 Target, Vecto
 /// </summary>
 /// <remarks>
 /// <para>A ray's hit is not continuous in its origin, so no drift bound holds for a target: an answer that names a
-/// target is reused only for bit-identical inputs over the same field instance. The presentation field is immutable
-/// and replaced whole when the static scene changes (<see cref="WorldClient.StaticField"/>), so the instance is the
-/// field's change revision.</para>
+/// target is returned as held (<see cref="Covers"/>) only for bit-identical inputs over the same field instance. The
+/// presentation field is immutable and replaced whole when the static scene changes (<see cref="WorldClient.StaticField"/>),
+/// so the instance is the field's change revision.</para>
+/// <para>A target for another ray is carried (<see cref="TryProject"/>) from a hit whose normal the march took: the asked ray
+/// meets the held hit's tangent plane at a point no farther than <see cref="ProjectionReach"/> of the reach from the
+/// held hit, and the field reads within <see cref="ProjectionTolerance"/> of the reach of zero there and clear of the
+/// surface at the asked ray's start. Two point reads stand for a march and a gradient, so a moving foot marches once
+/// per stretch of ground instead of every frame. Over a smooth surface the carried target stands within the tolerance
+/// of the marched one (a field steepening no faster than one per metre near its surface reads its distance there); a
+/// step edge or a cusp leaves the tangent plane, and the read at the projected point refuses it. A surface thinner than
+/// the tolerance crossing the ray between its start and the plane is not seen until the projected point passes
+/// <see cref="ProjectionReach"/> of the reach from the held hit, when a march finds it.</para>
 /// <para>A stance question (<see cref="Slack"/> positive, <see cref="WorldEffectorSolver.StanceDrifted"/>) asks only
 /// whether the hit lies farther than <see cref="Slack"/> from <see cref="Latch"/>. Over a smooth surface no steeper
 /// than <see cref="StanceSlope"/> allows, the hit moves at most <see cref="StanceDriftFactor"/> times the probe ray's
@@ -322,6 +332,15 @@ public readonly record struct WorldSurfaceQuery(WorldQueryField Field, Vector3 O
     /// <summary>The steepest surface, degrees from facing the probe, over which <see cref="StanceDriftFactor"/>
     /// bounds a stance question's hit.</summary>
     public const float StanceSlope = 60f;
+    /// <summary>The farthest a carried target's surface point may lie from the held hit, as a share of the probe's
+    /// reach (<see cref="TryProject"/>).</summary>
+    public const float ProjectionReach = 0.5f;
+    /// <summary>The most the field may read at a carried target's surface point, and the least it must read at the
+    /// asked ray's start, as a share of the probe's reach (<see cref="TryProject"/>).</summary>
+    public const float ProjectionTolerance = (1f / 64f);
+    // The cosine of StanceSlope: a ray meeting the held tangent plane more obliquely carries its hit too far per unit of
+    // the plane's error to be carried.
+    private const float ProjectionFacing = 0.5f;
 
     /// <inheritdoc/>
     public static WorldFieldQueryFamily Family => WorldFieldQueryWork.Surface;
@@ -355,6 +374,48 @@ public readonly record struct WorldSurfaceQuery(WorldQueryField Field, Vector3 O
             ((4f + (8f * length)) / 65536f));
 
         return ((Vector3.Distance(value1: asked.Latch, value2: held.Point) + (StanceDriftFactor * drift)) <= asked.Slack);
+    }
+    /// <inheritdoc/>
+    public bool TryProject(in WorldSurfaceQuery asked, in WorldSurfaceAnswer held, out WorldSurfaceAnswer answer) {
+        answer = held;
+
+        if (!held.Hit || !held.HasNormal || !(asked.Reach > 0f)) {
+            return false;
+        }
+
+        var direction = asked.Direction();
+        var facing = Vector3.Dot(vector1: direction, vector2: held.Normal);
+
+        if (!(facing <= -ProjectionFacing)) {
+            return false;
+        }
+
+        var start = (asked.Origin - (direction * WorldEffectorSolver.ProbeBackoff));
+        var along = (Vector3.Dot(vector1: (held.Point - start), vector2: held.Normal) / facing);
+
+        if (!(along >= 0f) || !(along <= (asked.Reach + WorldEffectorSolver.ProbeBackoff))) {
+            return false;
+        }
+
+        var point = (start + (direction * along));
+        var tolerance = FixedQ4816.FromDouble(value: (asked.Reach * ProjectionTolerance));
+
+        if (
+            !(Vector3.Distance(value1: point, value2: held.Point) <= (asked.Reach * ProjectionReach)) ||
+            !Field.TryDistance(distance: out var surface, position: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: point))) ||
+            (FixedQ4816.Abs(value: surface) > tolerance) ||
+            !Field.TryDistance(distance: out var clear, position: FixedPosition.FromLocal(local: FixedVector3.FromVector3(value: start))) ||
+            (clear <= tolerance)
+        ) {
+            return false;
+        }
+
+        answer = new WorldSurfaceAnswer(Hit: true, Normal: held.Normal, Point: point, HasNormal: true, Target: (point + (held.Normal * MathF.Max(
+            x: 0f,
+            y: asked.Standoff
+        ))));
+
+        return true;
     }
     /// <inheritdoc/>
     public WorldSurfaceAnswer March() {

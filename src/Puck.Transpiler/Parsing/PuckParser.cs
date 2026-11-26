@@ -512,6 +512,10 @@ public static partial class PuckParser {
             return ParseForStatement(col: col, context: context, diagnostics: diagnostics, line: line, schema: schema, startOffset: startOffset, vocabulary: vocabulary);
         }
 
+        if (TryMatchStatementKeyword(context: context, keyword: "if")) {
+            return ParseConditionalStatement(col: col, context: context, diagnostics: diagnostics, line: line, schema: schema, startOffset: startOffset, vocabulary: vocabulary);
+        }
+
         if (TryMatchStatementKeyword(context: context, keyword: "use")) {
             SkipWhiteSpace(context: context);
             var callStart = cursor.Offset;
@@ -1001,10 +1005,54 @@ public static partial class PuckParser {
         var cursor = context.Scanner.Cursor;
 
         var (item, index, sequence) = ParseForHead(context: context);
+        var statements = ParseBracedBody(body: body, closing: "a 'for' body", context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
+
+        return new ForStatementNode(item, index, sequence, statements, startOffset, (cursor.Offset - startOffset), line, col);
+    }
+    // `if cond { … }`, with an optional `else { … }` or `else if …` tail, in document position. An `else if` is an Else
+    // holding one nested ConditionalStatementNode, as a rule body's `if` chains.
+    private static ConditionalStatementNode ParseConditionalStatement(ParseContext context, int startOffset, int line, int col, DiagnosticBag? diagnostics, string? schema, IDocumentVocabulary? vocabulary) {
+        var cursor = context.Scanner.Cursor;
+        var condition = ParseExpression(context: context);
+
+        SkipWhiteSpace(context: context);
+        if (!TryConsume(c: '{', context: context)) {
+            throw CreateException(context: context, message: "Expected '{' starting an 'if' body");
+        }
+
+        var then = ParseBracedBody(closing: "an 'if' body", context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
+        IReadOnlyList<StatementNode>? otherwise = null;
+        var savedPosition = cursor.Position;
+
+        SkipWhiteSpace(context: context);
+        if (TryMatchKeyword(context: context, keyword: "else")) {
+            SkipWhiteSpace(context: context);
+
+            var elseStart = cursor.Offset;
+            var (elseLine, elseCol) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: elseStart);
+
+            if (TryMatchKeyword(context: context, keyword: "if")) {
+                otherwise = [ParseConditionalStatement(col: elseCol, context: context, diagnostics: diagnostics, line: elseLine, schema: schema, startOffset: elseStart, vocabulary: vocabulary)];
+            } else {
+                if (!TryConsume(c: '{', context: context)) {
+                    throw CreateException(context: context, message: "Expected '{' or 'if' after 'else'");
+                }
+
+                otherwise = ParseBracedBody(closing: "an 'else' body", context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary);
+            }
+        } else {
+            cursor.ResetPosition(position: savedPosition);
+        }
+
+        return new ConditionalStatementNode(condition, then, otherwise, startOffset, (cursor.Offset - startOffset), line, col);
+    }
+    // The statements of a compile-time body after its opening brace, through its closing one. `body` parses one statement
+    // where the body stands somewhere other than a document block; null parses document statements.
+    private static List<StatementNode> ParseBracedBody(ParseContext context, DiagnosticBag? diagnostics, string? schema, IDocumentVocabulary? vocabulary, string closing, Func<ParseContext, DiagnosticBag?, StatementNode?>? body = null) {
+        var cursor = context.Scanner.Cursor;
         var statements = new List<StatementNode>();
 
         SkipWhiteSpace(context: context);
-
         while (!cursor.Eof && (cursor.Current != '}')) {
             if (((body is null) ? ParseStatement(context: context, diagnostics: diagnostics, schema: schema, vocabulary: vocabulary) : body(arg1: context, arg2: diagnostics)) is { } statement) {
                 statements.Add(item: statement);
@@ -1014,10 +1062,10 @@ public static partial class PuckParser {
         }
 
         if (!TryConsume(c: '}', context: context)) {
-            throw CreateException(context: context, message: "Expected '}' closing a 'for' body");
+            throw CreateException(context: context, message: $"Expected '}}' closing {closing}");
         }
 
-        return new ForStatementNode(item, index, sequence, statements, startOffset, (cursor.Offset - startOffset), line, col);
+        return statements;
     }
     // `item in sequence {` or `(item, index) in sequence {` after the `for` keyword, through the body's opening brace.
     private static (string Item, string? Index, ExpressionNode Sequence) ParseForHead(ParseContext context) {

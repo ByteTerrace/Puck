@@ -199,8 +199,14 @@ lowering's text over carriers that name every operation as the fixed carriers
 do, with a guarded return turned into a select per lane. What a formula calls
 that is not a formula (a shape with a hand-written reader, the lattice noises,
 the ellipse's root) the wide reader reads a lane at a time through the
-fixed-point reader, so it states none of them again. Each reader's walk, its
-culls and its scope stack stay its own.
+fixed-point reader, so it states none of them again, except a sweep with no
+strand offset (`SdfSweepWide`): its curve search reads dozens of curve points,
+and read a lane at a time it made every normal taken near a swept trunk or root
+cost what a whole march did. Each reader's walk and its scope stack stay its
+own. The wide walk skips a chain where the point walk would
+(`SkippedChainsEnd`), asking the chain's certificate at every point of the box
+the lanes span against the interval of the lanes' answers widened by a few
+raws, so a skipped chain clears every lane's answer.
 
 Moving the semantics found two places where the hand-written readers had
 drifted. A morph pop read its lane in the kernels and a fixed zero in the
@@ -236,7 +242,8 @@ a foot's standoff moves by centimetres with it.
 | A sample reads the tape of the cube it lies in. | The lookup is the only way to a tape, and it descends by the point's own raws. Each tap of a gradient looks its own cube up. | None known. |
 | The index is bounded, and scattered samples do not churn it. | It counts the cubes it marks and records and drops them all at its limit (`sdf.regions.resets`). A cube is recorded by the second sample that reaches it; the first marks it and reads the cube around it. | A sample that never comes back costs a plain walk. A workload that returns to more cubes than the limit rebuilds as it goes; a lattice consumer would need a larger limit or coarser leaves. |
 | A wide answer decides nothing. | Its type: `TrySurfaceNormal` answers a float vector, which no fixed-point consumer takes, and the wide walk is private to the evaluator. | A march sampler in the bound role, with a certified error, is not built. |
-| A held answer is reused only over the field it was asked of. | `WorldFieldAnswer.Ask` compares the field instance, as before. | Unchanged. |
+| A held answer is reused only over the field it was asked of. | `WorldFieldAnswer.Ask` compares the field instance before it reuses or projects. | Unchanged. |
+| A projected surface target stands within its tolerance of a march's. | `WorldSurfaceQuery.TryProject`, the only way a held hit reaches another ray: the tangent plane's point within half the reach of the hit, the field reading within the tolerance there and clear at the ray's start. | It assumes the field reads its distance near the surface (a gradient near one). A surface thinner than the tolerance crossing the ray before the plane is found only by the next march. |
 
 ## Answers to the design review
 
