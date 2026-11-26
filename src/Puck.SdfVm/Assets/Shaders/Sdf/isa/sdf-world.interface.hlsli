@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/7c2dcfd9914147264e244a35b6ee33c3f08d7ce8613f600f4d31d877639b595d). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/b6e690c5cc0042d1d2749e61057f65c806cb0c1ff123aff9b72a2787fdca0f8f). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -247,8 +247,8 @@ struct SdfWorldPass {
     [[vk::offset(3356)]] uint _pad3356;
     [[vk::offset(3360)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa580C1DE8 : register(b0, space3);
-#define passGroup passGroupIsa580C1DE8
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa008A55E5 : register(b0, space3);
+#define passGroup passGroupIsa008A55E5
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);
@@ -267,18 +267,22 @@ struct SdfWorldPass {
 [[vk::binding(143, 3)]] StructuredBuffer<uint> meshShadowNearOptical : register(t143, space3);
 [[vk::binding(144, 3)]] StructuredBuffer<uint> meshShadowFarOptical : register(t144, space3);
 [[vk::binding(145, 3)]] StructuredBuffer<uint> meshShadowSecondOptical : register(t145, space3);
-[[vk::binding(146, 3)]] StructuredBuffer<uint> sdfMeshPyramid : register(t146, space3);
-[[vk::binding(147, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u147, space3);
-[[vk::binding(148, 3)]] StructuredBuffer<uint> sdfViewsFilterRecords : register(t148, space3);
-[[vk::binding(149, 3)]] RWStructuredBuffer<uint> sdfViewsFilterRecordsRW : register(u149, space3);
-[[vk::binding(150, 3)]] StructuredBuffer<uint> sdfViewsProbeRecords : register(t150, space3);
-[[vk::binding(151, 3)]] RWStructuredBuffer<uint> sdfViewsProbeRecordsRW : register(u151, space3);
-[[vk::binding(152, 3)]] StructuredBuffer<uint> sdfShadeTiles : register(t152, space3);
-[[vk::binding(153, 3)]] RWStructuredBuffer<uint> sdfShadeTilesRW : register(u153, space3);
-[[vk::binding(154, 3)]] RWStructuredBuffer<uint> sdfShadeArgumentsRW : register(u154, space3);
-[[vk::binding(155, 3)]] StructuredBuffer<uint> historySurface : register(t155, space3);
-[[vk::binding(156, 3)]] StructuredBuffer<uint> sdfViewsProbeHistory : register(t156, space3);
-[[vk::binding(157, 3)]] RWStructuredBuffer<uint> sdfViewsProbeHistoryRW : register(u157, space3);
+[[vk::binding(146, 3)]] StructuredBuffer<uint> meshShadowNearBlocks : register(t146, space3);
+[[vk::binding(147, 3)]] StructuredBuffer<uint> meshShadowFarBlocks : register(t147, space3);
+[[vk::binding(148, 3)]] StructuredBuffer<uint> meshShadowSecondBlocks : register(t148, space3);
+[[vk::binding(149, 3)]] StructuredBuffer<uint> meshShadowDistantBlocks : register(t149, space3);
+[[vk::binding(150, 3)]] StructuredBuffer<uint> sdfMeshPyramid : register(t150, space3);
+[[vk::binding(151, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u151, space3);
+[[vk::binding(152, 3)]] StructuredBuffer<uint> sdfViewsFilterRecords : register(t152, space3);
+[[vk::binding(153, 3)]] RWStructuredBuffer<uint> sdfViewsFilterRecordsRW : register(u153, space3);
+[[vk::binding(154, 3)]] StructuredBuffer<uint> sdfViewsProbeRecords : register(t154, space3);
+[[vk::binding(155, 3)]] RWStructuredBuffer<uint> sdfViewsProbeRecordsRW : register(u155, space3);
+[[vk::binding(156, 3)]] StructuredBuffer<uint> sdfShadeTiles : register(t156, space3);
+[[vk::binding(157, 3)]] RWStructuredBuffer<uint> sdfShadeTilesRW : register(u157, space3);
+[[vk::binding(158, 3)]] RWStructuredBuffer<uint> sdfShadeArgumentsRW : register(u158, space3);
+[[vk::binding(159, 3)]] StructuredBuffer<uint> historySurface : register(t159, space3);
+[[vk::binding(160, 3)]] StructuredBuffer<uint> sdfViewsProbeHistory : register(t160, space3);
+[[vk::binding(161, 3)]] RWStructuredBuffer<uint> sdfViewsProbeHistoryRW : register(u161, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfWorldPushedIndex {

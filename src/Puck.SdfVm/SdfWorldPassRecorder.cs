@@ -44,6 +44,10 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.MeshShadowNearOptical,
         SdfWorldPackage.MeshShadowFarOptical,
         SdfWorldPackage.MeshShadowSecondOptical,
+        SdfWorldPackage.MeshShadowNearBlocks,
+        SdfWorldPackage.MeshShadowFarBlocks,
+        SdfWorldPackage.MeshShadowSecondBlocks,
+        SdfWorldPackage.MeshShadowDistantBlocks,
         SdfWorldPackage.ViewsFilterRecords,
         SdfWorldPackage.ViewsFilterRecordsWritten,
         SdfWorldPackage.ViewsProbeRecords,
@@ -72,6 +76,13 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         (SdfMeshShadowCascades.NearEntry, SdfWorldPackage.MeshShadowNearOptical),
         (SdfMeshShadowCascades.FarEntry, SdfWorldPackage.MeshShadowFarOptical),
         (SdfMeshShadowCascades.SecondEntry, SdfWorldPackage.MeshShadowSecondOptical),
+    ];
+    // Each entry's block bounds, of the layers CascadeBindings binds, and the member a compute pass reads them through.
+    private static readonly (int Entry, string Member)[] BlocksBindings = [
+        (SdfMeshShadowCascades.NearEntry, SdfWorldPackage.MeshShadowNearBlocks),
+        (SdfMeshShadowCascades.FarEntry, SdfWorldPackage.MeshShadowFarBlocks),
+        (SdfMeshShadowCascades.SecondEntry, SdfWorldPackage.MeshShadowSecondBlocks),
+        (SdfMeshShadowCascades.DistantEntry, SdfWorldPackage.MeshShadowDistantBlocks),
     ];
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
@@ -1063,6 +1074,11 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         foreach (var (entry, member) in OpticalBindings) {
             if (shadows?.OpticalOf(view: view, entry: entry) is { } optical) {
                 tables.WriteInterfaceBuffer(buffer: optical, layout: layout, member: member, set: set);
+            }
+        }
+        foreach (var (entry, member) in BlocksBindings) {
+            if (shadows?.BlocksOf(view: view, entry: entry) is { } blocks) {
+                tables.WriteInterfaceBuffer(buffer: blocks, layout: layout, member: member, set: set);
             }
         }
 

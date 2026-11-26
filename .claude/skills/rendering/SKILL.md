@@ -568,13 +568,24 @@ records the options weighed.
   back (`Entry.Move`). A new layer is cleared before anything binds it.
 - **Glass.** An entry's glass extinction (`Optical`) is drawn with each whole redraw, against the front depth, from a
   selection of every draw (`OpticalKind`).
-- **Memory.** Every layer and extinction buffer is held under one fixed `MemoryAccount` reservation (`Hold`,
-  `TryHold`), counted in `SdfWorldTables.TableBytes`; a trim request gives back the anchors no view reads.
+- **Block bounds.** A pair of layers carries its block bounds (`Pair.Blocks`, `frame/sdf-shadow-blocks.hlsli`): a
+  fitted plane and the depth range off it for each block of `SdfWorldPackage.ShadowBlockEdge` texels and the filter's
+  reach about it, which the surface pass classifies a receiver by before any tap (`sdfMeshShadowClass`: lit, umbra
+  or filter, the first two the taps' own answer to the bit). They must describe the layers whenever a view reads the
+  pair, and one place keeps that: `Entry.Record` reduces them (`Entry.Reduce`, `passes/sdf-shadow-blocks.comp.hlsl`)
+  after the layers rest, over every block in the upload that completes a whole redraw, over the blocks a rectangle
+  can change, and the glass flags alone under a redrawn extinction. A new drawing into a pair that views read owes a
+  reduction there, or the surface pass classifies by bounds of what the layers held before; a change to what a tap
+  reads (the filter's radius `SdfKernelInterfaces.MeshShadowFilterTexels`, the slope or cone clearances, a new term
+  in `sdfMeshShadowGap`) changes `sdfMeshShadowClass`'s bounds in the same change. `SDF_SURFACE_OMIT_SHADOW_CLASSES`
+  compiles the classes out for a reload, which must leave a paused still unchanged.
+- **Memory.** Every layer, block-bounds and extinction buffer is held under one fixed `MemoryAccount` reservation
+  (`Hold`, `TryHold`), counted in `SdfWorldTables.TableBytes`; a trim request gives back the anchors no view reads.
 - **Evidence.** `world.residency`'s `shadows` line prints the uploads, the measured GPU time of the shadow pass
   (timestamps around it, read when the slot completes), moved changes and how many reached the entries, the bytes held
   and the spares, anchors, each view's anchor and each entry's state: its redraw (`2of5lent`), its last whole redraw's
-  measured triangles and shares (`tri…in…`), its rectangles' average triangles and count, and what ended its holds
-  (`ended-turn…-cell…-static…-fit…`); `world.rates` counts `shadow-<entry>.static|share|live|held` per world upload; the selection marks name each
+  measured triangles and shares (`tri…in…`), its rectangles' average triangles and count, what ended its holds
+  (`ended-turn…-cell…-static…-fit…`) and the blocks its bounds reduced in how many dispatches (`blocks…in…`); `world.rates` counts `shadow-<entry>.static|share|live|held` per world upload; the selection marks name each
   drawing (`drawn.shadow-far.a0 rect0.*`). Timings belong to the lead's quiet window.
 
 ### The distant shadow map

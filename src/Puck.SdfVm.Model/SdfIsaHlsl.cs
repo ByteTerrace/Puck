@@ -461,6 +461,10 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_MESH_MARK_BASE", value: SdfKernelInterfaces.MeshMarkBase);
         declarations.Count(name: "SDF_MESH_VERTEX_COUNT_BASE", value: SdfKernelInterfaces.MeshVertexCountBase);
         declarations.Real(name: "SDF_MESH_SHADOW_FILTER_TEXELS", value: SdfKernelInterfaces.MeshShadowFilterTexels);
+        declarations.Count(name: "SDF_SHADOW_BLOCK_EDGE", value: SdfWorldPackage.ShadowBlockEdge);
+        declarations.Count(name: "SDF_SHADOW_BLOCK_APRON", value: SdfKernelInterfaces.MeshShadowBlockApron);
+        declarations.Count(name: "SDF_SHADOW_BLOCK_LAYER_WORDS", value: SdfWorldPackage.ShadowBlockLayerWords);
+        declarations.Count(name: "SDF_SHADOW_BLOCK_FLAGS_ONLY_SHIFT", value: SdfKernelInterfaces.MeshShadowBlockFlagsOnlyShift);
         declarations.Section(title: "The irradiance volume's probe record and read (SdfMeshIrradianceProbe).");
         declarations.Count(name: "SDF_MESH_IRRADIANCE_PROBE_WORDS", value: SdfMeshIrradianceProbe.ProbeWords);
         declarations.Count(name: "SDF_MESH_IRRADIANCE_CELL_WORD", value: SdfMeshIrradianceProbe.CellWord);

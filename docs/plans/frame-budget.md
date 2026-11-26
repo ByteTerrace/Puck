@@ -194,7 +194,7 @@ only some pixels need lies in a pool, not in every pixel's record.
 |---|---|---|
 | Indirect light and traced-light visibility | `views-probes` | A slot: blended cubes, the lights' agreement, the lights the corners disagree on (`sdf-views-probes.hlsli`) |
 | Lights that reach a sample | `views-filter`, by cluster | A list of light indices a cluster, any count |
-| Shadow visibility | `surface`, after a classification by depth bounds | The record's shadow word |
+| Shadow visibility | `surface`, after a classification by each layer's block bounds, which the shadow upload reduces (`sdfMeshShadowClass`) | The record's shadow word |
 | The reflected environment | The environment node | A prefiltered map, one lookup a roughness |
 | Reconstruction's sample (motion, identity, air) | The views pass's epilogue | One record a render pixel |
 
@@ -338,28 +338,25 @@ pass's cost. Then the time:
 2. **Light lists.** As above. Check: the walk's visits a pixel are unchanged in
    the debug world; `SdfLights.MaxLights` is gone; a row of 512 point lights
    renders with each cluster's list holding only its own.
-3. **Classify a receiver's shadow before filtering it.** The
-   [rendering plan](rendering.md#gpu-submission-and-routed-worlds)'s item, with
-   one correction to its shape. A plain depth bound for each block of a layer
-   answers umbra, but it answers lit only for a receiver that faces the light:
-   the filter compares each tap against the receiver's own plane
-   (`sdfMeshShadowGap`'s `gradient`), and open ground under a slanted sun
-   changes depth across a block by more than any caster stands off it, so the
-   block's nearest depth always reads in front of the receiver. The bound that
-   classifies the common case is relative to a plane: for each block of 32
-   texels a side (the filter's reach, `SdfKernelInterfaces.MeshShadowFilterTexels`,
-   spans at most two a side, so four reads) the layer's least-squares plane
-   and the least and greatest depth off it, for the depth and the exit layer,
-   and whether the block holds glass extinction. A receiver is lit where its
-   own plane lies behind every block's plane less its nearest residual at the
-   footprint's corners, in umbra where it lies in front of every block's plane
-   plus its farthest residual by the filter's slope and cone margins, and
-   filters otherwise; a block with extinction classifies nothing. The bounds
-   belong to a layer pair (`SdfWorldShadows`' `Pair`) and are reduced by one
-   compute kernel after each drawing into it, over the blocks its area
-   touches. The invariant: a classified receiver's visibility is what the
-   filter's taps would sum to, which a device law holds by running both over
-   one layer. Check: `surface` under 1.2 ms at the stage, and the law.
+3. **The shadow classes' time.** A receiver's shadow is classified before it is
+   filtered ([the reference](../rendering/sdf/reference/shading-ao-shadows.md#shadows),
+   `sdfMeshShadowClass`): each layer pair keeps, for every block of 32 texels a
+   side, the layer's fitted plane and the least and greatest depth off it over
+   the block and the filter's reach about it, which
+   `passes/sdf-shadow-blocks.comp.hlsl` reduces after each drawing into the
+   pair, and the surface pass reads one record a receiver in place of the
+   search's twelve taps and the filter's sixteen wherever the record proves the
+   receiver lit or in umbra. The record is a plane's because open ground under
+   a slanted sun changes depth across a block by more than any caster stands
+   off it, so a plain depth bound never reads it lit. The bounds hold every
+   texel within the filter's reach of the block, so one read serves a
+   receiver; a whole layer's reduction reads each block's 62 by 62 texels.
+   Check, in the quiet window: `surface` under 1.2 ms at the stage; a paused
+   still under `world.debug-view shadow` unchanged against a reload with
+   `SDF_SURFACE_OMIT_SHADOW_CLASSES` defined; and `world.residency`'s
+   `shadows` line, whose `blocks…in…` counts say how many blocks each entry
+   reduced in how many dispatches, beside the pass's measured time under a
+   turning sun.
 4. **A prefiltered environment.** The environment node writes the reflected
    sky, its panels included, at a few roughness levels; views takes one lookup.
    Check: `SDF_VIEWS_OMIT_REFLECTION` removes under 0.4 ms.
