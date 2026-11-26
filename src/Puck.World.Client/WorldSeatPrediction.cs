@@ -14,8 +14,8 @@ namespace Puck.World.Client;
 /// <param name="Velocity">The predicted velocity over the last predicted step, in metres per second.</param>
 /// <param name="Orientation">The predicted attitude.</param>
 /// <param name="Error">The distance, in metres, by which the latest continuation missed what an earlier prediction
-/// reached for its tick; <see cref="FixedQ4816.MaxValue"/> until the authority has answered one.</param>
-public readonly record struct WorldPredictedBody(WorldAuthorityEndpoint Endpoint, int Index, ulong ContinuationTick, ulong Tick, FixedVector3 Position, FixedVector3 Velocity, FixedQuaternion Orientation, FixedQ4816 Error) {
+/// reached for its tick, or <see langword="null"/> until the authority has answered one.</param>
+public readonly record struct WorldPredictedBody(WorldAuthorityEndpoint Endpoint, int Index, ulong ContinuationTick, ulong Tick, FixedVector3 Position, FixedVector3 Velocity, FixedQuaternion Orientation, FixedQ4816? Error) {
     /// <summary>Gets the authority ticks the prediction runs ahead of its continuation.</summary>
     public ulong Steps => (Tick - ContinuationTick);
 }

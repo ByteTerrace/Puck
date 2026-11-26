@@ -52,7 +52,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         // The tip of each prediction by the authority tick it reached, and the distance by which the authority last missed one.
         public readonly (ulong Tick, FixedVector3 Position)[] Trail = new (ulong Tick, FixedVector3 Position)[64];
         public ulong ConfirmedAt = ulong.MaxValue;
-        public FixedQ4816 Error = FixedQ4816.MaxValue;
+        public FixedQ4816? Error;
         // The ticks from the authority tick a batch is sent at to the one that takes it, each answered batch's answer
         // tick less its send tick (WorldSeatSentInput.Sent.Tick): the least of the recent ones, since a batch held up in a
         // burst lands later than the link's own delay, and predicting that far ahead would carry the body past where the
@@ -96,9 +96,14 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
     public string Describe(int slot) {
         var seat = m_seats[slot];
 
-        return (seat.Predicted
-            ? string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"predicted {seat.Body.Steps} tick(s) past tick {seat.Body.ContinuationTick}, last missed by {(double)seat.Error:0.###} m; lead {seat.Leads.Minimum} tick(s), the authority's clock moved {client.SeatSentInput(slot: slot).Clock.Moved} tick(s) against the seat's; {Predictions} prediction(s), {StepsTaken} step(s), {PopulationsBuilt} population(s)")
-            : $"off({seat.Reason})");
+        if (!seat.Predicted) {
+            return $"off({seat.Reason})";
+        }
+        var missed = ((seat.Error is { } error)
+            ? string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"last missed by {(double)error:0.###} m")
+            : "no prediction answered yet");
+
+        return string.Create(provider: System.Globalization.CultureInfo.InvariantCulture, handler: $"predicted {seat.Body.Steps} tick(s) past tick {seat.Body.ContinuationTick}, {missed}; lead {seat.Leads.Minimum} tick(s), the authority's clock moved {client.SeatSentInput(slot: slot).Clock.Moved} tick(s) against the seat's; {Predictions} prediction(s), {StepsTaken} step(s), {PopulationsBuilt} population(s)");
     }
     // Predicts one seat's body, answering null, or why it predicted nothing.
     private string? Predict(Seat seat, int slot, out WorldPredictedBody body) {
@@ -134,7 +139,7 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
             seat.Endpoint = endpoint;
             seat.Leads.Clear();
             seat.ConfirmedAt = ulong.MaxValue;
-            seat.Error = FixedQ4816.MaxValue;
+            seat.Error = null;
         }
         if (!ReferenceEquals(objA: sent.Endpoint, objB: endpoint) || !sent.Clock.IsAnchored) {
             return "no input is sent to the seat's authority yet";
