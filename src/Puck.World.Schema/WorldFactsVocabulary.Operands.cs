@@ -13,16 +13,18 @@ namespace Puck.World;
 public static partial class WorldFactsVocabulary {
     /// <summary>Resolves the same admitted owner spelling for event reads and sweeps.</summary>
     public static WorldInputOwnerReference CompileInputOwner(string text, WorldFactsCompileContext world, string ruleName) => WorldFactsOperandFamily.CompileInputOwner(ruleName: ruleName, text: text, world: world);
-    /// <summary>Returns the validated source-normalized mapping of a <c>Simulation</c> screen, which a pointer ray or a
-    /// contact maps through.</summary>
+    /// <summary>Returns the validated source-normalized mapping of a pointer surface, which a pointer ray or a contact
+    /// maps through: a <c>Simulation</c> screen named by its index, or a placement carrying a
+    /// <see cref="WorldPointerSurface"/> named by its id, mapped where the placement's resolved frame puts it.</summary>
     /// <param name="definition">The document.</param>
-    /// <param name="screenIndex">The screen's index.</param>
     /// <param name="name">The spelling a refusal quotes.</param>
     /// <param name="ruleName">The rule a refusal names.</param>
-    /// <returns>The mapping.</returns>
-    /// <exception cref="RuleException">The document declares no such screen, its route input is not
-    /// <c>Simulation</c>, or its row maps no ray.</exception>
-    public static SourceMapping SimulationScreenMapping(WorldDefinition definition, int screenIndex, string name, string ruleName) => WorldFactsOperandFamily.SimulationScreenMapping(definition: definition, name: name, ruleName: ruleName, screenIndex: screenIndex);
+    /// <param name="surface">The surface: a screen's index or a placement's id.</param>
+    /// <returns>The mapping; the subject a participant must hold <c>Control</c> over to point at it; and its named
+    /// regions, or <see langword="null"/> for none.</returns>
+    /// <exception cref="RuleException">The surface names no declared <c>Simulation</c> screen or placement carrying a
+    /// pointer surface, or it maps no ray.</exception>
+    public static (SourceMapping Mapping, GrantSubject Subject, IReadOnlyList<WorldPointerRegion>? Regions) PointerSurfaceOf(WorldDefinition definition, string name, string ruleName, string surface) => WorldFactsOperandFamily.PointerSurfaceOf(definition: definition, name: name, ruleName: ruleName, surface: surface);
 
     private sealed class WorldFactsOperandFamily : OperandFamily {
         private const string BoardCellOfPrefix = "$board:cellOf:";
@@ -273,28 +275,10 @@ public static partial class WorldFactsVocabulary {
                 }
             }
 
-            var (mapping, subject, regions) = PointerSurfaceOf(name: name, ruleName: ruleName, surface: parts[1], world: world);
-
-            if (!mapping.TryValidate(refusal: out var refusal)) {
-                throw new RuleException(
-                    detail: $"'{name}' names surface '{parts[1]}', which maps no ray: {refusal}",
-                    refusal: WorldRuleRefusal.PointerMalformed,
-                    ruleName: ruleName
-                );
-            }
-
-            WorldPointerRegion? region = null;
-
-            if (
-                (pointerFacet is PointerFacet.Region or PointerFacet.Row) &&
-                ((region = regions?.FirstOrDefault(predicate: candidate => string.Equals(a: candidate?.Id, b: parts[3], comparisonType: StringComparison.Ordinal))) is null)
-            ) {
-                throw new RuleException(
-                    detail: $"'{name}' names region '{parts[3]}', which surface '{parts[1]}' does not declare",
-                    refusal: WorldRuleRefusal.PointerMalformed,
-                    ruleName: ruleName
-                );
-            }
+            var (mapping, subject, regions) = PointerSurfaceOf(definition: world.Definition, name: name, ruleName: ruleName, surface: parts[1]);
+            var region = ((pointerFacet is PointerFacet.Region or PointerFacet.Row)
+                ? PointerRegionOf(name: name, regionId: parts[3], regions: regions, ruleName: ruleName, surface: parts[1])
+                : null);
 
             var operand = new PointerOperand(
                 facet: pointerFacet.Value,
@@ -319,17 +303,18 @@ public static partial class WorldFactsVocabulary {
                 world: world
             );
         }
-        // The surface a $pointer: read names: a declared Simulation screen by its index, or a placement carrying a
-        // pointer surface by its id, mapped where the placement's resolved frame puts it.
-        private static (SourceMapping Mapping, GrantSubject Subject, IReadOnlyList<WorldPointerRegion>? Regions) PointerSurfaceOf(string name, string ruleName, string surface, WorldFactsCompileContext world) {
+        // The surface a pointer(…) read or a contacts(…) sweep names: a declared Simulation screen by its index, or a
+        // placement carrying a pointer surface by its id, mapped where the placement's resolved frame puts it. The mapping
+        // is validated here, so the tick maps a ray without a refusal left to raise.
+        public static (SourceMapping Mapping, GrantSubject Subject, IReadOnlyList<WorldPointerRegion>? Regions) PointerSurfaceOf(WorldDefinition definition, string name, string ruleName, string surface) {
             if (int.TryParse(s: surface, style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var screenIndex)) {
-                var mapping = SimulationScreenMapping(definition: world.Definition, name: name, ruleName: ruleName, screenIndex: screenIndex);
-                var screen = world.Definition.Screens.First(predicate: candidate => (candidate.Index == screenIndex));
+                var screenMapping = SimulationScreenMapping(definition: definition, name: name, ruleName: ruleName, screenIndex: screenIndex);
+                var screen = definition.Screens.First(predicate: candidate => (candidate.Index == screenIndex));
 
-                return (mapping, GrantSubject.Screen(index: screenIndex), screen.Route.Regions);
+                return (screenMapping, GrantSubject.Screen(index: screenIndex), screen.Route.Regions);
             }
 
-            var placement = world.Definition.Placements.FirstOrDefault(predicate: candidate => string.Equals(a: candidate?.Id, b: surface, comparisonType: StringComparison.Ordinal));
+            var placement = definition.Placements.FirstOrDefault(predicate: candidate => string.Equals(a: candidate?.Id, b: surface, comparisonType: StringComparison.Ordinal));
 
             if (placement?.Pointer is not { } pointer) {
                 throw new RuleException(
@@ -339,12 +324,27 @@ public static partial class WorldFactsVocabulary {
                 );
             }
 
-            return (
-                pointer.MappingIn(frame: WorldDefinitionRows.ResolvedFrame(definition: world.Definition, placement: placement), placementId: placement.Id),
-                GrantSubject.Placement(id: placement.Id),
-                pointer.Regions
-            );
+            var mapping = pointer.MappingIn(frame: WorldDefinitionRows.ResolvedFrame(definition: definition, placement: placement), placementId: placement.Id);
+
+            if (!mapping.TryValidate(refusal: out var refusal)) {
+                throw new RuleException(
+                    detail: $"'{name}' names surface '{surface}', which maps no ray: {refusal}",
+                    refusal: WorldRuleRefusal.PointerMalformed,
+                    ruleName: ruleName
+                );
+            }
+
+            return (mapping, GrantSubject.Placement(id: placement.Id), pointer.Regions);
         }
+        // The named region of a surface a region or row read hit-tests.
+        private static WorldPointerRegion PointerRegionOf(IReadOnlyList<WorldPointerRegion>? regions, string regionId, string surface, string name, string ruleName) => (
+            regions?.FirstOrDefault(predicate: candidate => string.Equals(a: candidate?.Id, b: regionId, comparisonType: StringComparison.Ordinal)) ??
+            throw new RuleException(
+                detail: $"'{name}' names region '{regionId}', which surface '{surface}' does not declare",
+                refusal: WorldRuleRefusal.PointerMalformed,
+                ruleName: ruleName
+            )
+        );
         private static WorldBodyFactOperand BodyFact(CellKind valueKind, WorldFactsCompileContext world, CompiledBodyRef bodyA, CompiledBodyRef bodyB, int rowOrdinal, long cost, Func<IWorldFacts, Fact> read, string describe, WorldDisclosureReach reach, WorldOperandFact? payload = null) => new(
             bodyA: world.Ordinals(body: in bodyA),
             bodyB: world.Ordinals(body: in bodyB),
@@ -452,21 +452,35 @@ public static partial class WorldFactsVocabulary {
             if (call is { Channel: "contact" }) {
                 RuleCompiler.RefuseKeyOnReservedChannel(cell, site.KeyFieldLabel, name, ruleName);
 
-                ContactFacet? facet = ((call.Count == 2) ? call.Text(index: 1) switch {
-                    "seat" => ContactFacet.Seat,
-                    "device" => ContactFacet.Device,
-                    "id" => ContactFacet.Id,
-                    "phase" => ContactFacet.Phase,
-                    "x" => ContactFacet.X,
-                    "y" => ContactFacet.Y,
+                ContactFacet? facet = (call.Count switch {
+                    2 => call.Text(index: 1) switch {
+                        "seat" => ContactFacet.Seat,
+                        "device" => ContactFacet.Device,
+                        "id" => ContactFacet.Id,
+                        "phase" => ContactFacet.Phase,
+                        "x" => ContactFacet.X,
+                        "y" => ContactFacet.Y,
+                        _ => null,
+                    },
+                    3 => call.Text(index: 1) switch {
+                        "region" => ContactFacet.Region,
+                        "row" => ContactFacet.Row,
+                        _ => null,
+                    },
                     _ => null,
-                } : null);
+                });
 
                 if ((facet is null) || (call.Text(index: 0) is not ("each" or "$each")) || (world.Iteration is not WorldContactIteration sweep)) {
-                    throw new RuleException(WorldRuleRefusal.PointerMalformed, ruleName, $"'{name}' does not spell 'contact(each, seat|device|id|phase|x|y)' inside 'forEach: $contacts:<screen>'");
+                    throw new RuleException(WorldRuleRefusal.PointerMalformed, ruleName, $"'{name}' does not spell 'contact(each, seat|device|id|phase|x|y|region <id>|row <id>)' inside 'forEach: contacts(<surface>)'");
                 }
 
-                var contact = new ContactOperand(facet: facet.Value, sweep: sweep);
+                var contact = new ContactOperand(
+                    facet: facet.Value,
+                    region: ((facet is ContactFacet.Region or ContactFacet.Row)
+                        ? PointerRegionOf(name: name, regionId: call.Text(index: 2), regions: sweep.Regions, ruleName: ruleName, surface: sweep.Surface)
+                        : null),
+                    sweep: sweep
+                );
 
                 fact = BodyFact(contact.ValueKind, world, default, default, -1, 1L, read => read.Read(operand: contact), name, WorldDisclosureReach.Bodies, payload: contact);
                 return true;

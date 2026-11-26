@@ -478,7 +478,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
                             : ((rule.Iteration is WorldPlayerIteration players)
                                 ? $"forEach {WorldPlayerIteration.Spelling} players={players.Players} (localSeats + networkPlayers){firings}"
                                 : ((rule.Iteration is WorldContactIteration contacts)
-                                    ? $"forEach $contacts:{contacts.ScreenIndex}, the contacts one tick carries={contacts.Capacity} ({contacts.Participants} participants x {Puck.Commands.SurfaceContact.MaximumPerTick}){firings}"
+                                    ? $"forEach contacts({contacts.Surface}), the contacts one tick carries={contacts.Capacity} ({contacts.Participants} participants x {Puck.Commands.SurfaceContact.MaximumPerTick}){firings}"
                                     : "no forEach — priced once"))))))
         );
     }
