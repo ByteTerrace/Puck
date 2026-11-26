@@ -1460,6 +1460,72 @@ public static partial class DocumentLowering {
 
         target[key] = value;
     }
+    /// <summary>Writes a member the document's author wrote, composing with what an earlier statement already wrote
+    /// there instead of replacing it.</summary>
+    /// <param name="target">The object the member belongs to.</param>
+    /// <param name="key">The member name.</param>
+    /// <param name="value">The lowered value.</param>
+    /// <param name="scope">The scope that reports the refusal.</param>
+    /// <param name="span">Where the later writing stands.</param>
+    /// <remarks>This is the one rule for a member written twice, whatever spelled it (a property, a block, a section
+    /// block): two arrays append, two objects merge member by member under the same rule, and anything else is
+    /// <see cref="PuckDiagnosticCodes.RepeatedMember"/> at the later writing, because one of the two would otherwise
+    /// vanish without a trace.</remarks>
+    public static void AssignMember(JsonObject target, string key, JsonNode? value, DocumentScope scope, SourceSpan span) =>
+        AssignMember(
+            key: key,
+            path: key,
+            scope: scope,
+            span: span,
+            target: target,
+            value: value
+        );
+    private static void AssignMember(JsonObject target, string key, string path, JsonNode? value, DocumentScope scope, SourceSpan span) {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(scope);
+
+        if (!target.ContainsKey(propertyName: key)) {
+            target[key] = value;
+
+            return;
+        }
+
+        switch (target[key], value) {
+            case (JsonArray existingArray, JsonArray addition):
+                AssignOrExtend(
+                    key: key,
+                    target: target,
+                    value: addition
+                );
+
+                break;
+
+            case (JsonObject existingObject, JsonObject incoming):
+                foreach (var (name, member) in incoming.ToList()) {
+                    _ = incoming.Remove(propertyName: name);
+                    AssignMember(
+                        key: name,
+                        path: $"{path}.{name}",
+                        scope: scope,
+                        span: span,
+                        target: existingObject,
+                        value: member
+                    );
+                }
+
+                break;
+
+            default:
+                scope.Diagnostics.ReportError(
+                    code: PuckDiagnosticCodes.RepeatedMember,
+                    message: $"'{path}' is written more than once — the later writing would silently replace the earlier; write each member once, or merge the two into one",
+                    span: span
+                );
+
+                break;
+        }
+    }
     /// <summary>Canonicalizes a JSON node in place by sorting every object's properties ordinally and writing every
     /// number in its one spelling (<see cref="DocumentNumberSpelling.Canonical"/>).</summary>
     /// <param name="node">The node to canonicalize; the caller owns it, and it is reordered where it stands.</param>

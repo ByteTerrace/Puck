@@ -116,6 +116,9 @@ A document's `schema:` field selects its vocabulary, never the filename.
   `compose(outer, inner, ...)` multiplies them (the last turns a point first), `rotatePoint(rotation, point)`,
   `polarPoint(radius, degrees, y)` and `fraction(x)`. Angles read in degrees (`DocumentDimensions.DegreesArgument`), so a
   radians value is `a * 1rad`. `+ - * /` on numeric arrays are element-wise, and a number scales an array.
+- **A section written twice composes; a member set twice is PUCK140.** A second `render { }` (or any block or property of
+  one object) appends its arrays, merges its objects and refuses a member both set, at the later writing
+  (`DocumentLowering.AssignMember`, the one door for a lowered member), so no writing replaces another silently.
 - **A clock's name is bare**, as its `state:` reference is (`clocks [{ name: fiber, state: fiber }]`); a quoted one
   is PUCK110 (`WorldCallArguments.FormOf`, `Declares` of kind Clock or State). Write the state row it follows bare too
   (`name: fiber`), which the state section admits.

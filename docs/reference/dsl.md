@@ -610,6 +610,17 @@ for the same reasons when it loads. A shade program reads a world lane by index 
 keeps its place in the composed order
 ([surface reference](../../.claude/skills/sdf-authoring/references/surface.md#render-lanes)).
 
+A render-lane member written with a quote offers the composed document's lane names in the language server
+(`WorldRenderLaneLanguageServices`), and hovering a name shows its lane and index.
+
+## A section written twice composes
+
+A section or block written twice in one source (`render { }` and later `render { }`) composes
+member by member under one rule (`DocumentLowering.AssignMember`): two arrays append, two objects merge
+under the same rule, and a member both set is **PUCK140** at the later writing, since the earlier one would
+otherwise vanish without a trace. Every spelling of a member (a property, a block, a section block, a rule's
+property) goes through that one door, so none replaces silently.
+
 ## Units and dimensions
 
 A unit written against a number gives it a physical dimension: `3m`, `250ms`, `30deg`, `50%`, `800lm`, and
