@@ -164,12 +164,6 @@ public sealed partial class WorldBody {
     // face by its own drive sits flush with it, and a march that starts on (or a hair inside) a surface has no
     // distance to march: backing the origin off guarantees the ray begins in open space, and the extra length is
     // added back so the reach the world authored is the reach actually searched.
-    private bool TryCastHold(in FixedVector3 direction, FixedQ4816 reach, out FixedSurfaceAttachCandidate candidate) => TryCastHoldFrom(
-        candidate: out candidate,
-        direction: in direction,
-        origin: HoldProbeOrigin,
-        reach: reach
-    );
     private bool TryCastHoldFrom(in FixedVector3 origin, in FixedVector3 direction, FixedQ4816 reach, out FixedSurfaceAttachCandidate candidate) {
         candidate = default;
 
@@ -349,35 +343,20 @@ public sealed partial class WorldBody {
     private bool TryTakeHoldOnDrive(in FixedBodyHold hold, in FixedVector3 drive, in FixedVector3 up, out FixedSurfaceAttachCandidate candidate) {
         candidate = default;
 
-        if (hold.Bond != BodyHoldBond.Surface) {
-            return false;
-        }
-        if (!TryCastHold(
-            candidate: out var driven,
-            direction: in drive,
-            reach: (hold.Reach * m_scale)
-        )) {
-            return false;
-        }
-
-        var normal = driven.Normal.Normalize();
-
-        if (
-            !hold.ConeAdmits(alignment: FixedVector3.Dot(
-            left: normal,
-            right: up
-        )) ||
+        return (
+            (hold.Bond == BodyHoldBond.Surface) &&
+            TryTakeHoldAlong(
+                candidate: out candidate,
+                direction: in drive,
+                hold: in hold,
+                origin: HoldProbeOrigin,
+                up: in up
+            ) &&
             (FixedVector3.Dot(
-            left: drive,
-            right: -normal
-        ) < hold.DriveAlignment)
-        ) {
-            return false;
-        }
-
-        candidate = (driven with { Normal = normal });
-
-        return true;
+                left: drive,
+                right: -candidate.Normal
+            ) >= hold.DriveAlignment)
+        );
     }
     // Takes a surface row from where the body already is. Both probes are directed and both are derived from the
     // authored cone rather than from any assumption about what is holding on: a cone reaching at or below a right
@@ -396,6 +375,7 @@ public sealed partial class WorldBody {
             candidate: out candidate,
             direction: -up,
             hold: in hold,
+            origin: HoldProbeOrigin,
             up: in up
         )
         ) {
@@ -408,16 +388,20 @@ public sealed partial class WorldBody {
             candidate: out candidate,
             direction: in up,
             hold: in hold,
+            origin: HoldProbeOrigin,
             up: in up
         )
         );
     }
-    private bool TryTakeHoldAlong(in FixedBodyHold hold, in FixedVector3 direction, in FixedVector3 up, out FixedSurfaceAttachCandidate candidate) {
+    // Casts for a face inside a row's cone: the one probe every take, track and edge guard reads a face with. The
+    // candidate's normal is unit length.
+    private bool TryTakeHoldAlong(in FixedBodyHold hold, in FixedVector3 origin, in FixedVector3 direction, in FixedVector3 up, out FixedSurfaceAttachCandidate candidate) {
         candidate = default;
 
-        if (!TryCastHold(
+        if (!TryCastHoldFrom(
             candidate: out var hit,
             direction: in direction,
+            origin: in origin,
             reach: (hold.Reach * m_scale)
         )) {
             return false;
@@ -855,36 +839,20 @@ public sealed partial class WorldBody {
     private bool TryFaceBehind(in FixedBodyHold hold, in FixedVector3 origin, in FixedVector3 up, out FixedSurfaceAttachCandidate candidate) {
         candidate = default;
 
-        if (m_holdNormal == FixedVector3.Zero) {
-            return false;
-        }
-        if (!TryCastHoldFrom(
-            candidate: out var nearest,
-            direction: -m_holdNormal,
-            origin: in origin,
-            reach: (hold.Reach * m_scale)
-        )) {
-            return false;
-        }
-
-        var normal = nearest.Normal.Normalize();
-
-        if (FixedVector3.Dot(
-            left: normal,
-            right: m_holdNormal
-        ) < HoldTrackAlignment) {
-            return false;
-        }
-        if (!hold.ConeAdmits(alignment: FixedVector3.Dot(
-            left: normal,
-            right: up
-        ))) {
-            return false;
-        }
-
-        candidate = (nearest with { Normal = normal });
-
-        return true;
+        return (
+            (m_holdNormal != FixedVector3.Zero) &&
+            TryTakeHoldAlong(
+                candidate: out candidate,
+                direction: -m_holdNormal,
+                hold: in hold,
+                origin: in origin,
+                up: in up
+            ) &&
+            (FixedVector3.Dot(
+                left: candidate.Normal,
+                right: m_holdNormal
+            ) >= HoldTrackAlignment)
+        );
     }
     // A pull row with a mantle keeps its body on the face. Each direction the command would move it is probed one
     // body extent ahead: where the face ends above within the mantle's reach, a landing is proven and the mantle

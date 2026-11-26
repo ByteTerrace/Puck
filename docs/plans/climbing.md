@@ -136,8 +136,12 @@ screen climbs. Space leaps the way she is moving. Left Shift lets go.
 
 ## Coordinating with the tree
 
-The tree's lane owns its geometry. For the tree to be climbable its placement needs `solid` and
-`grip { holdable: true }`. Three properties of the climb bear on its shape:
+The tree's lane owns its geometry (`gallery/tree.puck`). Its placement is `solid`, and `gallery/shell.puck` adds
+`grip { holdable: true }` to it, so its trunk and limbs hold a climber and its treads and branch tops are ground she
+walks. Headless, she takes the trunk from its east side and climbs until a tread above stops her; from the west and
+the north something at the trunk's foot stops her before she reaches bark she can hold. A look at the tree with the
+climb in mind is owed: which stretches of trunk are a route, and whether the treads leave room to climb between
+them. Three properties of the climb bear on its shape:
 
 - A face is tracked while its normal stays within 60 degrees of the one she holds, so a round trunk is one face and
   relief deeper than about a hand (0.1 m) with sharp sides reads as separate faces.

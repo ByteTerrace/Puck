@@ -151,8 +151,8 @@ template dashAbility(kit, speed = 14, duration = 0.2, cooldown = 0.8) {
 // points, hangs for free, leaps on it for a chunk of stamina, lets go on the run channel, and pulls herself up over
 // the top. `cone` is the faces that are walls (degrees from gravity-up); `speed` her pace on the face. On the ground
 // she takes a wall only after pushing into it for `driveSeconds`, so brushing one is not a grab; in the air she takes
-// it at once. Stamina is the
-// `stamina` body Counter, `staminaMax` full: `moveSpend` a second drains while she moves on the face and `restSpend`
+// it at once, but not within `airGrabSeconds` of leaving the ground, so a hop over a root or up a step is not a grab
+// either. Stamina is the `stamina` body Counter, `staminaMax` full: `moveSpend` a second drains while she moves on the face and `restSpend`
 // while she hangs still, and a jump on the face costs `jumpCost` and carries her `jumpSpeed` metres a second for
 // `jumpSeconds`. Emptied, she is `winded`: she lets go, and cannot climb again until the wheel has refilled. Letting
 // go starts the `climbRest` timer, `regrabSeconds` long, so the wall she dropped from does not take her straight back.
@@ -163,7 +163,7 @@ template dashAbility(kit, speed = 14, duration = 0.2, cooldown = 0.8) {
 // ground and fall rows. Stamina refills under the rows she rests under, so the kit authors `restore: staminaRestore()`
 // on its ground and fall rows. Which surfaces can be climbed is the world's `collision.defaultHold` and a placement's
 // `grip { holdable }`.
-template climbAbility(kit, speed = 2.2, cone = [60, 120], reach = 0.8, pull = 6, driveAlignment = 0.5, driveSeconds = 0.2, staminaMax = 10, moveSpend = 1, restSpend = 0, jumpCost = 2, jumpSpeed = 9, jumpSeconds = 0.2, regrabSeconds = 0.4, mantleHeight = 2.3, mantleDepth = 0.8, mantleSeconds = 0.5) {
+template climbAbility(kit, speed = 2.2, cone = [60, 120], reach = 0.8, pull = 6, driveAlignment = 0.5, driveSeconds = 0.2, airGrabSeconds = 0.2, staminaMax = 10, moveSpend = 1, restSpend = 0, jumpCost = 2, jumpSpeed = 9, jumpSeconds = 0.2, regrabSeconds = 0.4, mantleHeight = 2.3, mantleDepth = 0.8, mantleSeconds = 0.5) {
   state {
     body [
       {
@@ -201,9 +201,15 @@ template climbAbility(kit, speed = 2.2, cone = [60, 120], reach = 0.8, pull = 6,
             onDrive: true
             driveAlignment: driveAlignment
             driveSeconds: driveSeconds
+            // Standing, already on a face, or in the air for longer than a hop.
             when: all(predicates: [
               timerElapsed(state: "climbRest")
               compareState(state: winded, comparison: Equal, value: 0)
+              any(predicates: [
+                now(fact: Grounded)
+                now(fact: HoldingUnwalkable)
+                { $type: "not", predicate: recently(fact: Grounded, windowSeconds: airGrabSeconds) }
+              ])
             ])
             spend {
               state: "stamina"
