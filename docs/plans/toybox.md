@@ -49,8 +49,12 @@ A proposal for the full-size puzzle, for the owner to judge. It uses only mechan
 
 ## Open work
 
-- A shrinking body cannot climb the corner stairs (gallery.md, "What is still open"): its step height falls with its
-  size and the risers do not. The stairs need to shrink with the body along the flight.
+- The spiral stairs' shrinking flights are not yet shown walked end to end: the switchbacks are (a body climbs from
+  level 0 into level 1 shrinking to 0.15 and from level 1 to level 2 growing to full size, and walks down both), and
+  the spirals' risers keep the same 1.2 margin by construction, but a body walked round the south-east spiral by
+  chords stalled at about 1.1 m up at size 0.65. Walk it tangentially and name the cause.
+- A switchback's second flight arrives against the arcade's end pier over half its width (gallery.md, "What is still
+  open"): move the pier or narrow the arrival.
 - The rental stalls stand (worlds/debug/gallery/rentals.puck, worlds/debug/gallery.md "The rentals"): a rented
   device rides its renter's hip and its seat's pool machine runs, but nothing shows its picture. Open: a screen that
   follows a body, so the carried device shows its game and engages wherever its holder stands; creating a pool

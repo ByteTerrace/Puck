@@ -124,6 +124,12 @@ public static partial class ExpressionArithmetic {
                         value = length.Value;
                         return true;
                     }
+                case ExpressionOp.Logarithm: {
+                        // log_b(x) = log2(x) / log2(b); a non-positive value or base, or a base of one, has no answer.
+                        if ((arguments[0] <= 0L) || (arguments[1] <= 0L) || (arguments[1] == FixedQ4816.One.Value)) { return false; }
+                        value = (FixedQ4816.Log2(value: FixedQ4816.FromRawBits(value: arguments[0])) / FixedQ4816.Log2(value: FixedQ4816.FromRawBits(value: arguments[1]))).Value;
+                        return true;
+                    }
                 case ExpressionOp.Pair:
                     return TryPair(
                         pair: out value,

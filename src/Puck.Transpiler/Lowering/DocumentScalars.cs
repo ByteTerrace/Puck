@@ -24,11 +24,11 @@ public static class DocumentScalars {
     /// the refused set is what is left: the fixed-point-only and specialized-lowering entries, refused BY NAME.</summary>
     private static readonly HashSet<string> InDouble = new(comparer: StringComparer.Ordinal) {
         "absolute", "arcCosine", "arcSine", "arcTangent", "arcTangent2", "ceiling", "clamp", "cosine", "floor",
-        "hypotenuse", "maximum", "minimum", "power", "round", "sign", "sine", "squareRoot",
+        "hypotenuse", "logarithm", "maximum", "minimum", "power", "round", "sign", "sine", "squareRoot",
     };
     // The functions whose result is irrational for whole arguments, so it is always folded in double.
     private static readonly HashSet<string> Irrational = new(comparer: StringComparer.Ordinal) {
-        "arcCosine", "arcSine", "arcTangent", "arcTangent2", "cosine", "hypotenuse", "sine", "squareRoot",
+        "arcCosine", "arcSine", "arcTangent", "arcTangent2", "cosine", "hypotenuse", "logarithm", "sine", "squareRoot",
     };
 
     // An integer-domain function is the engine's to evaluate: integers are exact in both languages, so calling the
@@ -177,7 +177,29 @@ public static class DocumentScalars {
                 scope: scope
             );
         }
+        if (
+            (call.Name == "power") &&
+            (((numbers[0] == 0) && (numbers[1] < 0)) || ((numbers[0] < 0) && (numbers[1] != Math.Floor(d: numbers[1]))))
+        ) {
+            return Refuse(
+                call: call,
+                message: "power has no real value for zero to a negative exponent or a negative base to a fraction",
+                scope: scope
+            );
+        }
+        if (
+            (call.Name == "logarithm") &&
+            ((numbers[0] <= 0) || (numbers[1] <= 0) || (numbers[1] == 1))
+        ) {
+            return Refuse(
+                call: call,
+                message: "logarithm takes a positive value and a positive base other than one",
+                scope: scope
+            );
+        }
 
+        // A whole power with a non-negative exponent stays exact in the integer evaluator; a negative or fractional
+        // one is the real power the fixed-point rule evaluator also takes.
         if (
             (call.Name is "arcSine" or "arcCosine") &&
             ((numbers[0] < -1) || (numbers[0] > 1))
@@ -191,7 +213,8 @@ public static class DocumentScalars {
 
         if (
             allIntegers &&
-            !Irrational.Contains(item: call.Name)
+            !Irrational.Contains(item: call.Name) &&
+            ((call.Name != "power") || (integers[1] >= 0))
         ) {
             long value;
             var evaluated = function.Operation switch {
@@ -219,7 +242,8 @@ public static class DocumentScalars {
                 "cosine" => Math.Cos(d: numbers[0]),
                 "floor" => Math.Floor(d: numbers[0]),
                 "hypotenuse" => double.Hypot(x: numbers[0], y: numbers[1]),
-                "power" => Math.Pow(x: numbers[0], y: numbers[1]),
+                // Base 2 on both sides, as the rule language's FixedQ4816.Log2 quotient is, so a power of the base folds exactly.
+                "logarithm" => (Math.Log2(x: numbers[0]) / Math.Log2(x: numbers[1])),
                 "maximum" => Math.Max(
                     val1: numbers[0],
                     val2: numbers[1]
@@ -228,6 +252,7 @@ public static class DocumentScalars {
                     val1: numbers[0],
                     val2: numbers[1]
                 ),
+                "power" => Math.Pow(x: numbers[0], y: numbers[1]),
                 "round" => Math.Round(
                     value: numbers[0],
                     mode: MidpointRounding.ToEven

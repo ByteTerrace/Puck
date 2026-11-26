@@ -400,6 +400,7 @@ are the exact spellings the parser accepts.
 | Square coordinates | `squareIndex(x, y)`, `squareX`, `squareY`, `squareRadius`, `squareLength`, `squareEuclideanSquared`, `squareDistance(a, b)`, `squareChebyshev(a, b)`, `squareNeighbor(cell, direction)`, `squareRotate(cell, turns)`, `squareMirror`, `squareSwap`, `squareAdd`, `squareSubtract`, `squareMultiply`, `squareScale`, `squareTranslate(cell, dx, dy)` | Int |
 | Factors and cycles | `greatestCommonDivisor(a, b)`, `extendedGreatestCommonDivisor(a, b)`, `leastCommonMultiple(a, b)`, `floorDivide(a, b)`, `floorModulo(a, m)`, `floorDivideModulo(a, b)`, `divideRemainder(a, b)`, `cycleForward(a, b, m)`, `cycleDistance(a, b, m)` | Int |
 | Powers and inverses | `power(base, exponent)` | Int and Fixed |
+| Logarithms | `logarithm(value, base)` | Fixed |
 | Modular powers and inverses | `modularPower(base, exponent, modulus)`, `modularInverse(value, modulus)` | Int |
 | Sets and primes | `smallestMissing(mask)`, `isPrime(n)`, `primeAt(i)` | Int |
 | Combinations | `binomialCoefficient(n, k)`, `factorial(n)`, `subsetRank(n, mask)`, `subsetAt(n, k, rank)`, `subsetMember(n, k, rank, i)` | Int |
@@ -433,6 +434,12 @@ These notes cover the details that affect results:
   curve's one spelling: `start * power(end / start, t)` runs from `start` at
   `t = 0` to `end` at `t = 1`, multiplying by the same factor over every equal
   step of `t` (the standard's `sizeField`, `worlds/standard/size-field.puck`).
+- `logarithm(value, base)` is the exponent `power` raises `base` to for
+  `value`, so `logarithm(power(b, t), b)` is `t`. It takes a positive value and
+  a positive base other than one, through `FixedQ4816.Log2`, and fails
+  otherwise. It inverts the geometric curve: `t = logarithm(size / start, end /
+  start)` (the standard's stair riser schedule, `stairStepHeight` in
+  `worlds/standard/architecture.puck`).
 - `modularPower(base, exponent, modulus)` reduces the base into `[0, modulus)`
   and forms every product in 128 bits, so it never overflows; the modulus must
   be positive and the exponent non-negative. `modularInverse(value, modulus)`
