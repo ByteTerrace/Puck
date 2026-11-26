@@ -72,3 +72,28 @@ relit.
   no corners cut.
 - The gallery root has no valley around it, so its windows show white. View-out
   judgements happen in the debug world.
+
+## Gaps found in the first live session
+
+Measured on the gallery root, warm, with `world.watch on` (`world.iteration` per reload):
+
+- **A palette colour edit is not consistently a presentation-only install.** The first edit to the plinth's screen
+  colour took 5.9 s to its first frame and 6.8 s to meshes, as if the creations rebaked. Later edits of the same
+  value reached their first frame in 0.54 to 0.55 s. Find what the first reload rebuilt.
+- **An emissive edit relights the whole volume.** `lit` trailed by about 40 s after the screen's emissive changed,
+  so lighting can't be judged until the volume settles.
+- **A reload drops session pins.** After a live reload the exposure pin was gone (the hall washed out) and the
+  active `view.override camera <name>` kept its old rig until it was cleared (`view.override camera auto`) and
+  selected again. Session overrides should survive a reload, and a selected camera should follow its new definition.
+- **`world.view.camera` reports the seat's chase camera**, not an active camera override, so it can't confirm what
+  the window shows.
+- **A static view is never still.** With the camera, lighting and exposure held, about 9% of pixels change every
+  frame (peaks of 184 levels), which makes small edits harder to judge by comparing frames.
+- **A C# edit costs a full restart:** a build of `Puck.World`, a boot, and the bakes settling (about 17 s from boot
+  on a warm store). There's no hot path for engine code yet.
+- **Duplicated look values defeat edits.** The display screen's colour was written twice (the plinth kit and the
+  screen overlay in `shapes.puck`), so editing the kit changed nothing on screen. The overlay now reads the kit's
+  material.
+
+Fixed during the session: `view.override camera <name>` now takes the seat's own view in the play layout, so
+`gallery.shot` and `gallery.station` work.
