@@ -1,6 +1,84 @@
-// A seated player's buttons at a table game: which channel each reads and which way it is pressed, the test for one
-// held past half way, the press it makes, and the step across the board a press makes from the seat's chair. A module
-// library: it hands its importers lets, functions and a rule template, and emits no document.
+// At a tabletop: a seat sitting at a board (a placement whose board facet carries `engage`). A module library: it hands
+// its importers lets, functions and a rule template, and emits no document.
+//
+// `tabletopControls()` is the seat's controls while it sits: a binding overlay row whose `tabletop` group the seat's
+// bindings switch to while the engine's `engagement` context family reads `tabletop`. Its Board page replaces the
+// resting page: the movement keys and the stick step a cursor, confirm picks, cancel puts back, and the context button
+// leaves. The rest is what a game's rules read of a seated player: which channel each button reads and which way it is
+// pressed, the test for one held past half way, the press it makes, and the step across the board a press makes from
+// the seat's chair.
+//
+//   import "../standard/contexts/tabletop"
+//   bindingOverlays [tabletopControls()]
+
+function tabletopControls() = {
+  id: "tabletop"
+  document {
+    version: "puck.input.bindings.v1"
+    modifiers []
+    contexts [
+      { family: "engagement", state: "tabletop", group: "tabletop" }
+    ]
+    chords [
+      {
+        chord []
+        group: "tabletop"
+        page {
+          id: "board"
+          label: "Board"
+          entries [
+            {
+              channel: "forward"
+              id: "forward"
+              scale: 1
+              sources ["keyboard.w", "keyboard.arrowUp", "gamepad.dpadUp"]
+            }
+            {
+              channel: "forward"
+              id: "back"
+              scale: -1
+              sources ["keyboard.s", "keyboard.arrowDown", "gamepad.dpadDown"]
+            }
+            {
+              channel: "strafe"
+              id: "left"
+              scale: -1
+              sources ["keyboard.a", "keyboard.arrowLeft", "gamepad.dpadLeft"]
+            }
+            {
+              channel: "strafe"
+              id: "right"
+              scale: 1
+              sources ["keyboard.d", "keyboard.arrowRight", "gamepad.dpadRight"]
+            }
+            { command: "player.move.strafe", id: "move", sources ["gamepad.leftStick"] }
+            {
+              channel: "confirm"
+              id: "confirm"
+              label: "Pick"
+              scale: 1
+              sources ["keyboard.space", "keyboard.enter", "mouse.button1", "gamepad.buttonSouth"]
+            }
+            {
+              channel: "cancel"
+              id: "cancel"
+              label: "Cancel"
+              scale: 1
+              sources ["keyboard.escape", "keyboard.backspace", "mouse.button2", "gamepad.buttonEast"]
+            }
+            {
+              channel: "interact"
+              id: "interact"
+              label: "Leave"
+              scale: 1
+              sources ["keyboard.e", "gamepad.rightShoulder"]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
 
 // The buttons a table game reads, each a channel past half way in one direction: pick and cancel, and a step each way
 // across the board.

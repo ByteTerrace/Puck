@@ -1,7 +1,20 @@
-// Standard controls: authored cursor, icons, bar tables, pages and play wheel.
-// Import ../standard/standard, then refine rows by id in the importing document.
+// Standard controls: the default control sets of a world built on the standard, composed by context, and what they
+// share (the cursor, the icon and badge tables, the binding bar, the play wheel and the trigger pages).
+//
+// A context is where a seat is and what it is doing: on foot, piloting a craft, swimming, sitting at a tabletop, using
+// a terminal. Each has a document of its own under contexts/ that authors its controls as a binding group, and the
+// seat's bindings switch group as its context changes (a binding overlay's `contexts` rows). This document lists the
+// sets every world gets without declaring anything: on foot (the resting page), piloting and the tabletop. A world
+// opts into the others where it has them (contexts/swimming.puck's `swimPlay`, contexts/terminal.puck's
+// `terminalPlay`, typing.puck, instrument.puck, editor.puck, free-camera.puck).
+//
+// Import ../standard/standard, then refine rows by id in the importing document, list more sets after these, or author
+// a `bindingOverlays` list of your own from the context libraries.
 
 import "pad-kit"
+import "contexts/on-foot"
+import "contexts/piloting"
+import "contexts/tabletop"
 
 // Export the label and icon rows so a world's wheel refinement can read them.
 exports {
@@ -132,23 +145,15 @@ icons {
     { name: "act.rise", glyph { font: mono, glyph: "U+25B2" } }
     { name: "act.descend", glyph { font: mono, glyph: "U+25BC" } }
     { name: "act.jump", glyph { font: mono, glyph: "U+21A5" } }
-    { name: "act.camera1", label: "C1" }
-    { name: "act.camera2", label: "C2" }
-    { name: "act.camera3", label: "C3" }
-    { name: "act.camera4", label: "C4" }
-    { name: "act.camera5", label: "C5" }
     { name: "act.annotate", glyph { font: mono, glyph: "U+22A1" } }
-    { name: "act.isolate", glyph { font: mono, glyph: "U+25C9" } }
     { name: "act.build", glyph { font: mono, glyph: "U+229E" } }
     { name: "act.console", label: ">_" }
     { name: "act.where", glyph { font: mono, glyph: "U+25C8" } }
     { name: "act.channels", glyph { font: mono, glyph: "U+2261" } }
-    { name: "act.respawn", glyph { font: mono, glyph: "U+23CE" } }
     { name: "act.interact", glyph { font: mono, glyph: "U+25C7" } }
-    { name: "act.desktop", glyph { font: mono, glyph: "U+25E8" } }
-    { name: "act.play", glyph { font: mono, glyph: "U+25A0" } }
-    // The gallery's keys (gallery/gallery.puck): the next and previous exhibit, flagging and slicing the one at hand, the debug view.
-    { name: "act.view", label: "DV" }
+    { name: "act.confirm", label: "OK" }
+    { name: "act.cancel", glyph { font: mono, glyph: "U+2715" } }
+    { name: "act.tap", label: "TP" }
     { name: "act.wheel", label: "WH" }
     { name: "act.run", glyph { font: mono, glyph: "U+00BB" } }
     { name: "act.dash", label: "DS" }
@@ -156,26 +161,15 @@ icons {
     { name: "act.fly", glyph { font: mono, glyph: "U+21D1" } }
     { name: "act.autofly", label: "AF" }
     { name: "act.frame", label: "FM" }
-    // The View page and ring: the chase view and the inspection layouts, the camera, the close-ups.
-    { name: "view.play", label: "PL" }
-    { name: "view.quarter", label: "3Q" }
-    { name: "view.front", label: "FR" }
-    { name: "view.rear", label: "RE" }
-    { name: "view.wide", label: "WD" }
+    // The chase camera's sector of the play wheel.
     { name: "view.auto", label: "AU" }
-    { name: "view.face", label: "FC" }
-    // The Debug page: the inspector panel, noclip, the frame comparison, stopping, the suit.
-    { name: "dbg.inspect", label: "IN" }
-    { name: "dbg.noclip", label: "NC" }
+    // The Debug page: the frame comparison, stopping, the capture and the history.
     { name: "dbg.hold", label: "HO" }
     { name: "dbg.split", label: "SP" }
     { name: "dbg.clear", label: "CL" }
     { name: "dbg.stop", label: "ST" }
-    { name: "dbg.suit", label: "SU" }
     { name: "dbg.capture", label: "CP" }
     { name: "dbg.history", label: "HI" }
-    { name: "dbg.quality", label: "QU" }
-    { name: "dbg.rates", label: "RA" }
   ]
 
   // Which cap each physical control wears on the bar, its modifier row and the build bar.
@@ -264,7 +258,8 @@ icons {
 
 state {
   world {
-    // The icon each control's plate shows, by its binding entry id.
+    // The icon each control's plate shows, by its binding entry's id. The ids are the standard's action names, so a
+    // context's entry that names one (the pilot's `rise`, the tabletop's `confirm`) wears its icon.
     table barIcons {
       forward = "arrow.up"
       back = "arrow.down"
@@ -287,6 +282,9 @@ state {
       descend = "act.descend"
       jump = "act.jump"
       interact = "act.interact"
+      confirm = "act.confirm"
+      cancel = "act.cancel"
+      tap = "act.tap"
       annotate = "act.annotate"
       build = "act.build"
 
@@ -306,14 +304,10 @@ state {
       dbgConsole = "act.console"
       dbgCapture = "dbg.capture"
       dbgHistory = "dbg.history"
-      dbgInspect = "dbg.inspect"
-      dbgNoclip = "dbg.noclip"
-      dbgDebugView = "act.view"
       dbgHold = "dbg.hold"
       dbgSplit = "dbg.split"
       dbgClear = "dbg.clear"
       dbgStop = "dbg.stop"
-
     }
 
     // The bar draws one bar that swaps its page in place as a trigger is held, rather than every page's bank at once.
@@ -358,314 +352,18 @@ state {
 }
 
 bindingOverlays [
-  // The resting page every seat walks, looks, runs, jumps, flies and interacts with, and the bar that shows it: the
-  // Move page, with the trigger pages' View and Debug banks. A world or avatar refines its entries by page id and
-  // source (the debug world's Moth adds her layout keys, ../debug/moth-controls.puck).
+  // The bar: the plates every page shows on, whichever context's page is active. It is the first row, which is where
+  // a world's bar is read from, and binds nothing itself. One bank a page: Move (the resting page, and whichever
+  // context's page takes its place), View on the left trigger, Debug on the right trigger.
   {
-    id: "bare"
+    id: "bar"
     document {
-      chords [
-        {
-          chord []
-          group: "play"
-          page {
-            entries [
-              {
-                channel: "forward"
-                id: "forward"
-                scale: 1
-                sources [
-                  "keyboard.w"
-                  "keyboard.arrowUp"
-                  "gamepad.dpadUp"
-                ]
-              }
-              {
-                channel: "forward"
-                id: "back"
-                scale: -1
-                sources [
-                  "keyboard.s"
-                  "keyboard.arrowDown"
-                  "gamepad.dpadDown"
-                ]
-              }
-              {
-                channel: "strafe"
-                id: "left"
-                scale: -1
-                sources [
-                  "keyboard.a"
-                  "gamepad.dpadLeft"
-                ]
-              }
-              {
-                channel: "strafe"
-                id: "right"
-                scale: 1
-                sources [
-                  "keyboard.d"
-                  "gamepad.dpadRight"
-                ]
-              }
-              {
-                channel: "turn"
-                id: "turnLeft"
-                scale: 1
-                sources [
-                  "keyboard.arrowLeft"
-                ]
-              }
-              {
-                channel: "turn"
-                id: "turnRight"
-                scale: -1
-                sources [
-                  "keyboard.arrowRight"
-                ]
-              }
-              {
-                command: "player.move.strafe"
-                id: "move"
-                sources [
-                  "gamepad.leftStick"
-                ]
-              }
-              {
-                command: "player.look.steer"
-                id: "look"
-                sources [
-                  "gamepad.rightStick"
-                ]
-              }
-              // The pad's recenter is the View page's North (controls.puck): the right stick's press is fly.
-              {
-                command: "player.look.recenter"
-                id: "recenter"
-                label: "Recenter"
-                sources [
-                  "keyboard.r"
-                ]
-              }
-              {
-                command: "player.orbit"
-                id: "orbit"
-                sources [
-                  "mouse.button1"
-                ]
-              }
-              {
-                command: "player.steer"
-                id: "steer"
-                label: "Steer"
-                sources [
-                  "mouse.button2"
-                ]
-              }
-              // Run while held (Left Shift), or switched on and off (N, the left stick's press). The View page's
-              // left stick press (controls.puck) is autorun.
-              {
-                channel: "run"
-                id: "run"
-                label: "Run"
-                scale: 1
-                sources [
-                  "keyboard.shiftLeft"
-                ]
-              }
-              {
-                channel: "dash"
-                id: "dash"
-                label: "Dash"
-                scale: 1
-                sources ["gamepad.buttonWest", "keyboard.j"]
-              }
-              {
-                channel: "run"
-                id: "runToggle"
-                label: "Run on/off"
-                mode: Toggle
-                scale: 1
-                sources [
-                  "keyboard.n"
-                  "gamepad.leftStickPress"
-                ]
-              }
-              {
-                channel: "flight"
-                id: "flight"
-                label: "Flight"
-                scale: 1
-                sources [
-                  "keyboard.f"
-                  "gamepad.buttonNorth"
-                ]
-              }
-              // Fly while held (Left Ctrl, M, the right stick's press): rise without jump, which the `fly` rule reads as
-              // switching flight mode on, so she takes off and climbs, and letting go hovers. The View page's right stick
-              // press (controls.puck) is autofly.
-              {
-                channel: "rise"
-                id: "fly"
-                label: "Fly"
-                scale: 1
-                sources [
-                  "keyboard.controlLeft"
-                  "keyboard.m"
-                  "gamepad.rightStickPress"
-                ]
-              }
-              {
-                channel: "rise"
-                id: "rise"
-                scale: 1
-                sources [
-                  "keyboard.space"
-                  "gamepad.buttonSouth"
-                ]
-              }
-              {
-                channel: "jump"
-                id: "jump"
-                scale: 1
-                sources [
-                  "keyboard.space"
-                  "gamepad.buttonSouth"
-                ]
-              }
-              {
-                channel: "rise"
-                id: "descend"
-                label: "Descend"
-                scale: -1
-                sources [
-                  "keyboard.c"
-                  "gamepad.buttonEast"
-                ]
-              }
-              {
-                channel: "start"
-                id: "start"
-                scale: 1
-                sources [
-                  "keyboard.enter"
-                  "gamepad.start"
-                ]
-              }
-              {
-                channel: "select"
-                id: "select"
-                scale: 1
-                sources [
-                  "keyboard.shiftRight"
-                  "gamepad.back"
-                ]
-              }
-              // The context button: engage the device in reach, and leave it again.
-              {
-                channel: "interact"
-                id: "interact"
-                label: "Interact"
-                scale: 1
-                sources [
-                  "keyboard.e"
-                  "gamepad.rightShoulder"
-                ]
-              }
-              // The engaged screen's view: L switches between the framed picture and the other view, which is the held
-              // view of a carried screen and the room for any other. The pad's is the View page's East (controls.puck).
-              {
-                command: "player.frame"
-                id: "frame"
-                label: "Frame"
-                sources [
-                  "keyboard.l"
-                ]
-              }
-              {
-                command: "view.annotate"
-                id: "annotate"
-                label: "Annotate"
-                sources [
-                  "keyboard.f3"
-                ]
-                text: "toggle"
-              }
-            ]
-            id: "base"
-          }
-        }
-        // The left mouse button alone is a tap: a pointer surface's rules read it where the pointer lands
-        // (pointer(<seat>, <surface>, press, tap)). It passes through, so the button keeps its own orbit drag; a press
-        // that lands on a surface is the surface's alone where a world lists pointer capture (station.puck).
-        {
-          held [
-            "mouse.button1"
-          ]
-          group: "play"
-          command {
-            channel: "tap"
-            label: "Tap"
-            passThrough: true
-            scale: 1
-          }
-        }
-        // Both mouse buttons held, in either order, walk her forward until either is released. The chord passes each
-        // press through to the button's own binding, so the right button keeps steering her (steer outranks the left
-        // button's orbit) and a button left held after the other's release keeps its own drag.
-        {
-          held [
-            "mouse.button1"
-            "mouse.button2"
-          ]
-          group: "play"
-          command {
-            channel: "forward"
-            label: "Forward"
-            passThrough: true
-            scale: 1
-          }
-        }
-      ]
-      modifiers []
       version: "puck.input.bindings.v1"
+      modifiers []
+      chords []
     }
     bindingBar {
-      slotSet [
-        "keyboard.w"
-        "keyboard.a"
-        "keyboard.s"
-        "keyboard.d"
-        "keyboard.space"
-        "keyboard.controlLeft"
-        "keyboard.f"
-        "mouse.button1"
-        "mouse.button2"
-        "keyboard.1"
-        "keyboard.2"
-        "keyboard.3"
-        "keyboard.4"
-        "keyboard.5"
-        "keyboard.f2"
-        "keyboard.f3"
-        "keyboard.f4"
-        "gamepad.leftStick"
-        "gamepad.rightStick"
-        "gamepad.dpadUp"
-        "gamepad.dpadRight"
-        "gamepad.dpadDown"
-        "gamepad.dpadLeft"
-        "gamepad.leftShoulder"
-        "gamepad.leftStickPress"
-        "gamepad.buttonNorth"
-        "gamepad.buttonWest"
-        "gamepad.buttonSouth"
-        "gamepad.buttonEast"
-        "gamepad.rightShoulder"
-        "gamepad.rightStickPress"
-        "gamepad.back"
-      ]
-      // One bank a page: Move, View on the left trigger, Debug on the right trigger.
+      slotSet: barSlots
       banks [
         { id: "move", pageId: "base", alpha: 0.5, activeAlpha: 1 }
         { id: "view", pageId: "pad-lt", alpha: 0.5, activeAlpha: 1 }
@@ -767,28 +465,22 @@ bindingOverlays [
     }
   }
 
+  // The context sets every world gets: on foot is the resting page, and a seat that boards a craft or sits at a table
+  // takes that context's group until it leaves.
+  onFootControls()
+  pilotControls()
+  tabletopControls()
+
   // The play wheel, held open on Tab or LB over the seat's resting page so the seat keeps walking while it aims. The
   // build toggle is the editor's (editor.puck's `build` toggle), and the wheel's Build sector is another door to it.
   // While it is open the arrow keys (Tab) or the d-pad (LB) step its ring, Up to the next and Down to the previous, and
-  // the mouse wheel steps it too.
+  // the mouse wheel steps it too, in place of the resting page's zoom.
   {
     id: "play-wheel"
     document {
       version: "puck.input.bindings.v1"
       modifiers []
       chords [
-        {
-          chord []
-          group: "play"
-          page {
-            id: "base"
-            label: "Move"
-            entries [
-              { command: "player.camera.boom", id: "zoom", sources ["mouse.wheel"] }
-              { command: "player.camera.reset", id: "cameraReset", activateOn: Started, sources ["mouse.button3"] }
-            ]
-          }
-        }
         {
           chord ["keyboard.tab"]
           group: "play"
@@ -860,27 +552,14 @@ bindingOverlays [
           }
         }
       ]
-      wheels [
-        {
-          id: "play-primary"
-          group: "play"
-          holdPages ["wheel-keys", "wheel-pad"]
-          labelRow: "state.wheelLabels"
-          iconRow: "state.wheelIcons"
-          style {
-            placement: ViewportCenter
-          }
-          rings: standardRings
-        }
-      ]
+      wheels [playWheel()]
     }
   }
 
-  // The shared trigger pages: the left trigger (or Z) holds View, the right trigger (or X) holds Debug. The suit toggle joins
-  // Debug (suit.puck), and noclip joins it on the left stick's press in the debug world (noclip.puck). A page inherits
-  // `base`, so the sticks and the keyboard's movement keep working while it is held. The View page's free plates are a
-  // refinement's: a world that authors layouts binds them there (the debug world's Moth controls,
-  // ../debug/moth-controls.puck), and the chase camera and annotation are the play wheel's.
+  // The shared trigger pages: the left trigger (or Z) holds View, the right trigger (or X) holds Debug. A page inherits
+  // `base`, so the sticks and the keyboard's movement keep working while it is held. Their free plates are a
+  // refinement's: a world that authors layouts binds them on View and a world's own toggles join Debug (the debug
+  // world set's are ../debug/set-controls.puck), and the chase camera and annotation are the play wheel's.
   {
     id: "pad-pages"
     document {

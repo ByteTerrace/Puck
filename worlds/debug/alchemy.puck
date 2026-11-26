@@ -1,4 +1,4 @@
-import "../standard/seat"
+import "../standard/contexts/tabletop"
 import "elements"
 import "../standard/inputs"
 import "../standard/kits"

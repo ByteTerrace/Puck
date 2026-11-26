@@ -1,6 +1,6 @@
-// Debug-only Go and Tour pages, gallery icons and Places ring refine the Moth's controls (moth-controls.puck), which
-// refine the standard's.
-import "moth-controls"
+// Debug-only Go and Tour pages, gallery icons and Places ring refine the debug world set's controls (set-controls.puck),
+// which refine the standard's.
+import "set-controls"
 import "pad-kit"
 
 // The standard's screen material, re-exported so the debug world's devices and range name it.
@@ -110,26 +110,17 @@ bindingOverlays [
           }
         }
       ]
-      // The play wheel again with its Places ring and the desktop layout: a later layer's wheel replaces the earlier one
-      // whole.
-      wheels [
-        {
-          id: "play-primary"
-          group: "play"
-          holdPages ["wheel-keys", "wheel-pad"]
-          labelRow: "state.wheelLabels"
-          iconRow: "state.wheelIcons"
-          style {
-            placement: ViewportCenter
-          }
-          rings: debugRings
-        }
-      ]
+      // The play wheel again with its Places ring and the desktop layout.
+      wheels [playWheel(rings: debugRings)]
     }
   }
 ]
 
 icons [
+  { name: "act.desktop", glyph { font: "jetbrains-mono-regular", glyph: "U+25E8" } }
+  { name: "dbg.quality", label: "QU" }
+  { name: "dbg.rates", label: "RA" }
+  { name: "dbg.noclip", label: "NC" }
   { name: "act.next", label: ">" }
   { name: "act.prev", label: "<" }
   { name: "act.flag", label: "!" }
@@ -157,6 +148,8 @@ icons [
 state {
   world {
     table barIcons {
+      // noclip.puck's Debug-page plate.
+      dbgNoclip = "dbg.noclip"
       galleryNext = "act.next"
       galleryPrev = "act.prev"
       galleryFlag = "act.flag"
@@ -214,7 +207,7 @@ state {
 
 bindingOverlays [
   {
-    id: "bare"
+    id: "bar"
     bindingBar {
       banks [
         { id: "go", pageId: "pad-lt-rt", alpha: 0.5, activeAlpha: 1 }

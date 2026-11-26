@@ -13,7 +13,7 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "globe"
 
-import "moth-controls"
+import "set-controls"
 import "size"
 import "painting-kit"
 import "place-kit"

@@ -16,7 +16,7 @@ simulation {
 }
 
 // The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's suit toggle and size.
-import "moth-controls"
+import "set-controls"
 import "suit"
 import "size"
 import "painting-kit"

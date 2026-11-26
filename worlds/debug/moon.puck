@@ -16,7 +16,7 @@ documentId: "moon"
 
 // The debug world's chrome, so a traveller keeps its bar and wheel here, and the Moth's size; her suit toggle comes
 // with craft-form.puck below.
-import "moth-controls"
+import "set-controls"
 import "size"
 import "painting-kit"
 import "place-kit"

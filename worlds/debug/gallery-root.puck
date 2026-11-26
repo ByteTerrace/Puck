@@ -8,7 +8,7 @@ documentId: "gallery"
 
 import "day-alone"
 import "moon-frame"
-import "moth-controls"
+import "set-controls"
 import "noclip"
 import "ship-rows"
 import "shapes"

@@ -1,0 +1,80 @@
+// Piloting: the controls of a seat that drives a craft it boarded (ship.puck's ship, a vehicle). A library: it hands
+// its importers one function and emits no document.
+//
+// `pilotControls()` is a binding overlay row: the `pilot` group, whose page inherits the on-foot page (`restingPage`)
+// and takes over the controls a craft reads differently. The rise channel climbs and sinks, the run channel is the
+// boost, the context button steps out, and the face button that switches a jetpack recenters the camera behind the
+// craft. Everything it leaves alone (the sticks, the movement keys, the look) stays the on-foot page's.
+//
+// The seat's controls switch to it while the seat drives a body other than its own: the engine's `engagement` context
+// family reads `body` then. A world whose seats also possess bodies that walk passes the `family` and `state` that tell
+// its craft apart, a `state:<row>` family keyed by the seat's body.
+//
+//   import "../standard/contexts/piloting"
+//   bindingOverlays [pilotControls()]
+
+function pilotControls(family = "engagement", state = "body", restingPage = "base") = {
+  id: "piloting"
+  document {
+    version: "puck.input.bindings.v1"
+    modifiers []
+    contexts [
+      { family: family, state: state, group: "pilot" }
+    ]
+    chords [
+      {
+        chord []
+        group: "pilot"
+        page {
+          id: "pilot"
+          inherits: restingPage
+          label: "Fly"
+          entries [
+            {
+              channel: "rise"
+              id: "rise"
+              label: "Climb"
+              scale: 1
+              sources [
+                "keyboard.space"
+                "gamepad.buttonSouth"
+                "keyboard.controlLeft"
+                "keyboard.m"
+                "gamepad.rightStickPress"
+              ]
+            }
+            { channel: "rise", id: "descend", label: "Sink", scale: -1, sources ["keyboard.c", "gamepad.buttonEast"] }
+            {
+              channel: "run"
+              id: "run"
+              label: "Boost"
+              scale: 1
+              sources ["keyboard.shiftLeft", "gamepad.buttonWest", "keyboard.j"]
+            }
+            {
+              channel: "run"
+              id: "runToggle"
+              label: "Boost on/off"
+              mode: Toggle
+              scale: 1
+              sources ["keyboard.n", "gamepad.leftStickPress"]
+            }
+            {
+              command: "player.look.recenter"
+              id: "recenter"
+              label: "Recenter"
+              sources ["keyboard.r", "keyboard.f", "gamepad.buttonNorth"]
+            }
+            {
+              channel: "interact"
+              id: "interact"
+              label: "Step out"
+              scale: 1
+              sources ["keyboard.e", "gamepad.rightShoulder"]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

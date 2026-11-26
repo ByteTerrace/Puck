@@ -1,0 +1,140 @@
+// On foot: the controls of a body a seat walks, runs, jumps and dashes, and flies by jetpack. A library: it hands its
+// importers one function and emits no document.
+//
+// `onFootControls()` is a binding overlay row: the resting page (`base`, labelled Move by the play wheel's row) of the
+// default group (`play`), which every other context's page inherits or replaces. A world lists it in its
+// `bindingOverlays` after the row that carries its bar (the standard's controls.puck does), and refines an entry by
+// overlay id, page id and source.
+//
+//   import "../standard/contexts/on-foot"
+//   bindingOverlays [onFootControls()]
+//
+// The entry ids are the standard's action names, which the bar's icon row is keyed by (controls.puck's `barIcons`), so
+// another context's entry that names the same action wears the same icon.
+//
+// Jetpack flight is this context too: the `flight` channel switches flight mode (abilities.puck's `jetpack`), and the
+// rise channel climbs and sinks while it is on.
+
+function onFootControls() = {
+  id: "on-foot"
+  document {
+    version: "puck.input.bindings.v1"
+    modifiers []
+    chords [
+      {
+        chord []
+        group: "play"
+        page {
+          id: "base"
+          label: "Move"
+          entries [
+            {
+              channel: "forward"
+              id: "forward"
+              scale: 1
+              sources ["keyboard.w", "keyboard.arrowUp", "gamepad.dpadUp"]
+            }
+            {
+              channel: "forward"
+              id: "back"
+              scale: -1
+              sources ["keyboard.s", "keyboard.arrowDown", "gamepad.dpadDown"]
+            }
+            { channel: "strafe", id: "left", scale: -1, sources ["keyboard.a", "gamepad.dpadLeft"] }
+            { channel: "strafe", id: "right", scale: 1, sources ["keyboard.d", "gamepad.dpadRight"] }
+            { channel: "turn", id: "turnLeft", scale: 1, sources ["keyboard.arrowLeft"] }
+            { channel: "turn", id: "turnRight", scale: -1, sources ["keyboard.arrowRight"] }
+            { command: "player.move.strafe", id: "move", sources ["gamepad.leftStick"] }
+            { command: "player.look.steer", id: "look", sources ["gamepad.rightStick"] }
+            // The pad's recenter is the View page's North: the right stick's press is fly.
+            { command: "player.look.recenter", id: "recenter", label: "Recenter", sources ["keyboard.r"] }
+            { command: "player.orbit", id: "orbit", sources ["mouse.button1"] }
+            { command: "player.steer", id: "steer", label: "Steer", sources ["mouse.button2"] }
+            // The chase camera's boom: the mouse wheel changes the requested distance, and the middle button resets the
+            // distance and the angles.
+            { command: "player.camera.boom", id: "zoom", sources ["mouse.wheel"] }
+            { command: "player.camera.reset", id: "cameraReset", activateOn: Started, sources ["mouse.button3"] }
+            // Run while held (Left Shift), or switched on and off (N, the left stick's press). The View page's left
+            // stick press is autorun.
+            { channel: "run", id: "run", label: "Run", scale: 1, sources ["keyboard.shiftLeft"] }
+            { channel: "dash", id: "dash", label: "Dash", scale: 1, sources ["gamepad.buttonWest", "keyboard.j"] }
+            {
+              channel: "run"
+              id: "runToggle"
+              label: "Run on/off"
+              mode: Toggle
+              scale: 1
+              sources ["keyboard.n", "gamepad.leftStickPress"]
+            }
+            { channel: "flight", id: "flight", label: "Flight", scale: 1, sources ["keyboard.f", "gamepad.buttonNorth"] }
+            // Fly while held (Left Ctrl, M, the right stick's press): rise without jump, which a jetpack reads as
+            // switching flight mode on, so the body takes off and climbs, and letting go hovers. The View page's right
+            // stick press is autofly.
+            {
+              channel: "rise"
+              id: "fly"
+              label: "Fly"
+              scale: 1
+              sources ["keyboard.controlLeft", "keyboard.m", "gamepad.rightStickPress"]
+            }
+            { channel: "rise", id: "rise", scale: 1, sources ["keyboard.space", "gamepad.buttonSouth"] }
+            { channel: "jump", id: "jump", scale: 1, sources ["keyboard.space", "gamepad.buttonSouth"] }
+            {
+              channel: "rise"
+              id: "descend"
+              label: "Descend"
+              scale: -1
+              sources ["keyboard.c", "gamepad.buttonEast"]
+            }
+            { channel: "start", id: "start", scale: 1, sources ["keyboard.enter", "gamepad.start"] }
+            { channel: "select", id: "select", scale: 1, sources ["keyboard.shiftRight", "gamepad.back"] }
+            // The context button: engage what is in reach (a terminal, a screen, a table, a craft), and leave it again.
+            {
+              channel: "interact"
+              id: "interact"
+              label: "Interact"
+              scale: 1
+              sources ["keyboard.e", "gamepad.rightShoulder"]
+            }
+            // The engaged screen's view: L switches between the framed picture and the other view, which is the held
+            // view of a carried screen and the room for any other. The pad's is the View page's East.
+            { command: "player.frame", id: "frame", label: "Frame", sources ["keyboard.l"] }
+            {
+              command: "view.annotate"
+              id: "annotate"
+              label: "Annotate"
+              sources ["keyboard.f3"]
+              text: "toggle"
+            }
+          ]
+        }
+      }
+      // The left mouse button alone is a tap: a pointer surface's rules read it where the pointer lands
+      // (pointer(<seat>, <surface>, press, tap)). It passes through, so the button keeps its own orbit drag; a press
+      // that lands on a surface is the surface's alone where a world lists pointer capture (terminal.puck).
+      {
+        held ["mouse.button1"]
+        group: "play"
+        command {
+          channel: "tap"
+          label: "Tap"
+          passThrough: true
+          scale: 1
+        }
+      }
+      // Both mouse buttons held, in either order, walk the body forward until either is released. The chord passes
+      // each press through to the button's own binding, so the right button keeps steering (steer outranks the left
+      // button's orbit) and a button left held after the other's release keeps its own drag.
+      {
+        held ["mouse.button1", "mouse.button2"]
+        group: "play"
+        command {
+          channel: "forward"
+          label: "Forward"
+          passThrough: true
+          scale: 1
+        }
+      }
+    ]
+  }
+}

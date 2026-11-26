@@ -1,17 +1,38 @@
-// The Moth's controls beyond the standard's: Backspace back to the debug world's stage, the View page's plates for her
-// inspection layouts (avatars/moth.puck) and the jetpack's isolation, and the play wheel with her Respawn, Suit and
-// layout sectors (pad-kit.puck). It imports the standard and refines its controls by page, wheel and table key, so every
-// world she walks into (the debug world through controls.puck, the garden and the night field) imports it in the
-// standard's place.
+// The controls every world of the debug world set shares (the debug world, the garden, the night field, the moon and
+// the worlds built on their avatar): the standard's context sets (../standard/controls.puck) with what this set adds
+// to them. It opts into swimming. On foot, Backspace returns a seat to the debug world's stage. The avatar's inspection
+// views take the number keys and the View page's plates, and her jetpack's isolation F4 (the layouts and the parts are
+// avatars/moth.puck's). The play wheel gains the set's Respawn and Suit sectors and a View ring of those layouts
+// (pad-kit.puck). It imports the standard and refines its rows by overlay, page, wheel and table key, so a world of
+// the set imports it in the standard's place; the debug world's own pages refine it in turn (controls.puck).
 import "../standard/standard"
+import "../standard/contexts/swimming"
 import "pad-kit"
 
 // The standard's screen material, re-exported so a world importing these controls names it.
 export binding crt
 
+// The avatar swims wherever a world of the set has water (her kit leads with the swim hold), so the set opts into the
+// swimming context.
+swimPlay()
+
 bindingOverlays [
+  // The bar shows the keys this set binds beside the standard's.
   {
-    id: "moth-controls"
+    id: "bar"
+    bindingBar {
+      slotSet: concat(barSlots, [
+        "keyboard.1"
+        "keyboard.2"
+        "keyboard.3"
+        "keyboard.4"
+        "keyboard.5"
+        "keyboard.f4"
+      ])
+    }
+  }
+  {
+    id: "set-controls"
     document {
       version: "puck.input.bindings.v1"
       modifiers: padModifiers
@@ -29,69 +50,21 @@ bindingOverlays [
                 text: "spawn:stage"
                 sources ["keyboard.backspace"]
               }
-              // Her views by their layout's place in her basis's views.layouts (1 the chase, then her inspection cameras).
-              {
-                command: "view.override"
-                id: "camera1"
-                sources [
-                  "keyboard.1"
-                ]
-                value {
-                  kind: "Axis1D"
-                  raw [1, 0, 0, 0]
-                }
-              }
-              {
-                command: "view.override"
-                id: "camera2"
-                sources [
-                  "keyboard.2"
-                ]
-                value {
-                  kind: "Axis1D"
-                  raw [2, 0, 0, 0]
-                }
-              }
-              {
-                command: "view.override"
-                id: "camera3"
-                sources [
-                  "keyboard.3"
-                ]
-                value {
-                  kind: "Axis1D"
-                  raw [3, 0, 0, 0]
-                }
-              }
-              {
-                command: "view.override"
-                id: "camera4"
-                sources [
-                  "keyboard.4"
-                ]
-                value {
-                  kind: "Axis1D"
-                  raw [4, 0, 0, 0]
-                }
-              }
-              {
-                command: "view.override"
-                id: "camera5"
-                sources [
-                  "keyboard.5"
-                ]
-                value {
-                  kind: "Axis1D"
-                  raw [5, 0, 0, 0]
+              // The avatar's views by their layout's place in her basis's views.layouts (1 the chase, then her
+              // inspection cameras).
+              for n in range(1, 6) {
+                {
+                  command: "view.override"
+                  id: $"camera{n}"
+                  sources [$"keyboard.{n}"]
+                  value { kind: "Axis1D", raw [n, 0, 0, 0] }
                 }
               }
               {
                 command: "view.isolate"
                 id: "jetpackAlone"
                 label: "Jetpack alone"
-                sources [
-                  "keyboard.f4"
-                ]
+                sources ["keyboard.f4"]
                 text: "toggle moth pod* nozzle*"
               }
             ]
@@ -164,22 +137,30 @@ bindingOverlays [
           }
         }
       ]
-      // A later layer's wheel replaces the earlier one whole, so this restates the standard's with her rings.
-      wheels [
-        {
-          id: "play-primary"
-          group: "play"
-          holdPages ["wheel-keys", "wheel-pad"]
-          labelRow: "state.wheelLabels"
-          iconRow: "state.wheelIcons"
-          style {
-            placement: ViewportCenter
-          }
-          rings: mothRings
-        }
-      ]
+      wheels [playWheel(rings: setRings)]
     }
   }
+]
+
+icons [
+  { name: "act.respawn", glyph { font: "jetbrains-mono-regular", glyph: "U+23CE" } }
+  { name: "act.isolate", glyph { font: "jetbrains-mono-regular", glyph: "U+25C9" } }
+  { name: "act.play", glyph { font: "jetbrains-mono-regular", glyph: "U+25A0" } }
+  { name: "act.camera1", label: "C1" }
+  { name: "act.camera2", label: "C2" }
+  { name: "act.camera3", label: "C3" }
+  { name: "act.camera4", label: "C4" }
+  { name: "act.camera5", label: "C5" }
+  // The View page and ring: the chase view and the inspection layouts.
+  { name: "view.play", label: "PL" }
+  { name: "view.quarter", label: "3Q" }
+  { name: "view.front", label: "FR" }
+  { name: "view.rear", label: "RE" }
+  { name: "view.wide", label: "WD" }
+  { name: "view.face", label: "FC" }
+  // The debug view, which the gallery's keys and wheel step (gallery/gallery.puck).
+  { name: "act.view", label: "DV" }
+  { name: "dbg.suit", label: "SU" }
 ]
 
 state {

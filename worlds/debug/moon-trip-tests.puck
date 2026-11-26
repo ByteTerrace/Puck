@@ -5,7 +5,7 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "moon-trip-tests"
 
-import "moth-controls"
+import "set-controls"
 import "ship-rows"
 import "noclip"
 

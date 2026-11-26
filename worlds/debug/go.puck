@@ -1,6 +1,6 @@
 import "../standard/inputs"
 import "../standard/kits"
-import "../standard/seat"
+import "../standard/contexts/tabletop"
 import "shapes"
 import "gametable"
 // Physical Go on a 19x19 board: 361 rigid stones on a goban in the gallery hall's board game room (gallery/gallery.puck), whose every

@@ -24,9 +24,13 @@ public static class WorldContextFamilies {
     /// beyond its own body.</summary>
     public const string Engagement = "engagement";
     /// <summary>The engagement state while the seat's principal's <c>IWorldGrantsView.Applications</c> set names any
-    /// target other than its own body, and the seat is neither sitting at a tabletop nor captured on a screen showing a
-    /// window capture.</summary>
+    /// target other than its own body, and the seat is neither sitting at a tabletop, captured on a screen showing a
+    /// window capture, nor possessing another body.</summary>
     public const string EngagementEngaged = "engaged";
+    /// <summary>The engagement state while the seat possesses another body: its set names a body other than its own and
+    /// omits its own-body application, so the seat drives that body (a craft it boarded) and a world's context row can
+    /// give it that body's controls. The <c>Engagement</c> input selector reads the same set as <c>body</c>.</summary>
+    public const string EngagementBody = "body";
     /// <summary>The engagement state while the seat is captured at a tabletop: its set names a tabletop's placement
     /// and not its own body, so a world's context row can give it the table's controls.</summary>
     public const string EngagementTabletop = "tabletop";
@@ -67,7 +71,7 @@ public static class WorldContextFamilies {
     public const string RosterUnjoined = "unjoined";
 
     private static readonly string[] RosterStates = [RosterUnjoined, RosterClaimed, RosterPending, RosterActive];
-    private static readonly string[] EngagementStates = [EngagementEngaged, EngagementTabletop, EngagementPassthrough, EngagementNone];
+    private static readonly string[] EngagementStates = [EngagementEngaged, EngagementTabletop, EngagementPassthrough, EngagementBody, EngagementNone];
     private static readonly string[] EditorStates = [EditorPlay, EditorBuild];
     private static readonly string[] PointerStates = [PointerSurface, PointerNone];
 

@@ -1,14 +1,18 @@
-// Gameplay eligibility follows body registers and engagement, independently of camera pages.
+// Which actions the debug world accepts in which context: the standard's families for the contexts it has
+// (../standard/contexts/modes.puck's engagement, the instrument, the typing bench, the terminals) beside the two that
+// follow its avatar's own registers, her form and her jetpack. Eligibility follows body registers and engagement,
+// independently of binding pages.
+import "../standard/contexts/modes"
 import "../standard/instrument"
 import "../standard/typing"
 import "../standard/station"
 
-let movement = ["forward", "strafe", "turn", "faceX", "faceY", "faceZ", "run"]
+let movement = movementChannels
 let controls = ["jump", "suit", "noclip"]
 let flyingRise = [{ keep ["rise"], from { flight: "flying" }, to { flight: "flying" } }]
 // A seat engaged anywhere, at a bench or at a station, has none of the families that move her or play an instrument.
 let engagedAnywhere = [
-  { family: "engagement", states ["tabletop", "machine", "screen", "body"] }
+  whileEngaged
   { family: "typing", states ["seated"] }
   { family: "station", states ["engaged"] }
 ]
@@ -58,31 +62,12 @@ inputModes {
         { from: "flying", to: "walking", keep: movement }
       ]
     }
-    {
-      name: "engagement"
-      selector { kind: Engagement }
-      default: "none"
-      states [
-        { name: "none", values ["none"], channels [] }
-        { name: "tabletop", values ["tabletop"], channels ["forward", "strafe", "confirm", "cancel"] }
-        { name: "machine", values ["machine"], channels ["forward", "strafe", "jump", "flight", "start", "select"] }
-        { name: "screen", values ["screen"], channels ["forward", "strafe", "confirm", "cancel"] }
-        { name: "body", values ["body"], channels: concat(movement, ["jump", "rise", "flight"]) }
-      ]
-      // Omitted directed rows release everything, including global interaction and auto-actions.
-      transitions []
-    }
+    engagementFamily()
     // The instrument's vents are offered while the breath holds it up (bard.puck), and a seat engaged anywhere has none.
     instrumentFamily(suspendedBy: engagedAnywhere)
     // The press's typed text is offered while the seat sits at its bench (press.puck), in place of her movement.
-    typingFamily(suspendedBy: [
-      { family: "engagement", states ["tabletop", "machine", "screen", "body"] }
-      { family: "station", states ["engaged"] }
-    ])
+    typingFamily(suspendedBy: [whileEngaged, { family: "station", states ["engaged"] }])
     // A gallery display's console takes the seat's taps and its step back while she uses it (gallery/gallery.puck).
-    stationFamily(suspendedBy: [
-      { family: "engagement", states ["tabletop", "machine", "screen", "body"] }
-      { family: "typing", states ["seated"] }
-    ])
+    stationFamily(suspendedBy: [whileEngaged, { family: "typing", states ["seated"] }])
   ]
 }

@@ -1,0 +1,65 @@
+// Swimming: the controls of a body in water (a world's medium lattice, taken by kits.puck's `swimHold`). A library: it
+// hands its importers a function and a template and emits no document.
+//
+// `swimPlay()` authors the context for a world that has water: the `swimming` row, 1 for each player's body while the
+// world's medium holds it and 0 otherwise, the rule that keeps it, and the `swim` binding group the seat's controls
+// switch to while its body's cell is 1. The page inherits the on-foot page (`restingPage`) and takes over the rise
+// channel, which surfaces and dives. A jump still leaves the water from its surface.
+//
+//   import "../standard/contexts/swimming"
+//   swimPlay()
+//
+// A world's panels, lamps and rules read `swimming[<body>]`. `seats` sizes the row's seeded cells (bodies 0 to
+// seats - 1); a visitor's body takes a cell when it first swims, up to `capacity`.
+
+// The swim page as a binding overlay row, for a world that keeps the `swimming` row itself.
+function swimControls(restingPage = "base") = {
+  id: "swimming"
+  document {
+    version: "puck.input.bindings.v1"
+    modifiers []
+    contexts [
+      { family: "state:swimming", state: "1", group: "swim" }
+    ]
+    chords [
+      {
+        chord []
+        group: "swim"
+        page {
+          id: "swim"
+          inherits: restingPage
+          label: "Swim"
+          entries [
+            { channel: "rise", id: "rise", label: "Surface", scale: 1, sources ["keyboard.space", "gamepad.buttonSouth"] }
+            { channel: "jump", id: "jump", scale: 1, sources ["keyboard.space", "gamepad.buttonSouth"] }
+            { channel: "rise", id: "descend", label: "Dive", scale: -1, sources ["keyboard.c", "gamepad.buttonEast"] }
+          ]
+        }
+      }
+    ]
+  }
+}
+
+template swimPlay(seats = 4, capacity = 16, restingPage = "base") {
+  state {
+    world {
+      row {
+        name: "swimming"
+        kind: Int
+        capacity: capacity
+        cells: map(range(0, seats), seat => { key: $"{seat}", value: 0 })
+      }
+    }
+  }
+
+  // Written only when a body enters or leaves the water.
+  rule "swimming" {
+    forEach: $players
+    local wet = fact(each, InMedium)
+    when swimming[$each] != wet
+    mode: Level
+    swimming[$each] = wet
+  }
+
+  bindingOverlays [swimControls(restingPage: restingPage)]
+}

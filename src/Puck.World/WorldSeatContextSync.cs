@@ -105,6 +105,8 @@ public static class WorldSeatContextSync {
             var framed = (holdsOwn
                 ? -1
                 : screen);
+            // Possession: the set names another body and omits the seat's own, so the seat drives and perceives from it.
+            var driven = (!holdsOwn && (possessed >= 0));
 
             seatBindings.SetContextState(
                 slot: slot,
@@ -124,9 +126,11 @@ public static class WorldSeatContextSync {
                     screens: screens
                 )
                 ? WorldContextFamilies.EngagementPassthrough
+                : (driven
+                ? WorldContextFamilies.EngagementBody
                 : (composed
                 ? WorldContextFamilies.EngagementEngaged
-                : WorldContextFamilies.EngagementNone)))
+                : WorldContextFamilies.EngagementNone))))
             );
             seatBindings.SetContextState(
                 family: WorldContextFamilies.Layout,
@@ -139,7 +143,7 @@ public static class WorldSeatContextSync {
             // application keeps walking the seat's avatar, so it stays perceiving from that avatar; a screen
             // application never swaps either.
             anchor.Publish(
-                bodyIndex: ((!holdsOwn && (possessed >= 0))
+                bodyIndex: (driven
                 ? possessed
                 : slot),
                 slot: slot

@@ -12,7 +12,7 @@ namespace Puck.World.Tests;
 /// context family reads <c>tabletop</c>, so a world's context row can give the seat the table's controls. A mirrored
 /// set still walks its avatar and sits at nothing. A seat captured on a screen showing a window capture reads
 /// <c>passthrough</c>, so a world can give it a pad's desktop controls there; any other captured screen reads
-/// <c>engaged</c>.
+/// <c>engaged</c>. A seat that possesses another body reads <c>body</c>, so a world can give it a craft's controls.
 /// </summary>
 public sealed class WorldSeatContextSyncTabletopLawTests {
     [Fact]
@@ -81,6 +81,12 @@ public sealed class WorldSeatContextSyncTabletopLawTests {
         Assert.Equal(expected: WorldContextFamilies.EngagementEngaged, actual: bindings.ModeState(family: WorldContextFamilies.Engagement, slot: 0));
         Engage(capture: false, screens: [Screen(index: 16, monitor: null)], target: GrantSubject.Screen(index: 16));
         Assert.Equal(expected: -1, actual: anchor.EngagedScreen(slot: 0));
+        Assert.Equal(expected: WorldContextFamilies.EngagementEngaged, actual: bindings.ModeState(family: WorldContextFamilies.Engagement, slot: 0));
+
+        // Possessing another body reads body; driving it beside its own avatar reads engaged.
+        Engage(capture: true, screens: [], target: GrantSubject.Body(index: 1));
+        Assert.Equal(expected: WorldContextFamilies.EngagementBody, actual: bindings.ModeState(family: WorldContextFamilies.Engagement, slot: 0));
+        Engage(capture: false, screens: [], target: GrantSubject.Body(index: 1));
         Assert.Equal(expected: WorldContextFamilies.EngagementEngaged, actual: bindings.ModeState(family: WorldContextFamilies.Engagement, slot: 0));
     }
 

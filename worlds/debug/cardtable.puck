@@ -1,4 +1,4 @@
-import "../standard/seat"
+import "../standard/contexts/tabletop"
 import "../standard/inputs"
 import "shapes"
 import "solitaire"

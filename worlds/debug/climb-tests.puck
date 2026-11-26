@@ -8,7 +8,7 @@ schema: "puck.world.definition.v1"
 basis: "avatars/moth"
 documentId: "climb-tests"
 
-import "moth-controls"
+import "set-controls"
 
 prototypes {
   prototype "climb-face" {

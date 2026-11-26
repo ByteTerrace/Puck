@@ -1,6 +1,6 @@
-// The Moth's and the debug world's play-wheel rings: the standard's rings (../standard/pad-kit.puck) with the sectors
-// only these worlds provide. A library: moth-controls.puck draws the Moth's rings in every world she walks into, and
-// controls.puck the debug world's, with its Places ring.
+// The debug world set's play-wheel rings: the standard's rings (../standard/pad-kit.puck) with the sectors only these
+// worlds provide. A library: set-controls.puck draws the set's rings in every world of the set, and controls.puck the
+// debug world's, with its Places ring.
 import "../standard/pad-kit"
 
 // Back to the debug world's stage from anywhere, a fall or a portal loop included; from a painting's world the seat
@@ -18,9 +18,9 @@ let mothViewEntries = [
   { id: "face", command: "view.override", text: "layout face", value: neverRead, sources: null }
 ]
 
-let mothActRing = { id: "play-acts", label: "Act", entries: concat(actEntries, [respawnSector, suitSector]) }
-let mothViewRing = { id: "play-views", label: "View", entries: concat(mothViewEntries, viewEntries) }
-let mothRings = [mothActRing, mothViewRing, barRing]
+let setActRing = { id: "play-acts", label: "Act", entries: concat(actEntries, [respawnSector, suitSector]) }
+let setViewRing = { id: "play-views", label: "View", entries: concat(mothViewEntries, viewEntries) }
+let setRings = [setActRing, setViewRing, barRing]
 
 let placesRing = {
   id: "play-places"
@@ -48,4 +48,4 @@ let debugViewRing = {
   )
 }
 
-let debugRings = [mothActRing, debugViewRing, placesRing, barRing]
+let debugRings = [setActRing, debugViewRing, placesRing, barRing]

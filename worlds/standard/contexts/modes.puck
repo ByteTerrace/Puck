@@ -1,0 +1,39 @@
+// Which actions are live in which context. A binding group decides what a key or button does; an `inputModes` family
+// decides which actions the simulation accepts at all, and what stays held across a change. This library is the family
+// for the contexts the engine's engagement selects, which a world lists in its own `inputModes` beside the families of
+// the contexts it opts into (terminal.puck's `terminalFamily`, typing.puck's `typingFamily`, instrument.puck's
+// `instrumentFamily`). It hands its importers lets and a function and emits no document.
+//
+//   import "../standard/contexts/modes"
+//   inputModes { global ["interact", "tap"], families [engagementFamily(), ...] }
+
+// The channels that move a body, which a world's own families keep across a change of form.
+let movementChannels = ["forward", "strafe", "turn", "faceX", "faceY", "faceZ", "run"]
+
+// What a seat may press in each engagement: a cursor, a pick and a put-back at a tabletop and at a screen it points at,
+// the pad a machine's screen is played through (machines.puck's `devicePadKit`), and a body's movement, jump, rise and
+// flight while it drives another body (a craft). A seat that engages nothing has what the world's other families give.
+function engagementFamily(tabletop = ["forward", "strafe", "confirm", "cancel"], machine = [
+  "forward"
+  "strafe"
+  "jump"
+  "flight"
+  "start"
+  "select"
+], screen = ["forward", "strafe", "confirm", "cancel"], body = concat(movementChannels, ["jump", "rise", "flight"])) = {
+  name: "engagement"
+  selector { kind: Engagement }
+  default: "none"
+  states [
+    { name: "none", values ["none"], channels [] }
+    { name: "tabletop", values ["tabletop"], channels: tabletop }
+    { name: "machine", values ["machine"], channels: machine }
+    { name: "screen", values ["screen"], channels: screen }
+    { name: "body", values ["body"], channels: body }
+  ]
+  // With no directed rows a change releases everything held, the context button included.
+  transitions []
+}
+
+// The `suspendedBy` row of a family that stands down while the seat is engaged anywhere.
+let whileEngaged = { family: "engagement", states ["tabletop", "machine", "screen", "body"] }

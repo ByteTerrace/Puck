@@ -18,7 +18,7 @@ import "../standard/bounds"
 import "../standard/size-field"
 import "../standard/station"
 import "size"
-import "moth-controls"
+import "set-controls"
 
 let shrinkEnd = 0.15
 
