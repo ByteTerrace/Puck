@@ -98,6 +98,13 @@ public sealed partial class WorldDocumentWalker {
     private Tables m_tables;
 
     private static readonly ConcurrentDictionary<Type, (PropertyInfo? Key, PropertyInfo? Value)> PairCache = new();
+    // The values whose members a walk on this thread has entered, monotonic: a reader takes a window by reading twice.
+    [ThreadStatic]
+    private static long ThreadMembersVisited;
+
+    /// <summary>Gets the values whose members every walk on the calling thread has entered, a monotonic total: a
+    /// caller takes the members one piece of work walked by reading it before and after, on the same thread.</summary>
+    public static long MembersVisited => ThreadMembersVisited;
 
     /// <summary>Initializes a new instance of the <see cref="WorldDocumentWalker"/> class over the types a consumer
     /// reads.</summary>
@@ -571,6 +578,7 @@ public sealed partial class WorldDocumentWalker {
         }
 
         private void VisitMembers(object value, WorldModelType shape) {
+            ThreadMembersVisited++;
             switch (shape.Kind) {
                 case JsonTypeInfoKind.Enumerable:
                 case JsonTypeInfoKind.Dictionary:

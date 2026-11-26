@@ -36,6 +36,20 @@ public sealed class WorldProjectionWork : WorkLedger<WorkCounterSet> {
     /// reader, a recipient's delivery and a one-off read alike, whether or not it then owes anything. Fetch authorization
     /// also composes, so this count depends on the recipient cache retained across runs.</summary>
     public static WorkKind Compositions { get; } = Registry.Declare(name: "world.projection.compositions", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting compositions that projected the whole disclosed document again (serialized,
+    /// parsed into a tree and diffed against the held one), where neither an unchanged identity nor a state-only
+    /// composition could answer.</summary>
+    public static WorkKind WholeCompositions { get; } = Registry.Declare(name: "world.projection.whole-compositions", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the document values whose members the document walk entered while a recipient's
+    /// delivery composed (<see cref="WorldDocumentWalker.MembersVisited"/>, taken around each composition).</summary>
+    public static WorkKind WalkedMembers { get; } = Registry.Declare(name: "world.projection.walked-members", unit: "count", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the bytes the composing thread allocated while a recipient's delivery
+    /// composed.</summary>
+    public static WorkKind ComposedBytes { get; } = Registry.Declare(name: "world.projection.composed-bytes", unit: "bytes", workClass: WorkClass.Pacing);
+    /// <summary>Gets the kind counting the authored state rows a delivery cursor imaged again from the whole document
+    /// (<see cref="WorldDeliveryCursor.Delivered(WorldRecipientView)"/>), each read through the recipient's live
+    /// admission.</summary>
+    public static WorkKind SeededRows { get; } = Registry.Declare(name: "world.projection.seeded-rows", unit: "count", workClass: WorkClass.Pacing);
     /// <summary>Gets the kind counting member deltas delivered: the members of a recipient's projection that changed,
     /// and nothing else.</summary>
     public static WorkKind Deltas { get; } = Registry.Declare(name: "world.projection.deltas", unit: "count", workClass: WorkClass.Deterministic);

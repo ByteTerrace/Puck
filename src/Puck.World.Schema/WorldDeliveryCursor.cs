@@ -244,6 +244,7 @@ public sealed class WorldDeliveryCursor {
         Dictionary<string, HeldRow>? previous = (m_rows.Count == 0) ? null : new(m_rows, StringComparer.Ordinal);
         m_rows.Clear();
         m_metadataPrimers.Clear();
+        WorldProjectionWork.Count(amount: view.Source.AuthoredState.Count, kind: WorldProjectionWork.SeededRows);
         for (var row = 0; row < view.Source.AuthoredState.Count; row++) {
             var name = view.Arena.Rows[row].Name.Value;
             var held = default(HeldRow);
