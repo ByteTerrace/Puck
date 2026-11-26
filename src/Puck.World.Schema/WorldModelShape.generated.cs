@@ -4332,8 +4332,8 @@ public static partial class WorldModelShape {
         T(typeof(global::Puck.World.WorldHudSection), true, JsonTypeInfoKind.Object, null,
             [],
             [
-                M("defaults", typeof(global::Puck.World.WorldHudDefaults), typeof(global::Puck.World.WorldHudSection), "Defaults", Read | Write | Required, static value => ((global::Puck.World.WorldHudSection)value).Defaults),
-                M("panels", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldHudPanel>), typeof(global::Puck.World.WorldHudSection), "Panels", Read | Write | Required, static value => ((global::Puck.World.WorldHudSection)value).Panels),
+                M("defaults", typeof(global::Puck.World.WorldHudDefaults), typeof(global::Puck.World.WorldHudSection), "Defaults", Read | Write, static value => ((global::Puck.World.WorldHudSection)value).Defaults),
+                M("panels", typeof(global::System.Collections.Generic.IReadOnlyList<global::Puck.World.WorldHudPanel>), typeof(global::Puck.World.WorldHudSection), "Panels", Read | Write, static value => ((global::Puck.World.WorldHudSection)value).Panels),
             ],
             []),
         T(typeof(global::Puck.World.WorldIconBadgeOverride), true, JsonTypeInfoKind.Object, null,

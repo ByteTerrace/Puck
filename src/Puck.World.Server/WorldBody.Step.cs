@@ -742,8 +742,7 @@ public sealed partial class WorldBody {
 
         if (!resting && m_grounded && !HoldOwnsVerticalChannel && !HoldIsMedium && (scratch.DirectVerticalVelocity <= FixedQ4816.Zero) &&
             (m_contactField is { } field) && (m_collider is not null)) {
-            var contactStep = new BodyContactStep(field: field, entityIndex: scratch.EntityIndex, memo: ref scratch.SupportMemo,
-                orientation: scratch.Orientation, up: scratch.Up, volumes: ScaledColliderVolumes(), volumesRevision: BroadphaseRadiusComputations);
+            var contactStep = ContactStep(field: field, scratch: ref scratch);
 
             if (FixedStepUp.TryFollowSupport(step: ref contactStep, start: in m_position, velocity: in m_planarVelocity,
                 up: in scratch.Up, distance: GroundSnap, result: out var support)) {
