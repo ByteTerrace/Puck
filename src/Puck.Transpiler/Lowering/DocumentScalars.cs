@@ -2,7 +2,6 @@ using System.Text.Json.Nodes;
 using Puck.Assets.Documents;
 using Puck.State;
 using Puck.Transpiler.Ast;
-using Puck.Transpiler.Diagnostics;
 
 namespace Puck.Transpiler.Lowering;
 
@@ -67,15 +66,7 @@ public static class DocumentScalars {
 
         return JsonValue.Create(value: value);
     }
-    private static JsonNode? Refuse(DocumentScope scope, CallExpressionNode call, string message) {
-        scope.Diagnostics.ReportError(
-            code: PuckDiagnosticCodes.BuiltinRefused,
-            message: message,
-            span: call.Span
-        );
-
-        return null;
-    }
+    private static JsonNode? Refuse(DocumentScope scope, CallExpressionNode call, string message) => DocumentBuiltins.Refuse(call: call, message: message, scope: scope);
 
     /// <summary>Folds a scalar call to the value it denotes.</summary>
     /// <param name="call">The call as written.</param>
