@@ -440,8 +440,11 @@ public static partial class BenchmarkCommand {
             var connect = (local ? pair!.Endpoint : leg.Remote);
             var request = new WorldLaunchRequest(Verb, build.Path) {
                 Arguments = [
-                    // A client of a remote authority runs from its boot: a paused boot commits no transfer.
+                    // A client of a remote authority runs from its boot: a paused boot commits no transfer. A pair's client
+                    // names the namespace its authority proves, as a player's build does for the world it joins; any
+                    // other remote is held to the namespace the booted world declares.
                     .. ((connect is null) ? new[] { "--paused" } : ["--connect", connect]),
+                    .. ((local && (pair!.Namespace.Length > 0)) ? new[] { "--connect-authority", pair.Namespace } : []),
                     .. SizeArguments(options: options, parse: parse, shape: shape),
                     .. (parse.GetValue(options.Cache) is { } cache ? new[] { "--cache-dir", Path.GetFullPath(cache) } : []),
                     .. (issued
