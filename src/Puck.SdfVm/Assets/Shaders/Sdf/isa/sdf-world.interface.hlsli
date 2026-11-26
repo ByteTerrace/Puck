@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/6b533c3e2f6621e56dcf474b65996fb729ca33e7b1607e0e52b1c476efb8ed70). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/a69d8e9b8cb2f13b86cb395fb066b8ecbeebb0a59a6e602865dcc191c6fd376e). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -251,8 +251,8 @@ struct SdfWorldPass {
     [[vk::offset(3372)]] uint _pad3372;
     [[vk::offset(3376)]] float4 worldLanes;
 };
-[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsa735CBC51 : register(b0, space3);
-#define passGroup passGroupIsa735CBC51
+[[vk::binding(0, 3)]] ConstantBuffer<SdfWorldPass> passGroupIsaE0ADE217 : register(b0, space3);
+#define passGroup passGroupIsaE0ADE217
 [[vk::binding(1, 3)]] StructuredBuffer<uint> sdfVisibilityRecords : register(t1, space3);
 [[vk::binding(2, 3)]] RWStructuredBuffer<uint> sdfVisibilityRecordsRW : register(u2, space3);
 [[vk::binding(3, 3)]] RWStructuredBuffer<float> reactivityRW : register(u3, space3);
@@ -302,10 +302,10 @@ struct SdfWorldPushedIndex {
 
 // The pass's own work, added to its row of the node's kernel counters (GpuKernelCounters, which reads the rows
 // back): each counted kind in GpuWork.KernelKinds order, march steps, texels written, sky evaluations, sky hashes,
-// sky texture loads, shape evaluations, shape gradients and rejected mesh hits, as a
+// sky texture loads, shape evaluations, shape gradients, rejected mesh hits and light visits, as a
 // 64-bit count in two words, low word first. An interface declaring no work counters declares the same functions
 // empty.
-static const uint PuckWorkRowWords = 16u;
+static const uint PuckWorkRowWords = 18u;
 static const uint PuckWorkDisabledRow = 0xFFFFFFFFu;
 static const uint PuckWorkStepsWord = 0u;
 static const uint PuckWorkTexelsWord = 2u;
@@ -315,6 +315,7 @@ static const uint PuckWorkSkyTextureLoadsWord = 8u;
 static const uint PuckWorkShapesWord = 10u;
 static const uint PuckWorkGradientsWord = 12u;
 static const uint PuckWorkRejectedHitsWord = 14u;
+static const uint PuckWorkLightsWord = 16u;
 // Adds to one count: the low word atomically, then the high word by one when that addition carries.
 void puckAddWork(uint word, uint amount) {
     if (amount == 0u) {
@@ -485,6 +486,18 @@ void puckCountRejectedHit() {
 void puckCountSky(uint evaluations, uint loads) {
     puckAddRowWork(PuckWorkSkyWord, evaluations);
     puckAddRowWork(PuckWorkSkyTextureLoadsWord, loads);
+}
+// Adds the lights a lane's shading walks visited to its pass's row: the wave sums its lanes and the first adds
+// the sum. Every lane of the wave must reach the call.
+void puckCountLights(uint visits) {
+    if (passGroup.workCounterRow == PuckWorkDisabledRow) {
+        return;
+    }
+    uint waveVisits = WaveActiveSum(visits);
+
+    if (WaveIsFirstLane()) {
+        puckAddRowWork(PuckWorkLightsWord, waveVisits);
+    }
 }
 
 #endif // PUCK_SHADER_INTERFACE_SDF_WORLD

@@ -8,6 +8,7 @@
 #ifndef SHADE_SDF_LIGHT_HLSLI
 #define SHADE_SDF_LIGHT_HLSLI
 #include "Shared/luma.hlsli"
+#include "../frame/sdf-work.hlsli"
 #include "sdf-mesh-irradiance.hlsli"
 #include "sdf-toon.hlsli"
 
@@ -316,6 +317,7 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
         light.param = record.Param;
         light.index = (int)index;
         light.record = record;
+        sdfWorkLights++;
 
         return true;
     }
@@ -354,6 +356,7 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
         light.weight = (((4.0 * surface.right.w) * surface.up.w) / SDF_PI);
         light.position = surface.origin.xyz;
         light.facing = normalize(cross(surface.right.xyz, surface.up.xyz));
+        sdfWorkLights++;
 
         return true;
     }
@@ -383,12 +386,25 @@ bool sdfLightNext(inout SdfLightWalk walk, out SdfLightSource light) {
 // lights, and the probe share of every traced light only for a program that reads `light.probeShare` (`probeShare`,
 // SdfShadeReads.ProbeShare), since a directional's visibility otherwise reads the probes only where no cascade holds the
 // point. Ordinary shading requests only the terms its light kind uses, preserving the no-program path's work.
-// `unseen` says the light is a traced point or spot light whose share of the probes about the surface is exactly zero:
-// such a light adds nothing there, under the default response and an authored light phase alike (the light phase's door
-// answers no light before it runs a program), which is what lets a views tile leave out a traced light none of its
-// pixels' probes see (sdfViewsTileLights). A fixture meant to light through what the volume measured is authored
-// untraced.
-struct SdfLightInputs { float3 direction; float reach; float probeShare; float visibility; bool unseen; };
+// A point, spot or screen light's reach also fades out where its light falls under the view's cutoff
+// (sdfLightCutoffFade), so the walk drops what the view's exposure cannot show.
+// `none` says the light adds nothing at the surface: a point, spot or screen light whose reach there is exactly zero
+// (past its range or cone, behind a screen's face, or under the cutoff), or a traced point or spot light whose share of
+// the probes about the surface is exactly zero. Such a light adds nothing under the default response and an authored
+// light phase alike (the light phase's door answers no light before it runs a program), which is what lets a views tile
+// leave out a light that reaches none of its points or that none of its pixels' probes see (sdfViewsTileLights). A
+// fixture meant to light through what the volume measured is authored untraced.
+struct SdfLightInputs { float3 direction; float reach; float probeShare; float visibility; bool none; };
+// The share of display white under which a positional light's contribution leaves the shading walk: the share that sizes
+// every light's range at the world's darkest exposure (SdfPhotometry.RangeThreshold, SdfPhotometry.RangeOf), taken at
+// the view's own exposure. A light keeps its whole response where it gives a white surface facing it twice that share of
+// the view's white, and fades linearly to nothing at the share, so a views tile that leaves out a light whose bound over
+// its points stays under the share (sdfViewsTileLights) cuts nothing a pixel shows. `luminance` is the light's luminance
+// on a white surface facing it, in nits. The local adaptation (sdfLocalAdaptationGain) can lift what the fade removed in
+// the darkest pixels by at most its gain.
+float sdfLightCutoffFade(float luminance) {
+    return saturate(((luminance * passGroup.exposure) / SDF_LIGHT_RANGE_THRESHOLD) - 1.0);
+}
 // Whether the irradiance volume traces a light of the lights table at `index` for its occlusion (SdfLight.IsTraced): a
 // point or spot light whose record asks for shadows, among the lights a probe's light bits hold.
 bool sdfLightTraces(SdfLight record, uint index) {
@@ -400,23 +416,29 @@ SdfLightInputs sdfLightInputs(SdfLightSource light, SdfShadeSurface surface, boo
     inputs.reach = 1.0;
     inputs.probeShare = 1.0;
     inputs.visibility = 1.0;
+    bool positional = ((light.kind == SDF_LIGHT_POINT) || (light.kind == SdfLightScreen));
     if (light.kind == SDF_LIGHT_POINT) {
         inputs.reach = sdfPointReach(light.record, light.position, surface.position, inputs.direction);
+        inputs.reach *= sdfLightCutoffFade(light.weight * inputs.reach);
     } else if (light.kind == SdfLightScreen || (authored && light.kind != SDF_LIGHT_DIRECTIONAL)) {
         float3 delta = light.position - surface.position;
         float distanceSquared = dot(delta, delta);
         inputs.direction = delta * rsqrt(max(distanceSquared, 1.0e-8));
-        if (light.kind == SdfLightScreen) inputs.reach = (saturate(dot(light.facing, -inputs.direction)) * sdfLightWindow(distanceSquared, light.param)) / (distanceSquared + light.weight);
+        if (light.kind == SdfLightScreen) {
+            inputs.reach = (saturate(dot(light.facing, -inputs.direction)) * sdfLightWindow(distanceSquared, light.param)) / (distanceSquared + light.weight);
+            inputs.reach *= sdfLightCutoffFade(dot(light.color, PuckRec709Luminance) * light.weight * inputs.reach);
+        }
     }
     bool traced = surface.probed && light.record.Shadows != 0u && light.index >= 0;
     bool lit = (light.weight * inputs.reach > 0.0);
-    // The probes' share read here, or negative where it was not, so a directional's visibility reads the probes once.
+    // The probes' share read here, or negative where it was not, so a directional's visibility reads the probes once. A
+    // positional light that reaches nothing here reads no probe: it adds nothing whatever they say.
     float known = -1.0;
-    if (traced && (probeShare || ((light.kind == SDF_LIGHT_POINT) && (lit || authored)))) {
+    if (traced && (positional ? lit : probeShare)) {
         inputs.probeShare = sdfLightProbeVisibility(surface.probes, (uint)light.index);
         known = inputs.probeShare;
     }
-    inputs.unseen = ((light.kind == SDF_LIGHT_POINT) && (known == 0.0));
+    inputs.none = ((positional && !lit) || ((light.kind == SDF_LIGHT_POINT) && (known == 0.0)));
     if (light.kind == SDF_LIGHT_POINT) {
         inputs.visibility = inputs.probeShare * surface.ambientOcclusion;
     } else if (light.kind == SDF_LIGHT_DIRECTIONAL) {
