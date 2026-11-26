@@ -67,8 +67,9 @@ namespace Puck.Abstractions.Gpu;
 /// withheld them (<see cref="GpuDeviceOptions.Withheld"/>).</param>
 /// <param name="RaytracingTier">Direct3D 12's <c>D3D12_RAYTRACING_TIER</c> as reported (10 for 1.0, 11 for 1.1, 0 for
 /// none); zero on Vulkan.</param>
-/// <param name="MaxStorageBufferBytes">Vulkan's <c>maxStorageBufferRange</c>, the most bytes one storage-buffer view
-/// spans, which a buffer bound whole must fit; zero on Direct3D 12, whose views state no such limit.</param>
+/// <param name="MaxStorageBufferBytes">Vulkan's <c>maxStorageBufferRange</c> as reported, the most bytes one
+/// storage-buffer view may span; zero on Direct3D 12, whose views state no such limit. A driver may answer a view's length
+/// wrongly below it, so what a buffer bound whole fits is the bindings' <see cref="IGpuBindings.MaxStorageBufferBytes"/>.</param>
 public sealed record GpuDeviceCapabilities(
     string Backend,
     uint MaxBoundDescriptorSets,

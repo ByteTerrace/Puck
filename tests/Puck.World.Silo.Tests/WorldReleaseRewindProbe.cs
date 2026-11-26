@@ -668,6 +668,13 @@ public sealed partial class WorldReleaseCutoverLawTests {
                 ),
                 userMessage: reason
             );
+            // The point is a rewind baseline: it names its group, and the restored world's own capture is an ordinary
+            // image that does not. This group holds no guest, so the baseline's restore ends nothing.
+            Assert.Equal(
+                expected: ["alpha", "beta"],
+                actual: expectedCheckpoint!.Escrow.RewindBaseline
+            );
+            expectedCheckpoint = expectedCheckpoint with { Escrow = expectedCheckpoint.Escrow with { RewindBaseline = [] } };
             // Activation deliberately parks disconnected humans. Check that exact, documented change, then
             // compare the entire checkpoint: no other population, topology or gameplay difference is allowed.
             if (identity.World.Value == "alpha") {

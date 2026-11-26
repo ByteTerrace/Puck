@@ -162,7 +162,15 @@ explicitly acknowledged rewind. `WorldReleaseRewindBoundary` pins the enforced
 policy and group inventory in each authority root. Hosting cannot reopen those
 roots without the same closed group. A recovery point keeps its capture time,
 full checkpoints, and receipt provenance; a qualification export has no
-rewind proof. Restore first protects current state, then publishes the selected
+rewind proof. A closed group's point is a baseline
+(`WorldReleaseRewindBoundary.Baseline`): each checkpoint names the group's
+authorities, and restoring it ends every traveler minted outside them inside
+the restore function (`WorldPersistence.EndRewoundGuests`), so a player who
+was present at the capture is not in the restored world
+([decision](../../docs/decisions/worlds-and-federation.md#a-closed-rewind-group-admits-players-as-guests)).
+`WorldReleaseRewindBoundary.RequireContained` proves what the baseline keeps:
+settled departures, no open reservation from a world of the group, and no
+forwarding route that leaves it. Restore first protects current state, then publishes the selected
 checkpoints privately. Current operation receipts, journal numbering, and fresh
 writer generations survive the rewind. Pre-commit failure follows the ordinary
 protected-source recovery path; post-commit resume never reapplies the point.

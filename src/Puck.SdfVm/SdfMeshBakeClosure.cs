@@ -49,6 +49,8 @@ public sealed class SdfMeshBakeClosure {
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "PlanAhead"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "TryTake"),
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshPathBake", "Complete"),
+        // A world's far product is kept in the same store under the same identity, so its derivation is the bake's code.
+        ("Puck.SdfVm", "Puck.SdfVm.SdfFarProduct", nameof(SdfFarProduct.Build)),
         .. SampleInputs,
         // The encoder and its quantization determine the stored product.
         ("Puck.SdfVm", "Puck.SdfVm.SdfMeshStoreCodec", nameof(SdfMeshStoreCodec.Encode)),

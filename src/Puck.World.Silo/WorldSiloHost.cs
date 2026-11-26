@@ -795,7 +795,12 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
             var subject = FederationSubject(definition: definition, world: worldRow.World);
 
             if (ClosedGroupRewind) {
-                lock (m_rewindAuthoritiesGate) { m_rewindAuthorities.Add(item: subject); }
+                lock (m_rewindAuthoritiesGate) {
+                    m_rewindAuthorities.UnionWith(other: WorldReleaseRewindBoundary.Authorities(
+                        authorityNamespace: definition.Host.AuthorityNamespace,
+                        world: worldRow.World.Value
+                    ));
+                }
                 key.Dispose();
             }
 
@@ -1394,7 +1399,7 @@ public sealed partial class WorldSiloHost : IWorldAuthorityHost, IWorldWaitGateR
                 AdvertisedEndpoint = definition.Host.Authority,
                 Tape = tape,
             };
-            var slice = checkpoint?.HostRow;
+            var slice = ((checkpoint is { } restored) ? WorldReleaseRewindBoundary.HostRow(checkpoint: restored) : null);
             var tcs = new TaskCompletionSource<bool>(creationOptions: TaskCreationOptions.RunContinuationsAsynchronously);
 
             Post(action: () => {

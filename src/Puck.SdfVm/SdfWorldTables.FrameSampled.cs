@@ -92,7 +92,7 @@ public sealed partial class SdfWorldTables {
 
         if (bytes > m_frameSampledRegion.ShadowBytes) {
             Retire(replaced: m_frameSampledRegion.Grow(byteCount: (sizeof(uint) * GpuCapacity.Grown(current: (m_frameSampledRegion.ShadowBytes / sizeof(uint)),
-                required: words, ceiling: (GpuRegion.MaxByteCount / sizeof(uint)), divisor: 2))), carryingRegion: m_frameSampledRegion);
+                required: words, ceiling: (m_frameSampledRegion.MostBytes / sizeof(uint)), divisor: 2))), carryingRegion: m_frameSampledRegion);
             m_bindingRevision++;
         }
 

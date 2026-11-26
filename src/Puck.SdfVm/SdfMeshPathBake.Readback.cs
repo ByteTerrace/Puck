@@ -39,7 +39,7 @@ public sealed partial class SdfMeshPathBake {
     // no lattice past those already promised. Under the gate, on the take.
     private bool PromiseReadback(long taking) {
         lock (m_readbackGate) {
-            var promise = ChargeOf(bytes: (m_readbackPending + taking));
+            var promise = (m_readbackPending + taking);
 
             if ((promise > m_readbackPromised) && !m_readback.TryReserveProgress(peak: promise)) {
                 if (!m_readbackReported) { SdfMeshBakeReport.ReadbackDeferred(residency: Residency, bytes: promise); m_readbackReported = true; }
@@ -61,15 +61,12 @@ public sealed partial class SdfMeshPathBake {
     }
     // Under m_readbackGate: lowers the reservation to the bytes granted and being taken.
     private void SettleReadback() {
-        var promise = ChargeOf(bytes: (m_readbackPending + m_readbackTaking));
+        var promise = (m_readbackPending + m_readbackTaking);
 
         if (promise >= m_readbackPromised) { return; }
         _ = m_readback.TryReserve(peak: promise);
         m_readbackPromised = promise;
     }
-    // The bytes an answer's storage charges for `bytes` of output: the same bytes from a native allocator, and at most
-    // twice them from the rented arrays a bake with none uses, which round a length up to their bucket.
-    private long ChargeOf(long bytes) => ((Library.Allocator is null) ? (2L * bytes) : bytes);
     // The readback bytes the take may still grant: what is left of ReadbackBytes.
     private long ReadbackRoom {
         get {

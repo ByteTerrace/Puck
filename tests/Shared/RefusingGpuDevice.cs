@@ -100,6 +100,7 @@ internal sealed class RefusingGpuDevice :
 
     // A revision read reaches no device: a holder reads it to decide whether a refused build is due again.
     ulong IGpuBindings.MaxConstantBufferBytes => throw Reach(member: "IGpuBindings.MaxConstantBufferBytes");
+    ulong IGpuBindings.MaxStorageBufferBytes => throw Reach(member: "IGpuBindings.MaxStorageBufferBytes");
     long IGpuBindings.HeapReleaseRevision => 0L;
 
     nint IGpuBindings.AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) => throw Reach(member: "IGpuBindings.AllocateSet");
