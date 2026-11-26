@@ -78,9 +78,14 @@ clipped at a portal's glass, a mirrored draw) whole, as a thin caster. The
 wrap's light survives on a body in the open however thin or thick it is, and a
 roof, a wall or a single sheet farther off still shadows it; a thin caster's
 own wrapped side is shadowed by its own lit side.
-`world.debug-view shadow` shows the key light's filtered visibility. The
-ambient term still fills shadowed regions, so shadows read soft and colored,
-never black.
+`world.debug-view shadow` shows the key light's visibility as its light walk
+answers it (`sdfDebugKeyShadow`): grey on a side facing the light, the share the
+probes answer past the cascades tinted amber, violet on a side past the
+terminator whose wrapped response the exit layer lights (a wall's own room
+face reads visible there, since the light leaves the wall through it), and
+dark blue on a side the surface pass left unqueried, whose answer is zero. Read
+a white wall as lit only when it is grey, not violet or blue. The ambient term
+still fills shadowed regions, so shadows read soft and colored, never black.
 
 A wide filter on a single receiver depth shadows the receiver by its own
 surface: a floor seen at a slant from the light lies nearer the light on one
@@ -382,7 +387,12 @@ in the frame.
   `specular` at every angle); with the volume on, only as far as the probes
   about it see the sky open that way, and the light the surfaces about them
   send back where they do not (`sdfMeshReflection`), so a room reflects its
-  walls rather than the sky outside it.
+  walls rather than the sky outside it. The same directional albedo is the
+  share of the arriving light the specular layer returns, so the diffuse terms
+  (the lights', the volume's and the authored fill) take only the rest
+  (`sdfLightStage`): a surface reflects no more light than it receives, and a
+  material with a high `specular` reads as a glossy coat over a dimmer base
+  rather than a full diffuse surface with a bright veil laid over it.
 - **Exposure.** The volume is also the automatic exposure's meter: the
   luminance the probes about a view's camera see along their six axes, weighted
   toward where the camera looks. A scene ray from the camera to each probe
