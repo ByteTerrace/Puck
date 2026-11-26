@@ -1920,7 +1920,16 @@ public sealed partial class WorldInstanceHost {
     // instances over the wire reaches the destination through the escrow, never through PublishCommittedTransfer,
     // so the commit-time seed there covers colocated arrivals only. The escrow's own border admission is written by
     // the destination for both topologies, which is what makes this reachable at all.
-    private void SeedFederatedArrivalOccupancy(WorldInstance instance) {
+    // Seeds the portal latch an arrival owes each body whose retained arrival border is new, and forgets the borders
+    // that went; true when a latch was seeded. An authority retaining no border, while no arrival stands seeded
+    // anywhere, has nothing to seed or forget.
+    private bool SeedFederatedArrivalOccupancy(WorldInstance instance) {
+        if ((instance.Server.TransferArrivalBorders == 0) && (m_seededArrivals.Count == 0)) {
+            return false;
+        }
+
+        var seededAny = false;
+
         for (var seat = 0; (seat < instance.Server.Population.Capacity); seat++) {
             var key = (instance.Name, seat);
 
@@ -1952,7 +1961,10 @@ public sealed partial class WorldInstanceHost {
                 instance: instance,
                 seat: seat
             );
+            seededAny = true;
         }
+
+        return seededAny;
     }
     private static ulong StableJunctionSeed(string authority, int entity, int generation) {
         var hash = Puck.Maths.Fnv1aHash.Create();
@@ -2146,6 +2158,7 @@ public sealed partial class WorldInstanceHost {
     /// engine-time fence: destination topology resolves before population advance, and any overlapping destination
     /// step skips that traveler without evaluating input, motion, or dynamic contact a second time.</summary>
     public void DrainPendingTransfers() {
+        ReturnEndedSeats();
         DrainPendingPoseHomes();
         ReconcileInDoubtTransfers();
 

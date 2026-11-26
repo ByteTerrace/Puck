@@ -3124,7 +3124,7 @@ public sealed partial class SdfMeshPathBake {
             }
             for (var vertex = 0; (vertex < contour.VertexCount); vertex++) { m_starts[(vertex + 1)] += m_starts[vertex]; }
             m_incident.Resize(m_starts[contour.VertexCount], clear: false, preserve: false);
-            using var filledLease = RentedArrays.Rent<int>(array: out var filled, minimumLength: contour.VertexCount, owner: observer);
+            using var filled = OwnedBuffer<int>.OfLength(allocator: null, clear: false, length: contour.VertexCount, observer: observer);
 
             filled.AsSpan(start: 0, length: contour.VertexCount).Clear();
             for (var index = 0; (index < m_triangleCount); index++) {

@@ -758,6 +758,9 @@ public unsafe sealed class VulkanNativeCommandBufferRecordingApi : IVulkanComman
         );
     }
     /// <inheritdoc/>
+    /// <remarks>The stack storage is not zeroed: the fill writes every native barrier of the run before the call reads
+    /// one, and only the run's length reaches the call.</remarks>
+    [System.Runtime.CompilerServices.SkipLocalsInit]
     public void PipelineBarriers(VulkanDeviceCommands device, nint commandBufferHandle, uint sourceStageMask, uint destinationStageMask, (uint Source, uint Destination)? memory, ReadOnlySpan<VulkanBufferBarrier> buffers, ReadOnlySpan<VulkanImageBarrier> images) {
         ArgumentNullException.ThrowIfNull(argument: device);
 

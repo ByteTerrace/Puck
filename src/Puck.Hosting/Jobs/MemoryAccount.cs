@@ -101,13 +101,7 @@ public readonly record struct MemoryReading(long Live, long Reserved, long Cache
 /// </summary>
 public sealed class MemoryAccount {
     /// <summary>Gets the process account shared by mesh libraries, residencies and jobs.</summary>
-    public static MemoryAccount Shared { get; } = CreateShared();
-
-    private static MemoryAccount CreateShared() {
-        var account = new MemoryAccount();
-        RentedArrays.ObserveLargeCache(account.CreateOwner(name: "large-rented-array-cache", category: MemoryCategory.Cached));
-        return account;
-    }
+    public static MemoryAccount Shared { get; } = new();
 
     private const int Backings = 4;
     private const int Pools = 2;
@@ -331,7 +325,6 @@ public sealed class MemoryAccount {
     /// call; <see cref="DeferredTrims"/> counts those still waiting.</summary>
     public void TrimCaches() {
         TrimRequested?.Invoke();
-        Puck.Abstractions.Memory.RentedArrays.TrimLarge();
     }
 
     private int m_deferredTrims;
@@ -800,8 +793,6 @@ public sealed class MemoryAccount {
             }
             if ((m_hostBar is not null) && (Interlocked.Exchange(location1: ref m_beyondReading, value: 1) == 0)) { m_beyondReads.Enqueue(item: this); }
         }
-        // The large arrays no build has rented for a while go back to the collector at the account's own pace.
-        Puck.Abstractions.Memory.RentedArrays.TrimIdleLarge();
     }
     // Reads the process's private resident pages (HostMemory.PrivateResidentBytes) on the host's pool and records what
     // lies beyond the pool's holdings: commit no page backs yet, such as a driver's mirror of device memory or a

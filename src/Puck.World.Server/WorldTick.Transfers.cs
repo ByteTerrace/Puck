@@ -6,7 +6,6 @@ using Puck.World.Protocol;
 namespace Puck.World.Server;
 
 public sealed partial class WorldTick {
-    private Func<string, bool>? m_transferAuthorityAllowed;
     // How many federated images the tape was last handed: the tape hears the held set every step while it is
     // non-empty, and once more as it empties.
     private int m_tapedFederatedIntents;
@@ -27,13 +26,14 @@ public sealed partial class WorldTick {
         }
         hash.Add(values: writer.WrittenSpan);
     }
-    /// <summary>Installs the hosting boundary before admission. The predicate admits only authorities restored
-    /// together with this world. It cannot be replaced during an activation.</summary>
-    internal void ConstrainTransferAuthorities(Func<string, bool> allowed) {
-        ArgumentNullException.ThrowIfNull(allowed);
-        if (m_transferAuthorityAllowed is not null) { throw new InvalidOperationException(message: "transfer boundary is already installed"); }
-        m_transferAuthorityAllowed = allowed;
-    }
+    /// <summary>Installs a closed rewind group's boundary before admission: the authorities restored together with
+    /// this world, and the issuer whose players it admits as guests. Every crossing operation is then decided at the
+    /// escrow's door (<see cref="WorldTransferEscrow.Admit"/>). It cannot be replaced during an activation.</summary>
+    /// <param name="boundary">The boundary.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="boundary"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A boundary is already installed.</exception>
+    internal void ConstrainTransferAuthorities(WorldTransferBoundary boundary) =>
+        Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Constrain(boundary: boundary));
 
     // Admits every queued packet exactly once, in order, then republishes only the accepted held image. A row is
     // accepted only while the same peer principal still occupies its slot; an onward transfer leaves the old row
@@ -265,14 +265,20 @@ public sealed partial class WorldTick {
     /// <summary>Releases a reservation before commit. A destination that already committed ignores the abort.</summary>
     /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
     /// <param name="transferId">The source-minted transfer id.</param>
-    internal void AbortTransfer(string sourceAuthority, ulong transferId) =>
+    /// <param name="caller">Who made the call (<see cref="WorldTransferEscrow.Admit"/>).</param>
+    internal void AbortTransfer(string sourceAuthority, ulong transferId, WorldTransferCaller? caller = null) =>
         Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Abort(
+            caller: caller,
             sourceAuthority: sourceAuthority,
             transferId: transferId
         ));
     /// <summary>Retires the acknowledged transaction while preserving stable mobility replay protection.</summary>
-    internal void AcknowledgeTransfer(string sourceAuthority, ulong transferId) =>
+    /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
+    /// <param name="transferId">The source-minted transfer id.</param>
+    /// <param name="caller">Who made the call (<see cref="WorldTransferEscrow.Admit"/>).</param>
+    internal void AcknowledgeTransfer(string sourceAuthority, ulong transferId, WorldTransferCaller? caller = null) =>
         Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Acknowledge(
+            caller: caller,
             sourceAuthority: sourceAuthority,
             transferId: transferId
         ));
@@ -295,16 +301,12 @@ public sealed partial class WorldTick {
     /// <returns><see cref="WorldTransferStatus.Committed"/> when the commit is authoritative here,
     /// <see cref="WorldTransferStatus.Uncertain"/> while only this authority's recovery can decide, and
     /// <see cref="WorldTransferStatus.Missing"/> for a refusal.</returns>
-    internal WorldTransferStatus CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null) {
-        if (
-            (m_transferAuthorityAllowed is not null) &&
-            !m_transferAuthorityAllowed(sourceAuthority)
-        ) {
-            reason = "closed rewind group refuses an external transfer"; return WorldTransferStatus.Missing;
-        }
+    /// <param name="caller">Who made the call (<see cref="WorldTransferEscrow.Admit"/>).</param>
+    internal WorldTransferStatus CommitTransfer(string sourceAuthority, ulong transferId, IReadOnlyList<WorldTransferCommitMember> members, out string reason, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null, WorldTransferCaller? caller = null) {
         var resolvedReason = string.Empty;
         // A commit waiting on a crossing record in flight is decided again when it settles: it is not uncertain.
         var (status, waiting) = Host.ExecuteAuthorityOperation(operation: () => (Host.TransferEscrow.Commit(
+            caller: caller,
             confirmed: confirmed,
             members: members,
             reason: out resolvedReason,
@@ -401,14 +403,14 @@ public sealed partial class WorldTick {
     /// <param name="request">The source-tick deadline, border policy, and prospective travelers.</param>
     /// <param name="confirmed">Home's answers to this destination's question for this reservation, keyed by hop key
     /// and incarnation.</param>
+    /// <param name="caller">Who made the call (<see cref="WorldTransferEscrow.Admit"/>).</param>
     /// <returns>The destination's verdict and assigned body indices.</returns>
-    internal WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null) =>
-        Host.ExecuteAuthorityOperation(operation: () => (((m_transferAuthorityAllowed is not null) && !m_transferAuthorityAllowed(request.SourceAuthority))
-            ? WorldTransferReservationReply.Refused(reason: "closed rewind group refuses an external transfer")
-            : Host.TransferEscrow.Reserve(
-                confirmed: confirmed,
-                request: request
-            )));
+    internal WorldTransferReservationReply ReserveTransfer(WorldTransferReservationRequest request, IReadOnlyDictionary<(WorldTransferKey Key, WorldEntityAddress Incarnation), ulong>? confirmed = null, WorldTransferCaller? caller = null) =>
+        Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Reserve(
+            caller: caller,
+            confirmed: confirmed,
+            request: request
+        ));
     /// <summary>Terminally retires a traveler incarnation after its accepted leave has propagated through this hop.</summary>
     internal void RetireTransferredMobility(in WorldMobilityIdentity mobility) {
         var credential = mobility;
@@ -417,8 +419,12 @@ public sealed partial class WorldTick {
     }
     /// <summary>Returns the destination's view of a source-scoped transfer. A <see cref="WorldTransferStatus.Missing"/>
     /// answer is final: the key is tombstoned before it is given (<see cref="WorldTransferEscrow.Status"/>).</summary>
-    internal WorldTransferStatus TransferStatus(string sourceAuthority, ulong transferId) =>
+    /// <param name="sourceAuthority">The authenticated namespace that minted the transfer id.</param>
+    /// <param name="transferId">The source-minted transfer id.</param>
+    /// <param name="caller">Who made the call (<see cref="WorldTransferEscrow.Admit"/>).</param>
+    internal WorldTransferStatus TransferStatus(string sourceAuthority, ulong transferId, WorldTransferCaller? caller = null) =>
         Host.ExecuteAuthorityOperation(operation: () => Host.TransferEscrow.Status(
+            caller: caller,
             sourceAuthority: sourceAuthority,
             transferId: transferId
         ));

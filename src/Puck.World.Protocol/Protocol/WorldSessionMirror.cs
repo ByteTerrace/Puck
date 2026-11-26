@@ -604,47 +604,103 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
 
             var bodies = System.Buffers.ArrayPool<Body>.Shared.Rent(image.Extent);
             try {
-                var active = ImmutableArray.CreateBuilder<int>();
                 // A previous image of another authority names every body at another address, so it is no base.
                 var basis = ((state.Previous is { } held) && string.Equals(a: held.Authority, b: image.Authority, comparisonType: StringComparison.Ordinal)) ? state.Previous : null;
-                var changed = ((basis is null) ? null : ImmutableArray.CreateBuilder<int>());
-                var kitColliders = Volatile.Read(ref mirror.m_kitColliders);
-                var kitContacts = Volatile.Read(ref mirror.m_kitBodyContacts);
-                for (var index = 0; index < image.Extent; index++) {
-                    var entry = image.Entries[index];
-                    if (entry.Active) { active.Add(item: index); }
-                    bodies[index] = new Body(
-                        Active: entry.Active,
-                        Address: new WorldEntityAddress(Authority: image.Authority, Generation: entry.Generation, Index: index),
-                        PoseEpoch: entry.PoseEpoch,
-                        PlacementId: entry.PlacementId,
-                        PreviousPosition: entry.PreviousPosition,
-                        PreviousOrientation: entry.PreviousOrientation,
-                        CurrentPosition: entry.CurrentPosition,
-                        CurrentOrientation: entry.CurrentOrientation,
-                        Color: entry.Color,
-                        Look: WorldDefinitionRows.ResolveLook(index: entry.Look, rows: definition.Looks),
-                        CatalogRig: entry.CatalogRig,
-                        Collider: (entry.Kit < kitColliders.Length) ? kitColliders[entry.Kit] : null,
-                        Contact: (entry.Kit < kitContacts.Length) ? kitContacts[entry.Kit] : WorldBodyContactMode.Overlap
-                    );
-                    if ((changed is not null) && ((index >= basis!.Extent) || (basis.Entry(index, basis.Version) != bodies[index]))) { changed.Add(item: index); }
+                var reader = new BodyReader(Image: image, Definition: definition, Colliders: Volatile.Read(ref mirror.m_kitColliders), Contacts: Volatile.Read(ref mirror.m_kitBodyContacts));
+                var runs = (CaptureRuns ??= new GpuUploadRuns(capacity: 64));
+                var changed = (CaptureChanged ??= []);
+                changed.Clear();
+                // A base read against the same document resolves every look and collider as this image would, so only
+                // the slots the body journal names between the two images can differ from it (FillImage's invariant):
+                // the rest are copied from it whole.
+                var incremental = (basis is not null) && ReferenceEquals(basis.Definition, definition) && (basis.DefinitionRevision == revision) &&
+                    (basis.Serial > 0) && mirror.m_bodyJournal.TryCollect(since: basis.Serial, through: image.Serial, rows: image.Rows, into: runs);
+                var activeMoved = !incremental || (basis!.Extent != image.Extent);
+
+                if (incremental) {
+                    basis!.CopyTo(destination: bodies.AsSpan(start: 0, length: Math.Min(val1: basis.Extent, val2: image.Extent)));
+                    for (var run = 0; (run < runs.Count); run++) {
+                        var end = Math.Min(val1: (runs.Start(index: run) + runs.Length(index: run)), val2: image.Extent);
+                        for (var index = runs.Start(index: run); (index < end); index++) { activeMoved |= reader.Take(basis: basis, bodies: bodies, changed: changed, index: index); }
+                    }
+                    for (var index = basis.Extent; (index < image.Extent); index++) { _ = reader.Take(basis: basis, bodies: bodies, changed: changed, index: index); }
+                } else {
+                    for (var index = 0; (index < image.Extent); index++) { _ = reader.Take(basis: basis, bodies: bodies, changed: changed, index: index); }
                 }
                 // A slot past this image's extent that the base held active is a body that left.
-                for (var index = image.Extent; (changed is not null) && (index < basis!.Extent); index++) {
-                    if (basis.Entry(index, basis.Version).Active) { changed.Add(item: index); }
+                for (var index = image.Extent; (basis is not null) && (index < basis.Extent); index++) {
+                    if (basis.Entry(index, basis.Version).Active) { changed.Add(item: index); activeMoved = true; }
                 }
 
                 return new BodyImage(definition, revision, image.Authority, image.Tick, image.Revision, image.StepSeconds,
                     image.ArrivalTimestamp, bodies, image.Extent, version) {
-                    Active = active.ToImmutable(),
-                    Changed = (changed?.ToImmutable() ?? default),
+                    Active = (activeMoved ? ActiveSlots(bodies: bodies.AsSpan(start: 0, length: image.Extent)) : basis!.Active),
+                    Changed = ((basis is null) ? default : SortedUnique(slots: changed)),
+                    Serial = image.Serial,
+                    Rows = image.Rows,
                 };
             } catch {
                 System.Buffers.ArrayPool<Body>.Shared.Return(bodies, clearArray: true);
                 throw;
             }
         });
+    // A capturing reader's changed slots, reused: CaptureBodyImage runs on any reader's thread, outside every gate.
+    [ThreadStatic] private static List<int>? CaptureChanged;
+    // Reads a published image's slots as bodies, each look and collider resolved against one document.
+    private readonly record struct BodyReader(SnapshotImage Image, WorldDefinition Definition, FixedWorldCollider?[] Colliders, WorldBodyContactMode[] Contacts) {
+        private Body Read(int index) {
+            var entry = Image.Entries[index];
+            return new Body(
+                Active: entry.Active,
+                Address: new WorldEntityAddress(Authority: Image.Authority, Generation: entry.Generation, Index: index),
+                PoseEpoch: entry.PoseEpoch,
+                PlacementId: entry.PlacementId,
+                PreviousPosition: entry.PreviousPosition,
+                PreviousOrientation: entry.PreviousOrientation,
+                CurrentPosition: entry.CurrentPosition,
+                CurrentOrientation: entry.CurrentOrientation,
+                Color: entry.Color,
+                Look: WorldDefinitionRows.ResolveLook(index: entry.Look, rows: Definition.Looks),
+                CatalogRig: entry.CatalogRig,
+                Collider: (entry.Kit < Colliders.Length) ? Colliders[entry.Kit] : null,
+                Contact: (entry.Kit < Contacts.Length) ? Contacts[entry.Kit] : WorldBodyContactMode.Overlap
+            );
+        }
+        // Reads one slot into bodies and notes it in changed when it differs from the base's, reporting whether its
+        // active flag moved.
+        public bool Take(BodyImage? basis, Body[] bodies, List<int> changed, int index) {
+            bodies[index] = Read(index: index);
+            if (basis is null) { return false; }
+            if (index >= basis.Extent) { changed.Add(item: index); return bodies[index].Active; }
+            ref readonly var before = ref basis.Entry(index, basis.Version);
+            if (before == bodies[index]) { return false; }
+            changed.Add(item: index);
+            return (before.Active != bodies[index].Active);
+        }
+    }
+    // The active slots of a body table, in ascending order.
+    private static ImmutableArray<int> ActiveSlots(ReadOnlySpan<Body> bodies) {
+        var count = 0;
+        foreach (ref readonly var body in bodies) { count += (body.Active ? 1 : 0); }
+        var active = ImmutableArray.CreateBuilder<int>(initialCapacity: count);
+        for (var index = 0; (index < bodies.Length); index++) {
+            if (bodies[index].Active) { active.Add(item: index); }
+        }
+        return active.MoveToImmutable();
+    }
+    // The slots once each, in ascending order: a journal window over several frames can name a slot more than once.
+    private static ImmutableArray<int> SortedUnique(List<int> slots) {
+        if (slots.Count == 0) { return []; }
+        slots.Sort();
+        var count = 1;
+        for (var index = 1; (index < slots.Count); index++) { count += ((slots[index] != slots[(index - 1)]) ? 1 : 0); }
+        var unique = ImmutableArray.CreateBuilder<int>(initialCapacity: count);
+        unique.Add(item: slots[0]);
+        for (var index = 1; (index < slots.Count); index++) {
+            if (slots[index] != slots[(index - 1)]) { unique.Add(item: slots[index]); }
+        }
+        return unique.MoveToImmutable();
+    }
 
     /// <summary>A retained delivery for an adjacency. Entries are indexed by the destination's entity slot.</summary>
     public sealed class BodyImage {
@@ -696,6 +752,17 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
             return ref held[index];
         }
 
+        // The body journal frame the image was published through and the journal's row count at it, which a capture
+        // over this image collects the slots it changed from.
+        internal long Serial { get; init; }
+        internal int Rows { get; init; }
+
+        // Copies the leading bodies while the caller holds this publication.
+        internal void CopyTo(Span<Body> destination) {
+            if (Volatile.Read(ref m_entries) is not { } held) { throw new InvalidOperationException("The reader no longer holds this body publication."); }
+            held.AsSpan(start: 0, length: destination.Length).CopyTo(destination);
+        }
+
         /// <summary>Retains the body storage while the caller owns this publication.</summary>
         public void Retain() => _ = Interlocked.Increment(ref m_readers);
 
@@ -722,33 +789,34 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
     // Publishes the entity table, inputs and arrival history as one complete image (see m_images). Called by a writer
     // holding m_snapshotWriteGate once its writes are done.
     private void PublishImage() => m_images.Publish(state: this, fill: static (ref SnapshotImage image, WorldSessionMirror mirror) => mirror.FillImage(image: image));
-    // Overwrites an older image whole; copies only the slots below m_extent, since every other slot is still as
-    // constructed.
+    // Brings an older image current: the slots the body journal names since the frame it was filled through, and every
+    // slot past its own extent, or every slot below m_extent when the journal cannot prove the window. Invariant: every
+    // write to a field an image slot copies is journaled by the delivery that makes it (ApplySnapshot's moved test, a
+    // whole frame for an active-set change, a seeded route or another authority), and the image's frame is the one
+    // closed beside it (PublishBodyChanges before PublishImage), so an incremental fill copies every slot that differs.
+    // Slots at or above m_extent are still as constructed.
     private void FillImage(SnapshotImage image) {
         var extent = m_extent;
         var extras = m_extras;
+        var serial = m_bodySerial;
+        var rows = m_poses.Capacity;
+        var runs = m_imageRuns;
+        var whole = (image.Entries.Length < extent) || !m_bodyJournal.TryCollect(since: image.Serial, through: serial, rows: rows, into: runs);
 
         if (image.Entries.Length < extent) {
             image.Entries = new ImageEntry[((int)(((uint)extent)).NextPowerOfTwo())];
         }
-        for (var index = 0; (index < extent); index++) {
-            image.Entries[index] = new ImageEntry(
-                Active: m_poses.IsActive(index: index),
-                CatalogRig: extras.CatalogRig[index],
-                Color: extras.BodyColor[index],
-                CurrentOrientation: m_poses.CurrentOrientation(index: index),
-                CurrentPosition: m_poses.CurrentPosition(index: index),
-                Facts: extras.Facts[index],
-                Generation: extras.Generation[index],
-                Heading: extras.Heading[index],
-                Kit: extras.Kit[index],
-                Look: extras.Look[index],
-                PlacementId: m_poses.PlacementId(index: index),
-                PoseEpoch: m_poses.PoseEpoch(index: index),
-                PreviousOrientation: m_poses.PreviousOrientation(index: index),
-                PreviousPosition: m_poses.PreviousPosition(index: index)
-            );
+        if (whole) {
+            for (var index = 0; (index < extent); index++) { image.Entries[index] = Entry(index: index, extras: extras); }
+        } else {
+            for (var run = 0; (run < runs.Count); run++) {
+                var end = Math.Min(val1: (runs.Start(index: run) + runs.Length(index: run)), val2: extent);
+                for (var index = runs.Start(index: run); (index < end); index++) { image.Entries[index] = Entry(index: index, extras: extras); }
+            }
+            for (var index = image.Extent; (index < extent); index++) { image.Entries[index] = Entry(index: index, extras: extras); }
         }
+        image.Serial = serial;
+        image.Rows = rows;
         image.Extent = extent;
         image.Authority = Authority;
         image.Tick = Tick;
@@ -764,6 +832,23 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
         m_arrivals.CopyTo(array: image.Arrivals, index: 0);
         image.ArrivalCount = m_arrivalCount;
     }
+    // One slot as the mirror holds it now. Under m_snapshotWriteGate.
+    private ImageEntry Entry(int index, Extras extras) => new(
+        Active: m_poses.IsActive(index: index),
+        CatalogRig: extras.CatalogRig[index],
+        Color: extras.BodyColor[index],
+        CurrentOrientation: m_poses.CurrentOrientation(index: index),
+        CurrentPosition: m_poses.CurrentPosition(index: index),
+        Facts: extras.Facts[index],
+        Generation: extras.Generation[index],
+        Heading: extras.Heading[index],
+        Kit: extras.Kit[index],
+        Look: extras.Look[index],
+        PlacementId: m_poses.PlacementId(index: index),
+        PoseEpoch: m_poses.PoseEpoch(index: index),
+        PreviousOrientation: m_poses.PreviousOrientation(index: index),
+        PreviousPosition: m_poses.PreviousPosition(index: index)
+    );
     // Grows the pose table and the extras to hold a slot before a writer touches it, and returns the extras the writer
     // writes. Under m_snapshotWriteGate; the index is a body index (WorldBodiesLimits.IsBodyIndex).
     private Extras Extend(int index) {
@@ -807,6 +892,10 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
         public ImageEntry[] Entries = [];
 
         public int Extent;
+        // The body journal frame the entries are current through, and the journal's row count at it; zero before the
+        // first fill, which a window from it can never prove.
+        public long Serial;
+        public int Rows;
 
         public string Authority = string.Empty;
 
@@ -832,10 +921,11 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
 
     // Adopts a delivered definition through the state view, the mirror's one door for documents, and publishes it with
     // its version as one pair; the same pair delivered again is kept, so a repeated delivery allocates nothing. Returns
-    // the published definition.
-    private WorldDefinition Publish(WorldDefinition definition, WorldDocumentVersion version) {
+    // the published definition. valuesFollow is the state view's (WorldDocumentStateView.Adopt): the delivery kept the
+    // state section's shape, so the view keeps the arena and field cells it holds, as a client's does.
+    private WorldDefinition Publish(WorldDefinition definition, WorldDocumentVersion version, bool valuesFollow = false) {
         lock (m_followGate) {
-            var adopted = m_stateView.Adopt(delivered: definition);
+            var adopted = m_stateView.Adopt(delivered: definition, valuesFollow: valuesFollow);
 
             m_previousDelivered = m_lastDelivered;
             m_lastDelivered = definition;
@@ -877,15 +967,20 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
         ApplyDefinition(definition: definition, version: version);
     }
     /// <inheritdoc/>
-    public void DeliverPresentation(WorldDefinition definition, WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
+    /// <remarks>The rows apply to the held definition without reshaping the state view, which the rows never move.
+    /// Rows that moved placement holdings alone, none of them on a row showing a creation that derives a facet, leave
+    /// the composing revision to the scene that presents them, as a state delivery that moved them does.</remarks>
+    public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) {
         if (!m_ingress.Admit(stream: in stream)) { return; }
         var started = Stopwatch.GetTimestamp();
         lock (m_snapshotWriteGate) {
             lock (m_followGate) {
-                if (!rows.TryApply(Document.Definition, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the mirror's creation roster."); }
-                _ = Publish(changed, version);
+                var held = Document.Definition;
+                if (!rows.TryApply(held, out var changed)) { throw new InvalidOperationException("A presentation delivery must match the mirror's creation roster and placement rows."); }
+                var adopted = Publish(changed, version, valuesFollow: true);
+                _ = WorldPlacementResponse.CompareRows(after: adopted, before: held, holdings: out var holdings, rows: rows, solid: out _);
                 _ = Interlocked.Increment(ref m_definitionRevision);
-                _ = Interlocked.Increment(location: ref m_composingRevision);
+                if (!(holdings && rows.MovesHoldingsOnly)) { _ = Interlocked.Increment(location: ref m_composingRevision); }
             }
         }
         DocumentDelivered?.Invoke(Document);
@@ -1028,7 +1123,10 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
                 }
 
                 var extras = Extend(index: index);
-                // What a body's presented inputs read besides its look (BodyChanges), as they stood before the entry.
+                // Every field a published image slot copies (ImageEntry), as it stood before the entry: the journal
+                // frame this delivery closes names each slot it moved, which is what an image is filled by (FillImage)
+                // and a body image copied by (CaptureBodyImage), and a superset of what a stamp source's presented
+                // inputs read besides its look (BodyChanges).
                 var moved = (
                     (m_poses.IsActive(index: index) != entry.Active) ||
                     (extras.Facts[index] != entry.Facts) ||
@@ -1036,7 +1134,13 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
                     (m_poses.CurrentPosition(index: index) != entry.Position) ||
                     (m_poses.CurrentOrientation(index: index) != entry.Orientation) ||
                     (m_poses.PreviousPosition(index: index) != m_poses.CurrentPosition(index: index)) ||
-                    (m_poses.PreviousOrientation(index: index) != m_poses.CurrentOrientation(index: index))
+                    (m_poses.PreviousOrientation(index: index) != m_poses.CurrentOrientation(index: index)) ||
+                    (extras.BodyColor[index] != entry.BodyColor) ||
+                    (extras.Kit[index] != entry.Kit) ||
+                    (extras.Look[index] != entry.Look) ||
+                    (extras.CatalogRig[index] != entry.CatalogRig) ||
+                    (extras.Heading[index] != entry.Heading) ||
+                    !string.Equals(a: m_poses.PlacementId(index: index), b: entry.PlacementId, comparisonType: StringComparison.Ordinal)
                 );
 
                 extras.BodyColor[index] = entry.BodyColor;
@@ -1053,11 +1157,13 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
                 // The pose table publishes the entry's active flag last, after every field above, so a reader on
                 // another thread (a federated observer delivers on its socket task) that acquires IsActive sees the
                 // completed record.
-                if (m_poses.TryAdmit(
+                // An entry the pose table refuses still wrote the extras above, so a moved one is journaled either way.
+                var admitted = m_poses.TryAdmit(
                     admission: out var admission,
                     easeCorrections: false,
                     entry: in entry
-                ) && (moved || (admission.Step != WorldPoseStep.Interpolated))) {
+                );
+                if (moved || (admitted && (admission.Step != WorldPoseStep.Interpolated))) {
                     _ = m_deliveredChanges.Add(index: index);
                 }
             }
@@ -1169,9 +1275,13 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
         // definition for state-value reads without recompiling either table or bumping the rebuild-watch revision.
         // Publish the definition and its stamped clock together with respect to followers, including event readers.
         lock (m_followGate) {
-            var previous = Volatile.Read(location: ref m_document).Definition;
+            var document = Volatile.Read(location: ref m_document);
+            var previous = document.Definition;
+            // The values follow in the snapshots, under the same state section, exactly when WorldClient.DeliverState
+            // keeps its view's shape: a value-only delivery within one activation.
             var adopted = Publish(
                 definition: definition,
+                valuesFollow: (stamp.ArenaValues && (version.Activation == document.Version.Activation)),
                 version: version
             );
 
@@ -1360,7 +1470,7 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
     // Closes one journal frame over the delivery just applied and finds the entities it left moving. Under
     // m_snapshotWriteGate.
     private void PublishBodyChanges() {
-        _ = m_bodyJournal.Publish(everything: m_deliveredWhole, owed: m_deliveredChanges.Members, rows: m_poses.Capacity);
+        m_bodySerial = m_bodyJournal.Publish(everything: m_deliveredWhole, owed: m_deliveredChanges.Members, rows: m_poses.Capacity);
         m_deliveredChanges.Clear();
         m_deliveredWhole = false;
         m_moving.Clear();
@@ -1378,6 +1488,12 @@ public sealed class WorldSessionMirror : IClientSink, IWorldInhabitants {
     private bool m_deliveredWhole = true;
     private readonly GpuSharedChangedRows m_bodyJournal = new(stableRows: true);
     private readonly List<int> m_moving = [];
+    // The journal frame the delivery last closed, which the image published beside it is current through, and the
+    // runs FillImage collects into. Under m_snapshotWriteGate.
+    private long m_bodySerial;
+    private readonly GpuUploadRuns m_imageRuns = new(capacity: 64);
+    // A capturing reader's runs: CaptureBodyImage runs on any reader's thread, outside every gate.
+    [ThreadStatic] private static GpuUploadRuns? CaptureRuns;
 
     /// <summary>Gets the placement an entity inhabits (<see cref="EntitySnapshot.PlacementId"/>).</summary>
     /// <param name="index">The 0-based entity index.</param>

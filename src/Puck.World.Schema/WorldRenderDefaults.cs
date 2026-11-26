@@ -214,7 +214,8 @@ public readonly record struct WorldQualityPreset(
 /// a quality preset's row replaces it. Absent refreshes it every frame.</param>
 /// <param name="ViewsRate">The maximum shared shading footprint and classification tile size. Absent shades every pixel.</param>
 /// <param name="FarProduct">What the world shows of itself to a far viewer (<see cref="WorldFarProduct"/>): the product a
-/// sky view asking for it draws. Absent takes the product's defaults.</param>
+/// sky view asking for it draws. Declared, the boot world builds it from the start; absent, a product is built with the
+/// defaults only once a sky view asks for it, and a world nothing views from afar builds none.</param>
 public sealed record WorldRenderDefaults(
     ShadowTier Shadows = ShadowTier.Off,
     bool AmbientOcclusion = false,

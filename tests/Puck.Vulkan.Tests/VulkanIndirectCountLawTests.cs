@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 using Puck.Abstractions.Gpu;
-using Puck.Testing;
 using Puck.Vulkan.Bindings;
 using Puck.Vulkan.Interfaces;
 using Puck.Vulkan.Interop;
@@ -121,7 +120,7 @@ public sealed unsafe class VulkanIndirectCountLawTests {
 
         return new VulkanGpuRecorder(
             deviceContext: context,
-            recordingApi: new VulkanNativeCommandBufferRecordingApi(allocator: new HeapAllocator())
+            recordingApi: new VulkanNativeCommandBufferRecordingApi(allocator: new Puck.Abstractions.Memory.SystemAllocator())
         );
     }
     // A vkGetDeviceProcAddr stand-in: vkCmdDrawIndirectCountKHR records, and every other entry point resolves to a trap

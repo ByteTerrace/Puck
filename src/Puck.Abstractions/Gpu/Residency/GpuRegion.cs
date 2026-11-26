@@ -129,11 +129,33 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <summary>The largest gap of unchanged words a staged region's owed runs join across: a run-table entry costs two
     /// words, so copying a gap of up to two costs no more than another run.</summary>
     public const int StagedMergeGapWords = 2;
-    /// <summary>The most bytes a region holds: its destination and its staging ring each bind as one storage view, and
+    /// <summary>The most bytes any region holds: its destination and its staging ring each bind as one storage view, and
     /// Vulkan states a storage view's range (<c>maxStorageBufferRange</c>) in a uint32, so it is the whole uints below
     /// 4 GiB less the most a request's header and run table take. Every word then fits the copy kernel's uint indices and
-    /// the region's own int word counts.</summary>
+    /// the region's own int word counts. A device whose storage views span less holds each region to less
+    /// (<see cref="MostBytes"/>).</summary>
     public const long MaxByteCount = ((((long)(uint.MaxValue / sizeof(uint))) * sizeof(uint)) - MaxCopyHeaderBytes);
+
+    /// <summary>Returns the most bytes a region holds on a device: <see cref="MaxByteCount"/>, or, where the device's
+    /// storage views span less (<see cref="IGpuBindings.MaxStorageBufferBytes"/>), the whole uints within that view less
+    /// the most a request's header and run table take, so the destination and the staging ring each fit one view a
+    /// kernel can size.</summary>
+    /// <param name="bindings">The device's bindings service.</param>
+    /// <returns>The bytes, a whole number of uints.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="bindings"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The device's storage views cannot hold a request's header and run
+    /// table.</exception>
+    public static long MostBytesOn(IGpuBindings bindings) {
+        ArgumentNullException.ThrowIfNull(bindings);
+
+        var view = ((long)((Math.Min(val1: bindings.MaxStorageBufferBytes, val2: uint.MaxValue) / sizeof(uint)) * sizeof(uint)));
+
+        if (view <= MaxCopyHeaderBytes) {
+            throw new InvalidOperationException(message: $"The device's storage views span {view} bytes, no more than the {MaxCopyHeaderBytes} a region's copy request may take.");
+        }
+
+        return Math.Min(val1: MaxByteCount, val2: (view - MaxCopyHeaderBytes));
+    }
 
     // The most bytes one host write moves: a span's length is an int, so a longer run is written in pieces.
     private const int WriteChunkBytes = (1 << 30);
@@ -296,7 +318,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <param name="memory">Where the ring's or in-place buffer lives, normally <see cref="GpuResidency.RingMemory"/>'s
     /// choice; a staged region's staging buffers are host memory whatever it says.</param>
     /// <param name="byteCount">The region's size in bytes; positive, a whole number of uints and at most
-    /// <see cref="MaxByteCount"/>.</param>
+    /// <see cref="MostBytesOn"/> the device.</param>
     /// <param name="slotCount">The caller's frame slots; at least one.</param>
     /// <param name="buffers">The factory that creates the host-visible and device-local buffers.</param>
     /// <param name="bindings">The bindings service the staged policy's copy sets come from.</param>
@@ -324,7 +346,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <see cref="GpuBufferUsage.Storage"/>, at creation and at every growth and shrink: the mesh region's
     /// <see cref="GpuBufferUsage.AccelerationStructureInput"/>, which acceleration-structure builds read in place.</param>
     /// <param name="mapped">Whether a staged region's destination reserves the most a region holds
-    /// (<see cref="MaxByteCount"/>) and backs only the chunks its size reaches
+    /// (<see cref="MostBytes"/>) and backs only the chunks its size reaches
     /// (<see cref="IGpuBufferFactory.TryCreateMapped"/>), so <see cref="Grow"/> maps chunks in place and
     /// <see cref="Shrink"/> gives them back without a replacement. A device that has no such buffer gives the region an
     /// ordinary destination; <see cref="Mapped"/> reads which it has.</param>
@@ -336,7 +358,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <paramref name="copyPipeline"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="policy"/> or <paramref name="memory"/> is not a
     /// defined value, <paramref name="byteCount"/> is not positive, not a whole number of uints or past
-    /// <see cref="MaxByteCount"/>,
+    /// <see cref="MostBytesOn"/> the device,
     /// <paramref name="slotCount"/> is not positive, <paramref name="usage"/> is neither storage nor uniform, a
     /// uniform region is staged or not a multiple of <see cref="IGpuBindings.ConstantBufferAlignment"/> bytes, or
     /// <paramref name="hostCopyBytes"/> is given for a region that is not staged, is negative, not a whole number of
@@ -371,7 +393,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <param name="readersInFlight">Whether a submission reading the region can be in flight while the host writes
     /// it, as every per-frame owner's ring keeps one.</param>
     /// <param name="byteCount">The region's size in bytes; positive, a whole number of uints and at most
-    /// <see cref="MaxByteCount"/>.</param>
+    /// <see cref="MostBytesOn"/> the device.</param>
     /// <param name="slotCount">The caller's frame slots; at least one.</param>
     /// <param name="buffers">The factory that creates the host-visible and device-local buffers.</param>
     /// <param name="bindings">The bindings service the staged policy's copy sets come from.</param>
@@ -388,7 +410,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <exception cref="ArgumentNullException"><paramref name="buffers"/>, <paramref name="bindings"/>,
     /// <paramref name="recorder"/> or <paramref name="copyPipeline"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not positive, not a whole number of
-    /// uints or past <see cref="MaxByteCount"/>, or <paramref name="slotCount"/> is not positive.</exception>
+    /// uints or past <see cref="MostBytesOn"/> the device, or <paramref name="slotCount"/> is not positive.</exception>
     /// <exception cref="ArgumentException"><paramref name="copySets"/> holds another number of slots than
     /// <paramref name="slotCount"/>.</exception>
     public GpuRegion(GpuMemoryProfile profile, bool readersInFlight, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null, IAllocationObserver? hostCopies = null) : this(
@@ -422,7 +444,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <param name="destination">The device-local buffer the copy writes; the caller owns it and keeps it alive while the
     /// region records copies.</param>
     /// <param name="byteCount">The region's size in bytes; positive, a whole number of uints and at most
-    /// <see cref="MaxByteCount"/>.</param>
+    /// <see cref="MostBytesOn"/> the device.</param>
     /// <param name="slotCount">The caller's frame slots; at least one.</param>
     /// <param name="buffers">The factory that creates the staging buffers.</param>
     /// <param name="bindings">The bindings service the copy sets come from.</param>
@@ -441,7 +463,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <paramref name="bindings"/>, <paramref name="recorder"/> or <paramref name="copyPipeline"/> is
     /// <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not positive, not a whole number
-    /// of uints or past <see cref="MaxByteCount"/>, or <paramref name="slotCount"/> is not positive.</exception>
+    /// of uints or past <see cref="MostBytesOn"/> the device, or <paramref name="slotCount"/> is not positive.</exception>
     /// <exception cref="ArgumentException"><paramref name="copySets"/> holds another number of slots than
     /// <paramref name="slotCount"/>.</exception>
     public GpuRegion(IGpuBuffer destination, long byteCount, int slotCount, IGpuBufferFactory buffers, IGpuBindings bindings, IGpuRecorder recorder, IGpuComputePipeline copyPipeline, in GpuObjectName name, GpuRegionCopySets? copySets = null, IAllocationObserver? hostCopies = null) : this(
@@ -465,8 +487,9 @@ public sealed unsafe class GpuRegion : IDisposable {
         ArgumentNullException.ThrowIfNull(bindings);
         ArgumentNullException.ThrowIfNull(recorder);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: byteCount);
+        MostBytes = MostBytesOn(bindings: bindings);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(
-            other: MaxByteCount,
+            other: MostBytes,
             value: byteCount
         );
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(value: slotCount);
@@ -696,7 +719,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     // Reserves a mapped destination of the most a region holds and backs its first byteCount bytes, or answers null where
     // the device has none. A refused backing releases the reservation before the refusal leaves.
     private IGpuMappedBuffer? CreateMapped(long byteCount) {
-        if (m_buffers.TryCreateMapped(name: m_name, reservedBytes: ((ulong)MaxByteCount), usage: m_destinationUsage) is not { } created) {
+        if (m_buffers.TryCreateMapped(name: m_name, reservedBytes: ((ulong)MostBytes), usage: m_destinationUsage) is not { } created) {
             return null;
         }
         try {
@@ -891,6 +914,10 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <summary>Gets whether the region's destination is mapped (<see cref="IGpuMappedBuffer"/>): it grows and shrinks in
     /// place, never holding a replacement beside it.</summary>
     public bool Mapped => (m_destination is IGpuMappedBuffer);
+    /// <summary>Gets the most bytes the region holds on its device (<see cref="MostBytesOn"/>): what <see cref="Grow"/>
+    /// grows it to at most, and what a mapped destination reserves, so every view of its destination or staging ring is
+    /// one a kernel can size.</summary>
+    public long MostBytes { get; }
     /// <summary>Gets the device bytes the region's destination holds: a mapped destination's backed chunks, or an
     /// ordinary destination's size; zero for a region with no device-local destination of its own.</summary>
     public ulong DestinationBytes => ((m_destination is IGpuMappedBuffer mapped)
@@ -927,6 +954,13 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <summary>Gets how many flushes of a staged region staged nothing because the account or the device refused their
     /// staging (<see cref="GpuMemoryRefusedException"/>): each left its words owed for the next flush.</summary>
     public long StagingRefusals { get; private set; }
+    /// <summary>Gets the bytes of region words the latest <see cref="Flush"/> wrote into host-visible memory: a slot's
+    /// ring or in-place buffer, or the staging block a staged copy reads (with any restaging its
+    /// <see cref="RecordCopy"/> needed), its run table excluded. A flush that owed nothing wrote zero.</summary>
+    public long LastFlushedBytes { get; private set; }
+    /// <summary>Gets the bytes of region words every <see cref="Flush"/> of the region has written into host-visible
+    /// memory, as <see cref="LastFlushedBytes"/> counts them.</summary>
+    public long FlushedBytes { get; private set; }
     /// <summary>Gets where the buffers the region's readers bind directly live: its ring's or in-place buffer's memory,
     /// and <see cref="GpuHostVisibleMemory.Host"/> for a staged region, whose staging buffers are host memory.</summary>
     public GpuHostVisibleMemory Memory { get; private set; }
@@ -1003,7 +1037,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// the new size in the memory <see cref="Memory"/> names, and since a new buffer's contents are undefined, every
     /// buffer owes the whole region, so each slot's next flush writes all of it.</summary>
     /// <param name="byteCount">The new size in bytes; larger than <see cref="ByteCount"/>, a whole number of uints, at
-    /// most <see cref="MaxByteCount"/>, and for a uniform region a multiple of
+    /// most <see cref="MostBytes"/>, and for a uniform region a multiple of
     /// <see cref="IGpuBindings.ConstantBufferAlignment"/>.</param>
     /// <returns>What the region replaced, which the caller now owns: a staged region's destination (nothing, for a mapped
     /// one), or a ring's or in-place region's host-visible buffers. GPU work recorded before the grow may still read it, and a staged region's
@@ -1012,7 +1046,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// it held at its last recording and returns the one it never wrote.</returns>
     /// <exception cref="InvalidOperationException">The region's destination is external.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="byteCount"/> is not larger than
-    /// <see cref="ByteCount"/>, not a whole number of uints, past <see cref="MaxByteCount"/>, or for a uniform region
+    /// <see cref="ByteCount"/>, not a whole number of uints, past <see cref="MostBytes"/>, or for a uniform region
     /// not a multiple of <see cref="IGpuBindings.ConstantBufferAlignment"/> or past the device's view limit.</exception>
     /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
     public IDisposable Grow(long byteCount) {
@@ -1027,11 +1061,11 @@ public sealed unsafe class GpuRegion : IDisposable {
         if (
             (byteCount <= ByteCount) ||
             ((byteCount % sizeof(uint)) != 0) ||
-            (byteCount > MaxByteCount)
+            (byteCount > MostBytes)
         ) {
             throw new ArgumentOutOfRangeException(
                 actualValue: byteCount,
-                message: $"A region grows to a whole number of uints past its {ByteCount} bytes and within the {MaxByteCount} a region holds.",
+                message: $"A region grows to a whole number of uints past its {ByteCount} bytes and within the {MostBytes} it holds on its device.",
                 paramName: nameof(byteCount)
             );
         }
@@ -1784,6 +1818,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     /// <exception cref="ObjectDisposedException">The region has been disposed.</exception>
     public void Flush(int slot) {
         RequireSlot(slot: slot);
+        LastFlushedBytes = 0L;
 
         switch (Policy) {
             case GpuResidencyPolicy.Ring:
@@ -2014,8 +2049,11 @@ public sealed unsafe class GpuRegion : IDisposable {
             min: offset,
             value: (((long)m_knownWords) * sizeof(uint))
         );
+        var known = ((int)(knownEnd - offset));
+        // The host copy takes only the runs that differ, which OweDifferences copies as it finds them, so a write that
+        // changes nothing moves no byte, and the words the destination is not known to hold, which it owes whole.
         var owed = OweDifferences(
-            bytes: bytes[..((int)(knownEnd - offset))],
+            bytes: bytes[..known],
             offset: offset
         );
 
@@ -2024,13 +2062,12 @@ public sealed unsafe class GpuRegion : IDisposable {
                 endWord: endWord,
                 startWord: ((int)(knownEnd / sizeof(uint)))
             );
+            bytes[known..].CopyTo(destination: HostSpan(
+                length: (bytes.Length - known),
+                offset: knownEnd
+            ));
             owed = true;
         }
-
-        bytes.CopyTo(destination: HostSpan(
-            length: bytes.Length,
-            offset: offset
-        ));
 
         if ((offset / sizeof(uint)) <= m_knownWords) {
             m_knownWords = Math.Max(
@@ -2170,7 +2207,8 @@ public sealed unsafe class GpuRegion : IDisposable {
         return m_owed[slot];
     }
     // Owes each run of words in which bytes differ from the contents at offset, a word at a time past the first
-    // differing byte, and returns whether any did.
+    // differing byte, copies that run into the contents, and returns whether any did. Bytes outside the runs are equal,
+    // so the contents then hold bytes.
     private bool OweDifferences(ReadOnlySpan<byte> bytes, long offset) {
         var contents = HostSpan(
             length: bytes.Length,
@@ -2213,6 +2251,7 @@ public sealed unsafe class GpuRegion : IDisposable {
                 endWord: ((int)(offset + index).CeilingDivide(divisor: sizeof(uint))),
                 startWord: ((int)((offset + start) / sizeof(uint)))
             );
+            bytes[start..index].CopyTo(destination: contents[start..index]);
             owed = true;
         }
 
@@ -2255,6 +2294,8 @@ public sealed unsafe class GpuRegion : IDisposable {
         );
         var sourced = ((((long)length) * sizeof(uint)) - remaining);
 
+        LastFlushedBytes += (((long)length) * sizeof(uint));
+        FlushedBytes += (((long)length) * sizeof(uint));
         if (sourced > 0) {
             m_source!.WriteWords(
                 buffer: buffer,
@@ -2441,7 +2482,7 @@ public sealed unsafe class GpuRegion : IDisposable {
             // The new ring must hold this block alone, since the live ones stay where they are; room for them too keeps
             // the next flushes from replacing it. It is never larger than the region itself (or the floor), so a ring
             // binds wherever the region's own destination does.
-            var ceiling = Math.Max(val1: bytes, val2: Math.Min(val1: Math.Max(val1: ByteCount, val2: floor), val2: MaxByteCount));
+            var ceiling = Math.Max(val1: bytes, val2: Math.Min(val1: Math.Max(val1: ByteCount, val2: floor), val2: MostBytes));
             var least = Math.Min(val1: floor, val2: ceiling);
             // An oversized ring shrinks to twice what it must hold; one with no room grows (a fragmented one included).
             var size = (oversized
@@ -2485,7 +2526,7 @@ public sealed unsafe class GpuRegion : IDisposable {
     }
     // The least a ring holds: StagingFloorBytes, or every slot's whole update of a smaller region, so a small region's
     // ring holds whatever its slots stage and is never replaced.
-    private long RingFloorBytes => Math.Min(val1: ((long)StagingFloorBytes), val2: Math.Min(val1: (((long)SlotCount) * ByteCount), val2: MaxByteCount));
+    private long RingFloorBytes => Math.Min(val1: ((long)StagingFloorBytes), val2: Math.Min(val1: (((long)SlotCount) * ByteCount), val2: MostBytes));
     // Disposes the current ring when no block lives in it and it holds more than the floor, so an idle region keeps no
     // more staging than that; the next flush takes a ring sized to what it stages.
     private void DropIdleRing() {

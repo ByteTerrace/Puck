@@ -50,9 +50,14 @@ public sealed record OperatorWorldLaunch(
 /// <param name="Height">The window's client height in pixels, or <see langword="null"/> for the document's.</param>
 /// <param name="FrameBar">The device profile whose frame bar sizes the window (<c>--frame-bar</c>): a profile's name, or
 /// <c>auto</c> for the adapter's own; <see langword="null"/> for none.</param>
+/// <param name="WithheldGpu">The optional GPU capabilities the device is created without (<c>--withhold-gpu</c>), as
+/// <see cref="Puck.Abstractions.Gpu.GpuOptionalCapabilitiesSpelling"/> spells them; <see langword="null"/> for none.</param>
+/// <param name="DebugLayers">The validation the device is created with (<c>--debug-layers</c>), or
+/// <see cref="Puck.Abstractions.Gpu.GpuValidation.Off"/> for none.</param>
 public sealed record OperatorWorldRequest(string Checkout, string Document, Puck.World.WorldBackendPreference? Backend, string? CacheDirectory, string? CaptureTool, string Holder, string? Lane,
     bool Windowed, bool OwnerPlay, bool Paused, bool Lockstep, string StateDirectory, string TemporaryDirectory, TimeSpan Wait,
-    string? Listen = null, string? Connect = null, string? FederationKeyFile = null, int? Width = null, int? Height = null, string? FrameBar = null);
+    string? Listen = null, string? Connect = null, string? FederationKeyFile = null, int? Width = null, int? Height = null, string? FrameBar = null,
+    IReadOnlyList<string>? WithheldGpu = null, Puck.Abstractions.Gpu.GpuValidation DebugLayers = Puck.Abstractions.Gpu.GpuValidation.Off);
 /// <summary>A started World, or why none started.</summary>
 /// <param name="Process">The started World, its streams redirected and unread, or <see langword="null"/> when none started.</param>
 /// <param name="Build">The full path of the <c>Puck.World.dll</c> it runs, or <see langword="null"/>.</param>
@@ -170,6 +175,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         int? width = null;
         int? height = null;
         string? frameBar = null;
+        string[]? withheldGpu = null;
+        var debugLayers = Puck.Abstractions.Gpu.GpuValidation.Off;
 
         foreach (var (key, value) in (arguments ?? new Dictionary<string, JsonElement>())) {
             if ((key == "document") && (value.ValueKind == JsonValueKind.String) && !string.IsNullOrWhiteSpace(value: value.GetString())) {
@@ -202,6 +209,10 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 if (key == "width") { width = pixels; } else { height = pixels; }
             } else if ((key == "frameBar") && (value.ValueKind == JsonValueKind.String) && (value.GetString() is { Length: > 0 } named) && named.All(predicate: static character => (char.IsAsciiLetterOrDigit(c: character) || (character is '-' or '_' or '.')))) {
                 frameBar = named;
+            } else if ((key == "withholdGpu") && (OperatorMcpServer.StringsOf(value: value) is { } withheld) && withheld.All(predicate: static name => Puck.Abstractions.Gpu.GpuOptionalCapabilitiesSpelling.TryParse(capability: out _, name: name)) && (withheld.Distinct(comparer: StringComparer.Ordinal).Count() == withheld.Length)) {
+                withheldGpu = withheld;
+            } else if ((key == "debugLayers") && (value.ValueKind == JsonValueKind.String) && Puck.Abstractions.Documents.EnumWireName<Puck.Abstractions.Gpu.GpuValidation>.TryParse(name: (value.GetString() ?? string.Empty), value: out var level)) {
+                debugLayers = level;
             } else if ((key == "timeoutSeconds") &&(value.ValueKind == JsonValueKind.Number) && value.TryGetInt32(value: out var parsed) && (parsed is >= 1 and <= MaxStartSeconds)) {
                 seconds = parsed;
             } else {
@@ -214,6 +225,9 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         }
         if ((captureTool is not null) && !windowed) {
             return Refuse(output: "A captureTool requires windowed: true.");
+        }
+        if (((withheldGpu is not null) || (debugLayers != Puck.Abstractions.Gpu.GpuValidation.Off)) && !windowed) {
+            return Refuse(output: "A withholdGpu or debugLayers names how the GPU device is created, so it requires windowed: true.");
         }
         if ((captureTool == "pix") && (backend == Puck.World.WorldBackendPreference.Vulkan)) {
             return Refuse(output: "PIX captures Direct3D 12; use backend: directx or captureTool: renderdoc.");
@@ -262,7 +276,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
                 CallToolResult result;
 
                 try {
-                    result = await StartWorldAsync(checkout, path, backend, cacheDirectory, captureTool, holder, lane, windowed, ownerPlay, paused, lockstep, listen, connect, federationKeyFile, width, height, frameBar, seconds, attachment, progress, deadline.Token).ConfigureAwait(continueOnCapturedContext: false);
+                    result = await StartWorldAsync(checkout, path, backend, cacheDirectory, captureTool, holder, lane, windowed, ownerPlay, paused, lockstep, listen, connect, federationKeyFile, width, height, frameBar, withheldGpu, debugLayers, seconds, attachment, progress, deadline.Token).ConfigureAwait(continueOnCapturedContext: false);
                 } catch (OperationCanceledException) {
                     result = Refuse($"Start {id} was cancelled or reached its {seconds}-second deadline; any World it launched was stopped.");
                 } catch (Exception error) {
@@ -304,7 +318,8 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
         return Result(metadata: metadata);
     }
     private async Task<CallToolResult> StartWorldAsync(string checkout, string path, Puck.World.WorldBackendPreference? backend, string? cacheDirectory, string? captureTool, string holder, string? lane,
-        bool windowed, bool ownerPlay, bool paused, bool lockstep, string? listen, string? connect, string? federationKeyFile, int? width, int? height, string? frameBar, int seconds, OperatorAttachment attachment, StartProgress progress, CancellationToken cancellationToken) {
+        bool windowed, bool ownerPlay, bool paused, bool lockstep, string? listen, string? connect, string? federationKeyFile, int? width, int? height, string? frameBar,
+        string[]? withheldGpu, Puck.Abstractions.Gpu.GpuValidation debugLayers, int seconds, OperatorAttachment attachment, StartProgress progress, CancellationToken cancellationToken) {
         var budget = TimeSpan.FromSeconds(seconds: seconds);
         var runDirectory = Path.Combine(
             path1: attachment.Target,
@@ -323,7 +338,7 @@ internal sealed class OperatorWorlds(OperatorWorldLaunch? launch, TimeProvider c
             start = await launch!.Start(
                 new OperatorWorldRequest(Backend: backend, CacheDirectory: cacheDirectory, CaptureTool: captureTool, Checkout: checkout, Document: path, Holder: holder, Lane: lane,
                     Lockstep: lockstep, OwnerPlay: ownerPlay, Paused: paused, StateDirectory: state, TemporaryDirectory: attachment.Target, Wait: budget, Windowed: windowed,
-                    Listen: listen, Connect: connect, FederationKeyFile: federationKeyFile, Width: width, Height: height, FrameBar: frameBar),
+                    Listen: listen, Connect: connect, FederationKeyFile: federationKeyFile, Width: width, Height: height, FrameBar: frameBar, WithheldGpu: withheldGpu, DebugLayers: debugLayers),
                 text => progress.Stage = text,
                 cancellationToken
             ).ConfigureAwait(continueOnCapturedContext: false);

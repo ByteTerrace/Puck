@@ -197,56 +197,34 @@ public sealed partial class WorldInstanceHost {
     // junction tie is distributed by a stable hash of the entity generation and authority identity over the sorted
     // eligible edges—not document order. Each body transfers independently, which is what keeps a melee straddling a
     // seam live instead of sweeping unrelated party members through it.
-    private void ScanInstanceAdjacencies(WorldInstance instance, bool decides) {
+    private void ScanInstanceAdjacencies(WorldInstance instance, bool decides, Dictionary<int, ulong> heldSeats, ReadOnlySpan<int> seats) {
         if (instance.Server.Configuration.Adjacencies is not { Count: > 0 }) {
             return;
         }
 
         var population = instance.Server.Population;
-        var heldSeats = HeldCrossingSeats(instance: instance);
 
-        for (var seat = 0; (seat < population.Capacity); seat++) {
-            var announced = m_announcedCrossingHolds.TryGetValue(
-                key: (instance.Name, seat),
-                value: out var announcedTransferId
-            );
+        AnnounceCrossingHolds(heldSeats: heldSeats, instance: instance);
 
-            if (!heldSeats.TryGetValue(
-                key: seat,
-                value: out var heldTransferId
-            )) {
-                if (announced) {
-                    _ = m_announcedCrossingHolds.Remove(key: (instance.Name, seat));
-                }
+        var candidates = instance.BoundaryScan.Candidates;
 
-                continue;
-            }
-
-            if (
-                !announced ||
-                (announcedTransferId != heldTransferId)
-            ) {
-                m_announcedCrossingHolds[(instance.Name, seat)] = heldTransferId;
-                if (instance.Server.Output.HasNarrationSink) {
-                    instance.Server.Output.Narrate(
-                        channel: "world.adjacency",
-                        text: $"[world.adjacency: '{instance.Name}' seat {(seat + 1)} crossing HELD (transfer={heldTransferId} is queued or in flight); no further crossing is minted until it resolves]"
-                    );
-                }
-            }
-        }
-
-        var candidates = WorldAdjacencyOwnership.Sweep(
-            held: heldSeats.ContainsKey,
+        WorldAdjacencyOwnership.Sweep(
+            candidates: candidates,
+            held: heldSeats,
             pendingOnly: false,
+            seats: seats,
             server: instance.Server
         );
 
-        for (var seat = 0; (seat < candidates.Length); seat++) {
+        // A body the scan passed by holds no pending continuum (WorldBoundaryScan), so clearing it is the selected
+        // bodies' alone.
+        foreach (var seat in seats) {
             if (candidates[seat] is not { Count: > 0 } hits) {
                 population.EntryBody(index: seat)?.ClearPendingContinuum();
                 continue;
             }
+            candidates[seat] = null;
+            instance.BoundaryScan.Found(seat: seat);
 
             // A rider crosses with the body it rides (EnqueueAdjacencyTransfer queues it behind that body), never on
             // its own while that body stands here.
@@ -289,6 +267,41 @@ public sealed partial class WorldInstanceHost {
             }
         }
     }
+    // Narrates each seat a queued or in-flight crossing newly holds, in seat order, once per transfer, and forgets the
+    // announcements of this instance's seats no crossing holds any longer: the work follows the holds, never the slots.
+    private void AnnounceCrossingHolds(WorldInstance instance, Dictionary<int, ulong> heldSeats) {
+        if (m_announcedCrossingHolds.Count != 0) {
+            m_releasedCrossingHolds.Clear();
+            foreach (var key in m_announcedCrossingHolds.Keys) {
+                if (string.Equals(a: key.Instance, b: instance.Name, comparisonType: StringComparison.Ordinal) && !heldSeats.ContainsKey(key: key.Seat)) {
+                    m_releasedCrossingHolds.Add(item: key);
+                }
+            }
+            foreach (var key in m_releasedCrossingHolds) { _ = m_announcedCrossingHolds.Remove(key: key); }
+        }
+        if (heldSeats.Count == 0) {
+            return;
+        }
+        m_heldCrossingOrder.Clear();
+        m_heldCrossingOrder.AddRange(collection: heldSeats.Keys);
+        m_heldCrossingOrder.Sort();
+        foreach (var seat in m_heldCrossingOrder) {
+            var heldTransferId = heldSeats[seat];
+
+            if (m_announcedCrossingHolds.TryGetValue(key: (instance.Name, seat), value: out var announcedTransferId) && (announcedTransferId == heldTransferId)) {
+                continue;
+            }
+            m_announcedCrossingHolds[(instance.Name, seat)] = heldTransferId;
+            if (instance.Server.Output.HasNarrationSink) {
+                instance.Server.Output.Narrate(
+                    channel: "world.adjacency",
+                    text: $"[world.adjacency: '{instance.Name}' seat {(seat + 1)} crossing HELD (transfer={heldTransferId} is queued or in flight); no further crossing is minted until it resolves]"
+                );
+            }
+        }
+    }
+    private readonly List<(string Instance, int Seat)> m_releasedCrossingHolds = [];
+    private readonly List<int> m_heldCrossingOrder = [];
     // The hit a body crosses by: the earliest crossing parameter, and among equal ones the stable junction seed's
     // choice from the hits in ordinal name order. A method of its own, so the scan makes the selection's closure for a
     // body that crossed something, never once a slot on every tick.
@@ -319,15 +332,23 @@ public sealed partial class WorldInstanceHost {
     // re-drive applies it, and a tape that departs travelers does not drive live (WorldReplayTape.TryBeginDrive). A crossing the scan minted as well would move the body a second time, so a replaying
     // instance's scan still observes every face (its occupancy latch follows the driven bodies and is current when live
     // input returns) but mints nothing.
+    // Both scans visit the bodies the instance's boundary scan selects (WorldBoundaryScan): those whose answer at a face
+    // can differ from the last scan's.
     private void ScanInstanceBoundariesCore(WorldInstance instance) {
         var decides = (instance.Tape is not { Mode: WorldReplayMode.Replaying });
+        var held = HeldCrossingSeats(instance: instance);
+        var scan = instance.BoundaryScan;
+        var everyBody = scan.Select(held: held, instance: instance);
 
         ScanInstanceAdjacencies(
             decides: decides,
-            instance: instance
+            heldSeats: held,
+            instance: instance,
+            seats: scan.Seats
         );
         ScanInstancePortals(
             decides: decides,
+            everyBody: everyBody,
             instance: instance
         );
     }
@@ -347,27 +368,37 @@ public sealed partial class WorldInstanceHost {
     // with one merged cohort. ResolveAndEnqueueCoalescedTransfers does the grouping once the whole scan is
     // in hand.
     private PortalEdgeHit?[]? m_portalWinners;
+    private List<PortalFace>? m_portalFaces;
 
-    private void ScanInstancePortals(WorldInstance instance, bool decides) {
-        SeedFederatedArrivalOccupancy(instance: instance);
+    // One portal face the scan tests, with whether its door stands closed this tick.
+    private readonly record struct PortalFace(WorldPlacement Placement, WorldPlacementFace Face, WorldPlacementPortal Portal, WorldFaceAperture Aperture, bool Closed);
+
+    private void ScanInstancePortals(WorldInstance instance, bool decides, bool everyBody) {
+        var seeded = SeedFederatedArrivalOccupancy(instance: instance);
 
         var definition = instance.Server.Configuration;
         var population = instance.Server.Population;
+        var server = instance.Server;
         var catalog = WorldFaceCatalog.For(definition: definition);
-        // Every tick scans every instance, so the per-body winners reuse one buffer; a scan entered from inside
-        // another takes a fresh one.
+        // Every tick scans every instance, so the per-body winners and the faces reuse one buffer each; a scan entered
+        // from inside another takes fresh ones.
         var winners = (((m_portalWinners is { } held) && (held.Length >= population.Capacity))
             ? held
             : new PortalEdgeHit?[population.Capacity]);
+        var portalFaces = (m_portalFaces ?? []);
 
         m_portalWinners = null;
+        m_portalFaces = null;
+        portalFaces.Clear();
         Array.Clear(
             array: winners,
             index: 0,
             length: population.Capacity
         );
 
-        // Indexed loops: this runs every tick, and enumerating the lists through their interfaces allocates.
+        // Every door's closure is read first, since a door that opened or closed since the last scan moves what a body
+        // standing still in it answers. Indexed loops: this runs every tick, and enumerating the lists through their
+        // interfaces allocates.
         var placements = definition.Placements;
 
         for (var row = 0; (row < placements.Count); row++) {
@@ -397,27 +428,39 @@ public sealed partial class WorldInstanceHost {
                     continue;
                 }
 
-                ScanPortalFace(
-                    aperture: aperture!,
-                    face: face,
-                    instance: instance,
-                    placement: placement,
-                    population: population,
-                    portal: portal,
-                    winners: winners
-                );
+                var closed = ((portal.Open is WorldPlacementResponseCondition.StateCondition open) && !open.Holds(arena: server.Arena, definition: server.Configuration, engineTick: server.CompletedEngineTicks, tick: server.CompletedTick));
+
+                population.PortalClosures.Set(closed: closed, face: face.Face, placementId: placement.Id);
+                portalFaces.Add(item: new PortalFace(Aperture: aperture!, Closed: closed, Face: face, Placement: placement, Portal: portal));
             }
+        }
+        if (portalFaces.Count != 0) {
+            instance.PortalClosures = population.PortalClosures;
+        }
+
+        var doorsMoved = instance.BoundaryScan.ClosuresMoved(revision: population.PortalClosures.Revision);
+        var seats = ((everyBody || seeded || doorsMoved) ? instance.BoundaryScan.All(capacity: population.Capacity) : instance.BoundaryScan.Seats);
+
+        foreach (var portalFace in portalFaces) {
+            ScanPortalFace(
+                face: portalFace,
+                instance: instance,
+                population: population,
+                seats: seats,
+                winners: winners
+            );
         }
 
         List<PortalEdgeHit>? hits = null;
 
-        for (var seat = 0; (seat < population.Capacity); seat++) {
+        foreach (var seat in seats) {
             if (winners[seat] is { } hit) {
                 (hits ??= []).Add(item: hit);
             }
         }
 
         m_portalWinners = winners;
+        m_portalFaces = portalFaces;
 
         if (
             decides &&
@@ -444,26 +487,26 @@ public sealed partial class WorldInstanceHost {
     // stands in it when it closes keeps the side it is on and a body walking into it meets the frame alone. A door's
     // `gate` reads the traveller's own cell of its row once a crossing fires; a body it refuses passes the frame without
     // crossing, and its latch keeps that one crossing from firing again until it leaves the face.
-    private void ScanPortalFace(WorldInstance instance, WorldPopulation population, WorldPlacement placement, WorldPlacementFace face, WorldPlacementPortal portal, WorldFaceAperture aperture, PortalEdgeHit?[] winners) {
+    // The scan visits the bodies its selection names (seats, ascending): a latched body is always among them.
+    private void ScanPortalFace(WorldInstance instance, WorldPopulation population, PortalFace face, ReadOnlySpan<int> seats, PortalEdgeHit?[] winners) {
+        var (placement, portal, aperture) = (face.Placement, face.Portal, face.Aperture);
+        var faceName = face.Face.Face;
         var bounds = ((aperture is WorldFaceAperture.Box box) ? box.Bounds : FixedAabb.Everywhere);
         var occupancy = instance.PortalOccupancy;
         var server = instance.Server;
+        var scan = instance.BoundaryScan;
 
-        var closed = ((portal.Open is WorldPlacementResponseCondition.StateCondition open) && !open.Holds(arena: server.Arena, definition: server.Configuration, engineTick: server.CompletedEngineTicks, tick: server.CompletedTick));
-
-        population.PortalClosures.Set(closed: closed, face: face.Face, placementId: placement.Id);
-        instance.PortalClosures = population.PortalClosures;
-        if (closed) {
-            for (var seat = 0; (seat < population.Capacity); seat++) {
+        if (face.Closed) {
+            foreach (var seat in seats) {
                 if (occupancy.Holds(seat: seat)) {
-                    _ = occupancy.Observe(placementId: placement.Id, faceName: face.Face, seat: seat, inside: false, crossed: false);
+                    _ = occupancy.Observe(placementId: placement.Id, faceName: faceName, seat: seat, inside: false, crossed: false);
                 }
             }
 
             return;
         }
 
-        for (var seat = 0; (seat < population.Capacity); seat++) {
+        foreach (var seat in seats) {
             if (!WorldAdjacencyOwnership.TryTraveller(
                 body: out var body,
                 index: seat,
@@ -471,10 +514,10 @@ public sealed partial class WorldInstanceHost {
             )) {
                 occupancy.Forget(
                     placementId: placement.Id,
-                    faceName: face.Face,
+                    faceName: faceName,
                     seat: seat
                 );
-                occupancy.Release(placementId: placement.Id, faceName: face.Face, seat: seat);
+                occupancy.Release(placementId: placement.Id, faceName: faceName, seat: seat);
 
                 continue;
             }
@@ -484,15 +527,15 @@ public sealed partial class WorldInstanceHost {
 
             // A body this face's destination refused for good asks again only once it has stood a body's radius clear of
             // the face, so one walk into the glass is one attempt however often its origin crosses the region's edge.
-            if (occupancy.IsRefused(placementId: placement.Id, faceName: face.Face, seat: seat)) {
+            if (occupancy.IsRefused(placementId: placement.Id, faceName: faceName, seat: seat)) {
                 if (bounds.Grow(margin: body.BroadphaseRadius).Contains(point: to)) {
                     continue;
                 }
-                occupancy.Release(placementId: placement.Id, faceName: face.Face, seat: seat);
+                occupancy.Release(placementId: placement.Id, faceName: faceName, seat: seat);
             }
             if (!bounds.Intersects(other: FixedAabb.Empty.Enclose(point: from).Enclose(point: to))) {
                 if (occupancy.Holds(seat: seat)) {
-                    _ = occupancy.Observe(placementId: placement.Id, faceName: face.Face, seat: seat, inside: false, crossed: false);
+                    _ = occupancy.Observe(placementId: placement.Id, faceName: faceName, seat: seat, inside: false, crossed: false);
                 }
 
                 continue;
@@ -503,9 +546,11 @@ public sealed partial class WorldInstanceHost {
                 from: from,
                 to: to
             );
+
+            if (crossing.Inside || crossing.Crossed) { scan.Found(seat: seat); }
             var fired = occupancy.Observe(
                 placementId: placement.Id,
-                faceName: face.Face,
+                faceName: faceName,
                 seat: seat,
                 inside: crossing.Inside,
                 crossed: crossing.Crossed
@@ -518,7 +563,7 @@ public sealed partial class WorldInstanceHost {
                 if (server.Output.HasNarrationSink) {
                     server.Output.Narrate(
                         channel: "world.portal",
-                        text: $"[world.portal: '{instance.Name}/{placement.Id}/{face.Face}' gate '{gate.State}' refuses {TravellerName(index: seat, localSeatCount: population.LocalSeatCount)}; it passes the frame without crossing]"
+                        text: $"[world.portal: '{instance.Name}/{placement.Id}/{faceName}' gate '{gate.State}' refuses {TravellerName(index: seat, localSeatCount: population.LocalSeatCount)}; it passes the frame without crossing]"
                     );
                 }
 
@@ -527,7 +572,7 @@ public sealed partial class WorldInstanceHost {
 
             var claim = new WorldFaceCrossingClaim(
                 PlacementId: placement.Id,
-                FaceName: face.Face,
+                FaceName: faceName,
                 Parameter: crossing.Parameter
             );
 
@@ -540,7 +585,7 @@ public sealed partial class WorldInstanceHost {
 
             winners[seat] = new PortalEdgeHit(
                 Placement: placement,
-                Face: face,
+                Face: face.Face,
                 Portal: portal,
                 Seat: seat,
                 Frame: crossing.Frame,

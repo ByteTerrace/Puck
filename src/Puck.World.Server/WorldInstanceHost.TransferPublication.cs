@@ -273,6 +273,7 @@ public sealed partial class WorldInstanceHost {
                             applicationStopping: m_applicationStopping,
                             narrationHub: m_narration,
                             boundary: m_linkBoundary,
+                            routeEnded: () => m_endedSeatRoutes.Enqueue(item: trackedSlot),
                             routeChanged: route => {
                                 if (
                                     (publishedEndpoint is not null) &&
@@ -355,6 +356,9 @@ public sealed partial class WorldInstanceHost {
                     entity: routedEntity,
                     slot: followedSlot
                 );
+                if (targetAuthority.Remote is not null) {
+                    m_routedSeatIdentities[followedSlot] = member.Profile?.Name;
+                }
 
                 // A route this host just started observing publishes the claim under its own route gate, which then
                 // delivers any route observed before the claim stood; a delayed commit acknowledgement can outlive

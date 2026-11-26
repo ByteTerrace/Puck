@@ -122,24 +122,26 @@ public sealed partial record SdfMesh {
     /// <param name="allocator">The host allocator, or <see langword="null"/> to keep the mesh managed.</param>
     /// <param name="account">The account the storage is charged to.</param>
     /// <param name="restore">The library and store key the mesh was read from, whose store can restore its normals and
-    /// coarser levels' indices once no region needs them (<see cref="Need"/>), or <see langword="null"/> for a mesh that
-    /// keeps them for its lifetime.</param>
+    /// coarser levels' indices once no region needs them (<see cref="Need"/>), with the material ids, by place, its
+    /// triangle materials carry, which a restore writes them in again; or <see langword="null"/> for a mesh that keeps
+    /// them for its lifetime.</param>
     /// <param name="stored">Whether the copy carries what a decode of the mesh's store entry answers
     /// (<see cref="SdfMeshStoreCodec.Conform"/>) instead of the mesh's own positions and normals, which the entry stores
     /// quantized: the form of a mesh published with <paramref name="restore"/>, whose restored normals must be the ones
     /// its region first wrote.</param>
     /// <returns>The native mesh, or this mesh when <paramref name="allocator"/> is <see langword="null"/>.</returns>
     /// <exception cref="InvalidOperationException">The mesh is chunked, and its chunks are not views of its attributes.</exception>
-    internal SdfMesh NativeCopy(IAllocator? allocator, MemoryAccount account, (SdfMeshLibrary Library, UInt128 Identity, SdfMeshGeometry Geometry)? restore = null, SdfMeshStoreCodec.Positions? stored = null) {
+    internal SdfMesh NativeCopy(IAllocator? allocator, MemoryAccount account, (SdfMeshLibrary Library, UInt128 Identity, SdfMeshGeometry Geometry, int[] Materials)? restore = null, SdfMeshStoreCodec.Positions? stored = null) {
         if (allocator is null) { return this; }
         if (m_payload is not null) { return Acquire(); }
         if ((Chunks.Count != 0) && !JoinsChunks()) { throw new InvalidOperationException(message: "A chunked mesh's chunks view its attributes."); }
 
-        var storage = Native(account: account, allocator: allocator, restore: restore);
+        var storage = Native(account: account, allocator: allocator, restore: ((restore is { } key) ? (key.Library, key.Identity, key.Geometry) : null));
 
         try {
             var shape = SdfMeshShape.Of(mesh: this);
 
+            if (restore is { } written) { storage.WritesMaterialsIn(materials: written.Materials); }
             _ = storage.Begin(shape: shape);
             for (var piece = 0; (piece < shape.Pieces.Length); piece++) {
                 var source = Piece(index: piece);
@@ -186,6 +188,10 @@ public sealed partial record SdfMesh {
         private Memory<Vector3> m_normals;
         private Memory<uint> m_materials;
         private Part[] m_parts = [];
+        // The ids, by place, the triangle materials are written in (WritesMaterialsIn), which a restore writes them in.
+        private int[]? m_written;
+
+        public override void WritesMaterialsIn(int[] materials) => m_written = materials;
 
         private sealed class Part {
             public Payload Owner = null!;
@@ -205,7 +211,7 @@ public sealed partial record SdfMesh {
             m_shape = shape;
             m_payload = new Payload(owner: account.CreateOwner(memoryClass: Puck.Abstractions.Memory.MemoryClass.Elastic, name: "mesh"));
             try {
-                var restorable = ((restore is { } from) ? new Restorable(geometry: from.Geometry, identity: from.Identity, library: from.Library) : null);
+                var restorable = ((restore is { } from) ? new Restorable(geometry: from.Geometry, identity: from.Identity, library: from.Library, materials: m_written) : null);
 
                 m_restorable = restorable;
                 m_parts = new Part[shape.Pieces.Length];

@@ -385,7 +385,15 @@ answer. The primary world admits sixteen network players and gives disconnected
 seats sixty seconds of reconnect grace. Connections in one process share a
 session namespace, `<issuer domain>/<subject>/<session>`; starting a new process
 creates a fresh traveller namespace. Cross-process body recovery is a separate
-travel concern. The [Azure sign-in provider](../Puck.World.Azure/README.md#silo-hosting)
+travel concern. The hosted silo is a closed rewind group, which admits a signed-in
+player's party as a guest: its seats land at the world's own spawn, and the world
+keeps nothing of a session whose last traveller it retired
+([decision](../../docs/decisions/worlds-and-federation.md#a-closed-rewind-group-admits-players-as-guests)).
+A client whose traveller is gone, because it was away past the reconnect grace or
+the deployment was restored to an earlier point, is told so
+(`[world.transfer: seat N returned to 'boot': its traveler ended …]`), takes its
+seat back and joins again at the spawn. A client whose issuer replaced its root
+during the run is told its session ended and must be started again. The [Azure sign-in provider](../Puck.World.Azure/README.md#silo-hosting)
 owns token validation and group membership policy; those concepts stay outside
 the engine, and the
 [issuer decision](../../docs/decisions/worlds-and-federation.md#players-are-admitted-through-their-hosts-issuer)
@@ -1751,15 +1759,18 @@ The engine ships five producers, each with its settings record in
 | `qr` | `payload`, `ecLevel` (`M`), `quietZoneModules` (4) | uploaded | deterministic |
 | `color` | `color` (`#RRGGBB`) | uploaded | deterministic |
 | `camera` | `sensor` (`Color`), `seat`, `profile`, `controls` | imported | external |
-| `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (a staged copy under Vulkan) | external |
+| `capture` | `windowTitle` or `monitorIndex`, `profile` | imported (a staged copy under Vulkan for an HDR display) | external |
 
 A capture selects its format and encoding from its display when it opens. An
 HDR toggle, a move to a display that differs in it, or failed display discovery
 ends the feed, which the consumer reopens with fresh metadata; unknown discovery
 refuses the open. An SDR
-display is captured in B8G8R8A8 sRGB, which a Direct3D 12 host copies into
-shared targets the screen samples and a Vulkan host converts through
-`source-rgba`. An HDR display is captured in half-float scRGB, which a
+display is captured in B8G8R8A8 sRGB, which either host copies on the GPU into
+shared targets the screen samples (a Vulkan host imports the textures a headless
+Direct3D 12 device made, as it does a camera's), with no readback beyond the
+divided-cadence frames that light the room. A render device that refuses the
+targets takes the CPU route, which converts through `source-rgba`. An HDR
+display is captured in half-float scRGB, which a
 Direct3D 12 host copies into half-float shared targets and converts on the GPU
 through `source-scrgb`, and a Vulkan host converts on its CPU tier through
 `source-transfer`, both into working values at the host section's

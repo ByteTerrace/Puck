@@ -105,6 +105,11 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
     /// <summary>Gets the device bytes the region holds. Safe to read from any thread.</summary>
     internal GpuMemoryBytes OwnedBytes { get { lock (m_gate) { return (m_disposed ? default : m_region.OwnedBytes); } } }
 
+    /// <summary>Gets whether a begun upload has words ready that only a residency's upload carries (<see cref="RecordOwed"/>):
+    /// a chunk or a root, or chunks a refused flush kept staged. Its claimant takes no query until the root lands, so while
+    /// this holds some residency's upload must open, whether or not any view renders. Safe to read from any thread.</summary>
+    internal bool OwesCopies { get { lock (m_gate) { return (!m_disposed && ((m_staged.Count > 0) || HasOwed())); } } }
+
     /// <summary>Begins the upload of a claimant's scene: its worker creates the export in the store's arena, claiming each
     /// geometry it names, and cuts the words the arena does not hold yet into chunks, which residencies' uploads record in
     /// the order uploads were begun.</summary>
@@ -192,7 +197,7 @@ internal sealed class SdfMeshProbeScenes : IDisposable {
                     var need = ((long)m_arena.Words * sizeof(uint));
 
                     if (need > m_region.ByteCount) {
-                        var replaced = m_region.Grow(byteCount: (sizeof(uint) * GpuCapacity.Headroom(required: m_arena.Words, ceiling: (GpuRegion.MaxByteCount / sizeof(uint)), divisor: 8)));
+                        var replaced = m_region.Grow(byteCount: (sizeof(uint) * GpuCapacity.Headroom(required: m_arena.Words, ceiling: (m_region.MostBytes / sizeof(uint)), divisor: 8)));
 
                         // The carry out of the replaced buffer is recorded below into an upload that is submitted only
                         // at its residency's CloseUpload, after other residencies' uploads have opened and polled this

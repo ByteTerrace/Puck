@@ -34,7 +34,8 @@ namespace Puck.SdfVm;
 /// </summary>
 public sealed partial class SdfMeshRegionStore : IDisposable {
     /// <summary>The most bytes the region can hold on any device, a whole number of words
-    /// (<see cref="GpuRegion.MaxByteCount"/>): the ceiling of the limit its grant reserves for it.</summary>
+    /// (<see cref="GpuRegion.MaxByteCount"/>): the arena's address range. The limit the grant reserves for the region is
+    /// held to what the region holds on its own device (<see cref="GpuRegion.MostBytes"/>), which may be less.</summary>
     public const ulong MostBytes = ((ulong)GpuRegion.MaxByteCount);
     /// <summary>The unit a region that grows by replacement is rounded up to: 16 MiB. A mapped region rounds to its chunk
     /// instead.</summary>
@@ -776,4 +777,17 @@ public sealed partial class SdfMeshRegionStore : IDisposable {
     }
     /// <summary>Gets the probe scenes once created, without creating them, or <see langword="null"/>.</summary>
     internal SdfMeshProbeScenes? ProbeScenesIfCreated { get { lock (m_gate) { return (m_disposed ? null : m_probeScenes); } } }
+    /// <summary>Gets whether the store owes copies only a residency's upload carries (<see cref="RecordOwed"/> and
+    /// <see cref="SdfMeshProbeScenes.RecordOwed"/>): a compaction's moves, a grown region's carry, or the probe scenes'
+    /// words. Nothing a view's signature reads moves while they wait, so a frame whose views all stand still opens an
+    /// upload for them (<see cref="SdfWorldPasses.ReadsPrepared"/>). Safe to read from any thread.</summary>
+    internal bool OwesUploadCopies {
+        get {
+            lock (m_gate) {
+                if (m_disposed) { return false; }
+                if (m_region.OwesMoves || m_region.OwesCarry) { return true; }
+            }
+            return (ProbeScenesIfCreated?.OwesCopies ?? false);
+        }
+    }
 }

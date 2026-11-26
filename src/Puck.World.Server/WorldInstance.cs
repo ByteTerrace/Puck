@@ -207,6 +207,8 @@ public sealed class WorldInstance : IDisposable {
     /// <see cref="WorldInstanceHost.TryRetire"/> starts a brand-new instance with a brand-new latch rather than
     /// inheriting a departed instance's occupancy, exactly like every other per-instance table here.</summary>
     public WorldPortalOccupancy PortalOccupancy { get; } = new();
+    /// <summary>Gets the boundary scan's choice of the bodies it visits each tick, and what it compares against.</summary>
+    internal WorldBoundaryScan BoundaryScan { get; } = new();
     /// <summary>Gets the closures the boundary scan last wrote (the population's <see cref="WorldPortalClosures"/>), which
     /// the screen sessions settled right after the scan, on the same thread, read; <see langword="null"/> before the
     /// first scan.</summary>

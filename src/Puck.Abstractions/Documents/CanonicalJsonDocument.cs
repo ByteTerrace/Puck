@@ -1,6 +1,8 @@
+using System.Buffers;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization.Metadata;
+using Puck.Abstractions.Memory;
 
 namespace Puck.Abstractions.Documents;
 
@@ -42,22 +44,8 @@ public static class CanonicalJsonDocument {
     /// <param name="value">The member's value.</param>
     /// <param name="jsonTypeInfo">The member type's source-generated metadata.</param>
     /// <returns>The compact canonical UTF-8 bytes.</returns>
-    public static byte[] SerializeCompact(object? value, JsonTypeInfo jsonTypeInfo) {
-        using var stream = new MemoryStream();
-
-        using (var writer = new Utf8JsonWriter(
-            options: CompactWriterOptions,
-            utf8Json: stream
-        )) {
-            JsonSerializer.Serialize(
-                jsonTypeInfo: jsonTypeInfo,
-                value: value,
-                writer: writer
-            );
-        }
-
-        return stream.ToArray();
-    }
+    public static byte[] SerializeCompact(object? value, JsonTypeInfo jsonTypeInfo) =>
+        Write(options: CompactWriterOptions, newline: false, state: (value, jsonTypeInfo), write: static (writer, state) => JsonSerializer.Serialize(jsonTypeInfo: state.jsonTypeInfo, value: state.value, writer: writer));
     /// <summary>Serializes a document to its canonical UTF-8 bytes.</summary>
     /// <param name="value">The document to serialize.</param>
     /// <param name="jsonTypeInfo">The document type's source-generated metadata.</param>
@@ -66,22 +54,7 @@ public static class CanonicalJsonDocument {
     public static byte[] Serialize<T>(T value, JsonTypeInfo<T> jsonTypeInfo) where T : class {
         ArgumentNullException.ThrowIfNull(argument: value);
 
-        using var stream = new MemoryStream();
-
-        using (var writer = new Utf8JsonWriter(
-            options: WriterOptions,
-            utf8Json: stream
-        )) {
-            JsonSerializer.Serialize(
-                jsonTypeInfo: jsonTypeInfo,
-                value: value,
-                writer: writer
-            );
-        }
-
-        stream.WriteByte(value: ((byte)'\n'));
-
-        return stream.ToArray();
+        return Write(options: WriterOptions, newline: true, state: (value, jsonTypeInfo), write: static (writer, state) => JsonSerializer.Serialize(jsonTypeInfo: state.jsonTypeInfo, value: state.value, writer: writer));
     }
     /// <summary>Serializes a JSON node to its compact canonical UTF-8 bytes: the members, order, and escaping of
     /// <see cref="Serialize(JsonNode)"/>, with no indentation, newlines, or trailing newline.</summary>
@@ -91,16 +64,7 @@ public static class CanonicalJsonDocument {
     public static byte[] SerializeCompact(JsonNode node) {
         ArgumentNullException.ThrowIfNull(argument: node);
 
-        using var stream = new MemoryStream();
-
-        using (var writer = new Utf8JsonWriter(
-            options: CompactWriterOptions,
-            utf8Json: stream
-        )) {
-            node.WriteTo(writer: writer);
-        }
-
-        return stream.ToArray();
+        return Write(options: CompactWriterOptions, newline: false, state: node, write: static (writer, node) => node.WriteTo(writer: writer));
     }
     /// <summary>Serializes a JSON node (e.g. a hand-assembled basis delta) to its canonical UTF-8 bytes.</summary>
     /// <param name="node">The node to serialize.</param>
@@ -109,17 +73,17 @@ public static class CanonicalJsonDocument {
     public static byte[] Serialize(JsonNode node) {
         ArgumentNullException.ThrowIfNull(argument: node);
 
-        using var stream = new MemoryStream();
+        return Write(options: WriterOptions, newline: true, state: node, write: static (writer, node) => node.WriteTo(writer: writer));
+    }
 
-        using (var writer = new Utf8JsonWriter(
-            options: WriterOptions,
-            utf8Json: stream
-        )) {
-            node.WriteTo(writer: writer);
-        }
+    // The one door every serializer writes through: the document into native storage (OwnedBufferWriter), so no step of a
+    // large document's write is a managed array, then the canonical trailing newline when asked, copied out once.
+    private static byte[] Write<TState>(JsonWriterOptions options, bool newline, TState state, Action<Utf8JsonWriter, TState> write) {
+        using var output = new OwnedBufferWriter<byte>();
 
-        stream.WriteByte(value: ((byte)'\n'));
+        using (var writer = new Utf8JsonWriter(bufferWriter: output, options: options)) { write(arg1: writer, arg2: state); }
+        if (newline) { output.Write(value: "\n"u8); }
 
-        return stream.ToArray();
+        return output.ToArray();
     }
 }

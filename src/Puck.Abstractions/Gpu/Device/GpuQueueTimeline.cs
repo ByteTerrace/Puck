@@ -10,10 +10,20 @@ public abstract class GpuQueueTimeline : IDisposable {
     /// <summary>Signals a fresh value after all work submitted so far, including an open batch. Pending commands
     /// not yet handed to the submitter are not covered; their owner must keep their resources until submission.</summary>
     /// <returns>The value successfully queued. Zero and the device-loss sentinel are never returned.</returns>
-    public ulong Checkpoint() => SubmitCheckpoint(submit: Signal);
+    public ulong Checkpoint() {
+        // The hand-over may signal values of its own, so it runs before this checkpoint takes its value.
+        BeforeCheckpoint();
+
+        return SubmitCheckpoint(submit: Signal);
+    }
+
+    /// <summary>Gets whether a value is taken and its signal not yet on the queue: work that signals this timeline, which
+    /// would put a larger value ahead of it, waits until it is.</summary>
+    protected bool Signaling { get; private set; }
 
     /// <summary>Queues a backend operation that signals this timeline. The operation must order its signal after
-    /// every earlier signal and arrange a dependency before later queue work. A thrown call burns its value.</summary>
+    /// every earlier signal and arrange a dependency before later queue work, and signal no other value of this
+    /// timeline (<see cref="Signaling"/> is set while it runs). A thrown call burns its value.</summary>
     /// <param name="submit">The native operation, given the fresh signal value.</param>
     /// <returns>The successfully submitted value.</returns>
     protected ulong SubmitCheckpoint(Action<ulong> submit) {
@@ -22,9 +32,17 @@ public abstract class GpuQueueTimeline : IDisposable {
         // Burn a value even when the native call fails with an unknown outcome; it can never certify a later use.
         var value = m_next++;
 
-        submit(value);
+        Signaling = true;
+        try {
+            submit(value);
+        } finally {
+            Signaling = false;
+        }
         return value;
     }
+    /// <summary>Hands the queue whatever its door hands over before a checkpoint takes its value, so every value that
+    /// hand-over signals is smaller than the checkpoint's. Nothing by default.</summary>
+    protected virtual void BeforeCheckpoint() { }
 
     /// <summary>Gets the native completed prefix. Device loss throws; it is never reported as a completed prefix.</summary>
     public ulong Completed {

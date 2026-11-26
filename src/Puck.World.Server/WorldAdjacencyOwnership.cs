@@ -36,17 +36,37 @@ public static class WorldAdjacencyOwnership {
     /// and the latch is released here when they do. The caller holds the authority gate.</summary>
     /// <param name="server">The authority whose faces are swept.</param>
     /// <param name="pendingOnly">Whether only bodies holding a pending adjacency continuum are swept.</param>
-    /// <param name="held">Whether a body index is held out of the sweep, or <see langword="null"/> to hold none.</param>
     /// <returns>The crossings per body index; an entry is <see langword="null"/> where the body crossed nothing.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="server"/> is <see langword="null"/>.</exception>
-    public static List<WorldAdjacencyFaceHit>?[] Sweep(WorldServer server, bool pendingOnly, Func<int, bool>? held = null) {
+    public static List<WorldAdjacencyFaceHit>?[] Sweep(WorldServer server, bool pendingOnly) {
         ArgumentNullException.ThrowIfNull(argument: server);
 
+        var capacity = server.Population.Capacity;
+        var seats = new int[capacity];
+        var candidates = new List<WorldAdjacencyFaceHit>?[capacity];
+
+        for (var seat = 0; (seat < capacity); seat++) { seats[seat] = seat; }
+        Sweep(candidates: candidates, held: null, pendingOnly: pendingOnly, seats: seats, server: server);
+        return candidates;
+    }
+    /// <summary>Collects every ownership face the named bodies' last steps crossed into a caller's buffer, as
+    /// <see cref="Sweep(WorldServer, bool)"/> does for every body.</summary>
+    /// <param name="server">The authority whose faces are swept.</param>
+    /// <param name="seats">The bodies swept, each once.</param>
+    /// <param name="pendingOnly">Whether only bodies holding a pending adjacency continuum are swept.</param>
+    /// <param name="held">The seats held out of the sweep, or <see langword="null"/> to hold none.</param>
+    /// <param name="candidates">The crossings per body index, at least the population's capacity long; an entry the
+    /// sweep fills was <see langword="null"/>, and an entry of a body it crossed nothing for is left as it was.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="server"/> or <paramref name="candidates"/> is
+    /// <see langword="null"/>.</exception>
+    public static void Sweep(WorldServer server, ReadOnlySpan<int> seats, bool pendingOnly, IReadOnlyDictionary<int, ulong>? held, List<WorldAdjacencyFaceHit>?[] candidates) {
+        ArgumentNullException.ThrowIfNull(argument: server);
+        ArgumentNullException.ThrowIfNull(argument: candidates);
+
         var population = server.Population;
-        var candidates = new List<WorldAdjacencyFaceHit>?[population.Capacity];
 
         if (server.Definition.Adjacencies is not { Count: > 0 }) {
-            return candidates;
+            return;
         }
 
         foreach (var face in WorldAdjacencyPolicy.OwnershipFaces(definition: server.Definition)) {
@@ -54,7 +74,7 @@ public static class WorldAdjacencyOwnership {
             var frame = face.Frame;
             var ownershipThreshold = face.Threshold;
 
-            for (var seat = 0; (seat < population.Capacity); seat++) {
+            foreach (var seat in seats) {
                 if (!TryTraveller(
                     body: out var body,
                     index: seat,
@@ -68,7 +88,7 @@ public static class WorldAdjacencyOwnership {
                 ) {
                     continue;
                 }
-                if (held?.Invoke(arg: seat) == true) {
+                if (held?.ContainsKey(key: seat) == true) {
                     continue;
                 }
 
@@ -132,8 +152,6 @@ public static class WorldAdjacencyOwnership {
                 ));
             }
         }
-
-        return candidates;
     }
     /// <summary>Settles the already-evaluated adjacency continuations this authority holds before it advances its
     /// population: a pending continuum whose remaining image crosses no further ownership face here is consumed, and

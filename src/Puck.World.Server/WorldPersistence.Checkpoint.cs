@@ -523,6 +523,33 @@ public sealed partial class WorldPersistence {
             Source: new WorldSourceRevision(ContentHash: server.SourceContentHash ?? string.Empty, Definition: restoredSource)
         );
     }
+    // A rewind baseline's restore. Every traveler minted outside the closed group the image is a recovery point of ends
+    // here, inside the restore, as an arrival that never stood: its grants and its body go through the rollback door a
+    // refused commit uses, its held input is released, and the escrow drops every row it held of anyone outside the
+    // group. What this does depends only on the checkpoint's bytes, so a candidate host, a recovery and a replay shadow
+    // restore the same world, and no tick, rule or admission ever sees a restored guest.
+    private void EndRewoundGuests(IReadOnlyList<string> baseline) {
+        if (baseline.Count == 0) {
+            return;
+        }
+        var group = new HashSet<string>(collection: baseline, comparer: StringComparer.Ordinal) { Host.AuthorityIdentity };
+
+        lock (Host.AuthorityGate) {
+            for (var index = 0; (index < Host.Population.Capacity); index++) {
+                if (
+                    (Host.Population.ResolveIncarnation(authority: Host.AuthorityIdentity, index: index) is not { } incarnation) ||
+                    group.Contains(item: incarnation.Authority)
+                ) {
+                    continue;
+                }
+                if (index >= Host.Population.LocalSeatCount) {
+                    Host.Tick.ClearDepartedFederatedIntent(index: index, principal: Host.Population.PeerPrincipal(index: index));
+                }
+                Host.GrantTable.RollbackTransferredEntity(slot: index);
+            }
+            Host.TransferEscrow.EndOutside(group: group);
+        }
+    }
     private void RestoreCheckpointCore(WorldPrivateDrawKeys keys, WorldAuthorityCheckpoint checkpoint, WorldDefinitionAdmission admission, bool restoreOwnedIdentities = true, bool resetSessionEpochs = false, string? authorityIdentity = null, IWorldAddonPreparedPlan? preparedAddons = null, ValidatedCheckpoint? validated = null) {
         var server = checkpoint.Server;
         var restoredDefinition = admission.Definition;
@@ -686,6 +713,7 @@ public sealed partial class WorldPersistence {
             runtime.RestoreCheckpoint(checkpoint: scope);
         }
         Host.TransferEscrow.Restore(checkpoint: checkpoint.Escrow);
+        EndRewoundGuests(baseline: checkpoint.Escrow.RewindBaseline);
         if (!Host.Arena.TryImportUndoSnapshot((server.Undo ?? new ArenaUndoSnapshot(Groups: [])), out var undoReason)) {
             throw new InvalidOperationException(message: $"the checkpoint's retained turns do not restore: {undoReason}");
         }

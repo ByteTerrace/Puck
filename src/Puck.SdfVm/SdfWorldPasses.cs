@@ -687,10 +687,32 @@ public sealed partial class SdfWorldPasses : IRenderGraphPackageFactory {
     /// frames may pack beside others (<see cref="SdfWorldResidency.PacksBeside"/>) pack as the partitions of one fork of
     /// the pool's frame class, one residency a partition, and the rest pack here in turn. A partition touches only its
     /// own residency (<see cref="SdfWorldResidency.RunPack"/>), so the residencies' packed state is the same whichever
-    /// thread ran each.</remarks>
+    /// thread ran each. Then stages one residency while the shared mesh region owes copies only an upload carries
+    /// (<see cref="StageOwedCopies"/>).</remarks>
     public void ReadsPrepared(in FrameContext context, JobPool? jobs) {
-        if (m_packsPending.Count == 0) { return; }
+        if (m_packsPending.Count > 0) { PackPending(context: in context, jobs: jobs); }
+        StageOwedCopies(context: in context);
+    }
+    // Invariant: the copies the shared mesh region owes that only an upload's opening records (a probe scene's chunks and
+    // root, a compaction's moves, a grown region's carry; SdfMeshRegionStore.OwesUploadCopies) reach the queue within a
+    // frame of being owed, whether or not any view renders. A probe client takes no query until its scene's root has
+    // landed, and nothing a view's signature reads moves while it waits, so a frame whose views all stand would never
+    // carry the root and the irradiance volume would never settle. Enforced here, the one place a frame opens an upload
+    // for no render: once a frame, after the packs, one residency attached to the region (the host first, whose frame
+    // every frame captures) is staged, and a render prepared later this frame finds it staged
+    // (SdfWorldResidency.Stage). Any residency's upload carries the region's copies, so one a frame suffices.
+    private void StageOwedCopies(in FrameContext context) {
+        var staged = ((m_host is { IsReleased: false, IsParked: false, Tables: not null } host) ? host : null);
 
+        if (staged is null) {
+            foreach (var residency in m_residencies.Keys) {
+                if (residency is { IsReleased: false, IsParked: false, Tables: not null }) { staged = residency; break; }
+            }
+        }
+        if ((staged?.Tables is not { OwesUploadCopies: true }) || !staged.Stage(context: in context)) { return; }
+        SdfCaptureWork.ProcessWork.Count(kind: SdfCaptureWork.CopiesStaged);
+    }
+    private void PackPending(in FrameContext context, JobPool? jobs) {
         var fork = m_packFork;
 
         try {

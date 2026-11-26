@@ -441,6 +441,13 @@ internal sealed class FakeGpuDevice :
             return GpuDeviceCapabilities.DirectXConstantBufferBytes;
         }
     }
+    ulong IGpuBindings.MaxStorageBufferBytes {
+        get {
+            Hit(key: "IGpuBindings.MaxStorageBufferBytes");
+
+            return uint.MaxValue;
+        }
+    }
 
     nint IGpuBindings.CreatePool(in GpuDescriptorPoolSizes sizes, in GpuObjectName name) {
         Hit(key: "IGpuBindings.CreatePool");

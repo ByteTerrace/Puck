@@ -317,9 +317,13 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
 
         return 1;
     }
-    // Before any service resolves the allocator, so every native block the run owns carries the guard.
+    // Before anything owns storage: reading the platform's allocator installs it for the process
+    // (Puck.Abstractions.Memory.ProcessAllocator), so storage that names no allocator is its too, and with the option
+    // every native block the run owns carries the guard.
+    var processAllocator = Puck.Memory.Allocator.Current;
+
     if (parseResult.GetValue(option: debugAllocatorOption)) {
-        var guard = new Puck.Abstractions.Memory.GuardedAllocator(inner: Puck.Memory.Allocator.Current);
+        var guard = new Puck.Abstractions.Memory.GuardedAllocator(inner: processAllocator);
 
         Puck.Memory.Allocator.Current = guard;
         // The blocks still quarantined at exit are checked too; collection checks them sooner (host.memory collect).

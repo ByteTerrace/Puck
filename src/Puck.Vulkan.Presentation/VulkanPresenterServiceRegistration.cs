@@ -120,6 +120,7 @@ public static class VulkanPresenterServiceRegistration {
             ),
                 Recorder = new VulkanGpuRecorder(
                 deviceContext: deviceContext,
+                labels: nameObjects,
                 recordingApi: commandBufferRecordingApi
             ),
                 RenderPassFactory = new VulkanGpuRenderPassFactory(

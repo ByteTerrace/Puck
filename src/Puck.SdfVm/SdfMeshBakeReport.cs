@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Numerics;
-using Puck.Abstractions.Memory;
 using Puck.Hosting.Jobs;
 
 namespace Puck.SdfVm;
@@ -111,8 +110,6 @@ internal static class SdfMeshBakeReport {
         // The process's managed allocation, collector pause and collections when the bake started, of which the done
         // line reports the bake's window: every thread's, the bake's workers dominating it while they run.
         private long m_allocatedAtStart;
-        private long m_freshLargeAtStart;
-        private long m_reusedLargeAtStart;
         private TimeSpan m_pausedAtStart;
         private int m_gen0AtStart;
         private int m_gen1AtStart;
@@ -196,8 +193,6 @@ internal static class SdfMeshBakeReport {
             Array.Clear(array: GateHoldMax);
             GateNestedTicks = 0L;
             m_allocatedAtStart = GC.GetTotalAllocatedBytes(precise: false);
-            m_freshLargeAtStart = RentedArrays.LargeFreshBytes;
-            m_reusedLargeAtStart = RentedArrays.LargeReusedBytes;
             m_pausedAtStart = GC.GetTotalPauseDuration();
             m_gen0AtStart = GC.CollectionCount(generation: 0);
             m_gen1AtStart = GC.CollectionCount(generation: 1);
@@ -261,7 +256,7 @@ internal static class SdfMeshBakeReport {
             return string.Join(separator: ",", values: Enum.GetValues<Gate>().Where(predicate: site => (GateEntries[((int)site)] > 0)).Select(selector: site => string.Create(provider: CultureInfo.InvariantCulture, handler: $"{site.ToString().ToLowerInvariant()}:{GateEntries[((int)site)]}/wait:{Milliseconds(GateWaitTicks[((int)site)]):0.0}ms/hold:{Milliseconds(GateHoldTicks[((int)site)]):0.0}ms/max:{Milliseconds(GateHoldMax[((int)site)]):0.00}ms")));
         }
         // The process's managed allocation, collector pause and collections by generation since the bake started.
-        private string DescribeManaged() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"allocated:{((GC.GetTotalAllocatedBytes(precise: false) - m_allocatedAtStart) / 1.0e9):0.00}GB,rented-large-fresh:{((RentedArrays.LargeFreshBytes - m_freshLargeAtStart) / 1.0e9):0.00}GB,rented-large-reused:{((RentedArrays.LargeReusedBytes - m_reusedLargeAtStart) / 1.0e9):0.00}GB,gc-pause:{(GC.GetTotalPauseDuration() - m_pausedAtStart).TotalSeconds:0.00}s,collections:{(GC.CollectionCount(generation: 0) - m_gen0AtStart)}/{(GC.CollectionCount(generation: 1) - m_gen1AtStart)}/{(GC.CollectionCount(generation: 2) - m_gen2AtStart)}");
+        private string DescribeManaged() => string.Create(provider: CultureInfo.InvariantCulture, handler: $"allocated:{((GC.GetTotalAllocatedBytes(precise: false) - m_allocatedAtStart) / 1.0e9):0.00}GB,gc-pause:{(GC.GetTotalPauseDuration() - m_pausedAtStart).TotalSeconds:0.00}s,collections:{(GC.CollectionCount(generation: 0) - m_gen0AtStart)}/{(GC.CollectionCount(generation: 1) - m_gen1AtStart)}/{(GC.CollectionCount(generation: 2) - m_gen2AtStart)}");
     }
 
     // When the bake's pool last took work with more still queued behind every worker (PoolSaturated): the done line

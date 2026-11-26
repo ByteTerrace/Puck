@@ -101,6 +101,17 @@ survivors and with old-to-young references, not with the garbage.
   into reused storage. The World sets
   `System.GC.ConserveMemory` to 5 ([`Puck.World.csproj`](../../../../src/Puck.World/Puck.World.csproj))
   because it frees large arrays in bursts.
+- **Large scratch that comes and goes is native, never a rented array.** A
+  player's heap once held a large object heap ten times its live large objects:
+  a few long-lived arrays kept the regions open while rentals of differing
+  sizes left gaps between them, and no later rental fitted a gap. Compacting
+  treats that symptom. Scratch and tables of reference-free elements go in an
+  `OwnedBuffer<T>` (through a `RentedScope`'s `Buffer` and `RentList` for a
+  build's workspace), which is always native, grows by reallocation and leaves
+  nothing for the collector; the allocator reuses the freed space across sizes
+  and types. `RentedArrays` is for arrays under its shared-pool limit and for
+  elements that hold references. Read a suspect with `puck host heap`: live
+  large objects far below the heap's large-object bytes is this shape.
 
 Sources: cards set by the write barrier and read by ephemeral collections
 ([BOTR-GC]); old-generation references keep young objects alive and promote
@@ -275,20 +286,23 @@ storage.
 
 The host injects `MimallocAllocator` through `IAllocator`; the accounting owner
 stores byte totals, never addresses or buffer registry entries. `OwnedBuffer<T>`
-keeps capacity and logical length for reference-free storage. Growth allocates,
-copies and publishes before releasing the old block, including overlap in the
-owner's charge. Every borrowed span or memory slice ends before growth, reset
-or disposal. Managed backing serves standalone geometry callers without an
-injected allocator; published World bake payloads, lattice planes, lattice
-indices, point workspaces and the lattice's point rounds use the injected
+keeps capacity and logical length for reference-free storage, always in native
+memory. Growth reallocates the block, which the allocator may extend in place,
+and the owner is charged for the overlap while both sizes stand. Every borrowed
+span or memory slice ends before growth, reset or disposal. A buffer that names
+no allocator takes the process's (`ProcessAllocator.Current`: the host's once
+it reads `Puck.Memory.Allocator`, the system heap in a tool or a test);
+published World bake payloads, lattice planes, lattice indices, point
+workspaces and the lattice's point rounds use the injected
 native allocator, charged to the group that owns them. The readback copy of each
 completed batch, which its answers read in place, is charged to its bake's
 readback owner inside a standing reservation the take admits batches against
 (`SdfMeshPathBake.ReadbackBytes`), so an answer never waits for room the
-admitted groups hold. The irradiance worker's batch scratch (relight input and
-origins, answer words, saved hits, update words) is grow-only managed storage
-that only the worker task touches; a GPU job reads it before its submit
-returns, and a job given a reusable answer array returns it for the next job. A caller that overwrites every
+admitted groups hold. The irradiance worker's small batch scratch (relight
+input and origins, update words) is grow-only managed storage that only the
+worker task touches, and a GPU job reads it before its submit returns; its
+large scratch (a batch's answer words and saved hits, and the probe service's
+part answers) is native buffers, the batch's freed when the batch ends. A caller that overwrites every
 entry grows a buffer with `Resize(..., preserve: false)`, which copies nothing.
 Mesh-store decode scratch follows the same scope (`SdfMeshStoreDecoder.TryDecode`):
 the entry's bytes and the expanded bytes live in accounted `OwnedBuffer<byte>`s

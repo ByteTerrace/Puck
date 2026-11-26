@@ -182,6 +182,10 @@ public sealed class WorldDisclosureSession : IClientSink, IDisposable {
     public void DeliverDefinition(WorldDefinition definition, WorldDocumentVersion version, in WorldStreamStamp stream) => m_transcript.RecordText(door: "deliver.definition", principal: m_label,
         text: $"{Spell(stream: stream)} version={m_transcript.Spell(version: version)}\n{Document(definition: definition)}");
     /// <inheritdoc/>
+    /// <remarks>The transcript records the rows themselves, the whole of what crossed.</remarks>
+    public void DeliverPresentation(WorldPresentationRows rows, WorldDocumentVersion version, in WorldStreamStamp stream) => m_transcript.RecordText(door: "deliver.presentation", principal: m_label,
+        text: $"{Spell(stream: stream)} version={m_transcript.Spell(version: version)}\n{System.Text.Encoding.UTF8.GetString(rows.Payload.Span)}");
+    /// <inheritdoc/>
     public void DeliverState(WorldDefinition definition, WorldDocumentVersion version, in WorldStateStamp stamp, in WorldStreamStamp stream) => m_transcript.RecordText(door: "deliver.state", principal: m_label,
         text: string.Create(provider: CultureInfo.InvariantCulture,
             handler: $"{Spell(stream: stream)} version={m_transcript.Spell(version: version)} tick={stamp.Tick} engineTick={stamp.EngineTick} moved=[{string.Join(separator: ",", values: stamp.MovedRows.ToArray())}] everything={stamp.Everything} arena={stamp.ArenaValues}\n{Document(definition: definition)}"));

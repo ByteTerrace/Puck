@@ -109,14 +109,14 @@ public sealed partial class SdfMeshIrradiance {
     // are set.
     private async Task ReadCameraSample(SdfMeshProbeGpuWork gpu, Snapshot snapshot, Vector4[] origins, Vector4[] lighting, int words, Vector3[] positions, int[] rows, ReferenceRevision[] cuts, uint[] result) {
         try {
-            var answer = await gpu.CameraSample(snapshot.Scene, origins, lighting, words, snapshot.Geometry, snapshot.WindowVersion, result).ConfigureAwait(false);
+            _ = await gpu.CameraSample(snapshot.Scene, origins, lighting, words, snapshot.Geometry, snapshot.WindowVersion, result).ConfigureAwait(false);
             // Admission checked the scene and window, and the device read the volume they stood for, so the reading
             // stands for its positions even when the window has moved on since.
             lock (m_gate) {
                 if (m_disposed || !ReferenceEquals(GpuTrace, gpu)) { return; }
                 // Every camera reader holds this gate. After the exchange, no reader can reach the former answer.
                 m_gpuCameraSampleWritable = m_gpuCameraSample?.Words ?? [];
-                m_gpuCameraSample = new GpuCameraSampleReading(gpu, answer, positions, rows, cuts);
+                m_gpuCameraSample = new GpuCameraSampleReading(gpu, result, positions, rows, cuts);
             }
         } catch (OperationCanceledException) {
             // Admission saw an obsolete window or a stopping device; the next Stage asks again.

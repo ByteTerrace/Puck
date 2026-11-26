@@ -31,7 +31,8 @@ namespace Puck.Cli.Host;
 /// <param name="LoneOwnGb">The least commit, in gigabytes, the start is admitted at on an idle machine: for a measured
 /// profile the lesser of its expected commit peak and the kind's fallback, which <paramref name="OwnGb"/> is when the
 /// expected peak exceeds what the machine could hold with no admitted start running; for a profile this machine has not
-/// measured, its expected private working set, which a start alone is admitted at. A start whose lone need the machine
+/// measured, its expected private working set, which a start alone is admitted at, except a windowed World with a cold store,
+/// which is judged as a measured profile is. A start whose lone need the machine
 /// could never hold is refused by name (<see cref="HostLoadThresholds.NeverFits"/>).</param>
 /// <param name="LoneResidentOwnGb">The lone need in private working set, in gigabytes.</param>
 /// <param name="Profile">The profile the start was judged by, or <see langword="null"/> for its kind alone.</param>
@@ -81,7 +82,9 @@ public readonly record struct HostStartDemand(bool CommitCovered, bool PhysicalC
 /// of it alone (no other Puck process holding commit, admitted or still growing) is judged in commit by its expected private
 /// working set, the least commit it can need, and reserves its whole guess; so the first start of the profile runs and records
 /// what it reached when it stops (<see cref="Finish(Process, WorldReadiness)"/>), and only a machine whose commit limit could
-/// not hold even that is refused.
+/// not hold even that is refused. A windowed World with a cold store is never lowered so: it is judged as a measured profile
+/// is, by its cold figure (this machine's cold window of its document, else of any document, else the cold fallback), since
+/// a bake of every mesh reaches that figure whatever the first warm session of the profile would have taught.
 /// <para>Admitted starts come from the live processes each reading lists (<see cref="HostSample.Starts"/>, classified by
 /// <see cref="HostProcesses.RunningStart"/>) with their current private bytes, so a process that exits stops counting at
 /// once and nothing is read from a record that can go stale. The one thing a reading cannot show is a start admitted a
@@ -170,14 +173,17 @@ public sealed class HostStartTracker {
     // private working set: every privately resident page is committed, so no start of it can need less, and the first start
     // runs and records what it reached. Beside other work commit judges the whole guess, so admitted work never grows into a
     // start that guessed low. A step is never tracked once it runs, so no start of it teaches a lower figure, and commit
-    // judges its whole guess alone too. A measured profile is never clamped: its own record says what it needs.
+    // judges its whole guess alone too. A measured profile is never clamped: its own record says what it needs. Nor is a
+    // windowed World with a cold store: its figure (a cold window of this document, else of any document, else the cold
+    // fallback) is what a bake of every mesh reaches, which is no guess at a play session, and a cold bake let in at a warm
+    // session's least commit exhausts the machine's memory before it can teach the window anything.
     private HostPeaks Lone(HostStartProfile kind, HostLoadThresholds thresholds, HostSample idle, bool alone) {
         var learned = Expected(installedRamGb: thresholds.InstalledRamGb, kind: kind);
         var fallback = Fallback(installedRamGb: thresholds.InstalledRamGb, kind: kind);
         var resident = Math.Min(learned.ResidentGb, fallback.ResidentGb);
         var commit = Math.Min(learned.PrivateGb, fallback.PrivateGb);
 
-        if (Measured(kind: kind)) { return new HostPeaks(PrivateGb: commit, ResidentGb: resident, WorkingSetGb: learned.WorkingSetGb); }
+        if (Measured(kind: kind) || (kind.Class is { Kind: HostStartKind.WindowedWorld, Store: StoreWarmth.Cold })) { return new HostPeaks(PrivateGb: commit, ResidentGb: resident, WorkingSetGb: learned.WorkingSetGb); }
 
         return new HostPeaks(PrivateGb: ((alone && (kind.Kind != HostStartKind.Step)) ? Math.Min(commit, resident) : commit), ResidentGb: Math.Min(resident, thresholds.PhysicalRoomGb(reading: idle)), WorkingSetGb: learned.WorkingSetGb);
     }
