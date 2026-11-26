@@ -14,7 +14,8 @@ namespace Puck.World.Presentation.Tests;
 /// rows: the destination, served behind a <see cref="WorldPeerHost"/> door, and the onward row the destination hands a
 /// traveler on to. Each side trusts the other's key, both networks and the door run on one
 /// <see cref="VirtualClock"/> that never advances, and the destination's document is on disk so the source resolves it
-/// as a remote transfer destination.
+/// as a remote transfer destination. Built with a far host, a third host serves one more row behind its own door, as a
+/// third process would, and federates with the destination host both ways.
 /// </summary>
 internal sealed class FederatedHosts : IDisposable {
     /// <summary>The destination row's instance name, on the destination host.</summary>
@@ -28,8 +29,14 @@ internal sealed class FederatedHosts : IDisposable {
     private readonly LocalKeySigningOracle m_destinationOracle;
     private readonly WorldPeerNetwork m_sourceNetwork;
     private readonly WorldPeerNetwork m_destinationNetwork;
+    private readonly IAsyncDisposable? m_farMailbox;
+    private readonly LocalKeySigningOracle? m_farOracle;
+    private readonly WorldPeerNetwork? m_farNetwork;
 
-    private FederatedHosts(Action<WorldRemoteAuthority>? travelerRouteStarted, WorldDefinition? sourceDefinition) {
+    /// <summary>The far row's instance name, on the far host.</summary>
+    public const string FarName = "row-d";
+
+    private FederatedHosts(Action<WorldRemoteAuthority>? travelerRouteStarted, WorldDefinition? sourceDefinition, bool far) {
         m_scratch = new TemporaryDirectory(prefix: "puck-federated-hosts-");
         Clock = new VirtualClock(start: AdmissionWireFixture.ClaimInstant);
         Seats = new RoutedSeats();
@@ -73,7 +80,9 @@ internal sealed class FederatedHosts : IDisposable {
 
         var destinationSecurity = Authenticator(
             oracle: m_destinationOracle,
-            trustEntries: () => [TrustEntryFor(oracle: m_sourceOracle)]
+            trustEntries: () => ((m_farOracle is { } farOracle)
+                ? [TrustEntryFor(oracle: m_sourceOracle), TrustEntryFor(oracle: farOracle)]
+                : [TrustEntryFor(oracle: m_sourceOracle)])
         );
 
         SourceRow.Instance.Federation = new WorldFederationIdentity(
@@ -106,7 +115,70 @@ internal sealed class FederatedHosts : IDisposable {
             bytes: WorldDefinitionSerialization.Serialize(definition: DestinationRow.Server.Definition),
             name: $"{DestinationName}.world.json"
         );
+        if (!far) {
+            return;
+        }
+        // A third host, as a third process would be: its own machine, signing identity, network and door. It trusts the
+        // destination host's key and the destination host trusts its own, so a traveler walks between them both ways.
+        FarHost = new WorldInstanceHost(
+            applicationStopping: CancellationToken.None,
+            machineHostFactory: Fixtures.MachineHostFactory,
+            machineId: Guid.NewGuid(),
+            resolver: new WorldSessionResolver(),
+            seats: WorldEmbodiedSeats.None,
+            stateRoot: new WorldStateRoot(path: Directory.CreateDirectory(path: m_scratch.PathOf(name: "far-state")).FullName)
+        );
+        var farDefinition = Fixtures.PeerPopulationDocument(networkPlayers: 2);
+        FarRow = HostRow.Build(
+            definition: farDefinition with { HostRaw = farDefinition.Host with { AuthorityNamespace = FarName } },
+            name: FarName
+        );
+        m_farOracle = LocalOracle(subject: FarRow.Server.AuthorityIdentity);
+        m_farNetwork = new WorldPeerNetwork(
+            timeProvider: Clock,
+            transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout
+        );
+        var farSecurity = Authenticator(
+            oracle: m_farOracle,
+            trustEntries: () => [TrustEntryFor(oracle: m_destinationOracle)]
+        );
+
+        FarRow.Instance.Federation = new WorldFederationIdentity(
+            Authenticator: farSecurity,
+            Network: m_farNetwork,
+            Subject: FarRow.Server.AuthorityIdentity
+        );
+        FarDoor = new WorldPeerHost(
+            authenticator: farSecurity,
+            network: m_farNetwork,
+            server: FarRow.Server,
+            timeProvider: Clock
+        );
+        FarRow.Instance.Door = FarDoor;
+        FarDoor.Start(listen: "127.0.0.1:0");
+        m_farMailbox = AdmissionWireFixture.StartMailboxPump(FarDoor);
+        FarHost.Admit(row: FarRow.Instance);
+        FarPath = m_scratch.WriteBytes(
+            bytes: WorldDefinitionSerialization.Serialize(definition: FarRow.Server.Definition),
+            name: $"{FarName}.world.json"
+        );
     }
+
+    /// <summary>The far host, a third host federated with the destination host, or <see langword="null"/> when the
+    /// hosts were built without one.</summary>
+    public WorldInstanceHost? FarHost { get; }
+    /// <summary>The far row, served behind <see cref="FarDoor"/>, or <see langword="null"/>.</summary>
+    public HostRow? FarRow { get; }
+    /// <summary>The far row's door, or <see langword="null"/>.</summary>
+    public WorldPeerHost? FarDoor { get; }
+    /// <summary>The far row's document on disk, or <see langword="null"/>.</summary>
+    public string? FarPath { get; }
+    /// <summary>The remote transfer destination naming the far row behind its door.</summary>
+    public WorldInstanceHost.TransferDestination FarDestination => WorldInstanceHost.TransferDestination.Remote(
+        authority: FarDoor!.ListenEndpoint!,
+        documentPath: FarPath!,
+        name: FarName
+    );
 
     /// <summary>The clock both networks and the door run on.</summary>
     public VirtualClock Clock { get; }
@@ -138,8 +210,17 @@ internal sealed class FederatedHosts : IDisposable {
     /// <summary>Builds the two hosts.</summary>
     /// <param name="travelerRouteStarted">The source host's traveler-route callback, or <see langword="null"/>.</param>
     /// <param name="sourceDefinition">The source boot row's document, or <see langword="null"/> for the fixtures' default.</param>
+    /// <param name="far">Whether to build a third host the destination host federates with (<see cref="FarHost"/>).</param>
     /// <returns>The hosts, which the caller disposes.</returns>
-    public static FederatedHosts Build(Action<WorldRemoteAuthority>? travelerRouteStarted = null, WorldDefinition? sourceDefinition = null) => new(sourceDefinition: sourceDefinition, travelerRouteStarted: travelerRouteStarted);
+    public static FederatedHosts Build(Action<WorldRemoteAuthority>? travelerRouteStarted = null, WorldDefinition? sourceDefinition = null, bool far = false) => new(far: far, sourceDefinition: sourceDefinition, travelerRouteStarted: travelerRouteStarted);
+    /// <summary>Drains the transfers every host holds and steps each once, as their loops would.</summary>
+    public void Step() {
+        Destination.DrainPendingTransfers();
+        FarHost?.DrainPendingTransfers();
+        Destination.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+        FarHost?.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+        Source.StepInstances(masterDeltaTicks: Fixtures.StepTicks);
+    }
     /// <summary>Hands a traveler the destination row holds on to the onward row, then asks the destination for the
     /// traveler's route through <paramref name="traveler"/>. The destination's occupant takes
     /// <paramref name="travelTurn"/> before it leaves, and a spawned arrival carries it, so the onward route describes
@@ -221,8 +302,13 @@ internal sealed class FederatedHosts : IDisposable {
     /// <inheritdoc/>
     public void Dispose() {
         m_mailbox.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        m_farMailbox?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         Source.Dispose();
         Destination.Dispose();
+        FarHost?.Dispose();
+        FarRow?.Dispose();
+        m_farNetwork?.Dispose();
+        m_farOracle?.Dispose();
         SourceRow.Dispose();
         DestinationRow.Dispose();
         OnwardRow.Dispose();
