@@ -68,6 +68,8 @@ public static class McpCommand {
                     .. ((world.Width is { } width) ? ["--width", width.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)] : Array.Empty<string>()),
                     .. ((world.Height is { } height) ? ["--height", height.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)] : Array.Empty<string>()),
                     .. ((world.FrameBar is { } frameBar) ? ["--frame-bar", frameBar] : Array.Empty<string>()),
+                    .. (world.WithheldGpu ?? []).SelectMany(selector: static capability => new[] { "--withhold-gpu", capability }),
+                    .. ((world.DebugLayers == Puck.Abstractions.Gpu.GpuValidation.Off) ? Array.Empty<string>() : ["--debug-layers", Puck.Abstractions.Gpu.GpuValidationSpelling.Of(level: world.DebugLayers)]),
                 ],
                 Backend = world.Backend,
                 Checkout = world.Checkout,

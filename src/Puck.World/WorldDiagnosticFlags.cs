@@ -17,16 +17,10 @@ public static class WorldDiagnosticFlags {
     public static GpuValidation ParseValidation(string? token, Action<string> error) {
         ArgumentNullException.ThrowIfNull(error);
 
-        switch (token) {
-            case null:
-            case "basic":
-                return GpuValidation.Basic;
-            case "full":
-                return GpuValidation.Full;
-            default:
-                error($"--debug-layers takes basic or full, not '{token}'.");
+        if (token is null) { return GpuValidation.Basic; }
+        if (GpuValidationSpelling.TryParse(level: out var level, name: token)) { return level; }
+        error($"--debug-layers takes {string.Join(separator: " or ", values: GpuValidationSpelling.All)}, not '{token}'.");
 
-                return GpuValidation.Off;
-        }
+        return GpuValidation.Off;
     }
 }

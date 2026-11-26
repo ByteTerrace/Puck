@@ -18,3 +18,44 @@ public enum GpuValidation {
     /// frame much slower, so it is a hunting level, never a gate's.</summary>
     Full = 2,
 }
+/// <summary>The one spelling of each <see cref="GpuValidation"/> level above <see cref="GpuValidation.Off"/>, shared by the
+/// World's <c>--debug-layers</c> flag and every tool that passes it.</summary>
+public static class GpuValidationSpelling {
+    // Each level's one spelling, in declaration order.
+    private static readonly (GpuValidation Level, string Name)[] Names = [
+        (GpuValidation.Basic, "basic"),
+        (GpuValidation.Full, "full"),
+    ];
+
+    /// <summary>Gets every spelling, in declaration order.</summary>
+    public static IReadOnlyList<string> All { get; } = [.. Names.Select(selector: static entry => entry.Name)];
+
+    /// <summary>Returns a level's spelling.</summary>
+    /// <param name="level">The level; not <see cref="GpuValidation.Off"/>, which no flag spells.</param>
+    /// <returns>The spelling.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="level"/> has no spelling.</exception>
+    public static string Of(GpuValidation level) {
+        foreach (var (candidate, name) in Names) {
+            if (candidate == level) { return name; }
+        }
+
+        throw new ArgumentOutOfRangeException(actualValue: level, message: "Only a validation level above off has a spelling.", paramName: nameof(level));
+    }
+    /// <summary>Reads one level's spelling.</summary>
+    /// <param name="name">The spelling, such as <c>basic</c>.</param>
+    /// <param name="level">The level it names.</param>
+    /// <returns><see langword="true"/> when <paramref name="name"/> spells a level.</returns>
+    public static bool TryParse(string? name, out GpuValidation level) {
+        foreach (var (candidate, spelling) in Names) {
+            if (string.Equals(a: spelling, b: name, comparisonType: StringComparison.Ordinal)) {
+                level = candidate;
+
+                return true;
+            }
+        }
+
+        level = GpuValidation.Off;
+
+        return false;
+    }
+}
