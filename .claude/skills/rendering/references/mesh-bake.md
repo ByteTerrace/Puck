@@ -72,8 +72,13 @@ device sampling. Do not infer a GPU race from a whole-store hash alone.
   lattice reader judges nearness by small values or sign changes across a cell,
   so a skipped sample never changes what it reads; a new reader that reads a far
   sample's magnitude (a distance-weighted average, an SDF-valued blur) breaks
-  that and must sample the lattice whole. The done line's `bound=[…]` counts the
-  lattices bounded, refused (a field the CPU cannot read), walks and skipped
+  that and must sample the lattice whole. A box asks the evaluator's interval
+  reading first and its affine reading (`SdfBoundsReading.Affine`) only where
+  the interval is wider than the box's diagonal, and only while that pays for
+  the group (`AffineTrialWalks`, `AffineWalksPerSettle`); both are certified, so
+  the policy moves work, never which blocks skip. The done line's `bound=[…]`
+  counts the lattices bounded, refused (a field the CPU cannot read), walks,
+  affine walks and the boxes they settled past the interval, and skipped
   samples.
 - **Count ownership classes, then fill owned indexes.** `SdfSampledLattice.Refine`
   counts distinct samples by the cell faces they touch: low boundary, interior,

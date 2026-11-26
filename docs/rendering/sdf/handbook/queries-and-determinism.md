@@ -214,6 +214,20 @@ than mirror:
 A shape without a rule would answer `FixedInterval.Entire`, never an
 approximation, so it could only shrink the frame below.
 
+An interval reads every use of a coordinate apart, so it widens wherever one
+quantity is read twice: a rotation turns the box into the larger box that holds
+it, and a blend reads its two operands' difference as wide as both. The
+**affine reading** (`SdfBoundsReading.Affine`) carries, beside each step's
+interval, an affine form of the same value (`FixedAffineForm`, `Puck.Maths`):
+the box's three axes are symbols every form shares, so a rotated box stays a
+rotated box and a blend's operands cancel where they move together. The forms
+are a lowering of the field formulas (`SdfFormula`'s affine reader), not rules
+of their own. Each step meets its form with its interval, so the affine reading
+is certified as the interval one is and never wider. A step without an affine
+rule (a shape without a formula, a render-only warp, a noise) takes its interval
+as fresh noise. It costs more an instruction, and a regional evaluator answers
+its interval reading whichever is asked.
+
 No step of an evaluation leaves the carrier unseen. An interval whose exact
 hull leaves the carrier is the unbounded `FixedInterval.Entire`, and every
 interval operation given it answers it. So a bounded result proves that no step

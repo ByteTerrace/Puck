@@ -3409,6 +3409,9 @@ public sealed partial class SdfMeshPathBake {
         // The CPU field the group's bounds read, for the bake's field version it was built under (CpuField).
         public CpuFieldHold? BoundField { get; set; }
         public long BoundFieldVersion { get; set; }
+        // The affine walks the group's bounds took across its lattices and the boxes they settled past the interval
+        // reading (Classify), which decide whether its next lattice asks the affine reading at all.
+        public (long Walks, long Settled) AffineTrial { get; set; }
         // The final lattice's contour, its material cut, the points the cut's round samples, and their answers so far.
         public SdfContour? Contour { get; set; }
         public SdfMeshMaterialCut? Cut { get; set; }

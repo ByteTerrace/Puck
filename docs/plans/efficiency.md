@@ -124,7 +124,20 @@ the success line alone. What it did next, and what is left:
 A cold debug-world CPU bake does not fit a shared machine's memory (the host
 account defers admission past five gigabytes of machine limit), so the
 debug-world reading is the lead's: a cold windowed bake on each backend, reading
-`kinds=[…]` and `bound=[lattices,refused,walks,skipped]` on the done line.
+`kinds=[…]` and `bound=[lattices,refused,walks,affine-walks,affine-settled,skipped]`
+on the done line.
+
+**The affine reading.** The box walk can carry affine forms beside its
+intervals (`SdfBoundsReading.Affine`, the field formulas' affine lowering), so a
+rotated box stays rotated and a blend's operands cancel. On the Moth it settles
+about 2 % more of the samples the intervals skip, and nothing more on the
+static device prototypes, because the boxes the intervals leave lie within the
+band's reach of the surface, where no enclosure can skip. The bake asks it only
+where an interval is looser than its box and while it pays for the group. What
+would widen its reach is coverage: the superellipsoid's power, the render-only
+warps, sweeps, ellipses and polygons take their intervals as fresh noise. A
+coarse narrowing by bounds needs more than the reading's tightening shows on
+these creations.
 
 **Considered and left.** Narrowing the coarse search by bounds instead of
 sampling it: the CPU enclosures widen through rotations and blends, so the
@@ -211,12 +224,26 @@ root, the cell noise) answers by the six taps as before. A headless debug-world
 boot (`world.wait 30`, `world.counters sdf.queries`) reads 4,338 gradients as
 4,338 walks and no taps, where the base read them as 26,028 taps.
 
+**Built, the affine carrier.** `SdfFormula.EmitAllFixedAffine` renders the
+tree over `FixedAffineForm` (Puck.Maths, `FixedAffineForms` named as
+`FixedGradients` is). Over a box neither a comparison nor a rounding has one
+value, so both are active: a comparison answers a `FixedAffineTruth`, a
+selection under an unknown truth joins its arms, and a guarded return the box
+cannot decide joins its value into the answer and walks on. The box walk
+(`WalkBounds`, `SdfBoundsReading.Affine`) meets each step's form with its
+interval. A node with no affine enclosure (the ellipse's root, the noises)
+leaves its formula to the interval rule.
+
 **Next, by the same mechanism.**
 
 - An interval carrier: the same tree over `FixedInterval`, its guards joining
-  both branches where the condition is undecided, in place of the hand-written
-  shape rules in `SdfFieldEvaluator.Bounds.cs`; adopt per shape where its
-  enclosure is at least as tight (the frame and the region tapes read it).
+  both branches where the condition is undecided (the affine emitter's join,
+  renamed), in place of the hand-written shape rules in
+  `SdfFieldEvaluator.Bounds.cs`; adopt per shape where its enclosure is at
+  least as tight (the frame and the region tapes read it).
+- Affine coverage where a count shows it pays: the superellipsoid's power by a
+  convex slope rather than its interval, and the render-only warps as point maps
+  with formulas.
 - A wide dual: `TrySurfaceNormal`'s six double taps (`TryWideGradient`) become
   one walk over a wide gradient carrier.
 - Degree-two jets (`MonogenicAlgebra`, `x³ = 0`) for curvature in the bake's

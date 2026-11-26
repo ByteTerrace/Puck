@@ -34,6 +34,10 @@ public sealed partial class SdfMeshPathBake {
     // The band, in cell diagonals, a sampled block's samples may lie within of the surface: the crossed cells' corners lie
     // within one diagonal of a zero, and their ring, sheet and gap tests read one more cell about them.
     private const float BoundBandDiagonals = 3f;
+    // The affine walks a group's bounds take before judging whether they pay, and the affine walks each box they settle
+    // past the interval reading may cost for the group to go on asking (Classify).
+    private const int AffineTrialWalks = 64;
+    private const int AffineWalksPerSettle = 32;
     // The resources a group's GPU field reads that its CPU field cannot see.
     private const SdfFieldResource BoundUnseen = (SdfFieldResource.GlyphAtlas | SdfFieldResource.SampledHandle | SdfFieldResource.SlotLanes);
 
@@ -215,8 +219,11 @@ public sealed partial class SdfMeshPathBake {
         var walks = 0L;
         var affineWalks = 0L;
         var affineSettled = 0L;
-        var blocks = ((evaluator is null) ? null : Classify(affineSettled: out affineSettled, affineWalks: out affineWalks, evaluator: evaluator, lattice: (final?.Lattice ?? request), walks: out walks));
+        var blocks = ((evaluator is null) ? null : Classify(affineSettled: out affineSettled, affineWalks: out affineWalks, evaluator: evaluator, lattice: (final?.Lattice ?? request), trial: group.AffineTrial, walks: out walks));
         var empty = (blocks is { Sampled: 0 });
+
+        // Only the group's one running job reads or writes its trial.
+        group.AffineTrial = ((group.AffineTrial.Walks + affineWalks), (group.AffineTrial.Settled + affineSettled));
 
         if (empty) { StoreEmpty(group); }
 
@@ -261,9 +268,11 @@ public sealed partial class SdfMeshPathBake {
     // reading (SdfBoundsReading.Affine) only where the interval leaves it unsettled and is wider than the box's diagonal:
     // a field no steeper than a distance varies by at most that diagonal over the box, so a wider interval is the
     // interval's own looseness (a rotated box's hull, a blend's operands read apart), which the affine reading's shared
-    // symbols take back, and a narrower one straddles the band because the surface is near. Both readings are
-    // certified, so the choice moves only the work, never which blocks may skip.
-    private static LatticeBlocks Classify(SdfFieldEvaluator evaluator, in SdfMeshBakeRequest lattice, out long walks, out long affineWalks, out long affineSettled) {
+    // symbols take back, and a narrower one straddles the band because the surface is near. An affine walk costs several
+    // interval walks, so a group asks it only while it pays (AffinePays): past AffineTrialWalks, while one affine walk in
+    // AffineWalksPerSettle settles a box the interval left, the group's walks counted across its lattices (the trial
+    // passed in). Both readings are certified, so the choice moves only the work, never which blocks may skip.
+    private static LatticeBlocks Classify(SdfFieldEvaluator evaluator, in SdfMeshBakeRequest lattice, (long Walks, long Settled) trial, out long walks, out long affineWalks, out long affineSettled) {
         var blocks = new LatticeBlocks(dims: lattice.Dims);
         var (origin, cell) = (lattice.Origin, lattice.Cell);
         var band = (BoundBandDiagonals * cell.Length());
@@ -295,7 +304,9 @@ public sealed partial class SdfMeshPathBake {
             count++;
             if (evaluator.TryDistanceBounds(distance: out var bounds, instructionsWalked: out _, lower: lowCorner, reading: SdfBoundsReading.Interval, upper: highCorner)) {
                 fill = FillOf(bounds: bounds);
-                if (float.IsNaN(f: fill) && (bounds.IsUnbounded || ((((double)bounds.Upper) - ((double)bounds.Lower)) > (high - low).Length()))) {
+                var loose = (bounds.IsUnbounded || ((((double)bounds.Upper) - ((double)bounds.Lower)) > (high - low).Length()));
+
+                if (float.IsNaN(f: fill) && loose && AffinePays(settled: (trial.Settled + affineWins), walks: (trial.Walks + affineCount))) {
                     affineCount++;
                     if (evaluator.TryDistanceBounds(distance: out var affine, instructionsWalked: out _, lower: lowCorner, reading: SdfBoundsReading.Affine, upper: highCorner)) {
                         fill = FillOf(bounds: affine);
@@ -319,6 +330,7 @@ public sealed partial class SdfMeshPathBake {
         affineSettled = affineWins;
         return blocks;
     }
+    private static bool AffinePays(long walks, long settled) => ((walks < AffineTrialWalks) || ((settled * AffineWalksPerSettle) >= walks));
 
 
     // The next slab of a bounded final lattice: whole layers of blocks from the plane its last slab ended at, the sampled

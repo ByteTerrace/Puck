@@ -3,11 +3,11 @@ using System.Text;
 
 namespace Puck.SignedDistance;
 
-// The closed expression language the field's shared formulas are written in. One formula lowers to two readers: the
-// fixed-point C# the query evaluator runs (Puck.Maths carriers, one rounding per carrier operation, narrow widening
-// primitives where a carrier-rounded intermediate would lose the answer) and the precise HLSL the kernels run. The
-// node set is closed on purpose: every op names its lowering on both targets here, so a formula cannot reach a
-// construct one reader lacks. This source is also compiled into the Roslyn generator (Puck.Analyzers), which lowers
+// The closed expression language the field's shared formulas are written in. One formula lowers to every reader the
+// field has: the fixed-point C# the query evaluator runs (Puck.Maths carriers, one rounding per carrier operation, narrow
+// widening primitives where a carrier-rounded intermediate would lose the answer) and the precise HLSL the kernels run,
+// then the wide, dual and affine readers below. The node set is closed on purpose: every op names its lowering on every
+// target here, so a formula cannot reach a construct one reader lacks. This source is also compiled into the Roslyn generator (Puck.Analyzers), which lowers
 // the C# reader at build time; Puck.Shaders.Generator lowers the HLSL reader from the same objects.
 internal enum SdfFormulaType { Scalar, Vector2, Vector3, Condition, Index, Rotation }
 
