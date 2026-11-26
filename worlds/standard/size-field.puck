@@ -20,10 +20,8 @@
 // Outside every zone the register keeps the size the body last took, so leaving a field at its small end leaves the
 // body small until a field (the same one walked back, or another) grows it again.
 //
-// `passes` names identity facts (an `identity` row in state.world, WorldIdentityFactLane): a body holding any of them
-// nonzero is given the `passSize` size inside every zone instead, so a pass a puzzle grants keeps a body its full size
-// where the field would shrink it. An identity fact persists with the player's owned identity when its seat holds one,
-// and is the body's own lane cell otherwise.
+// `passes` names body registers (state.body): a body holding any of them nonzero is given the `passSize` size inside
+// every zone instead, so a pass a puzzle grants keeps a body its full size where the field would shrink it.
 //
 // The size is the body's own register, fixed point, written by a world rule from its live position (bodyPosition), so
 // it is world truth: its collider, speeds, step height, jump, engage reach and gravity response follow it on the
@@ -50,7 +48,7 @@
 //               box        { x0, x1, y0, y1, z0, z1 }, world metres, the box the zone holds a body in (omitted: none)
 //   sizes:    the named sizes, [{ key, value }], each a multiplier of the body's authored size
 //   register: the body register its size lives in; the one bodies.scale names
-//   passes:   identity facts that, nonzero, give a body `passSize` inside every zone
+//   passes:   body registers that, nonzero, give a body `passSize` inside every zone
 //   passSize: the key of `sizes` a pass holder takes (omitted: the first size)
 // )
 
@@ -95,10 +93,10 @@ template sizeField(name, zones, sizes, register = "size", passes = [], passSize 
     local px = bodyPosition(each, x)
     local py = bodyPosition(each, y)
     local pz = bodyPosition(each, z)
-    // Whether the body holds a pass: any of the named facts nonzero.
+    // Whether the body holds a pass: any of the named registers nonzero.
     local held0 = 0
-    for (fact, f) in passes {
-      local $"held{f + 1}" = (identity(each, fact) != 0) or $"held{f}"
+    for (pass, f) in passes {
+      local $"held{f + 1}" = (bodyState(each, pass) != 0) or $"held{f}"
     }
     // The zones in order: `size{z}` the size the first of the first z zones that holds the body gives it, 0 while none
     // does (every size is positive). Two locals a zone, so a field of thirty zones stays inside a rule's locals.

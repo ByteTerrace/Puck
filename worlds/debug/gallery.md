@@ -393,13 +393,12 @@ first match winning:
 - **Level 1's floor**: the two aisles and the bridge, never the nave's void.
   Alice's size throughout (`small`, look.puck's `lookWonderSize`, 0.15).
 
-**The pass.** A body holding the `wonderPass` identity fact nonzero takes its
-full size in every zone, so level 1, its stairs and its lift keep its size. An
-identity fact persists with the player's owned identity when the seat holds
-one (`setIdentityFact` writes both); for a seat holding none it is the body's
-own lane cell in the `identity` row, which the lane zeroes when the seat
-unbinds. A puzzle sets it with `setIdentityFact(key: $each, fact:
-"wonderPass", value: 1)`. No puzzle sets it yet.
+**The pass.** A body holding the `wonderPass` body register nonzero takes its
+full size in every zone, so level 1, its stairs and its lift keep its size. A
+puzzle sets it with `setBodyState(key: $each, state: "wonderPass", value: 1)`;
+no puzzle sets it yet. The register belongs to the body, so the pass does not
+persist with the player between sessions: an identity fact would, but
+`setIdentityFact` refuses a seat driving under no identity.
 
 **Out of reach while small.** A screen's engage reach is its route's radius
 times the body's size, measured on the ground plane and within that reach of
@@ -436,6 +435,15 @@ small that way.
 
 ## What is still open
 
+- **A shrinking body cannot climb the stairs.** A body's step height is its
+  kit's 0.3 m times its size (`WorldBody.StepHeight`), and the corner stairs'
+  risers are all 0.25 m, so a body climbing from level 0 stops once its size
+  falls under about 0.83, a riser or two up the first flight; at Alice's size
+  it cannot climb from level 1 to level 2 either. Walking down works, and the
+  lift works both ways. The fix is the evolving staircase the owner described:
+  treads and risers that shrink with the body over the flight, so each step
+  costs it the same share of its stride (the curve the size field already
+  follows).
 - **World-space pieces.** A static creation's paints, a state lattice's origin
   and a table's board are placed in the world's frame. The floor's tiles and
   pads, the tables in the board game room and the fixtures that stand by world

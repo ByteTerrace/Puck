@@ -1,6 +1,6 @@
 // Level 1, the toybox, makes you small. A body comes onto the Wonderland floor Alice's size (look.puck's
 // `lookWonderSize`) and too small to reach its cabinets' and stalls' controls, unless it holds the full-size pass, the
-// `wonderPass` identity fact a puzzle sets; then the floor keeps it its full size and the games are in its reach. The
+// `wonderPass` body register a puzzle sets; then the floor keeps it its full size and the games are in its reach. The
 // gallery module imports this, so the gallery booted alone and the debug world both size their visitors by it.
 //
 // The sizing is one standard size field (standard/size-field.puck), its zones in the order the first that holds a body
@@ -16,9 +16,13 @@
 //   level 1's floor, the two aisles and the bridge (never the nave's void, which the lattice walls off): Alice's size
 //     throughout
 //
-// A body holding the pass takes its full size in every zone. The pass is an identity fact, so it persists with the
-// player's owned identity when its seat holds one (WorldRuleHost.IdentityFacts), and is the body's own lane cell for a
-// seat holding none, which the lane zeroes when the seat unbinds.
+// A body holding the pass takes its full size in every zone. The pass is a body register, so it belongs to the body and
+// crosses with it, and does not persist with the player: an identity fact would, but `setIdentityFact` refuses a seat
+// driving under no identity, which a pass every visitor can earn cannot depend on.
+//
+// The lower flight's zone reaches a little above level 1's floor, so a body standing on level 1 at the stair's foot or
+// in the lift's car, its foot a skin above the floor's top, takes Alice's size exactly rather than the upper flight's
+// value a hair above it.
 //
 // The toybox's devices keep out of a small body's reach by the engine's own rule: a screen's and a tabletop's engage
 // reach is its radius times the body's size, measured on the ground plane and within that reach of the screen's height
@@ -43,11 +47,14 @@ function wonderBox(x0, x1, y0, y1, z0, z1) = {
 // How far past a storey's outer floor a shaft's zone reaches, so a body standing at the flight's foot or head, a little
 // above or below the floor's top, is held at its full size there rather than left at the size it last took.
 let wonderShaftMargin = 0.25
+// How far over level 1's floor the lower flight's zone reaches, its progress held at 1 there, and how far over level 0's
+// floor its progress starts, so a body standing there (in the lift's car, a skin above the floor) is exactly full size.
+let wonderLanding = 0.1
 // The two zones of a vertical shaft over a plan rectangle: level 0 up to level 1, and level 2 down to it.
 function wonderShaft(x0, x1, z0, z1) = [
   {
-    box: wonderBox(x0, x1, (galleryFloor[0] - wonderShaftMargin), galleryFloor[toyboxLevel], z0, z1)
-    from: galleryWorld(((x0 + x1) / 2), galleryFloor[0], ((z0 + z1) / 2))
+    box: wonderBox(x0, x1, (galleryFloor[0] - wonderShaftMargin), (galleryFloor[toyboxLevel] + wonderLanding), z0, z1)
+    from: galleryWorld(((x0 + x1) / 2), (galleryFloor[0] + wonderLanding), ((z0 + z1) / 2))
     to: galleryWorld(((x0 + x1) / 2), galleryFloor[toyboxLevel], ((z0 + z1) / 2))
     start: "full"
     end: "small"
@@ -94,13 +101,15 @@ enum WonderSwitch {
 }
 
 state {
-  world {
-    // The reserved identity fact lane (WorldIdentityFactLane): one cell per body and fact, keyed `<body>-<fact>`.
-    row {
-      name: "identity"
-      kind: Int
-      capacity: 64
+  body [
+    {
+      name: "wonderPass"
+      kind: "Counter"
+      initial: 0
+      envelope { $type: "range", minimum: 0, maximum: 1 }
     }
+  ]
+  world {
     row {
       name: "wonderpass"
       kind: Int
@@ -127,7 +136,7 @@ rule "wonder-pass-ask" {
   forEach: $players
   when wonderpass[$each] != 0
   mode: Level
-  setIdentityFact(key: $each, fact: "wonderPass", expression: wonderpass[$each] - 1)
+  setBodyState(key: $each, state: "wonderPass", expression: (wonderpass[$each] == 2) ? 1.0 : 0.0)
   wonderpass[$each] = 0
 }
 rule "wonder-size-ask" {

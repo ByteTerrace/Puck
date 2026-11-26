@@ -5,7 +5,7 @@
 //   the shrink zone    x 0, from z 0 (full size) to z -12 (`shrinkEnd`), reaching 3 m either side
 //   the grow zone      x 20, from z 0 to z -6, full size along its length: a body anywhere in it is asked to grow to one
 //   the canopy         a slab over the grow zone's first two metres, its underside 1 m up: half the Moth's height
-//   the small box      x -8 .. -4, z -4 .. 0: `shrinkEnd` throughout, unless the body holds the `pass` identity fact
+//   the small box      x -8 .. -4, z -4 .. 0: `shrinkEnd` throughout, unless the body holds the `pass` register
 //   the stand          a station at (-6, 0, -2), inside the small box, that needs a size of at least a half
 //
 // Size is the body's `size` register (size.puck), read back with bodyState. The middle of the shrink zone is the
@@ -41,15 +41,27 @@ spawnPoints [
 ]
 
 state {
+  body [
+    {
+      name: "pass"
+      kind: "Counter"
+      initial: 0
+      envelope { $type: "range", minimum: 0, maximum: 1 }
+    }
+  ]
   world {
-    // The identity fact lane, with body 0's pass cell.
-    row {
-      name: "identity"
-      kind: Int
-      capacity: 4
-      cells [{ key: "0-pass", value: 0 }]
+    // A mailbox a step writes to grant body 0 the pass, which the rule below writes into its register.
+    table passAsk {
+      grant = 0
     }
   }
+}
+
+rule "pass-grant" {
+  when passAsk.grant == 1
+  mode: Level
+  setBodyState(key: 0, state: "pass", value: 1)
+  passAsk.grant = 0
 }
 
 // Small in the box, the stand's needs keep her out of its reach; given the pass she grows to full size there and the
@@ -69,7 +81,7 @@ test "the pass gives her the pass size in the zone, and the station takes her" {
   when {
     seat1: body.pose -6 0 -2 0 0 0 0
     ticks 10
-    seat1: world.state.cell.set identity 0-pass 1
+    seat1: world.state.cell.set passAsk grant 1
     ticks 10
   }
   expect {
