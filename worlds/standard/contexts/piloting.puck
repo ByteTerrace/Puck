@@ -13,6 +13,14 @@
 //   import "../standard/contexts/piloting"
 //   bindingOverlays [pilotControls()]
 
+let climbSources = [
+  "keyboard.space"
+  "gamepad.buttonSouth"
+  "keyboard.controlLeft"
+  "keyboard.m"
+  "gamepad.rightStickPress"
+]
+
 function pilotControls(family = "engagement", state = "body", restingPage = "base") = {
   id: "piloting"
   document {
@@ -30,19 +38,10 @@ function pilotControls(family = "engagement", state = "body", restingPage = "bas
           inherits: restingPage
           label: "Fly"
           entries [
-            {
-              channel: "rise"
-              id: "rise"
-              label: "Climb"
-              scale: 1
-              sources [
-                "keyboard.space"
-                "gamepad.buttonSouth"
-                "keyboard.controlLeft"
-                "keyboard.m"
-                "gamepad.rightStickPress"
-              ]
-            }
+            { channel: "rise", id: "rise", label: "Climb", scale: 1, sources: climbSources }
+            // The press stays a jump as well, as it is on foot, so an avatar's rule that reads rise without jump (a
+            // jetpack's take-off) does not fire for the pilot's own body.
+            { channel: "jump", id: "jump", scale: 1, sources: climbSources }
             { channel: "rise", id: "descend", label: "Sink", scale: -1, sources ["keyboard.c", "gamepad.buttonEast"] }
             {
               channel: "run"
