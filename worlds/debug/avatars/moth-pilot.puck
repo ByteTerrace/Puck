@@ -133,7 +133,7 @@ template pilotArm(name, side, baseId, handGroup) {
       swing("run", [0, 0, 1], -0.06 * side, [side * 0.172, 1.355, -0.015]) with { wave: "constant" }
       swing("gait", [0.990, side * 0.138, 0], 0.5, [side * 0.172, 1.355, -0.015]) with {
         wave: "sine"
-        phase: 3.1415927 * (1 + side) / 2
+        phase: pi * (1 + side) / 2
       }
       // The arms open 0.45 rad from the sides at the jump's peak, 0.6 on the way up and 0.3 coming down.
       swing("air", [0, 0, 1], 0.03 * side, [side * 0.172, 1.355, -0.015]) with { wave: "linear", phase: 15 }
@@ -171,7 +171,7 @@ template pilotArm(name, side, baseId, handGroup) {
       swing("run", [1, 0, 0], -1.1, [side * 0.212, 1.068, -0.032]) with { wave: "constant" }
       swing("gait", [1, 0, 0], 0.18, [side * 0.212, 1.068, -0.032]) with {
         wave: "sine"
-        phase: 0.5 + 3.1415927 * (1 + side) / 2
+        phase: 0.5 + pi * (1 + side) / 2
       }
       // The elbows bend 0.36 rad at the jump's peak, 0.51 rising and 0.21 falling, and a little further on landing.
       swing("air", [1, 0, 0], -0.03, [side * 0.212, 1.068, -0.032]) with { wave: "linear", phase: 12 }
@@ -324,7 +324,7 @@ template pilotLeg(name, side, baseId) {
     swings [
       swing("heading", [0, 1, 0], 0.7, [side * 0.09, 0.86, 0]) with { wave: "sine" }
       swing("heading", [0, 1, 0], -0.5, [side * 0.09, 0.86, 0]) with { wave: "linear" }
-      swing("gait", [1, 0, 0], 0.7, [side * 0.09, 0.86, 0]) with { wave: "sine", phase: 3.1415927 * (1 - side) / 2 }
+      swing("gait", [1, 0, 0], 0.7, [side * 0.09, 0.86, 0]) with { wave: "sine", phase: pi * (1 - side) / 2 }
       swing("heading", [0, 1, 0], 0.5, [side * 0.09, 0.86, 0]) with { wave: "linear" }
       swing("heading", [0, 1, 0], -0.7, [side * 0.09, 0.86, 0]) with { wave: "sine" }
       // In the air the thigh lifts 0.8 rad at the peak, 1.1 on the way up and 0.5 reaching for the ground.
@@ -349,7 +349,7 @@ template pilotLeg(name, side, baseId) {
     swings [
       swing("gait", [1, 0, 0], 1.25, [side * 0.1, 0.475, 0.012]) with {
         wave: "halfSine"
-        phase: 2.0424 + 3.1415927 * (1 + side) / 2
+        phase: 2.0424 + pi * (1 + side) / 2
       }
       // The knee folds 1.2 rad at the peak, 1.45 rising and 0.95 falling, and takes twice the hip's fold on landing.
       swing("air", [1, 0, 0], 0.05, [side * 0.1, 0.475, 0.012]) with { wave: "linear", phase: 24 }
@@ -385,11 +385,11 @@ template pilotLeg(name, side, baseId) {
     swings [
       swing("gait", [1, 0, 0], 0.2, [side * 0.105, 0.085, -0.005]) with {
         wave: "sine"
-        phase: 3.1415927 * (1 - side) / 2
+        phase: pi * (1 - side) / 2
       }
       swing("gait", [1, 0, 0], -0.25, [side * 0.105, 0.085, -0.005]) with {
         wave: "halfSine"
-        phase: 2.0424 + 3.1415927 * (1 + side) / 2
+        phase: 2.0424 + pi * (1 + side) / 2
       }
       swing("air", [1, 0, 0], 0.02, [side * 0.105, 0.085, -0.005]) with { wave: "linear", phase: 12.5 }
       swing("land", [1, 0, 0], 0.1, [side * 0.105, 0.085, -0.005]) with { wave: "linear" }

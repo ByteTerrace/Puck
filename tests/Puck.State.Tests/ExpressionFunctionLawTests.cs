@@ -537,6 +537,41 @@ public sealed class ExpressionFunctionLawTests {
             kind: CellKind.Int,
             text: "sine(1)"
         ));
+        // The inverse functions answer the angle FixedQ4816.Atan2 gives the matching point, so they agree with it exactly.
+        Assert.Equal(
+            FixedQ4816.Atan2(y: FixedQ4816.One, x: FixedQ4816.FromInteger(value: 2L)).Value,
+            Eval("arcTangent2(1, 2)", kind: CellKind.Fixed)
+        );
+        Assert.Equal(
+            Eval("arcTangent2(0.5, 1)", kind: CellKind.Fixed),
+            Eval("arcTangent(0.5)", kind: CellKind.Fixed)
+        );
+        Assert.Equal(
+            FixedQ4816.Atan2(y: FixedQ4816.One, x: FixedQ4816.Zero).Value,
+            Eval("arcSine(1)", kind: CellKind.Fixed)
+        );
+        Assert.Equal(
+            0L,
+            Eval("arcCosine(1)", kind: CellKind.Fixed)
+        );
+        Assert.Equal(
+            (double)Eval("arcSine(1)", kind: CellKind.Fixed),
+            (double)Eval("arcSine(0.5) + arcCosine(0.5)", kind: CellKind.Fixed),
+            tolerance: 2
+        );
+        Assert.False(condition: TryEval("arcSine(1.5)", out _, kind: CellKind.Fixed));
+        Assert.Equal(
+            FixedQ4816.FromInteger(value: 5L).Value,
+            Eval("hypotenuse(3, 4)", kind: CellKind.Fixed)
+        );
+        Assert.Equal(
+            Eval("atan2(1, 2)", kind: CellKind.Fixed),
+            Eval("arcTangent2(1, 2)", kind: CellKind.Fixed)
+        );
+        Assert.Throws<RuleException>(testCode: () => Compile(
+            kind: CellKind.Int,
+            text: "arcTangent2(1, 2)"
+        ));
         Assert.Throws<RuleException>(testCode: () => Compile(
             kind: CellKind.Fixed,
             text: "pair(1, 2)"

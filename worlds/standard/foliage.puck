@@ -319,7 +319,7 @@ function treeCrowns(rows, height, spread) = map(rows, c => {
   r: c.r * [spread, height, spread]
 })
 function treeRoots(count, reach, r, turn = 0) = map(range(0, count), i => {
-  yaw: i * 6.2831853 / count + turn
+  yaw: i * 2 * pi / count + turn
   reach: reach
   r: r
 })
@@ -450,9 +450,9 @@ template weepingTree(id, height = 1, spread = 1, lean = 0, leaves = weepingLeave
       [{ position [0, 4 * height, 0], r [1.75 * spread, 1 * height, 1.75 * spread] }],
       map(range(0, drops), k => {
         position [
-          1.55 * spread * cosine(k * 6.2831853 / drops),
+          1.55 * spread * cosine(k * 2 * pi / drops),
           (2.5 + 0.25 * (k % 2)) * height,
-          1.55 * spread * sine(k * 6.2831853 / drops),
+          1.55 * spread * sine(k * 2 * pi / drops),
         ]
         r [0.6 * spread, 1.45 * height, 0.6 * spread]
       })
@@ -781,7 +781,7 @@ template paintedGround(id, radius, turf, paving, paths = [], pathWidth = 2.4, de
           })
         }
       ]
-      for open in filter([0], k => length(holes) == 0) {
+      if length(holes) == 0 {
         shape Cylinder "ground" {
           material: 0
           position [0, -depth, 0]

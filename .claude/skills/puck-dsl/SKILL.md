@@ -58,14 +58,15 @@ A document's `schema:` field selects its vocabulary, never the filename.
   consumes it after drops and appends; missing targets and cyclic positions refuse.
   Ordinary rows keep their order. This is document composition, not a runtime hold option.
 
-- **One spelling per shape, at every depth.** A literal container is always a
-  block with no colon (`host { }`, `cameras [ ]`, `variables [ ]`,
+- **One printed form per shape, at every depth.** A literal container prints as
+  a block with no colon (`host { }`, `cameras [ ]`, `variables [ ]`,
   `arrays [ ]`), inside an object literal too
   (`{ name: "lit", pixels ["00000000", "11111111"] }`). A scalar always takes a colon
-  (`name: "cursor"`, `initial: 0`). A colon in front of `{` or `[` is
-  **PUCK040**, the most common mistake; the fix is to drop the colon. A value
-  written as a call or a name keeps its colon even when it produces a
-  container: `pixels: map(range(0, 8), row => "00000000")`, `origin: bounds`.
+  (`name: "cursor"`, `initial: 0`). A colon in front of `{` or `[`
+  (`palette: [ ]`) reads as the container without it: one node, which
+  `puck format` prints without the colon. A value written as a call or a name
+  keeps its colon even when it produces a container:
+  `pixels: map(range(0, 8), row => "00000000")`, `origin: bounds`.
 - `let name = expr` is a compile-time constant (admitted at top level, inside
   templates, blocks, `prototypes`/`placements`/`state.world` sections, and `for`
   bodies); `base with overrides` derives a record from an object using either an
@@ -106,12 +107,16 @@ A document's `schema:` field selects its vocabulary, never the filename.
   behavior is unchanged. A lambda anywhere else is **PUCK042**; an unevaluable
   call **PUCK041**; a `for` over something not known at compile time
   **PUCK044**.
-  `range(start, count)` takes a count: `range(16, 16)` emits 16 through 31.
+  `range(start, end)` stops before its end: `range(1, 4)` is 1, 2 and 3, and `range(0, n)` holds n values.
   Every `for` body binds its own `let`s (a shade program's loop excepted, whose `let`s are runtime values).
 - **`if cond { } else { }` in document or section position emits one branch's rows**
   (`DocumentLowering.ExpandConditionalStatements`, the one expansion every section calls); a branch may hold `let`s
   and, unlike a `for` body, field assignments, so one member of a row can be conditional. A row written or left out is
   an `if`, never `for k in range(0, cond ? 1 : 0)`. A rule body's `if` is the rule's own, evaluated when it runs.
+- **An optional parameter defaults to `null`** (`template pier(foot = null)`) and is tested with
+  `foot != null`: `==` and `!=` compare any two values (two numbers as numbers, anything else by value), so a
+  template never fakes an absent value with `[]` and `length(x) == 2`. A Fixed row written as an object takes
+  numbers (`value: start`), which the compiler writes as the decimal text the row holds.
 - **Rotation and vector builtins** (`DocumentVectors`): `rotate(axis, degrees)` gives a quaternion `[x, y, z, w]`,
   `compose(outer, inner, ...)` multiplies them (the last turns a point first), `rotatePoint(rotation, point)`,
   `polarPoint(radius, degrees, y)` and `fraction(x)`. Angles read in degrees (`DocumentDimensions.DegreesArgument`), so a
@@ -125,7 +130,7 @@ A document's `schema:` field selects its vocabulary, never the filename.
 - **A clock's name is bare**, as its `state:` reference is (`clocks [{ name: fiber, state: fiber }]`); a quoted one
   is PUCK110 (`WorldCallArguments.FormOf`, `Declares` of kind Clock or State). Write the state row it follows bare too
   (`name: fiber`), which the state section admits.
-- **Aliases lower to one name.** `sqrt`, `abs`, `sin`, `cos`, `ceil` and `pow` are `ExpressionVocabulary.Aliases`,
+- **Aliases lower to one name.** `sqrt`, `abs`, `sin`, `cos`, `asin`, `acos`, `atan`, `atan2`, `hypot`, `ceil` and `pow` are `ExpressionVocabulary.Aliases`,
   read as their canonical names by both languages; `fract`/`frac` are the document's (`DocumentBuiltins.Canonical`).
   `min`/`max` stay the rule language's reductions.
 - **A `for` inside a rule body unrolls into the body.** A loop
@@ -260,7 +265,11 @@ A document's `schema:` field selects its vocabulary, never the filename.
   evaluates. Names in brackets resolve lexically, so an unknown bare word is
   an error. A key compile-time constants decide (`slot[k + 1]` with
   `let k = 1`) lowers to the literal key (`slot[2]`), priced and refused as
-  that literal is. Use `row["key"]` for a quoted literal key. Read a local as `name`,
+  that literal is. Use `row["key"]` for a quoted literal key. A bare word in a key
+  argument (`setState(key: slot, …)`, `fromKey: lit`) is that literal key unless a
+  `let`, parameter or loop variable of the name is in scope, whose value is then the
+  key, as inside brackets; a text written to a Text row through a compile-time
+  record (`ink[k] = look.lit`) is that text, never a row read. Read a local as `name`,
   never `local(name)`; use `row[x]`, never `row[(x)]` or `row[slot[$value]]`.
   Functions are recognized only in call position, so a local may be named `sign`.
 

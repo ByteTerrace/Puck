@@ -206,14 +206,14 @@ let goFaceSlots = flatMap(
     roughness: 0.6
     specular: 0.12
     paints: concat(
-      map(range(3 * c, 3), j => {
+      map(range(3 * c, 3 * c + 3), j => {
         type: Box
         color: "#1E1A16"
         position [goTable[0] + goGridBoxes[j][0] / 100, goTable[1] + goSurface, goTable[2]]
         scale [goGridBoxes[j][1] / 100, 1, 2]
         stroke: 0.0007
       }),
-      map(range(3 * r, 3), j => {
+      map(range(3 * r, 3 * r + 3), j => {
         type: Box
         color: "#1E1A16"
         position [goTable[0], goTable[1] + goSurface, goTable[2] + goGridBoxes[j][0] / 100]

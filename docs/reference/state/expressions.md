@@ -405,7 +405,7 @@ are the exact spellings the parser accepts.
 | Combinations | `binomialCoefficient(n, k)`, `factorial(n)`, `subsetRank(n, mask)`, `subsetAt(n, k, rank)`, `subsetMember(n, k, rank, i)` | Int |
 | Permutations | `arrangementRank(n, packed)`, `arrangementAt(n, rank)`, `arrangementMember(n, rank, i)` | Int |
 | Layer sequences | `layer`, `layerOffset`, `layerStart`, `layerSize`, each `(indexOrLayer, start, step, seed)` | Int |
-| Trigonometry | `sine(radians)`, `cosine(radians)` | Fixed |
+| Trigonometry | `sine(radians)`, `cosine(radians)`, `arcSine(x)`, `arcCosine(x)`, `arcTangent(x)`, `arcTangent2(y, x)` (radians), `hypotenuse(x, y)` | Fixed |
 | Vectors | `dot`, `similarity`, `identical` | See [Vectors and embedding spaces](vectors.md) |
 
 A **packed index** stores several coordinates or choices in one integer, which

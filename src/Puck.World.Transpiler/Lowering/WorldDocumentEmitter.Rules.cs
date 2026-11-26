@@ -1287,6 +1287,8 @@ public static partial class WorldDocumentEmitter {
             ExpressionSpelling.SourceName { Quoted: false } name when (!GetPoolBindings(scope: scope).Contains(item: name.Name) &&
                 ((ExpressionSpelling.CurrentLocals?.Contains(item: name.Name) != true) || scope.RuleBinders.Contains(item: name.Name)) &&
                 scope.TryLowerBinding(name.Name, out var bound)) => bound,
+            // A member or element read through a compile-time object or array (`look.lit`, `inks[1]`).
+            ExpressionSpelling.SourceAccess or ExpressionSpelling.SourceIndex => CompileTimeRead(operand: operand, scope: scope),
             _ => null,
         };
 

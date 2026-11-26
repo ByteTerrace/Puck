@@ -71,7 +71,7 @@ navigation {
     // over the floor (under every doorway, over the next storey's flights) and reaches down to the half landing under
     // it.
     map(
-      range(1, 3),
+      range(1, 4),
       level => walkable($"hall-level-{level}", [6, galleryFloor[level], 8], 0.5, 134, 84, 1.9, 2.35, 1024)
     ),
     flatMap(galleryStairs, stair => flatMap(range(0, 3), level => navStairDomains(stair, level)))

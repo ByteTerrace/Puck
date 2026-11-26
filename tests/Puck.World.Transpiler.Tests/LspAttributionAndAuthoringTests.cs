@@ -264,7 +264,7 @@ public sealed class LspAttributionAndAuthoringTests {
         Assert.DoesNotContain(expectedSubstring: "document arm", actualString: p041.Message, comparisonType: StringComparison.OrdinalIgnoreCase);
     }
 
-    // --- F5: Go-to-definition & hover across imports, plus code actions for PUCK040 and nearest-name fixes ----------
+    // --- F5: Go-to-definition & hover across imports, plus code actions for nearest-name fixes ----------
 
     [Fact]
     public async Task LspDefinitionAndHoverResolveAcrossImportsAndCodeActionsOfferQuickFixes() {
@@ -337,8 +337,8 @@ public sealed class LspAttributionAndAuthoringTests {
 
         Assert.Equal(expected: libUri, actual: transcript.Result(id: 7)?["uri"]?.ToString(), ignoreCase: true);
 
-        // Code action for PUCK040 (drop colon) and PUCK134 (nearest template suggestion).
-        var fixSource = "host: {\n  width: 1280\n}\ntemplate pillar(w = 1) { w: w }\npilar(w: 2)\n";
+        // Code action for PUCK134 (nearest template suggestion).
+        var fixSource = "host {\n  width: 1280\n}\ntemplate pillar(w = 1) { w: w }\npilar(w: 2)\n";
         var fixTranscript = await LanguageServerClient.SessionAsync(
             requests: [
                 LanguageServerClient.Request(
@@ -358,7 +358,6 @@ public sealed class LspAttributionAndAuthoringTests {
         );
         var actions = Assert.IsType<JsonArray>(@object: fixTranscript.Result(id: 2));
 
-        Assert.Contains(collection: actions, filter: static a => (a?["title"]?.ToString() ?? "").Contains(value: "Drop the ':'", comparisonType: StringComparison.Ordinal));
         Assert.Contains(collection: actions, filter: static a => (a?["title"]?.ToString() ?? "").Contains(value: "Replace 'pilar' with 'pillar'", comparisonType: StringComparison.Ordinal));
     }
 

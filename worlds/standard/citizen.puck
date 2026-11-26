@@ -172,7 +172,7 @@ template citizenSchedule(people, phases, clock, groups = 12, groupDayFraction = 
         name: "citizenGroupShift"
         kind: "Fixed"
         capacity: groups
-        cells: map(range(0, groups), g => { key: $"{g}", value: $"{round(g * groupDayFraction * 65536) / 65536}" })
+        cells: map(range(0, groups), g => { key: $"{g}", value: (round(g * groupDayFraction * 65536) / 65536) })
       }
       {
         name: "citizenGroupAnchor"
@@ -226,5 +226,5 @@ function citizenAnchorRow(name, people, values) = {
   name: name
   kind: "Fixed"
   capacity: length(people)
-  cells: map(range(0, length(people)), i => { key: $"{people[i].key}", value: $"{round(values[i] * 1024) / 1024}" })
+  cells: map(range(0, length(people)), i => { key: $"{people[i].key}", value: (round(values[i] * 1024) / 1024) })
 }

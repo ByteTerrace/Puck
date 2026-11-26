@@ -28,12 +28,12 @@ inputModes {
         {
           name: "middle"
           values ["middle"]
-          channels: concat(map(range(16, 16), i => $"axis{i}"), map(range(32, 32), i => $"action{i}"))
+          channels: concat(map(range(16, 32), i => $"axis{i}"), map(range(32, 64), i => $"action{i}"))
         }
         {
           name: "last"
           values ["last"]
-          channels: concat(map(range(32, 16), i => $"axis{i}"), map(range(64, 32), i => $"action{i}"))
+          channels: concat(map(range(32, 48), i => $"axis{i}"), map(range(64, 96), i => $"action{i}"))
         }
       ]
     }

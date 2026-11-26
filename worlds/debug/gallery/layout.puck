@@ -225,7 +225,7 @@ let flawControls = [
 ]
 // The heights the flaw's lights are cut at, each slab's middle, so every stretch of light lies in one storey and the
 // irradiance volume shuts it out of the storeys the slabs close off.
-let flawCuts = map(range(1, 3), k => ((galleryStorey * k) - 0.1))
+let flawCuts = map(range(1, 4), k => ((galleryStorey * k) - 0.1))
 
 // The display stations: the showcase's twelve stand in its bays (shapes.puck's galleryDisplays), a pair to each bay
 // across the nave on the two showcase rows, each console toward the centre aisle (yaw 180 faces +z, yaw 0 faces -z); a

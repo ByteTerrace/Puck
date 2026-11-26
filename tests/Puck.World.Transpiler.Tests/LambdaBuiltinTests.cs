@@ -127,7 +127,7 @@ public class LambdaBuiltinTests {
     public void TestRangeProducesAWholeNumberSequence() {
         Assert.Equal(
             [3L, 4L, 5L, 6L],
-            Numbers(node: WorldSources.LowerClean(body: "_cells: range(3, 4)")["_cells"])
+            Numbers(node: WorldSources.LowerClean(body: "_cells: range(3, 7)")["_cells"])
         );
         Assert.Empty(collection: Assert.IsType<JsonArray>(@object: WorldSources.LowerClean(body: "_cells: range(0, 0)")["_cells"]));
     }
@@ -135,7 +135,7 @@ public class LambdaBuiltinTests {
     public void TestReduceFoldsFromItsSeed() {
         Assert.Equal(
             10L,
-            WorldSources.LowerClean(body: "_total: reduce(range(1, 4), 0, (running, item) => running + item)")["_total"]?.GetValue<long>()
+            WorldSources.LowerClean(body: "_total: reduce(range(1, 5), 0, (running, item) => running + item)")["_total"]?.GetValue<long>()
         );
     }
 }

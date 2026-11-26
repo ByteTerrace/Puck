@@ -74,12 +74,12 @@ test('a JSON-only workspace file opens read-only with a plain notice', async () 
 test('diagnostics reach the alerts with a way to reveal each one, and a clean revision says so', async () => {
   const broken = await driven(async (actor, language) => {
     await open('counter')(actor);
-    language.publish('counter.puck', 0, [{ range: { start: { line: 12, character: 2 }, end: { line: 12, character: 7 } }, severity: 1, code: 'PUCK040', message: 'a container never takes a colon' }]);
+    language.publish('counter.puck', 0, [{ range: { start: { line: 12, character: 2 }, end: { line: 12, character: 7 } }, severity: 1, code: 'PUCK121', message: 'an import names what the file carries' }]);
   });
   const html = render(React.createElement(WorldStudioAlerts), broken);
   assert.ok(html.includes('1 error'));
   assert.ok(html.includes('counter.puck:13:3'), 'the 1-based position is shown');
-  assert.ok(html.includes('PUCK040'));
+  assert.ok(html.includes('PUCK121'));
   assert.ok(html.includes('aria-label="Reveal counter.puck line 13"'));
 
   const clean = await driven(async (actor, language) => {

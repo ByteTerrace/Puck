@@ -1,0 +1,11 @@
+// A colon in front of a literal container reads as the container written without it, at every depth.
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+host: {
+  width: 1280
+}
+
+screens: [
+  { index: 0, origin: [0, 1, 0] }
+]

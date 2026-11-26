@@ -105,7 +105,7 @@ public sealed class ProductionLoweringTests {
     [InlineData("template make(v) { _value: v }\nmake(1, 2)")]
     [InlineData("template make() { make() }\nmake()")]
     [InlineData("_value: range(0, 1000001)")]
-    [InlineData("_value: range(9223372036854775807, 2)")]
+    [InlineData("_value: range(-9223372036854775808, 9223372036854775807)")]
     [Theory]
     public void InvalidOrUnboundedInputHasLocatedDiagnostic(string source) {
         var parsed = WorldCompileSession.Shared.Compile(

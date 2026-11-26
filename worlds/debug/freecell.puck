@@ -18,9 +18,9 @@ export read solitaireFreecellPile8, solitaireFreecellPile9, solitaireFreecellPil
 export read solitaireFreecellPile12, solitaireFreecellPile13, solitaireFreecellPile14, solitaireFreecellPile15
 
 let fcPowers = [1, 2, 4, 8, 16, 32, 64, 128, 256]
-let fcColumns = range(8, 8)
+let fcColumns = range(8, 16)
 let fcCells = range(0, 4)
-let fcFoundations = range(4, 4)
+let fcFoundations = range(4, 8)
 
 state {
   world {

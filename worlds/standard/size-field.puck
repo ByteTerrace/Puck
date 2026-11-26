@@ -43,8 +43,8 @@ template sizeField(name, from, to, start, end, reach, register = "size") {
         kind: "Fixed"
         capacity: 2
         cells [
-          { key: "start", value: $"{start}" }
-          { key: "end", value: $"{end}" }
+          { key: "start", value: start }
+          { key: "end", value: end }
         ]
       }
     ]

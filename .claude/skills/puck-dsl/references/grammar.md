@@ -15,15 +15,15 @@ identifier(k: v, k2: v2)                      // a call-expression statement
 identifier                                    // a bare flag statement, only where nothing else could follow
 ```
 
-A container value is always a block and a scalar always takes a colon, at
-every depth and inside an object literal too — a colon in front of `{`/`[` is
-**PUCK040**. Inside an object literal an array member is written
+A container value prints as a block and a scalar always takes a colon, at
+every depth and inside an object literal too. A colon in front of `{`/`[`
+(`host: {`, `palette: [`) reads as the container without it: one node, printed
+without the colon. Inside an object literal an array member prints as
 `{ name: "lit", pixels ["00000000", "11111111"] }`. A name or a call that
 merely produces a container keeps its colon (`origin: bounds`,
-`pixels: map(range(0, 8), row => "00000000")`), because the rule is about the
-punctuation in front of a literal, not what the value turns out to be; a call's
-named argument keeps its colon too (`worldPoint(point: [0, 1, 0])`), being call
-syntax rather than a statement.
+`pixels: map(range(0, 8), row => "00000000")`); a call's named argument keeps
+its colon too (`worldPoint(point: [0, 1, 0])`), being call syntax rather than a
+statement.
 
 A section holding only its rows is the array of them: `kits [ … ]`,
 `looks: map(…)`, `assignment []` lower to `{ "rows": [ … ] }`. The block form
@@ -269,7 +269,7 @@ else; a lambda anywhere else is **PUCK042**, an unevaluable call is **PUCK041**.
 
 | Builtin | Reads | Lambda |
 |---|---|---|
-| `range(start, count)` | two whole numbers | — |
+| `range(start, end)` | two whole numbers, end never below start; end excluded | — |
 | `length(value)` | array, object, or string | — |
 | `scalars(text)` | a string | —; its Unicode scalar values in order, the numbers a `Text` input event carries, so a word a rule judges a character at a time is authored as the word |
 | `concat(a, b, ...)` | any number of arrays/values | — |

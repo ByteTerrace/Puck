@@ -932,6 +932,56 @@ public static class ExpressionOperators {
             symbol: null
         ),
         Define(
+            arity: 1,
+            cost: 30L,
+            function: true,
+            name: "arcSine",
+            operation: ExpressionOp.ArcSine,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Fixed,
+            symbol: null
+        ),
+        Define(
+            arity: 1,
+            cost: 30L,
+            function: true,
+            name: "arcCosine",
+            operation: ExpressionOp.ArcCosine,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Fixed,
+            symbol: null
+        ),
+        Define(
+            arity: 1,
+            cost: 25L,
+            function: true,
+            name: "arcTangent",
+            operation: ExpressionOp.ArcTangent,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Fixed,
+            symbol: null
+        ),
+        Define(
+            arity: 2,
+            cost: 25L,
+            function: true,
+            name: "arcTangent2",
+            operation: ExpressionOp.ArcTangent2,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Fixed,
+            symbol: null
+        ),
+        Define(
+            arity: 2,
+            cost: 20L,
+            function: true,
+            name: "hypotenuse",
+            operation: ExpressionOp.Hypotenuse,
+            payload: PayloadShape.None,
+            signature: ExpressionSignature.Fixed,
+            symbol: null
+        ),
+        Define(
             arity: 2,
             cost: 10L,
             function: true,

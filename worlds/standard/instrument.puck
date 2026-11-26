@@ -102,7 +102,7 @@ template instrumentPlay(music, seats = 1, phrase = rhythmPhrase, windows = rhyth
     }
   ]
 
-  for (seat, index) in range(1, seats) {
+  for (seat, index) in range(1, seats + 1) {
     rule $"breath-up-{seat}" {
       when channel(seat, breath) >= 0.5 and bodyState(body, index, breathing) == 0
       mode: Level
@@ -120,7 +120,7 @@ template instrumentPlay(music, seats = 1, phrase = rhythmPhrase, windows = rhyth
     }
   }
 
-  haptics: map(range(1, seats), s => {
+  haptics: map(range(1, seats + 1), s => {
     id: $"instrument-beat-{s}"
     low: 0.25
     high: 0.1
@@ -141,7 +141,7 @@ template instrumentPlay(music, seats = 1, phrase = rhythmPhrase, windows = rhyth
         name: "instrumentBeat"
         kind: Int
         capacity: seats
-        cells: map(range(1, seats), s => { key: $"{s}", value: 0 })
+        cells: map(range(1, seats + 1), s => { key: $"{s}", value: 0 })
       }
     ]
   )
