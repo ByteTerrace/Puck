@@ -12,8 +12,6 @@ public sealed partial class WorldRuleHost : IWorldSurfaceContacts {
         ArgumentNullException.ThrowIfNull(argument: sweep);
         ArgumentNullException.ThrowIfNull(argument: into);
 
-        var screen = GrantSubject.Screen(index: sweep.ScreenIndex);
-
         for (var participant = 0; (participant < sweep.Participants); participant++) {
             var contacts = ParticipantContacts(participant: participant, principal: out var principal);
 
@@ -22,7 +20,7 @@ public sealed partial class WorldRuleHost : IWorldSurfaceContacts {
                 !Host.GrantTable.Allows(
                     capability: WorldCapability.Control,
                     principal: principal,
-                    subject: screen
+                    subject: sweep.Subject
                 ).IsAllowed
             ) {
                 continue;

@@ -65,15 +65,21 @@ public sealed class WorldFactsCompileContext : RuleCompileContext {
             return WorldPlayerIteration.For(definition: Definition);
         }
         if (reference.Call is { Channel: WorldContactIteration.Channel } contacts) {
-            if ((contacts.Count != 1) || !int.TryParse(s: contacts.Text(index: 0), style: System.Globalization.NumberStyles.None, provider: System.Globalization.CultureInfo.InvariantCulture, result: out var screenIndex)) {
-                throw new RuleException(WorldRuleRefusal.PointerMalformed, ruleName, $"'forEach' sweeps '{reference.Spelling}', which does not spell '$contacts:<screenIndex>'");
+            var surface = string.Join(':', contacts.Texts());
+
+            if (string.IsNullOrEmpty(value: surface)) {
+                throw new RuleException(WorldRuleRefusal.PointerMalformed, ruleName, $"'forEach' sweeps '{reference.Spelling}', which does not spell 'contacts(<screenIndex>|<placement>)'");
             }
+
+            var (mapping, subject, regions) = WorldFactsVocabulary.PointerSurfaceOf(definition: Definition, name: reference.Spelling, ruleName: ruleName, surface: surface);
 
             Needs.Add(facet: FacetRef.Of<IWorldSurfaceContacts>());
             return new WorldContactIteration(
-                Mapping: WorldFactsVocabulary.SimulationScreenMapping(definition: Definition, name: reference.Spelling, ruleName: ruleName, screenIndex: screenIndex),
+                Mapping: mapping,
                 Participants: Math.Max(val1: 1, val2: (Definition.Population.LocalSeats + Definition.Population.NetworkPlayers)),
-                ScreenIndex: screenIndex
+                Regions: regions,
+                Subject: subject,
+                Surface: surface
             );
         }
         if (reference.Call is not { Channel: "inputEvents" } call) { return null; }
