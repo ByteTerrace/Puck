@@ -353,6 +353,11 @@ public static class PuckDiagnosticCodes {
     public const string TemplateArgument = "PUCK135";
     /// <summary>PUCK136: an unknown field or member name in a document object.</summary>
     public const string UnknownMember = "PUCK136";
+    /// <summary>PUCK138: a creation's render-lane member naming a world lane no <c>render.lanes</c> row of the whole
+    /// document declares.</summary>
+    public const string UnknownRenderLane = "PUCK138";
+    /// <summary>PUCK139: a document's <c>render.lanes</c> declaring one name twice, or more lanes than the world's four.</summary>
+    public const string RenderLaneDeclaration = "PUCK139";
 
     private static readonly FrozenSet<string> DeclaredCodes = typeof(PuckDiagnosticCodes)
         .GetFields(bindingAttr: System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)

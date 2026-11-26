@@ -2689,7 +2689,7 @@ export type PaletteEntryDocument = {
   /**
    * The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body's own look lanes (a placement without them reads zero), 4 to 7 the world's render.lanes (SdfLanes). Null keeps the emissive static.
    */
-  emissiveLane?: number | null;
+  emissiveLane?: number | string | null;
   /**
    * The slot's glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque.
    */
@@ -2780,7 +2780,7 @@ export type PaletteEntryDocumentVariant2 = {
   /**
    * The render lane whose saturated value scales Emissive at shading time: 0 to 3 an inhabited body's own look lanes (a placement without them reads zero), 4 to 7 the world's render.lanes (SdfLanes). Null keeps the emissive static.
    */
-  emissiveLane?: number | null;
+  emissiveLane?: number | string | null;
   /**
    * The slot's glass (PaletteGlassDocument), whose tint is Color and whose frost is Roughness; null keeps the slot opaque.
    */
@@ -2854,7 +2854,7 @@ export type PaletteFlowDocument = {
   /**
    * The render lane whose value scales the velocity: 0 to 3 an inhabited body's look lanes (a placement without them reads zero and stands still), 4 to 7 the world's render.lanes (SdfLanes). Null keeps the velocity constant.
    */
-  lane?: number | null;
+  lane?: number | string | null;
   /**
    * The frame the velocity is authored in (null = Object).
    */
@@ -2862,7 +2862,7 @@ export type PaletteFlowDocument = {
   /**
    * The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.
    */
-  coverageLane?: number | null;
+  coverageLane?: number | string | null;
   /**
    * A sphere in world coordinates within which the velocity varies.
    */
@@ -3244,7 +3244,7 @@ export type PaletteWeatheringDocument = {
   seed?: number;
   scale?: number;
   floor?: number;
-  lane?: number;
+  lane?: number | string;
   deposit?: PaletteSurfaceDocument | null;
   noise?: number;
   patternScale?: DocumentVector3;
@@ -3267,7 +3267,7 @@ export type PaletteWeatheringDocumentVariant2 = {
   seed?: number;
   scale?: number;
   floor?: number;
-  lane?: number;
+  lane?: number | string;
   deposit?: PaletteSurfaceDocument | null;
   noise?: number;
   patternScale?: DocumentVector3;
@@ -4372,7 +4372,7 @@ export type ShapeErodeDocument = {
   /**
    * Which dynamic-slot lane drives the erosion.
    */
-  lane: number;
+  lane: number | string;
   /**
    * The lane value where erosion begins (t = 0).
    */
@@ -4424,7 +4424,7 @@ export type ShapeMorphDocument = {
   /**
    * Which dynamic-slot lane drives the morph, in [0, 3].
    */
-  lane: number;
+  lane: number | string;
   /**
    * The lane value where the field before the shape shows alone (t = 0).
    */
@@ -5778,7 +5778,7 @@ export type VolumeDocument = {
   extinction?: number | null;
   pulseAmplitude?: number | null;
   pulseFrequency?: number | null;
-  intensityLane?: number | null;
+  intensityLane?: number | string | null;
   enabled?: boolean;
   coverage?: number | null;
   softness?: number | null;
@@ -11956,9 +11956,9 @@ export type WorldRenderDefaults = {
    */
   shadowCoverage?: WorldRenderShadowCoverage | null;
   /**
-   * The world's render lanes: up to four bindable scalars (a literal, a state.<row> binding, or keys on a clock), resolved at each frame's presented tick and read by every surface and volume as render lanes 4 to 7 (SdfLanes), so a static placement sharing one baked mesh follows world state without a slot. Absent or a missing entry reads zero; world.lighting echoes them as authored.
+   * The world's render lanes (WorldRenderLane): up to four named bindable scalars, resolved at each frame's presented tick and read by every surface and volume as render lanes 4 to 7 (SdfLanes) in the order the composed document holds them, so a static placement sharing one baked mesh follows world state without a slot. Rows merge across imports by name. Absent or a missing entry reads zero; world.lighting echoes them as authored.
    */
-  lanes?: BindableScalar[] | null;
+  lanes?: (WorldRenderLane | null)[] | null;
   /**
    * The default shading program inherited by materials without their own.
    */
@@ -12181,6 +12181,17 @@ export type WorldRenderIndirectSources = {
    * Reflected preceding-sweep radiance gain, once per bounce.
    */
   feedback?: BindableScalar;
+};
+
+export type WorldRenderLane = {
+  /**
+   * The lane's name, unique among the composed document's lanes. A creation's render-lane member (DocumentRenderLaneAttribute) that writes it reads this lane; the load resolves it to the lane's index (WorldRenderLaneNames).
+   */
+  name: string;
+  /**
+   * The bindable scalar the lane reads: a literal, a state.<row> binding, or keys on a clock.
+   */
+  value: BindableScalar;
 };
 
 /**

@@ -148,7 +148,13 @@ gravity {
   // The companion's turn is about the star's ball, so it is placed after the star's.
   orbits [
     starRail(of: sunStar, turn: sunTurn, around: "system-centre", periodSeconds: sharedDaySeconds, body: sunBody)
-    starRail(of: companionStar, turn: companionTurn, around: "sun-ball", periodSeconds: pairSeconds, body: companionBody)
+    starRail(
+      of: companionStar,
+      turn: companionTurn,
+      around: "sun-ball",
+      periodSeconds: pairSeconds,
+      body: companionBody
+    )
   ]
 }
 
@@ -212,7 +218,14 @@ rule "sun-lights" {
 
 // The star's heat: within `sunLethal` metres of its centre a body is burned and wakes on the pad.
 starHeat(of: sunStar, rider: sunBody, lethal: sunLethal, warning: sunWarning, spawn: "sun-arrival", name: "sun")
-starHeat(of: companionStar, rider: companionBody, lethal: companionLethal, warning: companionWarning, spawn: "sun-arrival", name: "companion")
+starHeat(
+  of: companionStar,
+  rider: companionBody,
+  lethal: companionLethal,
+  warning: companionWarning,
+  spawn: "sun-arrival",
+  name: "companion"
+)
 
 heldKit(name: "sun")
 
@@ -294,7 +307,11 @@ placements {
   // where the turn stands at the day's start.
   placement "sun" {
     prototype: "hidden"
-    position [(sunSystemCentre[0] + sunAtStart[0]), (sunSystemCentre[1] + sunAtStart[1]), (sunSystemCentre[2] + sunAtStart[2])]
+    position [
+      (sunSystemCentre[0] + sunAtStart[0]),
+      (sunSystemCentre[1] + sunAtStart[1]),
+      (sunSystemCentre[2] + sunAtStart[2])
+    ]
     inhabit {
       count: 1
       distribution {
@@ -312,7 +329,11 @@ placements {
   }
   placement "sun-ball" {
     prototype: "sun"
-    position [(sunSystemCentre[0] + sunAtStart[0]), (sunSystemCentre[1] + sunAtStart[1]), (sunSystemCentre[2] + sunAtStart[2])]
+    position [
+      (sunSystemCentre[0] + sunAtStart[0]),
+      (sunSystemCentre[1] + sunAtStart[1]),
+      (sunSystemCentre[2] + sunAtStart[2])
+    ]
     attach {
       bodyIndex: sunBody
       localOffset [0, 0, 0]
@@ -323,7 +344,11 @@ placements {
   // star at the first tick.
   placement "companion" {
     prototype: "hidden"
-    position [(sunSystemCentre[0] + sunAtStart[0]), (sunSystemCentre[1] + sunAtStart[1]), (sunSystemCentre[2] + sunAtStart[2])]
+    position [
+      (sunSystemCentre[0] + sunAtStart[0]),
+      (sunSystemCentre[1] + sunAtStart[1]),
+      (sunSystemCentre[2] + sunAtStart[2])
+    ]
     inhabit {
       count: 1
       distribution {
@@ -341,7 +366,11 @@ placements {
   }
   placement "companion-ball" {
     prototype: "companion"
-    position [(sunSystemCentre[0] + sunAtStart[0]), (sunSystemCentre[1] + sunAtStart[1]), (sunSystemCentre[2] + sunAtStart[2])]
+    position [
+      (sunSystemCentre[0] + sunAtStart[0]),
+      (sunSystemCentre[1] + sunAtStart[1]),
+      (sunSystemCentre[2] + sunAtStart[2])
+    ]
     attach {
       bodyIndex: companionBody
       localOffset [0, 0, 0]
@@ -402,10 +431,10 @@ prototypes {
     }
   }
 
-  // The star's body. Its surface dims with the light it has left (`sunLight`, the world's first render lane).
+  // The star's body. Its surface dims with the light it has left (the world lane `sunLight`).
   prototype "sun" {
     document {
-      starSurface(of: sunStar, name: "sun", lane: 4)
+      starSurface(of: sunStar, name: "sun", lane: "sunLight")
     }
   }
   // The companion's body: a smaller, redder ball whose cells drift faster.
@@ -422,7 +451,7 @@ prototypes {
 // star's own ball casts none (`starSurface`).
 render {
   farDistance: 8000
-  lanes ["state.sunLight"]
+  lanes [{ name: "sunLight", value: "state.sunLight" }]
   lighting {
     lights [
       starLight(

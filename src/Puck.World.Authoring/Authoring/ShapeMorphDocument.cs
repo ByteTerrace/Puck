@@ -1,3 +1,4 @@
+using Puck.Abstractions.Documents;
 using Puck.SignedDistance;
 
 namespace Puck.World.Authoring;
@@ -10,7 +11,7 @@ namespace Puck.World.Authoring;
 /// <param name="Lane">Which dynamic-slot lane drives the morph, in [0, 3].</param>
 /// <param name="From">The lane value where the field before the shape shows alone (t = 0).</param>
 /// <param name="To">The lane value where the shape shows alone (t = 1); must differ from <see cref="From"/>.</param>
-public sealed record ShapeMorphDocument(int Lane, float From, float To);
+public sealed record ShapeMorphDocument([property: DocumentRenderLane] int Lane, float From, float To);
 /// <summary>Opens a shape's own field scope with the compose its blend names: the pop-only blends
 /// (<see cref="SdfBlendOp.Morph"/>, <see cref="SdfBlendOp.StairsUnion"/>, <see cref="SdfBlendOp.StairsSubtraction"/>)
 /// take their dedicated openers, and every other blend the plain <see cref="SdfProgramBuilder.PushField"/>. The one

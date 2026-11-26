@@ -588,6 +588,28 @@ axis), so a new axis is an authored row. A rate and an ordered value (a gradient
 and a member that keys a field itself keeps its keys over a section's keys on that field
 ([decision](../decisions/state-and-language.md#a-value-follows-its-clocks-by-nesting-keys)).
 
+## Render lanes are named
+
+A world's render lanes are named rows, and a creation names the lane it reads:
+
+```text
+render {
+  lanes [{ name: "fallsFlow", value: "state.fallsFlow" }]
+}
+palette [{ color: "#E8F0F4", emissive: 40, emissiveLane: "fallsFlow" }]
+```
+
+Imports compose at load, so no single file knows the whole lane list. Each document declares the lanes it uses, the
+rows merge across imports by name, and the load (`WorldRenderLaneNames`) numbers the composed list from render lane 4
+in its order and replaces every name a creation's lane member writes with that index before the document is read. A
+lane member is a creation member marked `DocumentRenderLane` (`emissiveLane`, a flow's `lane` and `coverageLane`, a
+weathering's `lane`, a volume's `intensityLane`, an erode's or morph's `lane`). It still takes a number, and lanes 0
+to 3, a body's own, are only numbers. `puck compile` reports a name a document declares twice, or a fifth lane, as
+PUCK139, and a name no lane declares as PUCK138 when the document composes nothing; a composed document is refused
+for the same reasons when it loads. A shade program reads a world lane by index (`lanes.world0`), so a lane it reads
+keeps its place in the composed order
+([surface reference](../../.claude/skills/sdf-authoring/references/surface.md#render-lanes)).
+
 ## Units and dimensions
 
 A unit written against a number gives it a physical dimension: `3m`, `250ms`, `30deg`, `50%`, `800lm`, and

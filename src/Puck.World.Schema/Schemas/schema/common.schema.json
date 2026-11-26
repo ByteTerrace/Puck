@@ -11102,7 +11102,8 @@
           "description": "The render lane whose value scales the velocity: 0 to 3 an inhabited body\u0027s look lanes (a placement without them reads zero and stands still), 4 to 7 the world\u0027s render.lanes (SdfLanes). Null keeps the velocity constant.",
           "type": [
             "integer",
-            "null"
+            "null",
+            "string"
           ],
           "default": null
         },
@@ -11115,7 +11116,8 @@
           "description": "The render lane, as Lane, whose value saturated to [0, 1] scales Coverage. Null keeps the coverage constant.",
           "type": [
             "integer",
-            "null"
+            "null",
+            "string"
           ],
           "default": null
         },
@@ -12153,7 +12155,10 @@
       "properties": {
         "lane": {
           "description": "Which dynamic-slot lane drives the erosion.",
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "from": {
           "description": "The lane value where erosion begins (t = 0).",
@@ -12280,7 +12285,10 @@
       "properties": {
         "lane": {
           "description": "Which dynamic-slot lane drives the morph, in [0, 3].",
-          "type": "integer"
+          "type": [
+            "integer",
+            "string"
+          ]
         },
         "from": {
           "description": "The lane value where the field before the shape shows alone (t = 0).",

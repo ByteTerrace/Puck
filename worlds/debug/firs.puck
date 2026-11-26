@@ -15,7 +15,10 @@ state {
     }
   ]
 }
-// The fibre groups glow on world lanes 5 to 7, which debug.puck binds with `firFiberLane`.
+// The fibre groups glow on three world lanes of their own, a third of a turn of `fiber` apart.
+render {
+  lanes: firFiberLanes("fiber")
+}
 
 prototypes {
   firTree(id: "fir")

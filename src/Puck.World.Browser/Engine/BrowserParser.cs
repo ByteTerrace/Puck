@@ -49,7 +49,11 @@ public static class BrowserParser {
         definition = null;
         string json;
 
-        try { json = Encoding.UTF8.GetString(bytes: utf8Json); } catch (Exception exception) when ((exception is ArgumentException or DecoderFallbackException)) {
+        if (!WorldRenderLaneNames.TryResolve(utf8: utf8Json, resolved: out var named, reason: out var laneReason)) {
+            errors.Add(item: laneReason);
+            return false;
+        }
+        try { json = Encoding.UTF8.GetString(bytes: named.Span); } catch (Exception exception) when ((exception is ArgumentException or DecoderFallbackException)) {
             errors.Add(item: $"the document is not valid UTF-8 text: {exception.Message}");
             return false;
         }
