@@ -154,6 +154,8 @@ public sealed partial class WorldScreenBinder {
             // A view asking for its world's far product draws the product once it is built. Until then it draws the world
             // whole, which is the product's source, unless the presentation holds a residency of that world anyway, whose
             // product is on its way: then it draws its fallback for the moments the build takes.
+            if (ready && planned.Spec.FarProduct) { NoteFarWanted(instance: source.Instance!); }
+
             var far = ((ready && planned.Spec.FarProduct) ? FarProductOf(instance: source.Instance!) : null);
             var waits = (ready && planned.Spec.FarProduct && (far is null) && FarSourceResident(instance: source.Instance!));
 
