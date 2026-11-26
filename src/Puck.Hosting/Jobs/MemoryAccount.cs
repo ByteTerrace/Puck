@@ -1403,25 +1403,31 @@ public sealed class MemoryAccount {
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
         /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
         /// <exception cref="InvalidOperationException">The owner is a device family or a segment's row.</exception>
-        public bool TryReserve(long peak) => Reserve(peak: peak, progress: false);
-        // The one door of TryReserve and TryReserveProgress: a reservation within the pool's room, or, for a progress
-        // floor, within the host bar on what the owners hold and are promised, counted as an over-limit grant.
-        // An authoring owner the machine's room refuses makes the process give back what it no longer uses and asks
-        // once more (ReclaimForAuthoring).
-        private bool Reserve(long peak, bool progress) => (ReserveOnce(peak: peak, progress: progress) ||
-            ((m_allowance == MemoryAllowance.Authoring) && m_account.ReclaimForAuthoring() && ReserveOnce(peak: peak, progress: progress)));
-        private bool ReserveOnce(long peak, bool progress) {
+        public bool TryReserve(long peak) => Reserve(peak: peak, progress: false, forced: false);
+        // The one door of TryReserve, TryReserveProgress and TryReserveForced: a reservation within the pool's room; for a
+        // progress floor, past it within the host bar on what the owners hold and are promised, counted as an over-limit
+        // grant; for the forced job, within the host bar whatever the room, one owner at a time. Work past the room is
+        // still held to the machine's floor (FitsMachine). An authoring owner the machine's room refuses makes the process
+        // give back what it no longer uses and asks once more (ReclaimForAuthoring).
+        private bool Reserve(long peak, bool progress, bool forced) => (ReserveOnce(forced: forced, peak: peak, progress: progress) ||
+            ((m_allowance == MemoryAllowance.Authoring) && m_account.ReclaimForAuthoring() && ReserveOnce(forced: forced, peak: peak, progress: progress)));
+        private bool ReserveOnce(long peak, bool progress, bool forced) {
             ArgumentOutOfRangeException.ThrowIfNegative(peak);
             m_account.RefreshAvailable();
             lock (m_account.m_gate) {
                 ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
                 ThrowIfNotAdmitted();
+                if (forced && (m_account.m_forced is { } holder) && !ReferenceEquals(objA: holder, objB: this)) { return false; }
 
                 var extra = (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise);
+                var pastRoom = (forced || !m_account.Fits(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host));
 
-                if (!m_account.Fits(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host)) {
-                    if (!progress || !m_account.FitsMachine(extra: extra) || !m_account.FitsHostBar(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host)) { return RefusePeak(peak); }
-
+                if (pastRoom && (!(forced || progress) || !m_account.FitsMachine(extra: extra) || !m_account.FitsHostBar(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host))) { return RefusePeak(peak); }
+                if (forced) {
+                    if (m_account.m_forced is null) { m_account.m_forcedJobs++; }
+                    m_account.m_forced = this;
+                    m_account.m_forcedBytes = peak;
+                } else if (pastRoom) {
                     m_account.m_pools[((int)PhysicalMemory.Host)].GrantOverLimit(bytes: extra, taker: Name);
                     m_account.m_pressure = 1;
                 }
@@ -1454,27 +1460,7 @@ public sealed class MemoryAccount {
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
         /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
         /// <exception cref="InvalidOperationException">The owner is a device family or a segment's row.</exception>
-        public bool TryReserveForced(long peak) => (ReserveForcedOnce(peak: peak) ||
-            ((m_allowance == MemoryAllowance.Authoring) && m_account.ReclaimForAuthoring() && ReserveForcedOnce(peak: peak)));
-        private bool ReserveForcedOnce(long peak) {
-            ArgumentOutOfRangeException.ThrowIfNegative(peak);
-            m_account.RefreshAvailable();
-            lock (m_account.m_gate) {
-                ObjectDisposedException.ThrowIf(condition: m_closed, instance: this);
-                ThrowIfNotAdmitted();
-                if ((m_account.m_forced is { } holder) && !ReferenceEquals(objA: holder, objB: this)) { return false; }
-
-                var extra = (Math.Max(val1: 0L, val2: (peak - m_bytes)) - Promise);
-
-                if (!m_account.FitsMachine(extra: extra) || !m_account.FitsHostBar(allowance: m_allowance, extra: extra, pool: PhysicalMemory.Host)) { return RefusePeak(peak); }
-                if (m_account.m_forced is null) { m_account.m_forcedJobs++; }
-                m_account.m_forced = this;
-                m_account.m_forcedBytes = peak;
-                m_refusedPeak = -1L;
-                SetPeak(peak: peak);
-                return true;
-            }
-        }
+        public bool TryReserveForced(long peak) => Reserve(peak: peak, progress: false, forced: true);
         /// <summary>Reserves storage that work the account admitted needs to progress at all, such as a mesh bake's
         /// readback, which answers the groups it admitted: granted when it fits the pool's room
         /// (<see cref="TryReserve"/>), and otherwise when it fits the authored host bar counting only what the owners hold
@@ -1486,7 +1472,7 @@ public sealed class MemoryAccount {
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="peak"/> is negative.</exception>
         /// <exception cref="ObjectDisposedException">The owner is disposed.</exception>
         /// <exception cref="InvalidOperationException">The owner is a device family or a segment's row.</exception>
-        public bool TryReserveProgress(long peak) => Reserve(peak: peak, progress: true);
+        public bool TryReserveProgress(long peak) => Reserve(peak: peak, progress: true, forced: false);
         /// <summary>Releases the future promise after work ends, and the forced allowance if the owner holds it; any
         /// still-owned storage remains accounted.</summary>
         public void ReleaseReservation() {
