@@ -50,7 +50,7 @@ function navZ1(stair) = ((stair.yaw == 180) ? (stair.well.z1 + 0.5) : stair.well
 // A switchback's first flight climbs its piece's +X half and its second the -X half; a spiral (turning from its front
 // toward its -X side first) climbs its -X half first and its +X half second.
 function navStairDomains(stair, level) = (
-  (stair.kind == "switchback") ? [
+  (stair.form == "switchback") ? [
     navStair($"hall-stairs-{stair.id}-a-{level}", navHalfX0(stair, 1), navHalfX1(stair, 1), navZ0(stair), navZ1(stair), (galleryFloor[level] + 2.2), 2.25, 2.6)
     navStair($"hall-stairs-{stair.id}-b-{level}", navHalfX0(stair, 0), navHalfX1(stair, 0), navZ0(stair), navZ1(stair), galleryFloor[(level + 1)], 0.4, 2.5)
   ] : [

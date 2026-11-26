@@ -109,12 +109,12 @@ function stairWell(i, j, across, deep) = {
   z1: tileEdgeZ((j + deep))
 }
 let galleryStairs = [
-  { id: "south-west", kind: "switchback", yaw: 180, well: stairWell(0, 0, stairTiles, switchbackTiles) }
-  { id: "south-east", kind: "spiral", yaw: 180, well: stairWell((gridTilesX - stairTiles), 0, stairTiles, stairTiles) }
-  { id: "north-west", kind: "spiral", yaw: 0, well: stairWell(0, (gridTilesZ - stairTiles), stairTiles, stairTiles) }
+  { id: "south-west", form: "switchback", yaw: 180, well: stairWell(0, 0, stairTiles, switchbackTiles) }
+  { id: "south-east", form: "spiral", yaw: 180, well: stairWell((gridTilesX - stairTiles), 0, stairTiles, stairTiles) }
+  { id: "north-west", form: "spiral", yaw: 0, well: stairWell(0, (gridTilesZ - stairTiles), stairTiles, stairTiles) }
   {
     id: "north-east"
-    kind: "switchback"
+    form: "switchback"
     yaw: 0
     well: stairWell((gridTilesX - stairTiles), (gridTilesZ - switchbackTiles), stairTiles, switchbackTiles)
   }

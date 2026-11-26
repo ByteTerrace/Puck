@@ -384,7 +384,7 @@ template shellStripBoxes(top, wing) {
 // front the stair arrives through, and its back where the south wall stops short of it (the wing's storeys).
 let shellStairStoreys = map(range(0, 3), k => k)
 function shellStairPiece(stair, k) = (
-  (stair.kind == "spiral") ? "gallery-spiral" : ((k == (length(shellStairStoreys) - 1)) ? "gallery-switchback-top" : "gallery-switchback")
+  (stair.form == "spiral") ? "gallery-spiral" : ((k == (length(shellStairStoreys) - 1)) ? "gallery-switchback-top" : "gallery-switchback")
 )
 function shellWellBackOpen(stair, k) = (
   (stair.yaw == 180) and ((stair.well.x0 < shellSouthWall(k).x0) or (stair.well.x1 > shellSouthWall(k).x1))
@@ -411,7 +411,7 @@ function shellWellRails(stair, k) = concat(
   )
 )
 let shellStairRails = flatMap(
-  filter(galleryStairs, stair => (stair.kind == "spiral")),
+  filter(galleryStairs, stair => (stair.form == "spiral")),
   stair => flatMap(range(1, 3), k => map(shellWellRails(stair, k), rail => (rail with { id: $"{stair.id}-{k}-{rail.id}", y: galleryFloor[k] })))
 )
 
