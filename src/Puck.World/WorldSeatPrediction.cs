@@ -65,9 +65,6 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         public string Reason = "no prediction asked";
         public string? PopulationRefusal;
         public WorldPredictedBody Body;
-        // The portal openings of the document the prediction steps in, and that document.
-        public (string PlacementId, string Face, WorldFaceAperture.Box Box)[] Doors = [];
-        public WorldDefinition? DoorsFrom;
     }
 
     private readonly Seat[] m_seats = [.. Enumerable.Range(start: 0, count: PlayerRoster.MaxSlots).Select(selector: static _ => new Seat())];
@@ -177,10 +174,8 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         if (!TryDecode(own: in own, seat: seat)) {
             return "the continuation does not decode";
         }
-        if (!ReferenceEquals(objA: seat.DoorsFrom, objB: source)) {
-            seat.Doors = WorldFacePortalPolicy.PortalApertures(definition: source);
-            seat.DoorsFrom = source;
-        }
+        // The doors the authority's own portal scan tests, from the one derivation both read (built once per document).
+        var doors = WorldFaceCatalog.For(definition: source).PortalDoors(definition: source);
 
         // The authority's answer to an earlier prediction: what was predicted for the continuation's tick against where the
         // body stood after it. A prediction is relied on only while the authority keeps confirming it.
@@ -237,9 +232,11 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
             // A step through a door's glass is a crossing only the authority makes (it carries the body to the door's
             // counterpart, perhaps resized or into another world), so a prediction past one would steer the seat from a
             // body standing in the wall behind the glass: the seat steers from what was delivered until the crossing is.
-            foreach (var door in seat.Doors) {
-                if (WorldFaceRegion.Sweep(aperture: door.Box, from: position, to: predicted.FixedPosition).Crossed) {
-                    return $"the prediction reaches {door.PlacementId}/{door.Face}, whose crossing the authority makes";
+            for (var index = 0; (index < doors.Count); index++) {
+                var door = doors[index];
+
+                if (WorldFaceRegion.Sweep(aperture: door.Aperture, from: position, to: predicted.FixedPosition).Crossed) {
+                    return $"the prediction reaches {source.Placements[door.Row].Id}/{door.Face.Face}, whose crossing the authority makes";
                 }
             }
             previous = position;
