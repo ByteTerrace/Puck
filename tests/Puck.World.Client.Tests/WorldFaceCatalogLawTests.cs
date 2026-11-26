@@ -814,10 +814,10 @@ public sealed class WorldFaceCatalogLawTests {
         var catalog = WorldFaceCatalog.For(definition: before);
         var frames = WorldPlacementFrameCompilation.Resolve(section: before.PlacementsRaw, worldSeed: 0UL);
         var spatial = WorldSpatialQueryCompilation.Resolve(section: before.PlacementsRaw, worldSeed: 0UL);
-        var swapped = before.WithPlacementHoldings(holdings: [(1, 1)]);
+        var swapped = before.WithPlacementHoldings(holdings: [(1, WorldResponseHolding.Single(entry: 0))]);
 
         Assert.Same(expected: before, actual: before.WithPlacementHoldings(holdings: []));
-        Assert.Equal(expected: 1, actual: swapped.Placements[1].Holding);
+        Assert.Equal(expected: WorldResponseHolding.Single(entry: 0), actual: swapped.Placements[1].Holding);
         Assert.Same(expected: before.Placements[0], actual: swapped.Placements[0]);
         Assert.Same(expected: catalog, actual: WorldFaceCatalog.For(definition: swapped));
         Assert.Same(expected: frames, actual: WorldPlacementFrameCompilation.Resolve(section: swapped.PlacementsRaw, worldSeed: 0UL));
@@ -830,11 +830,11 @@ public sealed class WorldFaceCatalogLawTests {
         Assert.Equal(expected: WorldPlacementChange.Appearance, actual: WorldPlacementResponse.ComparePlacements(after: before, before: (before with { PlacementRowsRaw = [before.Placements[0]] }), holdings: out _, solid: out _));
         Assert.Equal(expected: WorldPlacementChange.Appearance, actual: WorldPlacementResponse.ComparePlacements(after: (before with { PlacementRowsRaw = [before.Placements[0], (crate with { Scale = 2f })] }), before: before, holdings: out _, solid: out _));
 
-        var faced = before.WithPlacementHoldings(holdings: [(0, 1)]);
+        var faced = before.WithPlacementHoldings(holdings: [(0, WorldResponseHolding.Single(entry: 0))]);
 
         Assert.NotSame(expected: catalog, actual: WorldFaceCatalog.For(definition: faced));
         Assert.Equal(expected: WorldPlacementChange.Facets, actual: WorldPlacementResponse.ComparePlacements(after: faced, before: before, holdings: out _, solid: out _));
-        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => before.WithPlacementHoldings(holdings: [(2, 1)]));
+        Assert.Throws<ArgumentOutOfRangeException>(testCode: () => before.WithPlacementHoldings(holdings: [(2, WorldResponseHolding.Single(entry: 0))]));
     }
     // THE LAW: a session mirror, whose readers watch its definition revision alone, moves it for a value delivery that
     // moves a holding mask and for no other; and preparing a document's responses emits each responding row once for
@@ -866,7 +866,7 @@ public sealed class WorldFaceCatalogLawTests {
 
         session.DeliverState(definition: (before with { }), stamp: in stamp, version: default, stream: default);
         Assert.Equal(expected: revision, actual: session.DefinitionRevision);
-        session.DeliverState(definition: before.WithPlacementHoldings(holdings: [(1, 1)]), stamp: in stamp, version: default, stream: default);
+        session.DeliverState(definition: before.WithPlacementHoldings(holdings: [(1, WorldResponseHolding.Single(entry: 0))]), stamp: in stamp, version: default, stream: default);
         Assert.Equal(expected: (revision + 1), actual: session.DefinitionRevision);
         Assert.Equal(expected: 2, actual: WorldPlacementStamper.PrepareResponses(definition: before));
         Assert.Equal(expected: 0, actual: WorldPlacementStamper.PrepareResponses(definition: door));

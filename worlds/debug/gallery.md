@@ -80,32 +80,63 @@ So the exhibits stand on display stations, each built to the kit pack's
 [display plinth](../../docs/game/art/gallery-kit-pack/display-plinth.png) and the
 discovery pack's [shape workbench](../../docs/game/art/canyon-discovery-pack/shape-workbench-v2.png):
 a teal base, the ochre body, a cream cap with the glowing turntable, and a
-console whose dark screen lists the shapes. Each display holds one of the
-gallery's groups (primitives, stretched, extruded, revolved, and so on), and its
-turntable shows one exhibit of the group at a time, at twice the exhibits' own
-scale. A player standing before the console steps through the list with the
-context button (E, or RB on a pad): the console's left steps back, the rest of
-it steps on, each wrapping round. The screen's three panes show the exhibit
-before the turntable's, the turntable's with its place in the list, and the one
-after it, and the strip under them says what the exhibit shows.
-[shapes.md](shapes.md#the-displays) lists the displays and the console lines.
+console across the front. Each display starts on one of the gallery's groups
+(primitives, stretched, extruded, revolved, and so on), and its turntable shows
+one exhibit at a time, at twice the exhibits' own scale.
+
+### Display consoles
+
+The owner's ruling, in the plan's words: go digital. The console is one
+seamless interactive screen, like the consoles in Star Trek: The Next
+Generation: the face the buttons and panels rested on, tastefully integrated,
+in place of the three panes, the two knobs and the button. It is multi-purpose
+and will later host easter eggs. The player uses it by tapping: with a real
+finger on a real touchscreen, fully diegetic, and with the mouse; keyboard and
+gamepad bindings come later. Its first layout is a simple shape enumeration:
+the player scrolls through every shape in the catalog, across every display and
+not just this station's group, and tapping one shows it on this station's
+turntable.
+
+So the console is one tilted glass screen in a cream bezel that spans the
+plinth's front under the cap, with a brass lip where a hand rests
+([architecture.puck](../standard/architecture.puck)'s plinth). Its interface
+glows on the glass in an LCARS-like layout in the kit's own palette
+(`consoleLook`): an ochre elbow frames the top left and turns into the top bar,
+whose cap names the catalog; PREV and NEXT buttons stack down the left column
+beside a list of every exhibit, the chosen one lit amber with its group beside
+it; and the right of the screen gives the chosen exhibit's title, its group and
+its place in the catalog, and its note. A tap on a row shows that exhibit; a
+drag scrolls the list a row for each row the pointer travels and taps nothing;
+PREV and NEXT turn it a page. `gallery.station <display>` frames the console
+with the exhibit. [shapes.md](shapes.md#the-displays) lists the displays and
+the console lines.
 
 Every part of a display is an engine mechanism a world authors:
 
 - A display's `gallerySelect` cell holds the catalog index of the exhibit its
   turntable shows: an exhibit's place in the whole gallery's walking order,
-  which is its identity. A button, `gallery.go`, `gallery.show` and the tour
-  each write it.
+  which is its identity, and any display may hold any exhibit's. The console's
+  list, `gallery.go`, `gallery.show`, `gallery.step` and the tour each write it.
 - The turntable is one placement whose `respond` entries swap which exhibit's
-  prototype stands there, one entry an exhibit after the first (up to
-  `WorldResponseCapacity.MaxEntries`), each a state condition on the
-  display's cell. A response may show an animated creation,
-  so the motion exhibits keep their clock and their controls on a display.
-- The buttons are reaches ([reach.puck](reach.puck)) before the console, each a
-  rule over whoever stands in it, as the lift's buttons are.
-- The screen's lines are text paints bound to the display's screen cells, which
-  one rule copies from the catalog's copy by index (`setState` with a `$cell:`
-  key) whenever the selection moves, however it moved.
+  prototype stands there, one entry for every exhibit in the catalog but the
+  display's first, each a state condition on the display's cell. A row's
+  holding is a set of entries held as machine words (`WorldResponseHolding`), so
+  a row lists as many entries as a catalog holds. A response may show an
+  animated creation, so the motion exhibits keep their clock and their controls
+  on any display.
+- The screen placement carries a pointer surface (`WorldPointerSurface`): a
+  rectangle on the glass that a seat's pointer ray maps onto, with the list and
+  the buttons as its named regions. Rules read it as
+  `pointer(any, display-<id>-screen, region|row, <region>)` beside
+  `pointer(…, press, tap)`, the standard's tap channel, which the left mouse
+  button presses and a touchscreen's contact will. The press, drag, release and
+  page rules in [gallery/gallery.puck](gallery/gallery.puck) are the whole
+  interaction.
+- The screen's lettering is text paints bound to the display's cells: the list's
+  rows are cells one rule rewrites from the catalog by index (`setState` with a
+  `$cell:` key) whenever the scroll or the selection moves, each row's ink a
+  colour tag the list's markup reads, and the chosen exhibit's copy another rule
+  copies whenever the selection moves, however it moved.
 
 ### Molding a shape later
 
@@ -115,8 +146,9 @@ display (`galleryMold<operation>.<display>`: a scale, a second exhibit to blend
 or subtract and its amount), and the molded shape is a creation of the display's
 own whose shapes read those cells, as `motion-state-blend` reads
 `galleryInputs.probe` and re-emits its seam. The turntable then shows that
-creation through one more response entry, and the console's buttons gain reaches
-for the operations. Nothing about the station, its list or its screen changes.
+creation through one more response entry, and the console's screen gains a
+layout of regions for the operations. Nothing about the station or its list
+changes.
 The in-world editing packet ([open items](../../docs/plans/open-items.md#in-world-editing))
 holds this as open work.
 
@@ -218,3 +250,17 @@ as the other world-space pieces are.
   moved or turned it at run time.
 - **The kit's banner.** Its motif is geometry a few millimetres proud of the
   cloth, because a paint cannot follow each copy of a static piece.
+- **The console's future, recorded and not built** (the owner's ruling):
+  - the Moth's hand mirrors the player's real touch on the screen;
+  - hidden ports under the display's overhang, where an avatar connects a gaming
+    brick by link cable and plays it on the console's screen, as old Nintendo
+    kiosk stations did;
+  - player shape molding ([Molding a shape later](#molding-a-shape-later)).
+- **A mouse tap still orbits.** The left button is both the camera's orbit drag
+  and the tap, so a drag on the list in the chase view also turns the camera;
+  `gallery.station` films from a camera the drag does not move. A press that
+  lands on a pointer surface should be captured by it
+  ([the UI decisions](../../docs/decisions/ui.md#layout-text-and-interaction)).
+- **The list scrolls by whole rows.** A drag moves the list a row each row the
+  pointer crosses, since a text paint's lines stand at fixed places; a smooth
+  scroll waits for an interface that lays its rows out each frame.

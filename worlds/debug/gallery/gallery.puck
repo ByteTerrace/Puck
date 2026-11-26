@@ -1502,9 +1502,9 @@ for display in galleryDisplays {
     when gallerySelect[key] != galleryShownAt[key]
     mode: Level
     galleryPlace[key] = gallerySelect[key] + 1
-    setState(state: galleryScreenTitle, key: key, fromState: galleryTitles, fromKey: $"$cell:gallerySelect:{key}")
-    setState(state: galleryScreenNote, key: key, fromState: galleryNotes, fromKey: $"$cell:gallerySelect:{key}")
-    setState(state: galleryScreenGroup, key: key, fromState: galleryGroups, fromKey: $"$cell:gallerySelect:{key}")
+    setState(state: galleryScreenTitle, key: $"{key}", fromState: galleryTitles, fromKey: $"$cell:gallerySelect:{key}")
+    setState(state: galleryScreenNote, key: $"{key}", fromState: galleryNotes, fromKey: $"$cell:gallerySelect:{key}")
+    setState(state: galleryScreenGroup, key: $"{key}", fromState: galleryGroups, fromKey: $"$cell:gallerySelect:{key}")
     if gallerySelect[key] < galleryScroll[key] {
       galleryScroll[key] = gallerySelect[key]
     }
