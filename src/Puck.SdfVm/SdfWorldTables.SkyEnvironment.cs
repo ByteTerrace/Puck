@@ -94,6 +94,14 @@ public sealed partial class SdfWorldTables {
         WriteInterfaceBuffer(set: set, layout: layout, member: SdfKernelInterfaces.SkyEnvironmentWritten, buffer: m_skyEnvironment.Map, bindings: bindings);
         WriteInterfaceBuffer(set: set, layout: layout, member: SdfKernelInterfaces.SkyCoefficientsWritten, buffer: m_skyEnvironment.Coefficients, bindings: bindings);
         WriteInterfaceBuffer(set: set, layout: layout, member: SdfKernelInterfaces.ScreenEmissionWritten, buffer: ScreenEmission, bindings: bindings);
+        // An emitter face's reduction reads its material and paints as the views pass does (sdf-screen-emission.comp.hlsl).
+        WriteInterfaceBuffer(set: set, layout: layout, member: SdfWorldPackage.ProgramWords, buffer: m_programRegion.Buffer(slot: CurrentSlot), bindings: bindings);
+        WriteInterfaceBuffer(set: set, layout: layout, member: SdfWorldPackage.DynamicTransforms, buffer: m_dynamicTransformRegion.Buffer(slot: CurrentSlot), bindings: bindings);
+        WriteInterfaceBuffer(set: set, layout: layout, member: SdfWorldPackage.SampledValues, buffer: m_dummyBuffer, bindings: bindings);
+        WriteInterfaceBuffer(set: set, layout: layout, member: SdfWorldPackage.ScreenSurfaces, buffer: m_screenSurfaceRegion.Buffer(slot: CurrentSlot), bindings: bindings);
+        WriteInterfaceBuffer(set: set, layout: layout, member: SdfWorldPackage.DecalCells, buffer: m_decalRegion.Buffer(slot: CurrentSlot), bindings: bindings);
+        bindings.WriteSampledImage(arrayElement: 0, binding: SdfKernelInterfaces.BindingOf(layout: layout, member: SdfWorldPackage.GlyphAtlas), descriptorSetHandle: set,
+            imageViewHandle: ((m_glyphAtlasView != 0) ? m_glyphAtlasView : m_sampledFiller.ImageViewHandle));
         var binding = SdfKernelInterfaces.BindingOf(layout: layout, member: SdfWorldPackage.Samplers);
 
         for (var index = 0; (index < m_samplers.Length); index++) {

@@ -616,6 +616,8 @@ template displayScreen(display) {
         rotation: plinthFace
         scale [plinthGlassHalf[0], plinthGlassHalf[1], plinthGlassDepth]
         rounding: 0.01
+        // The interface the glass shows lights the plinth's pad and the exhibit before it, in its own colours.
+        lightsAs: Face
       }
     }
   }

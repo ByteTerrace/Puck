@@ -1102,6 +1102,16 @@ the bake's (`SdfWorldTables.BindsBackgroundWork`, `BackgroundProgram`).
   glow on its surroundings declares a `screens` row, never a point light beside
   it, and a lamp's light stands at its fixture's glowing face in that face's
   colour (the gallery's `glowSpotPower`, `worlds/standard/architecture.puck`).
+  An emitter face (`SdfScreenSurface.IsEmitter`, a box shape's `lightsAs: Face`,
+  declared by `SdfProgramBuilder.EmitterFace` from a static stamp) is the same
+  light with no picture: it holds a screen slot under an identity past every
+  screen the residency binds (`SdfWorldResidency.BindScreens`,
+  `SdfWorldTables.WriteDeclaredSurface`), its state row says
+  `SdfScreenFace.Emitter` and carries its material, and the emission pass
+  reduces a grid of the face's points through `sdfApplyPaints`
+  (`shade/shade-paints.hlsli`, the paints' one implementation) times the
+  material's emissive. The face's own material and paints shade as before.
+  A face on a stamp that rides a slot declares none yet.
 - **Cel shading is a style per material, not a whole-image filter, and the
   banding is a program.** The standard's `cel` shade program
   (`worlds/standard/shading.puck`) is the one implementation of the band; no

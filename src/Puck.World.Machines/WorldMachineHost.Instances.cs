@@ -663,6 +663,10 @@ public sealed partial class WorldMachineHost {
                 WorldMachine declaration;
                 FolderDefaultBoot? folderBoot;
                 string? folderNarration = null;
+                // A kept machine keeps the library title it runs; a re-decided one starts on its own content and the next
+                // tick's SelectContent mounts its cell's title again.
+                var selection = 0;
+                StockBoot? stock = null;
 
                 // A row the candidate shares with the current document is one nothing changed, so its machine keeps
                 // what it runs, a swap the document adopted included. A reload re-reads every row, so it decides the
@@ -675,6 +679,8 @@ public sealed partial class WorldMachineHost {
                 ) {
                     declaration = untouched.Declaration;
                     folderBoot = untouched.FolderBoot;
+                    selection = untouched.ContentSelection;
+                    stock = untouched.Stock;
                 } else {
                     declaration = WithFolderDefault(
                         declaration: authored,
@@ -729,7 +735,9 @@ public sealed partial class WorldMachineHost {
                             kept,
                             ResolveBindings(declaration, kept)
                         ) {
+                            ContentSelection = selection,
                             FolderBoot = folderBoot,
+                            Stock = stock,
                         }
                     );
                     continue;
@@ -767,7 +775,9 @@ public sealed partial class WorldMachineHost {
                         lease,
                         ((lease is MachineLease.Running running) ? ResolveBindings(declaration, running) : FrozenDictionary<string, MachineMemoryAddress>.Empty)
                     ) {
+                        ContentSelection = selection,
                         FolderBoot = folderBoot,
+                        Stock = stock,
                     }
                 );
             }
@@ -1139,8 +1149,13 @@ public sealed partial class WorldMachineHost {
         // The authored and booted configurations of a machine that booted its folders' default in place of its authored
         // content, or null for one that booted as authored.
         public FolderDefaultBoot? FolderBoot { get; init; }
+        // The library title the machine's ContentBy cell last selected (SelectContent), 0 for its own content.
+        public int ContentSelection { get; init; }
+        // The machine as it runs with no title selected, kept while a title runs so 0 restores it; null while none runs.
+        public StockBoot? Stock { get; init; }
     }
     internal sealed record FolderDefaultBoot(JsonElement Authored, JsonElement Configuration);
+    internal sealed record StockBoot(WorldMachine Declaration, FolderDefaultBoot? FolderBoot);
     // A named machine's lease: the runtime its provider created, or the refusal that took its place. The private
     // constructor closes the pair, so every decision that differs by kind (advancing, checkpointing, keeping a lease
     // across a rebuild) is a switch over exactly these two.

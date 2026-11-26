@@ -35,6 +35,13 @@ public interface IShapeEmissionFrame {
     /// <param name="paletteSlot">The creation palette slot.</param>
     /// <returns>The program material id.</returns>
     int MaterialOf(ShapeDocument shape, int paletteSlot);
+    /// <summary>Declares the shape's emitter face (<see cref="ShapeDocument.LightsAs"/>,
+    /// <see cref="SdfProgramBuilder.EmitterFace"/>) where the frame knows the face's world pose; a frame whose pose moves
+    /// with a transform slot declares none, and the face lights nothing there.</summary>
+    /// <param name="builder">The program builder.</param>
+    /// <param name="shape">The emitted shape, a box.</param>
+    /// <param name="material">The shape's program material id.</param>
+    void EmitterFace(SdfProgramBuilder builder, ShapeDocument shape, int material);
 }
 /// <summary>Emits one creation shape's render chain: its pose and point deformations, the primitive, its field ops,
 /// panel, relief and trims, under the field scope it needs. Static stamps and pooled instances both emit through it,
@@ -124,6 +131,7 @@ public static class ShapeEmission {
             if (onion != 0f) { _ = unscoped.Onion(thickness: onion); }
         }
 
+        if (shape.LightsAs is ShapeLightForm.Face) { frame.EmitterFace(builder: builder, material: material, shape: shape); }
         if (!inScope && (shape.Trims is { Count: > 0 } trims)) {
             foreach (var trim in trims) {
                 EmitTrim(builder: builder, frame: in frame, shapes: shapes, shape: shape, trim: trim);

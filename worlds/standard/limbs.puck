@@ -153,3 +153,4 @@ function treadPoint(start, step, rise, base, apex, k, out) = polarPoint(
 // `d` authored in the creation's frame is carried there first; `barkUpright` is the frame of grain that climbs.
 function barkAlong(d) = turnAlong((d * [-1, 1, -1]))
 let barkUpright = rotate([0, 0, 1], 90)
+

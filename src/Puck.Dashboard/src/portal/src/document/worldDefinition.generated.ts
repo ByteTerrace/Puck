@@ -4232,6 +4232,10 @@ export type ShapeDocument = {
    * Only with a MorphBlend, and required by it: the lane and range the morph runs over — see ShapeMorphDocument.
    */
   morph?: ShapeMorphDocument | null;
+  /**
+   * How the shape's surface lights its surroundings with what its material shows (null = it lights nothing): Face lights from a box's front face (+Z in the author frame). The light is the mean of the material's painted albedo times its emissive over the face, so a console's interface or a marquee's lettering lights the room in its own colours, and the shape keeps its material and paints.
+   */
+  lightsAs?: ShapeLightForm | null;
 };
 
 /**
@@ -4436,6 +4440,8 @@ export type ShapeFlareDocument = {
    */
   startScale?: number;
 };
+
+export type ShapeLightForm = "Face";
 
 /**
  * The authored form of PushFieldMorph's parameters, carried by a shape whose Blend is Morph: the shape's own scope composes into the field before it by linear interpolation, the riding dynamic slot's Lane running the blend from the field (lane at From) to the shape (lane at To). A shape under no dynamic slot (a static placement) reads lane 0.
@@ -10149,6 +10155,10 @@ export type WorldMachine = {
    * The state condition the host advances this instance under, or null to advance it on every tick Running allows. The tick evaluates it against the arena after the rule frame folds and before the machines step (Server.WorldTick.GateMachines), so a rule's write starts or stops the machine on the tick it lands, and a replay or a restored checkpoint derives the same gate from the same state: the gate is never stored. A gated-off instance keeps its hardware state, as a stopped one does, and costs no emulation while it waits. It reuses StateCondition, the reading placement responses, binding overlays and portals share. Omitted from the wire when null.
    */
   runsWhen?: WorldPlacementResponseConditionStateConditionNullable | null;
+  /**
+   * The state cell that selects which title of the machine's library it runs, or null for a machine whose content only its configuration, a folder default and operations decide. The library is the files of ContentFolders the engine can mount, in their listing order (TryTitle): the cell holding 0 runs the machine's own content, and n runs the library's n-th title. The tick reads the cell after the rule frame folds, beside RunsWhen (Server.WorldTick.GateMachines), and the host mounts a new selection on the tick it lands, so a rule that inserts a cartridge swaps the machine's content, a replay derives the same swaps from the same state, and no document mutation or provider operation is involved. The document always names the authored content (CaptureInstances reports it), so a title's name never enters the document, a capture or a tape. A selection naming no mountable title runs the machine's own content. Omitted from the wire when null.
+   */
+  contentBy?: WorldMachineContentSelector | null;
 };
 
 export type WorldMachineCable = {
@@ -10160,6 +10170,17 @@ export type WorldMachineCable = {
    * This machine's 0-based place in cable order — contiguous across the cable's ports (validated), and what decides the linking engine's deterministic player order.
    */
   position: number;
+};
+
+export type WorldMachineContentSelector = {
+  /**
+   * The state row read; any declared numeric row (never Text).
+   */
+  state: string;
+  /**
+   * The cell inside State, or null for its slot cell; refused when the row is keyed and this is absent, or unkeyed and this is present.
+   */
+  key?: string | null;
 };
 
 export type WorldMachineMemory = {

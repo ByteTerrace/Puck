@@ -45,6 +45,7 @@ public sealed class SdfAppearance {
 
     private readonly SdfMaterial[] m_materials;
     private readonly SdfScreenSurface[] m_screenSurfaces;
+    private readonly SdfScreenSurface[] m_emitterFaces;
     // The declared surfaces ordered by index, which the declared indices (the outline's) parallel.
     private readonly SdfScreenSurface[] m_screenSurfacesByIndex;
     private readonly SdfShadeProgram[] m_shadingPrograms;
@@ -87,17 +88,20 @@ public sealed class SdfAppearance {
     /// surfaces, snapshotted and validated before anything reads them.</summary>
     /// <param name="materials">The material palette, in material-identifier order.</param>
     /// <param name="screenSurfaces">The screen-surface frames screen materials name; none when <see langword="null"/>.</param>
+    /// <param name="emitterFaces">The emitter faces (<see cref="SdfScreenSurface.IsEmitter"/>), each carrying its ordinal in
+    /// this list as its <see cref="SdfScreenSurface.ScreenIndex"/>; none when <see langword="null"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="materials"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentException">The palette reaches the screen sentinels, or two screen surfaces claim one
     /// index.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A material component is out of its domain, or a screen surface's
     /// index, origin, axes or half-extents are.</exception>
-    public SdfAppearance(IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null) {
+    public SdfAppearance(IReadOnlyList<SdfMaterial> materials, IReadOnlyList<SdfScreenSurface>? screenSurfaces = null, IReadOnlyList<SdfScreenSurface>? emitterFaces = null) {
         ArgumentNullException.ThrowIfNull(argument: materials);
 
         // Snapshot before reading: a caller's list could answer two reads differently.
         m_materials = Snapshot(materials: materials);
         m_screenSurfaces = [.. (screenSurfaces ?? [])];
+        m_emitterFaces = [.. (emitterFaces ?? [])];
 
         // Ids from SdfProgramBuilder.ScreenMaterialId up decode as screen shading, so a palette reaching that far
         // carries rows no instruction can name (SdfProgramBuilder.AddMaterial refuses the same row at its own door).
@@ -110,6 +114,7 @@ public sealed class SdfAppearance {
         RequirePackedMaterials(materials: m_materials, paramName: nameof(materials));
 
         m_screenSurfacesByIndex = RequireScreenSurfaces(paramName: nameof(screenSurfaces));
+        RequireEmitterFaces(paramName: nameof(emitterFaces));
 
         var screens = new int[m_screenSurfacesByIndex.Length];
 
@@ -145,6 +150,8 @@ public sealed class SdfAppearance {
 
         Materials = Array.AsReadOnly(array: m_materials);
         ScreenSurfaces = Array.AsReadOnly(array: m_screenSurfaces);
+        EmitterFaces = Array.AsReadOnly(array: m_emitterFaces);
+        ScreenIdentitySpan = ((m_screenSurfacesByIndex.Length == 0) ? 0 : (m_screenSurfacesByIndex[^1].ScreenIndex + 1));
         ShadingPrograms = Array.AsReadOnly(array: m_shadingPrograms);
         Outline = new SdfAppearanceOutline(classes: classes, screens: screens, vectors: VectorsOf(materials: m_materials));
     }
@@ -154,6 +161,11 @@ public sealed class SdfAppearance {
     public IReadOnlyList<SdfMaterial> Materials { get; }
     /// <summary>Gets the screen surfaces declared, in declaration order. Empty for none.</summary>
     public IReadOnlyList<SdfScreenSurface> ScreenSurfaces { get; }
+    /// <summary>Gets the emitter faces declared (<see cref="SdfProgramBuilder.EmitterFace"/>), in declaration order, each
+    /// carrying its position here as its <see cref="SdfScreenSurface.ScreenIndex"/>. Empty for none.</summary>
+    public IReadOnlyList<SdfScreenSurface> EmitterFaces { get; }
+    /// <summary>Gets one past the highest screen identity a declared screen surface names, or zero for none.</summary>
+    public int ScreenIdentitySpan { get; }
 
     /// <summary>Returns the surface a screen index declares, which a residency writes into the slot it claims for the
     /// screen.</summary>
@@ -292,43 +304,63 @@ public sealed class SdfAppearance {
                     paramName: paramName
                 );
             }
-
-            if (!VectorFunctions.IsFinite(vector: surface.Origin)) {
-                throw new ArgumentOutOfRangeException(
-                    paramName: paramName,
-                    message: $"A screen surface's origin must be finite; got {surface.Origin}."
-                );
+            if (surface.IsEmitter) {
+                throw new ArgumentException(message: $"Screen surface {surface.ScreenIndex} is an emitter face; emitter faces are declared apart from the sampled screens.", paramName: paramName);
             }
-
-            // sampleScreenSurface resolves the UV as dot(local, right)/right.w and dot(local, up)/up.w, so a zero (or
-            // NaN) half-extent maps every hit on a reachable surface to a non-finite UV. KEEP IN SYNC with
-            // SdfProgramBuilder's indexed ScreenSlab overload, which refuses the same face naming halfExtents. The
-            // slab's DEPTH half-extent is unconstrained here: nothing divides by it.
-            if (!float.IsFinite(f: surface.HalfWidth) || !float.IsFinite(f: surface.HalfHeight) || !(surface.HalfWidth > 0f) || !(surface.HalfHeight > 0f)) {
-                throw new ArgumentOutOfRangeException(
-                    paramName: paramName,
-                    message: $"A screen surface's half-width and half-height must be positive; got {surface.HalfWidth} and {surface.HalfHeight}. The shader divides the hit's projection onto each axis by that axis's half-extent."
-                );
-            }
-
-            // The frame is packed as two independent axes the shader projects a hit point onto, while the slab's own
-            // geometry rides the rotation derived from that same pair — so a non-unit or skewed pair packs a UV that
-            // does not describe the surface it labels. KEEP IN SYNC with SdfProgramBuilder's RequireOrthogonalBasis.
-            var skew = Vector3.Dot(vector1: surface.Right, vector2: surface.Up);
-
-            if (
-                !(MathF.Abs(x: (surface.Right.Length() - 1f)) <= ScreenFrameUnitTolerance) ||
-                !(MathF.Abs(x: (surface.Up.Length() - 1f)) <= ScreenFrameUnitTolerance) ||
-                !(MathF.Abs(x: skew) <= ScreenFrameSkewTolerance)
-            ) {
-                throw new ArgumentOutOfRangeException(
-                    paramName: paramName,
-                    message: $"A screen surface's right/up axes must be unit and orthogonal; got |right| {surface.Right.Length()}, |up| {surface.Up.Length()}, dot {skew}."
-                );
-            }
+            RequireScreenFrame(surface: surface, paramName: paramName);
         }
 
         return ordered;
+    }
+    // Refuses an emitter face the reduction cannot sample: a frame the screen frames' checks refuse, a material the palette
+    // does not hold, or an ordinal that is not its position.
+    private void RequireEmitterFaces(string paramName) {
+        for (var index = 0; (index < m_emitterFaces.Length); index++) {
+            var face = m_emitterFaces[index];
+
+            if ((face.ScreenIndex != index) || !face.IsEmitter || (face.EmitterMaterial >= m_materials.Length)) {
+                throw new ArgumentOutOfRangeException(paramName: paramName,
+                    message: $"Emitter face {index} must carry its ordinal and one of the palette's {m_materials.Length} materials; got ordinal {face.ScreenIndex} and material {face.EmitterMaterial}.");
+            }
+            RequireScreenFrame(surface: face, paramName: paramName);
+        }
+    }
+    // Refuses a screen frame the shaders cannot project onto: a non-finite origin, a face with no area, or axes that are
+    // not unit and orthogonal.
+    private static void RequireScreenFrame(SdfScreenSurface surface, string paramName) {
+        if (!VectorFunctions.IsFinite(vector: surface.Origin)) {
+            throw new ArgumentOutOfRangeException(
+                paramName: paramName,
+                message: $"A screen surface's origin must be finite; got {surface.Origin}."
+            );
+        }
+
+        // sampleScreenSurface resolves the UV as dot(local, right)/right.w and dot(local, up)/up.w, so a zero (or
+        // NaN) half-extent maps every hit on a reachable surface to a non-finite UV. KEEP IN SYNC with
+        // SdfProgramBuilder's indexed ScreenSlab overload, which refuses the same face naming halfExtents. The
+        // slab's DEPTH half-extent is unconstrained here: nothing divides by it.
+        if (!float.IsFinite(f: surface.HalfWidth) || !float.IsFinite(f: surface.HalfHeight) || !(surface.HalfWidth > 0f) || !(surface.HalfHeight > 0f)) {
+            throw new ArgumentOutOfRangeException(
+                paramName: paramName,
+                message: $"A screen surface's half-width and half-height must be positive; got {surface.HalfWidth} and {surface.HalfHeight}. The shader divides the hit's projection onto each axis by that axis's half-extent."
+            );
+        }
+
+        // The frame is packed as two independent axes the shader projects a hit point onto, while the slab's own
+        // geometry rides the rotation derived from that same pair — so a non-unit or skewed pair packs a UV that
+        // does not describe the surface it labels. KEEP IN SYNC with SdfProgramBuilder's RequireOrthogonalBasis.
+        var skew = Vector3.Dot(vector1: surface.Right, vector2: surface.Up);
+
+        if (
+            !(MathF.Abs(x: (surface.Right.Length() - 1f)) <= ScreenFrameUnitTolerance) ||
+            !(MathF.Abs(x: (surface.Up.Length() - 1f)) <= ScreenFrameUnitTolerance) ||
+            !(MathF.Abs(x: skew) <= ScreenFrameSkewTolerance)
+        ) {
+            throw new ArgumentOutOfRangeException(
+                paramName: paramName,
+                message: $"A screen surface's right/up axes must be unit and orthogonal; got |right| {surface.Right.Length()}, |up| {surface.Up.Length()}, dot {skew}."
+            );
+        }
     }
 
     // MaterialVectorsPerEntry float4 rows. KEEP IN SYNC with sdfMaterialLoad in shade/sdf-material.hlsli.

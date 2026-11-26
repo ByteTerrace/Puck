@@ -1,0 +1,120 @@
+// The toybox's cartridge rentals (gallery/rentals.puck), booted in the whole debug world: `puck test
+// worlds/debug/cartridge-rentals-tests.puck --reproduce`. Seat 1's body (body 0) rents the first cartridge on the rack
+// (loan ordinal 49, library title 1, the shipped `colour-bars` deck program), engages the south gallery's bay-2
+// television set (station `television-south-2`, screen 20, whose deck boots `moving-sprite`) from its console, which
+// inserts the cartridge, so the deck runs the colour bars; engages it again from the console with empty hands, which
+// takes the cartridge out and the deck runs its own program again; and returns the cartridge at the rack's tray.
+//
+// The two programs share no zero-page cell: the colour bars write their mask (0x12, 18) as 0x0A with no button held,
+// and the moving sprite moves its ball's x (0x20, 32) every frame and never writes 0x12 (DeckTestCartridges).
+//
+// The body holds the toybox's pass (wonder.puck's `wonderpass`), so it stays full size on level 1 and the station's
+// screen is in its reach. Positions are world coordinates with the building at layout.puck's `gallerySite`: the rack's first cartridge's floor
+// is at (53.94, 15.6), the tray's at (55.1, 15.6), and the station's console at (20.4, 15.25), all on level 1's floor
+// (4.55).
+schema: "puck.world.definition.v1"
+basis: "debug"
+// Keep same-world portals in this fixture's boot instance instead of opening another live debug world.
+documentId: "debug"
+import "stopped-machines"
+
+// Every other machine stays stopped; the station's deck runs.
+machines [
+  { name: "toybox-television-south-2", running: true }
+]
+
+state {
+  world {
+    table cartridgeProbe {
+      maskBefore = -1
+      held = 0
+      rented = 0
+      title = -1
+      mask = -1
+      inserted = 0
+      heldIn = -1
+      titleOut = -1
+      maskOut = -1
+      heldOut = 0
+      ballA = 0
+      ballB = 0
+      returned = -1
+      heldEnd = -1
+    }
+  }
+}
+
+rule "probe-rented" {
+  when $tick == 55
+  mode: Edge
+  cartridgeProbe.maskBefore = machine(20, 18)
+  cartridgeProbe.held = rentalCartridgeHeld["0"]
+  cartridgeProbe.rented = rentalLoan["49"]
+}
+rule "probe-inserted" {
+  when $tick == 95
+  mode: Edge
+  cartridgeProbe.title = toyboxTitle["television-south-2"]
+  cartridgeProbe.mask = machine(20, 18)
+  cartridgeProbe.inserted = rentalLoan["49"]
+  cartridgeProbe.heldIn = rentalCartridgeHeld["0"]
+}
+rule "probe-ejected" {
+  when $tick == 135
+  mode: Edge
+  cartridgeProbe.titleOut = toyboxTitle["television-south-2"]
+  cartridgeProbe.maskOut = machine(20, 18)
+  cartridgeProbe.heldOut = rentalCartridgeHeld["0"]
+  cartridgeProbe.ballA = machine(20, 32)
+}
+rule "probe-ball" {
+  when $tick == 140
+  mode: Edge
+  cartridgeProbe.ballB = machine(20, 32)
+}
+rule "probe-returned" {
+  when $tick == 175
+  mode: Edge
+  cartridgeProbe.returned = rentalLoan["49"]
+  cartridgeProbe.heldEnd = rentalCartridgeHeld["0"]
+}
+
+test "a rented cartridge runs its title in a station's deck and comes back out" {
+  when {
+    seat1: world.state.cell.set wonderpass 0 2
+    ticks 2
+    seat1: body.pose 53.94 4.6 15.6 0 0 0 0
+    ticks 30
+    seat1: body.press interact 1 0.2 0
+    ticks 20
+    seat1: body.pose 20.4 4.6 15.25 0 0 0 0
+    ticks 10
+    seat1: body.engage 20
+    ticks 40
+    seat1: body.disengage
+    ticks 5
+    seat1: body.engage 20
+    ticks 40
+    seat1: body.disengage
+    ticks 5
+    seat1: body.pose 55.1 4.6 15.6 0 0 0 0
+    ticks 10
+    seat1: body.press interact 1 0.2 0
+    ticks 20
+  }
+  expect {
+    cartridgeProbe.maskBefore == 0
+    cartridgeProbe.held == 49
+    cartridgeProbe.rented == 1
+    cartridgeProbe.title == 1
+    cartridgeProbe.mask == 10
+    cartridgeProbe.inserted == 1000
+    cartridgeProbe.heldIn == 0
+    cartridgeProbe.titleOut == 0
+    cartridgeProbe.maskOut == 0
+    cartridgeProbe.heldOut == 49
+    cartridgeProbe.ballA != cartridgeProbe.ballB
+    cartridgeProbe.returned == 0
+    cartridgeProbe.heldEnd == 0
+  }
+}

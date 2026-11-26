@@ -189,6 +189,51 @@ public static class WorldMachineContentFolder {
         return false;
     }
 
+    /// <summary>Finds a title of a machine's library: the mountable files of its folders, in the order
+    /// <see cref="TryList"/> lists them (folder by folder in authored order, by file name within one), numbered from 1.
+    /// A machine's <see cref="WorldMachine.ContentBy"/> cell selects by this number, so a world lists its shipped folder
+    /// first and its shipped titles keep their numbers whatever a local folder after it holds; a file added to a folder
+    /// renumbers only the titles after it.</summary>
+    /// <param name="entries">The files the folders hold, as <see cref="TryList"/> returns them.</param>
+    /// <param name="title">The 1-based title number.</param>
+    /// <param name="entry">The title's file on success.</param>
+    /// <returns><see langword="true"/> when the library holds that many titles.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="entries"/> is <see langword="null"/>.</exception>
+    public static bool TryTitle(IReadOnlyList<Entry> entries, int title, out Entry entry) {
+        ArgumentNullException.ThrowIfNull(argument: entries);
+
+        var remaining = title;
+
+        foreach (var candidate in entries) {
+            if ((candidate.Refusal is null) && (--remaining == 0)) {
+                entry = candidate;
+                return true;
+            }
+        }
+        entry = default;
+        return false;
+    }
+    /// <summary>Numbers a file of a machine's library as <see cref="TryTitle"/> does.</summary>
+    /// <param name="entries">The files the folders hold, as <see cref="TryList"/> returns them.</param>
+    /// <param name="entry">The file to number.</param>
+    /// <returns>The file's 1-based title number, or 0 when it is refused or not among <paramref name="entries"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="entries"/> is <see langword="null"/>.</exception>
+    public static int TitleOf(IReadOnlyList<Entry> entries, Entry entry) {
+        ArgumentNullException.ThrowIfNull(argument: entries);
+
+        var title = 0;
+
+        foreach (var candidate in entries) {
+            if (candidate.Refusal is not null) {
+                continue;
+            }
+            title++;
+            if (candidate == entry) {
+                return title;
+            }
+        }
+        return 0;
+    }
     /// <summary>Finds the default a machine's folders name: the first folder, in authored order, whose
     /// <see cref="SettingsFile"/> names a default or cannot be read decides. The named file must be one the folder holds
     /// and the engine can mount. A refusal names the folder and its settings file, never the file the settings name, so

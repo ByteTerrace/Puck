@@ -1252,6 +1252,19 @@ public static partial class CreationCanonicalizer {
             errors.Add(item: new(Message: "a detail shape cannot also carry trims; a trim's own copy has no detail visibility of its own.", Path: path));
         }
     }
+    // A face's light is the rectangle a box's front face spans, so only a box carries one, and a fold, which would draw
+    // the box many times over, has no one face to light from.
+    private static void ValidateLightsAs(ShapeDocument shape, List<DocumentValidationError> errors, string path) {
+        if (shape.LightsAs is not ShapeLightForm.Face) {
+            return;
+        }
+        if (shape.Type != SdfSolidPrimitive.Box) {
+            errors.Add(item: new(Message: $"a face's light is a box's front face; a {shape.Type} has none.", Path: path));
+        }
+        if (shape.Domain is { Count: > 0 }) {
+            errors.Add(item: new(Message: "a folded shape draws many faces, so it cannot light as one.", Path: path));
+        }
+    }
     private static void ValidateAnimationFacet(CreationDocument document, List<DocumentValidationError> errors, string path, string driver, DocumentVector3 axis, DocumentScalar amplitude, float maxAmplitude, string amplitudeUnit, DocumentScalar? phase, string? wave) {
         if ((document.Drivers ?? []).All(predicate: row => !string.Equals(
             a: row.Name,
@@ -2770,6 +2783,7 @@ public static partial class CreationCanonicalizer {
                 path: $"shapes[{i}].detail",
                 shape: shape
             );
+            ValidateLightsAs(errors: errors, path: $"shapes[{i}].lightsAs", shape: shape);
             ValidateCurve(
                 errors: errors,
                 path: $"shapes[{i}].curve",

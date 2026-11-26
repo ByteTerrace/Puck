@@ -21,12 +21,23 @@ namespace Puck.SignedDistance;
 /// half-extent).</param>
 /// <param name="ScreenIndex">The screen's identity (0 through <see cref="SdfProgramBuilder.MaxScreenIdentities"/> − 1,
 /// see <c>Puck.SdfVm.SdfWorldTables.SetScreenBound</c>) this
-/// surface samples when a source is bound.</param>
+/// surface samples when a source is bound. An emitter face (<see cref="EmitterMaterial"/>) carries its ordinal among
+/// the program's emitter faces (<see cref="SdfAppearance.EmitterFaces"/>) here instead: it names no screen material, and
+/// a residency gives it an identity of its own past every screen it binds.</param>
+/// <param name="EmitterMaterial">The material whose emission and paints an emitter face lights its surroundings with, or
+/// -1 for a sampled screen. An emitter face is light alone: the shape whose face it is keeps its own material and
+/// paints, and the face lights what stands before it as a screen's face does, with the mean of what the material shows
+/// over the face (its painted albedo times its emissive), reduced on the GPU in the screens' emission pass.</param>
 public readonly record struct SdfScreenSurface(
     Vector3 Origin,
     Vector3 Right,
     Vector3 Up,
     float HalfWidth,
     float HalfHeight,
-    int ScreenIndex
-);
+    int ScreenIndex,
+    int EmitterMaterial = -1
+) {
+    /// <summary>Gets whether this is an emitter face: light alone, reduced from its material rather than sampled from a
+    /// source.</summary>
+    public bool IsEmitter => (EmitterMaterial >= 0);
+}
