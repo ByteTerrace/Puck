@@ -101,9 +101,27 @@ public sealed class SdfMeshBakeIdentity {
             applied: Puck.Abstractions.CodeRevision.AppliedTo(reads: code.Reads),
             bakeKernel: SamplersOf(kernels: kernels),
             code: code,
-            maskKernel: XxHash128.HashToUInt128(source: kernels[SdfKernel.MeshBakeMask].Span)
+            maskKernel: MaskOf(kernels: kernels)
         );
     }
+    /// <summary>Returns the value of the identity a bake of a build derives as it starts (<see cref="Of"/>, with no
+    /// hot-reload update applied), without what the value is made of: the closure's remembered code hash
+    /// (<see cref="SdfMeshBakeClosure.Hash"/>), which walks the build's code only when no earlier process remembered it, and
+    /// its bake kernels' bytecode. A tool that only asks which store set a build's meshes land in (whether a World's store
+    /// is warm before it boots, or which cache set a build fetches) reads this rather than the identity with its
+    /// members.</summary>
+    /// <param name="code">The code the bake runs.</param>
+    /// <param name="kernels">The kernel set the bake dispatches.</param>
+    /// <returns>The identity's value, which names the build's set in the store (<see cref="SdfMeshStore.SetNameOf"/>).</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="code"/> or <paramref name="kernels"/> is
+    /// <see langword="null"/>.</exception>
+    public static UInt128 ValueOf(SdfMeshBakeClosure code, SdfKernelSet kernels) {
+        ArgumentNullException.ThrowIfNull(argument: code);
+        ArgumentNullException.ThrowIfNull(argument: kernels);
+
+        return SdfMeshStore.BuildIdentityOf(bakeKernel: SamplersOf(kernels: kernels), code: code.Hash, entryVersion: code.EntryVersion, maskKernel: MaskOf(kernels: kernels));
+    }
+    private static UInt128 MaskOf(SdfKernelSet kernels) => XxHash128.HashToUInt128(source: kernels[SdfKernel.MeshBakeMask].Span);
     private static UInt128 SamplersOf(SdfKernelSet kernels) {
         var hash = new XxHash128();
 
