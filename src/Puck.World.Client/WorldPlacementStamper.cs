@@ -1044,10 +1044,10 @@ public static partial class WorldPlacementStamper {
                 continue;
             }
 
-            shows.Add(item: (placement with { Holding = 0 }));
+            shows.Add(item: (placement with { Holding = WorldResponseHolding.None }));
 
             for (var index = 0; (index < Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries)); index++) {
-                shows.Add(item: (placement with { Holding = (1 << index) }));
+                shows.Add(item: (placement with { Holding = WorldResponseHolding.Single(entry: index) }));
             }
         }
 

@@ -546,6 +546,26 @@ type `source.pointer.origin`/`direction` once per aim, `world.wait` the ticks
 the aim should hold, read the cartridge's published byte through a memory
 binding, and end with `source.pointer.clear`. The `rendering` skill owns the mapping itself.
 
+**Pointer surfaces and regions.** The same ray maps onto a placement's pointer
+surface (`WorldPlacement.Pointer`, `WorldPointerSurface`): a rectangle authored in
+the row's frame (turned by its yaw, scaled by its scale), mapped where
+`WorldDefinitionRows.ResolvedFrame` puts it (`WorldPointerSurface.MappingIn`), so a
+creation's face (the gallery's display consoles) takes a pointer without a screen
+row; an attached row refuses the facet. A surface, and a `Simulation` route
+(`route.regions`), names regions (`WorldPointerRegion`: source-normalized
+`left`/`top`/`right`/`bottom`, and `rows` for a list). The operand spells the
+surface by screen index or placement id:
+`$pointer:<seat>|any:<screen>|<placement>:x|y|on|press:<channel>|region:<id>|row:<id>`
+(`pointer(any, display-primitives-screen, row, list)` in `.puck`). `region` reads
+1 inside the region; `row` reads the row the hit lies in, from the top, and -1
+outside it or off the surface (`WorldPointerRegion.RowOf`). `any` requires
+`Control` over the surface's subject: the screen, or the placement. The windowed
+host casts the OS pointer whenever a placement carries a surface. The standard's
+`tap` channel is a surface's press: the left mouse button alone presses it
+(passing through to its orbit drag), and a touchscreen contact presses it.
+`body.channels` echoes each surface's hit and the regions it lies in
+(`placement:<id>=on(u, v){list#3}`).
+
 ## `Dissolve` — three outcomes, no repair
 
 `WorldEngagement.ResolveDissolve` returns a `ControlOutcome` (3 members):

@@ -1,8 +1,8 @@
 // The shape gallery: every authorable signed-distance construct, one prototype an exhibit, shown on interactive display
-// stations. A display is a large display plinth whose turntable shows one exhibit of its list at a time, the list one of
-// the gallery's groups (primitives, stretched, extruded, revolved, and so on); a player standing at its console steps
-// through the list with the context button, and the console's screen shows the list's neighbours, the exhibit's name
-// and what it shows. The debug world expands `galleryPrototypes()` inside its `prototypes` block,
+// stations. A display is a large display plinth whose turntable shows one exhibit at a time, at first one of its own
+// group (primitives, stretched, extruded, revolved, and so on); its console is one interactive screen listing every
+// exhibit in the catalog, and a tap on one shows it on the turntable, with its name and what it shows beside the list.
+// The debug world expands `galleryPrototypes()` inside its `prototypes` block,
 // `galleryPlacements()` inside its `placements` block and `galleryState()` (the displays' selections and screens and
 // the motion exhibits' console controls) inside its `state.world` block. The displays stand inside the gallery
 // (gallery/gallery.puck), where its plan puts them (gallery/layout.puck, gallery.md):
@@ -206,24 +206,8 @@ function displayWorld(display, p) = galleryWorld(displayPoint(display, p)[0], di
 // The turn that carries a paint's +X along the console's face to the viewer's right, its +Y up the face and its +Z out
 // of it, in the world: the plinth's own face turn (`plinthFace`) at yaw 180, and the same turned half round at yaw 0.
 function displayFaceTurn(display) = ((display.yaw == 0) ? [0, plinthFace[3], (0 - plinthFace[0]), 0] : plinthFace)
-// A region before the console from author-frame x and z spans, in the building's frame, from half a metre under the
-// display's floor to a metre over it.
-function displayBox(display, x0, x1, z0, z1) = {
-  x0: minimum(displayPoint(display, [x0, 0, z0])[0], displayPoint(display, [x1, 0, z1])[0])
-  x1: maximum(displayPoint(display, [x0, 0, z0])[0], displayPoint(display, [x1, 0, z1])[0])
-  y0: (displayFloor(display) - 0.5)
-  y1: (displayFloor(display) + 1)
-  z0: minimum(displayPoint(display, [x0, 0, z0])[2], displayPoint(display, [x1, 0, z1])[2])
-  z1: maximum(displayPoint(display, [x0, 0, z0])[2], displayPoint(display, [x1, 0, z1])[2])
-}
-// The two buttons before the console, each a reach (reach.puck) a press of the context button acts in, in the plinth's
-// author frame: the console's left steps the list back, and the rest of it, where a body stands as it arrives, steps
-// it on.
-let displayBackSpan = [-1, -0.3]
-let displayNextSpan = [-0.3, 1]
-let displayReachDepth = [0.9, 1.9]
-// Where a body stands before the console, in the plinth's author frame: in the step-on reach, 1.25 m clear of the
-// console.
+// Where a body stands before the console, in the plinth's author frame: within reach of the screen, 1.25 m clear of
+// the console.
 let displayStand = [0, 0, 1.75]
 // The exhibit on the turntable stands this far over the display's floor (layout.puck's displayExhibitScale): the
 // exhibits' own frame puts the plinth's cap at 0.75, and the display's cap stands at plinthCapTop times displayScale.
@@ -493,72 +477,145 @@ let galleryCopy = {
   "shape-glass" { title: "GLASS", note: "Orange box holds a sphere; one window glass thin and thick; a frosted pane. Depth deepens tint, panes shift the rods." }
 }
 
-// A display's screen: dark glass over the console's three panes and a strip under them, each a little proud of the
-// plinth's own, in the plinth's author frame. The panes list the display's exhibits (the one before the turntable's,
-// the turntable's with its place in the list, the one after it) and the strip its note, each a text paint bound to the
-// display's screen cells (gallery/gallery.puck's `gallery-screen-<id>` rule writes them). A static placement draws a
-// paint in the world's frame, so each display's paints are placed at its console in the world.
-let displayPanes = [-0.33, 0, 0.33]
-let displayPaneUp = 0.075
-let displayPaneHalf = [0.158, 0.078]
-let displayNoteUp = -0.03
-let displayNoteHalf = [0.5, 0.026]
+// A display's console is one interactive screen (gallery.md, "Display consoles"): a glass a little proud of the
+// plinth's own (architecture.puck's plinth glass) on which the interface glows, laid out in the LCARS manner in the
+// kit's palette (consoleLook). An ochre elbow frames the top left and turns into the top bar, whose cap names the
+// catalog; PREV and NEXT buttons stack down the left column beside a list of every exhibit in the catalog, the chosen one
+// lit amber; a rule closes the list's foot; and the right of the screen tells the chosen exhibit's title, its group and
+// place in the catalog, and its note. A tap on a row shows that exhibit on this display's turntable, a drag scrolls the
+// list a row for each row the pointer travels, and PREV and NEXT turn it a page (gallery/gallery.puck's console rules).
+//
+// Every rectangle is in the glass's own coordinates in the plinth's units, `x0..x1` across and `y0..y1` up from its
+// centre. Each becomes a paint on the display's screen creation (a static placement draws a paint in the world's frame,
+// so each display's paints are placed at its console in the world), and the list and the buttons are also regions of the
+// screen placement's pointer surface, the rectangle a seat's pointer maps onto.
+let consoleRows = 9
+let galleryCount = length(galleryCatalog)
+let consoleScrollLast = (galleryCount - consoleRows)
 let displayGlassOut = 0.003
-let displayInk = "#FFC46A"
-let displayInkDim = "#C9B79A"
-// One text paint on the screen, `across` and `up` its box's centre on the console's face, `half` its half-extents.
-// A `wrap` text breaks its lines at the box's width, as the note strip's two lines do.
-function displayText(display, across, up, half, template, ink, em, wrap = false) = {
-  type: "Box"
-  position: displayWorld(display, plinthOnFace(across, up, (displayGlassOut + 0.012)))
-  rotation: displayFaceTurn(display)
-  scale [(displayScale * half[0]), (displayScale * half[1]), 0.03]
-  color: ink
-  text { template: template, emHeight: em, fit: true, wrap: wrap }
+let displayGlassFront = (displayGlassOut + plinthGlassDepth)
+let consoleColumn = { x0: -0.72, x1: -0.58 }
+let consoleBar = { y0: 0.125, y1: 0.165 }
+let consoleList = { x0: -0.53, x1: 0.105, y0: -0.145, y1: 0.105 }
+let consolePrev = { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: -0.025, y1: 0.05 }
+let consoleNext = { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: -0.105, y1: -0.03 }
+let consoleDetail = { x0: 0.155, x1: 0.72 }
+// The list's row pitch, and the font's line height in ems (Inter's ascent and descent), which set each list text's
+// line spacing so its lines fall on the rows the pointer's row read counts.
+let consoleRowPitch = ((consoleList.y1 - consoleList.y0) / consoleRows)
+let consoleFontLine = 1.21
+let consoleNameEm = 0.019
+let consoleGroupEm = 0.0125
+
+function consoleMid(rect) = [((rect.x0 + rect.x1) / 2), ((rect.y0 + rect.y1) / 2)]
+function consoleHalf(rect) = [((rect.x1 - rect.x0) / 2), ((rect.y1 - rect.y0) / 2)]
+// A rectangle as the fractions of the glass a pointer hit reads: x right from the glass's left edge, y down from its
+// top edge.
+function consoleRegion(id, rect, rows = 1) = {
+  id: id
+  left: ((rect.x0 + plinthGlassHalf[0]) / (2 * plinthGlassHalf[0]))
+  top: ((plinthGlassHalf[1] - rect.y1) / (2 * plinthGlassHalf[1]))
+  right: ((rect.x1 + plinthGlassHalf[0]) / (2 * plinthGlassHalf[0]))
+  bottom: ((plinthGlassHalf[1] - rect.y0) / (2 * plinthGlassHalf[1]))
+  rows: rows
 }
-function displayScreenPaints(display) = [
-  displayText(display, displayPanes[0], displayPaneUp, displayPaneHalf, $"{{state.galleryScreenBefore.{display.id}}}", displayInkDim, 0.045)
-  displayText(
+// A filled rectangle on a display's glass, its corners rounded by `round`, in the world's frame. Its box reaches
+// 8 cm either side of the glass, past any rounding, and only the glass wears its palette slot.
+function consoleFill(display, rect, color, round = 0) = {
+  type: "Box"
+  position: displayWorld(display, plinthOnFace(consoleMid(rect)[0], consoleMid(rect)[1], displayGlassFront))
+  rotation: displayFaceTurn(display)
+  scale [(displayScale * consoleHalf(rect)[0]), (displayScale * consoleHalf(rect)[1]), 0.08]
+  rounding: (displayScale * round)
+  color: color
+}
+// Lettering in a rectangle on a display's glass: `em` in the plinth's units, `spacing` the line spacing, `wrap` breaking
+// lines at the box's width and `markup` reading the substituted text's colour tags. A text fits its box.
+function consoleText(display, rect, template, ink, em, align, wrap = false, markup = false, spacing = 1) = {
+  type: "Box"
+  position: displayWorld(display, plinthOnFace(consoleMid(rect)[0], consoleMid(rect)[1], displayGlassFront))
+  rotation: displayFaceTurn(display)
+  scale [(displayScale * consoleHalf(rect)[0]), (displayScale * consoleHalf(rect)[1]), 0.03]
+  color: ink
+  text { template: template, emHeight: (displayScale * em), align: align, fit: true, wrap: wrap, markup: markup, lineSpacing: spacing }
+}
+// The list's lines, one a row: a row's title in its ink, read from a display's row cells (keyed `<display>-<row>`), and
+// a row's group.
+function consoleNameLine(display, row) = $"[color={{state.galleryRowInk.{display.id}-{row}}}]{{state.galleryRowName.{display.id}-{row}}}[/color]"
+function consoleGroupLine(display, row) = $"{{state.galleryRowGroup.{display.id}-{row}}}"
+function consoleNameLines(display) = reduce(range(0, consoleRows), "", (text, row) => ((row == 0) ? consoleNameLine(display, row) : $"{text}\n{consoleNameLine(display, row)}"))
+function consoleGroupLines(display) = reduce(range(0, consoleRows), "", (text, row) => ((row == 0) ? consoleGroupLine(display, row) : $"{text}\n{consoleGroupLine(display, row)}"))
+function consolePaints(display) = [
+  // The elbow: the left column's head turning into the top bar, its inner corner a quarter round the field cuts.
+  consoleFill(display, { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: 0.06, y1: consoleBar.y1 }, consoleLook.frame, 0.03)
+  consoleFill(display, { x0: (consoleColumn.x0 + 0.03), x1: 0.3, y0: consoleBar.y0, y1: consoleBar.y1 }, consoleLook.frame)
+  consoleFill(display, { x0: consoleColumn.x1, x1: (consoleColumn.x1 + 0.03), y0: (consoleBar.y0 - 0.03), y1: consoleBar.y0 }, consoleLook.frame)
+  consoleFill(display, { x0: consoleColumn.x1, x1: (consoleColumn.x1 + 0.12), y0: (consoleBar.y0 - 0.12), y1: consoleBar.y0 }, consoleLook.field, 0.03)
+  // The top bar's cap, which names the catalog, and the left column's buttons and foot.
+  consoleFill(display, { x0: 0.33, x1: 0.72, y0: consoleBar.y0, y1: consoleBar.y1 }, consoleLook.frame, 0.02)
+  consoleFill(display, consolePrev, consoleLook.cream, 0.012)
+  consoleFill(display, consoleNext, consoleLook.teal, 0.012)
+  consoleFill(display, { x0: consoleColumn.x0, x1: consoleColumn.x1, y0: -0.165, y1: -0.11 }, consoleLook.terracotta, 0.025)
+  // The rule closing the list's foot, and the divider between the list and the chosen exhibit.
+  consoleFill(display, { x0: (consoleColumn.x1 + 0.025), x1: 0.72, y0: -0.165, y1: -0.153 }, consoleLook.frame, 0.006)
+  consoleFill(display, { x0: 0.125, x1: 0.133, y0: consoleList.y0, y1: consoleList.y1 }, consoleLook.frame, 0.004)
+  consoleText(display, { x0: 0.35, x1: 0.70, y0: consoleBar.y0, y1: consoleBar.y1 }, $"SHAPE CATALOG {galleryCount}", consoleLook.ink, 0.02, "right")
+  consoleText(display, { x0: (consolePrev.x0 + 0.01), x1: (consolePrev.x1 - 0.01), y0: consolePrev.y0, y1: (consolePrev.y0 + 0.035) }, "PREV", consoleLook.ink, 0.017, "right")
+  consoleText(display, { x0: (consoleNext.x0 + 0.01), x1: (consoleNext.x1 - 0.01), y0: consoleNext.y0, y1: (consoleNext.y0 + 0.035) }, "NEXT", consoleLook.ink, 0.017, "right")
+  // The list: every row's title in its ink (the chosen one lit), and its group beside it.
+  consoleText(
     display,
-    displayPanes[1],
-    displayPaneUp,
-    displayPaneHalf,
-    $"{{state.galleryScreenTitle.{display.id}}}\n{{state.galleryPlace.{display.id}}} / {length(display.names)}",
-    displayInk,
-    0.06
+    { x0: consoleList.x0, x1: -0.095, y0: consoleList.y0, y1: consoleList.y1 },
+    consoleNameLines(display),
+    consoleLook.dim,
+    consoleNameEm,
+    "left",
+    markup: true,
+    spacing: (consoleRowPitch / (consoleNameEm * consoleFontLine))
   )
-  displayText(display, displayPanes[2], displayPaneUp, displayPaneHalf, $"{{state.galleryScreenAfter.{display.id}}}", displayInkDim, 0.045)
-  displayText(display, 0, displayNoteUp, displayNoteHalf, $"{{state.galleryScreenNote.{display.id}}}", displayInkDim, 0.022, wrap: true)
+  consoleText(
+    display,
+    { x0: -0.09, x1: consoleList.x1, y0: consoleList.y0, y1: consoleList.y1 },
+    consoleGroupLines(display),
+    consoleLook.quiet,
+    consoleGroupEm,
+    "right",
+    spacing: (consoleRowPitch / (consoleGroupEm * consoleFontLine))
+  )
+  // The chosen exhibit: its title, its group and place in the catalog, and its note.
+  consoleText(display, { x0: consoleDetail.x0, x1: consoleDetail.x1, y0: 0.05, y1: 0.105 }, $"{{state.galleryScreenTitle.{display.id}}}", consoleLook.lit, 0.034, "left")
+  consoleText(
+    display,
+    { x0: consoleDetail.x0, x1: consoleDetail.x1, y0: 0.022, y1: 0.048 },
+    $"{{state.galleryScreenGroup.{display.id}}}   {{state.galleryPlace.{display.id}}} / {galleryCount}",
+    consoleLook.quiet,
+    0.015,
+    "left"
+  )
+  consoleText(display, { x0: consoleDetail.x0, x1: consoleDetail.x1, y0: consoleList.y0, y1: 0.016 }, $"{{state.galleryScreenNote.{display.id}}}", consoleLook.dim, 0.0145, "left", wrap: true)
 ]
+// The pointer surface a display's screen placement carries: the glass's front face, carried from the plinth's author
+// frame into the placement's (author x and z point the other way), with the list and the buttons as its regions.
+let consolePointer = {
+  origin [0, plinthOnFace(0, 0, displayGlassFront)[1], (0 - plinthOnFace(0, 0, displayGlassFront)[2])]
+  right [-1, 0, 0]
+  up [0, plinthTiltCos, plinthTiltSin]
+  halfWidth: plinthGlassHalf[0]
+  halfHeight: plinthGlassHalf[1]
+  regions [consoleRegion("list", consoleList, consoleRows), consoleRegion("prev", consolePrev), consoleRegion("next", consoleNext)]
+}
 template displayScreen(display) {
   prototype $"gallery-screen-{display.id}" {
     document {
       name: $"gallery-screen-{display.id}"
       schema: "puck.creation.v1"
-      palette [
-        {
-          color: plinthPalette[plinthScreen].color
-          roughness: plinthPalette[plinthScreen].roughness
-          specular: plinthPalette[plinthScreen].specular
-          emissive: plinthPalette[plinthScreen].emissive
-          paints: displayScreenPaints(display)
-        }
-      ]
-      for (across, n) in displayPanes {
-        shape Box $"pane-{n}" {
-          material: 0
-          position: plinthOnFace(across, displayPaneUp, displayGlassOut)
-          rotation: plinthFace
-          scale [displayPaneHalf[0], displayPaneHalf[1], 0.012]
-          rounding: 0.008
-        }
-      }
-      shape Box "note" {
+      palette [consoleGlass with { paints: consolePaints(display) }]
+      shape Box "glass" {
         material: 0
-        position: plinthOnFace(0, displayNoteUp, displayGlassOut)
+        position: plinthOnFace(0, 0, displayGlassOut)
         rotation: plinthFace
-        scale [displayNoteHalf[0], displayNoteHalf[1], 0.012]
-        rounding: 0.008
+        scale [plinthGlassHalf[0], plinthGlassHalf[1], plinthGlassDepth]
+        rounding: 0.01
       }
     }
   }
@@ -692,7 +749,7 @@ template signPrototypes() {
           ),
           [
             {
-              text: "E at a display's console steps its list   gallery.go <exhibit>   gallery.next"
+              text: "Tap a display's console to show any shape   gallery.go <exhibit>   gallery.next"
               position [0, 1.08, 0.015]
               rotation [0, 0, 0, 1]
               emHeight: 0.026
@@ -833,9 +890,9 @@ template galleryPlacements() {
 }
 
 // Each display, which gallery/gallery.puck places beside the rules that work it: its plinth, solid, and its screen over
-// the console's panes, both at `displayScale`; the two buttons before its console; and the exhibit on its turntable,
-// which shows the display's first exhibit and, through its response facet, whichever one the display's `gallerySelect`
-// cell holds. A display of one exhibit carries no response.
+// the console's glass, both at `displayScale`, the screen carrying the console's pointer surface (consolePointer); and
+// the exhibit on its turntable, which shows the display's first exhibit and, through its response facet, whichever
+// exhibit of the whole catalog the display's `gallerySelect` cell holds, so any display can show any exhibit.
 template displayPlacements() {
   for display in galleryDisplays {
     placement $"display-{display.id}-plinth" {
@@ -852,54 +909,39 @@ template displayPlacements() {
       position [display.x, displayFloor(display), display.z]
       yawDegrees: display.yaw
       scale: displayScale
-    }
-    for button in [{ name: "back", span: displayBackSpan }, { name: "next", span: displayNextSpan }] {
-      placement $"display-{display.id}-{button.name}" {
-        prototype: "place"
-        parent: "gallery"
-        position: boundsCentre(displayBox(display, button.span[0], button.span[1], displayReachDepth[0], displayReachDepth[1]))
-        region {
-          halfExtents: boundsHalf(displayBox(display, button.span[0], button.span[1], displayReachDepth[0], displayReachDepth[1]))
-          capacity: reachCapacity
-        }
-      }
+      pointer: consolePointer
     }
   }
   for (display, index) in galleryDisplays {
-    for many in ((length(display.names) > 1) ? [1] : []) {
-      placement $"display-{display.id}" {
-        prototype: display.names[0]
-        parent: "gallery"
-        position [display.x, (displayFloor(display) + displayExhibitDrop), display.z]
-        yawDegrees: display.yaw
-        scale: displayExhibitScale
-        respond: map(
-          range(1, (length(display.names) - 1)),
-          slot => {
-            when: state(state: gallerySelect, key: display.id, comparison: Equal, value: (galleryDisplayFirsts[index] + slot))
-            prototypeId: display.names[slot]
-          }
-        )
-      }
-    }
-    for one in ((length(display.names) == 1) ? [1] : []) {
-      placement $"display-{display.id}" {
-        prototype: display.names[0]
-        parent: "gallery"
-        position [display.x, (displayFloor(display) + displayExhibitDrop), display.z]
-        yawDegrees: display.yaw
-        scale: displayExhibitScale
-      }
+    placement $"display-{display.id}" {
+      prototype: display.names[0]
+      parent: "gallery"
+      position [display.x, (displayFloor(display) + displayExhibitDrop), display.z]
+      yawDegrees: display.yaw
+      scale: displayExhibitScale
+      respond: map(
+        filter(galleryCatalog, entry => (entry.index != galleryDisplayFirsts[index])),
+        entry => {
+          when: state(state: gallerySelect, key: display.id, comparison: Equal, value: entry.index)
+          prototypeId: entry.name
+        }
+      )
     }
   }
 }
 
 // The displays' state, which gallery/gallery.puck declares beside the rules that write it. A display's `gallerySelect`
-// cell holds the catalog index of the exhibit its turntable shows, one of its own list's; its console's buttons,
-// gallery.go and gallery.show, and the tour write it, and its screen cells (`galleryScreen*`, `galleryPlace`) follow
-// it. `galleryTitles` and `galleryNotes` hold every exhibit's copy by catalog index, which the screen rule copies from;
-// `galleryPick` is the mailbox gallery.go and gallery.show write an exhibit's name to (`gallery`, the entrance, stands
-// at no display).
+// cell holds the catalog index of the exhibit its turntable shows, any of the catalog's; its console's list, gallery.go,
+// gallery.show, gallery.step and the tour write it, and its screen cells (`galleryScreen*`, `galleryPlace`, its place in
+// the catalog from 1) follow it. `galleryTitles`, `galleryNotes` and `galleryGroups` hold every exhibit's copy and its
+// display's title by catalog index, which the console rules copy from; `galleryPick` is the mailbox gallery.go and
+// gallery.show write an exhibit's name to (`gallery`, the entrance, stands at no display).
+//
+// A console's list: `galleryScroll` is the catalog index its top row shows, and the row cells (keyed `<display>-<row>`)
+// hold each row's catalog index, title, group and ink, the chosen row lit; `galleryRowsAt` and `galleryRowsChosen` are
+// the scroll and the choice the rows were last written for. A press on the list records the row it landed on, the
+// scroll it started from and the last row it passed (`galleryPress`, `galleryPressRow`, `galleryPressScroll`,
+// `galleryDragRow`), and `galleryDragged` whether it moved; `galleryStepAt` is the mailbox gallery.step writes a step to.
 //
 // The motion exhibits' controls, which a world declares (galleryState). Every driver in the motion rows reads `galleryClock`, gallery seconds advancing at the
 // row's rate; a rate of zero freezes every pose where it stands, and writing the cell scrubs it. Each driver is gated on
@@ -909,11 +951,19 @@ template displayPlacements() {
 // console lines.
 let reachStation = galleryStation("motion-ik")
 let reachPoint = exhibitPoint(reachStation, [-0.35, 1.45, 0.25])
-// A display's first exhibit, which its cells hold at boot.
+// A display's first exhibit, which its cells hold at boot, and the scroll its list boots at: that exhibit on the top row,
+// unless the catalog's end comes first.
 function displayFirst(index) = galleryCatalog[galleryDisplayFirsts[index]]
-function displayAround(index, step) = galleryCatalog[
-  (galleryDisplayFirsts[index] + ((length(galleryDisplays[index].names) + step) % length(galleryDisplays[index].names)))
-]
+function consoleScrollAt(index) = minimum(galleryDisplayFirsts[index], consoleScrollLast)
+// Every row of every console's list as it boots: its cells' key, and the catalog entry it shows.
+let consoleSlots = flatMap(
+  range(0, length(galleryDisplays)),
+  index => map(range(0, consoleRows), row => {
+    key: $"{galleryDisplays[index].id}-{row}"
+    entry: galleryCatalog[(consoleScrollAt(index) + row)]
+    chosen: ((consoleScrollAt(index) + row) == galleryDisplayFirsts[index])
+  })
+)
 
 // One Int cell a display, keyed by its id and seeded from `values`, a value a display in galleryDisplays' order.
 template displayCells(name, values) {
@@ -928,9 +978,48 @@ template displayCells(name, values) {
 template displayState() {
   displayCells(name: "gallerySelect", values: galleryDisplayFirsts)
   displayCells(name: "galleryShownAt", values: galleryDisplayFirsts)
-  displayCells(name: "galleryPlace", values: map(galleryDisplays, display => 1))
-  displayCells(name: "galleryBefore", values: map(range(0, length(galleryDisplays)), index => displayAround(index, -1).index))
-  displayCells(name: "galleryAfter", values: map(range(0, length(galleryDisplays)), index => displayAround(index, 1).index))
+  displayCells(name: "galleryPlace", values: map(galleryDisplayFirsts, first => (first + 1)))
+  displayCells(name: "galleryScroll", values: map(range(0, length(galleryDisplays)), index => consoleScrollAt(index)))
+  displayCells(name: "galleryRowsAt", values: map(range(0, length(galleryDisplays)), index => consoleScrollAt(index)))
+  displayCells(name: "galleryRowsChosen", values: galleryDisplayFirsts)
+  displayCells(name: "galleryPress", values: map(galleryDisplays, display => 0))
+  displayCells(name: "galleryPressRow", values: map(galleryDisplays, display => -1))
+  displayCells(name: "galleryPressScroll", values: map(range(0, length(galleryDisplays)), index => consoleScrollAt(index)))
+  displayCells(name: "galleryDragRow", values: map(galleryDisplays, display => -1))
+  displayCells(name: "galleryDragged", values: map(galleryDisplays, display => 0))
+  displayCells(name: "galleryStepAt", values: map(galleryDisplays, display => 0))
+  // One cell a row of every console's list, keyed `<display>-<row>`, seeded from each row's boot slot.
+  row {
+    name: "galleryRowIndex"
+    kind: Int
+    capacity: length(consoleSlots)
+    cells: map(consoleSlots, slot => { key: slot.key, value: slot.entry.index })
+  }
+  row {
+    name: "galleryRowName"
+    kind: Text
+    capacity: length(consoleSlots)
+    cells: map(consoleSlots, slot => { key: slot.key, value: galleryCopy[slot.entry.name].title })
+  }
+  row {
+    name: "galleryRowGroup"
+    kind: Text
+    capacity: length(consoleSlots)
+    cells: map(consoleSlots, slot => { key: slot.key, value: galleryDisplays[slot.entry.display].title })
+  }
+  row {
+    name: "galleryRowInk"
+    kind: Text
+    capacity: length(consoleSlots)
+    cells: map(consoleSlots, slot => { key: slot.key, value: (slot.chosen ? consoleLook.lit : consoleLook.dim) })
+  }
+  // The two inks of a list's rows (consoleLook), which the rows rule copies into each row's ink cell.
+  row {
+    name: "galleryInks"
+    kind: Text
+    capacity: 2
+    cells [{ key: "lit", value: consoleLook.lit }, { key: "dim", value: consoleLook.dim }]
+  }
   row {
     name: "galleryTitles"
     kind: Text
@@ -942,6 +1031,12 @@ template displayState() {
     kind: Text
     capacity: length(galleryCatalog)
     cells: map(galleryCatalog, entry => { key: $"{entry.index}", value: galleryCopy[entry.name].note })
+  }
+  row {
+    name: "galleryGroups"
+    kind: Text
+    capacity: length(galleryCatalog)
+    cells: map(galleryCatalog, entry => { key: $"{entry.index}", value: galleryDisplays[entry.display].title })
   }
   row {
     name: "galleryScreenTitle"
@@ -956,16 +1051,10 @@ template displayState() {
     cells: map(range(0, length(galleryDisplays)), index => { key: galleryDisplays[index].id, value: galleryCopy[displayFirst(index).name].note })
   }
   row {
-    name: "galleryScreenBefore"
+    name: "galleryScreenGroup"
     kind: Text
     capacity: length(galleryDisplays)
-    cells: map(range(0, length(galleryDisplays)), index => { key: galleryDisplays[index].id, value: galleryCopy[displayAround(index, -1).name].title })
-  }
-  row {
-    name: "galleryScreenAfter"
-    kind: Text
-    capacity: length(galleryDisplays)
-    cells: map(range(0, length(galleryDisplays)), index => { key: galleryDisplays[index].id, value: galleryCopy[displayAround(index, 1).name].title })
+    cells: map(galleryDisplays, display => { key: display.id, value: display.title })
   }
   row {
     name: "galleryPick"

@@ -600,6 +600,20 @@ bindingOverlays [
             id: "base"
           }
         }
+        // The left mouse button alone is a tap: a pointer surface's rules read it where the pointer lands
+        // (pointer(<seat>, <surface>, press, tap)). It passes through, so the button keeps its own orbit drag.
+        {
+          held [
+            "mouse.button1"
+          ]
+          group: "play"
+          command {
+            channel: "tap"
+            label: "Tap"
+            passThrough: true
+            scale: 1
+          }
+        }
         // Both mouse buttons held, in either order, walk her forward until either is released. The chord passes each
         // press through to the button's own binding, so the right button keeps steering her (steer outranks the left
         // button's orbit) and a button left held after the other's release keeps its own drag.

@@ -1,6 +1,34 @@
 namespace Puck.World;
 
 public static partial class WorldDefinitionValidator {
+    // The pointer facet (see WorldPointerSurface): a rectangle in the row's frame with the same frame rules a screen's
+    // face keeps, so the mapping a rule compiles from it validates. It rides the frame the row resolves to, which an
+    // attached row does not have, so the facet is refused there.
+    private static void ValidatePointerSurface(WorldPlacement placement, WorldPointerSurface pointer, string path, List<string> errors) {
+        if (placement.Attach is not null) {
+            errors.Add(item: $"{path} is refused on an attached row: a pointer surface rides the row's resolved static frame.");
+        }
+
+        if (
+            (pointer.Origin is null) || (pointer.Right is null) || (pointer.Up is null) ||
+            !Puck.Maths.VectorFunctions.IsFinite(vector: pointer.Origin) ||
+            !Puck.Maths.VectorFunctions.IsFinite(vector: pointer.Right) ||
+            !Puck.Maths.VectorFunctions.IsFinite(vector: pointer.Up)
+        ) {
+            errors.Add(item: $"{path} frame vectors must contain finite coordinates.");
+        } else if (
+            (MathF.Abs(x: (pointer.Right.Value.LengthSquared() - 1f)) > 1e-3f) ||
+            (MathF.Abs(x: (pointer.Up.Value.LengthSquared() - 1f)) > 1e-3f) ||
+            (MathF.Abs(x: System.Numerics.Vector3.Dot(vector1: pointer.Right, vector2: pointer.Up)) > MaximumScreenBasisSkew)
+        ) {
+            errors.Add(item: $"{path} right/up must be orthogonal unit axes.");
+        }
+        if (!float.IsFinite(f: pointer.HalfWidth) || !float.IsFinite(f: pointer.HalfHeight) || (pointer.HalfWidth <= 0f) || (pointer.HalfHeight <= 0f)) {
+            errors.Add(item: $"{path} half extents must be finite and positive.");
+        }
+
+        WorldPointerRegion.Validate(errors: errors, path: $"{path}.regions", regions: pointer.Regions);
+    }
     // The response facet (see WorldPlacementResponse): an ordered set of condition-gated prototype swaps. A Field
     // condition reuses the fields.reactions condition grammar (WorldFieldCondition-shaped: field/comparison/value)
     // rather than a parallel one, so this pass checks it exactly like ValidateFields checks a Transform/Expose
@@ -40,11 +68,8 @@ public static partial class WorldDefinitionValidator {
             prototypeId: placement.PrototypeId
         );
 
-        if (
-            (placement.Holding < 0) ||
-            (placement.Holding >= (1L << Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries)))
-        ) {
-            errors.Add(item: $"{placementPath}.holding {placement.Holding} marks an entry past the {responses.Count} response entries — bit i marks entry i.");
+        if (!placement.Holding.Fits(count: responses.Count)) {
+            errors.Add(item: $"{placementPath}.holding {placement.Holding} names an entry past the {responses.Count} response entries.");
         }
 
         for (var index = 0; (index < responses.Count); index++) {

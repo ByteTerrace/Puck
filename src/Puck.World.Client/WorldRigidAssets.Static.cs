@@ -243,7 +243,7 @@ public sealed partial class WorldRigidAssets {
     /// (<see cref="PresentHoldings"/>): a program-rebuild watch component of the scene that composes this catalog.</summary>
     public int HoldingComposeRevision { get; private set; }
     // Each responding row's holding as the latest PresentHoldings presented it.
-    private readonly Dictionary<string, int> m_presentedHoldings = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, WorldResponseHolding> m_presentedHoldings = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Presents a delivery that moved holdings alone without reconciling anything else: reconciles the static rows
     /// against the delivered definition, and while every responding row whose holding moved is a copy here, the copy count

@@ -14,8 +14,8 @@ namespace Puck.World;
 /// runs carries it, a catch-up burst included. Only a seat that still holds the mouse the position is attributed to
 /// points: the ray ends when that mouse leaves the seat or the position names no mouse (a platform that reports only
 /// the aggregate cursor, or a gamepad-only seat), when the pointer leaves the seat's view or the window
-/// (<see cref="WorldPointer.ForgetPosition"/>), or when the world declares neither a <c>Simulation</c> screen nor an
-/// engageable tabletop; the server then reads <c>on</c> 0 and no pointed cell.
+/// (<see cref="WorldPointer.ForgetPosition"/>), or when the world declares no <c>Simulation</c> screen, no placement
+/// pointer surface and no engageable tabletop; the server then reads <c>on</c> 0 and no pointed cell.
 /// </summary>
 /// <remarks>
 /// <para>The same capture casts every pointing contact (<see cref="WorldContacts"/>: a finger, a pen tip, or the mouse
@@ -68,8 +68,8 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
         m_viewports = viewports;
     }
 
-    // Whether anything in the world reads a pointer ray: a Simulation screen, or a tabletop a seat may sit at, whose
-    // rules read the cell the ray meets (board(pointer, …)).
+    // Whether anything in the world reads a pointer ray: a Simulation screen, a placement's pointer surface, or a
+    // tabletop a seat may sit at, whose rules read the cell the ray meets (board(pointer, …)).
     private bool DeclaresPointerTarget() {
         var definition = m_definition();
 
@@ -80,7 +80,7 @@ public sealed class WorldPointerRayCapture : ISnapshotInputCapture {
         }
 
         foreach (var placement in definition.Placements) {
-            if (placement.Board?.Engage is not null) {
+            if ((placement.Board?.Engage is not null) || (placement.Pointer is not null)) {
                 return true;
             }
         }

@@ -125,9 +125,9 @@ public sealed class PlacementResponseDisclosureLawTests {
 
         // The control: the live gate shows the entry seat 1's hidden slot holds.
         Assert.Equal(expected: Open, actual: Find(id: "vaultGate", placements: live).ShownPrototypeId);
-        Assert.Equal(expected: 1, actual: Find(id: "vaultGate", placements: live).Holding);
+        Assert.Equal(expected: WorldResponseHolding.Of(words: [1UL]), actual: Find(id: "vaultGate", placements: live).Holding);
         Assert.Equal(expected: Shut, actual: Find(id: "vaultGate", placements: forSeatTwo).ShownPrototypeId);
-        Assert.Equal(expected: 0, actual: Find(id: "vaultGate", placements: forSeatTwo).Holding);
+        Assert.Equal(expected: WorldResponseHolding.None, actual: Find(id: "vaultGate", placements: forSeatTwo).Holding);
         Assert.Equal(expected: Open, actual: Find(id: "vaultGate", placements: forSeatOne).ShownPrototypeId);
         Assert.Equal(expected: Open, actual: Find(id: "scoreGate", placements: forSeatTwo).ShownPrototypeId);
 
@@ -186,9 +186,9 @@ public sealed class PlacementResponseDisclosureLawTests {
 
         var served = Find(id: "ledgerGate", placements: Served(fixture: fixture, recipient: SeatTwo));
 
-        Assert.Equal(expected: 1, actual: Find(id: "ledgerGate", placements: fixture.Server.Definition.Placements).Holding);
+        Assert.Equal(expected: WorldResponseHolding.Of(words: [1UL]), actual: Find(id: "ledgerGate", placements: fixture.Server.Definition.Placements).Holding);
         Assert.Equal(expected: Open, actual: served.ShownPrototypeId);
-        Assert.Equal(expected: 1, actual: served.Holding);
+        Assert.Equal(expected: WorldResponseHolding.Of(words: [1UL]), actual: served.Holding);
     }
     // A gate opens on seat 1's hidden slot and embers on the lattice's heat, and both hold. The lattice is not hidden
     // state, so seat 2's peer is handed the ember the heat holds, never the open gate the hidden slot holds and never
@@ -244,10 +244,10 @@ public sealed class PlacementResponseDisclosureLawTests {
         var forSeatTwo = Find(id: "forgeGate", placements: Served(fixture: fixture, recipient: SeatTwo));
 
         // The control: both entries hold on the server, which shows the first.
-        Assert.Equal(expected: 3, actual: live.Holding);
+        Assert.Equal(expected: WorldResponseHolding.Of(words: [3UL]), actual: live.Holding);
         Assert.Equal(expected: Open, actual: live.ShownPrototypeId);
         Assert.Equal(expected: Ember, actual: forSeatTwo.ShownPrototypeId);
-        Assert.Equal(expected: 2, actual: forSeatTwo.Holding);
+        Assert.Equal(expected: WorldResponseHolding.Of(words: [2UL]), actual: forSeatTwo.Holding);
         Assert.Equal(expected: Open, actual: Find(id: "forgeGate", placements: Served(fixture: fixture, recipient: SeatOne)).ShownPrototypeId);
         Assert.Contains(
             actualString: fixture.Server.DescribePlacements(view: WorldStateReadView.Of(reader: SeatTwo, server: fixture.Server)),

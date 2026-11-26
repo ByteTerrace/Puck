@@ -111,7 +111,7 @@ judge it. The card table's cards are posed by the rules, which judge each reques
 | Switch a level's lights | Stand before the level's wall switch (`body.pose spawn:hall-switch-<level>`) and press the context button (E, or RB on a pad), or `gallery.lights <level> on\|off`. The press counts while a body stands in the reach box before the plate; a rule reads no facing, so that box stands in for facing the plate |
 | Walk to an exhibit | `gallery.go <exhibit> [body]` (`gallery.go shape-shear`) stands her before its display's console, turned past it (`gallerySpawnTurn`) so the chase camera frames the display beside her, and shows the exhibit on its turntable; `gallery.go` alone returns to the entrance |
 | Show an exhibit without walking | `gallery.show <exhibit>`: its display's turntable shows it and its screen names it |
-| Step a display's list | Stand before its console and press the context button (E, or RB on a pad): the console's left steps back, the rest of it steps on. Or write the display's cell: `world.state.cell.set gallerySelect <display> <catalog index>` |
+| Choose a display's exhibit | Point at its console's list and tap a row (the left mouse button): any exhibit in the catalog shows on its turntable. Drag the list to scroll it a row at a time, or tap PREV and NEXT to turn it a page. Or `gallery.step <display>`, or write the display's cell: `world.state.cell.set gallerySelect <display> <catalog index>` |
 | Step through every exhibit in walking order | `gallery.next` and `gallery.prev`: `=` steps on, `-` steps back, or the gallery wheel; each stands body 0 before the exhibit's display and shows it there; after the last it wraps to the first |
 | Draw one exhibit's shape alone | `gallery.isolate <exhibit> [shape]`, then `view.isolate off` |
 | Flag an exhibit that looks wrong | `gallery.flag [exhibit] [note]`, or `G` for the display at hand: `world.flag` writes `worlds/debug/flags/<exhibit>.json` (the note, the tick, the seat's pose and camera) and captures the view to `<exhibit>.png` beside it, in the git-ignored folder an agent reads back. The exhibit defaults to `near`, the spawn point nearest the seat's body, which names the display (`display-<id>`); the capture shows the exhibit on its turntable |
@@ -174,8 +174,8 @@ Prototype names are `shape-<exhibit>` for the still exhibits and
 the displays in walking order, each with its group's exhibits in order, and
 places each on its level ([gallery.md](gallery.md#what-stands-where)). A
 display's id names its placements (`display-<id>` the turntable,
-`display-<id>-plinth`, `-screen`, `-back`, `-next`), its spawn point
-(`display-<id>`), its sign and its state cells.
+`display-<id>-plinth`, and `-screen`, which carries the console's pointer
+surface), its spawn point (`display-<id>`), its sign and its state cells.
 
 | Display | Level, where | Exhibits, in order |
 |---|---|---|
@@ -194,20 +194,25 @@ display's id names its placements (`display-<id>` the turntable,
 | `styles` | 3, the south gallery, west | cel style, hard cel style, the grey card, repeated paint tiles |
 | `glass` | 3, the south gallery, east | glass: an orange acrylic box holding a sphere, a thin pane and a thick block of one window glass, a frosted pane, the rods behind them |
 
-A display's console works as [gallery.md](gallery.md#the-displays) says. Its
-state is ordinary world state, so it replicates, journals, undoes and reads back:
+A display's console works as [gallery.md](gallery.md#display-consoles) says.
+Its state is ordinary world state, so it replicates, journals, undoes and reads
+back:
 
 | To | Console line |
 |---|---|
 | Read what every display shows, as catalog indices | `world.state gallerySelect` |
 | Show an exhibit by name | `gallery.show <exhibit>` |
-| Show a catalog index on a display | `world.state.cell.set gallerySelect <display> <index>` (an index outside the display's list shows its first exhibit) |
-| Read a display's screen | `world.state galleryScreenTitle`, `galleryScreenNote`, `galleryScreenBefore`, `galleryScreenAfter`, `galleryPlace` |
+| Show a catalog index on a display | `world.state.cell.set gallerySelect <display> <index>` (any exhibit of the catalog; an index past it shows the display's first) |
+| Step a display through the catalog | `gallery.step <display>` (`gallery.step <display> -1` steps back) |
+| Read a display's screen | `world.state galleryScreenTitle`, `galleryScreenGroup`, `galleryScreenNote`, `galleryPlace` (the place in the catalog, from 1) |
+| Read a console's list | `world.state galleryScroll <display>` (the top row's catalog index) and `world.state galleryRowName` (the rows, keyed `<display>-<row>`) |
+| Point at a console and tap it | `source.pointer.origin <x> <y> <z>` and `source.pointer.direction <x> <y> <z>`, then `player.signal mouse.button1 press` and `release`; `body.channels 0` echoes where the ray lands and the regions it lies in (`placement:display-<id>-screen=on(u, v){list#3}`) |
 
 `galleryCopy` in `shapes.puck` holds each exhibit's title and note, which
-`galleryTitles` and `galleryNotes` carry by catalog index for the screen rule to
-copy. The note strip wraps over two lines, so a note of up to about 180
-characters reads at its full size.
+`galleryTitles` and `galleryNotes` carry by catalog index, and `galleryGroups`
+each exhibit's display title, for the console rules to copy. The note wraps in
+its box and shrinks to fit, so a note of up to about 180 characters reads at its
+full size.
 
 ## Coverage
 

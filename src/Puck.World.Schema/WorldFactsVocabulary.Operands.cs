@@ -1,6 +1,7 @@
 using System.Globalization;
 using Puck.Commands;
 using Puck.Physics.Motion;
+using Puck.World.Protocol;
 using IRuleOperand = Puck.State.Rules.IRuleOperand;
 using OperandFamily = Puck.State.Rules.OperandFamily;
 using OperandSite = Puck.State.Rules.OperandSite;
@@ -65,7 +66,7 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.ParkedPrefix}<bodyRef>",
             $"{WorldRuleFacts.LinkPrefix}<adjacencyName>",
             $"{WorldRuleFacts.ChannelPrefix}<seat>|<bodyRef>:<channelName>",
-            $"{WorldRuleFacts.PointerPrefix}<seat>|any:<screenIndex>:x|y|on|press:<channelName>",
+            $"{WorldRuleFacts.PointerPrefix}<seat>|any:<screenIndex>|<placement>:x|y|on|press:<channelName>|region:<id>|row:<id>",
             "$contact:each:seat|device|id|phase|x|y",
             $"{WorldRuleFacts.NearestPrefix}<bodyRef>:<row>",
             $"{WorldRuleFacts.ClockPrefix}<music>:phaseError|beat|bar|beatInBar",
@@ -209,8 +210,9 @@ public static partial class WorldFactsVocabulary {
 
             return mapping;
         }
-        // $pointer:<seat>:<screenIndex>:x|y|on — the seat bounded like $channel's, the screen a declared Simulation row
-        // whose source-normalized mapping validates, so the tick maps a ray without a refusal left to raise.
+        // $pointer:<seat>:<surface>:x|y|on|press:<channel>|region:<id>|row:<id> — the seat bounded like $channel's, the
+        // surface a declared Simulation screen (by index) or a placement carrying a pointer surface (by id), whose
+        // source-normalized mapping validates, so the tick maps a ray without a refusal left to raise.
         private static WorldBodyFactOperand Pointer(string name, string ruleName, WorldFactsCompileContext world) {
             var seats = world.Definition.Population.LocalSeats;
             var parts = name[WorldRuleFacts.PointerPrefix.Length..].Split(separator: ':');
@@ -221,7 +223,12 @@ public static partial class WorldFactsVocabulary {
                     "on" => PointerFacet.On,
                     _ => ((PointerFacet?)null),
                 },
-                4 when (parts[2] == "press") => PointerFacet.Press,
+                4 => parts[2] switch {
+                    "press" => PointerFacet.Press,
+                    "region" => PointerFacet.Region,
+                    "row" => PointerFacet.Row,
+                    _ => null,
+                },
                 _ => null,
             });
             // "any" is every participant allowed to point here, seats first and then live sessions; a number is one
@@ -243,15 +250,10 @@ public static partial class WorldFactsVocabulary {
             if (
                 (pointerFacet is null) ||
                 !participant ||
-                !int.TryParse(
-                s: parts[1],
-                style: NumberStyles.None,
-                provider: CultureInfo.InvariantCulture,
-                result: out var screenIndex
-            )
+                string.IsNullOrEmpty(value: parts[1])
             ) {
                 throw new RuleException(
-                    detail: $"'{name}' does not spell '{WorldRuleFacts.PointerPrefix}<seat>|any:<screenIndex>:x|y|on|press:<channelName>' with seat in 1..{seats}",
+                    detail: $"'{name}' does not spell '{WorldRuleFacts.PointerPrefix}<seat>|any:<screenIndex>|<placement>:x|y|on|press:<channelName>|region:<id>|row:<id>' with seat in 1..{seats}",
                     refusal: WorldRuleRefusal.PointerMalformed,
                     ruleName: ruleName
                 );
@@ -271,15 +273,38 @@ public static partial class WorldFactsVocabulary {
                 }
             }
 
-            var mapping = SimulationScreenMapping(definition: world.Definition, name: name, ruleName: ruleName, screenIndex: screenIndex);
+            var (mapping, subject, regions) = PointerSurfaceOf(name: name, ruleName: ruleName, surface: parts[1], world: world);
+
+            if (!mapping.TryValidate(refusal: out var refusal)) {
+                throw new RuleException(
+                    detail: $"'{name}' names surface '{parts[1]}', which maps no ray: {refusal}",
+                    refusal: WorldRuleRefusal.PointerMalformed,
+                    ruleName: ruleName
+                );
+            }
+
+            WorldPointerRegion? region = null;
+
+            if (
+                (pointerFacet is PointerFacet.Region or PointerFacet.Row) &&
+                ((region = regions?.FirstOrDefault(predicate: candidate => string.Equals(a: candidate?.Id, b: parts[3], comparisonType: StringComparison.Ordinal))) is null)
+            ) {
+                throw new RuleException(
+                    detail: $"'{name}' names region '{parts[3]}', which surface '{parts[1]}' does not declare",
+                    refusal: WorldRuleRefusal.PointerMalformed,
+                    ruleName: ruleName
+                );
+            }
+
             var operand = new PointerOperand(
                 facet: pointerFacet.Value,
                 mapping: mapping,
                 pressChannel: pressChannel,
-                screenIndex: screenIndex,
+                region: region,
                 seat: ((seat == PointerOperand.AnyParticipant)
                     ? PointerOperand.AnyParticipant
-                    : (seat - 1))
+                    : (seat - 1)),
+                subject: subject
             );
 
             return BodyFact(
@@ -292,6 +317,32 @@ public static partial class WorldFactsVocabulary {
                 rowOrdinal: -1,
                 valueKind: operand.ValueKind,
                 world: world
+            );
+        }
+        // The surface a $pointer: read names: a declared Simulation screen by its index, or a placement carrying a
+        // pointer surface by its id, mapped where the placement's resolved frame puts it.
+        private static (SourceMapping Mapping, GrantSubject Subject, IReadOnlyList<WorldPointerRegion>? Regions) PointerSurfaceOf(string name, string ruleName, string surface, WorldFactsCompileContext world) {
+            if (int.TryParse(s: surface, style: NumberStyles.None, provider: CultureInfo.InvariantCulture, result: out var screenIndex)) {
+                var mapping = SimulationScreenMapping(definition: world.Definition, name: name, ruleName: ruleName, screenIndex: screenIndex);
+                var screen = world.Definition.Screens.First(predicate: candidate => (candidate.Index == screenIndex));
+
+                return (mapping, GrantSubject.Screen(index: screenIndex), screen.Route.Regions);
+            }
+
+            var placement = world.Definition.Placements.FirstOrDefault(predicate: candidate => string.Equals(a: candidate?.Id, b: surface, comparisonType: StringComparison.Ordinal));
+
+            if (placement?.Pointer is not { } pointer) {
+                throw new RuleException(
+                    detail: $"'{name}' names '{surface}', which is neither a declared screen's index nor a placement carrying a pointer surface",
+                    refusal: WorldRuleRefusal.PointerMalformed,
+                    ruleName: ruleName
+                );
+            }
+
+            return (
+                pointer.MappingIn(frame: WorldDefinitionRows.ResolvedFrame(definition: world.Definition, placement: placement), placementId: placement.Id),
+                GrantSubject.Placement(id: placement.Id),
+                pointer.Regions
             );
         }
         private static WorldBodyFactOperand BodyFact(CellKind valueKind, WorldFactsCompileContext world, CompiledBodyRef bodyA, CompiledBodyRef bodyB, int rowOrdinal, long cost, Func<IWorldFacts, Fact> read, string describe, WorldDisclosureReach reach, WorldOperandFact? payload = null) => new(

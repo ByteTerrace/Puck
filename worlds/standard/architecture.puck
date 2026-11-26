@@ -21,27 +21,46 @@ let plinthPalette = [
   { color: "#FFC46A", roughness: 0.4, emissive: 2.5 }
 ]
 
-// The console's tilt back from vertical, as its sine and cosine and the quaternions that carry a shape onto its face:
-// `plinthFace` turns a box's +Z onto the face's outward normal, `plinthKnob` turns a cylinder's +Y onto it.
+// The console's tilt back from vertical, as its sine and cosine and the quaternion that carries a box's +Z onto the
+// face's outward normal.
 let plinthTiltSin = 0.4226
 let plinthTiltCos = 0.9063
 let plinthFace = [-0.2164, 0, 0, 0.9763]
-let plinthKnob = [0.5373, 0, 0, 0.8434]
 
 // A point on the console's face: `across` along x, `up` along the face, `out` along its normal, from the face's centre.
 let plinthConsole = [0, 0.46, 0.7]
 let plinthConsoleDepth = 0.09
+let plinthConsoleHalf = [0.79, 0.22]
 function plinthOnFace(across, up, out) = [
   across,
   ((plinthConsole[1] + (up * plinthTiltCos)) + ((plinthConsoleDepth + out) * plinthTiltSin)),
   ((plinthConsole[2] - (up * plinthTiltSin)) + ((plinthConsoleDepth + out) * plinthTiltCos))
 ]
+// The console's one glass screen, its half-extents across and up the face: it fills the cream bezel but for a rim.
+let plinthGlassHalf = [0.74, 0.18]
+let plinthGlassDepth = 0.012
+
+// The console screen's look: a near-black glass the interface glows on at a desktop monitor's brightness, and the
+// interface's colours in the kit's own palette (ochre frame, cream, teal and terracotta controls), the ink lettering
+// takes on a lit control and the two inks of a list, its chosen row lit amber.
+let consoleGlass = { color: "#081315", roughness: 0.12, specular: 0.45, emissive: 260 }
+let consoleLook = {
+  frame: "#E0A13A"
+  cream: "#EFE3C8"
+  teal: "#6FB0B4"
+  terracotta: "#C46A47"
+  ink: "#20160A"
+  lit: "#FFC46A"
+  dim: "#C9B79A"
+  quiet: "#7FB2B6"
+  field: "#081315"
+}
 
 // A display plinth that faces +Z (docs/game/art/gallery-kit-pack/display-plinth.png): a deep-teal foot, an ochre body
 // clad in panels with dark joints between them, a thick bevelled cream cap whose top stands 0.75 m up with a glowing
-// turntable ring set in it, and a cream console tilted back across the front carrying a three-pane screen, two brass
-// knobs and a round reset button. About 1.8 m wide and 1.6 m deep with its console; an exhibit stands on the cap from
-// y 0.75. Every shape is a union, so a creation that holds it keeps panels and trims.
+// turntable ring set in it, and a cream console tilted back across the whole front, its face one glass screen in a cream
+// bezel (a display's interface glows on it, gallery shapes.puck). About 1.8 m wide and 1.6 m deep with its console; an
+// exhibit stands on the cap from y 0.75. Every shape is a union, so a creation that holds it keeps panels and trims.
 let plinthCapTop = 0.75
 // The cap's half-extents across (x) and front to back (z), the plinth's widest.
 let plinthCapHalf = [0.9, 0.68]
@@ -97,33 +116,23 @@ template exhibitPlinth(base) {
     material: (base + plinthCream)
     position: plinthConsole
     rotation: plinthFace
-    scale [0.62, 0.2, plinthConsoleDepth]
+    scale [plinthConsoleHalf[0], plinthConsoleHalf[1], plinthConsoleDepth]
     chamfer: 0.03
   }
-  for x in [-0.33, 0, 0.33] {
-    shape Box $"plinth-screen-{x}" {
-      material: (base + plinthScreen)
-      position: plinthOnFace(x, 0.075, 0)
-      rotation: plinthFace
-      scale [0.155, 0.075, 0.012]
-      rounding: 0.008
-    }
+  shape Box "plinth-glass" {
+    material: (base + plinthScreen)
+    position: plinthOnFace(0, 0, 0)
+    rotation: plinthFace
+    scale [plinthGlassHalf[0], plinthGlassHalf[1], plinthGlassDepth]
+    rounding: 0.01
   }
-  for x in [-0.3, -0.12] {
-    shape Cylinder $"plinth-knob-{x}" {
-      material: (base + plinthBrass)
-      position: plinthOnFace(x, -0.11, 0.02)
-      rotation: plinthKnob
-      scale [0.045, 0.025, 0.045]
-      rounding: 0.008
-    }
-  }
-  shape Cylinder "plinth-reset" {
-    material: (base + plinthCream)
-    position: plinthOnFace(0.22, -0.11, 0.01)
-    rotation: plinthKnob
-    scale [0.05, 0.012, 0.05]
-    rounding: 0.006
+  // The brass lip under the glass, where a hand rests on the console.
+  shape Box "plinth-lip" {
+    material: (base + plinthBrass)
+    position: plinthOnFace(0, (0.02 - plinthConsoleHalf[1]), 0.006)
+    rotation: plinthFace
+    scale [(plinthGlassHalf[0] - 0.04), 0.01, 0.01]
+    rounding: 0.008
   }
 }
 

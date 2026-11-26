@@ -210,7 +210,7 @@ public sealed class BrowserRuleReader : ArenaEffectHost, IWorldFacts {
     Fact IWorldFacts.Read(PointerOperand operand) => Record(
         operand: nameof(PointerOperand),
         fact: Fact.Finite(
-            value: 0L,
+            value: operand.Read(ray: null),
             kind: operand.ValueKind
         )
     );

@@ -320,7 +320,7 @@ public sealed partial class WorldRuleHost {
             );
         }
 
-        var screen = GrantSubject.Screen(index: operand.ScreenIndex);
+        var screen = operand.Subject;
 
         for (var seat = 0; (seat < Host.Population.LocalSeatCount); seat++) {
             var ray = ReadPointerRay(seat: seat);
@@ -371,7 +371,8 @@ public sealed partial class WorldRuleHost {
             }
         }
 
-        return 0L;
+        // No participant points here: the facet's off value.
+        return operand.Read(ray: null);
     }
     /// <summary>Installs admission's pinned tables before boot reconciliation can query them.</summary>
     /// <param name="compilation">The boot definition's validated programs.</param>

@@ -241,8 +241,8 @@ public sealed class WorldScreenInputLawTests {
         var operands = new[] { PointerFacet.X, PointerFacet.Y, PointerFacet.On }.Select(selector: facet => new PointerOperand(
             facet: facet,
             mapping: mapping,
-            screenIndex: 0,
-            seat: 0
+            seat: 0,
+            subject: Puck.World.Protocol.GrantSubject.Screen(index: 0)
         )).ToArray();
         var hit = RayAt(
             u: 0.5,

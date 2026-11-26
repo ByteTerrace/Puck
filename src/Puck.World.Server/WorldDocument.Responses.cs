@@ -13,7 +13,7 @@ public sealed partial class WorldDocument {
     /// (<see cref="WorldPopulation.InstallResponseSolids"/>); a field-quality or line-of-sight world compiles its
     /// solid field again for any solid row.</summary>
     /// <param name="holdings">The rows whose masks moved, as indices into the live placements with their new masks.</param>
-    internal void InstallResponseSelection(IReadOnlyList<(int Row, int Holding)> holdings) {
+    internal void InstallResponseSelection(IReadOnlyList<(int Row, WorldResponseHolding Holding)> holdings) {
         if (holdings.Count == 0) {
             return;
         }

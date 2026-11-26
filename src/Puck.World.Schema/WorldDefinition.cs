@@ -1070,7 +1070,7 @@ public sealed partial record WorldDefinition(
     /// <returns>The updated definition, or this one when <paramref name="holdings"/> is empty.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="holdings"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException">An index names no placement row.</exception>
-    public WorldDefinition WithPlacementHoldings(IReadOnlyList<(int Row, int Holding)> holdings) {
+    public WorldDefinition WithPlacementHoldings(IReadOnlyList<(int Row, WorldResponseHolding Holding)> holdings) {
         ArgumentNullException.ThrowIfNull(argument: holdings);
 
         if (holdings.Count == 0) {
@@ -1105,13 +1105,13 @@ public sealed partial record WorldDefinition(
         return updated;
     }
 
-    private sealed record HoldingMove(WeakReference<WorldDefinition> Previous, (int Row, int Holding)[] Rows);
+    private sealed record HoldingMove(WeakReference<WorldDefinition> Previous, (int Row, WorldResponseHolding Holding)[] Rows);
     [SideTable(reason: "records which definition a holdings move produced each one from")]
     private static readonly ConditionalWeakTable<WorldDefinition, HoldingMove> HoldingMoves = new();
 
     /// <summary>Gets the exact placement changes when this definition came directly from a holding-only edit of
     /// <paramref name="previous"/>. An empty span makes no claim about how the definitions differ.</summary>
-    public ReadOnlySpan<(int Row, int Holding)> HoldingsFrom(WorldDefinition previous) =>
+    public ReadOnlySpan<(int Row, WorldResponseHolding Holding)> HoldingsFrom(WorldDefinition previous) =>
         HoldingMoves.TryGetValue(this, out var move) && move.Previous.TryGetTarget(out var source) && ReferenceEquals(previous, source)
             ? move.Rows
             : default;

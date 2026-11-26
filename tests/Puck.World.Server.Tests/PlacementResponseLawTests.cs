@@ -382,7 +382,7 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
             ]),
             PlacementRowsRaw = [(placement with {
                 Solid = new WorldSolid(Margin: 0f),
-                Holding = authoredHolding,
+                Holding = WorldResponseHolding.Of(words: [(ulong)authoredHolding]),
                 Respond = [(placement.Respond![0] with {
                     When = new WorldPlacementResponseCondition.StateCondition(
                         State: CounterRow,
@@ -398,7 +398,7 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         )!;
 
         Assert.Equal(expected: shown, actual: row.ShownPrototypeId);
-        Assert.Equal(expected: holding, actual: row.Holding);
+        Assert.Equal(expected: WorldResponseHolding.Of(words: [(ulong)holding]), actual: row.Holding);
         // The fixture builds its population before the server: both must start from the settled document.
         var expected = new WorldPopulation(fixture.Server.Definition);
         Assert.Equal(Assert.Single(expected.DiagnosticColliders).Collider,
@@ -498,10 +498,10 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         Assert.True(condition: (fixture.Server.SolidRevision > solids));
         Assert.Equal(expected: revision, actual: fixture.Server.Population.Revision);
     }
-    /// <summary>An upsert that writes a holding mask refuses a bit past the row's entries by name,
+    /// <summary>An upsert that writes a holding refuses an entry past the row's entries by name,
     /// leaving the row as it was.</summary>
     [Fact]
-    public void AHoldingBitPastTheEntriesIsRefused() {
+    public void AHoldingEntryPastTheEntriesIsRefused() {
         var document = CrossingDocument();
 
         using var fixture = Fixtures.FreshServer(definition: document with { Rules = [] });
@@ -509,13 +509,13 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
 
         fixture.Server.EchoTap = echoes.Add;
         fixture.Server.EnqueueMutation(mutation: new WorldMutation.UpsertPlacement(
-            Placement: (fixture.Server.Definition.Placements[0] with { Holding = 2 }),
+            Placement: (fixture.Server.Definition.Placements[0] with { Holding = WorldResponseHolding.Single(entry: 1) }),
             Principal: Principal.Console
         ));
         fixture.Step();
 
-        Assert.Equal(expected: 0, actual: fixture.Server.Definition.Placements[0].Holding);
-        Assert.Contains(collection: echoes, filter: static echo => (echo.Rejected && echo.Message.Contains(comparisonType: StringComparison.Ordinal, value: "holding 2 marks an entry past the 1 response entries")));
+        Assert.Equal(expected: WorldResponseHolding.None, actual: fixture.Server.Definition.Placements[0].Holding);
+        Assert.Contains(collection: echoes, filter: static echo => (echo.Rejected && echo.Message.Contains(comparisonType: StringComparison.Ordinal, value: "holding [1] names an entry past the 1 response entries")));
     }
     /// <summary>A response lasts exactly as long as its condition: the row shows the entry while the slot holds and
     /// its authored prototype once it stops, and the authored prototype itself is never overwritten.</summary>
@@ -543,10 +543,10 @@ public sealed class PlacementResponseStateConditionLawTests(ITestOutputHelper ou
         fixture.Step();
         Set(value: 3L);
         Assert.Equal(expected: TargetCreation, actual: Row().ShownPrototypeId);
-        Assert.Equal(expected: 1, actual: Row().Holding);
+        Assert.Equal(expected: WorldResponseHolding.Single(entry: 0), actual: Row().Holding);
         Set(value: 0L);
         Assert.Equal(expected: BaseCreation, actual: Row().ShownPrototypeId);
-        Assert.Equal(expected: 0, actual: Row().Holding);
+        Assert.Equal(expected: WorldResponseHolding.None, actual: Row().Holding);
         Assert.Equal(expected: BaseCreation, actual: Row().PrototypeId);
     }
     // Breaking the source change once (stash it, re-run, restore) turns this red: without the skip, every placement

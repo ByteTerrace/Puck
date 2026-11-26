@@ -31,7 +31,7 @@ public sealed class ResponsePaletteLawTests {
             CreationsRaw = creations,
             PlacementRowsRaw = [
                 Row(id: "swap", prototype: "lit", x: 0f) with {
-                    Holding = holding,
+                    Holding = WorldResponseHolding.Of(words: [(ulong)holding]),
                     Respond = [new WorldPlacementResponse(
                         PrototypeId: "dark",
                         When: new WorldPlacementResponseCondition.StateCondition(Comparison: Puck.State.ExpressionOp.Equal, State: "lights", Value: 0f)

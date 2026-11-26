@@ -10,11 +10,15 @@ public sealed partial class WorldTick {
     // comparably cheap "did anything move" proof (the field lattice steps every tick regardless), so such a placement
     // is never entered here and is swept in full every tick. The mask catches a write the sweep did not make (an undo,
     // a console upsert), which moves the row without moving any cell.
-    private readonly Dictionary<string, (long[] Values, bool[] Present, int Holding)> m_responseObservedValues = [];
+    private readonly Dictionary<string, (long[] Values, bool[] Present, WorldResponseHolding Holding)> m_responseObservedValues = [];
     // The sweep's scratch, reused every tick: each moved row with its index, its new holding and the snapshot that
     // admits a skip (null when the row cannot be skipped), and the selection the moves install.
-    private readonly List<(WorldPlacement Placement, int Row, int Holding, long[]? Values, bool[]? Present)> m_responseMoves = [];
-    private readonly List<(int Row, int Holding)> m_responseSelection = [];
+    private readonly List<(WorldPlacement Placement, int Row, WorldResponseHolding Holding, long[]? Values, bool[]? Present)> m_responseMoves = [];
+    // The cell values and the holding words one responder's evaluation reads and writes, grown to the widest row swept.
+    private long[] m_responseValues = [];
+    private bool[] m_responsePresent = [];
+    private ulong[] m_responseWords = [];
+    private readonly List<(int Row, WorldResponseHolding Holding)> m_responseSelection = [];
     private readonly List<Responder> m_responders = [];
     private WorldDefinition? m_respondersOf;
 
@@ -33,8 +37,8 @@ public sealed partial class WorldTick {
 
             var holds = new List<string>();
 
-            for (var index = 0; (index < responses.Count); index++) {
-                if ((placement.Holding & (1 << index)) != 0) {
+            foreach (var index in placement.Holding) {
+                if (index < responses.Count) {
                     holds.Add(item: $"[{index}] {DescribeCondition(condition: responses[index].When)} -> {responses[index].PrototypeId}");
                 }
             }
@@ -70,11 +74,6 @@ public sealed partial class WorldTick {
     // holding moved this tick lands in one selection install (WorldDocument.InstallResponseSelection), so a switch
     // that flips several rows replaces the live rows once and delivers them once.
     private void SweepPlacementResponses(ulong tick) {
-        // Declared once and reused every iteration below — a stackalloc inside the loop body would not release its
-        // frame slot between iterations, growing with the placement count instead of staying constant.
-        Span<long> values = stackalloc long[(WorldResponseCapacity.MaxEntries * 2)];
-        Span<bool> present = stackalloc bool[(WorldResponseCapacity.MaxEntries * 2)];
-
         m_responseMoves.Clear();
 
         var definition = Host.Document.Definition;
@@ -86,6 +85,16 @@ public sealed partial class WorldTick {
             var placementIndex = responder.Index;
             var placement = placements[placementIndex];
             var responses = placement.Respond!;
+            // Two cells an entry at most: its primary and its comparand.
+            var reads = (Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries) * 2);
+
+            if (m_responseValues.Length < reads) {
+                m_responseValues = new long[reads];
+                m_responsePresent = new bool[reads];
+            }
+
+            var values = m_responseValues.AsSpan();
+            var present = m_responsePresent.AsSpan();
 
             if (responder.RowsUnmoved(arena: arena, holding: placement.Holding)) {
                 continue;
@@ -226,13 +235,13 @@ public sealed partial class WorldTick {
         private readonly ulong[] m_versions = new ulong[(rows?.Length ?? 0)];
         private StateArena? m_arena;
         private StateCatalog? m_catalog;
-        private int m_holding;
+        private WorldResponseHolding m_holding;
         private bool m_observed;
 
         public int Index { get; } = index;
         public FixedVector3 Position { get; } = position;
 
-        public bool RowsUnmoved(StateArena arena, int holding) {
+        public bool RowsUnmoved(StateArena arena, WorldResponseHolding holding) {
             if (!m_observed || (m_holding != holding) || !ReferenceEquals(objA: m_arena, objB: arena) || !ReferenceEquals(objA: m_catalog, objB: arena.Catalog)) { return false; }
             for (var row = 0; (row < m_ordinals.Length); row++) {
                 if (arena.RowVersion(rowOrdinal: m_ordinals[row]) != m_versions[row]) { return false; }
@@ -240,7 +249,7 @@ public sealed partial class WorldTick {
             return true;
         }
         public void Forget() => m_observed = false;
-        public void Observe(StateArena arena, int holding) {
+        public void Observe(StateArena arena, WorldResponseHolding holding) {
             if (rows is null) { return; }
             for (var row = 0; (row < rows.Length); row++) {
                 if (!arena.Catalog.TryResolve(lane: StateLane.Document, name: rows[row], handle: out var handle) || arena.Layout[handle.Ordinal].HasTraits) { return; }
@@ -256,10 +265,18 @@ public sealed partial class WorldTick {
 
     // One bit per authored entry whose condition holds, bit i for entry i. A Field condition reads the cell coupled to
     // the placement's resolved position; a State condition needs no cell at all.
-    private int ResolveHolding(FixedVector3 position, IReadOnlyList<WorldPlacementResponse> responses, ulong tick) {
-        var holding = 0;
+    private WorldResponseHolding ResolveHolding(FixedVector3 position, IReadOnlyList<WorldPlacementResponse> responses, ulong tick) {
+        var count = Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries);
+        var wordCount = BitWords.WordsFor(members: count);
 
-        for (var index = 0; (index < Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries)); index++) {
+        if (m_responseWords.Length < wordCount) {
+            m_responseWords = new ulong[wordCount];
+        }
+
+        var words = m_responseWords.AsSpan(start: 0, length: wordCount);
+
+        words.Clear();
+        for (var index = 0; (index < count); index++) {
             var holds = responses[index].When switch {
                 WorldPlacementResponseCondition.FieldCondition field => (Host.Population.TryFieldForRow(field.Field, out var region, out _) &&
                     region!.Lattice.TryBodyCellOf(cell: out var cell, position: position) && FieldConditionHolds(field, region.Lattice, cell, tick)),
@@ -267,9 +284,9 @@ public sealed partial class WorldTick {
                 _ => false,
             };
 
-            if (holds) { holding |= (1 << index); }
+            if (holds) { BitWords.Add(index: index, words: words); }
         }
-        return holding;
+        return WorldResponseHolding.Of(words: words);
     }
     private bool FieldConditionHolds(WorldPlacementResponseCondition.FieldCondition condition, FieldLattice lattice, int cell, ulong tick) {
         if (!lattice.TryFieldIndex(
@@ -350,7 +367,7 @@ public sealed partial class WorldTick {
         present[index] = found;
         values[index] = (raw ?? 0L);
     }
-    private bool ObservedValuesUnchanged(string placementId, int holding, ReadOnlySpan<long> values, ReadOnlySpan<bool> present) {
+    private bool ObservedValuesUnchanged(string placementId, WorldResponseHolding holding, ReadOnlySpan<long> values, ReadOnlySpan<bool> present) {
         if (
             !m_responseObservedValues.TryGetValue(
             key: placementId,

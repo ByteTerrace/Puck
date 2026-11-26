@@ -1,6 +1,7 @@
 using Puck.Commands;
 using Puck.Physics.Motion;
 using Puck.Maths;
+using Puck.World.Protocol;
 
 namespace Puck.World;
 
@@ -229,37 +230,55 @@ public enum PointerFacet : byte {
     On,
     /// <summary>The pointing participant's value of one channel while its ray lands on the source, <c>0</c> otherwise.</summary>
     Press,
+    /// <summary><c>1</c> while the ray lands inside one named region of the surface, <c>0</c> otherwise.</summary>
+    Region,
+    /// <summary>The row of one named region the ray lands in, counted from the top (<see cref="WorldPointerRegion.RowOf"/>),
+    /// or <c>-1</c> while it lands outside the region or off the surface.</summary>
+    Row,
 }
-/// <summary>A seat's pointer ray mapped through one <c>Simulation</c> screen (<see cref="WorldRuleFacts.PointerPrefix"/>).
-/// The mapping is built from the screen row alone when the rule compiles, so every read maps in fixed point from
-/// document data.</summary>
+/// <summary>A seat's pointer ray mapped onto one pointer surface (<see cref="WorldRuleFacts.PointerPrefix"/>): a
+/// <c>Simulation</c> screen's face, or a placement's <see cref="WorldPointerSurface"/> where its resolved frame puts it.
+/// The mapping is built from the document alone when the rule compiles, so every read maps in fixed point from document
+/// data.</summary>
 public sealed class PointerOperand : WorldOperandFact {
-    /// <summary>The <see cref="Seat"/> value that reads every participant allowed to point at the screen: the first
-    /// local seat, then the first live session by ordinal, that holds <c>Control</c> over the screen and whose ray lands
-    /// on its source.</summary>
+    /// <summary>The <see cref="Seat"/> value that reads every participant allowed to point at the surface: the first
+    /// local seat, then the first live session by ordinal, that holds <c>Control</c> over the surface's subject and whose
+    /// ray lands on it.</summary>
     public const int AnyParticipant = -1;
 
     /// <summary>Initializes a new instance of the <see cref="PointerOperand"/> class.</summary>
     /// <param name="seat">The zero-based seat, or <see cref="AnyParticipant"/>.</param>
-    /// <param name="mapping">The screen row's source-normalized mapping (<see cref="WorldScreenMappings.Normalized"/>),
-    /// already validated.</param>
+    /// <param name="mapping">The surface's source-normalized mapping, already validated.</param>
     /// <param name="facet">The facet the read reports.</param>
-    /// <param name="screenIndex">The screen the ray maps through, which a participant must hold <c>Control</c> over.</param>
+    /// <param name="subject">What a participant must hold <c>Control</c> over to point at the surface: the screen, or
+    /// the placement carrying it.</param>
     /// <param name="pressChannel">The channel ordinal a <see cref="PointerFacet.Press"/> read reports, or <c>-1</c>.</param>
-    public PointerOperand(int seat, SourceMapping mapping, PointerFacet facet, int screenIndex, int pressChannel = -1) : base(((facet == PointerFacet.On)
+    /// <param name="region">The region a <see cref="PointerFacet.Region"/> or <see cref="PointerFacet.Row"/> read
+    /// hit-tests, or <see langword="null"/> for any other facet.</param>
+    /// <exception cref="ArgumentException"><paramref name="facet"/> is <see cref="PointerFacet.Region"/> or
+    /// <see cref="PointerFacet.Row"/> and <paramref name="region"/> is <see langword="null"/>.</exception>
+    public PointerOperand(int seat, SourceMapping mapping, PointerFacet facet, GrantSubject subject, int pressChannel = -1, WorldPointerRegion? region = null) : base(((facet is PointerFacet.On or PointerFacet.Region or PointerFacet.Row)
         ? CellKind.Int
         : CellKind.Fixed)) {
+        if ((facet is PointerFacet.Region or PointerFacet.Row) && (region is null)) {
+            throw new ArgumentException(message: $"A {facet} read names the region it hit-tests.", paramName: nameof(region));
+        }
+
         Seat = seat;
         Mapping = mapping;
         Facet = facet;
-        ScreenIndex = screenIndex;
+        Subject = subject;
         PressChannel = pressChannel;
+        Region = region;
     }
 
     /// <summary>Gets the channel ordinal a <see cref="PointerFacet.Press"/> read reports, or <c>-1</c>.</summary>
     public int PressChannel { get; }
-    /// <summary>Gets the screen the ray maps through.</summary>
-    public int ScreenIndex { get; }
+    /// <summary>Gets the region a <see cref="PointerFacet.Region"/> or <see cref="PointerFacet.Row"/> read hit-tests,
+    /// or <see langword="null"/>.</summary>
+    public WorldPointerRegion? Region { get; }
+    /// <summary>Gets what a participant must hold <c>Control</c> over to point at the surface.</summary>
+    public GrantSubject Subject { get; }
 
     /// <summary>Determines whether a ray lands on the screen's source.</summary>
     /// <param name="ray">The ray, or <see langword="null"/> for none.</param>
@@ -271,32 +290,37 @@ public sealed class PointerOperand : WorldOperandFact {
 
     /// <summary>Gets the facet the read reports.</summary>
     public PointerFacet Facet { get; }
-    /// <summary>Gets the screen row's source-normalized mapping.</summary>
+    /// <summary>Gets the surface's source-normalized mapping.</summary>
     public SourceMapping Mapping { get; }
     /// <summary>Gets the zero-based seat, or <see cref="AnyParticipant"/>.</summary>
     public int Seat { get; }
 
-    /// <summary>Returns the fact a mapped hit reads as: the facet's value while the hit lies on the source, and zero
-    /// otherwise, including for no ray at all.</summary>
+    /// <summary>Returns the fact a mapped hit reads as: the facet's value while the hit lies on the surface, and the
+    /// facet's off value otherwise, including for no ray at all: <c>-1</c> for a <see cref="PointerFacet.Row"/> read and
+    /// zero for every other.</summary>
     /// <param name="ray">The participant's pointer ray this tick, or <see langword="null"/> for none.</param>
     /// <param name="press">The participant's value of <see cref="PressChannel"/>, read for a
     /// <see cref="PointerFacet.Press"/> facet.</param>
     /// <returns>The raw value, in <see cref="WorldOperandFact.ValueKind"/>'s encoding.</returns>
     public long Read(SourceRay? ray, FixedQ4816 press = default) {
+        var off = ((Facet == PointerFacet.Row) ? -1L : 0L);
+
         if (ray is not { } pointer) {
-            return 0L;
+            return off;
         }
 
         var hit = Mapping.MapRay(ray: pointer);
 
         if (!hit.IsOnSource) {
-            return 0L;
+            return off;
         }
 
         return Facet switch {
             PointerFacet.X => hit.Coordinate.X.Value,
             PointerFacet.Y => hit.Coordinate.Y.Value,
             PointerFacet.Press => press.Value,
+            PointerFacet.Region => ((Region!.RowOf(point: hit.Coordinate) >= 0L) ? 1L : 0L),
+            PointerFacet.Row => Region!.RowOf(point: hit.Coordinate),
             _ => 1L,
         };
     }

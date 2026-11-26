@@ -1,5 +1,4 @@
 using Puck.Abstractions.Documents;
-using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Puck.Maths;
@@ -59,13 +58,13 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
         ArgumentNullException.ThrowIfNull(argument: placement);
 
         if (
-            (placement.Holding == 0) ||
+            placement.Holding.IsEmpty ||
             (placement.Respond is not { Count: > 0 } responses)
         ) {
             return -1;
         }
 
-        var index = BitOperations.TrailingZeroCount(value: ((uint)placement.Holding));
+        var index = placement.Holding.First;
 
         return (((index < responses.Count) && (responses[index] is not null))
             ? index
@@ -104,18 +103,16 @@ public sealed record WorldPlacementResponse(WorldPlacementResponseCondition When
         var responses = (placement.Respond ?? []);
         var holding = placement.Holding;
 
-        for (var index = 0; (index < Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries)); index++) {
-            var bit = (1 << index);
-
+        foreach (var index in placement.Holding) {
             if (
-                ((holding & bit) != 0) &&
+                (index < responses.Count) &&
                 (responses[index]?.When switch {
                     WorldPlacementResponseCondition.StateCondition state => (withheld(arg1: state.State, arg2: state.Key) || ((state.ComparandState is { } comparand) && withheld(arg1: comparand, arg2: state.ComparandKey))),
                     WorldPlacementResponseCondition.FieldCondition { Value.Row: { } row } => withheld(arg1: row, arg2: null),
                     _ => false,
                 })
             ) {
-                holding &= ~bit;
+                holding = holding.Without(entry: index);
             }
         }
 
@@ -384,7 +381,7 @@ public abstract record WorldPlacementResponseCondition {
 }
 /// <summary>Capacity constants for <see cref="WorldPlacement.Respond"/>.</summary>
 public static class WorldResponseCapacity {
-    /// <summary>The most response entries a single placement may declare: one a bit of <see cref="WorldPlacement.Holding"/>'s
-    /// non-negative range, so entry <c>i</c>'s bit <c>1 &lt;&lt; i</c> stays positive.</summary>
-    public const int MaxEntries = 31;
+    /// <summary>The most response entries a single placement may declare: a representation bound on the words
+    /// <see cref="WorldPlacement.Holding"/> carries, sized so one display lists every creation of a large catalog.</summary>
+    public const int MaxEntries = 4096;
 }

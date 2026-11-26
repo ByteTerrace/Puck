@@ -89,6 +89,13 @@ ruling that the engine is generic is in [AGENTS.md](../../AGENTS.md).
 - **A diegetic screen renders the same tree** into the target its screen
   samples; pointer input maps through the screen's inverse source mapping, and
   pad input arrives when a seat engages the screen.
+- **A shared in-world surface keeps its interface in world state.** A console
+  every viewer sees as one object (the gallery's display consoles, the owner's
+  first interactive screen) holds its scroll and selection in world state, draws
+  them with text paints, and reads taps in the simulation through a pointer
+  surface (`WorldPointerSurface`) and its named regions, so the authority decides
+  what a tap did and every viewer sees the same list. The presentation-state rule
+  above is for a viewer's own interface.
 - **A mod's UI runs in a presentation entry** of its package, apart from its
   simulation guest. It receives its own nodes' events locally, never hashed,
   and changes the simulation only through a granted action that becomes a

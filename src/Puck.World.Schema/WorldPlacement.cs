@@ -716,14 +716,17 @@ public interface IWorldInhabitants {
 /// <param name="Spatial">Named occupation, clearance, and influence volumes in this placement's local frame. The
 /// compiled static-query eligibility is exposed by <see cref="WorldSpatialQueryIndex.Unsupported"/>; ordinary
 /// inhabit/attach/distribution facets remain legal and are reported there when they have no single static frame.</param>
-/// <param name="Holding">Which of <paramref name="Respond"/>'s entries held at the last response sweep, one bit per
-/// entry in authored order (bit <c>i</c> for entry <c>i</c>); 0 while none holds, and always 0 on a row without
+/// <param name="Holding">Which of <paramref name="Respond"/>'s entries held at the last response sweep, in authored
+/// order (<see cref="WorldResponseHolding"/>); empty while none holds, and always empty on a row without
 /// <paramref name="Respond"/>. The response sweep writes it, and a booting document's state entries are settled into
-/// it before admission (<see cref="WorldStateSettlement.SettleResponses"/>); the row shows the lowest set bit's entry, else its own
+/// it before admission (<see cref="WorldStateSettlement.SettleResponses"/>); the row shows the lowest held entry, else its own
 /// authored <paramref name="PrototypeId"/> (<see cref="ShownPrototypeId"/>). Refused on a row without
-/// <paramref name="Respond"/> and with a bit at or past its entry count. A reader whose disclosure withholds a cell an
-/// entry reads is handed the mask without that entry's bit (<see cref="WorldPlacementResponse.Disclosed"/>). Omitted
-/// from the wire when 0.</param>
+/// <paramref name="Respond"/> and with an entry at or past its entry count. A reader whose disclosure withholds a cell an
+/// entry reads is handed the holding without that entry (<see cref="WorldPlacementResponse.Disclosed"/>). Omitted
+/// from the wire when empty.</param>
+/// <param name="Pointer">The placement's pointer surface (see <see cref="WorldPointerSurface"/>): a rectangle in the
+/// row's frame that a seat's pointer ray maps onto, with named regions a rule hit-tests, or <see langword="null"/> for
+/// none. Omitted from the wire when null.</param>
 public sealed record WorldPlacement(
     [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Declares)] string Id,
     [property: DocumentName(WorldNameKind.Prototype, WorldNameRole.Names)] string PrototypeId,
@@ -747,8 +750,9 @@ public sealed record WorldPlacement(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementDeal? Deal = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? DealSlot = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPlacementSpatialVolume>? Spatial = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int Holding = 0,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementSurface? Surface = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] WorldResponseHolding Holding = default,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPlacementSurface? Surface = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldPointerSurface? Pointer = null
 ) {
     /// <summary>The body-reference token a rule's <c>placement:$each</c> binds to its <c>forEach</c> key; no placement
     /// may be named it.</summary>

@@ -644,7 +644,7 @@ public sealed class WorldFaceCatalog {
     // Hands a definition's catalog to one that differs from it only in the holding masks of the named rows
     // (WorldDefinition.WithPlacementHoldings), when no creation a named row shows before or after derives a facet:
     // such a change derives the same rows, so the target derives nothing.
-    internal static void CarryAcrossHolding(WorldDefinition source, WorldDefinition target, IReadOnlyList<(int Row, int Holding)> holdings) {
+    internal static void CarryAcrossHolding(WorldDefinition source, WorldDefinition target, IReadOnlyList<(int Row, WorldResponseHolding Holding)> holdings) {
         if (!PerDefinition.TryGetValue(key: source, value: out var catalog)) {
             return;
         }
