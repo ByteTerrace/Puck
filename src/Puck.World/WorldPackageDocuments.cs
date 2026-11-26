@@ -5,20 +5,22 @@ namespace Puck.World;
 /// <summary>
 /// The client's own whole copies of the documents its package ships, by document id: the boot document, and each
 /// document a <c>references</c> row of the boot document names, loaded beside the boot document through its file origin
-/// (<see cref="WorldFileOrigin.TryResolveReference"/>, <see cref="WorldFileOrigin.TryLoad"/>) when first asked for. What a
-/// remote seat's prediction builds its population from (<see cref="WorldSeatPrediction"/>), since a delivered document is
-/// what its authority disclosed and may lack the kits and motion programs the body step reads.
+/// (<see cref="WorldFileOrigin.TryResolveReference"/>, <see cref="WorldFileOrigin.TryLoad"/>). What a remote seat's
+/// prediction builds its population from (<see cref="WorldSeatPrediction"/>), since a delivered document is what its
+/// authority disclosed and may lack the kits and motion programs the body step reads.
 /// </summary>
-/// <remarks>Every member runs on the thread that pumps and presents. A document is loaded at most once, and an id no
-/// reference resolves to is answered from a cached miss.</remarks>
+/// <remarks>A document other than the boot one is loaded off the asking thread, once per id: <see cref="Find"/> answers
+/// <see langword="null"/> until the load completes, so composing a document never stalls the thread that pumps and
+/// presents. The load tries first the references whose name or document is the id, then the rest. <see cref="Find"/>
+/// runs on the thread that pumps and presents.</remarks>
 /// <param name="boot">The boot document and the path it was loaded from.</param>
 public sealed class WorldPackageDocuments(WorldDefinitionSource boot) {
-    private readonly Dictionary<string, WorldDefinition?> m_byId = new(comparer: StringComparer.Ordinal);
-    private int m_loaded;
+    private readonly Dictionary<string, Task<WorldDefinition?>> m_byId = new(comparer: StringComparer.Ordinal);
 
     /// <summary>Returns the package's copy of the document a document id names.</summary>
     /// <param name="documentId">The document id, or <see langword="null"/>.</param>
-    /// <returns>The document, or <see langword="null"/> when the package ships none of that id.</returns>
+    /// <returns>The document, or <see langword="null"/> while it loads or when the package ships none of that
+    /// id.</returns>
     public WorldDefinition? Find(string? documentId) {
         if (documentId is null) {
             return null;
@@ -26,30 +28,31 @@ public sealed class WorldPackageDocuments(WorldDefinitionSource boot) {
         if (string.Equals(a: documentId, b: boot.Definition.DocumentId, comparisonType: StringComparison.Ordinal)) {
             return boot.Definition;
         }
-        if (m_byId.TryGetValue(key: documentId, value: out var known)) {
-            return known;
+        if (!m_byId.TryGetValue(key: documentId, value: out var load)) {
+            load = Task.Run(function: () => Load(documentId: documentId));
+            m_byId.Add(key: documentId, value: load);
         }
 
-        // References load in order, each once, until one is the id asked for; the ones passed on the way are kept.
+        return (load.IsCompletedSuccessfully ? load.Result : null);
+    }
+
+    private WorldDefinition? Load(string documentId) {
         var references = (boot.Definition.References ?? []);
+        var origin = new WorldFileOrigin(resolvedPath: boot.SourcePath);
 
-        while (m_loaded < references.Count) {
-            var reference = references[m_loaded++];
-
-            if ((reference?.Document is not { } document) ||
-                !new WorldFileOrigin(resolvedPath: boot.SourcePath).TryResolveReference(document: document, reason: out _, sibling: out var sibling) ||
-                !sibling!.TryLoad(definition: out var loaded, instanceIdentity: document, reason: out _) ||
-                (loaded!.DocumentId is not { } id)) {
-                continue;
-            }
-
-            _ = m_byId.TryAdd(key: id, value: loaded);
-            if (string.Equals(a: id, b: documentId, comparisonType: StringComparison.Ordinal)) {
+        foreach (var reference in references.Where(predicate: Names).Concat(second: references.Where(predicate: reference => !Names(reference: reference)))) {
+            if ((reference?.Document is { } document) &&
+                origin.TryResolveReference(document: document, reason: out _, sibling: out var sibling) &&
+                sibling!.TryLoad(definition: out var loaded, instanceIdentity: document, reason: out _) &&
+                string.Equals(a: loaded!.DocumentId, b: documentId, comparisonType: StringComparison.Ordinal)) {
                 return loaded;
             }
         }
 
-        m_byId[documentId] = null;
         return null;
+
+        bool Names(WorldReference? reference) =>
+            ((reference is not null) && (string.Equals(a: reference.Name.Value, b: documentId, comparisonType: StringComparison.Ordinal) ||
+                string.Equals(a: Path.GetFileName(path: reference.Document), b: documentId, comparisonType: StringComparison.Ordinal)));
     }
 }
