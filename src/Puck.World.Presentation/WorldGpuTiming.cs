@@ -186,6 +186,48 @@ public sealed class WorldGpuTiming(WorldRenderProbe? probe = null) {
         }
         return text.Append(value: ']').ToString();
     }
+    /// <summary>Describes each node's share of the frame: the sum of its passes' milliseconds per frame over its
+    /// completed submission window, the nodes ordered by that sum, with the frames of the window it rendered in and a
+    /// total. A node whose passes measured nothing in the window is counted, not listed.</summary>
+    /// <returns>The diagnostic readout.</returns>
+    public string DescribeSummary() {
+        var text = new StringBuilder(value: $"[world.gpu-timing: {DemandState} window={Puck.Shaders.ShaderPipelineRenderNode.TimingWindow}");
+
+        if ((m_operator || m_recording) && (probe?.Root?.Runtime is { } runtime)) {
+            var rows = new List<(string Name, double PerFrameMs, int Passes, int Samples, int Frames)>();
+            var idle = 0;
+            var total = 0d;
+
+            for (var index = 0; (index < runtime.Instances.Instances.Count); index++) {
+                if (runtime.Producer(instance: index) is not null) { continue; }
+                var node = runtime.Node(instance: index);
+
+                if (node.TimingRefusal is not null) { continue; }
+                var perFrameMs = 0d;
+                var passes = 0;
+                var samples = 0;
+
+                foreach (var timing in node.TimingsAt(frame: (runtime.Latest?.Frame ?? 0L))) {
+                    if (timing.Stale || (timing.Samples == 0)) { continue; }
+                    perFrameMs += timing.PerFrameMs;
+                    passes++;
+                    samples = Math.Max(val1: samples, val2: timing.Samples);
+                }
+                if (passes == 0) {
+                    idle++;
+                    continue;
+                }
+                total += perFrameMs;
+                rows.Add(item: (runtime.Instances.Instances[index].Name, perFrameMs, passes, samples, node.TimingWindowFrames));
+            }
+            rows.Sort(comparison: static (a, b) => b.PerFrameMs.CompareTo(value: a.PerFrameMs));
+            text.Append(provider: CultureInfo.InvariantCulture, handler: $"\ntotal: perFrameMs={total:0.000} nodes={rows.Count} idle={idle}");
+            foreach (var row in rows) {
+                text.Append(provider: CultureInfo.InvariantCulture, handler: $"\n{row.Name}: perFrameMs={row.PerFrameMs:0.000} passes={row.Passes} rendered={row.Samples}/{row.Frames}");
+            }
+        }
+        return text.Append(value: ']').ToString();
+    }
 
     private string DemandState => m_operator ? "on" : m_recording ? "on (recording)" : m_dynamicResolution ? "off (recording for dynamic resolution)" : m_allowance ? "off (recording for the background allowance)" : "off";
 }
