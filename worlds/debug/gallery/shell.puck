@@ -270,7 +270,9 @@ template shellWalls(level) {
       )
     }
     // The top storey's walls round the terrace: one between the nave's bridge and the terrace and one between the
-    // terrace and the south gallery, each with a doorway onto it.
+    // terrace and the south gallery, each with a doorway onto it. The bridge's wall stands just north of the south-west
+    // stair's well, so a second doorway there takes the stair's last flight on through to the bridge, east of the end
+    // pier's tile.
     if (level == 3) {
       wallAlongX(
         label: $"terrace-{skin.name}",
@@ -280,7 +282,10 @@ template shellWalls(level) {
         y1: (galleryStorey * (level + 1)),
         z0: ((terraceNorth - galleryWall) + skin.near),
         z1: ((terraceNorth - galleryWall) + skin.far),
-        openings: [{ a0: 5, a1: 7.2, y0: 0, y1: 2.75 }],
+        openings: [
+          { a0: tileEdgeX(1), a1: (tileEdgeX(1) + 2), y0: 0, y1: 2.75 }
+          { a0: 5, a1: 7.2, y0: 0, y1: 2.75 }
+        ],
         slot: skin.slot
       )
       wallAlongZ(
@@ -410,9 +415,17 @@ function shellWellRails(stair, k) = concat(
     t => { id: $"back-{t}", x: (stair.well.x0 + ((t + 0.5) * galleryTile)), z: (stair.well.z0 - 0.08), yaw: 180 }
   )
 )
-let shellStairRails = flatMap(
-  filter(galleryStairs, stair => (stair.form == "spiral")),
-  stair => flatMap(range(1, 3), k => map(shellWellRails(stair, k), rail => (rail with { id: $"{stair.id}-{k}-{rail.id}", y: galleryFloor[k] })))
+// The balcony edges' 4 m lengths stop a tile short of the east end's last pier, so a tile of balustrade closes each
+// edge's last tile on every upper level, where the eastern stairs arrive beside it.
+let shellTileRails = concat(
+  flatMap(
+    filter(galleryStairs, stair => (stair.form == "spiral")),
+    stair => flatMap(range(1, 3), k => map(shellWellRails(stair, k), rail => (rail with { id: $"{stair.id}-{k}-{rail.id}", y: galleryFloor[k] })))
+  ),
+  flatMap(range(1, 3), k => [
+    { id: $"nave-south-end-{k}", x: tileX((gridTilesX - 2)), y: galleryFloor[k], z: (naveSouth - 0.08), yaw: 180 }
+    { id: $"nave-north-end-{k}", x: tileX((gridTilesX - 2)), y: galleryFloor[k], z: (naveNorth + 0.08), yaw: 0 }
+  ])
 )
 
 // The lift's tower, outside the south wall: four teal posts, a ring beam at each floor, glass between them on the three
@@ -944,7 +957,7 @@ template shellPlacements() {
       }
     }
   }
-  for rail in shellStairRails {
+  for rail in shellTileRails {
     placement $"gallery-rail-{rail.id}" {
       prototype: "gallery-rail-tile"
       parent: "gallery"
