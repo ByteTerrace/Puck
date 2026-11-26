@@ -316,6 +316,15 @@ Reference-bearing contour roots stay managed under their existing ownership.
 `SdfSampledLattice.Refine` fills the group's owned fine-sample indexes directly,
 using admission's exact distinct-sample count; no worker retains a second copy.
 
+Storage several holders read across threads is freed by its last claim, counted by
+`ClaimCount` (`Puck.Abstractions.Memory`), never by a hand-written interlocked counter.
+A composed program built with an `SdfProgramStorage` keeps its words, appearance section
+and instructions natively; every holder that reads them after the call that handed the
+program over (the composition, every `SdfFrame.Writer`, the tables, the bake) takes its
+claim at one door, `SdfProgram.Exchange`, and its owner releases it at its end; a reference
+kept for identity takes none. A large `PublishArena` of plain values takes an allocator and
+is disposed by its owner after the reader epochs hand it back.
+
 `SdfMesh.Storage` owns each published mesh's blocks. Cache, residency, dressed
 frame, upload arena and GI scene claims are specific to that resource; the last
 claim frees its storage. Material variants share geometry and allocate only

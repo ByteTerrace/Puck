@@ -1608,14 +1608,13 @@ manifest parts it met (`world.boot.manifest.parts-walked` +275, `.replayed`
   threads, and their garbage stops the frame thread: every gen1 collection
   suspends it, and the stalls at the garden painting and the lift were frames
   holding several gen1 pauses beside the frame's own work. Per rebuild, read by
-  allocation tick (`puck host allocations --focus`): the composition's program
-  (`SdfProgram`'s word arrays, about 150 MB a build on the large object heap,
-  `SdfCompositionFrameSource.StartBuild`), and the presentation field
-  (`WorldFramePresenter.RebuildStaticField`, about 280 MB: a whole static
-  program and its field evaluator, `SdfFieldEvaluator.BuildRotationBounds` and
-  `SdfBoundsCache` among it). Build each from the one it replaces by the rows
-  that changed, or keep their storage owned and reused. Check: allocation by
-  site over the lift chapter, and no frame with more than one collection.
+  allocation tick (`puck host allocations --focus`): the presentation field's
+  evaluator (`WorldQueryField.PartOf`, about 68 MiB a palette edit, its compiled
+  stream and segment tables; its program and the composition's are native under
+  claims, [residency and streaming](#residency-and-streaming)). Build it from the
+  one it replaces by the rows that changed, or keep its storage owned and reused.
+  Check: allocation by site over the lift chapter, and no frame with more than
+  one collection.
 - [high] Each delivery that replaces a placements section still builds a new
   `WorldPlacementStamp` compilation context; frames now resolve on demand and
   a surface descriptor is carried from any context whose rows and creations it
@@ -2291,29 +2290,26 @@ check; this packet holds the defects beside it.
   readings (`SdfMeshPathBake.FrustumWatches`); the lattice's weld, crease split and refinement
   masks (`SdfSampledLattice`), the triangle grid, the trace judge's joined mesh, the store codec's
   planes, the volume's refill words, `DisjointSet` and `SpanDistinct`; and the canonical document
-  serializer (`CanonicalJsonDocument`, through `OwnedBufferWriter<T>`). `RentedArrays` keeps only
-  the shared pool's buckets; its large pool is gone. What still allocates large managed arrays:
-  - `SdfProgram` allocates fresh arrays on every field build (its words, the instruction copy, the
-    appearance section and the analysis passes' tables), about 320 MiB over a route: the debug
-    world's composed program is about 5.3 million words, so each field rebuild in
-    `SdfCompositionFrameSource` allocates tens of megabytes. Native storage needs an owner whose
-    last reader frees it, and the program is held across threads by the composition, every
-    `SdfFrame`, `SdfWorldTables`' live, background, shading and paint programs, the bake
-    (`SdfMeshPathBake` and its prepared frame), the dresser, the presenters and pick results, and
-    weakly by `SdfProgramDelta`. Give `SdfProgram` a claim count (`Acquire`/`Release`, the
-    composition holding the first) and move every holder to swap claims at one door, then move the
-    words and the instruction stream to owned storage freed at the last release; a rebuild then
-    reuses the replaced program's storage when it holds the last claim. A use after free here is a
-    crash in presentation, so the change needs a windowed run in the same batch.
-  - The probe cache's publication columns (`PublishArena`, 42 arrays of 3.7 MB live) hold
-    `ProbeBlock` and `LightBlock` references in each `ProbeData` slot, and each table's keys,
-    flags and entry indices are managed arrays. Give the blocks indices in a registry whose slots
-    are reused only after the reader epochs reclaim a block, keep `ProbeData.Hits` and `Shading` as
-    properties over those indices, then store an arena of unmanaged values natively; a table the
-    cache drops (the spare it replaces, the volume's end) frees its columns.
-  - A far product derived on a miss still builds its cluster's mesh, its chunks and its levels in
-    managed arrays before the library copies the result; only its tables are native. It runs once
-    per product per store.
+  serializer (`CanonicalJsonDocument`, through `OwnedBufferWriter<T>`); a composed program's
+  words, appearance section and instructions, under claims (`SdfProgram.Storage.cs`,
+  `SdfCompositionFrameSource.ProcessStorage`); and the probe cache's tables and entry arenas
+  (`PublishArena` with an allocator, `ProbeData` naming its blocks by registry index).
+  `RentedArrays` keeps only the shared pool's buckets; its large pool is gone. What still
+  allocates large managed arrays:
+  - The presentation field's evaluator (`SdfFieldEvaluator`, built per rebuild by
+    `WorldQueryField.PartOf`) compiles its stream (`CompiledInstruction[]`, about 28 MB, which
+    holds references for its polygon, path and relief side data), its rotation bounds (11 MB) and
+    its segment, reach and cull tables on the managed heap, about 68 MiB a palette edit. Move the
+    side data to tables indexed by instruction so the compiled stream is a value of no
+    references, keep the evaluator's tables in owned storage, and give the published field
+    (`WorldClient.StaticField`) reader holds so a replaced field is freed only once its readers
+    have left (`ReaderEpochs`). The program constructor's analysis tables (`AnalyzeBounds`' bound
+    records, root frames, relief masks) still allocate about 6 MiB a build.
+  - A far product derived on a miss, and every mesh the bake lands, is built as managed records
+    by the planar merge, the collapse's levels and the chunk join (`SdfMeshPlanarMerge.Merge`,
+    `SdfMeshCollapse.Levels`, `SdfMeshChunks.Bake`, and for the product `SdfMeshCluster.Build`)
+    before the library copies it natively (`SdfMesh.NativeCopy`). Write those stages' output into
+    an `SdfMeshStorage` so the library publishes the mesh they built.
   Check: the 2060's route ends under its host bar with the LOH flat across loops, and
   `puck host heap` reads live large objects near the heap's large-object bytes.
 - [medium] **Read the native allocator's slack on the RTX 2060's route.** The 2060 read 1.83 GB
