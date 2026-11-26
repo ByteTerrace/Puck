@@ -13,17 +13,16 @@ function firBase(t, tiers) = 0.55 + t * 3.3 / tiers
 function firHalf(t, tiers) = 0.95 - t * 0.3 / tiers
 function firRim(t, tiers) = 1.55 - t * 1.2 / tiers
 function firHem(t, tiers) = 0.6 + t * 3.3 / tiers
-function firFrac(x) = x - floor(x)
 
 // The k-th point of the R2 low-discrepancy sequence (the plastic number's inverse powers): points that look random but
 // never clump or leave holes, which a seeded hash cannot promise.
-function firSpreadU(k) = firFrac(0.5 + k * 0.7548776662)
-function firSpreadV(k) = firFrac(0.5 + k * 0.5698402910)
+function firSpreadU(k) = fraction(0.5 + k * 0.7548776662)
+function firSpreadV(k) = fraction(0.5 + k * 0.5698402910)
 // The share of the tree's height a point lands at: 1 - sqrt(1 - v) puts more points on the wider lower tiers, about
 // in proportion to their area, so the spacing stays even from top to bottom.
 function firLift(k) = 1 - squareRoot(1 - firSpreadV(k))
 function firTier(k, tiers) = floor(firLift(k) * tiers)
-function firSlope(k, tiers) = 0.12 + 0.38 * firFrac(firLift(k) * tiers)
+function firSlope(k, tiers) = 0.12 + 0.38 * fraction(firLift(k) * tiers)
 
 // One world lane's value for fibre group `g` of `groups`: a soft hump that rises and falls once per turn of `clock`,
 // each group a share of the turn behind the last. Bind three of these in `render.lanes` and point `fiberLanes` at them.
@@ -35,23 +34,9 @@ function firFiberLane(clock, g, groups = 3, span = 60, steps = 24) = {
   })
 }
 
-template firTree(
-  id,
-  height = 1,
-  spread = 1,
-  tiers = 5,
-  needles = firNeedles,
-  bark = "#4A3424",
-  lights = false,
-  bulbs = firBulbs,
-  bulbCount = 46,
-  bulbGlow = 70,
-  fiber = false,
-  fibers = firFibers,
-  fiberLanes = [5, 6, 7],
-  fiberCount = 150,
-  fiberGlow = 90
-) {
+template firTree(id, height = 1, spread = 1, tiers = 5, needles = firNeedles, bark = "#4A3424", lights = false, bulbs = firBulbs, bulbCount = 46, bulbGlow = 70, fiber = false, fibers = firFibers, fiberLanes = [
+  5, 6, 7
+], fiberCount = 150, fiberGlow = 90) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -103,33 +88,36 @@ template firTree(
       }
       // A bulb rides its tier's skirt a share s up the slope, where the cone's radius is rim * (1 - s), and hangs a
       // little proud of it. It is a C9's teardrop: taller than wide.
-      for k in range(0, lights ? bulbCount : 0) {
-        shape Superellipsoid $"bulb-{k}" {
-          exponent: 2
-          position [
-            (firRim(firTier(k, tiers), tiers) * spread * (1 - firSlope(k, tiers)) + 0.07) *
-              cosine(6.283185307 * firSpreadU(k)),
-            (firBase(firTier(k, tiers), tiers) + 2 * firHalf(firTier(k, tiers), tiers) * firSlope(k, tiers)) * height,
-            (firRim(firTier(k, tiers), tiers) * spread * (1 - firSlope(k, tiers)) + 0.07) *
-              sine(6.283185307 * firSpreadU(k)),
-          ]
-          scale [0.055, 0.085, 0.055]
-          material: 1 + length(needles) + k % length(bulbs)
+      if lights {
+        for k in range(0, bulbCount) {
+          let t = firTier(k, tiers)
+          let s = firSlope(k, tiers)
+          shape Superellipsoid $"bulb-{k}" {
+            exponent: 2
+            position: polarPoint(
+              firRim(t, tiers) * spread * (1 - s) + 0.07,
+              360 * firSpreadU(k),
+              (firBase(t, tiers) + 2 * firHalf(t, tiers) * s) * height
+            )
+            scale [0.055, 0.085, 0.055]
+            material: 1 + length(needles) + k % length(bulbs)
+          }
         }
       }
       // Fibre tips stud the boughs' hems and skirts: tiny points in three colour groups spread by the same sequence.
-      for k in range(0, fiber ? fiberCount : 0) {
-        shape Sphere $"fiber-{k}" {
-          position [
-            ((firRim(firTier(k, tiers), tiers) - 0.04) * spread * (1 - 0.6 * (firSlope(k, tiers) - 0.12)) + 0.02) *
-              cosine(6.283185307 * firSpreadU(k)),
-            (firHem(firTier(k, tiers), tiers) + 2.2 * firHalf(firTier(k, tiers), tiers) * (firSlope(k, tiers) - 0.12)) *
-              height,
-            ((firRim(firTier(k, tiers), tiers) - 0.04) * spread * (1 - 0.6 * (firSlope(k, tiers) - 0.12)) + 0.02) *
-              sine(6.283185307 * firSpreadU(k)),
-          ]
-          scale [0.03, 0.03, 0.03]
-          material: 1 + length(needles) + (lights ? length(bulbs) : 0) + k % length(fibers)
+      if fiber {
+        for k in range(0, fiberCount) {
+          let t = firTier(k, tiers)
+          let s = firSlope(k, tiers) - 0.12
+          shape Sphere $"fiber-{k}" {
+            position: polarPoint(
+              (firRim(t, tiers) - 0.04) * spread * (1 - 0.6 * s) + 0.02,
+              360 * firSpreadU(k),
+              (firHem(t, tiers) + 2.2 * firHalf(t, tiers) * s) * height
+            )
+            scale [0.03, 0.03, 0.03]
+            material: 1 + length(needles) + (lights ? length(bulbs) : 0) + k % length(fibers)
+          }
         }
       }
     }

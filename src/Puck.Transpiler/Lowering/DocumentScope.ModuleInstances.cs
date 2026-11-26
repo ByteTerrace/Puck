@@ -36,6 +36,10 @@ public sealed partial class DocumentScope {
                     );
 
                     break;
+                case ConditionalStatementNode branch:
+                    CollectModuleInstances(instances: instances, statements: [.. branch.Then, .. (branch.Else ?? [])]);
+
+                    break;
             }
         }
     }

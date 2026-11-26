@@ -2074,12 +2074,12 @@ public static partial class ExpressionSpelling {
                         if (
                             !quoted &&
                             calling && Calls.TryGetValue(
-                            key: name,
+                            key: ExpressionVocabulary.Canonical(name: name),
                             value: out var call
                         )
                         ) {
                             return ParseCall(
-                                name: name,
+                                name: ExpressionVocabulary.Canonical(name: name),
                                 arity: call.Arity,
                                 names: 0
                             );

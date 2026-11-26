@@ -88,6 +88,9 @@ public static class SyntaxScopes {
                 AddLoop(index: loop.Index, into: bound, item: loop.Item, loop: loop);
                 AddLets(before: child, into: bound, statements: loop.Body);
                 break;
+            case ConditionalStatementNode branch when !ReferenceEquals(objA: child, objB: branch.Condition):
+                AddLets(before: child, into: bound, statements: (branch.Then.Any(predicate: statement => ReferenceEquals(objA: statement, objB: child)) ? branch.Then : (branch.Else ?? [])));
+                break;
             case ForExpressionNode loop when !ReferenceEquals(objA: child, objB: loop.Sequence):
                 AddLoop(index: loop.Index, into: bound, item: loop.Item, loop: loop);
                 AddLets(before: child, into: bound, statements: loop.Bindings);

@@ -11,11 +11,12 @@ internal static class PuckHoverInfo {
     private static readonly Lazy<PuckSchemaHover> Schema = new(valueFactory: () => new PuckSchemaHover());
 
     internal static string? Builtin(string word) {
+        word = DocumentBuiltins.Canonical(name: word);
         if (DocumentBuiltins.Collections.TryGetValue(key: word, value: out var collection)) {
             return Card(
                 declaration: collection.Signature,
                 description: collection.Description,
-                title: "Collection function — evaluated at compile time"
+                title: "Document function — evaluated at compile time"
             );
         }
         if (ExpressionVocabulary.Functions.TryGetValue(
