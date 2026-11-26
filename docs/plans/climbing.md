@@ -124,7 +124,9 @@ screen climbs. Space leaps the way she is moving. Left Shift lets go.
 - **The mantle is proven.** Other engines play a canned animation over a capsule test. Puck's lands only where the
   body's own sweep stood it, on ground no author marked.
 - **A grab is deliberate on the ground and instant in the air.** The dwell removes the accidental grab that walking
-  along a wall causes, and keeps the catch when she falls past a face.
+  along a wall causes, and keeps the catch when she falls past a face. The ability's own gate adds that a hop is not
+  a fall: within a fifth of a second of leaving the ground she takes nothing, so stepping over a root does not catch
+  its flank.
 - **Rest is the surface's choice.** Hanging is free, as in the original. The two drain rates are authored per row,
   so a world can make one face cost a little to hang on and another nothing.
 - **No slip tax.** Rain slipping is the feature players name as the worst. A wet surface is a `when` gate or a row
