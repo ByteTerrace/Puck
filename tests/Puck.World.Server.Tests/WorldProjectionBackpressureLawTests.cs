@@ -95,7 +95,7 @@ public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output
         using var narrated = hub.AttachNarrationSink(sink: narration);
         using var lease = hub.Subscribe(sink: sink);
 
-        for (var tick = 1UL; (tick <= ((ulong)(WorldFederationProjectionSink.PendingDeliveryLimit + 1))); tick++) {
+        for (var tick = 1UL; (tick <= ((ulong)(WorldFederationProjectionSink.PendingDeliveryLimit + WorldFederationProjectionSink.StalledDeliveryLimit + 2))); tick++) {
             var snapshot = new WorldSnapshot(Authority: "authority/one", Entries: ReadOnlyMemory<EntitySnapshot>.Empty, Revision: 1, StepTicks: 1UL, Tick: tick);
 
             hub.DeliverSnapshot(snapshot: in snapshot);
@@ -160,7 +160,7 @@ public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output
 
         using var lease = hub.Subscribe(sink: sink);
 
-        for (var tick = 1UL; (tick <= ((ulong)(WorldFederationProjectionSink.PendingDeliveryLimit + 1))); tick++) {
+        for (var tick = 1UL; (tick <= ((ulong)(WorldFederationProjectionSink.PendingDeliveryLimit + WorldFederationProjectionSink.StalledDeliveryLimit + 2))); tick++) {
             var snapshot = new WorldSnapshot(
                 Authority: "authority/one",
                 Entries: ReadOnlyMemory<EntitySnapshot>.Empty,
@@ -235,6 +235,71 @@ public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output
             expected: WorldFederationProjectionSink.BackpressureDetachReason,
             actual: System.Text.Encoding.UTF8.GetString(bytes: terminal.Body.Span)
         );
+    }
+    // An observer whose wire fell a whole queue behind is not detached. It is sent nothing while its wire drains, and
+    // the first delivery after that cuts its stream to a new generation and sends the current snapshot behind the cut,
+    // so it catches up on the stream it holds.
+    [Fact]
+    public async Task ASlowObserverCatchesUpOnItsOpenStreamBehindACut() {
+        var ct = TestContext.Current.CancellationToken;
+        var sink = new WorldFederationProjectionSink(
+            disclosure: static () => new WorldSinkDisclosure(ObserverBodyIndex: -1, Policy: new WorldObserverDisclosure(UpdateSeconds: 0f)),
+            tier: WorldDisclosureTier.Replica
+        );
+        var hub = new WorldOutputHub();
+        const ulong Missed = 16UL;
+        var last = (((ulong)WorldFederationProjectionSink.PendingDeliveryLimit) + Missed);
+
+        using var lease = hub.Subscribe(sink: sink);
+
+        void Deliver(ulong tick) {
+            var snapshot = new WorldSnapshot(Authority: "authority/one", Entries: ReadOnlyMemory<EntitySnapshot>.Empty, Revision: 1, StepTicks: 1UL, Tick: tick);
+
+            hub.DeliverSnapshot(snapshot: in snapshot);
+        }
+        for (var tick = 1UL; (tick <= last); tick++) {
+            Deliver(tick: tick);
+        }
+        Assert.Null(@object: sink.DetachReason);
+        Assert.True(condition: hub.HasTypedSubscribers);
+        Assert.Equal(expected: WorldFederationProjectionSink.PendingDeliveryLimit, actual: sink.PendingDeliveries);
+
+        using var wire = new ProjectionWire();
+        using var streaming = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
+        var stream = sink.StreamAsync(ct: streaming.Token, output: wire);
+
+        Puck.Testing.TestLiveness.Until(reason: static () => "the observer's wire did not drain what was queued", step: () => (wire.Flushes == WorldFederationProjectionSink.PendingDeliveryLimit));
+        Deliver(tick: (last + 1UL));
+        Assert.Null(@object: sink.DetachReason);
+        Puck.Testing.TestLiveness.Until(reason: static () => "the observer's wire did not drain its catch-up", step: () => (wire.Flushes == (WorldFederationProjectionSink.PendingDeliveryLimit + 2)));
+        await streaming.CancelAsync();
+        try { await stream; } catch (OperationCanceledException) { }
+
+        using var decodedWire = new MemoryStream(buffer: wire.ToArray());
+        var generation = 0L;
+
+        for (var tick = 1UL; (tick <= ((ulong)WorldFederationProjectionSink.PendingDeliveryLimit)); tick++) {
+            var frame = await WorldFederationCodec.ReadResponseAsync(ct: ct, stream: decodedWire);
+
+            Assert.Equal(expected: ((byte)WorldFederationResponse.Snapshot), actual: frame.Kind);
+            Assert.True(condition: WorldFederationCodec.TryReadStamped(frame.Body.Span, out var stamp, out _, out _));
+            Assert.True(condition: WorldFederationCodec.TryDecodeSnapshot(body: frame.Body.Span[WorldFederationCodec.StreamStampBytes..], failure: out var failure, snapshot: out var decoded), userMessage: failure.ToString());
+            Assert.Equal(expected: tick, actual: decoded.Tick);
+            generation = stamp.Generation;
+        }
+        var cutFrame = await WorldFederationCodec.ReadResponseAsync(ct: ct, stream: decodedWire);
+
+        Assert.Equal(expected: ((byte)WorldFederationResponse.Cut), actual: cutFrame.Kind);
+        Assert.True(condition: WorldFederationCodec.TryDecodeCut(body: cutFrame.Body.Span, stream: out var cut, terminal: out var terminal));
+        Assert.False(condition: terminal);
+        Assert.True(condition: (cut.Generation > generation));
+        var caughtUp = await WorldFederationCodec.ReadResponseAsync(ct: ct, stream: decodedWire);
+
+        Assert.Equal(expected: ((byte)WorldFederationResponse.Snapshot), actual: caughtUp.Kind);
+        Assert.True(condition: WorldFederationCodec.TryReadStamped(caughtUp.Body.Span, out var resumed, out _, out _));
+        Assert.Equal(expected: cut.Generation, actual: resumed.Generation);
+        Assert.True(condition: WorldFederationCodec.TryDecodeSnapshot(body: caughtUp.Body.Span[WorldFederationCodec.StreamStampBytes..], failure: out var resumedFailure, snapshot: out var current), userMessage: resumedFailure.ToString());
+        Assert.Equal(expected: (last + 1UL), actual: current.Tick);
     }
 
     [Fact]
@@ -329,6 +394,15 @@ public sealed class WorldProjectionBackpressureLawTests(ITestOutputHelper output
 /// <summary>A projection stream that keeps every record written to it and never acknowledges one, so a sink's
 /// records stay whole snapshots rather than deltas against an acknowledged baseline.</summary>
 internal sealed class ProjectionWire : MemoryStream {
+    private int m_flushes;
+
+    /// <summary>Gets the records written so far: a sink flushes once behind each record.</summary>
+    public int Flushes => Volatile.Read(location: ref m_flushes);
+
+    public override Task FlushAsync(CancellationToken cancellationToken) {
+        _ = Interlocked.Increment(location: ref m_flushes);
+        return base.FlushAsync(cancellationToken: cancellationToken);
+    }
     public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) {
         await Task.Delay(cancellationToken: cancellationToken, delay: Timeout.InfiniteTimeSpan);
 

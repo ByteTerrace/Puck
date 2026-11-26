@@ -74,6 +74,31 @@ public static class WorldReleaseRewindBoundary {
             names
         )}").ToString();
     }
+    /// <summary>Proves a checkpoint is a recovery point of the group whose restore reads it: it carries a rewind
+    /// baseline, the baseline names exactly the authorities the restore's own inventory holds, and the part of the
+    /// image the baseline keeps is contained (<see cref="RequireContained"/>) by those same names. What a restore ends
+    /// is decided once, by the names in the checkpoint's bytes; this refuses a point whose bytes and the inventory
+    /// that selected it would decide differently.</summary>
+    /// <param name="checkpoint">The recovery point's checkpoint.</param>
+    /// <param name="authorities">The restoring group's authority namespaces.</param>
+    /// <exception cref="InvalidOperationException">The checkpoint carries no baseline, its baseline differs from
+    /// <paramref name="authorities"/>, or the image is not contained.</exception>
+    public static void RequireBaseline(WorldAuthorityCheckpoint checkpoint, IReadOnlySet<string> authorities) {
+        ArgumentNullException.ThrowIfNull(argument: checkpoint);
+        ArgumentNullException.ThrowIfNull(argument: authorities);
+        var baseline = checkpoint.Escrow.RewindBaseline;
+
+        if (baseline.Count == 0) {
+            throw new InvalidOperationException(message: "rewind checkpoint is not a recovery point: it carries no rewind baseline");
+        }
+        if (!authorities.SetEquals(other: baseline)) {
+            throw new InvalidOperationException(message: $"rewind checkpoint is a recovery point of another group: its baseline names [{string.Join(separator: ", ", values: baseline)}], and this group is [{string.Join(separator: ", ", values: authorities.Order(comparer: StringComparer.Ordinal))}]");
+        }
+        RequireContained(
+            checkpoint: checkpoint,
+            containsAuthority: authorities.Contains
+        );
+    }
     /// <summary>Proves the part of a checkpoint a rewind baseline keeps: this world's own departures are settled and
     /// no world of the group holds an open reservation here, every forwarding route stays inside the group, and every
     /// body minted outside the group is a transferred human seat, which is what a baseline's restore ends. Rows of a

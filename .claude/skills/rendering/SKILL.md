@@ -220,7 +220,12 @@ the floor where its cell projects under half a pixel (a view) or half a texel (a
 cascade) and the finer tier everywhere else, deciding from the shared words and the
 draw's pose alone, so exactly one tier of a placement draws; a finer tier yields only
 while every floor row it names stands. Floor rows stay out of the irradiance volume's
-static scene (`SdfMeshDraw.InStaticScene`). Below the floor, the collapse's last two
+static scene (`SdfMeshDraw.InStaticScene`), which traces the kept floor through the
+group's row instead (`SdfMeshDraw.Trace`). A shape names its materials by place, so a
+floor kept across a replan or a renumbering can match the group's shape while carrying
+another program's material ids. A kept floor changes only through `Group.SetFloor`, which `KeepFloorOf` and
+`Renumber` hand the library's copy in the group's own ids (`Group.FloorIn`), or no
+floor where the library holds none. Below the floor, the collapse's last two
 levels (`SdfMeshCollapse.CellShares`) serve views far smaller than the tier was
 demanded for. The selection marks clamp a level past the second to it, so
 `drawn.*.level2` counts the second level's triangles for those draws.
@@ -243,7 +248,15 @@ reuse the ordinary static emitter in prototype-local ranges (`SdfMeshTemplateRan
 including its per-shape bounds, detail regions and separate groups. The largest
 occurrence bakes at ordinary authored scale; copies use relative matrices. Do not
 replace that partition with one dynamic whole-object range or promote the default
-bake spacing into explicit detail: both increase tessellation. `IsDynamic` selects
+bake spacing into explicit detail: both increase tessellation. A template draws
+only through the copies that name it: an emitter publishes its fixed template ranges
+(`ISdfSceneEmitter.MeshTemplateRanges`) as it publishes its dynamic template slots,
+and the bake's one copy index (`SdfMeshPathBake.CopiesOf`) answers no copies, not
+"the group once", for a template group no copy names. A responding row keeps a
+template for every creation it can show; a template that drew itself once would put
+the creations it does not show at their templates' frame, on top of the shown one, and
+the irradiance volume would trace two coincident surfaces with two materials, whichever
+the CPU and the GPU walks each meet first. `IsDynamic` selects
 static lighting membership; `UsesRootMaterialFrame` independently selects material
 coordinates while retaining the root slot for skinning and portals. Dressing retains
 group/copy topology and immutable per-surface picking metadata across pose changes.

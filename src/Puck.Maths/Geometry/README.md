@@ -22,7 +22,8 @@ the contract for the folder.
 | [`HexagonalIndex`](#hexagonalindex) | `readonly record struct` | A dense, continuous hex-grid walk in complete rings. Radius, rotation, and reflection act directly on the index. |
 | [`SquareCoordinate`](#squarecoordinate) | `readonly record struct` | A signed integer cell with four cardinal neighbours, exact quarter turns and Gaussian arithmetic. |
 | [`SquareIndex`](#squareindex) | `readonly record struct` | A dense, continuous spiral over complete squares, with direct symmetries, scaling and norm. |
-| [`HilbertCurve`](#hilbertcurve) | `static` | The locality-preserving 1D ↔ 2D bijection. Cache-coherent tile and chunk ordering. |
+| [`HilbertCurve`](#hilbertcurve) | `static` | The locality-preserving 1D ↔ 2D bijection. Cache-coherent tile and chunk ordering. `EncodeCentered` takes signed, saturated cell indices. |
+| `CurveOrderedIndex` | `sealed class` | A set of slots kept in Hilbert order of their grid cells, re-sorted only for slots that joined or changed cell; ties by slot, so the order is a pure function of members and cells. |
 | [`LayerSequence`](#layersequence) | `readonly record struct` | Layered index spaces (the generalized figurate numbers), with constant-time index → layer lookup. |
 | [`ModularTransform`](#modulartransform) | `readonly record struct` | An exact element of the modular group, acting on the hyperbolic plane. The one object beneath the other three motions. |
 

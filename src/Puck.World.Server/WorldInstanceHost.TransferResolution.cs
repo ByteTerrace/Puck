@@ -809,9 +809,11 @@ public sealed partial class WorldInstanceHost {
                 resolvedName = (transfer.Destination.Name ?? (transfer.Destination.Site ?? endpoint));
 
                 try {
-                    var authorityNamespace = definition.Host.AuthorityNamespace;
+                    // The namespace the remote must prove is the run's own input when it gave one, and the destination
+                    // document's otherwise: the one place a remote destination's expected authority is decided.
+                    var authorityNamespace = (transfer.Destination.AuthorityNamespace ?? definition.Host.AuthorityNamespace);
                     if (string.IsNullOrWhiteSpace(value: authorityNamespace)) {
-                        throw new InvalidOperationException(message: "remote destination requires host.authorityNamespace");
+                        throw new InvalidOperationException(message: "remote destination requires the authority namespace it must prove: name it for the run, or declare host.authorityNamespace in the destination document");
                     }
                     if (
                         !m_remoteAuthorities.TryGetValue(
@@ -822,7 +824,7 @@ public sealed partial class WorldInstanceHost {
                         a: remote.Endpoint,
                         b: endpoint,
                         comparisonType: StringComparison.Ordinal
-                    ) || (remote.PeerAuthority != definition.Host.AuthorityNamespace)
+                    ) || (remote.PeerAuthority != authorityNamespace)
                     ) {
                         var replacement = new WorldRemoteAuthority(
                             expectedAuthority: authorityNamespace,

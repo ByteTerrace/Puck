@@ -3731,6 +3731,8 @@ public sealed partial class SdfMeshPathBake {
         public bool Declined { get; set; }
 
         private SdfMesh? m_floor;
+        // The material ids, by place, the kept floor's triangles carry: always the group's own (SetFloor).
+        private int[] m_floorMaterials = [];
 
         // The mesh a group planned at or past its floor tier landed, kept with its own claim while a finer tier draws, so
         // the group shows it again the moment that tier is refused or evicted (SdfMeshPathBake.Evict); the geometry it
@@ -3773,27 +3775,33 @@ public sealed partial class SdfMeshPathBake {
         public SdfMesh? JudgedAgainst => OwnProduct;
 
         // Keeps the floor of the group this one replaces: that group's own product at or past its floor tier, or the
-        // floor it kept, with its shape, its tier and its verdict. A group planned at or past its floor tier keeps none,
-        // since its product is its floor. Takes a claim of its own.
+        // floor it kept, with its shape, its tier and its verdict, in this group's material ids (FloorIn). A group planned
+        // at or past its floor tier keeps none, since its product is its floor. Takes a claim of its own.
         public void KeepFloorOf(Group old) {
             if (AtFloor) { return; }
 
             var atFloor = old.AtFloor;
-            var (floor, geometry, shape, tier) = (atFloor ? (old.Mesh, old.Sealed, old.Shape, old.Tier) : (old.m_floor, old.FloorGeometry, old.m_floorShape, old.KeptFloorTier));
+            var (floor, geometry, shape, tier, carried) = (atFloor ? (old.Mesh, old.Sealed, old.Shape, old.Tier, old.MaterialOrder) : (old.m_floor, old.FloorGeometry, old.m_floorShape, old.KeptFloorTier, old.m_floorMaterials));
 
             if ((floor is null) || ReferenceEquals(objA: floor, objB: m_floor)) { return; }
-            m_floor?.Release();
-            m_floor = floor.Acquire();
-            FloorGeometry = geometry;
             KeptFloorTier = tier;
             m_floorShape = shape;
             FloorVerdict = (atFloor ? new TraceVerdict() : old.FloorVerdict);
-            if (Owner is { } owner) {
-                owner.m_floorRevision++;
-                owner.Touch(group: this);
-                owner.Keep(group: this);
-                owner.Judgeable(group: this);
-            }
+            SetFloor(floor: FloorIn(carried: carried, floor: floor, geometry: geometry, wanted: MaterialOrder), geometry: geometry);
+        }
+        // The one door a kept floor changes through: takes the claim on the floor (in the group's own material ids, or
+        // null for none), lets the one it replaces go, and tells the bake.
+        private void SetFloor(SdfMesh? floor, SdfMeshGeometry? geometry) {
+            m_floor?.Release();
+            m_floor = floor;
+            m_floorMaterials = MaterialOrder;
+            FloorGeometry = ((floor is null) ? null : geometry);
+            if (Owner is not { } owner) { return; }
+            owner.m_floorRevision++;
+            owner.Touch(group: this);
+            if (floor is null) { return; }
+            owner.Keep(group: this);
+            owner.Judgeable(group: this);
         }
 
         // Takes the demand box from the planned box, once.
@@ -3803,10 +3811,22 @@ public sealed partial class SdfMeshPathBake {
             DemandHalf = Vector3.Abs(value: ((High - Low) * 0.5f));
             HasDemandBox = true;
         }
-        // Draws its mesh renumbered into a later program's material ids, which number its shapes place for place.
+        // Draws its mesh renumbered into a later program's material ids, which number its shapes place for place, and
+        // keeps its floor in the same ids.
         public void Renumber(int[] materials, SdfMesh mesh) {
+            var carried = m_floorMaterials;
+
             Renumber(materials: materials);
             Mesh = mesh;
+            if (m_floor is { } floor) { SetFloor(floor: FloorIn(carried: carried, floor: floor, geometry: FloorGeometry, wanted: materials), geometry: FloorGeometry); }
+        }
+        // A claim on a floor whose triangles carry the ids `carried` numbers its shapes with, in the ids `wanted` numbers
+        // them with: the floor itself where they agree, else the library's renumbered copy of its geometry, or null where
+        // the library holds none, so no group draws or traces a floor in another program's material ids.
+        private SdfMesh? FloorIn(SdfMesh floor, SdfMeshGeometry? geometry, int[] carried, int[] wanted) {
+            if (carried.AsSpan().SequenceEqual(other: wanted)) { return floor.Acquire(); }
+            if ((Owner is not { } owner) || (geometry is not { } key)) { return null; }
+            return (owner.Library.TryTake(geometry: key, identity: Identity, materials: wanted, mesh: out var renumbered) ? renumbered : null);
         }
     }
     // A group's final lattice: its values and materials, sampled a slab at a time, then the sampled lattice built from

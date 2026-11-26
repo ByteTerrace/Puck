@@ -60,7 +60,7 @@ public sealed partial class WorldReleaseCutoverLawTests {
                 Listen = ((world == "alpha") ? endpoint : null),
                 Presentation = WorldHostPresentation.None,
             },
-            PopulationRaw = initial.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 2), NetworkPlayers = 2 },
+            PopulationRaw = initial.Population with { CapacityRaw = (WorldBodiesLimits.LocalSeatCount + 8), NetworkPlayers = 8 },
             Admission = [Fixtures.AnyAuthorityArrivals()],
         };
         var package = Directory.CreateDirectory(path: Path.Combine(path1: directory.RootPath, path2: "package")).FullName;
@@ -109,7 +109,10 @@ public sealed partial class WorldReleaseCutoverLawTests {
             ),
             target,
             timeProvider: clock,
-            extensions: Puck.Abstractions.PuckExtensionSet.Compose(extensions: [new WorldServerExtension()])
+            extensions: Puck.Abstractions.PuckExtensionSet.Compose(extensions: [new WorldServerExtension()]),
+            // Small enough for the probe to reach: a session's budget, and what every guest may hold together.
+            guestKeysPerSession: GuestKeysPerSession,
+            guestKeys: GuestKeys
         );
         var source = Host();
         using var sourceInstances = source.Instances;
@@ -200,29 +203,31 @@ public sealed partial class WorldReleaseCutoverLawTests {
             // 2. The door refuses everyone else, and a guest in any other shape, by name, and writes nothing.
             var keysBefore = Counts(host: source, world: "alpha").TransferKeys;
             var rate = alpha.Server.Configuration.SimulationRateHz;
-            WorldTransferCaller Guest(string subject, out string ns, bool vouched = true, string? domain = null) {
+            VerifiedPeerIdentity Session(string subject, out string ns, bool vouched = true, string? domain = null) {
                 ns = $"{(domain ?? issuerDomain)}/{subject}/{Guid.NewGuid():N}";
-                return WorldTransferCaller.Authenticated(identity: new VerifiedPeerIdentity(
+                return new VerifiedPeerIdentity(
                     Authority: ns,
                     Session: new VerifiedSession(Domain: (domain ?? issuerDomain), Run: ns[(ns.LastIndexOf(value: '/') + 1)..], Subject: subject, Vouched: vouched),
                     ValidThrough: long.MaxValue
-                ));
+                );
             }
-            WorldTransferReservationRequest Request(string ns, ulong id, Func<WorldTransferReservationMember, WorldTransferReservationMember>? shape = null) {
-                var minted = new WorldEntityAddress(Authority: ns, Generation: 1, Index: 0);
+            WorldTransferCaller Guest(string subject, out string ns, bool vouched = true, string? domain = null) =>
+                WorldTransferCaller.Authenticated(identity: Session(domain: domain, ns: out ns, subject: subject, vouched: vouched));
+            WorldTransferReservationRequest Request(string ns, ulong id, Func<WorldTransferReservationMember, WorldTransferReservationMember>? shape = null, int body = 0, string border = "", int? borderCapacity = null) {
+                var minted = new WorldEntityAddress(Authority: ns, Generation: 1, Index: body);
                 var member = new WorldTransferReservationMember(
                     BodyColor: default,
                     CatalogRig: 0,
                     Identity: null,
                     Mobility: new WorldMobilityIdentity(DepartedFrom: minted, Epoch: 0, Incarnation: minted),
                     PreferredSlot: -1,
-                    Principal: default,
+                    Principal: Principal.Seat(slot: 0),
                     Source: IntentSource.Live
                 );
 
                 return new(
-                    Border: string.Empty,
-                    BorderCapacity: null,
+                    Border: border,
+                    BorderCapacity: borderCapacity,
                     DeadlineSourceTick: 600,
                     Members: [(shape?.Invoke(arg: member) ?? member)],
                     PartyAllOrNothing: true,
@@ -233,15 +238,34 @@ public sealed partial class WorldReleaseCutoverLawTests {
                     TransferId: id
                 );
             }
-            async Task<string> RefusedAsync(WorldTransferCaller caller, WorldTransferReservationRequest request) {
+            async Task<WorldTransferReservationReply> ReserveAsync(WorldTransferCaller? caller, WorldTransferReservationRequest request) {
                 var reserving = alpha.Server.ReserveTransferAsync(caller: caller, ct: Token, request: request);
 
                 await silo.UntilAsync(done: () => reserving.IsCompleted, what: "a reservation was answered");
-                var reply = await reserving;
+                return await reserving;
+            }
+            async Task<string> RefusedAsync(WorldTransferCaller caller, WorldTransferReservationRequest request) {
+                var reply = await ReserveAsync(caller: caller, request: request);
 
                 Assert.False(condition: reply.Accepted, userMessage: "a disallowed party was leased");
                 return reply.Reason;
             }
+            async Task<(WorldTransferStatus Status, string Reason)> CommitAsync(WorldTransferCaller caller, string ns, ulong id, WorldTransferCommitMember member) {
+                var committing = alpha.Server.CommitTransferAsync(caller: caller, ct: Token, members: [member], sourceAuthority: ns, transferId: id);
+
+                await silo.UntilAsync(done: () => committing.IsCompleted, what: "a guest's commit was answered");
+                return await committing;
+            }
+            WorldTransferCommitMember Landing(WorldTransferArrival arrival = WorldTransferArrival.Spawn, Puck.Maths.FixedQ4816 turn = default, WorldIdentityProjection? profile = null) => new(
+                Arrival: arrival,
+                BodyMotionProgramName: string.Empty,
+                PlanarVelocity: default,
+                Position: default,
+                Profile: profile,
+                TravelTurn: turn,
+                VerticalVelocity: default,
+                YawRadians: default
+            );
             var guest = Guest(subject: "player-two", ns: out var second);
 
             Assert.Contains(
@@ -297,6 +321,91 @@ public sealed partial class WorldReleaseCutoverLawTests {
             Assert.Equal(expected: keysBefore, actual: Counts(host: source, world: "alpha").TransferKeys);
             Assert.Equal(expected: 1, actual: GuestBodies(host: source, session: session, world: "alpha"));
 
+            // A producer's source is no player's seat, whatever the sender says holds it.
+            Assert.Contains(
+                expectedSubstring: "is not a player's seat",
+                actualString: await RefusedAsync(caller: guest, request: Request(id: 5, ns: second, shape: member => member with { RemoteHuman = true, Source = IntentSource.Producer(name: "patrol") }))
+            );
+            // The sender's border and its capacity are not read: a border with no room would refuse a cohort that named
+            // it. The seat it leases is refused at commit for the arrival turn it carries, and the session is forgotten.
+            var bordered = await ReserveAsync(caller: guest, request: Request(border: "adjacency/beta", borderCapacity: 0, id: 6, ns: second));
+
+            Assert.True(condition: bordered.Accepted, userMessage: bordered.Reason);
+            var turned = await CommitAsync(caller: guest, id: 6, member: Landing(turn: Puck.Maths.FixedQ4816.One), ns: second);
+
+            Assert.Equal(expected: WorldTransferStatus.Missing, actual: turned.Status);
+            Assert.Contains(expectedSubstring: "it carries an arrival turn", actualString: turned.Reason);
+            await silo.UntilAsync(done: () => (alpha.Server.TransferStatus(caller: guest, sourceAuthority: second, transferId: 6) == WorldTransferStatus.Ended), what: "the session whose commit carried a turn was forgotten");
+            Assert.Equal(expected: keysBefore, actual: Counts(host: source, world: "alpha").TransferKeys);
+
+            // A guest lands under the subject its issuer vouched for, at this world's own rates, whatever identity it
+            // sends: the id another player holds and speeds of its own choosing are not what lands.
+            var claimed = new WorldIdentityProjection(ColorHex: "#336699", Id: "player-one", MoveSpeed: Puck.Maths.FixedQ4816.FromInteger(value: 99), Name: "Second", TurnSpeed: Puck.Maths.FixedQ4816.FromInteger(value: 99));
+            var entering = await ReserveAsync(caller: guest, request: Request(body: 1, id: 7, ns: second, shape: member => member with { Identity = claimed, PreferredSlot = (WorldBodiesLimits.LocalSeatCount + 7) }));
+
+            Assert.True(condition: entering.Accepted, userMessage: entering.Reason);
+            Assert.NotEqual(expected: (WorldBodiesLimits.LocalSeatCount + 7), actual: entering.BodyIndices[0]);
+            var entered = await CommitAsync(caller: guest, id: 7, member: Landing(profile: claimed), ns: second);
+
+            Assert.True(condition: (entered.Status == WorldTransferStatus.Committed), userMessage: entered.Reason);
+            var landedAs = alpha.Server.ExecuteAuthorityOperation(operation: () => alpha.Server.Population.EntryBody(index: entering.BodyIndices[0])!.Profile!.Project());
+
+            Assert.Equal(expected: "player-two", actual: landedAs.Id);
+            Assert.Equal(expected: "Second", actual: landedAs.Name);
+            Assert.Null(@object: landedAs.MoveSpeed);
+            Assert.Null(@object: landedAs.TurnSpeed);
+            Assert.Equal(expected: 2, actual: Counts(host: source, world: "alpha").MobilityCredentials);
+
+            // A question about a key the session never reserved is answered and writes no row.
+            var rows = Counts(host: source, world: "alpha").TransferKeys;
+
+            Assert.Equal(expected: WorldTransferStatus.Missing, actual: alpha.Server.TransferStatus(caller: guest, sourceAuthority: second, transferId: 999));
+            Assert.Equal(expected: rows, actual: Counts(host: source, world: "alpha").TransferKeys);
+
+            // A session's budget. This one holds the key it landed under; each lease it takes and gives up keeps its
+            // row, and the lease past the budget is refused by name.
+            for (var id = 8UL; (id < (7UL + GuestKeysPerSession)); id++) {
+                var extra = await ReserveAsync(caller: guest, request: Request(body: ((int)id), id: id, ns: second));
+
+                Assert.True(condition: extra.Accepted, userMessage: extra.Reason);
+                alpha.Server.AbortTransfer(caller: guest, sourceAuthority: second, transferId: id);
+            }
+            Assert.Contains(
+                expectedSubstring: $"holds the {GuestKeysPerSession} transfer keys one player's session may hold here",
+                actualString: await RefusedAsync(caller: guest, request: Request(body: 99, id: 99, ns: second))
+            );
+
+            // What every guest may hold together. Another player's session leases until the guests' share is full, well
+            // inside its own budget, and is then refused by name.
+            var third = Guest(subject: "player-three", ns: out var thirdSession);
+            string? shareRefusal = null;
+
+            for (var id = 1UL; ((id <= GuestKeysPerSession) && (shareRefusal is null)); id++) {
+                var reply = await ReserveAsync(caller: third, request: Request(body: ((int)id), id: id, ns: thirdSession));
+
+                shareRefusal = (reply.Accepted ? null : reply.Reason);
+            }
+            Assert.Contains(expectedSubstring: $"this world's guests hold the {GuestKeys} transfer keys it keeps for players", actualString: shareRefusal);
+            Assert.Equal(expected: GuestKeys, actual: Counts(host: source, world: "alpha").GuestTransferKeys);
+
+            // No guest's row is counted against a world of the group: beta still reserves here.
+            Assert.True(condition: source.Instances.TryGet(instance: out var beta, name: "beta"));
+            var member = WorldTransferCaller.Colocated(source: beta!.Server);
+            var fromBeta = await ReserveAsync(caller: member, request: Request(id: 1, ns: beta.Server.AuthorityIdentity));
+
+            Assert.True(condition: fromBeta.Accepted, userMessage: fromBeta.Reason);
+            alpha.Server.AbortTransfer(caller: member, sourceAuthority: beta.Server.AuthorityIdentity, transferId: 1);
+            Assert.Equal(expected: GuestKeys, actual: Counts(host: source, world: "alpha").GuestTransferKeys);
+
+            // A world of the group gives a credential to a vouched session alone: a vouched identity that signed for no
+            // session (its namespace is its bare subject, which can spell a world's name) and a session no root vouched
+            // for are refused before any door reads their namespace.
+            var boundary = alpha.Server.TransferBoundary!;
+
+            Assert.Null(@object: boundary.CredentialRefusal(identity: Session(ns: out _, subject: "player-four")));
+            Assert.Contains(expectedSubstring: "answers only a player's session", actualString: boundary.CredentialRefusal(identity: new VerifiedPeerIdentity(Authority: "beta", ValidThrough: long.MaxValue)));
+            Assert.Contains(expectedSubstring: "answers only a player's session", actualString: boundary.CredentialRefusal(identity: Session(ns: out _, subject: "pinned", vouched: false)));
+
             // 3. A capture with the player present is a baseline that still holds the player's rows.
             var capturing = source.ExportReleaseFixtureAsync(Guid.NewGuid(), Token);
 
@@ -340,32 +449,71 @@ public sealed partial class WorldReleaseCutoverLawTests {
             Assert.True(condition: (await restoring).Completed, userMessage: (await restoring).Detail);
             foreach (var identity in identities) {
                 Assert.Equal(expected: 0, actual: GuestBodies(host: candidate, session: session, world: identity.World.Value));
-                Assert.Equal(expected: new WorldTransferTableCounts(ActiveTransactions: 0, MobilityCredentials: 0, MobilityLeases: 0, TransferKeys: 0), actual: Counts(host: candidate, world: identity.World.Value));
+                Assert.Equal(expected: 0, actual: GuestBodies(host: candidate, session: second, world: identity.World.Value));
+                AssertNoGuestRows(host: candidate, world: identity.World.Value);
             }
+            // What beta's own reservation left in alpha is the group's, and the restore keeps it.
+            Assert.Equal(expected: 1, actual: Counts(host: candidate, world: "alpha").TransferKeys);
             Assert.True(condition: candidate.Instances.TryGet(instance: out var restoredAlpha, name: "alpha"));
             Assert.Equal(expected: point.Worlds["alpha"].Tick, actual: restoredAlpha!.CompletedTicks);
 
             // 5. The client is told its session ended there, takes its seat back and joins again as a first entry.
             silo = new SiloPump(host: candidate);
             var returned = false;
+            string? owedAtHome = null;
 
             await silo.UntilAsync(
                 done: () => {
-                    returned |= (seats.RoutedEndpoint(slot: 0)?.Identity == WorldInstanceHost.BootInstanceName);
+                    if (!returned && (seats.RoutedEndpoint(slot: 0)?.Identity == WorldInstanceHost.BootInstanceName)) {
+                        // The seat is returned once: it stands in the boot world as one body, and the client owes no
+                        // restoration of another for it.
+                        returned = true;
+                        owedAtHome = client.TimelineResetRefusal(source: boot.Server);
+                        Assert.True(condition: boot.Server.Population.IsActive(index: 0));
+                    }
                     return returned && SeatAway() && (GuestBodies(host: candidate, session: session, world: "alpha") == 1);
                 },
                 each: StepClient,
                 what: "the client's seat came home and joined the restored group again"
             );
+            Assert.Null(@object: owedAtHome);
             Assert.Equal(expected: 1, actual: Counts(host: candidate, world: "alpha").MobilityCredentials);
 
-            // 6. The client goes away: its traveler parks, its reconnect grace runs out on the tick, and the ledger
-            // keeps no row of the session.
+            // 6. The player walks on to beta. alpha keeps the session's credential and a route; beta holds the body.
+            var walking = candidate.Instances.TryGet(instance: out var candidateAlpha, name: "alpha");
+
+            Assert.True(condition: walking);
+            var guestSlot = candidateAlpha!.Server.ExecuteAuthorityOperation(operation: () => Enumerable.Range(start: 0, count: candidateAlpha.Server.Population.Capacity).First(predicate: index => (candidateAlpha.Server.Population.ResolveIncarnation(authority: candidateAlpha.Server.AuthorityIdentity, index: index)?.Authority == session)));
+
+            _ = candidate.Instances.EnqueueTransfer(
+                actingPrincipal: candidateAlpha.Server.Population.PeerPrincipal(index: guestSlot),
+                destination: WorldInstanceHost.TransferDestination.Existing(name: "beta"),
+                scope: WorldInstanceHost.TransferScope.Body,
+                sourceInstance: "alpha",
+                sourceSlot: guestSlot
+            );
+            await silo.UntilAsync(
+                done: () => (GuestBodies(host: candidate, session: session, world: "beta") == 1) && (GuestBodies(host: candidate, session: session, world: "alpha") == 0),
+                each: StepClient,
+                what: "the player's body walked from alpha to beta"
+            );
+            Assert.Equal(expected: 1, actual: Counts(host: candidate, world: "alpha").MobilityCredentials);
+            Assert.Equal(expected: 1, actual: Counts(host: candidate, world: "beta").MobilityCredentials);
+            Assert.NotEqual(expected: 0, actual: Counts(host: candidate, world: "alpha").GuestTransferKeys);
+
+            // 7. The client goes away. alpha holds the credential and no body, so the absence is passed to beta, where
+            // the body parks and its reconnect grace runs out on the tick. beta retires it, alpha is told, and neither
+            // row keeps a body, a credential or a ledger row of the session.
             clientClosed = true;
             client.Dispose();
             clientNetwork.Dispose();
-            await silo.UntilAsync(done: () => (GuestBodies(host: candidate, session: session, world: "alpha") == 0), what: "the departed client's traveler was retired when its grace ran out");
-            Assert.Equal(expected: new WorldTransferTableCounts(ActiveTransactions: 0, MobilityCredentials: 0, MobilityLeases: 0, TransferKeys: 0), actual: Counts(host: candidate, world: "alpha"));
+            await silo.UntilAsync(
+                done: () => (GuestBodies(host: candidate, session: session, world: "beta") == 0) && (Counts(host: candidate, world: "alpha").MobilityCredentials == 0),
+                what: "the departed player's traveler was retired at beta when its grace ran out, and at alpha with it"
+            );
+            foreach (var identity in identities) {
+                AssertNoGuestRows(host: candidate, world: identity.World.Value);
+            }
             await PumpAsync(host: candidate, operation: candidate.DrainAsync(ct: Token));
         } finally {
             if (!clientClosed) {
@@ -385,6 +533,19 @@ public sealed partial class WorldReleaseCutoverLawTests {
             }
             return bodies;
         });
+    }
+    private const int GuestKeysPerSession = 4;
+    private const int GuestKeys = 8;
+
+    // A row that holds nothing of any guest: no held transaction, no credential, no leased traveler and no ledger row
+    // a guest's session owns. Rows the group's own worlds hold are theirs and stay.
+    private static void AssertNoGuestRows(WorldSiloHost host, string world) {
+        var counts = Counts(host: host, world: world);
+
+        Assert.Equal(
+            expected: new WorldTransferTableCounts(ActiveTransactions: 0, GuestTransferKeys: 0, MobilityCredentials: 0, MobilityLeases: 0, TransferKeys: counts.TransferKeys),
+            actual: counts
+        );
     }
     private static WorldTransferTableCounts Counts(WorldSiloHost host, string world) {
         Assert.True(condition: host.Instances.TryGet(instance: out var row, name: world));
