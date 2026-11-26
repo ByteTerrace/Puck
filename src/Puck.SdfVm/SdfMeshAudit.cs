@@ -195,18 +195,19 @@ public sealed record SdfMeshDefectTally(SdfMeshDefectClass Class, int Count, int
 /// the mesh, the fields and the options, so a later run over the same inputs prints the same report.</para>
 /// </summary>
 public static class SdfMeshAudit {
-    /// <summary>Returns the surface a forced level draws, with only its referenced vertices. Chunk boundaries keep
-    /// their coincident positions, which the audit welds before measuring topology.</summary>
+    /// <summary>Returns the surface a forced level draws, with only its referenced vertices: level zero names none of
+    /// the vertices the coarser levels made (<see cref="SdfMeshCollapse"/>). Chunk boundaries keep their coincident
+    /// positions, which the audit welds before measuring topology.</summary>
     /// <param name="mesh">The stored mesh.</param>
     /// <param name="level">The requested level, zero for the merged surface; clamped per piece to its last level.</param>
     /// <returns>The selected surface.</returns>
     public static SdfMesh Surface(SdfMesh mesh, int level) {
         ArgumentNullException.ThrowIfNull(mesh);
         ArgumentOutOfRangeException.ThrowIfNegative(level);
-        if (level == 0) { return mesh; }
         if (mesh.Chunks.Count > 0) {
             return SdfMeshChunks.Join(chunks: mesh.Chunks.Select(selector: chunk => Surface(level: level, mesh: chunk)).ToArray());
         }
+        if (mesh.Levels.Count == 0) { return mesh; }
         var selected = Math.Min(val1: level, val2: mesh.Levels.Count);
         using var held = mesh.Hold();
 

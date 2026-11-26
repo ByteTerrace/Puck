@@ -715,7 +715,7 @@ public sealed class SdfMeshLibrary(SdfMeshStore? store = null, long? byteBudget 
             levels[level] = new SdfMeshLevel(Error: mesh.Levels[level].Error, Indices: held.LevelIndices(level: (level + 1)), TriangleMaterials: Renumbered(source: held.LevelMaterials(level: (level + 1)).Span, map: map));
         }
 
-        return new SdfMesh(indices: held.Indices, members: mesh.Members, normals: held.Normals, positions: held.Positions, triangleMaterials: Renumbered(source: held.TriangleMaterials.Span, map: map), vertexMembers: mesh.VertexMembers, influences: mesh.Influences) { BakeCell = mesh.BakeCell, Levels = levels };
+        return new SdfMesh(indices: held.Indices, members: mesh.Members, normals: held.Normals, positions: held.Positions, triangleMaterials: Renumbered(source: held.TriangleMaterials.Span, map: map), vertexMembers: mesh.VertexMembers, influences: mesh.Influences) { BakeCell = mesh.BakeCell, Clusters = mesh.Clusters, Levels = levels };
     }
     private static uint[] Renumbered(ReadOnlySpan<uint> source, SdfMeshMaterials.Remap map) {
         var renumbered = new uint[source.Length];

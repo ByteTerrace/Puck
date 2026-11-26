@@ -216,7 +216,9 @@ Each view draws a bake group at the detail its own pixels need. Where the bake k
 a group's floor of its own shape beside the finer tier it draws
 (`SdfMeshPathBake.FrameAccess.FloorOf`), the dresser binds the floor's pieces after
 the mesh's in every placement's rows and gives all of them one band (`SdfMeshBand`):
-the sphere about both meshes' box and the floor's cell. `sdfSelectionBandKeeps` draws
+the sphere about both meshes' box and the floor's cell, the cell its contour was actually
+drawn on (`SdfMesh.BakeCell`), which a floor whose lattice is capped at its samples holds
+finer than its tier's rung (the oak's 97 mm against a rung of 512). `sdfSelectionBandKeeps` draws
 the floor where its cell projects under half a pixel (a view) or half a texel (a
 cascade) and the finer tier everywhere else, deciding from the shared words and the
 draw's pose alone, so exactly one tier of a placement draws; a finer tier yields only
@@ -231,7 +233,25 @@ draws the level of the collapse chain its own pixels allow (a level each doublin
 the error, `SdfMeshCollapse.CellShares`), so a far copy is not drawn at its nearest
 sibling's detail; the chain's coarse levels also serve views far smaller than the tier
 was demanded for. A selection mark holds a draw's level in `SdfKernelInterfaces.MeshMarkBits`
-bits, so `drawn.*.level<n>` counts every level of the chain apart.
+bits; a view's compaction also adds every command it keeps to its level's drawn-triangle
+word (`SdfKernelInterfaces.MeshLevelTriangleBase`, a cluster's at its own level), so a
+view's `drawn.*.level<n>` and `drawn.*.triangles` count exactly what it drew, clusters
+included, while a cascade's come from its marks. A draw drawn in clusters is marked at its
+finest cluster's level, so its tier line counts that level's whole mesh, an upper bound.
+
+A large mesh is drawn in clusters inside its one draw (`SdfMesh.Clusters`,
+`SdfMeshClusters`): its own triangles and its first clustered levels lie cluster by
+cluster, the places clusters share held by the collapse through those levels
+(`SdfMeshCollapse.ClusteredRuns`), so any mix of clustered levels is watertight. A view
+whose draw's own box asks a clustered level culls each cluster by the frustum, gives it
+the level its own box asks, and tests it against the pyramid in the late phase, keeping
+each cluster's visibility and level in the draw's second state row; the compaction writes
+one command per emitted cluster (`sdfOcclusionCompactPhase`), whose identity names the
+cluster's segment past the mesh's levels (`sdfMeshClusterSegment`), which
+`sdfMeshLevelIndex` resolves for the raster and the hit door alike. A view's compact lists
+hold one command a draw plus `SdfWorldTables.MeshClusterCommands`, kept beside the rows'
+mesh claims; a command past that capacity would be dropped, so every path that changes a
+row's mesh goes through those claims. A cascade draws a clustered mesh whole.
 
 Draw selection reads the retained `SdfWorldTables` staged draw span, the same
 records whose boxes and GPU records were uploaded. Never borrow the frame source's
@@ -729,7 +749,8 @@ add the row you found.
 | Write or change a primitive's or blend's distance arithmetic, an op's point map or field edit, a scope pop or a material winner once for every reader (fixed-point C#, precise HLSL, the wide C# for normals) | `SdfFieldFormulas` in the closed expression language of `SdfFormula`, named by the catalogue entry's `Formula`, `DistanceFormula`, `Winner` or `Operand` | `src/Puck.SignedDistance/Formulas`; [changing the instruction set](#changing-the-instruction-set) |
 | Bake a mesh from the field, or find the one already baked | `SdfMeshPathBake` (the path), `SdfSampledLattice` and `SdfDualContouring` (the sampling and contouring), `SdfMeshStore` (the shared on-disk cache of baked meshes, one set per bake identity) | `src/Puck.SdfVm`, `src/Puck.SignedDistance/Baking`; [mesh bake](references/mesh-bake.md) |
 | Judge which way a contour's triangle faces, or hold a vertex move to it | `SdfContourFacing` (the lattice edge a quad crosses, then its corners' patches), read through `SdfContour.QuadAxes` and `Patches`; never vertex normals or a triangle's earlier facing | `src/Puck.SignedDistance/Baking`; [mesh bake](references/mesh-bake.md#contouring) |
-| Make coarser levels of a baked mesh, or choose a draw's level | `SdfMeshCollapse` (half-edge collapse, every level a subset of the mesh's own vertices), `SdfMeshDetail` (the level a draw takes) | `src/Puck.SdfVm` |
+| Make coarser levels of a baked mesh, or choose a draw's level | `SdfMeshCollapse` (half-edge collapse, every level's vertices at the mesh's own places, a corner's third face taking a vertex made there with its own normal), `SdfMeshDetail` (the level a draw takes) | `src/Puck.SdfVm` |
+| Cull or level parts of one draw apart (a tree beside the eye) | `SdfMeshClusters` (the clusters of one mesh, made by `SdfMeshCollapse`), the clustered branch of `sdf-mesh-occlusion.comp.hlsl` | `src/Puck.SdfVm` |
 | Contour a group's field again at a coarser cell, or measure any level's error against the field (bracketed both ways, enclosure, material and normal runs) | `SdfMeshPathBake.ContourLevel`, `SdfMeshFieldLevels` (offline, `puck mesh audit --cpu --field-levels`) | `src/Puck.SdfVm`; [mesh bake](references/mesh-bake.md) |
 | Skip drawing what a view, a cascade or the previous frame hides | `SdfMeshBox` and `SdfMeshCull` (host boxes), `SdfMeshOcclusion` (the depth pyramid test) | `src/Puck.SdfVm`; [the dispatch bullets](#which-dispatch-owns-the-code) |
 | Put the world's placements into the program a frame draws | `WorldPlacementStamper` (static placements), `WorldCreationInstances` (animated, attached and inhabited creations), `CreationStampEmitter` (a creation's stamp); one shape's chain, field ops, panel, relief and trims are `ShapeEmission.Emit` for both, each path supplying only its `IShapeEmissionFrame` | `src/Puck.World.Client`, `src/Puck.World.Authoring/Authoring` |
@@ -1755,8 +1776,14 @@ wrong. The contracts that bite most often:
   there, or drops an outline vertex, does change pixels.
 - **A landed mesh carries a chain of coarser levels** (`SdfMeshCollapse`, after the
   merge in `Land`; `SdfMesh.Levels`): half-edge collapses over the mesh's own
-  vertices, one each doubling of the error from a quarter cell to 32 cells, each
-  with its measured error. The region lays a level's indices and
+  places, one each doubling of the error from a quarter cell to 32 cells, each
+  with its measured error. A corner's third face may take a vertex made at the
+  neighbour's place with its own normal, past the mesh's own vertices
+  (`SdfMesh.VertexCount` counts them; the mesh's own triangles name none), so read
+  a level's vertices from the levelled mesh, never the contour it came from, and
+  audit level zero through `SdfMeshAudit.Surface`, which leaves them out. A vertex
+  within a level's error of a sharp turn keeps that level's distance bound but not
+  its normal bound (`SdfMeshCollapse.SharpDegrees`). The region lays a level's indices and
   materials after the merged ones', so its triangles are numbered after them. A
   draw pushes its level above its index (`SdfKernelInterfaces.MeshLevelShift`,
   in a counted indirect draw's identity too), its record points at the mesh's

@@ -441,6 +441,11 @@ public static class SdfIsaHlsl {
         declarations.Bits(name: "SDF_MESH_CLIP_FLAG", value: SdfMeshRecord.ClipFlag);
         declarations.Count(name: "SDF_MESH_OBJECT_KEY_SHIFT", value: SdfMeshRecord.ObjectKeyShift);
         declarations.Count(name: "SDF_MESH_DISPLACEMENT_WORD", value: SdfMeshRecord.DisplacementWord);
+        declarations.Count(name: "SDF_MESH_CLUSTER_HEADER_WORDS", value: SdfMeshRecord.ClusterHeaderWords);
+        declarations.Count(name: "SDF_MESH_CLUSTER_BOX_WORDS", value: SdfMeshRecord.ClusterBoxWords);
+        declarations.Count(name: "SDF_MESH_CLUSTER_RUN_WORDS", value: SdfMeshRecord.ClusterRunWords);
+        declarations.Count(name: "SDF_MESH_MOST_CLUSTERS", value: SdfMeshRecord.MostClusters);
+        declarations.Count(name: "SDF_MESH_MOST_CLUSTER_LEVELS", value: SdfMeshRecord.MostClusterLevels);
         declarations.Count(name: "SDF_MESH_BAND_WORD", value: SdfMeshRecord.BandWord);
         declarations.Section(title: "The frame's sampled table (SdfFrameSampled): a handle with no entry, a height field entry's header, and the reference height its baked reference stands at.");
         declarations.Bits(name: "SDF_FRAME_SAMPLED_NONE", value: SdfFrameSampled.None);
@@ -459,6 +464,9 @@ public static class SdfIsaHlsl {
         declarations.Count(name: "SDF_OCCLUSION_COUNT_STEP", value: SdfKernelInterfaces.MeshOcclusionCountStep);
         declarations.Count(name: "SDF_OCCLUSION_COMPACT_STEP", value: SdfKernelInterfaces.MeshOcclusionCompactStep);
         declarations.Count(name: "SDF_COMPACT_ROW", value: SdfKernelInterfaces.MeshCompactRow);
+        declarations.Count(name: "SDF_COMMAND_ROW", value: SdfKernelInterfaces.MeshCommandRow);
+        declarations.Count(name: "SDF_MESH_LEVEL_TRIANGLE_BASE", value: SdfKernelInterfaces.MeshLevelTriangleBase);
+        declarations.Count(name: "SDF_MESH_LEVEL_TRIANGLE_WORDS", value: SdfKernelInterfaces.MeshLevelTriangleWords);
         declarations.Count(name: "SDF_SIGHT_ROW", value: SdfKernelInterfaces.MeshSightRow);
         declarations.Count(name: "SDF_SHADOW_CULLED_ENTRY_PHASE", value: SdfKernelInterfaces.MeshShadowCulledEntryPhase);
         declarations.Count(name: "SDF_SIGHT_COUNT_BASE", value: SdfKernelInterfaces.MeshSightCountBase);

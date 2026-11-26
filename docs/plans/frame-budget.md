@@ -123,12 +123,16 @@ against the same frame:
   (`sdfSelectionViewPixels`). Counted offline over the forest's 4,583 copies
   from the stop's camera, with each species' CPU bake and no occlusion, the
   copies in view select 26 million triangles where they selected 41 million.
-  What remains is the copies whose box reaches within a few metres of the eye,
-  which draw their merged mesh whole (a draw takes one level; about 4 million),
-  and thin foliage whose collapse stalls (a fern's coarsest level keeps 17,000
-  triangles at 26 mm; its coarser tiers lose the fronds past its floor). Both
-  are the [virtual geometry plan](virtual-geometry.md)'s: clusters inside a draw
-  (D4) and a coarse tier that keeps thin parts (D1's option 1d).
+  Two walls followed, both now answered in the [virtual geometry
+  plan](virtual-geometry.md): thin foliage whose collapse stalled (D1: the
+  collapse keeps thin parts, a fern's 26 mm level 1,648 triangles where it kept
+  17,342) and trees whose box reaches within a few metres of the eye drawing their
+  merged mesh whole (D4: clusters inside a draw, each levelled and culled by its own
+  box). Counted the same way over the eleven species the forest draws most, the
+  stop's view selects 15.3 million triangles where it selected 23.9 million. What
+  remains is ferns between 5 and 40 m, whose finer levels stay dense where their
+  fronds crowd at the base (69,000 triangles at 6.5 mm), leaf litter at its 12 and
+  24 mm levels, and the trees' clustered levels.
 - **`resolve`**: standing, every pixel sums its window; `world.temporal off`
   removes the pass and a third of the probe lookup with it.
 - **`main`**: the root places every view and pane in one pass

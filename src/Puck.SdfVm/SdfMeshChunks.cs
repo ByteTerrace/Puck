@@ -153,6 +153,12 @@ public static class SdfMeshChunks {
         Parallel.For(0, chunks.Length, part => {
             chunks[part] = SdfMeshCollapse.Levels(chunks[part], preserveFeatures, owner, allocator) with { BakedSites = null };
         });
+        // A chunk whose levels made vertices holds them past its own, and a clustered chunk holds its own triangles in its
+        // clusters' order (SdfMeshCollapse), so the joined mesh is joined again from the chunks, keeping them views of its
+        // attributes in order.
+        for (var part = 0; (part < parts); part++) {
+            if ((chunks[part].VertexCount != vertexCounts[part]) || (chunks[part].Clusters is not null)) { return Join(chunks: chunks); }
+        }
         return new SdfMesh(joinedPositions, joinedIndices, joinedNormals, joinedMaterials) { BakeCell = mesh.BakeCell, Chunks = chunks };
     }
 
@@ -203,6 +209,7 @@ public static class SdfMeshChunks {
                 normals: ((normals.Length == 0) ? default : normals.AsMemory(start: vertex, length: chunk.VertexCount)),
                 triangleMaterials: ((materials.Length == 0) ? default : materials.AsMemory(start: triangle, length: chunk.TriangleCount))) {
                 BakeCell = chunk.BakeCell,
+                Clusters = chunk.Clusters,
                 Levels = chunk.Levels,
             };
             vertex += chunk.VertexCount;

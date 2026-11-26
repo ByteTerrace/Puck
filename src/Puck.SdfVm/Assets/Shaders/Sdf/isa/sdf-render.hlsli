@@ -179,6 +179,11 @@
 #define SDF_MESH_CLIP_FLAG              0x00000010u
 #define SDF_MESH_OBJECT_KEY_SHIFT       8u
 #define SDF_MESH_DISPLACEMENT_WORD      50u
+#define SDF_MESH_CLUSTER_HEADER_WORDS   2u
+#define SDF_MESH_CLUSTER_BOX_WORDS      6u
+#define SDF_MESH_CLUSTER_RUN_WORDS      2u
+#define SDF_MESH_MOST_CLUSTERS          16u
+#define SDF_MESH_MOST_CLUSTER_LEVELS    4u
 #define SDF_MESH_BAND_WORD              51u
 
 // The frame's sampled table (SdfFrameSampled): a handle with no entry, a height field entry's header, and the reference height its baked reference stands at.
@@ -198,12 +203,15 @@
 #define SDF_OCCLUSION_COUNT_STEP          7u
 #define SDF_OCCLUSION_COMPACT_STEP        8u
 #define SDF_COMPACT_ROW                   15u
+#define SDF_COMMAND_ROW                   14u
+#define SDF_MESH_LEVEL_TRIANGLE_BASE      135u
+#define SDF_MESH_LEVEL_TRIANGLE_WORDS     16u
 #define SDF_SIGHT_ROW                     16u
 #define SDF_SHADOW_CULLED_ENTRY_PHASE     5u
 #define SDF_SIGHT_COUNT_BASE              7u
-#define SDF_MESH_MARK_BASE                142u
+#define SDF_MESH_MARK_BASE                158u
 #define SDF_MESH_MARK_BITS                4u
-#define SDF_MESH_VERTEX_COUNT_BASE        135u
+#define SDF_MESH_VERTEX_COUNT_BASE        151u
 #define SDF_MESH_SHADOW_FILTER_TEXELS     14.0
 #define SDF_SHADOW_BLOCK_EDGE             32u
 #define SDF_SHADOW_BLOCK_APRON            15u

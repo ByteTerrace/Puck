@@ -69,10 +69,17 @@ build first. Where each stands:
   path on bytes, bake work and frame cost ([D3](#d3-a-hierarchy-above-the-draw)).
   A parent faces the two clauses the field levels failed and is measured
   against them before it is built.
-- **Clusters inside a draw, compute micropolygon raster, mesh shaders and
-  virtual shadow maps are watched**, each with the measurement that admits it,
-  because the floor, the skinned gap and the far field dominate at MMO scale
-  and none of those four touches them.
+- **Clusters inside a draw are built** ([D4](#d4-clusters-inside-a-draw)): a large
+  static mesh is drawn in up to eight spatial clusters whose seams the collapse
+  holds through its two finest levels, each culled by the view and occlusion and
+  levelled by its own box in the one selection kernel. **Compute micropolygon
+  raster, mesh shaders and virtual shadow maps are watched**, each with the
+  measurement that admits it.
+- **The collapse keeps thin parts** ([D1](#d1-the-unit-of-detail)): a corner may
+  move with its third face taking a vertex made at the neighbour's place, and a
+  vertex within a level's error of a sharp turn keeps only the distance bound, so a
+  plate thinner than a level's error closes to a card and thin foliage keeps
+  simplifying (the fern's 26 mm level from 17,342 to 1,648 triangles).
 
 Borrowed techniques win where they are better (the two-phase depth pyramid,
 order-preserving compaction and buckets from the visibility plan, meshoptimizer
@@ -109,9 +116,10 @@ be baked on demand and cached where a triangle asset cannot.
   level for each doubling of the error budget from a quarter of the group's
   contour cell to 32 cells, `NormalDegrees` widens with it from 2 to 30
   degrees, and `KeptShare = 0.75f` drops a level that saves less than a quarter.
-  The collapse never moves or makes a vertex; a corner where three faces meet,
-  an open edge and a place whose triangles do not close a ring never move
-  (`SdfMeshCollapse` summary).
+  The collapse never moves a position; an open edge and a place whose triangles
+  do not close a ring never move, and a corner moves only with its third face
+  taking a vertex made at the neighbour's place with its own normal, measured as
+  every collapse is (`SdfMeshCollapse` summary).
 - **A skinned or multi-slot draw has no box and no levels**:
   `SdfMeshBox.TryOf` returns `false` when `!mesh.Members.IsEmpty` ("those
   vertices ride dynamic-transform slots the GPU reads, so no host box bounds
@@ -475,6 +483,28 @@ for what those coarse tiers still lose, a part thinner than a cell, and option
 What the visibility plan calls V3c, field-derived levels as a bake experiment,
 is this measurement and is closed with it.
 
+**Thin parts, answered in the collapse.** The forest's thin foliage stopped
+simplifying: the fern's sixteen fronds held 17,342 triangles at its 26 mm level and
+no coarser level saved a quarter, the leaf litter 14,048 at 171 mm, and a lone
+frond plate stalled at about 1,000. Instrumented on a lone plate and a lone leaf,
+the cause was two of the collapse's rules, not its error budget: every place left
+at the coarse levels was a corner (a crease split with three or more seams), which
+never moved, and the side wall of a plate thinner than the error kept its sideways
+normal under the level's angle. The collapse now lets a corner slide along any of
+its creases, a third face taking the neighbour's vertex whose normal lies within
+the level's angle or a vertex made at the neighbour's place with its own normal,
+and waives the normal bound for a vertex within the level's error, along the mesh,
+of a sharp turn (`SdfMeshCollapse.SharpDegrees`), whose normal shades no pixel of
+its own where the level is drawn. Every collapse is still measured by distance, the
+reverse strays and the lines. A plate thinner than a level's error closes to a card
+whose faces keep their normals; the fern's 26 mm level holds 1,648 triangles and a
+new 103 mm level 1,160, the litter's 188 mm level 956, the grass tuft's 34 mm level
+486 against 4,086 at 54 mm, for about two percent more collapses tried over the
+forest's species. This is option 1d's purpose met without a second level source;
+the fern's finer levels stay dense where its fronds crowd at the base (a frond with
+its tip alone holds 150 triangles at 11 mm, the fern 15,804 at 13 mm), which is the
+collapse's open question now.
+
 ### D2. Bounds for skinned and multi-slot draws
 
 **What must be decided.** How a draw whose vertices ride dynamic slots gets a
@@ -626,13 +656,31 @@ against:** none of the three bar devices is shown geometry-bound today, so a
 cluster path built now would be a second implementation of culling waiting for
 its workload.
 
-**Decided.** Watched, with its first experiment written: flat clusters of the
-chosen level, compact lists on V1's buckets, counts of candidates, survivors,
-pyramid tests, rejected triangles and reference writes, captures on moving,
-cut, portal-clipped and bent geometry. The bounds invariant Codex states is
-adopted for the day it lands: *every cluster bound encloses every position its
-resolver can emit*, enforced at the derived cluster product and one bound-refit
-door; cones are disabled under deformation, two-sidedness or glass until
+**Decided, and built.** The forest admitted it: a tree whose box reaches within a
+few metres of the eye drew its whole merged mesh at level zero (285,000 to
+372,000 triangles), about 4 million of the stop's 26 million selected. A large
+static mesh is drawn in clusters inside its one draw (`SdfMeshClusters`, made by
+`SdfMeshCollapse`): a median split of its triangles' centroids along the largest
+cluster's longest extent, up to eight for a tree, each with its box; the collapse
+holds the places clusters share for its two finest runs (`ClusteredRuns`), so the
+mesh's own triangles and those levels lie cluster by cluster and any mix of them
+is watertight, and collapses the rest whole. A view whose draw's box asks a
+clustered level culls each cluster by the frustum, levels it by its own box, and
+tests it against the pyramid in the late phase, with the clusters' visibility and
+levels in the draw's second state row; the compaction writes one command per
+emitted cluster into the phase's compact list, after the draw's predecessors, so
+there is no second indirect path and no level path but `sdfSelectionLevel`. A
+cascade draws the mesh whole. Counted offline over the forest stop's 4,583
+placements with no occlusion, clusters took the selected triangles from 17.36 to
+15.26 million and the near trees' level-zero draws from 3.98 to 2.31 million.
+Sixteen clusters with seams held through three runs cost more in seam vertices
+than they saved (17.25 million), which is why the seams stop at two runs; a
+cluster hierarchy whose groups move their seams level by level (1c's runtime) is
+the answer that lets them stop nowhere, and stays watched. The bounds invariant
+Codex states holds: *every cluster bound encloses every position its resolver can
+emit*, enforced by the builder, which bounds each cluster by its own triangles'
+places, where every clustered level's vertices sit. A skinned mesh has no levels
+and so no clusters, and a displaced draw is drawn whole. Cones are disabled under deformation, two-sidedness or glass until
 proven, and never copied into the shadow exit or optical passes. The first
 draft said normal cones were worth measuring first on "the cascades, which
 have no occlusion of their own" (Claude **[record]**); that premise is false
@@ -995,7 +1043,11 @@ a ruling and not a neutral value) in five steps:
      only where their cell is under half a pixel, past about 100 m for the
      litter's, so what the rungs still owe is far views and the bytes a far
      copy's tier holds, with the recorded deviation below to admit a rung by
-     its error rather than its nominal cell.
+     its error rather than its nominal cell. The floor's band already judges it
+     by the cell its contour was drawn on (`SdfMeshBand.Of`, the floor's
+     `SdfMesh.BakeCell`: the oak's 97 mm against its rung's 512 mm), not the
+     rung's; the recorded deviation is not built, and with the collapse keeping
+     thin parts a tree's chain reaches the errors its coarser tiers would.
    - *Recorded deviation over authored bounds.* Every rung records its
      bidirectional deviation from the authored field via
      `SdfMeshFieldLevels.Measure` (covering lost parts, materials and normals)
@@ -1067,7 +1119,7 @@ history, which is why thinning removes whole plants.
 | G6. Creation proxy and union parent | The alternatives rule in the kernel (a parent's record names its children's range), per-member pieces as the proxy's middle tier, the one-draw tier only where V2c's bound exists, parents per render class with a per-triangle source table, `SdfDressedPickMap.Resolve` taking the triangle, union parents above chunked unions | The Moth at 50 and 100 m draws its slots' count of records, and one per render class where its motion bound is derived; `world.counters gpu` draws and vertices at the garden crowd from the lawn; the hall's unions from the forest pose at (47.80, 0.02, -116.84); a glass-over-opaque creation (the lift's cab, or an exhibit the lane chooses) captured at parent distance against its children; `world.view.pick` on a parent naming the same child as a pick on the children at the same pixel; a parent and its children never both drawn (a count per pass) | Draws per distant creation fall to its slots, and to one per render class where admitted; the hall's far draws fall to its parents; no surface of one class lost behind a parent of another; picks agree; captures meet the reference |
 | G7. Stand parents for the forest (dense landscapes L4's far field; measured exception after the chain) | A bake group over many static copies contoured as one region per render class, with a source table; compared against the chain of rungs above and the shared prototype path under V1's buckets (adopted only as a measured exception for repeated arrangements, never ahead of the chain) | `view.override layout three-quarter` then `view.override camera forest-overview`, and `body.pose spawn:forest 0` looking south: draws, vertices, candidates and cascade vertices against the shared path's; resident bytes of parents and children together (`world.residency`); cold derivation of the belt's parents and the re-derivation one moved tree costs; captures from the overlook and the road against the reference; the nested forest view's own counts; the frame cost on the Deck's leg in the lead's window | The overlook's far belt draws as parents at sub-pixel error and reads as a forest, and the parents beat the shared path on bytes, derivation and frame cost; where they read wrong the hybrid far tier is briefed, where they cost more the far field is the shared path (with parents shared over repeated arrangements), and the pixel rule is never loosened |
 | G8. Demand tiers' arrival contract | The tier, its key and the report are built ([D7](#d7-the-detail-budget)). What remains is arrival: a demand read ahead along the camera's bound, cancellation of a demand that leaves a view's reach, and the one in-flight budget. [The streaming plan](streaming-and-memory.md#the-build-order) owns all three with its prediction and reservation decisions; this row is its check on a creation | Spawn in the studio and walk to the Moth's face at boom 1.5 m, retreat, and cut back; open a portal onto a second demanding view: owed error and interval per group over the walk, peak resident and in-flight bytes | Owed error never worse than one tier below demand for longer than the landing budget's frames on any of the four runs; peak bytes under the budget; no view ever refused, only owed |
-| G9. Clusters inside a draw (D4's experiment) | Flat clusters of the chosen level on V1's buckets, behind a lever, admitted only on a cascade-pass measurement on a bar device where published cluster gains are largest | The terrain sector, hall shell and cascade passes on a bar device: candidates, survivors, pyramid tests, rejected triangles, reference writes; moving, cut, portal-clipped and bent geometry captured | Kept only if it removes measured geometry-bound work without a missed surface, a swapped pick or a stale bound |
+| G9. Clusters inside a draw (D4, built for views) | Built: clusters per large static mesh with seams held through the two finest runs, culled and levelled per cluster in the view's selection. Remaining: cascade passes drawing clusters (each cluster's box against the light box), and a cluster hierarchy whose seams move level by level | The forest stop's `drawn.mesh-*` level lines with clusters against `world.detail` forced whole; presented bursts walking past a tree to see no seam crack or pop; picks on a near tree naming its triangles | No missed surface or seam crack in a presented burst; the view's drawn triangles fall where a box reaches the eye |
 
 G3a shares no files with V2a and V1a and runs beside them; G3b waits on moving
 blends publishing its margin. G4 is V2b and lands where the visibility plan

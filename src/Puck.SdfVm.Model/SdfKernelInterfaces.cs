@@ -84,6 +84,9 @@ public sealed class SdfKernelInterfaces {
     /// <summary>Compaction step: each group copies a phase's emitted commands, in candidate order, to the phase's
     /// compact list after the counts of the groups before it, and the last group writes the phase's draw count.</summary>
     public const int MeshOcclusionCompactStep = 8;
+    /// <summary>The command row: the commands each phase's compact list holds, past the one each candidate's slot holds by
+    /// the clusters a view draws a draw in (<see cref="SdfMeshRecord.MostClusters"/>).</summary>
+    public const int MeshCommandRow = 14;
     /// <summary>The compaction row: the command slots a phase holds, the first word of the compact lists, the first word
     /// of the group counts and the groups a phase counts.</summary>
     public const int MeshCompactRow = 15;
@@ -100,6 +103,12 @@ public sealed class SdfKernelInterfaces {
     /// compaction adds each command it keeps for the phase's draw list to its phase's word, so the counts carry the
     /// vertices each phase rasterizes and a pass reads back the work it drew (a shadow entry's drawings).</summary>
     public const int MeshVertexCountBase = (MeshMarkBase - MeshShadowPhases);
+    /// <summary>The first of a view's drawn-triangle words, one a level a selection mark names, past every portal sight
+    /// verdict: on a marked frame a view's compaction adds each command it keeps to its level's word, a cluster's at the
+    /// cluster's own level, so the triangles a view drew are read by level exactly.</summary>
+    public const int MeshLevelTriangleBase = (MeshSightCountBase + SdfProgramBuilder.MaxScreenSurfaces);
+    /// <summary>The drawn-triangle words: one for each value a selection mark holds (<see cref="MeshMarkBits"/>).</summary>
+    public const int MeshLevelTriangleWords = (1 << MeshMarkBits);
     /// <summary>The widest radius, in shadow texels, the surface pass's percentage-closer filter takes: the penumbra the
     /// softest shadow edge a cascade draws spreads over, which the world's shadows weigh a held layer's lag against
     /// (<c>SdfWorldShadows</c>).</summary>
@@ -123,9 +132,9 @@ public sealed class SdfKernelInterfaces {
     /// <summary>The block bounds the shadow block reduction writes (<see cref="SdfWorldPackage.MeshShadowNearBlocks"/>).</summary>
     public const string ShadowBlocksWritten = "shadowBlocksRW";
     /// <summary>The first selection mark word in the raster selection's counts, past every portal sight verdict (one a
-    /// screen) and the vertex words: on a marked frame each draw a phase emits a command for ORs its level plus one into
-    /// <see cref="MeshMarkBits"/> bits, the lowest draw in the lowest bits.</summary>
-    public const int MeshMarkBase = ((MeshSightCountBase + SdfProgramBuilder.MaxScreenSurfaces) + MeshShadowPhases);
+    /// screen), the drawn-triangle words and the vertex words: on a marked frame each draw a phase emits a command for ORs
+    /// its level plus one into <see cref="MeshMarkBits"/> bits, the lowest draw in the lowest bits.</summary>
+    public const int MeshMarkBase = ((MeshLevelTriangleBase + MeshLevelTriangleWords) + MeshShadowPhases);
     /// <summary>The bits one draw's selection mark takes: its level plus one, a level past the field's largest value marked
     /// as that value. Four bits name every level of a mesh's chain (<c>SdfMeshCollapse.CellShares</c>) apart.</summary>
     public const int MeshMarkBits = 4;
@@ -135,8 +144,10 @@ public sealed class SdfKernelInterfaces {
     /// receiver camera's sample grid/jitter row, followed by portal sight queries.
     /// Draw bounds and mesh level metadata are retained in the shared mesh region.</summary>
     public const string MeshOcclusionCandidates = "sdfMeshOcclusionCandidates";
-    /// <summary>The raster pass's per-draw retained state: visibility, previous level, mesh reference identity and
-    /// whether this frame's box/receiver classification kept the draw. The level survives buffer growth and resets on a mesh change.</summary>
+    /// <summary>The raster pass's per-draw retained state, two rows a draw: visibility, previous level, mesh reference
+    /// identity and whether this frame's box/receiver classification kept the draw; then its clusters' (a view drawing it
+    /// in clusters): their visibility and kept masks, their previous levels, the clusters the latest step emitted and
+    /// whether this frame draws it in clusters. The levels survive buffer growth and reset on a mesh change.</summary>
     public const string MeshOcclusionVisibleWritten = "sdfMeshOcclusionVisibleRW";
     /// <summary>The mesh pass occlusion's indirect draws: each phase's slots, one <c>GpuDrawIndirectCommand</c> a
     /// candidate in staged order, empty where the phase draws nothing; then each phase's compact list, its emitted
