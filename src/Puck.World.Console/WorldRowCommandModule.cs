@@ -42,7 +42,7 @@ namespace Puck.World;
 /// wraps the built <see cref="WorldRowAssignment"/> and what additive offset the r1 sequence takes.</para>
 /// <para><c>world.kits</c> is a plain census read-back, not a row verb — the kits section's only listing.</para>
 /// </remarks>
-public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authority, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard? stepGuard = null) : ICommandModule {
+public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authority, WorldDeferredVerbEchoes echoes, WorldRowStepWindowGuard? stepGuard = null, WorldPinLedger? pins = null) : ICommandModule {
     private const string PropertiesNamesPath = "properties.names";
     private static readonly CommandForms WorldRowAddForms = CommandForms.Of(verb: "world.row.add", "<path> <key> <listPath> <json> [after=<selector>]", "<path> <listPath> <json> [after=<selector>]");
     private static readonly CommandForms WorldRowRemoveForms = CommandForms.Of(verb: "world.row.remove", "<path> <key>", "<path> <key> <listPath> <selector>", "<path> <listPath> <selector>");
@@ -1987,13 +1987,17 @@ public sealed partial class WorldRowCommandModule(IWorldConsoleAuthority authori
                     return error;
                 }
 
-                return HandleSet(
+                var submitted = HandleSet(
                     args: args,
                     context: context,
                     link: instance.SubmissionLink,
                     view: authority.ReadView(context: context, instance: instance),
                     server: instance.Server
                 );
+
+                // Every token but the value (the path, and the key and field path a literal form names) names what the line
+                // holds; a declared property name is its own subject.
+                return (pins?.Track(args: in args, context: in context, result: submitted, subjectTokens: ((args.Count > 0) && args[0].ToString().Equals(PropertiesNamesPath, StringComparison.Ordinal) ? args.Count : (args.Count - 1)), verb: "world.row.set") ?? submitted);
             },
             routing: CommandRouting.Simulation
         );

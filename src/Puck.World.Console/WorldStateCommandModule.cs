@@ -33,7 +33,7 @@ namespace Puck.World;
 /// (<c>world.grant … edit state:&lt;name&gt; verbs:UpsertStateCell,RemoveStateCell</c>), which admits the per-cell
 /// writes while denying the whole-row pair — the difference between bumping a row and redefining it. Revoking either
 /// grant, or narrowing its mask, refuses that principal's writes here, whichever verb produced them.</remarks>
-public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority authority, WorldDeferredVerbEchoes echoes) : ICommandModule {
+public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority authority, WorldDeferredVerbEchoes echoes, WorldPinLedger? pins = null) : ICommandModule {
     private static readonly CommandForms WorldStateForms = CommandForms.Of(verb: "world.state", "[<row> [<key>]] [instance:<name>]");
     private static readonly CommandForms WorldStateCellSetForms = CommandForms.Of(verb: "world.state.cell.set", "<row> <key> <value> [add]", "<row> <key> <text...>", "<row> <key> <base64url-vector>");
     private static readonly CommandForms WorldRuleTraceForms = CommandForms.Of(verb: "world.rule.trace", $"<rule> [evaluations 1..{RuleEvaluator.MaxTraceEvaluations}]", "off");
@@ -799,11 +799,14 @@ public sealed partial class WorldStateCommandModule(IWorldConsoleAuthority autho
             handler: (context, args) => {
                 if (args.Count < 3) { return WorldStateCellSetForms.Refuse(args: in args); }
                 if (!authority.TryResolveLink(context, "world.state.cell.set", out var link, out var error)) { return error; }
-                return link.Submit(mutation: new WorldMutation.UpsertStateCell(
+                var submitted = link.Submit(mutation: new WorldMutation.UpsertStateCell(
                     Principal: context.Principal, Row: args[0].ToString(), Key: args[1].ToString(),
                     Value: 0L, Kind: WorldDocumentWriteKind.Set,
                     CommandTail: WorldCommandArguments.RawAfter(context, in args, tokens: 3, preserveQuotes: true)
                 ), echoes: echoes, verb: "world.state.cell.set");
+
+                // The row and key name what the line holds.
+                return (pins?.Track(args: in args, context: in context, result: submitted, subjectTokens: 2, verb: "world.state.cell.set") ?? submitted);
             },
             routing: CommandRouting.Simulation
         );
