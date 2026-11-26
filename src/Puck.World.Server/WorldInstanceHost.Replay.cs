@@ -26,13 +26,8 @@ public sealed partial class WorldInstanceHost {
                     return "an inbound or outbound transfer is in doubt — resolve its outcome before replaying";
                 }
             }
-            foreach (var pair in m_forwardedBodies) {
-                if (ReferenceEquals(
-                    objA: pair.Key.Server,
-                    objB: source
-                )) {
-                    return "a departed traveler's forwarding route depends on this timeline — replay in an isolated session";
-                }
+            if (HasForwardingFrom(source: source)) {
+                return "a departed traveler's forwarding route depends on this timeline — replay in an isolated session";
             }
             // A rewind keeps this row's transfer counter, drained ids and occupancy latch: ids only climb, so none is
             // minted twice, and a replaying row's scan keeps its latch current while minting nothing.

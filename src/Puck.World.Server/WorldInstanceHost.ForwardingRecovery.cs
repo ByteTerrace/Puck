@@ -6,14 +6,15 @@ namespace Puck.World;
 public sealed partial class WorldInstanceHost {
     /// <inheritdoc/>
     public ValueTask<byte[]?> FetchForwardedPrototypeAsync(WorldServer source, WorldTravelerObservation request, Puck.Assets.ContentPin pin) =>
-        (((request.RemainingHops > 1) && m_forwardedBodies.TryGetValue(key: (source, request.Mobility.Incarnation), value: out var route))
+        (((request.RemainingHops > 1) && m_forwardedBodies.TryGetValue(left: source, right: request.Mobility.Incarnation, value: out var route))
             ? route.Authority.FetchPrototypeAsync(pin: pin, ceiling: request.Ceiling, remainingHops: ((byte)(request.RemainingHops - 1)))
             : default);
     /// <inheritdoc/>
     public Task<string?> StreamForwardedProjectionAsync(WorldServer source, WorldTravelerObservation request, Stream output, CancellationToken ct) {
         if (request.RemainingHops <= 1) { return Task.FromResult<string?>(result: "traveler projection exceeded its forwarding hop limit"); }
         return (m_forwardedBodies.TryGetValue(
-            key: (source, request.Mobility.Incarnation),
+            left: source,
+            right: request.Mobility.Incarnation,
             value: out var route
         )
             ? route.Authority.StreamProjectionAsync(
@@ -26,15 +27,7 @@ public sealed partial class WorldInstanceHost {
         );
     }
 
-    private bool HasForwardingFrom(WorldServer source) {
-        foreach (var pair in m_forwardedBodies) {
-            if (ReferenceEquals(
-                objA: pair.Key.Server,
-                objB: source
-            )) { return true; }
-        }
-        return false;
-    }
+    private bool HasForwardingFrom(WorldServer source) => m_forwardedBodies.ContainsLeft(left: source);
     private List<(WorldEntityAddress Incarnation, ForwardedBody Body)> PrepareForwardedBodies(WorldInstance row,
         IReadOnlyList<WorldForwardedBodyCheckpoint> records) {
         var result = new List<(WorldEntityAddress, ForwardedBody)>(capacity: records.Count);
@@ -126,7 +119,7 @@ public sealed partial class WorldInstanceHost {
     // Host-thread only: never inspect the mutable instance registry from a socket reader. A deferred arm remains
     // in the concurrent route table, answering by name and remaining capturable while its target is absent.
     private void ResolveForwardedRecoveries() {
-        foreach (var pair in m_forwardedBodies) {
+        foreach (var pair in m_forwardedBodies.Entries) {
             if (pair.Value.Authority is not WorldDeferredForwardedAuthority { IsBound: false } deferred) { continue; }
             var description = deferred.DescribeForCheckpoint();
 
@@ -143,7 +136,7 @@ public sealed partial class WorldInstanceHost {
             ) {
                 var source = m_instances.Values.FirstOrDefault(predicate: candidate => ReferenceEquals(
                     objA: candidate.Server,
-                    objB: pair.Key.Server
+                    objB: pair.Key.Left
                 ));
 
                 if (source is null) { continue; }
@@ -167,17 +160,8 @@ public sealed partial class WorldInstanceHost {
         }
     }
     private void RemoveSourceForwarding(WorldServer source) {
-        foreach (var pair in m_forwardedBodies) {
-            if (
-                ReferenceEquals(
-                objA: pair.Key.Server,
-                objB: source
-            ) &&
-                m_forwardedBodies.TryRemove(
-                key: pair.Key,
-                value: out var removed
-            )
-            ) {
+        foreach (var incarnation in m_forwardedBodies.RightsOf(left: source)) {
+            if (m_forwardedBodies.TryRemove(left: source, right: incarnation, removed: out var removed)) {
                 (removed.Authority as IDisposable)?.Dispose();
             }
         }
@@ -196,7 +180,7 @@ public sealed partial class WorldInstanceHost {
     // each one whose body was retired where it stood. Runs on the host loop.
     private void RetireEndedTravelers() {
         while (m_travelerPresence.TryDequeue(result: out var presence)) {
-            if (m_forwardedBodies.TryGetValue(key: (presence.Source, presence.Incarnation), value: out var route)) {
+            if (m_forwardedBodies.TryGetValue(left: presence.Source, right: presence.Incarnation, value: out var route)) {
                 route.Authority.SetPresence(present: presence.Present);
             }
         }
@@ -210,16 +194,10 @@ public sealed partial class WorldInstanceHost {
     // that retired it. A traveler can revisit an authority, so every retained branch for the incarnation goes, a stale
     // route the last request did not traverse included.
     private void RetireForwardedTraveler(WorldEntityAddress incarnation) {
-        foreach (var pair in m_forwardedBodies) {
-            if (
-                (pair.Key.Incarnation == incarnation) &&
-                m_forwardedBodies.TryRemove(
-                key: pair.Key,
-                value: out var retired
-            )
-            ) {
+        foreach (var source in m_forwardedBodies.LeftsOf(right: incarnation)) {
+            if (m_forwardedBodies.TryRemove(left: source, right: incarnation, removed: out var retired)) {
                 (retired.Authority as IDisposable)?.Dispose();
-                pair.Key.Server.RetireTransferredIncarnation(incarnation: incarnation);
+                source.RetireTransferredIncarnation(incarnation: incarnation);
             }
         }
     }

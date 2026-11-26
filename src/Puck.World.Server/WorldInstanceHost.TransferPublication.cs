@@ -163,22 +163,20 @@ public sealed partial class WorldInstanceHost {
                 }
 
                 if (onward is not null) {
-                    var key = (sourceInstance.Server, member.Mobility.Incarnation);
-
-                    if (m_forwardedBodies.TryGetValue(
-                        key: key,
-                        value: out var superseded
+                    if (m_forwardedBodies.Set(
+                        left: sourceInstance.Server,
+                        replaced: out var superseded,
+                        right: member.Mobility.Incarnation,
+                        value: new ForwardedBody(
+                            Authority: new WorldDeferredForwardedAuthority(
+                                destination: onward.DescribeForCheckpoint(),
+                                initial: onward
+                            ),
+                            BodyIndex: onwardSlot
+                        )
                     )) {
                         (superseded.Authority as IDisposable)?.Dispose();
                     }
-
-                    m_forwardedBodies[key] = new ForwardedBody(
-                        Authority: new WorldDeferredForwardedAuthority(
-                            destination: onward.DescribeForCheckpoint(),
-                            initial: onward
-                        ),
-                        BodyIndex: onwardSlot
-                    );
                 }
             }
 
