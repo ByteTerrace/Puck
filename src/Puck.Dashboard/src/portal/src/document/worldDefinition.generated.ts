@@ -3012,6 +3012,10 @@ export type PalettePaintDocument = {
    * The lattice the paint repeats on, or null for a paint drawn once; a text paint cannot repeat.
    */
   repeat?: PalettePaintRepeatDocument | null;
+  /**
+   * The width, in the frame's units (metres in world space), the paint's edge feathers over, centred on the primitive's surface (or the stroke's edge), so a path fades into the ground about it; null or zero for an edge as crisp as the pixel.
+   */
+  softness?: number | null;
 };
 
 export type PalettePaintDocumentVariant2 = {
@@ -3079,6 +3083,10 @@ export type PalettePaintDocumentVariant2 = {
    * The lattice the paint repeats on, or null for a paint drawn once; a text paint cannot repeat.
    */
   repeat?: PalettePaintRepeatDocument | null;
+  /**
+   * The width, in the frame's units (metres in world space), the paint's edge feathers over, centred on the primitive's surface (or the stroke's edge), so a path fades into the ground about it; null or zero for an edge as crisp as the pixel.
+   */
+  softness?: number | null;
 };
 
 /**
@@ -11059,7 +11067,7 @@ export type WorldPlacementResponse = {
    */
   when: WorldPlacementResponseConditionNonNullable;
   /**
-   * The creation the placement shows/collides as while When holds and no earlier entry does. Must resolve to a declared, non-animated creation row.
+   * The creation the placement shows/collides as while When holds and no earlier entry does. Must resolve to a declared creation row.
    */
   prototypeId: string;
 };

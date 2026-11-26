@@ -28,11 +28,14 @@ float sdfGlyphInkCoverage(float2 atlasUv, float texelsPerWorld, float footprintD
 // The ink of surface text slot `slot` at a point of its paint's bound box: `boxPoint` runs from -1 at the box's low
 // face to 1 at its high face on each axis, y up, and `boxHalf` is the box's half-extents in world units. Returns the
 // ink's colour, the paint's own unless the glyph carries a tint, and its coverage in alpha: zero off every glyph and
-// for a slot the host supplied no glyphs for. Where glyph quads overlap the heaviest coverage wins. KEEP IN SYNC with
-// SdfSurfaceTextLayout and SdfWorldTables.SetSurfaceText: the slot's descriptor follows the screens' in sdfDecalCells,
-// (glyphCount, firstEntry, asuint(distanceRange), 0), and each glyph is two entries from firstEntry: the quad's
-// rectangle as four floats (minimum x and y, maximum x and y), then (packedUvTopLeft, packedUvBottomRight, ink rgba8
-// with coverage in alpha, flags).
+// for a slot the host supplied no glyphs for. Where glyph quads overlap the heaviest coverage wins. A pixel tests only the
+// glyphs its cell of the slot's grid lists, so its cost follows the glyphs near it, not the text's length. KEEP IN SYNC
+// with SdfSurfaceTextLayout and SdfWorldTables.SetSurfaceText: the slot's descriptor follows the screens' in
+// sdfDecalCells, (glyphCount, firstEntry, asuint(distanceRange), columns | rows << 16), and each glyph is two entries
+// from firstEntry: the quad's rectangle as four floats (minimum x and y, maximum x and y), then (packedUvTopLeft,
+// packedUvBottomRight, ink rgba8 with coverage in alpha, flags). The grid follows the glyphs: a header entry (the grid's
+// low corner, then its cells per unit on x and y, as floats), the cells four to an entry (first index | count << 16),
+// then the sixteen-bit glyph indices eight to an entry.
 float4 sdfSurfaceTextInk(uint slot, float2 boxPoint, float2 boxHalf, float footprintDiameter, float3 paintColor) {
     float4 ink = float4(paintColor, 0.0);
 
@@ -41,13 +44,34 @@ float4 sdfSurfaceTextInk(uint slot, float2 boxPoint, float2 boxHalf, float footp
     }
 
     uint4 descriptor = sdfDecalCells[SDF_MAX_SCREEN_SURFACES + slot];
-    uint count = min(descriptor.x, SDF_MAX_SURFACE_TEXT_GLYPHS);
+    uint columns = (descriptor.w & 0xFFFFu);
+    uint rows = (descriptor.w >> 16u);
+
+    if ((descriptor.x == 0u) || (columns == 0u) || (rows == 0u)) {
+        return ink;
+    }
+
+    uint headerEntry = (descriptor.y + (2u * descriptor.x));
+    float4 header = asfloat(sdfDecalCells[headerEntry]);
+    float2 cellPoint = floor((boxPoint - header.xy) * header.zw);
+
+    if (any(cellPoint < 0.0) || (cellPoint.x >= float(columns)) || (cellPoint.y >= float(rows))) {
+        return ink;
+    }
+
+    uint cellIndex = ((uint(cellPoint.y) * columns) + uint(cellPoint.x));
+    uint cellWord = sdfDecalCells[(headerEntry + 1u) + (cellIndex >> 2u)][cellIndex & 3u];
+    uint indexEntry = ((headerEntry + 1u) + (((columns * rows) + 3u) >> 2u));
+    uint first = (cellWord & 0xFFFFu);
+    uint count = (cellWord >> 16u);
     uint2 atlasSize;
 
     sdfGlyphAtlas.GetDimensions(atlasSize.x, atlasSize.y);
 
     [loop]
-    for (uint glyph = 0u; glyph < count; glyph++) {
+    for (uint listed = 0u; listed < count; listed++) {
+        uint index = (first + listed);
+        uint glyph = ((sdfDecalCells[indexEntry + (index >> 3u)][(index >> 1u) & 3u] >> ((index & 1u) * 16u)) & 0xFFFFu);
         uint entry = (descriptor.y + (2u * glyph));
         float4 quad = asfloat(sdfDecalCells[entry]);
 

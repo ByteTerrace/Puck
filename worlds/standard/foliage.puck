@@ -29,7 +29,7 @@ let meadowBlades = map(range(0, 144), i => {
 let landscapeTurn = [0.2, -0.4, -0.4, 0.8]
 function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, settle = 0.3, edge = 0, reach = 0.35, threshold = 0.16, noise = 0, patternScale = [
   1, 1, 1
-], softness = 0, octaves = 2, octaveRatio = 2.03, octaveGain = 0.534, turn = landscapeTurn, settleThreshold = 0.5, settleWidth = 0) = base with {
+], softness = 0, octaves = 2, octaveRatio = 2.03, octaveGain = 0.534, turn = landscapeTurn, settleThreshold = 0.5, settleWidth = 0, settleScale = 1, settleOwn = 0) = base with {
   shade: weathered(
     under,
     deposit,
@@ -48,6 +48,8 @@ function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, se
     turn,
     settleThreshold: settleThreshold,
     settleWidth: settleWidth,
+    settleScale: settleScale,
+    settleOwn: settleOwn,
     octaves: octaves
   )
   weathering {
@@ -71,17 +73,23 @@ function landscapeSurface(base, under, deposit, seed, scale = 1.5, lines = 0, se
 }
 
 // Flat turf and relieved patches share one world-space material, including the noise phase at their seam. The pattern
-// is broad (features of several metres): drier, yellower drifts settle soft-edged over the turf, which stays lusher
-// between them. Reveal and settle read one noise, so the turf's own colour carries the lush side.
+// is broad (features of several metres): drier, yellower drifts settle soft-edged over the turf, and darker, lusher
+// patches show through it elsewhere. The drifts read a noise channel of their own (settleOwn), a little broader than
+// the lush patches', so the two lie beside each other rather than on the same spots.
 function groundSurface(color) = landscapeSurface(
   { color: color, roughness: 0.99, specular: 0.015 },
-  under: "#6A6D42",
+  under: "#3F5F25",
   deposit: "#A3A651",
   seed: 4187,
   scale: 0.11,
+  noise: 1,
+  threshold: 0.68,
+  softness: 0.12,
   settle: 0.6,
   settleThreshold: 0.52,
-  settleWidth: 0.3
+  settleWidth: 0.3,
+  settleScale: 0.8,
+  settleOwn: 1
 )
 
 // Stone palettes for mossyRock: the stone, the paler tone its chamfered edges and mottling reveal, and the moss that
@@ -761,7 +769,7 @@ function groundSlabs(extent, holes) = filter(
   ),
   s => s.z1 > s.z0
 )
-template paintedGround(id, radius, turf, paving, paths = [], pathWidth = 2.4, depth = 0.2, holes = []) {
+template paintedGround(id, radius, turf, paving, paths = [], pathWidth = 2.4, depth = 0.2, holes = [], pathSoftness = 0) {
   prototype $"{id}" {
     document {
       schema: "puck.creation.v1"
@@ -771,6 +779,7 @@ template paintedGround(id, radius, turf, paving, paths = [], pathWidth = 2.4, de
           paints: map(paths, p => {
             type: "Sweep"
             color: paving
+            softness: pathSoftness
             curve {
               a [p.a[0], 0, p.a[1]]
               b [p.b[0], 0, p.b[1]]

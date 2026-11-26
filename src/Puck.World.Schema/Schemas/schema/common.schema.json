@@ -9210,7 +9210,7 @@
           "description": "The condition tested every sweep \u2014 a lattice-field read or a state-cell read."
         },
         "prototypeId": {
-          "description": "The creation the placement shows/collides as while When holds and no earlier entry does. Must resolve to a declared, non-animated creation row.",
+          "description": "The creation the placement shows/collides as while When holds and no earlier entry does. Must resolve to a declared creation row.",
           "type": "string"
         }
       },

@@ -806,6 +806,11 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
         using var ackCts = CancellationTokenSource.CreateLinkedTokenSource(token: ct);
         using var ackSignal = new SemaphoreSlim(initialCount: 0, maxCount: 1);
         byte[]? latestAck = null;
+        // The acknowledgement writer shares the stream with the reader below, and a peer stream closes itself when a
+        // write fails part-way. The far end closes its side as it ends a projection, so an acknowledgement that meets
+        // the closing link takes the stream from under the reader, with the far end's last record, the reason it
+        // ended, unread. What the writer met is kept here, and the reader reports it as how the session ended.
+        Exception? ackFailure = null;
         var ackTask = Task.Run(function: async () => {
             try {
                 while (!ackCts.IsCancellationRequested) {
@@ -815,16 +820,39 @@ public sealed partial class WorldRemoteAuthority : IWorldRoutedRequests, IWorldC
                         await stream.FlushAsync(cancellationToken: ackCts.Token).ConfigureAwait(continueOnCapturedContext: false);
                     }
                 }
+            } catch (OperationCanceledException) when (ackCts.IsCancellationRequested) {
             } catch (Exception exception) when ((exception is IOException or SocketException or OperationCanceledException or ObjectDisposedException)) {
+                Volatile.Write(location: ref ackFailure, value: exception);
             }
         });
 
         try {
         while (!ct.IsCancellationRequested) {
-            var frame = await WorldFederationCodec.ReadResponseAsync(
-                ct: ct,
-                stream: stream
-            ).ConfigureAwait(continueOnCapturedContext: false);
+            WireFrameRead frame;
+
+            try {
+                frame = await WorldFederationCodec.ReadResponseAsync(
+                    ct: ct,
+                    stream: stream
+                ).ConfigureAwait(continueOnCapturedContext: false);
+            } catch (ObjectDisposedException) when (!ct.IsCancellationRequested) {
+                // Nothing but the acknowledgement writer closes this stream while the reader holds it. The writer is
+                // let finish, so what it met is known before it is read.
+                await ackCts.CancelAsync().ConfigureAwait(continueOnCapturedContext: false);
+                try { await ackTask.ConfigureAwait(continueOnCapturedContext: false); } catch { }
+                if (Volatile.Read(location: ref ackFailure) is not { } cause) {
+                    throw;
+                }
+                if (m_narrationHub is { HasNarrationSink: true } hub) {
+                    hub.Narrate(
+                        channel: "world.projection",
+                        text: $"[world.projection: remote observer '{Endpoint}' ended as its acknowledgement was written ({cause.GetType().Name}: {cause.Message.ReplaceLineEndings(replacementText: " ")}); the far end closed the stream and its last record was not read]"
+                    );
+                }
+                // The far end closes a traveler's stream when it ends the projection, which is observed again at
+                // once, as an invalidation that was read is. A far end that is gone refuses the next session's dial.
+                return m_submissionCredential.HasValue;
+            }
 
             if (!frame.Ok) {
                 return false;

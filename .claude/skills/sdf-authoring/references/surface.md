@@ -202,12 +202,14 @@ frames make the same local inset correct.
 Surface detail that is colour rather than form (a stripe, a trim, a mouth line,
 a panel) is a paint, never a sculpted copy proud of its plate: relief under the
 bake's cell (5 mm refined, 15 mm on smooth parts) frays into jagged steps and
-speckled material. `palette[].paints` holds up to eight paints, each drawn over
+speckled material. `palette[].paints` holds up to `SdfAppearance.MaxPaintsPerMaterial` paints, each drawn over
 the one before on every surface of the slot. A paint is one primitive of the
 shape vocabulary placed like a shape; the surface takes `color` inside it, or,
 with a `stroke`, within the stroke of its surface, the edge antialiased over the
-pixel's footprint. The views pass draws it at the hit alone, so it never changes
-the field or the bake.
+pixel's footprint. A `softness` (a width in the frame's units, metres on a
+static placement) feathers the edge over that width instead, centred on it, so
+a path fades into the turf about it. The views pass draws it at the hit alone,
+so it never changes the field or the bake.
 
 ```puck
 paints [
@@ -321,7 +323,11 @@ proportional, kerned, one Unicode scalar a glyph.
 
 Limits: a world draws at most `SdfSurfaceTextLayout.MaxTexts` distinct text
 paints (the validator counts them; paints equal in every field share one), and
-a text draws its first `SdfSurfaceTextLayout.MaxGlyphs` glyphs. A text is the
+a text draws its first `SdfSurfaceTextLayout.MaxGlyphs` glyphs; the texts share
+one pool of `SdfSurfaceTextLayout.PoolEntries` entries, and a text it has no room
+for draws nothing that frame (`SdfWorldTables.DegradedSurfaceTexts` counts them).
+A pixel tests only the glyphs its cell of the text's grid lists, so a long text
+costs a pixel no more than a short one. A text is the
 world's, not a body's: every copy of a creation shows the same words. A static
 placement draws an unparented text paint in world space, as any paint, and no
 parented one. A world shown through a screen or a portal draws none of its

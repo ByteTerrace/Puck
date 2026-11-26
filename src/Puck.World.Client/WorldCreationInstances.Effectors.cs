@@ -400,6 +400,13 @@ public sealed partial class WorldCreationInstances {
 
             return m_resolved;
         }
+        // Answers no target without asking for one, as an unresolved target reads: the tip itself and world up.
+        public readonly bool Unasked(out Vector3 target, out Vector3 normal) {
+            target = tipWorld;
+            normal = Vector3.UnitY;
+
+            return false;
+        }
         // Whether the target has drifted farther than the distance from a latched one. A surface probe compares the
         // surface points under the latch and under the tip (the latch less its standoff along its normal), which a held
         // march answers without the field gradient (WorldEffectorSolver.StanceDrifted); every other target compares the
@@ -525,7 +532,11 @@ public sealed partial class WorldCreationInstances {
             live.EffectorPlanted[index] = false;
             contactWeight = (1f - (driverWeight * (1f - (plant.SwingWeight ?? 1f))));
 
-            return goal.Resolve(normal: out normal, target: out target);
+            // A swing that weighs the tip nothing, once its weight has eased out, draws no target and fades toward
+            // none, so none is asked: its level is zero whatever a probe answers.
+            return (((contactWeight <= 0f) && (live.EffectorWeight[index] <= 0f))
+                ? goal.Unasked(normal: out normal, target: out target)
+                : goal.Resolve(normal: out normal, target: out target));
         }
         // A contact latched in its window holds its point whatever a probe would answer, so it asks none.
         if (live.EffectorPlanted[index]) {
