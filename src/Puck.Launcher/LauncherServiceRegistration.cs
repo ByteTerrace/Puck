@@ -30,6 +30,9 @@ public static class LauncherServiceRegistration {
         // The live present-rate control the window pump's display-aware pacer reads: seeded from the configured target rate, then
         // retargeted mid-session by the `present-rate` verb (presentation pacing only — the fixed-step sim is untouched).
         services.TryAddSingleton(implementationFactory: static sp => new PresentPacingControl(initialTargetHertz: sp.GetRequiredService<LauncherOptions>().TargetRenderRate));
+        // The door to the window's live placement: the window pump attaches its window, and a headless or offscreen host
+        // never does, so a placement verb refuses there by name.
+        services.TryAddSingleton<HostWindowPlacement>();
 
         // The shared monotonic capture clock: every input backend stamps CaptureTick from this one instance, and
         // the window pump uses it to time-stamp drained input. One origin so all stamps are comparable.

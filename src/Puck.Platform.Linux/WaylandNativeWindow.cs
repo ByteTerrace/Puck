@@ -21,7 +21,7 @@ namespace Puck.Platform.Linux;
 /// <c>orientation</c> since version 6, with surface-local <c>wl_fixed</c> (24.8) coordinates in
 /// the same logical space the toplevel's configured size is in; a <c>cancel</c> ends every live
 /// contact.</remarks>
-internal sealed unsafe class WaylandNativeWindow : INativeWindow, IWindowInputSource {
+internal sealed unsafe partial class WaylandNativeWindow : INativeWindow, IWindowInputSource {
     private const uint WlCompositorMaxVersion = 4;
     private const uint WlSeatMaxVersion = 7;
     private const uint WlSeatCapabilityTouch = 4;

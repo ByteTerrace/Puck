@@ -1121,6 +1121,13 @@ public static class WorldBootComposition {
             server: sp.GetRequiredService<Puck.World.Server.WorldServer>(),
             state: sp.GetRequiredService<WorldDeviceProfileState>()
         ));
+        // world.window: the host window's live placement. Core, so every shape knows the verb; only the window pump
+        // attaches a window to the door, so a headless or offscreen boot refuses it by name.
+        services.AddSingleton<ICommandModule>(implementationFactory: static sp => new WorldWindowCommandModule(
+            deviceProfile: sp.GetRequiredService<WorldDeviceProfileState>(),
+            server: sp.GetRequiredService<Puck.World.Server.WorldServer>(),
+            window: sp.GetService<HostWindowPlacement>()
+        ));
         // What each seat's client was delivered, which a seat driver reads. Its paths come from the navigation the
         // delivered document describes, compiled in this process from that document alone whichever process runs its
         // authority.

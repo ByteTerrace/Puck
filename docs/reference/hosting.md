@@ -311,6 +311,29 @@ included) and serves settled and presented captures without ever being
 shown, and `host.frames` reads the same frame time in each state, the
 minimized ones with a present phase of zero.
 
+The window's size and place change while the World runs. `world.window`
+(`WorldWindowCommandModule`) sizes the client area to a size or to a device
+profile's frame bar, centres or moves the window, switches the frame-filling
+mode, and reads where the window stands; an Operator sends it through
+`puck_exec` like any verb. It reaches the window through one door,
+`HostWindowPlacement`, which the window pump attaches its window to and which
+admits only the thread that owns the window: console lines drain on that thread
+in the host loop's control phase, so a placement call goes straight to the
+windowing system (`INativeWindowPlacement`). A size change is the windowing
+system's own resize, the one a drag of the window's edge makes: the window
+reports it through `Width`, `Height` and `ResizeCount`, and the next frame's
+`BeginFrame` rebuilds the swap chain at the new extent and the frame context
+carries it to the render targets and the HUD, with no second resize path. A
+Win32 window sizes from its client size with `AdjustWindowRectEx` and
+`SetWindowPos`, raises its `WM_GETMINMAXINFO` tracking limit to the frame that
+size needs (a client the size of its monitor needs a frame larger than the
+monitor), and centres its visible frame (DWM's extended frame bounds) in the
+monitor's work area (`MonitorFromWindow`, `GetMonitorInfo`). An X11 window sends
+`ConfigureWindow` and reports the size its window manager grants from the next
+pump; it has no fullscreen mode and centres on its root screen. A Wayland
+compositor places its toplevels itself, so a Wayland window takes a size (the
+swap chain sizes the surface) and refuses `move` and `center` by name.
+
 The simulation's fixed tick is unchanged by this. The pump still hands
 `FixedStepPump.Advance` the wall interval each iteration sampled and runs
 every whole step it covers (up to one step's period of wall time a call), so a 30 Hz simulation steps on alternate 60 Hz

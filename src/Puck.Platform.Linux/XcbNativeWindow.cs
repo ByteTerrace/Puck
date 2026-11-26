@@ -110,6 +110,10 @@ internal sealed partial class XcbNativeWindow : INativeWindow, IWindowInputSourc
     private readonly nint m_connection;
     private readonly uint m_deleteWindowAtom;
     private readonly NativeWindowOptions m_options;
+    private readonly uint m_rootWindow;
+    // The root screen's size (xcb_screen_t's width_in_pixels and height_in_pixels), the area TryCenter centres in.
+    private readonly ushort m_screenHeight;
+    private readonly ushort m_screenWidth;
     private readonly uint m_window;
 
     private bool m_disposed;
@@ -149,6 +153,15 @@ internal sealed partial class XcbNativeWindow : INativeWindow, IWindowInputSourc
 
         var rootWindow = ((uint)Marshal.ReadInt32(
             ofs: 0,
+            ptr: screen
+        ));
+        m_rootWindow = rootWindow;
+        m_screenWidth = ((ushort)Marshal.ReadInt16(
+            ofs: 20,
+            ptr: screen
+        ));
+        m_screenHeight = ((ushort)Marshal.ReadInt16(
+            ofs: 22,
             ptr: screen
         ));
         var rootVisual = ((uint)Marshal.ReadInt32(

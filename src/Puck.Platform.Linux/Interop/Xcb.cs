@@ -19,6 +19,10 @@ internal static partial class Xcb {
     public struct InternAtomCookie {
         public uint Sequence;
     }
+    [StructLayout(LayoutKind.Sequential)]
+    public struct TranslateCoordinatesCookie {
+        public uint Sequence;
+    }
 
     [LibraryImport("libxcb.so.1")]
     public static partial nint xcb_connect(nint displayName, out int screenNumber);
@@ -89,4 +93,13 @@ internal static partial class Xcb {
         uint dataLength,
         [In] uint[] data
     );
+    // value_list holds one 32-bit value per bit set in value_mask, lowest bit first (XCB_CONFIG_WINDOW_X = 1, _Y = 2,
+    // _WIDTH = 4, _HEIGHT = 8); a signed coordinate travels as its two's-complement bits.
+    [LibraryImport("libxcb.so.1")]
+    public static partial VoidCookie xcb_configure_window(nint connection, uint windowId, ushort valueMask, [In] uint[] valueList);
+    [LibraryImport("libxcb.so.1")]
+    public static partial TranslateCoordinatesCookie xcb_translate_coordinates(nint connection, uint sourceWindow, uint destinationWindow, short sourceX, short sourceY);
+    // The reply (freed by the caller) carries dst_x at byte 12 and dst_y at byte 14, both int16.
+    [LibraryImport("libxcb.so.1")]
+    public static partial nint xcb_translate_coordinates_reply(nint connection, TranslateCoordinatesCookie cookie, nint error);
 }

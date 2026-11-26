@@ -674,6 +674,9 @@ internal sealed partial class Win32NativeWindow : INativeWindow, INativeWindowCu
             case WmShowWindow:
                 m_isVisible = (wParam != 0);
                 return 0;
+            case WmGetMinMaxInfo:
+                RaiseTrackingLimit(lParam: lParam);
+                return 0;
             case WmSize:
                 var previousWidth = Width;
                 var previousHeight = Height;
