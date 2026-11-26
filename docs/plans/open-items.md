@@ -554,57 +554,53 @@ measured.**
     unverified; then one built CLI
     ([the authoring loop](iteration/authoring-loop.md#build-order)'s step 9),
     which ends the stale global tool.
-13. [high] [Lighting and GI](#lighting-and-gi): the probes read wrong surface
-    materials in some boots, which tints the closed gallery hall orange and
-    olive and darkens its bounce. The gallery is the engine's self-test, so
-    every other look reading waits on this diagnosis.
 
 **Then, each chosen for what it stresses.**
 
-14. [high] [The debug world at MMO scale](#the-debug-world-at-mmo-scale): the
+13. [high] [The debug world at MMO scale](#the-debug-world-at-mmo-scale): the
     town, a moon on another authority, and live authoring on the hosted
     world.
-15. [high] [The visual bar](#the-visual-bar)'s engine gaps, each ahead of any
+14. [high] [The visual bar](#the-visual-bar)'s engine gaps, each ahead of any
     look lane that would sculpt around it: the water's gaps 5, 6 and 9
     ([water](#water)), the terrain pass's steps
     ([the valley's terrain](#the-valleys-terrain)), the contour rule and the
     moving cutter ([bake detail](#bake-detail)). They compete for the same
     rendering lanes and run in the order written here (the lead's decision).
-16. [high] [Temporal](#temporal-shimmer-and-cadence-flicker): a still view
+15. [high] [Temporal](#temporal-shimmer-and-cadence-flicker): a still view
     shimmers on an 8-frame cycle. The fix is the reconstruction's
     ([rendering P15](rendering.md#p15--temporal-reconstruction)): a jitter
     period that follows the render scale and history clipped by variance.
-17. [high] [Bake proportional to change](#bake-proportional-to-change): the
+16. [high] [Bake proportional to change](#bake-proportional-to-change): the
     bake samples a dense lattice in about twenty round trips a group. Its
     replacement is sampling in one round trip a stage from one root-search
     source, with coarse-to-fine pruning; the CPU-stage cuts follow it.
-18. [high, before the hosted world admits players] [Security review](#security-review):
+17. [high, before the hosted world admits players] [Security review](#security-review):
     the write door's remaining leaks, then
     [disclosure](disclosure.md#the-build-order)'s next steps and what
     [rule faults](rule-faults.md) lists as not built.
-19. [high] [Edit to running](#edit-to-running-hot-reload-and-boot):
+18. [high] [Edit to running](#edit-to-running-hot-reload-and-boot):
     [the authoring loop](iteration/authoring-loop.md#build-order)'s step 5.
-20. [high] [Residency and streaming](#residency-and-streaming):
+19. [high] [Residency and streaming](#residency-and-streaming):
     [the streaming plan](streaming-and-memory.md#the-build-order)'s next step,
     and the mesh region's growth without a second buffer on Vulkan.
-21. [high] [Lighting and GI](#lighting-and-gi), after item 13: emitters
+20. [high] [Lighting and GI](#lighting-and-gi): emitters
     integrated over their solid angle, then what the GPU trace still owes
     under a moving sun.
-22. [high] [Refactoring campaign](#refactoring-campaign) and
+21. [high] [Refactoring campaign](#refactoring-campaign) and
     [code size](code-size.md#the-build-order): the generator families, as
     parallel lanes beside everything above.
-23. [high] [The benchmark](#the-benchmark): a route against a remote
+22. [high] [The benchmark](#the-benchmark): a route against a remote
     authority and a four-seat route, without which neither milestone has a
     verdict; then stage 4's remainder.
-24. [high] [Transfers, federation and server](#transfers-federation-and-server),
+23. [high] [Transfers, federation and server](#transfers-federation-and-server),
     [dense landscapes](#dense-landscapes), [transmission](transmission.md)
     and [test runner and replay](#test-runner-and-replay) (the body's write
     door from step D5), each at its plan's next step.
-25. [medium] [Collision versus drawn mesh](#collision-versus-drawn-mesh),
+24. [medium] [Collision versus drawn mesh](#collision-versus-drawn-mesh),
     [certified field contact](#certified-field-contact),
     [language and authoring](#language-and-authoring) and
     [author leaks to the standard](#author-leaks-to-the-standard).
-26. Then, by ordinary priority:
+25. Then, by ordinary priority:
     [the port](#port-the-experimental-worlds-missing-features),
     [rigid bodies](#rigid-bodies-and-physics),
     [MCP](#mcp-and-the-operator-attachment),
@@ -2565,39 +2561,16 @@ holds the fixed poses and the approaches already rejected.
 
 The volume's cost and convergence:
 
-- [high] The probes read wrong surface materials, so a closed room takes
-  coloured light it does not hold. In the gallery hall at a pinned noon, with
-  the blinds down and the cascades shadowing every interior surface, one boot's
-  probes under the `ellipsoid` exhibit (`world.probe 35.55 0.85 16 -0.9 -0.4 0`)
-  published an orange bounce of about (121, 42, 18) while their neighbours
-  stayed near neutral, the blinds took an olive bounce, and the volume's whole
-  light ran near a tenth of another boot's; that boot's beauty showed an
-  orange blob in the exhibit and olive exhibits and blinds until well past a
-  minute. A second boot of the same tree published neutral cubes about ten
-  times brighter, while its CPU reference (`world.probe`'s `reference-*`
-  fields, which name the face the relights disagree on most and the material
-  the reference's hits there weigh most in) read the floor under those probes
-  as program material 0, albedo (1, 0.078, 0.005), and so an orange-red
-  bounce. Turning `world.rays off` and resetting the layout (`world.indirect
-  medium`, then `high`) gave a neutral hall where the same reset with rays on
-  gave the orange and olive tints again. The tint is the device's: on a cold
-  D3D12 boot whose restores write the ids a mesh carries
-  (`SdfMesh.Restore.cs`), settled, the probe
-  at `(35.5, 1.5, 15.5)` published `(36.91, 10.65, 1.73)` against the CPU
-  reference's `(243.44, 216.28, 207.14)` (`reference-local-error=0.99994`,
-  `reference-visibility-errors=0`, the reference's face material 3058), and the
-  whole hall, grey exhibits included, read deep orange while `world.indirect
-  off` showed them grey on a peach floor. Unverified lead: a hardware-ray hit
-  takes its triangle from the bottom structure (`TryTakeStructures`, bottoms
-  keyed by geometry and shared through `TraceBottoms`), which keeps the
-  positions it was built from, while its material is read from the mesh
-  region at the instance's placement (`sdfProbeSurface`), so a trace mesh whose
-  region words were taken back or unmapped (a kept floor no list names,
-  `SdfMeshRegionStore.Cover`) still hits on the device and reads zero words,
-  program material 0. Next: on a cold boot, compare `world.rays off` against
-  on for that probe (published against reference), and check whether every
-  instance a published top level names still stands in the region
-  (`SdfMeshRegionStore.StandsUnderGate`) for as long as the top is used.
+- [medium] The gallery hall's north wall, behind the `PAINTING WING` sign,
+  reads as orange and white blotches about a probe cell across under indirect
+  light, while `world.indirect off` shows it unlit; a pinned noon and
+  `view.override camera look 22 2.4 22 40 1.0 20 60` frame it on D3D12. The
+  hall's probes now read the materials their CPU reference reads (the probe at
+  `(35.5, 1.5, 15.5)` agrees to `reference-relight-error=0.0003`), and the
+  hall's remaining warmth is its terracotta floor's bounce, so the blotches are
+  unexplained, not a material fault. Next: `world.probe` on the wall's face to
+  tell whether neighbouring probes' cubes disagree or the views' blend steps
+  between cells (`sdfProbeBlend`).
 - [medium] Faster probe convergence costs host time while the volume works.
   With several probe jobs in flight, one commit a batch and placement trials
   sharing rounds (`SdfMeshProbeGpuWork.Run`, `SdfMeshIrradiance.PlaceBatch`),

@@ -371,6 +371,7 @@ public sealed class WorldSceneEmitter : ISdfSceneEmitter {
     }
 
     public IReadOnlyList<int> MeshAssetSlots => m_animator.Rigid.Slots;
+    public IReadOnlyList<SdfMeshTemplateRange> MeshTemplateRanges => m_animator.Rigid.TemplateRanges;
     public IReadOnlyList<SdfMeshInstance> MeshInstances => m_animator.Rigid.Copies;
     /// <inheritdoc/>
     public IReadOnlyList<int> MeshInstanceChanges => m_animator.Rigid.ChangedCopies;

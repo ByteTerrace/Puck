@@ -671,6 +671,10 @@ public sealed partial class SdfMeshPathBake {
     private int[] m_copyAssetSlots = [];
     // The same slots as a set, which CopiesOf asks of every dynamic group.
     private readonly HashSet<int> m_copyAssetSlotSet = [];
+    // The frame's fixed template ranges as it published them (SdfFrame.MeshTemplateRanges), and those that hold an
+    // instance in increasing first instance, which CopiesOf searches for a fixed group no copy names.
+    private SdfMeshTemplateRange[] m_templateRangesPublished = [];
+    private SdfMeshTemplateRange[] m_templateRanges = [];
     // The copy journal's endpoint the layout was last compared at, the runs it named, and whether they are every copy
     // because the journal could not prove the window.
     private readonly GpuRowCursor m_copyCursor = new();
@@ -893,9 +897,11 @@ public sealed partial class SdfMeshPathBake {
             m_copyRuns, force: ((frame.MeshCopyChanges is null) || (m_copyLayout.Length != frame.MeshInstances.Count)));
 
         m_copiesWhole = whole;
-        if ((m_copyLayout.Length != frame.MeshInstances.Count) || (m_copyAssetSlots.Length != frame.MeshAssetSlots.Count)) { return false; }
+        if ((m_copyLayout.Length != frame.MeshInstances.Count) || (m_copyAssetSlots.Length != frame.MeshAssetSlots.Count) ||
+            (m_templateRangesPublished.Length != frame.MeshTemplateRanges.Count)) { return false; }
         if (whole) {
             for (var index = 0; (index < m_copyAssetSlots.Length); index++) { if (m_copyAssetSlots[index] != frame.MeshAssetSlots[index]) { return false; } }
+            for (var index = 0; (index < m_templateRangesPublished.Length); index++) { if (m_templateRangesPublished[index] != frame.MeshTemplateRanges[index]) { return false; } }
         }
         for (var run = 0; (run < m_copyRuns.Count); run++) {
             SdfMeshHistory.ProcessWork.Add(kind: SdfMeshHistory.DressCopiesVisited, amount: m_copyRuns.Length(index: run));
@@ -921,6 +927,9 @@ public sealed partial class SdfMeshPathBake {
         m_copyAssetSlots = frame.MeshAssetSlots.ToArray();
         m_copyAssetSlotSet.Clear();
         m_copyAssetSlotSet.UnionWith(other: m_copyAssetSlots);
+        m_templateRangesPublished = [.. frame.MeshTemplateRanges];
+        m_templateRanges = [.. m_templateRangesPublished.Where(predicate: static range => (range.InstanceCount > 0))];
+        Array.Sort(array: m_templateRanges, comparison: static (a, b) => a.FirstInstance.CompareTo(value: b.FirstInstance));
         m_copyLayout = new CopyLayout[frame.MeshInstances.Count];
         for (var index = 0; (index < m_copyLayout.Length); index++) {
             var copy = frame.MeshInstances[index];
@@ -948,10 +957,21 @@ public sealed partial class SdfMeshPathBake {
         if (!table.TryGetValue(key: key, value: out var indices)) { table.Add(key: key, value: indices = []); }
         if ((indices.Count == 0) || (indices[^1] != copy)) { indices.Add(item: copy); }
     }
+    // The copies that draw a group, or null for a group that draws itself once: a template's group, fixed (in a template
+    // range) or dynamic (on a template slot), draws only through its copies, and draws nothing while none names it.
     private IReadOnlyList<int>? CopiesOf(SdfMeshBakeGroup group) {
-        if (!group.Dynamic) { return m_instanceCopies.GetValueOrDefault(key: group.FirstInstance); }
+        if (!group.Dynamic) {
+            if (m_instanceCopies.TryGetValue(key: group.FirstInstance, value: out var named)) { return named; }
+            return (InTemplateRange(instance: group.FirstInstance) ? Array.Empty<int>() : null);
+        }
         if (!m_copyAssetSlotSet.Contains(item: group.Slot)) { return null; }
         return (m_slotCopies.TryGetValue(key: group.Slot, value: out var copies) ? copies : Array.Empty<int>());
+    }
+    // Whether a program instance lies in a fixed template range of the indexed frame.
+    private bool InTemplateRange(int instance) {
+        var at = Puck.Maths.PartitionPoint.Of(span: (ReadOnlySpan<SdfMeshTemplateRange>)m_templateRanges, state: instance, isBefore: static (instance, range) => ((range.FirstInstance + range.InstanceCount) <= instance));
+
+        return ((at < m_templateRanges.Length) && (m_templateRanges[at].FirstInstance <= instance));
     }
 
     // The lattices and their groups while TryTake chooses them, reused take to take.
@@ -3712,6 +3732,8 @@ public sealed partial class SdfMeshPathBake {
         public bool Declined { get; set; }
 
         private SdfMesh? m_floor;
+        // The material ids, by place, the kept floor's triangles carry: always the group's own (KeepFloorOf, Renumber).
+        private int[] m_floorMaterials = [];
 
         // The mesh a group planned at or past its floor tier landed, kept with its own claim while a finer tier draws, so
         // the group shows it again the moment that tier is refused or evicted (SdfMeshPathBake.Evict); the geometry it
@@ -3754,27 +3776,33 @@ public sealed partial class SdfMeshPathBake {
         public SdfMesh? JudgedAgainst => OwnProduct;
 
         // Keeps the floor of the group this one replaces: that group's own product at or past its floor tier, or the
-        // floor it kept, with its shape, its tier and its verdict. A group planned at or past its floor tier keeps none,
-        // since its product is its floor. Takes a claim of its own.
+        // floor it kept, with its shape, its tier and its verdict, in this group's material ids (FloorIn). A group planned
+        // at or past its floor tier keeps none, since its product is its floor. Takes a claim of its own.
         public void KeepFloorOf(Group old) {
             if (AtFloor) { return; }
 
             var atFloor = old.AtFloor;
-            var (floor, geometry, shape, tier) = (atFloor ? (old.Mesh, old.Sealed, old.Shape, old.Tier) : (old.m_floor, old.FloorGeometry, old.m_floorShape, old.KeptFloorTier));
+            var (floor, geometry, shape, tier, carried) = (atFloor ? (old.Mesh, old.Sealed, old.Shape, old.Tier, old.MaterialOrder) : (old.m_floor, old.FloorGeometry, old.m_floorShape, old.KeptFloorTier, old.m_floorMaterials));
 
             if ((floor is null) || ReferenceEquals(objA: floor, objB: m_floor)) { return; }
-            m_floor?.Release();
-            m_floor = floor.Acquire();
-            FloorGeometry = geometry;
             KeptFloorTier = tier;
             m_floorShape = shape;
             FloorVerdict = (atFloor ? new TraceVerdict() : old.FloorVerdict);
-            if (Owner is { } owner) {
-                owner.m_floorRevision++;
-                owner.Touch(group: this);
-                owner.Keep(group: this);
-                owner.Judgeable(group: this);
-            }
+            SetFloor(floor: FloorIn(carried: carried, floor: floor, geometry: geometry, wanted: MaterialOrder), geometry: geometry);
+        }
+        // The one door a kept floor changes through: takes the claim on the floor (in the group's own material ids, or
+        // null for none), lets the one it replaces go, and tells the bake.
+        private void SetFloor(SdfMesh? floor, SdfMeshGeometry? geometry) {
+            m_floor?.Release();
+            m_floor = floor;
+            m_floorMaterials = MaterialOrder;
+            FloorGeometry = ((floor is null) ? null : geometry);
+            if (Owner is not { } owner) { return; }
+            owner.m_floorRevision++;
+            owner.Touch(group: this);
+            if (floor is null) { return; }
+            owner.Keep(group: this);
+            owner.Judgeable(group: this);
         }
 
         // Takes the demand box from the planned box, once.
@@ -3784,10 +3812,22 @@ public sealed partial class SdfMeshPathBake {
             DemandHalf = Vector3.Abs(value: ((High - Low) * 0.5f));
             HasDemandBox = true;
         }
-        // Draws its mesh renumbered into a later program's material ids, which number its shapes place for place.
+        // Draws its mesh renumbered into a later program's material ids, which number its shapes place for place, and
+        // keeps its floor in the same ids.
         public void Renumber(int[] materials, SdfMesh mesh) {
+            var carried = m_floorMaterials;
+
             Renumber(materials: materials);
             Mesh = mesh;
+            if (m_floor is { } floor) { SetFloor(floor: FloorIn(carried: carried, floor: floor, geometry: FloorGeometry, wanted: materials), geometry: FloorGeometry); }
+        }
+        // A claim on a floor whose triangles carry the ids `carried` numbers its shapes with, in the ids `wanted` numbers
+        // them with: the floor itself where they agree, else the library's renumbered copy of its geometry, or null where
+        // the library holds none, so no group draws or traces a floor in another program's material ids.
+        private SdfMesh? FloorIn(SdfMesh floor, SdfMeshGeometry? geometry, int[] carried, int[] wanted) {
+            if (carried.AsSpan().SequenceEqual(other: wanted)) { return floor.Acquire(); }
+            if ((Owner is not { } owner) || (geometry is not { } key)) { return null; }
+            return (owner.Library.TryTake(geometry: key, identity: Identity, materials: wanted, mesh: out var renumbered) ? renumbered : null);
         }
     }
     // A group's final lattice: its values and materials, sampled a slab at a time, then the sampled lattice built from

@@ -21,6 +21,11 @@ public sealed partial class WorldAdjacencySceneEmitter {
     private readonly HashSet<string> m_staticNames = new(comparer: StringComparer.Ordinal);
     private readonly List<string> m_staticRetired = [];
     private readonly List<SdfMeshInstance> m_staticInstances = [];
+    // The template ranges the latest presentation emission's projections wrote, which MeshTemplateRanges publishes.
+    private readonly List<SdfMeshTemplateRange> m_staticTemplateRanges = [];
+
+    /// <inheritdoc/>
+    public IReadOnlyList<SdfMeshTemplateRange> MeshTemplateRanges => m_staticTemplateRanges;
 
     private void PrepareStaticProjections(IReadOnlyList<WorldAdjacencyProjection> projections) {
         m_preparedStatic.Clear();

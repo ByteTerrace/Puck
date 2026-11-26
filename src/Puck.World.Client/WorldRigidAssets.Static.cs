@@ -304,6 +304,12 @@ public sealed partial class WorldRigidAssets {
     }
     // The templates the latest emission wrote, with the scale each baked at.
     private readonly List<(StaticAsset Asset, float Scale)> m_emittedStaticAssets = [];
+    private readonly List<SdfMeshTemplateRange> m_templateRanges = [];
+
+    /// <summary>Gets the program instance ranges the latest emission wrote as static templates, one for each template
+    /// that holds an instance (<see cref="ISdfSceneEmitter.MeshTemplateRanges"/>): a template draws only through the
+    /// copies that name it, so a responding row's creation it does not show now draws nothing.</summary>
+    public IReadOnlyList<SdfMeshTemplateRange> TemplateRanges => m_templateRanges;
 
     // Why a static row is left to the ordinary visual emission, or null when it is a rigid static copy.
     private static string? Refusal(WorldPrototype creation, WorldPlacement placement) {
@@ -334,6 +340,7 @@ public sealed partial class WorldRigidAssets {
         for (var index = 0; (index < m_slotCount); index++) { transforms[slotBase + index] = new DynamicTransform(Vector3.Zero, Quaternion.Identity); }
     }
     private void EmitStaticAssets(SdfProgramBuilder builder, WorldBakedColors colors, WorldPickMapBuilder picks, WorldShapeIsolation? isolation, PackedFontAtlasCatalog? text) {
+        m_templateRanges.Clear();
         foreach (var asset in m_staticAssets) {
             var creation = asset.Creation;
             var document = creation.EngineDocument;
@@ -366,6 +373,7 @@ public sealed partial class WorldRigidAssets {
                 scratch.Text = text;
             }
             asset.Range = new SdfMeshTemplateRange(first, (builder.InstanceCount - first));
+            if (asset.Range.InstanceCount > 0) { m_templateRanges.Add(item: asset.Range); }
             picks.Instances(first, builder.InstanceCount, scratch.Target);
             WorldCreationWork.ProcessWork.Count(WorldCreationWork.StaticTemplates);
         }

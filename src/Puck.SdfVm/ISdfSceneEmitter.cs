@@ -41,6 +41,10 @@ public interface ISdfSceneEmitter {
 
     /// <summary>Gets the local geometry slots whose meshes are templates, drawn only by their copies.</summary>
     IReadOnlyList<int> MeshAssetSlots => [];
+    /// <summary>Gets the program instance ranges the latest <see cref="Emit"/> wrote as fixed copy templates, each drawn
+    /// only through the copies that name it (<see cref="SdfMeshInstance.TemplateRange"/>): a template no copy shows, such
+    /// as a responding row's creation it does not show now, draws nothing.</summary>
+    IReadOnlyList<SdfMeshTemplateRange> MeshTemplateRanges => [];
     /// <summary>Gets the rigid copies posed by the latest pack.</summary>
     IReadOnlyList<SdfMeshInstance> MeshInstances => [];
     /// <summary>Gets the indices into <see cref="MeshInstances"/> of the copies whose row the latest

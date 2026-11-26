@@ -83,13 +83,14 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
     private DynamicTransform[] m_transforms;
     private int m_programSlots;
 
-    // The copies and template slots every frame publishes, rewritten in place, and the journal of the copies each pack
+    // The copies, template slots and fixed template ranges every frame publishes, rewritten in place, and the journal of the copies each pack
     // changed (another copy at an index, the copy at an index on another root slot or at another revision), which the dresser and the bake
     // read through their own cursors instead of comparing the whole list.
     private readonly List<SdfMeshInstance> m_meshInstances = [];
     // Each published copy's revision as this pack read it, beside m_meshInstances.
     private readonly List<long> m_meshInstanceRevisions = [];
     private readonly List<int> m_meshAssetSlots = [];
+    private readonly List<SdfMeshTemplateRange> m_meshTemplateRanges = [];
     private readonly Puck.Abstractions.Gpu.GpuChangedRows m_copyChanges = new();
     private readonly SdfMovedTransforms m_moved = new();
 
@@ -509,21 +510,29 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
             );
         }
 
-        // The template slots first: a frame whose slots moved owes every copy, since a copy's group membership reads them.
+        // The template slots and ranges first: a frame whose templates moved owes every copy, since a copy's group
+        // membership, and whether a template group no copy names draws at all, read them.
         var slots = 0;
+        var ranges = 0;
         var slotsMoved = false;
         var copyCount = 0;
 
         for (var owner = 0; (owner < m_emitters.Count); owner++) {
             var assets = m_emitters[owner].MeshAssetSlots;
+            var templates = m_emitters[owner].MeshTemplateRanges;
 
             copyCount += m_emitters[owner].MeshInstances.Count;
             for (var at = 0; (at < assets.Count); at++, slots++) {
                 if (slots == m_meshAssetSlots.Count) { m_meshAssetSlots.Add(item: assets[at]); slotsMoved = true; }
                 else if (m_meshAssetSlots[slots] != assets[at]) { m_meshAssetSlots[slots] = assets[at]; slotsMoved = true; }
             }
+            for (var at = 0; (at < templates.Count); at++, ranges++) {
+                if (ranges == m_meshTemplateRanges.Count) { m_meshTemplateRanges.Add(item: templates[at]); slotsMoved = true; }
+                else if (m_meshTemplateRanges[ranges] != templates[at]) { m_meshTemplateRanges[ranges] = templates[at]; slotsMoved = true; }
+            }
         }
         if (slots < m_meshAssetSlots.Count) { m_meshAssetSlots.RemoveRange(index: slots, count: (m_meshAssetSlots.Count - slots)); slotsMoved = true; }
+        if (ranges < m_meshTemplateRanges.Count) { m_meshTemplateRanges.RemoveRange(index: ranges, count: (m_meshTemplateRanges.Count - ranges)); slotsMoved = true; }
         var resized = (copyCount != m_meshInstances.Count);
 
         if (copyCount < m_meshInstances.Count) {
@@ -779,7 +788,7 @@ public sealed partial class SdfCompositionFrameSource : ISdfFrameSource {
         // that moved makes a new set, and the program stands.
         m_sampled = SdfSampledSet.Capture(program: m_program!, previous: (m_sampled ?? m_program!.Sampled));
         dressed.PickMap = ComposePickMap();
-        dressed.Compose(meshAssetSlots: m_meshAssetSlots, meshInstances: m_meshInstances, sampled: m_sampled, slotClips: ComposeSlotClips(),
+        dressed.Compose(meshAssetSlots: m_meshAssetSlots, meshTemplateRanges: m_meshTemplateRanges, meshInstances: m_meshInstances, sampled: m_sampled, slotClips: ComposeSlotClips(),
             copyChanges: m_copyChanges.Reader, copyChangesSerial: m_copyChanges.Serial);
         dressed.ProgramDelta = (ReferenceEquals(objA: m_programDelta?.To, objB: dressed.Program) ? m_programDelta : null);
         if (Frames == 0) { Console.Error.WriteLine(value: $"[world.render] envelope: {m_program!.Instances.Count} instances, {m_program.MaterialCount} materials, {m_program.WordCount} program words, {m_transforms.Length} dynamic slots, {m_meshAssetSlots.Count} geometry assets, {m_meshInstances.Count} rigid copies"); }

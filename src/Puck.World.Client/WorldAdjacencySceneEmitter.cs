@@ -543,6 +543,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter, IDisp
 
         if (includeEntities) {
             HoldEmitted(read.Retain());
+            m_staticTemplateRanges.Clear();
         }
 
         for (var bandIndex = 0; (bandIndex < projections.Count); bandIndex++) {
@@ -610,6 +611,7 @@ public sealed partial class WorldAdjacencySceneEmitter : ISdfSceneEmitter, IDisp
                 );
                 if (prepared is not null) {
                     prepared.Assets.Emit(builder, colors, 0, null, prepared.Picks);
+                    m_staticTemplateRanges.AddRange(collection: prepared.Assets.TemplateRanges);
                 }
             }
 
