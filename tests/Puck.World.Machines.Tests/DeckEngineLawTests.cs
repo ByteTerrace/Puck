@@ -73,7 +73,7 @@ public sealed class DeckEngineLawTests {
         );
         Assert.True(
             condition: host.TryPrepare(
-                candidate: document with { MachinesRaw = [deck], ScreensRaw = [display with { Route = Engageable with { Port = "controls" } }] },
+                candidate: document with { MachinesRaw = [deck], ScreensRaw = [display with { Route = Engageable with { Ports = ["controls"] } }] },
                 current: null,
                 plan: out var plan,
                 reason: out var reason

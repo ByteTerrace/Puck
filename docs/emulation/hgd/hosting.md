@@ -24,9 +24,10 @@ an image before building a host, so a damaged or unsupported cartridge is
 refused with the loader's own diagnostic.
 
 The machine has two input ports, `controls` ($4016) and `controls-2` ($4017).
-A world screen that shows it and can be engaged names the port it drives in its
-route (`route { port: "controls" }`); the host refuses such a screen whose
-route names no port, and the port nobody routes to holds neutral input.
+A world screen that shows it and can be engaged names the ports its seats
+drive in its route (`route { ports ["controls", "controls-2"] }`, one engaged
+seat a port, in the order they engage); the host refuses such a screen whose
+route names no port, and a port nobody is seated on holds neutral input.
 
 ```text
 machines [

@@ -528,8 +528,8 @@ public sealed partial class WorldMachineHost {
         }
     }
     // Fills m_portTimeline with the input one port of a named machine receives over the tick: the engaged pads of every
-    // screen showing the machine whose route names that port, or that names none when the port is the machine's sole
-    // one, merged instant by instant; neutral when none is engaged.
+    // screen showing the machine that the engagement fold seated on that port (ScreenPadSnapshot.Port), or on no port
+    // when the port is the machine's sole one, merged instant by instant; neutral when none is engaged.
     private void MachineInput(string instance, ReadOnlySpan<ScreenPadSnapshot> pads, string port, bool sole) {
         var routed = false;
 
@@ -542,17 +542,19 @@ public sealed partial class WorldMachineHost {
                 a: source.Instance,
                 b: instance,
                 comparisonType: StringComparison.Ordinal
-            ) &&
-                ((slot.Route.Port is { } routedPort)
-                ? string.Equals(
-                    a: routedPort,
-                    b: port,
-                    comparisonType: StringComparison.Ordinal
-                )
-                : sole)
+            )
             ) {
                 foreach (ref readonly var snapshot in pads) {
-                    if (snapshot.ScreenIndex != slot.Index) {
+                    if (
+                        (snapshot.ScreenIndex != slot.Index) ||
+                        !((snapshot.Port is { } seated)
+                        ? string.Equals(
+                            a: seated,
+                            b: port,
+                            comparisonType: StringComparison.Ordinal
+                        )
+                        : sole)
+                    ) {
                         continue;
                     }
 
@@ -579,7 +581,6 @@ public sealed partial class WorldMachineHost {
                     }
 
                     routed = true;
-                    break;
                 }
             }
         }
@@ -618,14 +619,16 @@ public sealed partial class WorldMachineHost {
         if (!route.Engageable) {
             return null;
         }
-        if (route.Port is { } port) {
-            return (ports.Any(predicate: declared => string.Equals(a: declared.Name, b: port, comparisonType: StringComparison.Ordinal))
-                ? null
-                : $"Screen {index} routes to input port '{port}', which {machine} does not have ({DescribePorts(ports: ports)})."
-            );
+        if (route.Ports is { Count: > 0 } routed) {
+            foreach (var port in routed) {
+                if (!ports.Any(predicate: declared => string.Equals(a: declared.Name, b: port, comparisonType: StringComparison.Ordinal))) {
+                    return $"Screen {index} routes to input port '{port}', which {machine} does not have ({DescribePorts(ports: ports)}).";
+                }
+            }
+            return null;
         }
         return ((ports.Count > 1)
-            ? $"The {machine} on screen {index} has input ports {DescribePorts(ports: ports)}; the screen's route must name the one it drives."
+            ? $"The {machine} on screen {index} has input ports {DescribePorts(ports: ports)}; the screen's route must name the ports it drives."
             : null
         );
 

@@ -17,7 +17,10 @@ namespace Puck.World.Server;
 /// <param name="Timeline">The merged image over the tick, from its start through each press, release and axis sample
 /// at the instant it was captured, ending at <paramref name="Pad"/>; <see langword="null"/> when the image holds for
 /// the whole tick. Valid until the next fold, as the lane itself is.</param>
-public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState Pad, MachinePadTimeline? Timeline = null);
+/// <param name="Port">The machine input port this image drives, from the screen route's
+/// <see cref="WorldScreenRoute.Ports"/> as the applications on it were seated (<see cref="ControlApplication.Port"/>),
+/// or <see langword="null"/> for a route naming no ports, whose image drives the machine's sole port.</param>
+public readonly record struct ScreenPadSnapshot(int ScreenIndex, MachinePadState Pad, MachinePadTimeline? Timeline = null, string? Port = null);
 /// <summary>
 /// The control-application fold — where a participant's resolved intent goes, distinct from the
 /// <see cref="IntentSource"/> axis (what fills it). A principal holds a SET of
@@ -93,14 +96,14 @@ public sealed partial class WorldEngagement {
     // Reused scratch for a Compose/Dissolve set rebuild — the write path is human-cadence, but reusing it keeps the
     // allocation profile of this class uniform.
     private readonly List<ControlApplication> m_composeScratch = new();
-    // This tick's per-screen merged pad accumulator (FoldTick's write, BuildPadSnapshot's read) — a reused Dictionary
-    // cleared and refilled every FoldTick call, since screen indices are document-authored and not a compact 0..N
-    // space a fixed-size array could index directly.
-    private readonly Dictionary<int, MachinePadState> m_screenPads = new();
-    // This tick's per-screen pad timelines, for the screens whose image changed inside the tick, and the timelines not
-    // in use, kept so a tick with a press allocates nothing once warm. One application's own timeline is built in
-    // m_applicationTimeline before it merges into its screen's.
-    private readonly Dictionary<int, MachinePadTimeline> m_screenTimelines = new();
+    // This tick's merged pad accumulator per screen and seated port (FoldTick's write, BuildPadSnapshot's read) — a
+    // reused Dictionary cleared and refilled every FoldTick call, since screen indices are document-authored and not a
+    // compact 0..N space a fixed-size array could index directly. The port is null for a route naming no ports.
+    private readonly Dictionary<(int Screen, string? Port), MachinePadState> m_screenPads = new();
+    // This tick's pad timelines per screen and seated port, for the images that changed inside the tick, and the
+    // timelines not in use, kept so a tick with a press allocates nothing once warm. One application's own timeline is
+    // built in m_applicationTimeline before it merges into its seat's.
+    private readonly Dictionary<(int Screen, string? Port), MachinePadTimeline> m_screenTimelines = new();
     private readonly Stack<MachinePadTimeline> m_spareTimelines = new();
     private readonly MachinePadTimeline m_applicationTimeline = new();
     // The step's timed events on the channels an application reaches, newest first, as FoldTick walks them back.
@@ -331,9 +334,10 @@ public sealed partial class WorldEngagement {
 
         foreach (var pair in m_screenPads) {
             m_padEntries[count++] = new ScreenPadSnapshot(
-                ScreenIndex: pair.Key,
+                ScreenIndex: pair.Key.Screen,
                 Pad: pair.Value,
-                Timeline: m_screenTimelines.GetValueOrDefault(key: pair.Key)
+                Timeline: m_screenTimelines.GetValueOrDefault(key: pair.Key),
+                Port: pair.Key.Port
             );
         }
 
@@ -393,15 +397,19 @@ public sealed partial class WorldEngagement {
         }
 
         var own = GrantSubject.Body(index: targetPrincipal.Index);
+        // A screen application keeps the port it already holds there, else takes the screen's first free port.
+        string? seatedPort = null;
 
         m_composeScratch.Clear();
 
         // Everything already applied except this target (replaced below) and, under capture, the own body.
         foreach (var existing in m_grants.Applications(principal: targetPrincipal)) {
-            if (
-                (existing.Target == target) ||
-                (exclusive && (existing.Target == own))
-            ) {
+            if (existing.Target == target) {
+                seatedPort = existing.Port;
+
+                continue;
+            }
+            if (exclusive && (existing.Target == own)) {
                 continue;
             }
 
@@ -425,8 +433,21 @@ public sealed partial class WorldEngagement {
             ? PolicyOf(screenIndex: target.Value)
             : null);
 
+        if (policy is { Ports: { Count: > 0 } ports }) {
+            if ((seatedPort is null) || !NamesPort(ports: ports, port: seatedPort)) {
+                _ = TryFreeSeat(
+                    except: targetPrincipal,
+                    port: out seatedPort,
+                    screenIndex: target.Value
+                );
+            }
+        } else {
+            seatedPort = null;
+        }
+
         m_composeScratch.Add(item: new ControlApplication(
             Kit: policy?.Kit,
+            Port: seatedPort,
             Reach: policy?.Reach,
             Target: target
         ));
@@ -673,7 +694,7 @@ public sealed partial class WorldEngagement {
                         pointer: pointer,
                         reach: reach
                     );
-                    var screen = application.Target.Value;
+                    var screen = (Screen: application.Target.Value, Port: SeatPort(ports: policy.Ports, held: application.Port));
 
                     if (m_screenPads.TryGetValue(
                         key: screen,
@@ -994,68 +1015,174 @@ public sealed partial class WorldEngagement {
             entityIndex: entityIndex,
             targetPrincipal: targetPrincipal
         );
-    /// <summary>Returns this tick's merged pad for <paramref name="screenIndex"/>, the image <see cref="FoldTick"/>
-    /// hands the screen's machine — the <c>screen.state</c> read-back of what the machine receives.</summary>
+    /// <summary>Returns this tick's merged pad for one port of <paramref name="screenIndex"/>, the image
+    /// <see cref="FoldTick"/> hands the screen's machine on that port — the <c>screen.state</c> read-back of what the
+    /// machine receives.</summary>
     /// <param name="screenIndex">The engine screen index.</param>
-    /// <returns>The merged pad, or <see langword="null"/> when no application reaches the screen this tick.</returns>
-    public MachinePadState? PadOn(int screenIndex) => (m_screenPads.TryGetValue(
-        key: screenIndex,
+    /// <param name="port">The seated port, one of <see cref="SeatPorts"/>, or <see langword="null"/> for a route naming
+    /// no ports.</param>
+    /// <returns>The merged pad, or <see langword="null"/> when no application reaches that port this tick.</returns>
+    public MachinePadState? PadOn(int screenIndex, string? port = null) => (m_screenPads.TryGetValue(
+        key: (screenIndex, port),
         value: out var pad
     )
         ? pad
         : null
     );
-    /// <summary>Returns where this tick's merged pad aims <paramref name="screenIndex"/>'s light gun — the
-    /// <c>screen.state</c> read-back of <see cref="FoldTick"/>'s aim.</summary>
+    /// <summary>Returns where this tick's merged pads aim <paramref name="screenIndex"/>'s light gun — the
+    /// <c>screen.state</c> read-back of <see cref="FoldTick"/>'s aim: the first seated port's aim that lands on the
+    /// source, in the route's port order.</summary>
     /// <param name="screenIndex">The engine screen index.</param>
-    /// <returns>The aim, or <see cref="MachinePointer.Off"/> when no application reaches the screen this tick.</returns>
-    public MachinePointer PointerOn(int screenIndex) => (m_screenPads.TryGetValue(
-        key: screenIndex,
-        value: out var pad
-    )
-        ? pad.Pointer
-        : MachinePointer.Off
-    );
+    /// <returns>The aim, or <see cref="MachinePointer.Off"/> when no application on the screen aims at its source this
+    /// tick.</returns>
+    public MachinePointer PointerOn(int screenIndex) {
+        if (SeatPorts(screenIndex: screenIndex) is { Count: > 0 } ports) {
+            foreach (var port in ports) {
+                if ((PadOn(port: port, screenIndex: screenIndex) is { } seated) && seated.Pointer.OnScreen) {
+                    return seated.Pointer;
+                }
+            }
+            return MachinePointer.Off;
+        }
+        return ((PadOn(screenIndex: screenIndex) is { } pad)
+            ? pad.Pointer
+            : MachinePointer.Off
+        );
+    }
+    /// <summary>Returns the machine input ports <paramref name="screenIndex"/>'s live route seats players on, in seat
+    /// order (<see cref="WorldScreenRoute.Ports"/>).</summary>
+    /// <param name="screenIndex">The engine screen index.</param>
+    /// <returns>The ports, or <see langword="null"/> for a route naming none or a screen the document does not
+    /// declare.</returns>
+    public IReadOnlyList<string>? SeatPorts(int screenIndex) => PolicyOf(screenIndex: screenIndex)?.Ports;
     /// <summary>Returns every entity currently applied to <paramref name="screenIndex"/>, reported as 1-based display
     /// numbers (1..128, matching the <c>player.*</c> verb convention — a Seat/Peer principal's
     /// <see cref="Principal.Index"/> plus one) alongside whether the application captures it (its avatar idle,
-    /// the classic engage) or mirrors it (its avatar still driving), in ascending display order. Prunes any set that
-    /// no longer resolves to a live body.</summary>
+    /// the classic engage) or mirrors it (its avatar still driving) and the port it is seated on, in ascending display
+    /// order. Prunes any set that no longer resolves to a live body.</summary>
     /// <param name="screenIndex">The engine screen index.</param>
-    /// <returns>The applied entities' display indices and capture policy.</returns>
-    public IReadOnlyList<(int Display, bool Capture)> PlayersOn(int screenIndex) {
-        var players = new List<(int Display, bool Capture)>();
+    /// <returns>The applied entities' display indices, capture policy and seated port (<see langword="null"/> for a
+    /// route naming no ports).</returns>
+    public IReadOnlyList<(int Display, bool Capture, string? Port)> PlayersOn(int screenIndex) {
+        var players = new List<(int Display, bool Capture, string? Port)>();
+        var target = GrantSubject.Screen(index: screenIndex);
+        var ports = SeatPorts(screenIndex: screenIndex);
 
-        CollectPlayersOn(players: players, screenIndex: screenIndex);
-        players.Sort(comparison: static (a, b) => a.Display.CompareTo(value: b.Display));
-        return players;
-    }
-
-    internal bool HasPlayersOn(int screenIndex) => (CollectPlayersOn(players: null, screenIndex: screenIndex) != 0);
-
-    private int CollectPlayersOn(int screenIndex, List<(int Display, bool Capture)>? players) {
         m_grants.CollectApplicationHolders(
             into: m_holderScratch,
-            target: GrantSubject.Screen(index: screenIndex)
+            target: target
         );
-
         m_staleScratch.Clear();
-        var count = 0;
 
         foreach (var principal in m_holderScratch) {
             if (Body(index: principal.Index) is not null) {
-                count++;
-                players?.Add(item: ((principal.Index + 1), !HoldsOwnBody(
-                    applications: m_grants.Applications(principal: principal),
+                var applications = m_grants.Applications(principal: principal);
+
+                players.Add(item: ((principal.Index + 1), !HoldsOwnBody(
+                    applications: applications,
                     bodyIndex: principal.Index
-                )));
+                ), SeatPort(held: HeldPort(applications: applications, target: target), ports: ports)));
             } else {
                 m_staleScratch.Add(item: principal);
             }
         }
 
+        m_holderScratch.Clear();
         PruneStale();
-        return count;
+        players.Sort(comparison: static (a, b) => a.Display.CompareTo(value: b.Display));
+        return players;
+    }
+    /// <summary>Determines whether <paramref name="screenIndex"/> has a seat free for one more engager, and which port
+    /// it takes: the first of the route's <see cref="WorldScreenRoute.Ports"/> no live occupant other than
+    /// <paramref name="except"/> is seated on, or, for a route naming no ports, the machine's sole port while no other
+    /// live occupant holds the screen. The context button offers only a screen with a free seat; an engage by name
+    /// onto a full screen shares the first port.</summary>
+    /// <param name="screenIndex">The engine screen index.</param>
+    /// <param name="except">The principal asking, whose own application on the screen (if any) holds no seat against
+    /// it.</param>
+    /// <param name="port">The free port, or the route's first port when none is free; <see langword="null"/> for a
+    /// route naming no ports.</param>
+    /// <returns><see langword="true"/> when a seat is free.</returns>
+    public bool TryFreeSeat(int screenIndex, Principal except, out string? port) {
+        var target = GrantSubject.Screen(index: screenIndex);
+        var ports = SeatPorts(screenIndex: screenIndex);
+
+        m_grants.CollectApplicationHolders(
+            into: m_holderScratch,
+            target: target
+        );
+
+        try {
+            if (ports is not { Count: > 0 }) {
+                port = null;
+
+                foreach (var holder in m_holderScratch) {
+                    if ((holder != except) && (Body(index: holder.Index) is not null)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            foreach (var candidate in ports) {
+                var held = false;
+
+                foreach (var holder in m_holderScratch) {
+                    if (
+                        (holder != except) &&
+                        (Body(index: holder.Index) is not null) &&
+                        string.Equals(
+                            a: SeatPort(held: HeldPort(applications: m_grants.Applications(principal: holder), target: target), ports: ports),
+                            b: candidate,
+                            comparisonType: StringComparison.Ordinal
+                        )
+                    ) {
+                        held = true;
+
+                        break;
+                    }
+                }
+                if (!held) {
+                    port = candidate;
+
+                    return true;
+                }
+            }
+
+            port = ports[0];
+
+            return false;
+        } finally {
+            m_holderScratch.Clear();
+        }
+    }
+    // The port an application set holds on a screen target, or null when it holds none there.
+    private static string? HeldPort(IReadOnlyList<ControlApplication> applications, GrantSubject target) {
+        for (var index = 0; (index < applications.Count); index++) {
+            if (applications[index].Target == target) {
+                return applications[index].Port;
+            }
+        }
+        return null;
+    }
+    // The port an application seated on `held` drives under the route's live ports: its own while the route still names
+    // it, else the route's first port (a live edit renamed or dropped it), or null for a route naming no ports.
+    private static string? SeatPort(IReadOnlyList<string>? ports, string? held) {
+        if (ports is not { Count: > 0 }) {
+            return null;
+        }
+        return (((held is not null) && NamesPort(ports: ports, port: held))
+            ? held
+            : ports[0]
+        );
+    }
+    private static bool NamesPort(IReadOnlyList<string> ports, string port) {
+        for (var index = 0; (index < ports.Count); index++) {
+            if (string.Equals(a: ports[index], b: port, comparisonType: StringComparison.Ordinal)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>Translates a resolved <see cref="PlayerIntent"/> to a neutral standard-controller image through
@@ -1128,14 +1255,16 @@ public sealed partial class WorldEngagement {
     }
 
     /// <summary>Returns an application as the fold delivers it now: a screen member carries its screen's live policy
-    /// (the reach and pad kit the document's row authors today, which <see cref="FoldTick"/> reads), not the policy it
-    /// recorded at compose; any other member, or a screen the document no longer declares, is returned as held.</summary>
+    /// (the reach and pad kit the document's row authors today, and the port its seat drives under the row's ports, which
+    /// <see cref="FoldTick"/> reads), not the policy it recorded at compose; any other member, or a screen the document
+    /// no longer declares, is returned as held.</summary>
     /// <param name="application">A member of an application set.</param>
     /// <returns>The member with the policy the fold applies.</returns>
     public ControlApplication Live(ControlApplication application) =>
         (((application.Target.Kind == GrantSubjectKind.Screen) && (PolicyOf(screenIndex: application.Target.Value) is { } policy))
             ? (application with {
                 Kit = policy.Kit,
+                Port = SeatPort(held: application.Port, ports: policy.Ports),
                 Reach = policy.Reach,
             })
             : application);
@@ -1226,6 +1355,7 @@ public sealed partial class WorldEngagement {
                 : null
             ),
             Kit: screen.Route.Kit,
+            Ports: screen.Route.Ports,
             Reach: ((screen.Route.Channels is { Count: > 0 } names) ? new WorldChannelSelection(names) : null)
         );
 
@@ -1311,4 +1441,5 @@ public readonly record struct BodyRouteContribution(int SourceBody, int TargetBo
 /// <see cref="SourceDestination.Simulation"/> or that maps no ray.</param>
 /// <param name="Kit">The route's <see cref="WorldScreenRoute.Kit"/>, or <see langword="null"/> for the engine default.</param>
 /// <param name="Reach">The logical names from the route's <see cref="WorldScreenRoute.Channels"/>, or null for all.</param>
-internal readonly record struct ScreenPolicy(SourceMapping? Aim, string? Kit, WorldChannelSelection? Reach);
+/// <param name="Ports">The route's <see cref="WorldScreenRoute.Ports"/>, the ports its seats drive in seat order, or null for none.</param>
+internal readonly record struct ScreenPolicy(SourceMapping? Aim, string? Kit, WorldChannelSelection? Reach, IReadOnlyList<string>? Ports);

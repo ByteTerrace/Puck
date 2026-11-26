@@ -108,10 +108,9 @@ a station and press the context button (E, or RB on a pad) to play it, through
 the same device route and `devicePad` kit as a Wonderland device
 ([devices.md](devices.md)). Every station seats two players: the first seat to
 engage it plays the deck's first controller port, and a second seat that
-engages while the first still plays takes the second. A screen's route seats
-its players on one port, so each station shows its picture on two screens, the
-second sunk inside the frame behind the first, where no view sees it, and
-casting the least light a screen may. The decks are the toybox's own
+engages while the first still plays takes the second, all on the station's one
+screen, whose route names both ports (the standard's `deckRoute`); leaving frees
+the port for the next seat. The decks are the toybox's own
 (`toybox-cabinet-south-3` and so on, layout.puck's `toyboxMachines`), so the
 gallery booted alone hosts them, and the debug world runs them beside the
 Wonderland devices. Each can swap among the shipped deck programs and the
@@ -120,8 +119,9 @@ owner's local `roms/hgd` folder: `machine.content <deck>`, then
 standard's [machines.puck](../standard/machines.puck).
 
 Read them with `machine.state` (each machine's frames advance) and
-`screen.state <index>` (screens 20 to 43, two to a station in the plan's order,
-south then north, the even one the visible picture). `gallery.shot toybox` looks from
+`screen.state <index>` (screens 20 to 31, one to a station in the plan's order,
+south then north), which names each player's port (`engaged=p1@controls+p2@controls-2`)
+and prints the pad each port receives. `gallery.shot toybox` looks from
 level 2's north balcony down across the void at the south stations, and
 `gallery.shot toybox-across` from level 1's south balcony edge at the north
 ones.

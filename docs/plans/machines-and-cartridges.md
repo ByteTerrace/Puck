@@ -78,8 +78,8 @@ hardware observations, addon watches, the execution and content receipt,
    from those declarations. In place: cable endpoints on the machine row, a
    removed display leaving its machine and generation alone and releasing its
    input, named link members that advance once, and routes that name the
-   input port they drive (`route.port`, required for an engageable display of a
-   multi-port machine). Open: authored screen `Name` and the derived catalog,
+   input ports their seats drive (`route.ports`, one seat a port, required for an
+   engageable display of a multi-port machine). Open: authored screen `Name` and the derived catalog,
    routes that name a machine instance, and cable-group membership by machine
    name in place of screen index.
 2. **Hardware consumers.** One machine-operation payload carries instance,
