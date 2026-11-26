@@ -4746,6 +4746,13 @@ public static partial class WorldModelShape {
                 M("preferFolderDefault", typeof(global::System.Boolean), typeof(global::Puck.World.WorldMachine), "PreferFolderDefault", Read | Write, static value => ((global::Puck.World.WorldMachine)value).PreferFolderDefault),
                 M("runsWhen", typeof(global::Puck.World.WorldPlacementResponseCondition.StateCondition), typeof(global::Puck.World.WorldMachine), "RunsWhen", Read | Write, static value => ((global::Puck.World.WorldMachine)value).RunsWhen),
                 M("contentBy", typeof(global::Puck.World.WorldMachineContentSelector), typeof(global::Puck.World.WorldMachine), "ContentBy", Read | Write, static value => ((global::Puck.World.WorldMachine)value).ContentBy),
+                M("attention", typeof(global::Puck.World.WorldMachineAttention), typeof(global::Puck.World.WorldMachine), "Attention", Read | Write, static value => ((global::Puck.World.WorldMachine)value).Attention),
+            ],
+            []),
+        T(typeof(global::Puck.World.WorldMachineAttention), true, JsonTypeInfoKind.Object, null,
+            [],
+            [
+                M("within", typeof(global::System.Single), typeof(global::Puck.World.WorldMachineAttention), "Within", Read | Write | Required, static value => ((global::Puck.World.WorldMachineAttention)value).Within),
             ],
             []),
         T(typeof(global::Puck.World.WorldMachineCable), true, JsonTypeInfoKind.Object, null,

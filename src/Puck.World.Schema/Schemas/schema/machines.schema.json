@@ -195,6 +195,25 @@
         "additionalProperties": false,
         "default": null,
         "title": "WorldMachineContentSelector"
+      },
+      "attention": {
+        "description": "How far the machine\u0027s attention reaches, or null for a machine the host advances on every tick Running and RunsWhen allow, attended or not. A machine that authors one is advanced only on the ticks it is attended (WorldMachineAttention) and is suspended on every other: its clock stops, it keeps its hardware state, and it resumes from that state on the tick it is attended again. The tick decides it beside RunsWhen (Server.WorldTick.GateMachines), from authority state alone, so a replay or a restored checkpoint derives the same ticks: the verdict is never stored. Omitted from the wire when null.",
+        "type": [
+          "object",
+          "null"
+        ],
+        "properties": {
+          "within": {
+            "description": "The distance in metres, finite and positive.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "within"
+        ],
+        "additionalProperties": false,
+        "default": null,
+        "title": "WorldMachineAttention"
       }
     },
     "required": [

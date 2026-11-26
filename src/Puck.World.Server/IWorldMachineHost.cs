@@ -163,14 +163,17 @@ public interface IWorldMachineHost : IWorldExtensionRuntime, IWorldMachineMemory
     /// <param name="links">The declared cable groups, derived from the live definition's machine sources
     /// (<c>WorldDefinition.MachineCableGroups()</c>).</param>
     void ReconcileLinks(IReadOnlyList<WorldMachineCableGroup> links);
-    /// <summary>Sets whether a machine's <see cref="WorldMachine.RunsWhen"/> holds this tick. The tick calls it for every
-    /// machine that authors one, after the rule frame folds and before <see cref="TryAdvance"/>
-    /// (<c>WorldTick.GateMachines</c>), so the gate is always derived from the arena and never carried across a
-    /// checkpoint. A gated-off instance keeps its hardware state and is not advanced; one with no condition is never
-    /// gated.</summary>
+    /// <summary>Sets whether a machine's <see cref="WorldMachine.RunsWhen"/> holds this tick and whether anyone attends
+    /// it (<see cref="WorldMachine.Attention"/>). The tick calls it for every declared machine, after the rule frame
+    /// folds and before <see cref="TryAdvance"/> (<c>WorldTick.GateMachines</c>), so both verdicts are always derived
+    /// from the tick's authority state and never carried across a checkpoint. An instance either verdict holds back
+    /// keeps its hardware state and is not advanced: its clock stops, and it resumes from that state on the tick both
+    /// hold. A cable link advances while every member's condition holds and anyone attends any member.</summary>
     /// <param name="instance">The authored machine instance name; an undeclared name is ignored.</param>
-    /// <param name="runs">The condition's verdict: <see langword="true"/> to advance the instance on this tick.</param>
-    void GateRunning(string instance, bool runs);
+    /// <param name="runs">The condition's verdict: <see langword="true"/> for a machine that authors none.</param>
+    /// <param name="attended">Whether the machine is attended this tick: <see langword="true"/> for a machine that
+    /// authors no attention.</param>
+    void GateRunning(string instance, bool runs, bool attended);
     /// <summary>Mounts the library title a machine's <see cref="WorldMachine.ContentBy"/> cell selects. The tick calls it
     /// for every machine that authors one, beside <see cref="GateRunning"/> (<c>WorldTick.GateMachines</c>), and the host
     /// acts only when the title differs from the one it last mounted: it creates the machine afresh on the title's file

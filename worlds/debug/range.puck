@@ -156,8 +156,12 @@ kits [
   }
 ]
 
-// Each television's deck plays the bouncing ball.
-machines: map(televisions, tv => deckMachine(tv.name, "cartridges/deck/moving-sprite.deck"))
+// Each television's deck plays the bouncing ball while someone stands within 64 m of its picture: every television
+// faces the lane's head, so that reaches a viewer anywhere before the farthest one, and the decks stand suspended while
+// nobody is on the range.
+machines: map(televisions, tv => (deckMachine(tv.name, "cartridges/deck/moving-sprite.deck") with {
+  attention { within: 64 }
+}))
 
 // The televisions' pictures, each facing +Z, back up the lane.
 screens: map(televisions, tv => {

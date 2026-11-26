@@ -1,0 +1,133 @@
+// A machine follows attention (docs/decisions/worlds-and-federation.md, "Simulation follows attention"): one brick on
+// a screen at the middle of the moth basis's floor, attended within 4 m of the screen and engageable within 8 m. Seat
+// 1 stands far from it, walks into its reach, steps back out to where it can still engage, engages it, and leaves. The
+// brick runs on the ticks someone is within its reach or engaged on its screen and stands suspended on every other,
+// read from its divider register (DIV, 0xFF04), which counts while the brick runs and holds still while it does not.
+//
+// `puck test worlds/debug/machine-attention-tests.puck --reproduce` replays the walk: whether the brick advances on a
+// tick is derived from where the body stands and what it is engaged on, so two runs suspend and resume it on the same
+// ticks and reach the same state hash.
+schema: "puck.world.definition.v1"
+basis: "avatars/moth"
+documentId: "machine-attention-tests"
+
+import "../standard/machines"
+import "moth-controls"
+
+machines [
+  (brickMachine("brick", "cartridges/cgb/tetromino.cgb.puck") with {
+    attention { within: 4 }
+  })
+]
+
+kits [devicePadKit]
+
+screens [
+  {
+    index: 0
+    origin [0, 1, 0]
+    right [1, 0, 0]
+    up [0, 1, 0]
+    halfWidth: 0.4
+    halfHeight: 0.36
+    halfDepth: 0.004
+    round: 0
+    source: machine(instance: brick, output: "video")
+    route: (deviceRoute with { engageRadius: 8 })
+  }
+]
+
+state {
+  world {
+    table attentionProbe {
+      far0 = 0
+      far1 = 0
+      near0 = 0
+      near1 = 0
+      out0 = 0
+      out1 = 0
+      engaged0 = 0
+      engaged1 = 0
+      left0 = 0
+      left1 = 0
+    }
+  }
+}
+
+rule "probe-far-0" {
+  when $tick == 20
+  mode: Edge
+  attentionProbe.far0 = machine(0, 65284)
+}
+rule "probe-far-1" {
+  when $tick == 31
+  mode: Edge
+  attentionProbe.far1 = machine(0, 65284)
+}
+rule "probe-near-0" {
+  when $tick == 50
+  mode: Edge
+  attentionProbe.near0 = machine(0, 65284)
+}
+rule "probe-near-1" {
+  when $tick == 61
+  mode: Edge
+  attentionProbe.near1 = machine(0, 65284)
+}
+rule "probe-out-0" {
+  when $tick == 80
+  mode: Edge
+  attentionProbe.out0 = machine(0, 65284)
+}
+rule "probe-out-1" {
+  when $tick == 91
+  mode: Edge
+  attentionProbe.out1 = machine(0, 65284)
+}
+rule "probe-engaged-0" {
+  when $tick == 110
+  mode: Edge
+  attentionProbe.engaged0 = machine(0, 65284)
+}
+rule "probe-engaged-1" {
+  when $tick == 121
+  mode: Edge
+  attentionProbe.engaged1 = machine(0, 65284)
+}
+rule "probe-left-0" {
+  when $tick == 150
+  mode: Edge
+  attentionProbe.left0 = machine(0, 65284)
+}
+rule "probe-left-1" {
+  when $tick == 161
+  mode: Edge
+  attentionProbe.left1 = machine(0, 65284)
+}
+
+// The brick stands suspended while seat 1 is 16 m away, runs once it stands 2 m away, stands suspended again 6 m away
+// (outside its reach, inside its engage radius), runs while the seat is engaged on its screen from there, and stands
+// suspended once the seat leaves. Each suspended pair reads one value; the suspended stretches keep the state the brick
+// stopped in, so the value it resumes from is the value it stopped at.
+test "a brick runs while someone is near or engaged and stands suspended otherwise" {
+  when {
+    seat1: body.pose 0 0.05 16 0 0 0 0
+    ticks 40
+    seat1: body.pose 0 0.05 2 0 0 0 0
+    ticks 30
+    seat1: body.pose 0 0.05 6 0 0 0 0
+    ticks 25
+    seat1: body.press interact 1 0.2 0
+    ticks 40
+    seat1: body.press interact 1 0.2 0
+    ticks 40
+  }
+  expect {
+    attentionProbe.far0 == attentionProbe.far1
+    attentionProbe.near0 != attentionProbe.near1
+    attentionProbe.near0 != attentionProbe.far1
+    attentionProbe.out0 == attentionProbe.out1
+    attentionProbe.engaged0 != attentionProbe.engaged1
+    attentionProbe.left0 == attentionProbe.left1
+  }
+}

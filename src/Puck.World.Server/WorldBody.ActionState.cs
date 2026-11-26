@@ -397,6 +397,16 @@ public sealed partial class WorldBody {
         writer: "clearance"
     );
 
+    /// <summary>Writes a register back to its authored initial value, called only by
+    /// <c>WorldPopulation.RestoreAuthoredScale</c> for the register <c>bodies.scale</c> names.</summary>
+    /// <param name="slot">The register's action-state slot.</param>
+    internal void ApplyAuthoredState(int slot) => ApplyRawState(
+        reason: "returned to its authored size",
+        requested: InitialRaw(definition: in m_actionStateDefinitions[slot]),
+        slot: slot,
+        writer: "pose"
+    );
+
     private void ApplyRawState(int slot, long requested, string writer, string reason) {
         var definition = m_actionStateDefinitions[slot];
         var effective = (definition.Envelope?.Clamp(

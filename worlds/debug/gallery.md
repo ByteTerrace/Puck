@@ -102,7 +102,13 @@ corner bays and the walls beside them clear, and the lift's landing (bay 4) and
 the endless fall (bay 11).
 
 The ball bounces on its own with no one playing, so the screens move with the
-floor empty. Each screen is a deck's video in its station's dark bezel, at the
+floor empty. A deck runs while someone stands within 40 m of its screen
+(toybox.puck's `toyboxAttention`, its machine's `attention`) or plays it, and
+stands suspended otherwise, resuming from the frame it stopped on: the screens
+a player in the hall can make out are live, and the floor costs no emulation
+while nobody is near
+([machine hosting](../../docs/emulation/shared/machine-hosting.md#queued-screen-machine-hosting)).
+Each screen is a deck's video in its station's dark bezel, at the
 largest size the bezel frames, through the standard's CRT material. Walk up to
 a station and press the context button (E, or RB on a pad) to play it, through
 the same device route and `devicePad` kit as a Wonderland device

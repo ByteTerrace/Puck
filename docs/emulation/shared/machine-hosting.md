@@ -164,22 +164,41 @@ rate; CPU T-cycles are a separate hardware domain.
 
 ## Queued screen-machine hosting
 
-A world emulates every running machine on every tick, whether or not any
-screen showing it is visible to anyone. Machine state is simulation state that
-rules, bindings and replays read, so it never depends on what a viewer can see;
-the cost of an unseen cabinet is reduced by making idle emulation cheap, never
-by skipping or deferring it. Which frame a display shows, and whether any
-display reads the machine at all, likewise never reaches it.
+Machine state is simulation state that rules, bindings and replays read, so it
+never depends on what a viewer can see. Which frame a display shows, whether
+any display reads the machine at all, and where any camera points never reach
+it. A world emulates every running machine on every tick unless the machine's
+own declaration says when it runs.
 
-Whether a machine runs is simulation state too. A declaration's `running`
-stops it outright, and its `runsWhen` (a state condition, the one placement
-responses and portals read) advances it only on the ticks the condition holds:
-`WorldTick.GateMachines` decides it from the arena after the rules fold and
-before the machines step, and a replay or a restored checkpoint derives the
-same verdict, so nothing stores it. A gated-off machine keeps its hardware state
-and costs no emulation; its runtime stays allocated. The gallery's handheld
-rentals (`worlds/debug/gallery/rentals.puck`) gate a pool of one brick and one
-advanced brick for each seat's body on whether that body holds a rented device.
+Whether a machine runs is simulation state too, and a declaration has three
+ways to say it. `WorldTick.GateMachines` decides all three after the rules
+fold and the population advances, before the machines step, and a replay or a
+restored checkpoint derives the same verdict, so nothing stores it. A machine
+held back keeps its hardware state and costs no emulation; its clock stops, its
+runtime stays allocated, and it resumes from the state it held.
+
+- `running: false` stops it outright.
+- `runsWhen` (a state condition, the one placement responses and portals read)
+  advances it only on the ticks the condition holds. The gallery's handheld
+  rentals (`worlds/debug/gallery/rentals.puck`) gate a pool of one brick and
+  one advanced brick for each seat's body on whether that body holds a rented
+  device.
+- `attention { within: <metres> }` advances it only on the ticks someone
+  attends it: a participant holds a control application on a screen that shows
+  it, or a body a human occupies stands within that distance of one of those
+  screens. The distance is measured in the world's fixed-point coordinates from
+  the screen's place, so a headless authority and a windowed one suspend and
+  resume a machine on the same ticks. A cable link advances while anyone
+  attends any member. The toybox's decks author it
+  (`worlds/debug/gallery/toybox.puck`);
+  [the decision](../../decisions/worlds-and-federation.md#simulation-follows-attention)
+  holds why a suspended machine does not catch up, and
+  `worlds/debug/machine-attention-tests.puck` reproduces a walk out of and back
+  into a machine's reach.
+
+`machine.state` reads each machine's `running` (whether the host advances it
+now), its `attention` (`none`, `attended` or `unattended`) and the `segments`
+it has completed, which stand still while it is held back.
 
 ### Segments run in parts
 

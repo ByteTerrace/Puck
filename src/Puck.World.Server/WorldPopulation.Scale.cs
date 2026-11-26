@@ -49,6 +49,22 @@ public sealed partial class WorldPopulation {
             SyncBodyScaleAt(holdGrowthByClearance: false, index: index, slot: slot);
         }
     }
+    /// <summary>Returns one body's size register to its authored initial value, the size the body spawns at. The write
+    /// is a touch of the register, so the next <see cref="SyncBodyCells"/> brings the body to it within the room about
+    /// it, as it does a rule's write.</summary>
+    /// <param name="definition">The live document.</param>
+    /// <param name="index">The body's entity index; one that holds no active body is ignored, as is every index in a
+    /// world that names no scale register.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public void RestoreAuthoredScale(WorldDefinition definition, int index) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var slot = WorldBodyStateReads.PlanFor(definition: definition).Scale;
+
+        if ((slot >= 0) && (((uint)index) < ((uint)m_entries.Length)) && (m_entries[index] is { Active: true, Body: { } body })) {
+            body.ApplyAuthoredState(slot: slot);
+        }
+    }
 
     // Brings one body's scale to its register: an active body takes the register's value, within its clearance when
     // asked, and every other body, or every body under no register (a negative slot), is one.
