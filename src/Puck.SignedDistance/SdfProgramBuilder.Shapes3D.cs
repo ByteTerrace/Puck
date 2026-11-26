@@ -545,18 +545,7 @@ public sealed partial class SdfProgramBuilder {
     /// refused as <see cref="ScreenSlab(Vector3, float, Vector3, Vector3, Vector3, int, SdfBlendOp, float)"/> refuses
     /// it.</exception>
     public SdfProgramBuilder ScreenSurface(Vector3 worldOrigin, Vector3 worldRight, Vector3 worldUp, float halfWidth, float halfHeight, int screenIndex) {
-        if (
-            !float.IsFinite(f: halfWidth) ||
-            !float.IsFinite(f: halfHeight) ||
-            !(halfWidth > 0f) ||
-            !(halfHeight > 0f)
-        ) {
-            throw new ArgumentOutOfRangeException(
-                paramName: nameof(halfWidth),
-                message: $"A screen surface's half-width and half-height must be positive and finite; got {halfWidth} and {halfHeight}."
-            );
-        }
-
+        RequireFaceHalves(halfHeight: halfHeight, halfWidth: halfWidth, subject: "A screen surface");
         AddScreenSurface(
             halfHeight: halfHeight,
             halfWidth: halfWidth,
@@ -587,10 +576,7 @@ public sealed partial class SdfProgramBuilder {
     /// <exception cref="ArgumentOutOfRangeException">A half-extent is not positive and finite, the frame is refused as
     /// <see cref="ScreenSurface"/> refuses it, or <paramref name="material"/> names no material of the palette.</exception>
     public SdfProgramBuilder EmitterFace(Vector3 worldOrigin, Vector3 worldRight, Vector3 worldUp, float halfWidth, float halfHeight, int material) {
-        if (!float.IsFinite(f: halfWidth) || !float.IsFinite(f: halfHeight) || !(halfWidth > 0f) || !(halfHeight > 0f)) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(halfWidth),
-                message: $"An emitter face's half-width and half-height must be positive and finite; got {halfWidth} and {halfHeight}.");
-        }
+        RequireFaceHalves(halfHeight: halfHeight, halfWidth: halfWidth, subject: "An emitter face");
         if ((material < 0) || (material >= m_materials.Count)) {
             throw new ArgumentOutOfRangeException(paramName: nameof(material),
                 message: $"An emitter face's material must name one of the program's {m_materials.Count} materials; got {material}.");
@@ -639,6 +625,14 @@ public sealed partial class SdfProgramBuilder {
             ScreenIndex: screenIndex,
             Up: Vector3.Normalize(value: worldUp)
         ));
+    }
+    // A face's half-extents, a sampled screen's or an emitter face's: refused unless positive and finite, since the shaders
+    // divide a hit's projection by them and sample the face's area.
+    private static void RequireFaceHalves(float halfWidth, float halfHeight, string subject) {
+        if (!float.IsFinite(f: halfWidth) || !float.IsFinite(f: halfHeight) || !(halfWidth > 0f) || !(halfHeight > 0f)) {
+            throw new ArgumentOutOfRangeException(paramName: nameof(halfWidth),
+                message: $"{subject}'s half-width and half-height must be positive and finite; got {halfWidth} and {halfHeight}.");
+        }
     }
     // A screen surface's frame, a sampled screen's or an emitter face's: refused unless finite, unit-normalizable and
     // orthogonal.
