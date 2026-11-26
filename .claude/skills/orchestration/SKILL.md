@@ -559,7 +559,10 @@ lighting retune, a palette or treatment pass) does not land on relative
 improvement alone. Landing the creation and putting its gap first are separate
 decisions, and the second is made in the same landing. The lead reads a lane's captures at landing and sends a milestone
 or a doubtful case to the `look-critic` agent when fresh eyes pay for
-themselves, not every pass, and at most twice per creation per wave. A change is judged on what
+themselves, not every pass, and at most twice per creation per wave. While the owner pairs on a place's looks,
+the owner is its critic and no `look-critic` round is run for it (the owner's ruling during the gallery overhaul:
+"No need for the independent critic in the looks right now, I am that critic"); the pair loop is
+[gallery pair sessions](../../../docs/plans/iteration/gallery-pair.md). A change is judged on what
 it owns: a failure the critic attributes to a filed world-wide item (the night
 lighting, a backend colour defect, the world's cel treatment, another
 creation's defect) holds that item, not the change, once the lead has checked
