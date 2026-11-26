@@ -22,7 +22,9 @@ namespace Puck.World;
 /// <para>Where it stops: the step also reads what lies outside the body. The static ground, gravity, kits and motion
 /// programs come from the delivered document and the moving solids' poses from the continuation, so they are exact at
 /// its tick; other bodies, a moving solid's motion after that tick and rule writes to the body's registers are not
-/// predicted, and show as a correction at the next delivery. A seat riding another body is not predicted.</para>
+/// predicted, and show as a correction at the next delivery. A seat riding another body is not predicted, and neither is
+/// one whose predicted steps pass through a portal's glass (<see cref="WorldFaceRegion.Sweep"/>): the crossing is the
+/// authority's, so the seat steers from what was delivered until the crossing is delivered.</para>
 /// <para>Nothing a prediction does reaches an authority or the delivered mirror: its population and arena are its own.
 /// Every member runs on the host pump.</para>
 /// </remarks>
@@ -60,6 +62,9 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         public string Reason = "no prediction asked";
         public string? PopulationRefusal;
         public WorldPredictedBody Body;
+        // The portal openings of the document the prediction steps in, and that document.
+        public (string PlacementId, string Face, WorldFaceAperture.Box Box)[] Doors = [];
+        public WorldDefinition? DoorsFrom;
     }
 
     private readonly Seat[] m_seats = [.. Enumerable.Range(start: 0, count: PlayerRoster.MaxSlots).Select(selector: static _ => new Seat())];
@@ -172,6 +177,10 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         if (!TryDecode(own: in own, seat: seat)) {
             return "the continuation does not decode";
         }
+        if (!ReferenceEquals(objA: seat.DoorsFrom, objB: source)) {
+            seat.Doors = WorldFacePortalPolicy.PortalApertures(definition: source);
+            seat.DoorsFrom = source;
+        }
 
         // The authority's answer to an earlier prediction: what was predicted for the continuation's tick against where the
         // body stood after it. A prediction is relied on only while the authority keeps confirming it.
@@ -223,6 +232,15 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
             population.AdvanceSeats(engageEdges: m_edges, engageProbeOrdinals: [], stepStartEngineTick: engineTick, stepTicks: stepTicks, tick: tick);
             population.CompleteStep(tick: tick);
             engineTick += stepTicks;
+
+            // A step through a door's glass is a crossing only the authority makes (it carries the body to the door's
+            // counterpart, perhaps resized or into another world), so a prediction past one would steer the seat from a
+            // body standing in the wall behind the glass: the seat steers from what was delivered until the crossing is.
+            foreach (var door in seat.Doors) {
+                if (WorldFaceRegion.Sweep(aperture: door.Box, from: previous, to: predicted.FixedPosition).Crossed) {
+                    return $"the prediction reaches {door.PlacementId}/{door.Face}, whose crossing the authority makes";
+                }
+            }
         }
         if (steps > 0L) {
             var tip = (own.Tick + ((ulong)steps));

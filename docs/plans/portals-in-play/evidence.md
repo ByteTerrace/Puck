@@ -83,11 +83,11 @@ previous position to its current one (`WorldBody.FixedPreviousPosition`,
 definition it never moves. The only ways to move a door today are these:
 
 - A document mutation moves it between two ticks as a jump. A body the glass
-  jumps over has a zero-length segment, so it is caught only if it ends inside
-  the opening's depth band, and that band is sized from the fastest *body* the
-  document declares (`WorldFacePortalPolicy.CrossingFloor`), never from a door's
-  speed. A door that jumps further than the band passes over the body without
-  firing.
+  jumps over has a zero-length segment, which never crosses the glass
+  (`WorldFaceRegion.Sweep` fires only for a segment that starts in front of the
+  plane), so a door that jumps onto or over a standing body passes it without
+  firing; the body ends latched inside the opening when it ends in the depth
+  band.
 - A state-bound position moves the drawing and not the opening (1.1).
 - An attached, inhabited or animated placement is refused.
 

@@ -1913,9 +1913,9 @@ public sealed partial class WorldInstanceHost {
     // An arriving traveler's own occupancy, latched at the instant it lands rather than discovered by the
     // next scan. The mapped isometry sets a traveler down against its counterpart's threshold, and a Spawn
     // arrival can land a seat inside any door the spawn point happens to sit in front of; either way, the
-    // body did not walk in, so its first scan there must not read as an entry edge. A degenerate segment
-    // (the landing collapses previous to current — WorldBody.Pose) makes the swept test the point test, so
-    // the region's own Inside answer is exactly what the next scan would latch.
+    // body did not walk in, so its first scan there must not read as an entry edge. The landing collapses
+    // previous to current (WorldBody.Pose), a segment that never crosses the glass, so the region's own Inside
+    // answer is exactly what the next scan would latch.
     // The same seed for an arrival this host did not itself land: a traveler committed into one of this process's
     // instances over the wire reaches the destination through the escrow, never through PublishCommittedTransfer,
     // so the commit-time seed there covers colocated arrivals only. The escrow's own border admission is written by

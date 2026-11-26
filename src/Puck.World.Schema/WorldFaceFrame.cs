@@ -66,12 +66,13 @@ public abstract record WorldFaceAperture {
     private WorldFaceAperture() {
     }
 
-    /// <summary>A planar rectangular aperture: the face's own frame extruded one-sidedly behind the glass, against
-    /// <see cref="WorldFaceFrame.Normal"/>, so a body's origin is inside once it has passed through the glass.</summary>
+    /// <summary>A planar rectangular aperture: the face's glass, which a body's origin crosses from the side it faces,
+    /// and the face's own frame extruded one-sidedly behind it, against <see cref="WorldFaceFrame.Normal"/>, the
+    /// slab a body occupies once it has passed through.</summary>
     /// <param name="Frame">The face frame the slab is built on.</param>
-    /// <param name="Depth">How far the slab extends behind the glass, along <see cref="WorldFaceFrame.Normal"/>. The
-    /// slab is <c>[-Depth, 0]</c>, entered only from the front, so a door fires when a body's origin passes through
-    /// its glass from the side it faces.</param>
+    /// <param name="Depth">How far the slab extends behind the glass, along <see cref="WorldFaceFrame.Normal"/>: the
+    /// slab is <c>[-Depth, 0]</c>. It bounds occupancy only; whether a body crossed is the glass test alone
+    /// (<see cref="WorldFaceRegion.Sweep"/>).</param>
     public sealed record Box(WorldFaceFrame Frame, FixedQ4816 Depth) : WorldFaceAperture {
         /// <summary>Gets a world-axis box that holds the whole slab, grown past the rounding of the region test by a
         /// sixty-fourth of the slab's extents and a sixty-fourth of a metre. A segment whose bounds miss it neither
@@ -96,10 +97,10 @@ public abstract record WorldFaceAperture {
 /// <summary>One swept region test's answer.</summary>
 /// <param name="Inside">Whether the segment's end point lies in the region. This is the occupancy latch value: it is
 /// what a face records about a body, independent of whether the segment crossed.</param>
-/// <param name="Crossed">Whether the segment meets the region at all — <paramref name="Inside"/> or a swept
-/// intersection that both endpoints missed.</param>
-/// <param name="Parameter">The earliest parameter in <c>[0, 1]</c> along the segment at which it meets the region;
-/// zero when nothing crossed, and zero for a degenerate segment already inside.</param>
+/// <param name="Crossed">Whether the segment passes through the glass from the side it faces: it starts in front of
+/// the face's plane, ends on or behind it, and meets the plane within the face's rectangle.</param>
+/// <param name="Parameter">The parameter in <c>[0, 1]</c> along the segment at which it meets the glass; zero when
+/// nothing crossed.</param>
 /// <param name="SeamU">The in-plane coordinate along <see cref="WorldFaceFrame.Right"/> at
 /// <paramref name="Parameter"/>.</param>
 /// <param name="SeamV">The in-plane coordinate along <see cref="WorldFaceFrame.Up"/> at
@@ -117,18 +118,12 @@ public readonly record struct WorldFaceCrossing(
 /// The swept region test behind every face-crossing decision, dispatched on the aperture arm.
 /// </summary>
 public static class WorldFaceRegion {
-    // Slab test plus the Liang-Barsky segment clip: each axis narrows a shared [0,1] parameter interval, using only
-    // Dot and division — no Sqrt, no Length, both of which round in the wrong direction for a conservative bound.
-    // The shared clipper rejects same-side endpoints and skips boundaries already containing both endpoints.
-    // A zero-length segment reduces exactly to the point test, with no division or separate teleport path.
-    //
-    // THE SWEPT CLIP ITSELF IS DIRECTION-BLIND: it asks only whether the segment's normal-axis component visits
-    // [-Depth, 0] at some parameter, the same answer for either travel direction. That is correct for Right/Up (a
-    // door has no preferred sideways or vertical approach) but wrong for Normal — the aperture is documented
-    // one-sided (see WorldFaceAperture.Box.Depth), so a segment that starts behind the slab and passes forward out
-    // through the front must not fire, even though it visits the slab along the way. Inside
-    // remains the endpoint's direction-free OCCUPANCY fact, but Crossed is always the direction-gated swept result:
-    // otherwise an ordinary back-side step ending inside the band bypasses the gate and fires through `inside`.
+    // Inside is the end point's slab test, the occupancy fact a latch records. Crossed is the swept test of the glass
+    // itself: the segment's normal component goes from in front of the plane to on or behind it, and the in-plane point
+    // where it meets the plane (the shared clipper's boundary parameter, using only Dot and division) lies within the
+    // face's rectangle. It reads no depth, so no speed, rate or motion program can tunnel through it, and it fires
+    // only for travel through the glass from the side it faces: a segment that starts on or behind the plane (a
+    // body posed into the slab, a step away from the glass on its far side, a walk out through the front) never fires.
     private static WorldFaceCrossing SweepBox(WorldFaceAperture.Box box, FixedVector3 from, FixedVector3 to) {
         var frame = box.Frame;
         var delta = (to - frame.Origin);
@@ -162,46 +157,50 @@ public static class WorldFaceRegion {
             right: frame.Up
         );
 
-        var enter = FixedQ4816.Zero;
-        var exit = FixedQ4816.One;
-        var sweptRegion = (FixedSegmentClip.Axis(
-            start: previousAlongNormal,
-            end: alongNormal,
-            lower: -box.Depth,
-            upper: FixedQ4816.Zero,
-            enter: ref enter,
-            exit: ref exit
-        )
-            && FixedSegmentClip.Axis(
-            start: previousAlongRight,
-            end: alongRight,
-            lower: -frame.HalfWidth,
-            upper: frame.HalfWidth,
-            enter: ref enter,
-            exit: ref exit
-        )
-            && FixedSegmentClip.Axis(
-            start: previousAlongUp,
-            end: alongUp,
-            lower: -frame.HalfHeight,
-            upper: frame.HalfHeight,
-            enter: ref enter,
-            exit: ref exit
-        ));
-        var entersFromFront = (alongNormal <= previousAlongNormal);
-        var swept = (sweptRegion && entersFromFront);
-        var parameter = (swept
-            ? enter
-            : FixedQ4816.Zero
+        // The glass is passed from the front only by a segment that starts in front of its plane and ends on or behind
+        // it; the parameter is where it meets the plane, and the door fires when that point lies on the glass. A
+        // segment that starts on or behind the plane never fires, however it moves: a pose that sets a body down
+        // behind a door (a zero-length segment) or a step away from the glass on its far side did not pass through it.
+        var parameter = FixedQ4816.Zero;
+        var crossesPlane = (
+            (previousAlongNormal > FixedQ4816.Zero) &&
+            (alongNormal <= FixedQ4816.Zero)
         );
+
+        if (crossesPlane) {
+            var exit = FixedQ4816.One;
+
+            _ = FixedSegmentClip.Axis(
+                start: previousAlongNormal,
+                end: alongNormal,
+                lower: alongNormal,
+                upper: FixedQ4816.Zero,
+                enter: ref parameter,
+                exit: ref exit
+            );
+        }
+
+        var seamU = (previousAlongRight + ((alongRight - previousAlongRight) * parameter));
+        var seamV = (previousAlongUp + ((alongUp - previousAlongUp) * parameter));
+        var swept = (
+            crossesPlane &&
+            (FixedQ4816.Abs(value: seamU) <= frame.HalfWidth) &&
+            (FixedQ4816.Abs(value: seamV) <= frame.HalfHeight)
+        );
+
+        if (!swept) {
+            parameter = FixedQ4816.Zero;
+            seamU = previousAlongRight;
+            seamV = previousAlongUp;
+        }
 
         return new WorldFaceCrossing(
             Crossed: swept,
             Frame: frame,
             Inside: inside,
             Parameter: parameter,
-            SeamU: (previousAlongRight + ((alongRight - previousAlongRight) * parameter)),
-            SeamV: (previousAlongUp + ((alongUp - previousAlongUp) * parameter))
+            SeamU: seamU,
+            SeamV: seamV
         );
     }
 
