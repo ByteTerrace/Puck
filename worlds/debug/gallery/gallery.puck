@@ -1445,39 +1445,91 @@ for entry in galleryCatalog {
   }
 }
 
-// The displays. A press of the context button in a display's step-on reach shows the next exhibit of its list, and one
-// in its step-back reach the one before, each wrapping round; the edge fires once a press. Its selection holds a catalog
-// index, so a step works in the list's own places (`first` the catalog index of its first exhibit, `count` how many it
-// holds) and lands back in the catalog.
-for (display, index) in galleryDisplays {
-  let first = galleryDisplayFirsts[index]
-  let count = length(display.names)
-  rule $"gallery-display-{display.id}-next" {
-    when pressing()
+// The display consoles (shapes.puck's console interface). Each console's screen placement carries a pointer surface, so
+// its rules read where a seat's pointer lands on the glass and whether its tap is pressed: pointer(any, <screen>, ...)
+// answers for the first seat pointing at it. A press on the list records the row it landed on; while it is held, each
+// row the pointer passes scrolls the list a row the other way, as a finger drags a page; and a release that never left
+// its row is a tap, which shows that row's exhibit on the turntable. PREV and NEXT turn the list a page. A display's
+// selection holds a catalog index, any of the catalog's.
+for display in galleryDisplays {
+  let key = display.id
+  let screen = $"display-{display.id}-screen"
+  rule $"gallery-console-{key}-press" {
+    when galleryPress[key] == 0 and pointer(any, screen, press, tap) > 0 and pointer(any, screen, region, list) == 1
     mode: Edge
-    forEach: region($"display-{display.id}-next")
-    gallerySelect[$"{display.id}"] = first + (gallerySelect[$"{display.id}"] - first + 1) % count
+    galleryPress[key] = 1
+    galleryPressRow[key] = pointer(any, screen, row, list)
+    galleryDragRow[key] = pointer(any, screen, row, list)
+    galleryPressScroll[key] = galleryScroll[key]
+    galleryDragged[key] = 0
   }
-  rule $"gallery-display-{display.id}-back" {
-    when pressing()
-    mode: Edge
-    forEach: region($"display-{display.id}-back")
-    gallerySelect[$"{display.id}"] = first + (gallerySelect[$"{display.id}"] - first + count - 1) % count
-  }
-  // The screen follows the selection, however it moved (a button, gallery.go, the tour, a console write): its place in
-  // the list, the exhibits either side of it, and each one's copy from the catalog by its index (a `$cell:` key reads
-  // the index a cell holds).
-  rule $"gallery-screen-{display.id}" {
-    when gallerySelect[$"{display.id}"] != galleryShownAt[$"{display.id}"]
+  rule $"gallery-console-{key}-drag" {
+    when galleryPress[key] == 1 and pointer(any, screen, press, tap) > 0 and pointer(any, screen, row, list) >= 0 and pointer(any, screen, row, list) != galleryDragRow[key]
     mode: Level
-    galleryPlace[$"{display.id}"] = gallerySelect[$"{display.id}"] - first + 1
-    galleryBefore[$"{display.id}"] = first + (gallerySelect[$"{display.id}"] - first + count - 1) % count
-    galleryAfter[$"{display.id}"] = first + (gallerySelect[$"{display.id}"] - first + 1) % count
-    setState(state: galleryScreenTitle, key: $"{display.id}", fromState: galleryTitles, fromKey: $"$cell:gallerySelect:{display.id}")
-    setState(state: galleryScreenNote, key: $"{display.id}", fromState: galleryNotes, fromKey: $"$cell:gallerySelect:{display.id}")
-    setState(state: galleryScreenBefore, key: $"{display.id}", fromState: galleryTitles, fromKey: $"$cell:galleryBefore:{display.id}")
-    setState(state: galleryScreenAfter, key: $"{display.id}", fromState: galleryTitles, fromKey: $"$cell:galleryAfter:{display.id}")
-    galleryShownAt[$"{display.id}"] = gallerySelect[$"{display.id}"]
+    galleryDragRow[key] = pointer(any, screen, row, list)
+    galleryDragged[key] = 1
+    galleryScroll[key] = clamp(galleryPressScroll[key] + galleryPressRow[key] - pointer(any, screen, row, list), 0, consoleScrollLast)
+  }
+  rule $"gallery-console-{key}-release" {
+    when galleryPress[key] == 1 and pointer(any, screen, press, tap) == 0
+    mode: Level
+    if galleryDragged[key] == 0 {
+      gallerySelect[key] = minimum(galleryPressScroll[key] + galleryPressRow[key], galleryLast)
+    }
+    galleryPress[key] = 0
+  }
+  rule $"gallery-console-{key}-prev" {
+    when pointer(any, screen, press, tap) > 0 and pointer(any, screen, region, prev) == 1
+    mode: Edge
+    galleryScroll[key] = maximum(galleryScroll[key] - consoleRows, 0)
+  }
+  rule $"gallery-console-{key}-next" {
+    when pointer(any, screen, press, tap) > 0 and pointer(any, screen, region, next) == 1
+    mode: Edge
+    galleryScroll[key] = minimum(galleryScroll[key] + consoleRows, consoleScrollLast)
+  }
+  // gallery.step's mailbox: the display shows the next or the previous exhibit of the catalog, wrapping round.
+  rule $"gallery-console-{key}-step" {
+    when galleryStepAt[key] != 0
+    mode: Level
+    gallerySelect[key] = (gallerySelect[key] + galleryStepAt[key] + galleryCount) % galleryCount
+    galleryStepAt[key] = 0
+  }
+  // The screen follows the selection, however it moved (the list, gallery.go, gallery.step, the tour, a console write):
+  // its place in the catalog and its copy by its index (a `$cell:` key reads the index a cell holds), and the list
+  // scrolls just far enough to show it.
+  rule $"gallery-screen-{key}" {
+    when gallerySelect[key] != galleryShownAt[key]
+    mode: Level
+    galleryPlace[key] = gallerySelect[key] + 1
+    setState(state: galleryScreenTitle, key: key, fromState: galleryTitles, fromKey: $"$cell:gallerySelect:{key}")
+    setState(state: galleryScreenNote, key: key, fromState: galleryNotes, fromKey: $"$cell:gallerySelect:{key}")
+    setState(state: galleryScreenGroup, key: key, fromState: galleryGroups, fromKey: $"$cell:gallerySelect:{key}")
+    if gallerySelect[key] < galleryScroll[key] {
+      galleryScroll[key] = gallerySelect[key]
+    }
+    if gallerySelect[key] >= galleryScroll[key] + consoleRows {
+      galleryScroll[key] = gallerySelect[key] - consoleRows + 1
+    }
+    galleryShownAt[key] = gallerySelect[key]
+  }
+  // The list's rows follow the scroll and the selection: each row's catalog index, its title and group copied from the
+  // catalog by that index, and its ink from the console's inks, the chosen row lit.
+  rule $"gallery-rows-{key}" {
+    when galleryScroll[key] != galleryRowsAt[key] or gallerySelect[key] != galleryRowsChosen[key]
+    mode: Level
+    for row in range(0, consoleRows) {
+      galleryRowIndex[$"{key}-{row}"] = galleryScroll[key] + row
+      setState(state: galleryRowName, key: $"{key}-{row}", fromState: galleryTitles, fromKey: $"$cell:galleryRowIndex:{key}-{row}")
+      setState(state: galleryRowGroup, key: $"{key}-{row}", fromState: galleryGroups, fromKey: $"$cell:galleryRowIndex:{key}-{row}")
+      if galleryScroll[key] + row == gallerySelect[key] {
+        setState(state: galleryRowInk, key: $"{key}-{row}", fromState: galleryInks, fromKey: lit)
+      } else {
+        setState(state: galleryRowInk, key: $"{key}-{row}", fromState: galleryInks, fromKey: dim)
+      }
+    }
+    galleryRowsAt[key] = galleryScroll[key]
+    galleryRowsChosen[key] = gallerySelect[key]
   }
 }
 
@@ -1509,6 +1561,17 @@ commands [
     help: "Stands body 0 at the previous exhibit of the tour; before the first it wraps to the last."
     lines [
       "world.state.cell.set galleryStep $value -1"
+    ]
+  }
+  {
+    name: "gallery.step"
+    help: "Shows the next exhibit of the catalog on a display's turntable (step -1 for the previous one), wrapping round, without moving anyone; its console's list follows."
+    parameters [
+      { name: "display", kind: Choice, values: map(galleryDisplays, display => display.id) }
+      { name: "step", kind: Choice, values ["1", "-1"], default: "1" }
+    ]
+    lines [
+      "world.state.cell.set galleryStepAt {display} {step}"
     ]
   }
 ]

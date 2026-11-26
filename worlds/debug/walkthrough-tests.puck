@@ -15,9 +15,9 @@ basis: "debug"
 documentId: "debug"
 import "stopped-machines"
 
-// A display's step-on press: the context button (the pad's right shoulder) held two ticks, then a rest of 26 ticks while
-// the turntable shows the next exhibit and the screen its copy. A display of n exhibits takes n - 1 steps to show them
-// all, from its first; each step's capture falls two ticks before the next press (sweep.json).
+// A display's step: gallery.step shows the catalog's next exhibit on the display's turntable, then a rest of 28 ticks
+// while the screen follows. A display's own group of n exhibits takes n - 1 steps to show, from its first; each step's
+// capture falls two ticks before the next step (sweep.json).
 let displayPressTicks = 2
 let displayRestTicks = 26
 
@@ -45,11 +45,10 @@ test "gallery level 1 blends display" {
     seat1: player.signal gamepad.rightStick 0 0
     ticks 26
     repeat 13 {
-      seat1: player.signal gamepad.rightShoulder press
+      seat1: gallery.step blends
       repeat displayPressTicks {
         ticks 1
       }
-      seat1: player.signal gamepad.rightShoulder release
       repeat displayRestTicks {
         ticks 1
       }
@@ -57,11 +56,11 @@ test "gallery level 1 blends display" {
   }
   expect {
     // Arrival: the last blend (PIPE SUBTRACT, the display's fourteenth, catalog index 65) on the turntable and its copy
-    // on the screen, and the body still at the console, standing.
+    // on the screen, the catalog's sixty-sixth, and the body still at the console, standing.
     gallerySelect.blends == 65
     galleryShownAt.blends == 65
-    galleryPlace.blends == 14
-    // Within half a metre of the display's spawn point (34, 4.55, 43.5), in its step-on reach.
+    galleryPlace.blends == 66
+    // Within half a metre of the display's spawn point (34, 4.55, 43.5), before its console.
     bodyPosition(body, 0, x) > 33.5
     bodyPosition(body, 0, x) < 34.5
     bodyPosition(body, 0, z) > 43
@@ -93,11 +92,10 @@ test "gallery level 0 primitives display" {
     seat1: player.signal gamepad.rightStick 0 0
     ticks 26
     repeat 9 {
-      seat1: player.signal gamepad.rightShoulder press
+      seat1: gallery.step primitives
       repeat displayPressTicks {
         ticks 1
       }
-      seat1: player.signal gamepad.rightShoulder release
       repeat displayRestTicks {
         ticks 1
       }
@@ -108,7 +106,7 @@ test "gallery level 0 primitives display" {
     gallerySelect.primitives == 9
     galleryShownAt.primitives == 9
     galleryPlace.primitives == 10
-    // Within half a metre of the display's spawn point (46, 0.05, 27.95), in its step-on reach.
+    // Within half a metre of the display's spawn point (46, 0.05, 27.95), before its console.
     bodyPosition(body, 0, x) > 45.5
     bodyPosition(body, 0, x) < 46.5
     bodyPosition(body, 0, z) > 27.45

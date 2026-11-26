@@ -56,7 +56,7 @@ public static partial class WorldFactsVocabulary {
             $"{WorldRuleFacts.ParkedPrefix}<bodyRef>",
             $"{WorldRuleFacts.LinkPrefix}<adjacencyName>",
             $"{WorldRuleFacts.ChannelPrefix}<seat>|<bodyRef>:<channelName>",
-            $"{WorldRuleFacts.PointerPrefix}<seat>|any:<screenIndex>:x|y|on|press:<channelName>",
+            $"{WorldRuleFacts.PointerPrefix}<seat>|any:<screenIndex>|<placement>:x|y|on|press:<channelName>|region:<id>|row:<id>",
             $"{WorldRuleFacts.NearestPrefix}<bodyRef>:<row>",
             $"{WorldRuleFacts.ClockPrefix}<music>:phaseError|beat|bar|beatInBar",
             $"{WorldRuleFacts.ClockPrefix}<music>:phaseErrorAt|beatAt|barAt|beatInBarAt:<owner>:<channel>:<kind>:<occurrence>",

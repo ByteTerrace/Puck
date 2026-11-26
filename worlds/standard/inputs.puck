@@ -90,4 +90,7 @@ channels [
     shape: Binary
   }
   { composition: true, name: "cancel", shape: Binary }
+  // A tap or a click on a pointer surface (a placement's pointer facet, a Simulation screen): the press a surface's rules
+  // read beside where the pointer lands, pointer(<seat>|any, <surface>, press, tap). A touchscreen's contact presses it.
+  { composition: true, name: "tap", shape: Binary }
 ]

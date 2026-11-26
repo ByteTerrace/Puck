@@ -156,7 +156,7 @@ public enum WorldRuleRefusal : byte {
     ParkedChannelMalformed,
     [Refusal(door: "world.rule.compile", condition: "an 'upsertPlacement'/'removePlacement' effect carries no placement id", kind: RefusalKind.Verdict)]
     PlacementInvalid,
-    [Refusal(door: "world.rule.compile", condition: "a '$pointer:' channel does not spell '$pointer:<seat>:<screenIndex>:x|y|on' with seat in 1..population.localSeats, or names a screen whose route input is not Simulation or whose row maps no ray", kind: RefusalKind.Verdict)]
+    [Refusal(door: "world.rule.compile", condition: "a '$pointer:' channel does not spell '$pointer:<seat>|any:<screenIndex>|<placement>:x|y|on|press:<channel>|region:<id>|row:<id>' with seat in 1..population.localSeats, names a screen whose route input is not Simulation, a placement carrying no pointer surface, a surface that maps no ray, or a region the surface does not declare", kind: RefusalKind.Verdict)]
     PointerMalformed,
     [Refusal(door: "world.rule.compile", condition: "a 'pose' effect authors both or neither of 'spawnPoint' and 'position'", kind: RefusalKind.Verdict)]
     PoseAmbiguous,

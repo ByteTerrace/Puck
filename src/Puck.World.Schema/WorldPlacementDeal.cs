@@ -206,6 +206,7 @@ public sealed record WorldPlacementDeal(
         float number => (number != 0f),
         double number => (number != 0d),
         string text => (text.Length != 0),
+        WorldResponseHolding holding => !holding.IsEmpty,
         Enum flag => (Convert.ToInt64(value: flag, provider: CultureInfo.InvariantCulture) != 0L),
         System.Collections.IEnumerable items => items.GetEnumerator().MoveNext(),
         _ => true,

@@ -7,7 +7,8 @@ let controls = ["jump", "suit", "noclip"]
 let flyingRise = [{ keep ["rise"], from { flight: "flying" }, to { flight: "flying" } }]
 
 inputModes {
-  global ["interact"]
+  // A tap reaches a pointer surface in every mode, as the context button reaches what is beside her.
+  global ["interact", "tap"]
   families [
     {
       name: "form"

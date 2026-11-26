@@ -20,7 +20,7 @@ let guideExhibits = map(
     y: displayFloor(display)
     z: displayPoint(display, displayStand)[2]
     title: display.title
-    note: $"{display.what}: press E at the console to step through"
+    note: $"{display.what}: tap the console to show any shape"
   }
 )
 let guideRadius = 1.29
