@@ -56,12 +56,52 @@ of headroom over every tread.
 | Level | South of the nave | The nave | North of the nave |
 |---|---|---|---|
 | 0 | West hall (the desktop, the typesetter's bench, the painting into Wonderland on the west wall); stairs, lift and lobby; the painting wing east of the lobby | Four displays flanking the centre aisle: primitives and stretched to the south, extruded and revolved to the north | The north aisle, open |
-| 1 | A lounge west of the stairs; the sweeps and facets display east of the lobby; the rail round the endless fall's well | void | The blends and folds displays |
-| 2 | The board game room, from the lift's landing east and out into the projecting wing | void | The motion, motion II and warps II displays |
-| 3 | The terrace west of the stairs; the styles and glass displays | void | The forms and surfaces displays |
+| 1 | The toybox: a lounge west of the stairs; three arcade cabinets east of the lift's landing; the rail round the endless fall's well | void | The toybox's three other arcade cabinets, facing the south ones across the void |
+| 2 | The board game room, from the lift's landing east and out into the projecting wing | void | The motion and motion II displays |
+| 3 | The terrace west of the stairs | void | The north gallery, open |
 
 [shapes.md](shapes.md) lists the displays and what each exhibit shows,
 [paintings.md](paintings.md) the wing, and the tables' own pages their games.
+
+## The toybox
+
+The owner's ruling: level 1 is the Wonderland floor, with a colourful,
+childlike quality that draws players in from outside. With the floor empty,
+what draws them is the colour and the live game screens flickering there,
+showing off the games the world hosts. Players on the other levels look across
+the nave's void into it.
+
+So level 1 wears the toybox's colours (look.puck's `lookLevelToybox` and its
+pastel piers), and [gallery/toybox.puck](gallery/toybox.puck) stands six toy
+arcade cabinets on it, three on each gallery in the middle showcase bays
+(layout.puck's `toyboxBays` and `toyboxRows`), each facing the nave. The two
+cabinets in a bay play one game across the void, each on its own hardware, in
+one colourway with the game's name on its glowing marquee:
+
+| Bay | South cabinet | North cabinet |
+|---|---|---|
+| TETROMINO | a Color brick running `cartridges/cgb/tetromino.cgb.puck` | a monochrome brick running `cartridges/dmg/tetromino.dmg.puck` |
+| BOUNCE | a deck running `cartridges/deck/moving-sprite.deck` | a second deck running the same |
+| TEST CARD | an Advanced brick running `cartridges/agb/test-card.agb.puck` | a monochrome brick running `cartridges/dmg/test-card.dmg.puck` |
+
+Each cartridge moves on its own with no one playing: the tetromino game's
+title chases its colours through PRESS START, the ball bounces, and the bars
+drift. Each screen is a hosted machine's video in its cabinet's dark bezel, at
+the largest size the bezel frames for that machine's picture, through the
+standard's CRT material. Walk up to a cabinet and press the context button (E,
+or RB on a pad) to play it, through the same device route and `devicePad` kit
+as a Wonderland device ([devices.md](devices.md)). The machines are the
+toybox's own (`toybox-*`), so the gallery booted alone hosts them, and the
+debug world runs them beside the Wonderland devices. The cabinet is the
+standard's `arcadeCabinet` ([architecture.puck](../standard/architecture.puck));
+the machine rows, pictures, pad and route are the standard's
+[machines.puck](../standard/machines.puck).
+
+Read them with `machine.state` (each machine's frames advance) and
+`screen.state <index>` (screens 20 to 25). `gallery.shot toybox` looks from
+level 2's north balcony down across the void at the south cabinets, and
+`gallery.shot toybox-across` from level 1's south balcony edge at the north
+ones.
 
 ## The displays
 
@@ -263,6 +303,7 @@ own materials `exhibitSubjects` in [`shapes.puck`](shapes.puck). Edit a value,
 | `hall-side` | The nave from beside its south arcade, looking north-east across it |
 | `plinth`, `arcade`, `bay`, `balcony`, `floor`, `ceiling`, `furniture` | What each kit sheet draws: the primitives display's console, the north arcade, the end wall's wide bays, the balcony edges from the bridge, the tiles and a pad, a coffered soffit, a banner and planter |
 | `atrium`, `outside` | The entrance looking in, and the south front from the forecourt |
+| `toybox`, `toybox-across` | Level 1's south cabinets from level 2's north balcony, and its north cabinets from level 1's south balcony edge |
 
 A shot's eye and aim are placed from `gallerySite` when the document compiles,
 as the other world-space pieces are.

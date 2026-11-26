@@ -30,6 +30,7 @@
 // engage, reset and eject each one, and the camera lines that frame each device.
 
 import "../standard/kits"
+import "../standard/machines"
 import "gallery/layout"
 
 // The room's floor top (wonderland.puck).
@@ -171,10 +172,10 @@ let tvX = -0.22
 let tvFront = 0.205
 let tubeFront = 0.2
 let deckPitchY = 0.001875
-let deckPitchX = (deckPitchY * (8 / 7))
+let deckPitchX = (deckPitchY * deckVideo.aspect)
 let pictureY = (deckTop + 0.357)
-let pictureHalfWidth = ((256 * deckPitchX) / 2)
-let pictureHalfHeight = ((240 * deckPitchY) / 2)
+let pictureHalfWidth = ((deckVideo.columns * deckPitchX) / 2)
+let pictureHalfHeight = ((deckVideo.rows * deckPitchY) / 2)
 let tubeHalfWidth = (pictureHalfWidth + 0.009)
 let tubeHalfHeight = (pictureHalfHeight + 0.008)
 let tubeTop = (pictureY + tubeHalfHeight)
@@ -1172,75 +1173,23 @@ placements {
 // default: where a local folder's own `folder.json` names one (`machine.default`), the device boots it instead of its
 // shipped cartridge, and everywhere else it boots the shipped cartridge.
 machines [
-  {
-    name: "humble-gaming-brick"
-    engine: "gaming-brick"
-    configuration {
-      schema: "puck.gaming-brick.configuration.v1"
-      model: "cgb"
-      content {
-        path: "cartridges/cgb/tetromino.cgb.puck"
-      }
-    }
+  (brickMachine("humble-gaming-brick", "cartridges/cgb/tetromino.cgb.puck") with {
     contentFolders ["cartridges/cgb", "cartridges/dmg", "../../roms/hgb"]
     preferFolderDefault: true
-  }
-  {
-    name: "advanced-gaming-brick"
-    engine: "advanced-gaming-brick"
-    configuration {
-      schema: "puck.advanced-gaming-brick.config.v1"
-      content {
-        path: "cartridges/agb/pip.agb.puck"
-      }
-    }
+  })
+  (advancedBrickMachine("advanced-gaming-brick", "cartridges/agb/pip.agb.puck") with {
     contentFolders ["cartridges/agb", "../../roms/agb"]
     preferFolderDefault: true
-  }
-  {
-    name: "humble-gaming-deck"
-    engine: "humble-gaming-deck"
-    configuration {
-      schema: "puck.humble-gaming-deck.configuration.v1"
-      content {
-        path: "cartridges/deck/colour-bars.deck"
-      }
-    }
+  })
+  (deckMachine("humble-gaming-deck", "cartridges/deck/colour-bars.deck") with {
     contentFolders ["cartridges/deck", "../../roms/hgd"]
     preferFolderDefault: true
-  }
+  })
 ]
 
-// The pad a seat wears on a device it engages: the Moth's movement drives the d-pad, jump is A, flight is B, the start
-// channel (the pad's Start, Enter on a keyboard) is start and the select channel (the pad's Back, right Shift) is select.
-kits [
-  {
-    name: "devicePad"
-    bodyMotionProgram: "walk"
-    motion {
-      holds [airHold]
-      shaping [
-        {
-          along {}
-        }
-      ]
-      speed {
-        value: 4
-      }
-      turn {
-        rate: 2
-      }
-    }
-    pad {
-      forward: "LeftStickY"
-      strafe: "LeftStickX"
-      jump: "South"
-      flight: "East"
-      start: "Start"
-      select: "Back"
-    }
-  }
-]
+// The pad a seat wears on a device it engages (the standard's machines.puck): the Moth's movement drives the d-pad,
+// jump is A, flight is B, her start and select channels are start and select.
+kits [devicePadKit]
 
 // Engaging a device shows no HUD prompt. The section's panel list
 // starts here because the garden, which imports controls.puck too, authors its own; the debug world's only panels are
@@ -1265,17 +1214,9 @@ hud {
 //   screen 2, the deck: 256 by 240 at 2.143 by 1.875 mm, 548.6 by 450 mm, upright in the television
 let brickPitch = 0.000275
 let advancedPitch = 0.000255
-// Each engages on the Moth's context button (`interact`), which the pad does not play, so the same press leaves. Once
-// the camera has framed the picture, the window shows it alone, as a desktop emulator does, on the matte its route's
-// `display` fills: black on every device.
-let deviceDisplay = { fill: "#000000" }
-let deviceRoute = {
-  engageable: true
-  engageRadius: 3
-  engageChannel: "interact"
-  kit: "devicePad"
-  display: deviceDisplay
-}
+// Each engages through the standard's device route (machines.puck): the Moth's context button (`interact`), which the
+// pad does not play, so the same press leaves, and once the camera has framed the picture the window shows it alone on
+// a black matte, as a desktop emulator does.
 
 screens [
   {
@@ -1283,8 +1224,8 @@ screens [
     origin [(brickAt[0] - 0.014043), (deviceFloor + 0.105102), brickAt[2]]
     right [0, 0, -1]
     up [-0.34202, 0.939693, 0]
-    halfWidth: ((160 * brickPitch) / 2)
-    halfHeight: ((144 * brickPitch) / 2)
+    halfWidth: ((brickVideo.columns * brickPitch) / 2)
+    halfHeight: ((brickVideo.rows * brickPitch) / 2)
     halfDepth: 0.001
     round: 0
     source: machine(instance: `humble-gaming-brick`, output: "video")
@@ -1304,8 +1245,8 @@ screens [
     origin [(advancedAt[0] - 0.035821), ((deviceFloor + plinthTop) + 0.101622), advancedAt[2]]
     right [0, 0, -1]
     up [-0.5, 0.866025, 0]
-    halfWidth: ((240 * advancedPitch) / 2)
-    halfHeight: ((160 * advancedPitch) / 2)
+    halfWidth: ((advancedBrickVideo.columns * advancedPitch) / 2)
+    halfHeight: ((advancedBrickVideo.rows * advancedPitch) / 2)
     halfDepth: 0.001
     round: 0
     source: machine(instance: `advanced-gaming-brick`, output: "video")
@@ -1327,14 +1268,7 @@ screens [
     // and its bezel is the set's geometry round the glass. The handhelds' panels show theirs plainly.
     material: crt
     // The deck has two controller ports; an engaged seat plays the first.
-    route {
-      engageable: true
-      engageRadius: 3
-      engageChannel: "interact"
-      kit: "devicePad"
-      port: "controls"
-      display: deviceDisplay
-    }
+    route: deckRoute
   }
 ]
 

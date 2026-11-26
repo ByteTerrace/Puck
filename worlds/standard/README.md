@@ -6,6 +6,15 @@ it, or shows it during a run. It authors the interval/work plots, budget
 reference, chapter, tick and current figures over generic presentation
 readings; importing worlds can override its `benchmark` panel by id.
 
+[machines.puck](machines.puck) writes a hosted machine's row for each engine Puck
+ships (`brickMachine`, `advancedBrickMachine`, `deckMachine`), each engine's
+picture (`brickVideo`, `advancedBrickVideo`, `deckVideo`, and `videoAspect`), and
+the pad kit and route a seat plays a machine's screen through (`devicePadKit`,
+`deviceRoute`, `deckRoute`). A library: the calling document spells each
+content path from where it stands, since a machine's paths resolve beside the
+document that names them. The debug world's devices, its range and its
+gallery's toybox all write their machines through it.
+
 [paths.puck](paths.puck) supplies reusable quadratic corridor masks for paving and
 scenery exclusions. It is a pure authoring library; a world owns its routes and widths.
 

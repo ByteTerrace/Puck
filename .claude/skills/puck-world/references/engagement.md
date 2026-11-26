@@ -848,7 +848,9 @@ Run the game; drive `body.engage <target> [body] [capture:on|off]` with a
 control pair: an actor holding `Control` over the target succeeds, a revoked
 actor refuses loudly. For possession, grant Drive over the target body first
 (`world.grant seatN drive body:<n>`) — Control alone moves nothing. The debug
-world's device row declares engageable machine screens 0 to 2 (kit
+world's device row declares engageable machine screens 0 to 2, and the
+gallery's toybox screens 20 to 25 (`worlds/debug/gallery/toybox.puck`), all
+through the standard's `deviceRoute` (`worlds/standard/machines.puck`: kit
 `devicePad`, engage radius 3, engage channel `interact`, the Moth's context
 button on E and the pad's RB; `devices.md` has the stand-there `body.pose`
 lines), so the screen path runs in the live world: drive the button through

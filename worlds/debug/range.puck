@@ -20,6 +20,7 @@
 // 1280x900 (5 Hz at 178 m, past the lane's end), and at 69.7 and 142 m at 3840x2160.
 
 import "../standard/kits"
+import "../standard/machines"
 import "pad-kit"
 
 let laneX = -100
@@ -156,16 +157,7 @@ kits [
 ]
 
 // Each television's deck plays the bouncing ball.
-machines: map(televisions, tv => {
-  name: tv.name
-  engine: "humble-gaming-deck"
-  configuration {
-    schema: "puck.humble-gaming-deck.configuration.v1"
-    content {
-      path: "cartridges/deck/moving-sprite.deck"
-    }
-  }
-})
+machines: map(televisions, tv => deckMachine(tv.name, "cartridges/deck/moving-sprite.deck"))
 
 // The televisions' pictures, each facing +Z, back up the lane.
 screens: map(televisions, tv => {

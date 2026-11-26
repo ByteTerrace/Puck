@@ -527,3 +527,120 @@ template banner(base, width = 0.9, drop = 2.3) {
     scale [(width * 0.07), (drop * 0.09), 0.013]
   }
 }
+
+// A toy arcade cabinet's materials, in slot order from `base`: its body, the cheeks, kick and marquee housing, the dark
+// bezel round the picture (and the stick's shaft), the control shelf, the stick's ball and the first button, the second
+// button, the marquee's glowing panel and the marquee's lettering.
+let cabinetBody = 0
+let cabinetTrim = 1
+let cabinetBezel = 2
+let cabinetShelf = 3
+let cabinetButton = 4
+let cabinetButtonAlt = 5
+let cabinetGlow = 6
+let cabinetInk = 7
+// The picture a cabinet frames is a screen row of the world's, not a shape: `cabinetPicture` is the centre of the
+// screen's front face in the cabinet's frame, 3 mm proud of the bezel, and `cabinetPictureHalf` the largest half-extents
+// the bezel frames. `cabinetPictureHalves` fits a picture of an aspect (width over height) inside them.
+let cabinetPicture = [0, 1.62, 0.183]
+let cabinetPictureHalf = [0.7, 0.48]
+function cabinetPictureHalves(aspect) = (((cabinetPictureHalf[1] * aspect) > cabinetPictureHalf[0])
+  ? [cabinetPictureHalf[0], (cabinetPictureHalf[0] / aspect)]
+  : [(cabinetPictureHalf[1] * aspect), cabinetPictureHalf[1]])
+
+// A toy arcade cabinet that faces +Z, a toy built big: a chunky rounded body on a kick, cheeks standing proud of either
+// side, an upright picture in a dark bezel, a flat control shelf with a ball-topped stick on the left and two big
+// buttons on the right, and on top a marquee whose glowing panel carries `title`. About 1.9 m wide, 0.95 m deep and
+// 2.85 m tall; its shelf is 1.06 m up, at a standing player's hands. Every shape is a rounded box, cylinder or sphere
+// joined by union, so the analytic contact collides it as drawn.
+template arcadeCabinet(base, title, em = 0.13) {
+  shape Box "cabinet-kick" {
+    material: (base + cabinetTrim)
+    position [0, 0.08, -0.04]
+    scale [0.84, 0.08, 0.42]
+    rounding: 0.04
+  }
+  shape Box "cabinet-body" {
+    material: (base + cabinetBody)
+    position [0, 0.57, -0.04]
+    scale [0.8, 0.41, 0.4]
+    rounding: 0.09
+  }
+  shape Box "cabinet-shelf" {
+    material: (base + cabinetShelf)
+    position [0, 1.01, 0.1]
+    scale [0.84, 0.05, 0.34]
+    rounding: 0.04
+  }
+  shape Box "cabinet-head" {
+    material: (base + cabinetBody)
+    position [0, 1.76, -0.16]
+    scale [0.8, 0.72, 0.29]
+    rounding: 0.09
+  }
+  shape Box "cabinet-bezel" {
+    material: (base + cabinetBezel)
+    position [0, cabinetPicture[1], 0.15]
+    scale [(cabinetPictureHalf[0] + 0.06), (cabinetPictureHalf[1] + 0.08), 0.03]
+    rounding: 0.025
+  }
+  for side in [-1, 1] {
+    shape Box $"cabinet-cheek-{side}" {
+      material: (base + cabinetTrim)
+      position [(side * 0.87), 1.31, -0.04]
+      scale [0.07, 1.31, 0.45]
+      rounding: 0.06
+    }
+  }
+  shape Box "cabinet-marquee" {
+    material: (base + cabinetTrim)
+    position [0, 2.66, -0.06]
+    scale [0.94, 0.18, 0.4]
+    rounding: 0.08
+  }
+  shape Box "cabinet-marquee-panel" {
+    material: (base + cabinetGlow)
+    position [0, 2.66, 0.335]
+    scale [0.8, 0.12, 0.012]
+  }
+  shape Cylinder "cabinet-stick-base" {
+    material: (base + cabinetBezel)
+    position [-0.42, 1.07, 0.22]
+    scale [0.09, 0.012, 0.09]
+  }
+  shape Cylinder "cabinet-stick" {
+    material: (base + cabinetBezel)
+    position [-0.42, 1.15, 0.22]
+    scale [0.025, 0.08, 0.025]
+  }
+  shape Sphere "cabinet-stick-ball" {
+    material: (base + cabinetButton)
+    position [-0.42, 1.25, 0.22]
+    scale [0.075, 0.075, 0.075]
+  }
+  shape Cylinder "cabinet-button-a" {
+    material: (base + cabinetButton)
+    position [0.18, 1.08, 0.24]
+    scale [0.075, 0.025, 0.075]
+    rounding: 0.01
+  }
+  shape Cylinder "cabinet-button-b" {
+    material: (base + cabinetButtonAlt)
+    position [0.42, 1.08, 0.18]
+    scale [0.075, 0.025, 0.075]
+    rounding: 0.01
+  }
+  textRuns [
+    {
+      text: title
+      position [0, 2.66, 0.347]
+      rotation [0, 0, 0, 1]
+      emHeight: em
+      depth: 0.008
+      mode: "emboss"
+      material: (base + cabinetInk)
+      align: "center"
+      maxWidth: 1.5
+    }
+  ]
+}

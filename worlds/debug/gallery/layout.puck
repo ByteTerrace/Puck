@@ -176,3 +176,12 @@ let displayExhibitScale = 2
 // How far, in metres, an exhibit floats clear of its turntable: the exhibits were authored resting on the old plinths'
 // cap, some dipping a little under it, so each stands this much higher and reads as a specimen held over the light.
 let displayExhibitLift = 0.3
+
+// Level 1's toybox (toybox.puck): an arcade cabinet in each of the three middle showcase bays on both galleries, facing
+// the nave across its void, so every other level looks across into live game screens. The bays stand clear of the
+// stairs and the lift's landing (bays 3 and 4) and the endless fall's well (bay 11). Each cabinet stands on a gallery's
+// third tile row in from its wall, mirrored about the nave, leaving about 4 m before it to the balcony edge to stand and
+// play, and a walkway behind it.
+let toyboxLevel = 1
+let toyboxBays = [showcaseBays[2], showcaseBays[3], showcaseBays[4]]
+let toyboxRows = [{ row: (wallRowSouth + 2), yaw: 180, facing: 1 }, { row: (wallRowNorth - 2), yaw: 0, facing: -1 }]

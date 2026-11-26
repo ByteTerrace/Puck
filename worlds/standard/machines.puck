@@ -1,0 +1,95 @@
+// Hosted machines: a row for each machine engine Puck ships, each engine's picture, and the pad and route a seat wears
+// to play one on a screen. A module library: it hands its importers lets and functions and emits no document, so a
+// world writes a machine as `brickMachine(name, content)` in its own `machines` and a screen's route as `deviceRoute`.
+//
+// A machine's paths (its content, its `contentFolders`) resolve beside the document that names them, so the calling
+// document spells each path from where it stands; an imported fragment's paths are carried to the importing world's
+// directory when it composes.
+import "kits"
+
+// Each engine's picture: its columns and rows, and its pixels' width over their height. The bricks' pixels are square;
+// the deck's are 8:7, as a television of its day shows them.
+let brickVideo = { columns: 160, rows: 144, aspect: 1 }
+let advancedBrickVideo = { columns: 240, rows: 160, aspect: 1 }
+let deckVideo = { columns: 256, rows: 240, aspect: (8 / 7) }
+// A picture's width over its height.
+function videoAspect(video) = ((video.columns * video.aspect) / video.rows)
+
+// A Humble Gaming Brick: `model` is a family (`dmg`, `cgb`) or a revision; the Color model runs the forge's cgb and dmg
+// targets alike, and the monochrome one shades a dmg target's picture as its own panel does.
+function brickMachine(name, content, model = "cgb") = {
+  name: name
+  engine: "gaming-brick"
+  configuration {
+    schema: "puck.gaming-brick.configuration.v1"
+    model: model
+    content {
+      path: content
+    }
+  }
+}
+// An Advanced Gaming Brick.
+function advancedBrickMachine(name, content) = {
+  name: name
+  engine: "advanced-gaming-brick"
+  configuration {
+    schema: "puck.advanced-gaming-brick.config.v1"
+    content {
+      path: content
+    }
+  }
+}
+// A Humble Gaming Deck. It has two controller ports, so a screen that seats a player on it names one (`deckRoute`).
+function deckMachine(name, content) = {
+  name: name
+  engine: "humble-gaming-deck"
+  configuration {
+    schema: "puck.humble-gaming-deck.configuration.v1"
+    content {
+      path: content
+    }
+  }
+}
+
+// The pad a seat wears on a device it engages: its movement drives the d-pad, jump is A, flight is B, the start
+// channel (the pad's Start, Enter on a keyboard) is start and the select channel (the pad's Back, right Shift) is select.
+let devicePadKit = {
+  name: "devicePad"
+  bodyMotionProgram: "walk"
+  motion {
+    holds [airHold]
+    shaping [
+      {
+        along {}
+      }
+    ]
+    speed {
+      value: 4
+    }
+    turn {
+      rate: 2
+    }
+  }
+  pad {
+    forward: "LeftStickY"
+    strafe: "LeftStickX"
+    jump: "South"
+    flight: "East"
+    start: "Start"
+    select: "Back"
+  }
+}
+
+// A device's screen engages on the context button (`interact`) within 3 m, and the same press leaves, since the pad
+// does not play it. Once the camera has framed the picture, the window shows it alone, as a desktop emulator does, on
+// a black matte. A deck's screen seats its player on the first controller port.
+let deviceRoute = {
+  engageable: true
+  engageRadius: 3
+  engageChannel: "interact"
+  kit: "devicePad"
+  display {
+    fill: "#000000"
+  }
+}
+let deckRoute = (deviceRoute with { port: "controls" })

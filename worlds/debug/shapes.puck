@@ -106,7 +106,7 @@ let surfaceLevel = 3
 // The levels, in walking order: the board over each lift door names its level and what it shows.
 let galleryLevels = [
   { level: 0, title: "LEVEL 0  SHAPE AND SURFACE", what: "glass, warps, styles, surfaces, facets, forms, primitives, profiles, blends, folds" }
-  { level: 1, title: "LEVEL 1  BALCONIES", what: "open galleries over the nave" }
+  { level: 1, title: "LEVEL 1  TOYBOX", what: "arcade cabinets playing the world's hosted games" }
   { level: 2, title: "LEVEL 2  MOTION AND GAMES", what: "the stamp pool's motion, the board game room" }
   { level: 3, title: "LEVEL 3  GALLERIES", what: "open galleries over the nave" }
 ]
