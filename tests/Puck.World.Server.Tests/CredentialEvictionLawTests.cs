@@ -120,7 +120,7 @@ public sealed class CredentialEvictionLawTests {
     [InlineData(1)]
     [InlineData(2)]
     [Theory]
-    public async Task AnIdleAuthenticatedFederationIntentStreamClosesWhenCredentialExpiresOrAdmissionIsRemoved(int revocation) {
+    public async Task AnIdleAuthenticatedFederationIntentStreamOutlivesItsClaimAndClosesWhenItsAdmissionIsRemoved(int revocation) {
         var identity = GenerateIdentity(subject: "evicted-authority");
         var signingEntry = BuildEntry(grants: [], identity: identity);
         var document = BuildAdmissionDocument(entry: signingEntry);
@@ -133,7 +133,8 @@ public sealed class CredentialEvictionLawTests {
         using var fixture = Fixtures.FreshServer(definition: document);
         var clock = new VirtualClock(start: ClaimInstant);
         var verifier = new WorldAttestedAuthenticator(trustEntries: () => fixture.Server.Definition.Admission, now: clock.GetUtcNow);
-        using var oracle = new LocalKeySigningOracle(key: identity.Key, subject: identity.Subject, validity: TimeSpan.FromSeconds(value: 1), now: clock.GetUtcNow);
+        // A claim's window starts the skew allowance before it is signed, so this one is valid through the next second.
+        using var oracle = new LocalKeySigningOracle(key: identity.Key, subject: identity.Subject, validity: TimeSpan.FromSeconds(value: (FederationClaims.ClockSkewSeconds + 1)), now: clock.GetUtcNow);
         using var host = new WorldPeerHost(server: fixture.Server, authenticator: verifier, timeProvider: clock, transportHandshakeTimeout: PeerTestClient.TransportHandshakeTimeout);
 
         PeerTestClient.StartOrSkip(host: host);
@@ -147,12 +148,16 @@ public sealed class CredentialEvictionLawTests {
         await OpenIntentStreamAsync(client: client);
         var closed = WaitForCloseAsync(stream: client.GetStream(), ct: TestToken);
 
-        if (revocation != 0) {
-            InstallDefinition(fixture: fixture, candidate: fixture.Server.Definition with { Admission = ((revocation == 1) ? [] : [signingEntry]) });
-            clock.Advance(WorldPeerHost.CredentialSweepInterval);
-        } else {
+        if (revocation == 0) {
+            // A session rests on the trust that vouched for its key, never on its claim's window: a pinned key's session
+            // stands past the claim until its trust row changes.
+            // The virtual clock runs the sweeps it passes synchronously; the wait only lets a close they made reach the
+            // client.
             clock.Advance(by: TimeSpan.FromSeconds(value: 2));
+            Assert.NotSame(expected: closed, actual: await Task.WhenAny(closed, Task.Delay(delay: TimeSpan.FromMilliseconds(value: 500), cancellationToken: TestToken)));
         }
+        InstallDefinition(fixture: fixture, candidate: fixture.Server.Definition with { Admission = ((revocation == 2) ? [signingEntry] : []) });
+        clock.Advance(WorldPeerHost.CredentialSweepInterval);
         Assert.True(condition: await closed.WaitAsync(cancellationToken: TestToken));
     }
     [Fact]

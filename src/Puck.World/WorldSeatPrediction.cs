@@ -154,7 +154,13 @@ public sealed class WorldSeatPrediction(WorldClient client, Func<string?, WorldD
         }
 
         var lead = seat.Leads.Minimum;
-        var target = (sent.Clock.TickAt(clientTick: client.SeatClockTicks(rateHz: definition.SimulationRateHz)) + lead);
+        var now = client.SeatClockTicks(rateHz: definition.SimulationRateHz);
+
+        // A delivery that arrived since the last batch was sent (an authority catching up runs several ticks at once)
+        // anchors the clock too, so the tick an input sent now lands at is never behind the continuation.
+        sent.Clock.Observe(clientTick: now, deliveredTick: Math.Max(val1: mirror.Tick, val2: own.Tick));
+
+        var target = (sent.Clock.TickAt(clientTick: now) + lead);
         var steps = (target - (long)own.Tick);
 
         if ((steps < 0L) || (steps > MaxSteps)) {

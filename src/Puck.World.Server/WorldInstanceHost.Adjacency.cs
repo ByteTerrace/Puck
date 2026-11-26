@@ -718,12 +718,13 @@ public sealed partial class WorldInstanceHost {
         return route.Authority.TryForwardSubmission(
             completion: result => {
                 // An accepted leave retires the forwarded traveler once its answer arrives. The hop that answered it
-                // retired the traveler before it answered.
+                // retired the traveler before it answered. The answer can arrive on any thread, the destination's gate
+                // held, and retiring enters each source's gate, so the retirement is queued for the host loop.
                 if (
                     (payload is WorldSubmissionPayload.Session { Value: SessionRequest.Leave }) &&
                     (result is WorldSubmissionResult.Session { Reply.Accepted: true })
                 ) {
-                    RetireForwardedTraveler(incarnation: traveler.Incarnation, told: answering);
+                    m_endedTravelers.Enqueue(item: (traveler.Incarnation, answering));
                 }
 
                 completion(obj: result);

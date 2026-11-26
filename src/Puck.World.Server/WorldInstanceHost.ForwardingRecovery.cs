@@ -179,7 +179,7 @@ public sealed partial class WorldInstanceHost {
     /// <inheritdoc/>
     /// <remarks>Queued for the host loop (<see cref="DrainPendingTransfers"/>): the authority that retired the body
     /// calls this under its own gate, and no authority's gate is held while another authority is entered.</remarks>
-    public void RetireTraveler(WorldEntityAddress incarnation) => m_endedTravelers.Enqueue(item: incarnation);
+    public void RetireTraveler(WorldEntityAddress incarnation) => m_endedTravelers.Enqueue(item: (incarnation, null));
     /// <inheritdoc/>
     /// <remarks>Queued for the host loop, as <see cref="RetireTraveler"/> is.</remarks>
     public void SetTravelerPresence(WorldServer source, in WorldMobilityIdentity mobility, bool present) =>
@@ -268,8 +268,8 @@ public sealed partial class WorldInstanceHost {
                 route.Authority.SetPresence(present: presence.Present);
             }
         }
-        while (m_endedTravelers.TryDequeue(result: out var incarnation)) {
-            RetireForwardedTraveler(incarnation: incarnation);
+        while (m_endedTravelers.TryDequeue(result: out var ended)) {
+            RetireForwardedTraveler(incarnation: ended.Incarnation, told: ended.Told);
         }
     }
     // The one retirement of a traveler that is gone for good: every authority of this host that still forwards to it
