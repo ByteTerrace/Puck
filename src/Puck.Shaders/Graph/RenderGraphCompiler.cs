@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using Puck.Abstractions.Presentation;
 using Puck.Hosting;
+using Puck.Abstractions.Collections;
 
 namespace Puck.Shaders;
 
@@ -189,7 +190,7 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 foreach (var part in inputFragment.Passes) {
                     for (var index = 0; (index < Math.Min(val1: part.Inputs.Count, val2: part.InputAccesses.Count)); index++) {
                         if (part.InputAccesses[index] != RenderGraphPortAccess.ComputeReadWrite) { continue; }
-                        var port = IndexOf(list: inputFragment.InputVersions, name: part.Inputs[index].Name);
+                        var port = StringLists.IndexOf(items: inputFragment.InputVersions, value: part.Inputs[index].Name);
 
                         if ((port >= 0) && (package.Inputs[port].Access == RenderGraphPortAccess.ComputeReadWrite)) { continue; }
                         // A buffer the fragment declares itself and keeps private is owned storage; the pipeline compiler
@@ -413,9 +414,9 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
             var from = ((resource.From is { } predecessor)
                 ? names[predecessor].Name
                 : null);
-            var port = IndexOf(
-                list: fragment.OutputVersions,
-                name: resource.Name
+            var port = StringLists.IndexOf(
+                items: fragment.OutputVersions,
+                value: resource.Name
             );
 
             if (port < 0) {
@@ -465,19 +466,6 @@ public sealed class RenderGraphCompiler(RenderGraphPackageCatalog packages, Shad
                 PushesIndex: package.PushesIndex
             ));
         }
-    }
-    private static int IndexOf(IReadOnlyList<string> list, string name) {
-        for (var index = 0; (index < list.Count); index++) {
-            if (string.Equals(
-                a: list[index],
-                b: name,
-                comparisonType: StringComparison.Ordinal
-            )) {
-                return index;
-            }
-        }
-
-        return -1;
     }
 
     /// <summary>Validates and plans a graph without throwing for an authored refusal.</summary>

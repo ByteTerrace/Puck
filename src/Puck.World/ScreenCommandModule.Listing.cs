@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 using Puck.Commands;
-
+using Puck.Abstractions.Machines;
 
 namespace Puck.World;
 
@@ -23,6 +23,26 @@ internal sealed partial class ScreenCommandModule {
             _ => "none",
         };
     }
+    // The players engaged on a screen as screen.state and world.screens print them: `p1@controls+p2(mirror)@controls-2`,
+    // the port present only for a route naming ports; null when nobody is engaged.
+    private static string? DescribeEngaged(IReadOnlyList<(int Display, bool Capture, string? Port)> players) => ((players.Count > 0)
+        ? string.Join(
+            separator: "+",
+            values: players.Select(selector: static entry => $"p{entry.Display}{(entry.Capture ? string.Empty : "(mirror)")}{((entry.Port is { } port) ? $"@{port}" : string.Empty)}")
+        )
+        : null
+    );
+    // A pad screen.state prints: `<buttons>/stick(<x>, <y>)`, or `off` when no application reaches it.
+    private static string DescribePad(MachinePadState? pad) => ((pad is { } image)
+        ? FormattableString.Invariant(formattable: $"{((image.Buttons == MachineButtons.None)
+            ? "none"
+            : image.Buttons.ToString().Replace(
+                comparisonType: StringComparison.Ordinal,
+                newValue: "+",
+                oldValue: ", "
+            ))}/stick({image.LeftStick.X:0.###}, {image.LeftStick.Y:0.###})")
+        : "off"
+    );
     // The world.nesting listing: every level of nested worlds, as the binder last reconciled them.
     private CommandResult NestingHandler(CommandContext context, WireArgs args) => ((args.Count != 0)
         ? CommandResult.Error(output: "[world.nesting: no arguments — lists every level of nested worlds]")
@@ -59,14 +79,8 @@ internal sealed partial class ScreenCommandModule {
             var bound = (m_binder.CurrentHandle(index: screen.Index) != 0);
             // The engaged marker (only when players are engaged) — reflects the route state, kept bracket-agnostic so the
             // proof regexes are undisturbed.
-            var engaged = m_engagement.PlayersOn(screenIndex: screen.Index);
-            var engagedText = ((engaged.Count > 0)
-                ? $" engaged:{string.Join(
-                    separator: "+",
-                    values: engaged.Select(selector: static entry => (entry.Capture
-                    ? $"p{entry.Display}"
-                    : $"p{entry.Display}(mirror)"))
-                )}"
+            var engagedText = ((DescribeEngaged(players: m_engagement.PlayersOn(screenIndex: screen.Index)) is { } engaged)
+                ? $" engaged:{engaged}"
                 : ""
             );
             // How a camera or capture image crosses devices: the shared fence, or the producer's CPU wait and why.

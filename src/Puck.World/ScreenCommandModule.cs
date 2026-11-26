@@ -3,7 +3,6 @@ using System.Text;
 using Puck.Commands;
 using Puck.Maths;
 using Puck.World.Protocol;
-using Puck.Abstractions.Machines;
 using Puck.Assets.Qr;
 using Puck.World.Server;
 using Puck.World.Machines;
@@ -728,30 +727,19 @@ internal sealed partial class ScreenCommandModule(WorldScreenBinder binder, Worl
             return CommandResult.Error(output: $"[screen.state: no screen {index} declared]");
         }
 
-        var engaged = m_engagement.PlayersOn(screenIndex: index);
-        var engagedText = ((engaged.Count > 0)
-            ? string.Join(
-                separator: "+",
-                values: engaged.Select(selector: static entry => (entry.Capture
-                ? $"p{entry.Display}"
-                : $"p{entry.Display}(mirror)"))
-            )
-            : "none"
-        );
+        var engagedText = (DescribeEngaged(players: m_engagement.PlayersOn(screenIndex: index)) ?? "none");
         var pointer = m_engagement.PointerOn(screenIndex: index);
         var gunText = (pointer.OnScreen
             ? $"({FixedQ4816.FromRawBits(value: pointer.X)}, {FixedQ4816.FromRawBits(value: pointer.Y)})"
             : "off"
         );
-        var padText = ((m_engagement.PadOn(screenIndex: index) is { } pad)
-            ? FormattableString.Invariant(formattable: $"{((pad.Buttons == MachineButtons.None)
-                ? "none"
-                : pad.Buttons.ToString().Replace(
-                    comparisonType: StringComparison.Ordinal,
-                    newValue: "+",
-                    oldValue: ", "
-                ))}/stick({pad.LeftStick.X:0.###}, {pad.LeftStick.Y:0.###})")
-            : "off"
+        // A route naming ports reads one pad per port, in seat order (`controls:<pad>;controls-2:<pad>`).
+        var padText = ((m_engagement.SeatPorts(screenIndex: index) is { Count: > 0 } ports)
+            ? string.Join(
+                separator: ";",
+                values: ports.Select(selector: port => $"{port}:{DescribePad(pad: m_engagement.PadOn(port: port, screenIndex: index))}")
+            )
+            : DescribePad(pad: m_engagement.PadOn(screenIndex: index))
         );
         var builder = new StringBuilder();
 

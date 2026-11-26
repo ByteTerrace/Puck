@@ -4773,7 +4773,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `screens[].route.cycleChannel` | `WorldScreenRoute.CycleChannel` | logical input channels |
 | `screens[].route.channels` | `WorldScreenRoute.Channels` | logical input channels |
 | `screens[].route.kit` | `WorldScreenRoute.Kit` | a kit in the composed world |
-| `screens[].route.port` | `WorldScreenRoute.Port` | a selector in the machine provider vocabulary |
+| `screens[].route.ports` | `WorldScreenRoute.Ports` | a selector in the machine provider vocabulary |
 | `screens[].route.display.fill` | `WorldScreenDisplay.Fill` | a color literal |
 | `screens[].route.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
 | `screens[].magazine.entries[][machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
