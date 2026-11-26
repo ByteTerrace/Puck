@@ -213,6 +213,7 @@ public sealed partial class SdfWorldResidency {
         SdfKernel.Views => SdfKernel.ViewsPlain,
         SdfKernel.Glass => SdfKernel.GlassPlain,
         SdfKernel.ViewsShade => SdfKernel.ViewsShadePlain,
+        SdfKernel.ViewsLights => SdfKernel.ViewsLightsPlain,
         _ => throw new ArgumentOutOfRangeException(paramName: nameof(kernel), actualValue: kernel, message: "Not a shading kernel."),
     };
 

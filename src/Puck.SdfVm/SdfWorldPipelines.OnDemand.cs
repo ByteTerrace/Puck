@@ -11,7 +11,8 @@ public sealed partial class SdfWorldPipelines {
     /// <param name="kernel">The kernel.</param>
     /// <returns><see langword="true"/> for a kernel a view acquires on demand.</returns>
     public static bool AcquiredOnDemand(SdfKernel kernel) =>
-        (kernel is SdfKernel.Resolve or SdfKernel.ViewsReflections or SdfKernel.ViewsFilter or SdfKernel.ViewsBins or SdfKernel.ViewsShade or SdfKernel.ViewsShadePlain);
+        (kernel is SdfKernel.Resolve or SdfKernel.ViewsReflections or SdfKernel.ViewsFilter or SdfKernel.ViewsBins or SdfKernel.ViewsShade or SdfKernel.ViewsShadePlain
+            or SdfKernel.ViewsLights or SdfKernel.ViewsLightsPlain);
 
     /// <summary>Builds on-demand pipelines (<see cref="AcquiredOnDemand"/>) into the set's existing reloadable slot table.
     /// The set owns each slot until disposal; repeated requests join the same slot and cache lease.</summary>

@@ -1,7 +1,9 @@
 // The views pass's stage over the pixel's visibility record, which the surface pass wrote (sdf-surface-stage.hlsli):
 // views shades the record (sdfViewsStage below). A binned kernel (SDF_VIEWS_BINNED) reads the filtered occlusion and
 // shadows from the filter record, and its tile's light masks from the shade bins, which its filter pass wrote; every
-// other kernel filters and decides its tile's lights in its own group.
+// other kernel filters and decides its tile's lights in its own group. A binned view's light pass (SDF_VIEWS_LIGHT_PASS)
+// runs the same stage up to its light walk, whose sums it stores (sdf-views-light-sums.hlsli), and the binned views
+// kernels read those sums in place of the walk.
 #ifndef PASSES_SDF_VIEWS_STAGE_HLSLI
 #define PASSES_SDF_VIEWS_STAGE_HLSLI
 #include "sdf-light-stage.hlsli"
@@ -108,6 +110,11 @@ float3 sdfViewsStage(SdfPixel p, bool shadesPixel, out float coverage, out float
     }
 
     float3 color = sdfLightStage(p, s, meshHit, surfacePoint, useFinalShading, curvatureShading, material, lights, edges, coverage, reactivity);
+
+#if defined(SDF_VIEWS_LIGHT_PASS)
+    // The light pass stored the pixel's sums in its light stage and shows nothing.
+    return color;
+#endif
     float3 viewColor = sdfDebugView(p, s, color);
     // The atmosphere along the sample's ray to its surface, evaluated once for the transmittance below and the air the
     // resolve reads.

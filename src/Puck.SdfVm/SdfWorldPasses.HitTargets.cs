@@ -32,8 +32,8 @@ public sealed partial class SdfWorldPasses {
 
     /// <summary>Notes and checks the hit targets a pass of an instance writes and reads as it records: the mesh and glass
     /// raster passes note their targets; the surface pass checks the mesh target and notes its visibility records; the
-    /// views and resolve passes check the visibility records; the glass shading pass checks the glass target. Every other
-    /// part does nothing.</summary>
+    /// probe lookup, reflection, light, views and resolve passes check the visibility records; the glass shading pass checks
+    /// the glass target. Every other part does nothing.</summary>
     /// <param name="instance">The instance's name.</param>
     /// <param name="part">The recording pass (<see cref="SdfWorldPackage.Parts"/>, or <see cref="SdfWorldPackage.Resolve"/>).</param>
     /// <param name="tables">The tables the pass records against.</param>
@@ -53,6 +53,7 @@ public sealed partial class SdfWorldPasses {
                 break;
             case SdfWorldPackage.Parts.ViewsProbes:
             case SdfWorldPackage.Parts.ViewsReflections:
+            case SdfWorldPackage.Parts.ViewsLights:
             case SdfWorldPackage.Parts.Views:
             case SdfWorldPackage.Resolve:
                 entry.Check(revision: HitRevisionOf(entry: entry, instance: instance, tables: tables, target: HitTarget.Visibility), tables: tables, target: HitTarget.Visibility);

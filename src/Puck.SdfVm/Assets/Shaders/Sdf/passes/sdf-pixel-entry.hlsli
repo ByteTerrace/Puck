@@ -53,6 +53,14 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
     sdfSurfaceStage(p);
 #elif defined(SDF_VIEWS_FILTER_PASS)
     sdfViewsFilterStage(p);
+#elif defined(SDF_VIEWS_LIGHT_PASS)
+    // The light pass stores its sums inside the stage and writes no image.
+    float coverage;
+    float reactivity;
+    uint2 sampleAir;
+
+    sdfViewsStage(p, shadesPixel, coverage, reactivity, sampleAir);
+    sdfWorkTexels = ((p.active && shadesPixel && (coverage > 0.0)) ? 1u : 0u);
 #else
     float coverage;
     float reactivity;
@@ -99,7 +107,7 @@ void CSMain(uint3 id : SV_DispatchThreadID) {
 #endif
 
     // The surface pass counts a pixel whose visibility record it stored, the filter pass a pixel whose filter record it
-    // stored and views a pixel whose texel it wrote.
+    // stored, the light pass a hit it shaded and views a pixel whose texel it wrote.
     puckCountWork(sdfWorkSteps, sdfWorkTexels);
     puckCountShapes(sdfWorkShapes, sdfWorkGradients);
 #if !defined(SDF_SURFACE_PASS) && !defined(SDF_VIEWS_FILTER_PASS)

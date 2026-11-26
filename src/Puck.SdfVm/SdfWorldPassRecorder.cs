@@ -54,6 +54,8 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.MeshShadowDistantBlocks,
         SdfWorldPackage.ViewsFilterRecords,
         SdfWorldPackage.ViewsFilterRecordsWritten,
+        SdfWorldPackage.ViewsLightSums,
+        SdfWorldPackage.ViewsLightSumsWritten,
         SdfWorldPackage.ViewsProbeRecords,
         SdfWorldPackage.ViewsProbeRecordsWritten,
         SdfWorldPackage.ShadeTiles,
@@ -467,9 +469,11 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
             case SdfWorldPackage.Parts.Pyramid: {
                     return (m_view.Residency.Staged(context: in context).MeshDrawCount == 0);
                 }
-            // The filter and bins passes skip a frame whose views do not shade in bins (SdfWorldResidency.ShadesInBins).
+            // The filter, bins and light passes skip a frame whose views do not shade in bins
+            // (SdfWorldResidency.ShadesInBins): views then walks its lights itself.
             case SdfWorldPackage.Parts.ViewsFilter:
-            case SdfWorldPackage.Parts.ViewsBins: {
+            case SdfWorldPackage.Parts.ViewsBins:
+            case SdfWorldPackage.Parts.ViewsLights: {
                     return !m_view.Residency.ShadesInBins;
                 }
             default:
@@ -733,6 +737,14 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                     m_decided.Selection = m_shade.RecordSelection(plan: m_shadePlan, residency: residency, slot: recording.Slot);
                     break;
                 }
+            case SdfWorldPackage.Parts.ViewsLights: {
+                    // The light pass records views' plan, the one whose arguments its bins pass last wrote, with the
+                    // residency's shading selection pinned for its own submission.
+                    m_shadePlan = m_owner.ShadePlanOf(instance: m_context.Instance, frame: residency.Frame!, width: recording.Width, height: recording.Height,
+                        screens: tables.PassValues.ScreenCount, lightMask: tables.LightMaskOf(frame: residency.Frame!, view: m_view.View));
+                    m_decided.Selection = m_shade.RecordSelection(plan: m_shadePlan, residency: residency, slot: recording.Slot);
+                    break;
+                }
             case SdfWorldPackage.Parts.ViewsFilter: {
                     // The filter runs no program: one job of views' groups, whose pushed ordinal its entry remaps as views'
                     // does.
@@ -791,15 +803,11 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                         m_shadePlan.Record(pipeline: pipeline, recording: in recording);
                         return;
                     }
-                    // Bin zero's tiles hold no program, so the plain kernel shades them; every other bin's take the
-                    // selection's kernel, which shades every program the frame runs.
-                    for (var bin = 0; (bin < m_shadePlan.Bins.Count); bin++) {
-                        if (m_shadePlan.Bins[bin].Jobs == 0) { continue; }
-                        var pipeline = ((bin == 0) ? selection.Plain(kernel: SdfKernel.ViewsShade) : selection.Pipeline(kernel: SdfKernel.ViewsShade));
-
-                        BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
-                        m_shadePlan.RecordBin(bin: bin, pipeline: pipeline, recording: in recording);
-                    }
+                    RecordBins(kernel: SdfKernel.ViewsShade, recording: in recording, tables: tables);
+                    return;
+                }
+            case SdfWorldPackage.Parts.ViewsLights: {
+                    RecordBins(kernel: SdfKernel.ViewsLights, recording: in recording, tables: tables);
                     return;
                 }
             case SdfWorldPackage.Parts.ViewsFilter: {
@@ -901,6 +909,19 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     }
     // Binds a compute kernel with the slot's pass set and the residency's World set. A pipeline bind can drop the bound
     // sets (Direct3D 12 sets the kernel's root signature again), so the sets follow every bind.
+    // Records a binned part's jobs, each bin with its kernel: bin zero's tiles hold no program, so the plain counterpart
+    // records them; every other bin's take the decision's selection, which shades every program the frame runs.
+    private void RecordBins(SdfKernel kernel, in RenderGraphPackageRecording recording, SdfWorldTables tables) {
+        var selection = m_decided.Selection;
+
+        for (var bin = 0; (bin < m_shadePlan!.Bins.Count); bin++) {
+            if (m_shadePlan.Bins[bin].Jobs == 0) { continue; }
+            var pipeline = ((bin == 0) ? selection.Plain(kernel: kernel) : selection.Pipeline(kernel: kernel));
+
+            BindCompute(pipeline: pipeline, recording: in recording, tables: tables);
+            m_shadePlan.RecordBin(bin: bin, pipeline: pipeline, recording: in recording);
+        }
+    }
     private void BindCompute(IGpuComputePipeline pipeline, in RenderGraphPackageRecording recording, SdfWorldTables tables) {
         recording.Recorder.BindPipeline(
             bindPoint: GpuBindPoint.Compute,
@@ -1165,6 +1186,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.Parts.MeshPyramid => SdfWorldPackage.MeshPyramid,
         SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecords,
+        SdfWorldPackage.Parts.LightSums => SdfWorldPackage.ViewsLightSums,
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecords,
         SdfWorldPackage.Parts.Reflections => SdfWorldPackage.ViewsReflections,
         SdfWorldPackage.Parts.ReflectionDepth => SdfWorldPackage.ReflectionDepth,
@@ -1185,6 +1207,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         SdfWorldPackage.Parts.SampleAir => SdfWorldPackage.SampleAirWritten,
         SdfWorldPackage.Parts.MeshPyramid => SdfWorldPackage.MeshPyramidWritten,
         SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecordsWritten,
+        SdfWorldPackage.Parts.LightSums => SdfWorldPackage.ViewsLightSumsWritten,
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecordsWritten,
         SdfWorldPackage.Parts.Reflections => SdfWorldPackage.ViewsReflectionsWritten,
         SdfWorldPackage.Parts.ReflectionDepth => SdfWorldPackage.ReflectionDepthWritten,

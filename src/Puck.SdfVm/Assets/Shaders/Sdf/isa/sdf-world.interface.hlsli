@@ -1,4 +1,4 @@
-// Generated from shader interface 'sdf-world' (sha256/a69d8e9b8cb2f13b86cb395fb066b8ecbeebb0a59a6e602865dcc191c6fd376e). Regenerate it from the interface; never edit it.
+// Generated from shader interface 'sdf-world' (sha256/cafc31dee3388421a6ffd43bbf1b0e383a9a35b43b67573d567b66f2c6fa48d7). Regenerate it from the interface; never edit it.
 #ifndef PUCK_SHADER_INTERFACE_SDF_WORLD
 #define PUCK_SHADER_INTERFACE_SDF_WORLD
 
@@ -280,19 +280,21 @@ struct SdfWorldPass {
 [[vk::binding(152, 3)]] RWStructuredBuffer<uint> sdfMeshPyramidRW : register(u152, space3);
 [[vk::binding(153, 3)]] StructuredBuffer<uint> sdfViewsFilterRecords : register(t153, space3);
 [[vk::binding(154, 3)]] RWStructuredBuffer<uint> sdfViewsFilterRecordsRW : register(u154, space3);
-[[vk::binding(155, 3)]] StructuredBuffer<uint> sdfViewsProbeRecords : register(t155, space3);
-[[vk::binding(156, 3)]] RWStructuredBuffer<uint> sdfViewsProbeRecordsRW : register(u156, space3);
-[[vk::binding(157, 3)]] StructuredBuffer<uint> sdfShadeTiles : register(t157, space3);
-[[vk::binding(158, 3)]] RWStructuredBuffer<uint> sdfShadeTilesRW : register(u158, space3);
-[[vk::binding(159, 3)]] RWStructuredBuffer<uint> sdfShadeArgumentsRW : register(u159, space3);
-[[vk::binding(160, 3)]] StructuredBuffer<uint> historySurface : register(t160, space3);
-[[vk::binding(161, 3)]] StructuredBuffer<uint> sdfViewsProbeHistory : register(t161, space3);
-[[vk::binding(162, 3)]] RWStructuredBuffer<uint> sdfViewsProbeHistoryRW : register(u162, space3);
-[[vk::binding(163, 3)]] StructuredBuffer<uint4> sdfViewsReflections : register(t163, space3);
-[[vk::binding(164, 3)]] RWStructuredBuffer<uint4> sdfViewsReflectionsRW : register(u164, space3);
-[[vk::binding(165, 3)]] Texture2D<float4> sdfReflectionHistory : register(t165, space3);
-[[vk::binding(166, 3)]] StructuredBuffer<uint> sdfReflectionDepth : register(t166, space3);
-[[vk::binding(167, 3)]] RWStructuredBuffer<uint> sdfReflectionDepthRW : register(u167, space3);
+[[vk::binding(155, 3)]] StructuredBuffer<uint4> sdfViewsLightSums : register(t155, space3);
+[[vk::binding(156, 3)]] RWStructuredBuffer<uint4> sdfViewsLightSumsRW : register(u156, space3);
+[[vk::binding(157, 3)]] StructuredBuffer<uint> sdfViewsProbeRecords : register(t157, space3);
+[[vk::binding(158, 3)]] RWStructuredBuffer<uint> sdfViewsProbeRecordsRW : register(u158, space3);
+[[vk::binding(159, 3)]] StructuredBuffer<uint> sdfShadeTiles : register(t159, space3);
+[[vk::binding(160, 3)]] RWStructuredBuffer<uint> sdfShadeTilesRW : register(u160, space3);
+[[vk::binding(161, 3)]] RWStructuredBuffer<uint> sdfShadeArgumentsRW : register(u161, space3);
+[[vk::binding(162, 3)]] StructuredBuffer<uint> historySurface : register(t162, space3);
+[[vk::binding(163, 3)]] StructuredBuffer<uint> sdfViewsProbeHistory : register(t163, space3);
+[[vk::binding(164, 3)]] RWStructuredBuffer<uint> sdfViewsProbeHistoryRW : register(u164, space3);
+[[vk::binding(165, 3)]] StructuredBuffer<uint4> sdfViewsReflections : register(t165, space3);
+[[vk::binding(166, 3)]] RWStructuredBuffer<uint4> sdfViewsReflectionsRW : register(u166, space3);
+[[vk::binding(167, 3)]] Texture2D<float4> sdfReflectionHistory : register(t167, space3);
+[[vk::binding(168, 3)]] StructuredBuffer<uint> sdfReflectionDepth : register(t168, space3);
+[[vk::binding(169, 3)]] RWStructuredBuffer<uint> sdfReflectionDepthRW : register(u169, space3);
 
 // The pushed index: Vulkan push constants at offset 0, Direct3D 12 root constants at register b0, space 4.
 struct SdfWorldPushedIndex {
