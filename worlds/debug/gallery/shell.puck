@@ -621,8 +621,11 @@ let shellPlanters = concat(
     { x: 10.5, y: 3, z: (naveMid - 0.1), yaw: 90 }, { x: 24, y: 3, z: (arcadeSouth + 0.15), yaw: 0 }, { x: (galleryEast - 4.2), y: 3, z: (arcadeSouth + 0.15), yaw: 0 }
   ]
 )
+// The benches stand in the floor's empty bays, each two tiles long and centred on a tile, so its ends lie on the
+// centres of the tiles either side (the placements snap each to its nearest tile centre). Level 0's south aisle has one
+// against the painting wing's south wall, in the middle of the arcade bay before the night and city paintings.
 let shellBenches = [
-  { x: 37.5, y: 0, z: (arcadeSouth - 1.15), yaw: 0 }, { x: 50, y: 0, z: 3.2, yaw: 0 }, { x: 6, y: 0, z: 5, yaw: 0 }, { x: 31, y: 0, z: (northAisleMid - 1.8), yaw: 0 }
+  { x: (naveWest + (5.5 * arcadePitch)), y: 0, z: (galleryWall + (galleryTile / 2)), yaw: 0 }, { x: 50, y: 0, z: 3.2, yaw: 0 }, { x: 6, y: 0, z: 5, yaw: 0 }, { x: 31, y: 0, z: (northAisleMid - 1.8), yaw: 0 }
   { x: 6, y: 1, z: 5, yaw: 0 }, { x: 6, y: 1, z: naveMid, yaw: 90 }, { x: 52, y: 1, z: 3, yaw: 0 }
   { x: 6, y: 2, z: 5, yaw: 0 }, { x: 6, y: 2, z: naveMid, yaw: 90 }
   { x: 4, y: 3, z: 5.4, yaw: 0 }, { x: 9, y: 3, z: 5.4, yaw: 0 }, { x: 6, y: 3, z: naveMid, yaw: 90 }, { x: 38, y: 3, z: (arcadeSouth - 1.35), yaw: 0 }
@@ -856,7 +859,7 @@ template shellPrototypes() {
       name: "gallery-bench"
       schema: "puck.creation.v1"
       palette: shellKit
-      bench(base: 0)
+      bench(base: 0, length: (2 * galleryTile))
     }
   }
   prototype "gallery-banner" {
@@ -1033,7 +1036,7 @@ template shellPlacements() {
     placement $"gallery-bench-{n}" {
       prototype: "gallery-bench"
       parent: "gallery"
-      position [bench.x, galleryFloor[bench.y], bench.z]
+      position [galleryTileX(bench.x), galleryFloor[bench.y], galleryTileZ(bench.z)]
       yawDegrees: bench.yaw
       solid
     }
