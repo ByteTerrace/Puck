@@ -310,9 +310,16 @@ template shellSlab(label, x0, x1, y0, y1, z0, z1, top = shellFloor) {
 }
 
 // An upper level's floor as the boxes of its plan: the north gallery, the bridge west of the nave, the south gallery,
-// and on the wing's levels the floor of the projection, holed by a well over each stair and on level 1 by one over the
-// endless fall's ceiling painting.
+// and on the wing's levels the floor of the projection, holed by a well over each stair, on level 1 by one over the
+// endless fall's ceiling painting, and by a small square wherever the flaw passes through (layout.puck's
+// `flawCrossings`), which the flaw's collar (flaw.puck) fills and rounds.
 let fallWell = { x0: (fallPlan[0] - fallHole), x1: (fallPlan[0] + fallHole), z0: (fallPlan[1] - fallHole), z1: (fallPlan[1] + fallHole) }
+function flawOpenings(level) = map(filter(flawCrossings, c => ((c.height + 1) == level)), c => {
+  x0: (c.point[0] - lookFlawCollarCut)
+  x1: (c.point[0] + lookFlawCollarCut)
+  z0: (c.point[2] - lookFlawCollarCut)
+  z1: (c.point[2] + lookFlawCollarCut)
+})
 function shellFloorPieces(level) = boundsCutAll(
   concat(
     [
@@ -323,7 +330,7 @@ function shellFloorPieces(level) = boundsCutAll(
     ],
     ((level >= wingLevel) ? [{ id: "wing", x0: wingWest, x1: galleryWidth, z0: wingSouth, z1: galleryWall }] : [])
   ),
-  concat(galleryStairWells, ((level == 1) ? [fallWell] : []))
+  concat(galleryStairWells, ((level == 1) ? [fallWell] : []), flawOpenings(level))
 )
 // The roof: the same plan without the wells and the terrace, the nave closed over between three skylights, each
 // 2.5 m in from the balcony edges.

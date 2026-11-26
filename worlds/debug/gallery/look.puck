@@ -185,10 +185,14 @@ let lookShots = [
 // that looks like neon, a saturated core glowing through a frosted sleeve. `core` and `sleeve` are the two radii in
 // metres, `frost` the sleeve's roughness, `glass` its tint and `depth` how deep that tint builds, `coreNits` the core's
 // luminance, and `intensity` the light each metre of the tube gives, in candela per metre (a fluorescent tube gives
-// about 200), which a level's switch writes into `hallLamps` for the stretch of the flaw that storey holds.
+// about 200), which a level's switch writes into `hallLamps` for the stretch of the flaw that storey holds. `bend` is
+// the radius every corner of its route turns on, and `stretch` the longest stretch of one tint (and one light) along a
+// run, so the tint eases along the long runs too.
 let lookFlaw = {
   core: 0.07
   sleeve: 0.16
+  bend: 0.4
+  stretch: 5
   frost: 0.42
   glass: "#EAF4FF"
   depth: 0.03
@@ -207,3 +211,18 @@ let lookFlawTint = [[120, 226, 255], [150, 128, 255], [236, 112, 236], [255, 170
 // switch is off.
 let lookCarLamp = { color: "#F4F8FF", luminance: 120 }
 let lookStairPendant = { drum: lookTeal, cord: "#23262B", color: "#FFD9A8", luminance: 3000, off: "#C9BFB2" }
+
+// The collar fitted where the flaw passes through a slab: a short brass sleeve that fills the slab's opening, with a
+// bevelled ring on the floor and one on the ceiling. `bore` is the open hole's radius (wider than the flaw's sleeve, so
+// a dark ring of gap shows round the glow), `rim` the rings' outer radius, `lip` how far each stands proud of its face.
+// The slab's square opening (`lookFlawCollarCut`, its half-width) sits just outside the bore, and the collar's sleeve
+// reaches past the opening's corners, so the collar alone is seen.
+let lookFlawCollar = {
+  bore: 0.24
+  rim: 0.44
+  lip: 0.025
+  bevel: 0.008
+  color: lookBrass
+  roughness: 0.32
+}
+let lookFlawCollarCut = (lookFlawCollar.bore + 0.01)
