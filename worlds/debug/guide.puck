@@ -9,17 +9,13 @@ exports {
   reads [guideAt]
 }
 
-// Every exhibit in walking order, with the centre of the region in front of it: 1.7 m out from the plinth on the
-// label's side, on the level's floor. Regions 2.6 m apart with a 1.29 m radius never overlap.
-let guideExhibits = flatMap(galleryRows, row => map(
-  row.names,
-  (name, index) => {
-    name: name
-    x: (galleryX + (gallerySpacing * index))
-    y: galleryFloor[row.level]
-    z: (row.z - 1.7)
-  }
-))
+// Every exhibit in walking order, with the centre of the region in front of it: 1.7 m out from the plinth on its
+// console's side, on the level's floor, in the building's frame. Regions at least 2.5 m apart with a 1.24 m radius never
+// overlap.
+let guideExhibits = map(
+  galleryStations,
+  station => { name: station.name, x: station.x, y: station.y, z: (station.z + (1.7 * station.front)) }
+)
 // Titles and notes are authored here by exhibit name; the guest contains no exhibit copy. A region reads the copy of
 // the exhibit it stands before, whatever place its row has in walking order.
 let guideCopy = {
@@ -313,6 +309,7 @@ placements {
   for exhibit in guideExhibits {
     placement $"guide-{exhibit.name}" {
       prototype: "guide-region"
+      parent: "gallery"
       position [exhibit.x, exhibit.y, exhibit.z]
       region {
         radius: guideRadius

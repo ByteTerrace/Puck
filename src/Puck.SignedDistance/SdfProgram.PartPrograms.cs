@@ -64,7 +64,7 @@ public sealed partial class SdfProgram {
                 leafCount += leaves.Length;
             }
 
-            var scale = m_instructions[(instance.End - 1)].Data1.Y;
+            var scale = InstructionRows[(instance.End - 1)].Data1.Y;
 
             instances[index] = new PartInstancePlan(
                 Asset: asset,
@@ -93,9 +93,9 @@ public sealed partial class SdfProgram {
         if (
             !instance.Active ||
             ((instance.End - instance.First) < 4) ||
-            (m_instructions[instance.First].Op != SdfOp.PushField) ||
-            (m_instructions[(instance.End - 1)].Op != SdfOp.PopField) ||
-            (m_instructions[(instance.End - 1)].Blend != ((uint)SdfBlendOp.Union))
+            (InstructionRows[instance.First].Op != SdfOp.PushField) ||
+            (InstructionRows[(instance.End - 1)].Op != SdfOp.PopField) ||
+            (InstructionRows[(instance.End - 1)].Blend != ((uint)SdfBlendOp.Union))
         ) {
             return false;
         }
@@ -112,7 +112,7 @@ public sealed partial class SdfProgram {
 
         while (cursor < end) {
             if (
-                (m_instructions[cursor++].Op != SdfOp.ResetPoint) ||
+                (InstructionRows[cursor++].Op != SdfOp.ResetPoint) ||
                 (cursor >= end)
             ) {
                 return false;
@@ -120,8 +120,8 @@ public sealed partial class SdfProgram {
 
             var slot = NoDynamicTransformSlot;
 
-            if (m_instructions[cursor].Op == SdfOp.TransformDynamic) {
-                slot = ((int)m_instructions[cursor++].Data0.X);
+            if (InstructionRows[cursor].Op == SdfOp.TransformDynamic) {
+                slot = ((int)InstructionRows[cursor++].Data0.X);
             }
             if (cursor >= end) {
                 return false;
@@ -129,18 +129,18 @@ public sealed partial class SdfProgram {
 
             var domain = -1;
 
-            if (SdfFieldOps.PartDomainOf(value: m_instructions[cursor].Op)) {
+            if (SdfFieldOps.PartDomainOf(value: InstructionRows[cursor].Op)) {
                 domain = cursor++;
             }
             if (
                 (cursor >= end) ||
-                (m_instructions[cursor].Op != SdfOp.ShapeBlend) ||
+                (InstructionRows[cursor].Op != SdfOp.ShapeBlend) ||
                 (ShapeStepScaleAt(instructionIndex: cursor) != 1f)
             ) {
                 return false;
             }
 
-            var shape = m_instructions[cursor];
+            var shape = InstructionRows[cursor];
             // Side-table content needs its own shared-part key. Retain instruction-local ownership until then.
             var sharing = SdfFieldShapes.PartShapeOf(value: ((SdfShapeType)shape.Shape));
 
@@ -180,9 +180,9 @@ public sealed partial class SdfProgram {
             );
             signature.Add(item: ((domain < 0)
                 ? 0u
-                : (uint)m_instructions[domain].Op));
+                : (uint)InstructionRows[domain].Op));
             if (domain >= 0) {
-                var operation = m_instructions[domain];
+                var operation = InstructionRows[domain];
 
                 signature.Add(item: operation.Shape);
                 signature.Add(item: operation.Blend);
@@ -234,7 +234,7 @@ public sealed partial class SdfProgram {
     internal bool ComposesByHardUnion(bool parts) {
         var depth = 0;
 
-        foreach (var instruction in m_instructions) {
+        foreach (var instruction in InstructionRows) {
             switch (SdfFieldOps.CullInstancesOf(value: instruction.Op)) {
                 case SdfCullInstancesAction.PushField: {
                         depth++;
@@ -280,24 +280,24 @@ public sealed partial class SdfProgram {
         if (plan.CompiledCount == 0) {
             return;
         }
-        m_words[((instanceOffset * WordsPerVector) + InstancePartProgramsLane)] = ((uint)offset);
+        PackedWords[((instanceOffset * WordsPerVector) + InstancePartProgramsLane)] = ((uint)offset);
         var header = (offset * WordsPerVector);
 
-        m_words[header] = ((uint)plan.CompiledCount) | (InstancesComposable
+        PackedWords[header] = ((uint)plan.CompiledCount) | (InstancesComposable
             ? IndependentPartTracingFlag
             : 0u
         );
-        m_words[(header + 1)] = ((uint)plan.Assets.Count);
-        m_words[(header + 2)] = ((uint)plan.LeafCount);
-        m_words[(header + 3)] = ((uint)plan.BindingCount);
+        PackedWords[(header + 1)] = ((uint)plan.Assets.Count);
+        PackedWords[(header + 2)] = ((uint)plan.LeafCount);
+        PackedWords[(header + 3)] = ((uint)plan.BindingCount);
         var cursor = ((offset + 1) + plan.Instances.Length);
         var assetOffsets = new int[plan.Assets.Count];
 
         for (var asset = 0; (asset < plan.Assets.Count); asset++) {
             assetOffsets[asset] = cursor;
             foreach (var leaf in plan.Assets[asset]) {
-                m_words[(cursor * WordsPerVector)] = ((uint)leaf.ShapeInstruction);
-                m_words[((cursor * WordsPerVector) + 1)] = ((uint)(leaf.DomainInstruction + 1));
+                PackedWords[(cursor * WordsPerVector)] = ((uint)leaf.ShapeInstruction);
+                PackedWords[((cursor * WordsPerVector) + 1)] = ((uint)(leaf.DomainInstruction + 1));
                 cursor++;
             }
         }
@@ -309,7 +309,7 @@ public sealed partial class SdfProgram {
             // leaf count keeps it on the generic walk.
             var gainBits = (EncodePartDistanceGain(gain: InstanceDistanceGain(index: index)) << PartDistanceGainShift);
 
-            m_words[(entry + 2)] = gainBits;
+            PackedWords[(entry + 2)] = gainBits;
 
             if (plan.Instances[index] is not { } placement) {
                 continue;
@@ -319,19 +319,19 @@ public sealed partial class SdfProgram {
                 throw new InvalidOperationException(message: $"A compiled part holds at most {PartLeafCountMask} leaves; instance {index} has {placement.Bindings.Length}.");
             }
 
-            m_words[entry] = ((uint)assetOffsets[placement.Asset]);
-            m_words[(entry + 1)] = ((uint)cursor);
+            PackedWords[entry] = ((uint)assetOffsets[placement.Asset]);
+            PackedWords[(entry + 1)] = ((uint)cursor);
             // A non-world shader without pose bindings must leave a dynamic part on its existing fallback path.
-            m_words[(entry + 2)] = ((uint)placement.Bindings.Length) | gainBits
+            PackedWords[(entry + 2)] = ((uint)placement.Bindings.Length) | gainBits
                 | (placement.Bindings.Any(predicate: binding => (binding.DynamicSlot != NoDynamicTransformSlot))
                 ? 0x80000000u
                 : 0u
             );
-            m_words[(entry + 3)] = BitConverter.SingleToUInt32Bits(value: placement.Scale);
+            PackedWords[(entry + 3)] = BitConverter.SingleToUInt32Bits(value: placement.Scale);
             foreach (var binding in placement.Bindings) {
-                m_words[(cursor * WordsPerVector)] = PackTransformSlot(slot: binding.DynamicSlot);
-                m_words[((cursor * WordsPerVector) + 1)] = binding.Material;
-                m_words[((cursor * WordsPerVector) + 2)] = ((uint)binding.ShapeInstruction);
+                PackedWords[(cursor * WordsPerVector)] = PackTransformSlot(slot: binding.DynamicSlot);
+                PackedWords[((cursor * WordsPerVector) + 1)] = binding.Material;
+                PackedWords[((cursor * WordsPerVector) + 2)] = ((uint)binding.ShapeInstruction);
                 cursor++;
             }
         }

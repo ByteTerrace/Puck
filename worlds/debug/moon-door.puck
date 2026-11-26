@@ -19,8 +19,8 @@ import "reach"
 
 // The painting hangs on the wing's south wall at x 66, its canvas facing +Z (paintings.puck's `wallPaintings`); the
 // step is the floor before it, and the curtain hangs a hand in front of the canvas.
-let moonDoorX = 66
-let moonDoorWall = 12.6
+let moonDoorX = 58.5
+let moonDoorWall = 12.3
 // The valley door stands on the launch field east of the pad (moon-frame.puck's `launchPad`), its glass facing +Z toward
 // the pad's side of the field, and its step is the ground before the glass.
 let valleyDoorX = (launchPad[0] + 16)
@@ -34,7 +34,7 @@ let moonDoors = [
     prototype: "painting-moon"
     position [moonDoorX, 0.05, moonDoorWall]
     yaw: 180
-    step { x0: 65, x1: 67, z0: 12.7, z1: 14.2, y0: -0.5, y1: 1 }
+    step { x0: 57.5, x1: 59.5, z0: 12.4, z1: 13.9, y0: -0.5, y1: 1 }
     socket: "moon-socket"
   }
   {

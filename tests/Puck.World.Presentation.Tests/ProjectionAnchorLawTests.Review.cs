@@ -160,7 +160,7 @@ public sealed partial class ProjectionAnchorLawTests {
             fixture.Step();
             Assert.Equal(expected: WorldFederationProjectionSink.DisclosureDetachReason, actual: sink.DetachReason);
         } else {
-            for (var index = 0; (index < WorldFederationProjectionSink.PendingDeliveryLimit); index++) {
+            for (var index = 0; ((index < (WorldFederationProjectionSink.PendingDeliveryLimit + WorldFederationProjectionSink.StalledDeliveryLimit + 2)) && (sink.DetachReason is null)); index++) {
                 fixture.Step();
             }
 

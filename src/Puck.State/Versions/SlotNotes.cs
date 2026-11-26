@@ -110,6 +110,8 @@ public sealed class SlotBinding {
 public sealed class SlotNotes {
     private readonly int m_partitionSlots;
     private List<(SlotBinding? Binding, int Slot)>[] m_partitions;
+    // A slot's partition where it is not the run of consecutive slots it falls in (Assign); null until one is assigned.
+    private int[]? m_assigned;
 
     /// <summary>Initializes a new instance of the <see cref="SlotNotes"/> class with nothing noted.</summary>
     /// <param name="count">The number of slots.</param>
@@ -149,7 +151,28 @@ public sealed class SlotNotes {
     /// <summary>Returns the partition a slot belongs to.</summary>
     /// <param name="slot">The slot.</param>
     /// <returns>The partition's ordinal.</returns>
-    public int PartitionOf(int slot) => (slot / m_partitionSlots);
+    public int PartitionOf(int slot) => ((m_assigned is { } table) ? table[slot] : (slot / m_partitionSlots));
+    /// <summary>Assigns a slot to a partition other than the run of consecutive slots it falls in, so a step that
+    /// hands each worker a different grouping of slots (a spatial run) still has every worker append to lists no other
+    /// worker holds. Call it on one thread, with no step running, for every slot a coming step's workers will write;
+    /// a slot never assigned keeps its run of consecutive slots. The notes already made stay in the lists they were
+    /// made to and publish with the rest.</summary>
+    /// <param name="slot">The slot.</param>
+    /// <param name="partition">The partition's ordinal, in <c>[0, <see cref="PartitionCount"/>)</c>.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="slot"/> is outside the notes, or
+    /// <paramref name="partition"/> is outside the partitions.</exception>
+    public void Assign(int slot, int partition) {
+        ArgumentOutOfRangeException.ThrowIfNegative(value: slot);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(other: Count, value: slot);
+        ArgumentOutOfRangeException.ThrowIfNegative(value: partition);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(other: m_partitions.Length, value: partition);
+
+        if (m_assigned is null) {
+            m_assigned = new int[Count];
+            for (var at = 0; (at < m_assigned.Length); at++) { m_assigned[at] = (at / m_partitionSlots); }
+        }
+        m_assigned[slot] = partition;
+    }
     /// <summary>Notes a slot the population itself changed (a slot that took or lost its occupant), as a holder's
     /// write notes its own. Called on the thread that owns the slot's partition.</summary>
     /// <param name="slot">The slot.</param>
@@ -190,6 +213,7 @@ public sealed class SlotNotes {
             foreach (var (binding, _) in partition) { binding?.Published(notes: this); }
         }
         m_partitions = NewPartitions(count: count, partitionSlots: m_partitionSlots);
+        m_assigned = null;
         Versions.ResetAll(count: count, version: 0UL);
     }
     /// <summary>Clears the stale-digest report, for a reader that has narrated it.</summary>

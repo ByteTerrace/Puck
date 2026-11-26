@@ -14,8 +14,8 @@ public sealed partial class SdfProgram {
 
         for (var segment = 0; (segment < SkipSegmentCount); segment++) {
             var word = (SegmentDirectoryWord() + ((DirectoryHeaderVectors + (BoundRecordVectors * segment)) * WordsPerVector));
-            var first = ((int)m_words[((word + WordsPerVector) + 2)]);
-            var end = ((int)m_words[((word + WordsPerVector) + 3)]);
+            var first = ((int)PackedWords[((word + WordsPerVector) + 2)]);
+            var end = ((int)PackedWords[((word + WordsPerVector) + 3)]);
 
             while ((instance < m_instances.Length) && (m_instances[instance].End <= first)) { instance++; }
             var owner = (((instance < m_instances.Length) && (m_instances[instance].First <= first)) ? instance : -1);
@@ -35,8 +35,8 @@ public sealed partial class SdfProgram {
             var finiteOwner = ((owner >= 0) && m_instances[owner].IsDynamic && (radius >= 0f) && (radius < UnmaskableBoundRadius));
 
             for (var instruction = first; (instruction < end); instruction++) {
-                if (m_instructions[instruction].Op != SdfOp.TransformDynamic) { continue; }
-                var slot = ((int)m_instructions[instruction].Data0.X);
+                if (InstructionRows[instruction].Op != SdfOp.TransformDynamic) { continue; }
+                var slot = ((int)InstructionRows[instruction].Data0.X);
                 var bounded = (finiteOwner && (m_instances[owner].Slot == slot));
 
                 var localBound = (bounded && m_instances[owner].BoundInSlotFrame);

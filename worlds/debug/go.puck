@@ -3,7 +3,7 @@ import "../standard/kits"
 import "../standard/seat"
 import "shapes"
 import "gametable"
-// Physical Go on a 19x19 board: 361 rigid stones on a goban in the gallery hall's board game room (hall.puck), whose every
+// Physical Go on a 19x19 board: 361 rigid stones on a goban in the gallery hall's board game room (gallery/gallery.puck), whose every
 // settled arrangement is judged against the position the rules last accepted, and a computer opponent. The debug
 // world imports this file whole. The table stands north of the chess table, its board's centre at (56.5, 9.905, 30.6)
 // on level 2; Black sits at its -Z edge and White at its +Z edge, each with a tray of 181 or 180 stones at their right-hand end.
@@ -23,7 +23,7 @@ import "gametable"
 // stay at rest before an arrangement is judged (0.3 s at 30 Hz), the board's side and its point count. A point's
 // ordinal is 19 * row + column: its column runs along +X and its row along +Z, so point 0 is the -X, -Z corner, the
 // corner at Black's right hand.
-let goTable = [56.5, 8.55, 30.6]
+let goTable = [44, 8.55, 10.3]
 let goSettleTicks = 9
 let goSize = 19
 let goPoints = (goSize * goSize)

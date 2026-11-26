@@ -131,4 +131,38 @@ public static class HilbertCurve {
 
         return distance;
     }
+    /// <summary>Returns the distance along the curve at a signed cell, for a grid centred on the origin: the cell is
+    /// biased by half the grid and saturated at the grid's edges, so a world coordinate of either sign (a body's cell
+    /// index) always maps to a valid point and a far outlier shares the edge's distance rather than throwing.</summary>
+    /// <param name="order">The curve order; the grid is <c>2^order</c> square, covering signed cells in
+    /// <c>[-2^(order-1), 2^(order-1))</c>. In <c>[1, 31]</c>.</param>
+    /// <param name="x">The cell's x index.</param>
+    /// <param name="y">The cell's y index.</param>
+    /// <returns>The cell's distance along the curve, in <c>[0, 4^order)</c>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="order"/> is outside <c>[1, 31]</c>.</exception>
+    public static ulong EncodeCentered(int order, long x, long y) {
+        var bound = ValidOrderBound(order: order);
+        var half = (long)(bound >> 1);
+
+        return Encode(
+            order: order,
+            x: CenterAndSaturate(bound: bound, cell: x, half: half),
+            y: CenterAndSaturate(bound: bound, cell: y, half: half)
+        );
+    }
+    /// <summary>Biases a signed cell index by half the grid and clamps it into <c>[0, bound)</c>.</summary>
+    /// <param name="bound">The grid side.</param>
+    /// <param name="cell">The signed cell index.</param>
+    /// <param name="half">Half the grid side, the bias.</param>
+    /// <returns>The unsigned grid coordinate.</returns>
+    private static uint CenterAndSaturate(uint bound, long cell, long half) {
+        if (cell < -half) {
+            return 0U;
+        }
+        if (cell >= half) {
+            return (bound - 1U);
+        }
+
+        return (uint)(cell + half);
+    }
 }

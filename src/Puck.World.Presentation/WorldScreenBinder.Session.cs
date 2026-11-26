@@ -452,6 +452,7 @@ public sealed partial class WorldScreenBinder {
         // leaves the render graph once no slot holds the feed.
         public void Dispose() {
             Emitter?.Dispose();
+            FrameSource?.Dispose();
             Route.Dispose();
             EnvelopeRegistration?.Dispose();
             EnvelopeRegistration = null;

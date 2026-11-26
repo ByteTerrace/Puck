@@ -102,12 +102,22 @@ public sealed partial class WorldGrants {
         }
     }
 
+    // Parks the body a traveler's credential names, when its source has stopped attending to it. A traveler that has
+    // walked on keeps its credential here and its body at the authority the host forwards to, so its absence is passed
+    // on: the body parks, and its reconnect grace runs, wherever it stands.
     internal void ParkTransferredPeer(string sourceAuthority, in WorldMobilityIdentity mobility) {
         lock (Host.AuthorityGate) {
             if (
                 !Host.TransferEscrow.TryMobilityPrincipal(sourceAuthority: sourceAuthority, mobility: in mobility, principal: out var principal) ||
-                (principal.Kind != PrincipalKind.Peer) ||
-                !Host.IsLivePeer(principal: principal) ||
+                (principal.Kind != PrincipalKind.Peer)
+            ) {
+                return;
+            }
+            if (!Host.IsLivePeer(principal: principal)) {
+                Host.TransferForwarder?.SetTravelerPresence(mobility: in mobility, present: false, source: Host);
+                return;
+            }
+            if (
                 Host.Population.IsParked(index: principal.Index) ||
                 !Host.Population.TryCaptureTransferredPeer(index: principal.Index, peer: out var peer)
             ) {
@@ -138,14 +148,21 @@ public sealed partial class WorldGrants {
         }
     }
 
+    // Resumes the parked body a traveler's credential names, when its source attends to it again. A traveler that has
+    // walked on is resumed at the authority the host forwards to, as ParkTransferredPeer parks it there.
     internal bool TryResumeTransferredPeer(string sourceAuthority, in WorldMobilityIdentity mobility) {
         lock (Host.AuthorityGate) {
             if (
                 !Host.TransferEscrow.TryMobilityPrincipal(sourceAuthority: sourceAuthority, mobility: in mobility, principal: out var principal) ||
-                (principal.Kind != PrincipalKind.Peer) ||
+                (principal.Kind != PrincipalKind.Peer)
+            ) {
+                return false;
+            }
+            if (
                 !Host.Population.IsAdmittedPeer(bodyIndex: principal.Index) ||
                 (Host.Population.PeerPrincipal(index: principal.Index) != principal)
             ) {
+                Host.TransferForwarder?.SetTravelerPresence(mobility: in mobility, present: true, source: Host);
                 return false;
             }
             if (!Host.Population.IsParked(index: principal.Index)) {

@@ -45,6 +45,23 @@ public sealed partial class WorldRecipientView(Func<WorldDefinition> definition,
         ? new(Source.Population.ObserverDisclosure, recipient is { Kind: PrincipalKind.Seat or PrincipalKind.Peer } body ? body.Index : -1)
         : new(WithheldBodies, -1);
     private static readonly WorldObserverDisclosure WithheldBodies = new(Mode: WorldObserverDisclosureMode.SelfOnly);
+    /// <summary>Gets the recipient's disclosure class now (<see cref="WorldDisclosureClass"/>): what decides its
+    /// replica stream's composition, read from this view's own answers, or <see langword="null"/> for a view that
+    /// observes nothing or below <see cref="WorldDisclosureTier.Replica"/>, whose stream is its own.</summary>
+    public WorldDisclosureClass? DisclosureClass {
+        get {
+            if (!Observes || (ceiling != WorldDisclosureTier.Replica)) { return null; }
+
+            var audience = images.Audience(this).Text;
+            var bodies = Bodies;
+
+            // The class answered last, while every answer it was made from stands, so a steady stream allocates none.
+            return ((m_class is { } held) && held.Holds(store: images, audience: audience, bodies: bodies))
+                ? held
+                : (m_class = new WorldDisclosureClass(store: images, audience: audience, bodies: bodies));
+        }
+    }
+    private WorldDisclosureClass? m_class;
 
     /// <summary>The document the recipient may hold at its ceiling.</summary>
     public WorldDefinition Definition {

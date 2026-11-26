@@ -119,7 +119,7 @@ public sealed partial class SdfMeshPathBake {
         private readonly SdfMeshPathBake m_bake;
         private readonly OwnedBuffer<byte> m_bytes;
         private readonly long m_granted;
-        private int m_references = 1;
+        private ClaimCount m_references = new(claims: 1);
 
         public AnsweredSamples(SdfMeshPathBake bake, long granted) {
             m_bake = bake;
@@ -139,12 +139,12 @@ public sealed partial class SdfMeshPathBake {
         /// <summary>Takes another reference, for an answer that reads the copy after its caller releases its own.</summary>
         /// <returns>This copy.</returns>
         public AnsweredSamples Share() {
-            _ = Interlocked.Increment(location: ref m_references);
+            m_references.Acquire(owner: this);
             return this;
         }
         /// <summary>Ends a reference; the last frees the copy and gives back its readback bytes.</summary>
         public void Release() {
-            if (Interlocked.Decrement(location: ref m_references) != 0) { return; }
+            if (!m_references.Release()) { return; }
             m_bytes.Dispose();
             m_bake.ReleaseReadback(bytes: m_granted);
         }

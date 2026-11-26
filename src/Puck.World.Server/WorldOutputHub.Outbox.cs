@@ -247,6 +247,7 @@ public sealed partial class WorldOutputHub {
                     batch = m_records;
                     m_records = m_replay;
                 }
+                m_replayBatch++;
                 try {
                     for (var index = 0; index < batch.Count; index++) {
                         Replay(in CollectionsMarshal.AsSpan(batch)[index], completedAt: completedAt);
@@ -264,6 +265,26 @@ public sealed partial class WorldOutputHub {
         } finally {
             m_collecting = false;
         }
+    }
+
+    // The interest frame the session sinks a collect batch replays one snapshot to share (InterestFor): the batch and
+    // the entries span it was begun over. A batch holds every loan it replays until it ends, so within one batch two
+    // equal spans are one snapshot's entries; a later batch may reuse the storage, so it begins the frame again.
+    private readonly WorldInterestFrame m_replayInterest = new();
+    private long m_replayBatch;
+    private long m_replayInterestBatch = -1L;
+    private ReadOnlyMemory<EntitySnapshot> m_replayInterestEntries;
+
+    // The interest frame a session sink projects and rosters a delivered snapshot through: the one its batch's other
+    // sinks of the same snapshot share while the collect replays, and a frame of its own otherwise (a primer).
+    internal WorldInterestFrame InterestFor(in WorldSnapshot snapshot) {
+        if (!m_collecting) { return WorldInterestFrame.ForPrimer(snapshot: in snapshot); }
+        if ((m_replayInterestBatch != m_replayBatch) || !m_replayInterestEntries.Equals(other: snapshot.Entries)) {
+            m_replayInterest.Begin(entries: snapshot.Entries);
+            m_replayInterestBatch = m_replayBatch;
+            m_replayInterestEntries = snapshot.Entries;
+        }
+        return m_replayInterest;
     }
 
     private static void Replay(in Record record, long completedAt) {

@@ -931,29 +931,21 @@ camera latch, and Vulkan's capture copy and record fork.
      anyway, so taking them before the restore point opens saves nothing
      else; the durable input's own writes of the submitted image need the
      same order first.
-   - **Every session mirror applies every snapshot.** The thread that also
-     runs the frame spends about half of its step taking the boot
-     authority's snapshots into the mirrors that observe it
-     (`WorldOutputHub.Collect`, beneath it `WorldSessionMirror.ApplySnapshot`
-     and `WorldDocumentStateView.ApplyFieldCells`): each mirror admits every
-     entry it is handed, about 8,000 entries and 5,000 cells a tick across
-     the sessions (`world.boot.session-entries-delivered` and
-     `session-cells-delivered`), most of them the same bodies for every
-     mirror of one authority. The structure is one image per authority and
-     disclosure that its mirrors share, as a world is resident once however
-     many views show it, and a stream that sends a mirror the bodies that
-     changed. Built: a replica whose frame moved with values alone takes the
-     placement rows that moved through the presentation door
-     (`WorldDeliveryCursor.TryDeliverPlacements`), though the debug world's
-     frame does not move in steady state
-     (`world.disclosure.definition-compositions` flat); a mirror fills and
-     copies its body images by its changed-body journal
-     (`WorldSessionMirror.FillImage`, `CaptureBodyImage`); the portal and
-     seam scans visit the bodies whose answer can move
-     (`WorldBoundaryScan`). Check: `host.frames`' frame thread allocation an
-     iteration (19,056 bytes at the median after these, 35,344 before), and
-     `WorldOutputHub.Collect`'s share of `FixedStepPump.Step`'s samples in a
-     quiet window.
+   - **A leader's stream still composes per tick, and every follower still
+     takes a record.** The sessions of one authority disclosed alike share
+     one image (`WorldImageClasses`): one leader's stream composes and its
+     mirror applies each snapshot, and each follower's stream delivers
+     nothing while its observer presents the leader's mirror
+     (`WorldSessionMirror.Presented`). Left on the host thread: the hub still
+     records the tick's snapshot for every session sink, followers included
+     (`WorldOutputHub.RecordSnapshot`, a loan each), since a session sink is
+     not inline and is judged only when the collect replays it; a sink judged
+     to follow at the fan-out would take no record. Left in presentation: the
+     binder builds one scene per session even where sessions present one
+     mirror. Check: `world.boot.session-entries-delivered` and
+     `session-cells-delivered` a tick fall to one stream per authority and
+     class, `session-snapshots-followed` counts the rest, and `outbox-records`
+     a tick for the followers once they take none.
 
    Left, in the order the debug world spends them:
    - **An arm that would change nothing.** A Level rule that poses a body every
@@ -1072,28 +1064,23 @@ check missed is baked by that boot and listed under the record's
   pace, several times slower than a paused, tick-locked bake. Let the fill
   end when its ladders are whole. Under the ladder policy `world.wait ready`
   also times out.
-- [high · unconfirmed] The RTX 2060's player build drew the glacier's ice
-  edges and the rim slope as large flat facets up close: a floor, the
-  coarsest tier, drawn where a finer one was asked. Two causes fit, and the
-  code alone cannot tell them apart. A group that arrives in view draws its
-  stored floor at once and then owes its first detail; if the store holds
-  that tier it loads outside the budget, and if the store lacks it and holds
-  no tier between, nothing starts (`SdfMeshPathBake.StartReplacement`): the
-  tier waits its hold as an ordinary owed tier and bakes only when the detail
-  budget has room, so on a card whose budget is full the floor keeps drawing.
-  Or every tier is stored and the budget's bias has coarsened the demand to
-  the floor. Read, on the 2060 at the glacier: the log's `[sdf.mesh-bake]
-  rung-missed` lines (each names its group, the tier asked, the tier drawn
-  and the ladder), `world.counters sdf.mesh-cache` (`rungs-missed` less
-  `rungs-missed-live`, `groups-baked`, `dispatches`) and `world.residency`'s
-  tier line (`tiers-held-back`, `detail-bias`, `region-budget`,
-  `region-named`). Missed tiers with `tiers-held-back` above zero is a cache
-  gap the budget then holds: complete the fill (the item on a tick-locked
-  fill above; a ladder fills coarsest first, so a fill cut short lacks its
-  finest tiers), and decide whether a player's missed first detail is the
-  arrival's own bake again. No missed tier with a bias above zero is the
-  device budget: the card's fixed storage leaves detail too little room,
-  which is the device-memory items' work.
+- [high] The rim slope by the glacier draws as large flat facets up close on
+  every build, not only the RTX 2060's player build: a developer build under
+  the demand policy (Vulkan at 1920 by 1080, `debug.go glacier`, bakes
+  settled, `rungs-missed` 0, `tiers-owed` 0) shows them as plainly. It is no
+  cache gap. The slope is the north-west sector, one static union group whose
+  final lattice is capped (`SdfMeshPathBake.UnionFinal`): `puck mesh audit
+  --prototype valley-north-west --eye -341.99,362.9,377.34` on that boot's
+  store read its mesh at a 3.68 m cell, 183,208 triangles over the whole
+  sector, so no tier the demand asks brings it finer near the eye. The terrain
+  tiles lift it ([the terrain pass](terrain-pass.md#what-the-bake-needs),
+  step 2, on the streaming plan's step 10). Still to read: whether the
+  glacier's own ice edges are the same limit (its creation is one group whose
+  relief bakes over its whole box), with the same audit on `--prototype
+  glacier`. The 2060's three `rung-missed` lines were a water height field's
+  reference at boot (only a height field reads a sampled field in the debug
+  world, and only a sampled reader's misses turn live), drawn a stored tier
+  for the seconds until its first resample made it live.
 - [medium] A residency no authored spawn point shows gets no ladder, so a
   player who opens one counts `rungs-missed`. Give such a place a spawn
   point, or give the fill a door that draws every residency a world can open.
@@ -1141,11 +1128,36 @@ open.
   - What a hosted world's rules write on a guest's identity copy ends with the
     guest's body. Player progress that outlives a visit needs a record the
     group owns and restores with itself.
-  - The law covers one entry row. A restore taken after a guest walked from one
-    world of the group to another rests on each row ending what it holds by
-    the traveler's origin, which no law runs. Check: the probe hops the guest
-    from `alpha` to `beta` before its capture and both restored rows hold no
-    guest and no forwarding route.
+  - The law walks a guest from `alpha` to `beta` and ends it there when its
+    grace runs out, but takes its capture before the walk. A restore taken
+    after a guest walked on rests on each row ending what it holds by the
+    traveler's origin, which no law runs. Check: the probe hops the guest
+    before its capture and both restored rows hold no guest and no forwarding
+    route.
+  - A world that retires a traveler's body tells its host, which drops the
+    routes and credentials of the worlds that forwarded to it on its next loop
+    (`IWorldTransferForwarder.RetireTraveler`). A process that dies between
+    the two leaves the forwarding world with a route to a traveler its
+    neighbour no longer holds, and the player's client is answered
+    `RouteUnknown` there until the next restore. Check: when a recovered route
+    binds its colocated destination (`WorldInstanceHost.ResolveForwardedRecoveries`),
+    retire it if the destination holds no credential for the traveler, and
+    show a crash between the retirement and the drain recovers to no route.
+  - The same word stops at a socket. A traveler retired by a world in another
+    process is retired upstream only when an accepted leave's answer comes
+    back, and a player's absence reaches a remote hop only as the streams to
+    it ending. Closed groups run in one process, so this is an open-world
+    gap. Check: a forwarding world retires its route when its next hop
+    answers that it holds no credential for the traveler.
+  - Two parts of the guest design are covered by their predicate and not by a
+    run. A federation handshake by a vouched identity that signed for no
+    session is refused its credential (`WorldTransferBoundary.CredentialRefusal`),
+    and the law asks the predicate, since the engine's own client always signs
+    a session. A seat whose traveler ended while its departure is still in
+    doubt is returned by that departure alone (`WorldInstanceHost.ReturnSeatHome`),
+    and the law's restore finds the departure already settled. Check: a
+    session-less issued claim against a closed group's door, and a restore
+    taken between a client's commit and its settlement.
   - A crash recovery redoes arrivals from the crossing log and no retirement
     the tick made between them. Two arrivals in one journal tail, with the first
     traveler retired in between, redo as two bodies, and a second arrival that
@@ -1602,14 +1614,13 @@ manifest parts it met (`world.boot.manifest.parts-walked` +275, `.replayed`
   threads, and their garbage stops the frame thread: every gen1 collection
   suspends it, and the stalls at the garden painting and the lift were frames
   holding several gen1 pauses beside the frame's own work. Per rebuild, read by
-  allocation tick (`puck host allocations --focus`): the composition's program
-  (`SdfProgram`'s word arrays, about 150 MB a build on the large object heap,
-  `SdfCompositionFrameSource.StartBuild`), and the presentation field
-  (`WorldFramePresenter.RebuildStaticField`, about 280 MB: a whole static
-  program and its field evaluator, `SdfFieldEvaluator.BuildRotationBounds` and
-  `SdfBoundsCache` among it). Build each from the one it replaces by the rows
-  that changed, or keep their storage owned and reused. Check: allocation by
-  site over the lift chapter, and no frame with more than one collection.
+  allocation tick (`puck host allocations --focus`): the presentation field's
+  evaluator (`WorldQueryField.PartOf`, about 68 MiB a palette edit, its compiled
+  stream and segment tables; its program and the composition's are native under
+  claims, [residency and streaming](#residency-and-streaming)). Build it from the
+  one it replaces by the rows that changed, or keep its storage owned and reused.
+  Check: allocation by site over the lift chapter, and no frame with more than
+  one collection.
 - [high] Each delivery that replaces a placements section still builds a new
   `WorldPlacementStamp` compilation context; frames now resolve on demand and
   a surface descriptor is carried from any context whose rows and creations it
@@ -2022,7 +2033,7 @@ Remaining detailed findings and smaller cuts in this area:
   detail derive from what the document means:
   - a static group's detail follows the whole group's size, so authors split
     one object into prototypes to keep detail (`devices.puck`, `desktop.puck`,
-    `hall.puck`);
+    `gallery/gallery.puck`);
   - a warped shape bakes alone and forces the next shape alone, so shape order
     changes grouping (`WorldPlacementStamper`);
   - every text run bakes as its own group;
@@ -2285,29 +2296,26 @@ check; this packet holds the defects beside it.
   readings (`SdfMeshPathBake.FrustumWatches`); the lattice's weld, crease split and refinement
   masks (`SdfSampledLattice`), the triangle grid, the trace judge's joined mesh, the store codec's
   planes, the volume's refill words, `DisjointSet` and `SpanDistinct`; and the canonical document
-  serializer (`CanonicalJsonDocument`, through `OwnedBufferWriter<T>`). `RentedArrays` keeps only
-  the shared pool's buckets; its large pool is gone. What still allocates large managed arrays:
-  - `SdfProgram` allocates fresh arrays on every field build (its words, the instruction copy, the
-    appearance section and the analysis passes' tables), about 320 MiB over a route: the debug
-    world's composed program is about 5.3 million words, so each field rebuild in
-    `SdfCompositionFrameSource` allocates tens of megabytes. Native storage needs an owner whose
-    last reader frees it, and the program is held across threads by the composition, every
-    `SdfFrame`, `SdfWorldTables`' live, background, shading and paint programs, the bake
-    (`SdfMeshPathBake` and its prepared frame), the dresser, the presenters and pick results, and
-    weakly by `SdfProgramDelta`. Give `SdfProgram` a claim count (`Acquire`/`Release`, the
-    composition holding the first) and move every holder to swap claims at one door, then move the
-    words and the instruction stream to owned storage freed at the last release; a rebuild then
-    reuses the replaced program's storage when it holds the last claim. A use after free here is a
-    crash in presentation, so the change needs a windowed run in the same batch.
-  - The probe cache's publication columns (`PublishArena`, 42 arrays of 3.7 MB live) hold
-    `ProbeBlock` and `LightBlock` references in each `ProbeData` slot, and each table's keys,
-    flags and entry indices are managed arrays. Give the blocks indices in a registry whose slots
-    are reused only after the reader epochs reclaim a block, keep `ProbeData.Hits` and `Shading` as
-    properties over those indices, then store an arena of unmanaged values natively; a table the
-    cache drops (the spare it replaces, the volume's end) frees its columns.
-  - A far product derived on a miss still builds its cluster's mesh, its chunks and its levels in
-    managed arrays before the library copies the result; only its tables are native. It runs once
-    per product per store.
+  serializer (`CanonicalJsonDocument`, through `OwnedBufferWriter<T>`); a composed program's
+  words, appearance section and instructions, under claims (`SdfProgram.Storage.cs`,
+  `SdfCompositionFrameSource.ProcessStorage`); and the probe cache's tables and entry arenas
+  (`PublishArena` with an allocator, `ProbeData` naming its blocks by registry index).
+  `RentedArrays` keeps only the shared pool's buckets; its large pool is gone. What still
+  allocates large managed arrays:
+  - The presentation field's evaluator (`SdfFieldEvaluator`, built per rebuild by
+    `WorldQueryField.PartOf`) compiles its stream (`CompiledInstruction[]`, about 28 MB, which
+    holds references for its polygon, path and relief side data), its rotation bounds (11 MB) and
+    its segment, reach and cull tables on the managed heap, about 68 MiB a palette edit. Move the
+    side data to tables indexed by instruction so the compiled stream is a value of no
+    references, keep the evaluator's tables in owned storage, and give the published field
+    (`WorldClient.StaticField`) reader holds so a replaced field is freed only once its readers
+    have left (`ReaderEpochs`). The program constructor's analysis tables (`AnalyzeBounds`' bound
+    records, root frames, relief masks) still allocate about 6 MiB a build.
+  - A far product derived on a miss, and every mesh the bake lands, is built as managed records
+    by the planar merge, the collapse's levels and the chunk join (`SdfMeshPlanarMerge.Merge`,
+    `SdfMeshCollapse.Levels`, `SdfMeshChunks.Bake`, and for the product `SdfMeshCluster.Build`)
+    before the library copies it natively (`SdfMesh.NativeCopy`). Write those stages' output into
+    an `SdfMeshStorage` so the library publishes the mesh they built.
   Check: the 2060's route ends under its host bar with the LOH flat across loops, and
   `puck host heap` reads live large objects near the heap's large-object bytes.
 - [medium] **Read the native allocator's slack on the RTX 2060's route.** The 2060 read 1.83 GB
@@ -5119,17 +5127,17 @@ the stages; this packet holds what a stage does not.
 - [medium] `host.frames` reads the host loop's interval and never the time a
   frame was displayed, so judder that an even interval hides is not read
   (`HostFrameTimeline`). Stage 8 adds the displayed interval.
-- [medium] On a remote authority (`puck benchmark --route debug --remote local
-  --headless`, which now arrives in all seven chapters at `Presentation`
-  disclosure over `worlds/debug`'s authored `authorityNamespace` and
-  `visitorAdmissionRow`), an observer that falls eight records behind is
-  detached and reconnects (`WorldFederationProjectionSink.PendingDeliveryLimit`).
-  Each detach withdraws the mirror to `Undisclosed` until the projection
-  re-arrives and re-admits the traveller's input profile, dropping batches that
-  named the prior input epoch.
-- [medium] `--connect` resolves the expected remote `authorityNamespace` from
-  the booted document (`WorldInstanceHost`'s remote destination resolution)
-  rather than taking the remote subject as a CLI run input beside the endpoint.
+- [low] An observer whose wire falls a full queue behind is no longer detached:
+  it is sent nothing while its wire drains, and the next delivery cuts its
+  stream to a new generation and sends the whole projection and a primer behind
+  the cut (`WorldFederationProjectionSink.ResumeDeliveryLimit`). Two parts are
+  left. The catch-up rides a delivery, so on a paused authority, which makes
+  none, a drained observer keeps what it held until the world steps; and the
+  receiver's side of a catch-up has been read only as records on the wire.
+  Check: `puck benchmark --route debug --remote local --jitter-ms <n>` at a
+  jitter that fills the queue arrives in every chapter with no
+  `world.observation.backpressure` line, and a paused authority's observer is
+  primed when its wire drains.
 - [medium] A replica dealt to a recipient who may not read a cell still carries
   the rules that read it (`WorldStateDisclosure.Disclose` withholds the cell and
   the rule is sent whole). The receiver no longer refuses the document, since it
@@ -6116,7 +6124,7 @@ content on the owner's call.
   ([the seam walk](streaming-and-memory.md#the-seam-walk)): a hub of large
   worlds and a crowd of distinct looks; the walk's three crossings are the
   debug world's `seams` route.
-- [medium] The lift (`worlds/debug/hall.puck`), the owner's example of polish
+- [medium] The lift (`worlds/debug/gallery/gallery.puck`), the owner's example of polish
   as engine systems doing real work, on the owner's go: its displays as one
   emulated machine running an authored cartridge, mirrored to every panel and
   driven by the lift's state cells, after confirming a generic

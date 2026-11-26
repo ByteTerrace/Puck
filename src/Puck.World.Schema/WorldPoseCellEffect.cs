@@ -11,7 +11,9 @@ namespace Puck.World;
 /// <param name="glide">Whether the body moves there as continuous motion rather than a teleport.</param>
 /// <param name="roll">The roll, in radians, a teleport stands the body at.</param>
 /// <param name="pitch">The pitch, in radians, a teleport stands the body at.</param>
-public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, CompiledExpressionToken[] expression, FixedVector3 offset, bool glide = false, FixedQ4816 roll = default, FixedQ4816 pitch = default) : WorldFactEffect(describe: $"poseCell {topology}", reach: WorldDisclosureReach.Bodies) {
+/// <param name="frame">The placement whose composed frame the cell and the offset are read in, or
+/// <see langword="null"/> for the world.</param>
+public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, CompiledExpressionToken[] expression, FixedVector3 offset, bool glide = false, FixedQ4816 roll = default, FixedQ4816 pitch = default, string? frame = null) : WorldFactEffect(describe: $"poseCell {topology}", reach: WorldDisclosureReach.Bodies) {
     /// <summary>The position of the cell ordinal among the sources.</summary>
     public const int CellSource = 0;
 
@@ -21,6 +23,9 @@ public sealed class WorldPoseCellEffect(WorldBodyRef body, string topology, Comp
     public override EffectSource[] Sources { get; } = [EffectSource.Expression(kind: CellKind.Int, program: expression)];
     /// <summary>Gets the topology name.</summary>
     public string Topology { get; } = topology;
+    /// <summary>Gets the placement whose frame the cells and the offset are read in, or <see langword="null"/> for
+    /// the world.</summary>
+    public string? Frame { get; } = frame;
     /// <summary>Gets the cell expression.</summary>
     public CompiledExpressionToken[] Expression { get; } = expression;
     /// <summary>Gets the displacement from the cell centre.</summary>

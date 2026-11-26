@@ -893,26 +893,55 @@ that signs in through it and holds no key the document pins.
 (`WorldSiloReleaseManagement.ClosedGroupRewind`) refuses every transfer from
 outside its inventory, because a restore would forget what an outside source
 remembers. A player's party comes from outside too: its source is the client's
-own session. The group admits it as a guest, on four terms.
+own session. The group admits it as a guest, on five terms.
 
 - **Who.** A network caller whose verified identity carries a session a chain
   under the host's own issuer root vouched for (`VerifiedPeerIdentity.Session`).
   A name never decides it. A world of the group is a caller inside the silo's
   process (`WorldTransferCaller.Colocated`), so a sign-in subject that spells
-  a world's name is still outside.
-- **What.** Human seats only, each landing at the world's own spawn, naming an
-  incarnation its own session minted, with no companion, no title, no carried
-  motion and nothing to drive (`WorldTransferBoundary.GuestReservationRefusal`,
-  `WorldTransferBoundary.GuestCommitRefusal`). A guest brings a copy of its
-  identity and takes nothing out: a closed group sends no body outside itself.
+  a world's name is still outside. A federation connection that is not such a
+  session is given no credential at all
+  (`WorldTransferBoundary.CredentialRefusal`), so the doors that read a
+  connection's namespace (leave, submission, observation) only ever read a
+  guest's.
+- **What.** Seats a person holds (a live source, or an idle one a person set,
+  never a producer's), each landing at the world's own spawn with no arrival
+  turn, naming an incarnation its own session minted, with no companion, no
+  title, no carried motion and nothing to drive. The door shapes what it
+  admits before anything compares, leases or records it
+  (`WorldTransferBoundary.GuestReservationRefusal`,
+  `WorldTransferBoundary.GuestCommitRefusal`): the border is the world's own,
+  the body index is the world's to choose, and the identity lands as
+  `WorldTransferBoundary.GuestIdentity` leaves it. Its id is the subject the
+  issuer vouched for. Its name and colour are the player's own, shown and never
+  read as proof. Its speeds, facts and records are not carried, because a
+  world's rules read them and the group holds no copy to check them against: a
+  guest moves at the world's kit rates and starts from the world's defaults. A
+  guest takes nothing out either: a closed group sends no body outside itself.
+- **How much.** A guest session holds at most
+  `WorldTransferLimits.GuestTransferKeysPerSession` ledger rows in a world, and
+  all guests together at most `WorldTransferLimits.GuestTransferKeys`. Guests
+  are counted apart: the bounds on the group's own worlds count no guest's row,
+  transaction or credential, so no number of players present refuses a portal
+  inside the group. A guest's question about a key that holds no row is
+  answered `Missing` and writes nothing.
 - **How long.** A world keeps a session's transfer keys and traveler
   credentials only while the session holds a live reservation or a landed
   traveler there (`WorldTransferEscrow.ReclaimGuest`). For a session it holds
-  nothing of it answers `WorldTransferStatus.Ended` and writes nothing.
+  nothing of it answers `WorldTransferStatus.Ended` and writes nothing. A
+  traveler that walked on to another world of the group stays live at the
+  world it left, as a credential and a route, until its body is retired where
+  it stands; that world then tells the host, and every world that forwarded to
+  it drops its route and credential
+  (`IWorldTransferForwarder.RetireTraveler`). The player's absence travels the
+  same way, so the body parks and its reconnect grace runs wherever it stands
+  (`IWorldTransferForwarder.SetTravelerPresence`).
 - **At a restore.** A recovery point is a baseline
   (`WorldTransferEscrowCheckpoint.RewindBaseline`): restoring it ends every
   traveler minted outside the group and drops every row of an outside source,
-  inside the restore function, before any tick or admission.
+  inside the restore function, before any tick or admission. A release restore
+  refuses a point whose baseline is absent or names other authorities than its
+  own inventory (`WorldReleaseRewindBoundary.RequireBaseline`).
 
 **The invariant and its enforcement.** After any capture and restore the group
 owes nothing to anyone outside it, and no player body exists twice. One door
@@ -922,7 +951,11 @@ it returns (`WorldTransferAdmission`), so a new caller cannot reach the ledger
 around it. Custody questions from the network are refused in `WorldPeerHost`
 before the server is asked. The restore half is enforced by the checkpoint's
 own bytes: `WorldPersistence.EndRewoundGuests` runs for every reader of a
-baseline. The guarantee stops at the process (code inside the silo is
+baseline. Which sources are guests is the door's decision, recorded in the
+ledger when a session's first reservation is admitted
+(`WorldTransferEscrowCheckpoint.Guests`) and carried by each crossing record
+and taped arrival, so a replay that has no boundary reclaims a session where
+the live world did. The guarantee stops at the process (code inside the silo is
 trusted), at the issuer (a player is who its sign-in says) and at the body:
 what the world's rules gave a guest ends when its body does.
 

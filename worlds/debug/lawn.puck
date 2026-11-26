@@ -2,7 +2,7 @@
 // foliage families (../standard/foliage.puck) placed in groups along the paths and banks, the middle left open. The
 // paths and the turf are the floor's paints (debug.puck's ground, from lawnPaths here). Positions are world X/Z, and
 // every member is computed from its group by a golden-angle sequence, so the tables say only where each group stands.
-// Kept clear: the hall (x 10 .. 70, z 12 .. 40), the studio (x 24 .. 72, z -76 .. -20), the stream and pool corridor
+// Kept clear: the gallery and its forecourt (x 10 .. 72.3, z 0.7 .. 40), the studio (x 24 .. 72, z -76 .. -20), the stream and pool corridor
 // west of x -38, the camera course, the combat yard and the climate wing.
 import "../standard/foliage"
 import "meadow"
@@ -38,7 +38,7 @@ let lawnGroups = [
   { center [77, -47], kind: "weeping", count: 1, radius: 0, seed: 9 }
   { center [-2, -40], kind: "oak", count: 1, radius: 0, seed: 10 }
   { center [6, 8.5], kind: "column", count: 1, radius: 0, seed: 11 }
-  { center [66, 6], kind: "column", count: 1, radius: 0, seed: 12 }
+  { center [76, 5], kind: "column", count: 1, radius: 0, seed: 12 }
   { center [-20, 6], kind: "flat", count: 1, radius: 0, seed: 13 }
   { center [-15, -31], kind: "scrub", count: 3, radius: 1.6, seed: 1 }
   { center [-16, -62], kind: "scrub", count: 3, radius: 1.6, seed: 2 }
@@ -49,10 +49,10 @@ let lawnGroups = [
   { center [66, -2], kind: "scrub", count: 3, radius: 1.5, seed: 7 }
   { center [90, -20], kind: "scrub", count: 3, radius: 1.6, seed: 8 }
   { center [75, -58], kind: "scrub", count: 3, radius: 1.6, seed: 9 }
-  { center [24, 9], kind: "scrub", count: 3, radius: 1.4, seed: 10 }
-  { center [36, 9], kind: "scrub", count: 3, radius: 1.4, seed: 11 }
-  { center [48, 9], kind: "scrub", count: 3, radius: 1.4, seed: 12 }
-  { center [60, 9], kind: "scrub", count: 3, radius: 1.4, seed: 13 }
+  { center [14, 9], kind: "scrub", count: 3, radius: 1.4, seed: 10 }
+  { center [19, 5], kind: "scrub", count: 3, radius: 1.4, seed: 11 }
+  { center [74, 9], kind: "scrub", count: 3, radius: 1.4, seed: 12 }
+  { center [75, -1], kind: "scrub", count: 3, radius: 1.4, seed: 13 }
   { center [-26, -36], kind: "scrub", count: 3, radius: 1.6, seed: 14 }
   { center [-2, -35], kind: "boulder", count: 3, radius: 1.8, seed: 1 }
   { center [-14, -72], kind: "boulder", count: 2, radius: 1.5, seed: 2 }

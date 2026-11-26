@@ -17,6 +17,7 @@ internal sealed class WorldDeferredForwardedAuthority(WorldForwardingDestination
     public bool IsBound => (Volatile.Read(location: ref m_current) is not null);
 
     public WorldForwardingDestination DescribeForCheckpoint() => m_destination;
+    public void SetPresence(bool present) => Volatile.Read(location: ref m_current)?.SetPresence(present: present);
     public void Dispose() => Retire(final: true);
     public void Invalidate() => Retire(final: false);
     // Unbinds the current arm and disposes it outside the gate; a final retirement also refuses every later bind.

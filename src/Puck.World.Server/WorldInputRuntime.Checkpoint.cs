@@ -103,7 +103,9 @@ public sealed partial class WorldInputRuntime {
         }
     }
     /// <summary>Hashes all future-decision state in canonical order, with no temporary allocations.</summary>
-    public void AppendStateHash(ref Fnv1aHash hash) {
+    /// <param name="hash">The running hash.</param>
+    /// <param name="recompute">Whether each owner folds its retained state afresh rather than from its cached digest.</param>
+    public void AppendStateHash(ref Fnv1aHash hash, bool recompute = false) {
         Interval.AppendStateHash(hash: ref hash);
         hash.Add(value: ((uint)m_intervalCount));
         var start = (((m_intervalNext - m_intervalCount) + m_intervals.Length) % m_intervals.Length);
@@ -124,7 +126,7 @@ public sealed partial class WorldInputRuntime {
             }
             // SeatModes is document order, which is also the stable authority's cell layout.
             foreach (var family in m_host.Document.Definition.SeatModes) { hash.Add(value: family.Name); hash.Add(value: owner.SeatStates[family.Name]); }
-            owner.Input.AppendStateHash(hash: ref hash);
+            owner.Input.AppendStateHash(hash: ref hash, recompute: recompute);
         }
     }
 }

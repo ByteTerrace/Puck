@@ -4,7 +4,7 @@ import "shapes"
 import "gametable"
 
 // The granary board: the deployment's storage accounts as pieces on a tabletop board, at the board game room's
-// south-east table on level 2 (hall.puck). The debug world imports this file whole (before alchemy, so its cursor takes
+// south-east table on level 2 (gallery/gallery.puck). The debug world imports this file whole (before alchemy, so its cursor takes
 // the population's top slot; shapes.puck's granaryBodies). granaries.md beside this file says how to read the board,
 // run it against the synthetic feed and point it at a live subscription.
 //
@@ -25,7 +25,7 @@ import "gametable"
 // A seated player moves the cursor over the grid (pointer, keys, pad: the shared board page of chess.puck) and the
 // lectern's screen reads the piece under it: name, region, kind and SKU.
 
-let granaryTable = [65, 8.55, 14.6]
+let granaryTable = [65, 8.55, 10.3]
 let granarySize = 4
 let granaryCells = (granarySize * granarySize)
 let granaryCellSize = 0.15

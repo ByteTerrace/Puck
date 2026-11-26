@@ -99,18 +99,46 @@ public sealed partial class WorldBody {
     // against a body already leaned onto a ceiling would read that ceiling's own floor as a ceiling.
     private FixedVector3 HoldGravityUp {
         get {
-            if (
-                TrySolvedGravity(acceleration: out var acceleration) &&
-                (acceleration.Length >= MinFieldUpMagnitude)
-            ) {
-                var down = acceleration.Normalize();
+            var gravity = default(SolvedGravityRead);
 
-                if (down != FixedVector3.Zero) {
-                    return -down;
-                }
+            return gravity.Up(body: this);
+        }
+    }
+
+    // One read of the body's solved gravity (TrySolvedGravity), its magnitude and the hold up axis it gives, taken on
+    // first use and kept for the caller's span: a fact mask or a hold test that asks several of them samples the field
+    // and takes the root once.
+    private struct SolvedGravityRead {
+        private bool m_known;
+        private bool m_upKnown;
+        private FixedVector3 m_up;
+
+        public bool Has { get; private set; }
+        public FixedVector3 Acceleration { get; private set; }
+        public FixedQ4816 Magnitude { get; private set; }
+
+        public SolvedGravityRead Read(WorldBody body) {
+            if (!m_known) {
+                m_known = true;
+                Has = body.TrySolvedGravity(acceleration: out var acceleration);
+                Acceleration = acceleration;
+                Magnitude = (Has ? acceleration.Length : FixedQ4816.Zero);
             }
+            return this;
+        }
+        // The axis every hold cone is measured against: against the solved pull when it is strong enough to name a
+        // direction, else world up.
+        public FixedVector3 Up(WorldBody body) {
+            if (m_upKnown) { return m_up; }
+            _ = Read(body: body);
+            m_up = FixedVector3.UnitY;
+            if (Has && (Magnitude >= MinFieldUpMagnitude)) {
+                var down = Acceleration.Normalize();
 
-            return FixedVector3.UnitY;
+                if (down != FixedVector3.Zero) { m_up = -down; }
+            }
+            m_upKnown = true;
+            return m_up;
         }
     }
 
@@ -1335,7 +1363,7 @@ public sealed partial class WorldBody {
     }
     // Whether the body is holding a surface the contact resolve would refuse to stand it on — the published
     // HoldingUnwalkable fact, stated over the world's own walkable threshold rather than any creature's idea of a wall.
-    private bool HoldsUnwalkableSurface() {
+    private bool HoldsUnwalkableSurface(ref SolvedGravityRead gravity) {
         if (
             !TryCurrentHold(hold: out var hold) ||
             (hold.Bond != BodyHoldBond.Surface) ||
@@ -1344,7 +1372,7 @@ public sealed partial class WorldBody {
             return false;
         }
 
-        return !WalkableUnderHoldUp(normal: m_holdNormal);
+        return (FixedVector3.Dot(left: m_holdNormal, right: gravity.Up(body: this)) < m_walkableThreshold);
     }
     // Whether a face is ground by the world's walkable threshold, measured from HoldGravityUp as every hold cone is, so
     // a ceiling a turned-over field stands the body on is a floor here too.

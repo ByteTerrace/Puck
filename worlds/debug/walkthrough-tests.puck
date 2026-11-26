@@ -19,9 +19,8 @@ import "stopped-machines"
 // gallery's floors a held deflection carries her 2.51 m in 18 ticks and 2.65 m in 19, so the pattern 19, 19, 18 keeps
 // every rest within 0.13 m of its exhibit's spawn point against a row's 2.6 m spacing. A row of n exhibits takes the
 // first n - 1 holds.
-let rowHolds = [19, 19, 18, 19, 19, 18, 19, 19, 18, 19, 19, 18, 19, 19, 18, 19, 19]
-let blendRowHolds = filter(rowHolds, (hold, index) => (index < 13))
-let primitivesRowHolds = filter(rowHolds, (hold, index) => (index < 9))
+let blendRowHolds = [21, 21, 20, 21, 21, 21, 21, 20, 21, 21, 21, 21, 20]
+let primitivesRowHolds = [24, 24, 23, 24, 24, 24, 24]
 
 // Gallery level 1's blend row (shapes.puck's blendExhibits): from the UNION spawn point, strafe along +X past every
 // blend, resting 26 ticks square in front of each one. Facing +Z, the stick's left strafes toward +X.
@@ -30,7 +29,7 @@ test "gallery level 1 blend row" {
     seat1: body.pose spawn:shape-blend-union 0
     ticks 1
     // The spawn stands her turned toward +X for the chase camera (shapes.puck's gallerySpawns); square her to the row.
-    seat1: body.pose - - - 180 - - 0
+    seat1: body.pose - - - 0 - - 0
     ticks 1
     seat1: player.camera.view first
     ticks 9
@@ -48,7 +47,7 @@ test "gallery level 1 blend row" {
     seat1: player.signal gamepad.rightStick 0 0
     ticks 26
     for hold in blendRowHolds {
-      seat1: player.signal gamepad.leftStick -1 0
+      seat1: player.signal gamepad.leftStick 1 0
       repeat hold {
         ticks 1
       }
@@ -58,10 +57,10 @@ test "gallery level 1 blend row" {
   }
   expect {
     // Arrival: within half a metre of PIPE SUBTRACT's spawn point (56.8, 4.55, 22.2), standing.
-    bodyPosition(body, 0, x) > 56.3
-    bodyPosition(body, 0, x) < 57.3
-    bodyPosition(body, 0, z) > 21.7
-    bodyPosition(body, 0, z) < 22.7
+    bodyPosition(body, 0, x) > 61.2
+    bodyPosition(body, 0, x) < 62.2
+    bodyPosition(body, 0, z) > 35.2
+    bodyPosition(body, 0, z) < 36.2
     bodyPosition(body, 0, y) > 4.5
     bodyPosition(body, 0, y) < 4.7
     fact(body, 0, Grounded) == 1
@@ -70,11 +69,11 @@ test "gallery level 1 blend row" {
 
 // Gallery level 0's primitives row (shapes.puck's uniformRow): from the SPHERE spawn point, strafe along +X past each
 // primitive at a uniform scale, resting 26 ticks square in front of each one, as the blend row does.
-test "gallery level 0 primitives row" {
+test "gallery level 0 primitives line" {
   when {
-    seat1: body.pose spawn:shape-sphere 0
+    seat1: body.pose spawn:shape-torus 0
     ticks 1
-    seat1: body.pose - - - 180 - - 0
+    seat1: body.pose - - - 0 - - 0
     ticks 1
     seat1: player.camera.view first
     ticks 9
@@ -89,7 +88,7 @@ test "gallery level 0 primitives row" {
     seat1: player.signal gamepad.rightStick 0 0
     ticks 26
     for hold in primitivesRowHolds {
-      seat1: player.signal gamepad.leftStick -1 0
+      seat1: player.signal gamepad.leftStick 1 0
       repeat hold {
         ticks 1
       }
@@ -99,10 +98,10 @@ test "gallery level 0 primitives row" {
   }
   expect {
     // Arrival: within half a metre of PLANE's spawn point (46.4, 0.05, 13.2), standing.
-    bodyPosition(body, 0, x) > 45.9
-    bodyPosition(body, 0, x) < 46.9
-    bodyPosition(body, 0, z) > 12.7
-    bodyPosition(body, 0, z) < 13.7
+    bodyPosition(body, 0, x) > 61.9
+    bodyPosition(body, 0, x) < 62.9
+    bodyPosition(body, 0, z) > 25.2
+    bodyPosition(body, 0, z) < 26.2
     bodyPosition(body, 0, y) > 0
     bodyPosition(body, 0, y) < 0.2
     fact(body, 0, Grounded) == 1

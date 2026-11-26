@@ -471,6 +471,11 @@ narrow invariant classes above (a cache and its invalidation, a concurrency
 primitive, a trust boundary), and then as a page the build lane writes for
 itself, not a memo that waits on a round.
 
+While the owner pairs with the lead, a lane's finish line is code that builds (the owner's ruling: "Have the lanes
+focus on getting the code implemented, we will do build and testing ourselves in the pair session/merge"). It runs no
+boot, test or windowed leg of its own, except a reading only its machine can take, and names what the lead should
+run at merge under **Needs you**.
+
 A continuation whose cause a lane already traced is an implementation lane
 (the owner's correction, after a campaign lane spent three passes reading and
 landed no code, and its continuation was briefed to Fable: "should be Opus,

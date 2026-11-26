@@ -475,7 +475,7 @@ public sealed partial class WorldCreationInstances {
         // the client's view has not grown to yet reads inactive.
         if (
             (live is { Row.Attach: { } parked }) &&
-            (!WorldBodiesLimits.IsBodyIndex(index: parked.BodyIndex) || !client.IsActive(index: parked.BodyIndex))
+            !WorldAttachedPose.IsRiding(attach: parked, source: client)
         ) {
             // A parked row is drawn nowhere, so it rates no body it reads (ReaderHertz reads PackedRoot).
             live.PackedRoot = null;

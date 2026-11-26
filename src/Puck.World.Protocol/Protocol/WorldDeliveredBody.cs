@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Numerics;
 using Puck.Physics.Motion;
 
@@ -23,28 +22,18 @@ public readonly record struct WorldDeliveredBody(bool Active, ulong Tick, float 
     /// two delivered positions, zero when the step has no length or the delivery snapped the body.</summary>
     public Vector3 Velocity => ((StepSeconds > 0f) ? ((Position - PreviousPosition) / StepSeconds) : Vector3.Zero);
 }
-/// <summary>What a session mirror's deliveries have cost: each kind's count and the time its delivering thread spent
-/// applying it, in <see cref="Stopwatch.GetTimestamp"/> units.</summary>
+/// <summary>The deliveries a session mirror has applied, each kind's count.</summary>
 /// <param name="Snapshots">The tick images applied.</param>
-/// <param name="SnapshotTicks">The time spent applying them.</param>
-/// <param name="Definitions">The whole definitions applied.</param>
-/// <param name="DefinitionTicks">The time spent applying them, their subscribers included.</param>
+/// <param name="Definitions">The whole definitions and presentation rows applied.</param>
 /// <param name="States">The value-only definition deliveries applied.</param>
-/// <param name="StateTicks">The time spent applying them, their subscribers included.</param>
-public readonly record struct WorldDeliveryWork(long Snapshots, long SnapshotTicks, long Definitions, long DefinitionTicks, long States, long StateTicks) {
-    /// <summary>Gets the time spent applying every kind, in milliseconds.</summary>
-    public double Milliseconds => (((SnapshotTicks + DefinitionTicks + StateTicks) * 1000.0) / Stopwatch.Frequency);
-
-    /// <summary>Returns the work done between an earlier reading and a later one.</summary>
+public readonly record struct WorldDeliveryWork(long Snapshots, long Definitions, long States) {
+    /// <summary>Returns the deliveries applied between an earlier reading and a later one.</summary>
     /// <param name="later">The later reading.</param>
     /// <param name="earlier">The earlier reading.</param>
     /// <returns>The difference, member by member.</returns>
     public static WorldDeliveryWork operator -(WorldDeliveryWork later, WorldDeliveryWork earlier) => new(
-        DefinitionTicks: (later.DefinitionTicks - earlier.DefinitionTicks),
         Definitions: (later.Definitions - earlier.Definitions),
-        SnapshotTicks: (later.SnapshotTicks - earlier.SnapshotTicks),
         Snapshots: (later.Snapshots - earlier.Snapshots),
-        StateTicks: (later.StateTicks - earlier.StateTicks),
         States: (later.States - earlier.States)
     );
 }

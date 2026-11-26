@@ -274,6 +274,10 @@ public static class WorldEffect {
     /// <param name="PitchDegrees">The pitch a teleport stands the body at, about its right axis: a creation authored
     /// standing on its edge (a playing card, whose face looks along its forward axis) is laid flat at 90 or -90. A glide
     /// keeps the body's attitude and ignores it.</param>
+    /// <param name="Frame">The placement whose composed frame the topology's cells and <paramref name="Offset"/> are
+    /// read in, or <see langword="null"/> for the world: the cell centre plus the offset is turned by the frame's yaw,
+    /// scaled by its scale and added to its position, so a topology authored beside a group of rows under one root
+    /// placement moves and turns with that root.</param>
     public sealed record PoseCell(
         [property: DocumentName(WorldNameKind.State, WorldNameRole.Key)] string Key,
         [property: DocumentName(WorldNameKind.Topology, WorldNameRole.Names)] string Topology,
@@ -281,7 +285,9 @@ public static class WorldEffect {
         DocumentVector3 Offset,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Glide = false,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float RollDegrees = 0f,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float PitchDegrees = 0f
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] float PitchDegrees = 0f,
+        [property: DocumentName(WorldNameKind.Placement, WorldNameRole.Names)]
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Frame = null
     ) : ActionEffect;
     /// <summary>Teleports a world-addressed body to a spawn point or a literal position.</summary>
     public sealed record Pose(
