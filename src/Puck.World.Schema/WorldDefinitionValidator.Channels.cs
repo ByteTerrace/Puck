@@ -858,9 +858,9 @@ public static partial class WorldDefinitionValidator {
             // frame would then rotate a second time by the body's own heading — refuse the double rotation.
             if (
                 (moveFrame != ChannelFrame.World) &&
-                (kit.Motion.MoveFrame != MotionMoveFrame.World)
+                !kit.Motion.MoveFrame.SubmitsWorldAxes()
             ) {
-                errors.Add(item: $"kit '{kit.Name}' motion frame '{kit.Motion.MoveFrame}' cannot carry a '{moveFrame}'-framed MoveAdvance/MoveStrafe pair — a framed pair needs the kit's World frame.");
+                errors.Add(item: $"kit '{kit.Name}' motion frame '{kit.Motion.MoveFrame}' cannot carry a '{moveFrame}'-framed MoveAdvance/MoveStrafe pair — a framed pair needs a kit frame the seat resolves into world axes (World or Aim).");
             }
 
             if (!programs.TryGetValue(

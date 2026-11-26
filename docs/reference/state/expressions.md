@@ -368,8 +368,9 @@ A pattern's per-token program uses the same interpreter through
 `RuleExpressions.EvaluateDetached` is an entry to that same loop for consumers
 outside a firing. `OutcomeDetachedAllowlist` names the permitted files and
 their fault handling: the constant folder leaves a non-finite subtree
-unfolded, a flock affinity counts failure and contributes zero weight, and the
-browser refuses a non-finite read. Search scoring uses a framed evaluation
+unfolded, the bounds lowering (`RuleBounds`) answers unbounded for a program
+with a non-finite assignment, a flock affinity counts failure and contributes
+zero weight, and the browser refuses a non-finite read. Search scoring uses a framed evaluation
 and returns its outcome to the search, rather than evaluating detached.
 The [host reference](hosting.md#outcomes-analyzer) describes the build errors
 that enforce these boundaries.

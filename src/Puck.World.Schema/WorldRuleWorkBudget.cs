@@ -175,7 +175,7 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
     private static List<RuleWorkContributor> Lines(WorldDefinition definition, WorldFactsCompileContext context, RuleEvaluationOrder order, CompiledRule[] interactions) {
         var rules = order.Rules;
         var contributors = new List<RuleWorkContributor>(capacity: (rules.Length + interactions.Length));
-        var gate = GateCommitCost(context: context, definition: definition);
+        var gate = GateCommitCost(definition: definition);
         var writes = new List<Puck.State.CellAccess>();
 
         for (var index = 0; (index < rules.Length); index++) {
@@ -218,16 +218,16 @@ public readonly record struct WorldRuleWorkBudget(int RuleRows, int InteractionR
 
         return contributors;
     }
-    // A firing that writes a drive-gate row resyncs the gate index at its commit, a walk of every gate row's cells, and
-    // then every input owner, one pass over the input families and the kit selection each to validate and to
-    // synchronize, priced as one owner per body the population holds.
-    private static long GateCommitCost(WorldDefinition definition, WorldFactsCompileContext context) {
-        var cells = 0L;
+    // A firing that writes a drive-gate cell resyncs, at its commit, the gate of the body the cell is keyed by (one
+    // read of each gate row's cell under that key) and then that body's routing owner, one pass over the input
+    // families and the kit selection each to validate and to synchronize (WorldServer.CommitStateTransaction).
+    private static long GateCommitCost(WorldDefinition definition) {
+        var rows = 0L;
 
         for (var ordinal = 0; (ordinal < definition.State.Count); ordinal++) {
-            if (definition.State[ordinal].GatesDrive) { cells += context.RowCapacity(rowOrdinal: ordinal); }
+            if (definition.State[ordinal].GatesDrive) { rows++; }
         }
-        return ((cells == 0L) ? 0L : (cells + (definition.Population.Capacity * (2L * (WorldInputCatalog.For(definition: definition).Selectors.Length + 1L)))));
+        return ((rows == 0L) ? 0L : (rows + (2L * (WorldInputCatalog.For(definition: definition).Selectors.Length + 1L))));
     }
     private static bool WritesGate(WorldDefinition definition, CompiledRule rule, List<Puck.State.CellAccess> writes) {
         writes.Clear();

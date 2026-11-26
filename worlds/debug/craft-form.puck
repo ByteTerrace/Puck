@@ -48,10 +48,13 @@ looks {
   }
 }
 
-// Rules run before the tick's kit selection, so a body's form moves its kit the tick it lands.
+// Rules run before the tick's kit selection, so a body's form moves its kit the tick it lands. The gate and the write
+// read one local whose every value the form register's envelope keeps, so the work sheet sees that a firing closes its
+// own gate and prices the rule by the registers that move.
 rule "craft-form" {
-  when bodyState(each, form) != ((bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * bodyState(each, suit)))
+  local target = (bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * bodyState(each, suit))
+  when bodyState(each, form) != target
   mode: Level
   forEach: $bodies
-  setBodyState(key: $each, state: "form", expression: (bodyState(each, craft) * (4 + bodyState(each, space))) + ((1 - bodyState(each, craft)) * bodyState(each, suit)))
+  setBodyState(key: $each, state: "form", expression: target)
 }

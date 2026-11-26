@@ -52,7 +52,7 @@ let galleryPlaces = concat(
     // Before each painting of the wing: the looping pair facing each other across the east court, the garden, the
     // night field and the city on the south wall, and the endless fall in the floor, its column up to the ceiling twin.
     storeyPlace("loop-portal-west", 0, (courtFin + galleryWall), ((courtFin + galleryWall) + 2), 1.2, 3.6)
-    storeyPlace("loop-portal-east", 0, (galleryEast - 2), galleryEast, 1.2, 3.6)
+    storeyPlace("loop-portal-east", 0, (courtStairFin - 2), courtStairFin, 1.2, 3.6)
     storeyPlace("garden-painting", 0, 33.2, 35.6, galleryWall, 2.3)
     storeyPlace("night-painting", 0, 36.8, 39.2, galleryWall, 2.3)
     storeyPlace("city-painting", 0, 40.4, 42.8, galleryWall, 2.3)
@@ -89,8 +89,8 @@ let regionPlaces = [
   // Wonderland: the room beyond the gallery's west wall, the device row along its west side, and the mouse hole in
   // its east wall back to the gallery.
   { id: "wonderland", at [(5.2 + galleryWestShift), 2, 29], half [4.5, 2.5, 5.3] }
-  { id: "machines", at [4.8, 2, 30.5], half [4.1, 2.5, 3] }
-  { id: "mouse-hole", at [8.9, 1, 30.5], half [0.5, 1.5, 1] }
+  { id: "machines", at [(4.8 + galleryWestShift), 2, 30.5], half [4.1, 2.5, 3] }
+  { id: "mouse-hole", at [(8.9 + galleryWestShift), 1, 30.5], half [0.5, 1.5, 1] }
   // The valley floor's places (valley.puck lists what stands where).
   groundPlace("studio", 24, 72, -80, -24)
   groundPlace("camera-course", -26, -13, 16, 44)

@@ -41,40 +41,60 @@ public sealed partial class WorldPopulation {
         body.InstallInputMapping(InputCatalog, previous, owner.Mapping, m_inputKits[owner.Mapping.Id][ResolveKitIndex(index: bodyIndex)], owner.Image, owner.Epoch, reset, owner.LastSwitch.Decisions.Span, recompiled);
     }
 
-    // The effective kit and look each body held before a resync, so only a body whose own selection moved recompiles,
-    // and the selections a resync resolves before they are compared against the entries'.
-    private byte[]? m_priorKits;
-    private byte[]? m_priorLooks;
-    private int[]? m_selectedKits;
-    private int[]? m_selectedLooks;
     // Whether the last selection pass had a selector to resolve, so the pass after a document drops both selectors
     // still clears what they selected, and a document without one costs nothing per tick.
     private bool m_selecting;
+    // What the last resync ran against: the document, the population's revision and the register binding. While all
+    // three stand, a body's scale, kit and look can only have moved with a touch of its own registers.
     private WorldDefinition? m_bodyCellDefinition;
     private int m_bodyCellRevision = -1;
-    private (ulong Scale, ulong Kit, ulong Look) m_bodyCellGenerations;
+    private int m_bodyCellBinding = -1;
+    // The bodies whose scale, kit or look register was touched since the last resync, in a scope or out of one and
+    // by a rewind too, and the drain's scratch.
+    private readonly ArenaLaneTouches m_bodyCellTouches = new();
+    private int[] m_bodyCellTouched = [];
+    private bool m_bodyCellsWatched;
 
-    /// <summary>Resyncs what every body takes from its own registers: its live <see cref="WorldBody.Scale"/> from the
-    /// register <c>bodies.scale</c> names (<see cref="SyncBodyScale"/>), and its kit and look from the assignments'
-    /// selectors (<see cref="SyncBodySelections"/>). Called from the same <c>WorldServer.Install</c> choke points
-    /// <c>WorldGrants.SyncState</c> is, once a tick after the world rules, and when a crossing lands a body.</summary>
+    /// <summary>Resyncs what a body takes from its own registers: its live <see cref="WorldBody.Scale"/> from the
+    /// register <c>bodies.scale</c> names, and its kit and look from the assignments' selectors. Only the bodies whose
+    /// registers were touched since the last call are resynced, whether the write is committed, open or rewound
+    /// (<see cref="ArenaLaneTouches"/>); every body is when the document, the population's revision or the register
+    /// binding moved. Called from the same <c>WorldServer.Install</c> choke points <c>WorldGrants.SyncState</c> is,
+    /// at every state transaction's commit, once a tick after the world rules, and when a crossing lands a body.</summary>
     /// <param name="definition">The live document.</param>
-    /// <returns><see langword="true"/> when a register was written (even to the value it held), the document or the
-    /// population's revision moved since the last call, so the resync ran; <see langword="false"/> when nothing it
-    /// reads could have moved and it did nothing.</returns>
+    /// <returns><see langword="true"/> when a register was touched (even with the value it held), or the document, the
+    /// population's revision or the binding moved since the last call, so a resync ran; <see langword="false"/> when
+    /// nothing it reads could have moved and it did nothing.</returns>
     public bool SyncBodyCells(WorldDefinition definition) {
         var plan = WorldBodyStateReads.PlanFor(definition: definition);
-        var generations = (RegisterGeneration(slot: plan.Scale),
-            RegisterGeneration(slot: plan.KitSelect),
-            RegisterGeneration(slot: plan.LookSelect));
+        var rebound = (!ReferenceEquals(objA: m_bodyCellDefinition, objB: definition) || (m_bodyCellBinding != m_actionStateLane.Binding));
 
-        if (ReferenceEquals(objA: m_bodyCellDefinition, objB: definition) && (m_bodyCellRevision == m_revision) &&
-            (m_bodyCellGenerations == generations)) { return false; }
-        SyncBodyScale(definition: definition);
-        SyncBodySelections(definition: definition);
-        m_bodyCellDefinition = definition;
+        if (rebound) {
+            m_bodyCellsWatched = m_actionStateLane.WatchTouches(slots: [plan.Scale, plan.KitSelect, plan.LookSelect], watch: m_bodyCellTouches);
+            m_bodyCellDefinition = definition;
+            m_bodyCellBinding = m_actionStateLane.Binding;
+        }
+        if (!rebound && (m_bodyCellRevision == m_revision) && (!m_bodyCellsWatched || m_bodyCellTouches.IsEmpty)) { return false; }
+
+        var touched = m_bodyCellTouches.Drain(ordinals: ref m_bodyCellTouched, whole: out var whole);
+
+        if (rebound || (m_bodyCellRevision != m_revision) || (m_bodyCellsWatched && whole)) {
+            SyncBodyScale(definition: definition);
+            SyncBodySelections(definition: definition);
+        } else {
+            var selecting = ((plan.KitSelect >= 0) || (plan.LookSelect >= 0));
+            var moved = false;
+
+            for (var at = 0; (at < touched); at++) {
+                var index = m_bodyCellTouched[at];
+
+                if (((uint)index) >= ((uint)m_entries.Length)) { continue; }
+                if (plan.Scale >= 0) { SyncBodyScaleAt(holdGrowthByClearance: true, index: index, slot: plan.Scale); }
+                if (selecting) { moved |= SyncBodySelectionAt(definition: definition, index: index, plan: plan); }
+            }
+            if (moved) { m_revision++; }
+        }
         m_bodyCellRevision = m_revision;
-        m_bodyCellGenerations = generations;
 
         return true;
     }
@@ -83,14 +103,11 @@ public sealed partial class WorldPopulation {
     internal void RestoreInputEffectSelections(WorldDefinition definition, int revision) {
         SyncBodyCells(definition: definition);
         m_revision = revision;
+        m_bodyCellRevision = revision;
     }
 
-    private ulong RegisterGeneration(int slot) => ((slot >= 0) ? m_actionStateLane.Generation(slot: slot) : 0);
-
     /// <summary>Resyncs every body's kit and look from the kit and look assignments' selectors
-    /// (<see cref="WorldRowAssignment.Select"/>), which read each body's own <c>state.body</c> register. Called once a
-    /// tick after the world rules, the last writer of a register in a tick; from every choke point
-    /// <see cref="SyncBodyCells"/> is; and when a crossing lands a body with the registers it carried. A body whose kit
+    /// (<see cref="WorldRowAssignment.Select"/>), which read each body's own <c>state.body</c> register. A body whose kit
     /// moves recompiles it in place, keeping its pose, velocity and action state; a moved kit or look bumps
     /// <see cref="Revision"/>, so the client rebuilds its program and re-latches that body's look.</summary>
     /// <param name="definition">The live document.</param>
@@ -109,42 +126,36 @@ public sealed partial class WorldPopulation {
 
         m_selecting = selecting;
 
-        var kits = (m_priorKits ??= new byte[m_entries.Length]);
-        var looks = (m_priorLooks ??= new byte[m_entries.Length]);
-
-        for (var index = 0; (index < m_entries.Length); index++) {
-            kits[index] = ResolveKitIndex(index: index);
-            looks[index] = LookIndex(index: index);
-        }
-
-        if (!ResolveSelections(definition: definition)) {
-            return;
-        }
-
+        var plan = WorldBodyStateReads.PlanFor(definition: definition);
         var moved = false;
 
         for (var index = 0; (index < m_entries.Length); index++) {
-            var kitIndex = ResolveKitIndex(index: index);
-
-            moved |= (looks[index] != LookIndex(index: index));
-
-            if (kitIndex == kits[index]) {
-                continue;
-            }
-
-            moved = true;
-
-            if (m_entries[index] is { Active: true, Body: { } body }) {
-                RecompileBodyKit(
-                    body: body,
-                    kitIndex: kitIndex
-                );
-            }
+            moved |= SyncBodySelectionAt(definition: definition, index: index, plan: plan);
         }
 
         if (moved) {
             m_revision++;
         }
+    }
+
+    // Resolves one body's selected kit and look from its own registers and, when its effective kit moved, recompiles
+    // it in place. Returns whether its effective kit or look moved.
+    private bool SyncBodySelectionAt(int index, WorldDefinition definition, BodyRegisterPlan plan) {
+        var kit = ResolveKitIndex(index: index);
+        var look = LookIndex(index: index);
+
+        SelectBody(definition: definition, index: index, plan: plan);
+
+        var kitIndex = ResolveKitIndex(index: index);
+
+        if ((kitIndex != kit) && (m_entries[index] is { Active: true, Body: { } body })) {
+            RecompileBodyKit(
+                body: body,
+                kitIndex: kitIndex
+            );
+        }
+
+        return ((kitIndex != kit) || (look != LookIndex(index: index)));
     }
 
     // Swaps one live body's compiled feel to a kit row in place: pose, velocity, tape, source and the registers the
@@ -175,46 +186,22 @@ public sealed partial class WorldPopulation {
         );
     }
     // Resolves every entry's selected kit and look from the assignments' selectors against each active body's own
-    // register: a body whose register holds a value a case names takes that case's row, and every other body none
-    // (-1). Returns whether any entry's selection moved.
-    private bool ResolveSelections(WorldDefinition definition) {
-        var kits = (m_selectedKits ??= new int[m_entries.Length]);
-        var looks = (m_selectedLooks ??= new int[m_entries.Length]);
-
+    // register, recompiling nothing: the tables a rebuild made are read by what it builds next.
+    private void ResolveSelections(WorldDefinition definition) {
         var plan = WorldBodyStateReads.PlanFor(definition: definition);
 
-        SelectRows(
-            kits: true,
-            slot: plan.KitSelect,
-            select: definition.Assignment.Select,
-            selected: kits
-        );
-        SelectRows(
-            kits: false,
-            slot: plan.LookSelect,
-            select: definition.LookAssignment.Select,
-            selected: looks
-        );
-
-        var moved = false;
-
         for (var index = 0; (index < m_entries.Length); index++) {
-            var entry = m_entries[index];
-
-            moved |= ((entry.SelectedKit != kits[index]) || (entry.SelectedLook != looks[index]));
-            entry.SelectedKit = kits[index];
-            entry.SelectedLook = looks[index];
+            SelectBody(definition: definition, index: index, plan: plan);
         }
-
-        return moved;
     }
-    // Writes the row each active body's register selects, -1 for every other body and for a value no case names. The
-    // validator admits only a state.body Counter and a case value is a whole number, so a register holding a fraction
-    // selects nothing.
-    private void SelectRows(int slot, WorldRowSelector? select, bool kits, int[] selected) {
-        for (var bodyIndex = 0; (bodyIndex < selected.Length); bodyIndex++) {
-            selected[bodyIndex] = SelectRow(bodyIndex: bodyIndex, kits: kits, slot: slot, select: select);
-        }
+    // Writes the rows one body's registers select: a body whose register holds a value a case names takes that case's
+    // row, and every other body, and a value no case names, none (-1). The validator admits only a state.body Counter
+    // and a case value is a whole number, so a register holding a fraction selects nothing.
+    private void SelectBody(int index, WorldDefinition definition, BodyRegisterPlan plan) {
+        var entry = m_entries[index];
+
+        entry.SelectedKit = SelectRow(bodyIndex: index, kits: true, select: definition.Assignment.Select, slot: plan.KitSelect);
+        entry.SelectedLook = SelectRow(bodyIndex: index, kits: false, select: definition.LookAssignment.Select, slot: plan.LookSelect);
     }
     private int SelectRow(int slot, WorldRowSelector? select, bool kits, int bodyIndex) {
         if (

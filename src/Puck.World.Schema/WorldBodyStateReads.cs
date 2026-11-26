@@ -99,6 +99,45 @@ public static class WorldBodyStateReads {
 
         return false;
     }
+    /// <summary>Returns what a declared counter register's values are bounded by, in raw <see cref="FixedQ4816"/>
+    /// bits.</summary>
+    /// <param name="definition">The world.</param>
+    /// <param name="slot">The slot's index in the register file (body slots, then identity slots).</param>
+    /// <param name="keeps">The values a write keeps exactly as written: the declared envelope's set or range, or
+    /// unbounded for a register declaring none. A value outside it is clamped to the range, or replaced by the
+    /// initial value for a set.</param>
+    /// <param name="reads">The values a read can answer: <paramref name="keeps"/>, the initial value a body is born
+    /// with, and the zero a reference resolving to no live body reads. It holds for values written through the
+    /// envelope, which every body, rule and crossing write is; an operator's raw write of the lane row is not.</param>
+    /// <returns><see langword="true"/> when <paramref name="slot"/> is a declared counter.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="definition"/> is <see langword="null"/>.</exception>
+    public static bool TryCounterBounds(WorldDefinition definition, int slot, out Puck.State.Rules.ValueBounds keeps, out Puck.State.Rules.ValueBounds reads) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        var bodyState = definition.BodyState;
+        var identityState = definition.IdentityState;
+
+        keeps = default;
+        reads = default;
+        if ((slot < 0) || (slot >= (bodyState.Count + identityState.Count))) {
+            return false;
+        }
+
+        var declared = ((slot < bodyState.Count) ? bodyState[slot] : identityState[(slot - bodyState.Count)]);
+
+        if (declared.Kind != ActionStateKind.Counter) {
+            return false;
+        }
+
+        keeps = (FixedWorldKit.CompileEnvelope(state: declared) switch {
+            null => Puck.State.Rules.ValueBounds.Unbounded,
+            { Values: { } values } => Puck.State.Rules.ValueBounds.Exactly(values: values),
+            var range => Puck.State.Rules.ValueBounds.Between(lower: range.Minimum, upper: range.Maximum),
+        });
+        reads = keeps.With(raw: FixedQ4816.FromDouble(value: declared.Initial).Value).With(raw: 0L);
+
+        return true;
+    }
     /// <summary>Returns the number a stored slot presents, as raw <see cref="FixedQ4816"/> bits.</summary>
     /// <param name="kind">The slot's kind.</param>
     /// <param name="raw">The stored value: a counter's raw bits, or a timer's remaining engine ticks.</param>

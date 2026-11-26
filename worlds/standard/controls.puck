@@ -32,22 +32,17 @@ hud {
   defaults {
     enabled: true
     // A small ring drawn at the pointer for three seconds after it moves, lit in the accent while it hovers something
-    // within 48 m.
+    // within 48 m. It shows on a framed screen too: an engaged console is where a pointer is wanted most, and a hidden
+    // cursor casts no pointer, so a console's taps would never land.
     cursor {
       hoverRadius: 48
       sizePx: 7
       role: TextPrimary
       visible {
-        $type: "all"
-        predicates [
-          {
-            $type: "recently"
-            fact: PointerMotion
-            windowSeconds: 3
-            fadeSeconds: 0.5
-          }
-          { $type: "not", predicate { $type: "now", fact: ScreenFramed } }
-        ]
+        $type: "recently"
+        fact: PointerMotion
+        windowSeconds: 3
+        fadeSeconds: 0.5
       }
     }
   }

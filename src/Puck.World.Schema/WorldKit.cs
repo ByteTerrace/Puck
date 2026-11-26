@@ -235,7 +235,9 @@ public readonly record struct FixedWorldKit(
         return slots.ToArray();
     }
 
-    private static CompiledActionStateEnvelope? CompileEnvelope(ActionStateSlot state) {
+    // The one compile of a declared envelope into the slot's raw encoding, which the register file and the rule
+    // analysis's bounds (WorldBodyStateReads.TryCounterBounds) both read.
+    internal static CompiledActionStateEnvelope? CompileEnvelope(ActionStateSlot state) {
         long Compile(float value) => ((state.Kind == ActionStateKind.Counter)
             ? FixedQ4816.FromDouble(value: value).Value
             : checked((long)FixedTickConversion.DurationEngineTicks(seconds: ((decimal)value)))

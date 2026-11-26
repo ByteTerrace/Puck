@@ -218,6 +218,7 @@ public sealed partial class StateArena {
             array: m_rowGenerations,
             value: next
         );
+        ReleaseLaneTouches();
         ResetRowVersions(version: next);
     }
 }

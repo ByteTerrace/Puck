@@ -463,7 +463,7 @@ public sealed partial class WorldPopulation : IWorldInhabitants {
 
         // The look table resolves after the entries exist (it writes each entry's LookIndex).
         ResolveLookIndices(definition: definition);
-        _ = ResolveSelections(definition: definition);
+        ResolveSelections(definition: definition);
 
         for (var index = LocalSeatCount; (index < Capacity); index++) {
             SeedSimulated(index: index);

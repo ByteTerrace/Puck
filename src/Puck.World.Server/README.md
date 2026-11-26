@@ -397,16 +397,19 @@ domain row was written, and input selection only for the owners routing a body
 whose selection registers (a body-state selector's counter, or the kit
 assignment's selector register) the transaction touched
 (`WorldInputRuntime.TouchedSelectionBodies`, over
-`StateArena.CollectOpenLaneOrdinals`). The commit resynchronizes those owners
-alone; a write to a drive-gate row resyncs the gate index and every owner. A
+`StateArena.CollectOpenLaneOrdinals`) or whose drive-gate cells it wrote
+(`StateArena.TryCollectOpenKeys`). The commit resynchronizes those owners
+alone, and resyncs the drive gate of each written key alone
+(`WorldGrants.SyncDriveGate`); only a change to a drive-gate row that no key
+describes resyncs the gate index and every owner. A
 firing that writes nothing input selection reads costs the input runtime
 nothing. Keep it proportional: three selection passes over every owner per
 firing measured 18 % of the headless debug World's tick in a thread-time
 trace, at about 94 firings a tick. The rule-work sheet prices what a commit spends beyond the effects:
 `WorldBodyStateEffect.Cost` adds one owner's revalidation for a selection
-register and the population's whole-body resync (`WorldPopulation.SyncBodyCells`)
-for a scale, kit or look register, and `WorldRuleWorkBudget` adds the gate and
-owner resync to a line that writes a drive-gate row.
+register and the written body's own resync (`WorldPopulation.SyncBodyCells`)
+for a scale, kit or look register, and `WorldRuleWorkBudget` adds one body's gate
+and owner resync to a line that writes a drive-gate row.
 
 ### The action-state slot lanes (`WorldActionStateLane.cs`)
 
@@ -1035,9 +1038,10 @@ active indices with one-instance coarse capsules, keeping the worst-case SDF
 program under its fixed instruction/transform ceilings. `WorldBody` owns one entry's integration, pose, tape, motion row, and
 action-state machinery—including its live `Scale` multiplier (`WorldBody.Scale.cs`),
 1 unless `bodies.scale` names a `state.body` Counter register carrying this
-body's size; `WorldPopulation.SyncBodyScale` (through `SyncBodyCells`) resyncs
-every active body's `Scale` from that register once a tick after the world
-rules, and at the same `Install`/admission choke points
+body's size; `WorldPopulation.SyncBodyCells` resyncs the `Scale` of each body
+whose register was touched (`ArenaLaneTouches`: a write in a scope or out of
+one, and a rewind) at every state transaction's commit and once a tick after
+the world rules, and every active body's at the same `Install`/admission choke points
 `WorldGrants.SyncState` resyncs its own drive-gate index at (construction,
 every `Install`, every seat join/peer admission, `RestoreCheckpoint` after
 `WorldPopulation.Restore` reconstructs each body's captured scale and selected kit before its latches, a

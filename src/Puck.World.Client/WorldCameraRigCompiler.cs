@@ -64,7 +64,7 @@ public static class WorldCameraRigCompiler {
     /// <param name="program">The authored op list.</param>
     /// <param name="definition">The document this program's state bindings, placement subjects, and blend names
     /// resolve against.</param>
-    /// <param name="interactive">Whether the program's orbit op folds in <see cref="IWorldCameraProgramRig.Look"/> —
+    /// <param name="interactive">Whether the program's orbit op and facing look-at fold in <see cref="IWorldCameraProgramRig.Look"/> —
     /// true for the seat rig a joined seat steers, false for an authored camera that renders its own angles.</param>
     /// <param name="mirror">The state mirror whose registered slots the program's bound operands read each
     /// frame.</param>
@@ -123,7 +123,7 @@ public static class WorldCameraRigCompiler {
         /// <param name="definition">The current live document.</param>
         /// <param name="mirror">The state mirror the program's bound operands read through (see
         /// <see cref="Compile"/>).</param>
-        /// <param name="interactive">Whether the program's orbit op folds in the live look (see
+        /// <param name="interactive">Whether the program's orbit op and facing look-at fold in the live look (see
         /// <see cref="Compile"/>).</param>
         /// <param name="domains">The guard that holds the last valid value of a bound operand and reports its transitions;
         /// a different guard compiles the rig again, since the rig keeps the one it compiled with.</param>
@@ -336,6 +336,7 @@ public static class WorldCameraRigCompiler {
                         break;
                     case WorldCameraProgramOp.LookAt lookAt:
                         operations.Add(item: new SdfCameraOp.LookAt(
+                            AppliesLook: interactive,
                             FocusDistance: SdfCameraScalar.FromLiteral(value: lookAt.FocusDistance),
                             SubjectSlot: ((lookAt.Subject is { } lookSubject)
                             ? Subject(subject: lookSubject)

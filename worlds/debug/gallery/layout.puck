@@ -191,10 +191,13 @@ let westBays = [
 ]
 let eastBays = [[northAisleMid], [4.4, northAisleMid], [4.4, northAisleMid], [4.4, northAisleMid]]
 
-// The painting wing: level 0's south aisle east of the entrance lobby, x 30 .. 59.7. Two fins stand out from the south
-// wall, at x 30 and x 44.3, each 4.2 m long; the fall's well is at (52.5, 6.2), under a hole in level 1's floor.
+// The painting wing: level 0's south aisle east of the entrance lobby, x 30 to the east wall. Three fins stand out from
+// the south wall, each 4.2 m long: at x 30, at x 44.3, and against the west side of the south-east stair's well, which
+// fills the wing's last bay, so the east court ends at that fin; the fall's well is at (52.5, 6.2), under a hole in
+// level 1's floor.
 let courtWest = 30
 let courtFin = 44.3
+let courtStairFin = (galleryStair("south-east").well.x0 - galleryWall)
 let courtFinLength = 4.2
 let fallPlan = [52.5, 6.2]
 // The paintings that hang on the painting wing's south wall, as the centre of each along it (paintings.puck hangs them;
@@ -255,16 +258,15 @@ let flawCuts = map(range(1, 4), k => ((galleryStorey * k) - 0.1))
 let flawCrossings = loopCrossings(flawRoute, flawCuts)
 
 // The display stations: the showcase's twelve stand in its bays (shapes.puck's galleryDisplays), a pair to each bay
-// across the nave on the two showcase rows, each console toward the centre aisle (yaw 180 faces +z, yaw 0 faces -z); a
-// gallery's displays stand along its middle, their consoles toward its balcony edge.
+// across the nave on the two showcase rows, each console toward the centre aisle (yaw 180 faces +z, yaw 0 faces -z).
 let showcaseRows = [{ row: showcaseRowSouth, yaw: 180 }, { row: showcaseRowNorth, yaw: 0 }]
-let displayNorth = (northAisleMid + 0.6)
 let displaySouth = 4.4
-// A display is the standard's display plinth (architecture.puck) stamped at `displayScale`, its cap's top 1.05 m up,
-// and the exhibit on its turntable stands at `displayExhibitScale`, set down so the plinth's cap of the exhibits' own
-// frame (0.75 m) meets the turntable: a 0.5 m sphere stands 2 m across.
-let displayScale = 1.4
-let displayExhibitScale = 2
+// A display is the standard's display plinth (architecture.puck) stamped at `displayScale`, so its cap spans about four
+// fifths of its pad's width (look.puck's lookPadTiles) with a cream margin round it, and the exhibit on its turntable
+// stands at `displayExhibitScale`, in proportion, set down so the plinth's cap of the exhibits' own frame (0.75 m) meets
+// the turntable.
+let displayScale = 1.75
+let displayExhibitScale = 2.5
 // How far, in metres, an exhibit floats clear of its turntable: the exhibits were authored resting on the old plinths'
 // cap, some dipping a little under it, so each stands this much higher and reads as a specimen held over the light.
 let displayExhibitLift = 0.3

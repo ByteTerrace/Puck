@@ -189,7 +189,7 @@ public sealed partial class StateArena {
 
         foreach (var row in image.Rows) {
             if (m_layout[row].IsStored) { Reindex(row, m_layout[row]); }
-            m_rowGenerations[row]++;
+            BumpRowGeneration(row: row);
             MarkOutOfScope(change: change, restored: null, row: row);
         }
     }

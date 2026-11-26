@@ -1483,9 +1483,12 @@ for display in galleryDisplays {
     galleryShownAt[key] = gallerySelect[key]
   }
   // The list's rows follow the scroll and the selection: each row's catalog index, its title and group copied from the
-  // catalog by that index, and its ink from the console's inks, the chosen row lit.
+  // catalog by that index, and its ink from the console's inks, the chosen row lit. The scroll and the choice pack into
+  // one view that the gate and the write share, so a firing closes its own gate and the rows are written only when the
+  // view moves.
   rule $"gallery-rows-{key}" {
-    when galleryScroll[key] != galleryRowsAt[key] or gallerySelect[key] != galleryRowsChosen[key]
+    local view = galleryScroll[key] * consoleViewStride + gallerySelect[key]
+    when galleryRowsView[key] != view
     mode: Level
     for row in range(0, consoleRows) {
       galleryRowIndex[$"{key}-{row}"] = galleryScroll[key] + row
@@ -1497,8 +1500,7 @@ for display in galleryDisplays {
         setState(state: galleryRowInk, key: $"{key}-{row}", fromState: galleryInks, fromKey: dim)
       }
     }
-    galleryRowsAt[key] = galleryScroll[key]
-    galleryRowsChosen[key] = gallerySelect[key]
+    galleryRowsView[key] = view
   }
 }
 

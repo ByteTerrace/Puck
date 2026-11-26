@@ -412,6 +412,19 @@ on which writes are structural. A reader that keeps a row's keys, or anything
 else that no cell value can change, compares it instead of `RowVersion` and is
 not disturbed by a value write.
 
+A **generation** says only that the row was mutated. A reader that keeps
+something derived per lane ordinal (a body's kit, look and size from its own
+registers) follows the cell-level form instead: `StateArena.WatchLaneTouches`
+registers an `ArenaLaneTouches` over some lane rows, and the watch collects the
+ordinals whose slots were touched since the reader last drained it, a write
+inside an open scope, a write of the value already held and a rewind included.
+A change no ordinal describes (a restored image, a relayout) reads as
+`ArenaLaneTouches.Whole`, and so does a watch no arena holds, so a reader that
+never registers again rederives everything rather than missing a touch. For the
+writes of the open scopes alone, `CollectOpenLaneOrdinals` answers the lane
+ordinals and `TryCollectOpenKeys` the keys of keyed rows, both read from the
+journal.
+
 A **row version** is a change counter. Versions settle when the
 outermost scope commits: the arena walks the record from the end, compares each
 position's final value with the value it held when the scope opened, and moves

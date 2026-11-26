@@ -90,7 +90,7 @@ public sealed partial class StateArena {
             if (previous == next[row].CellCapacity) { continue; }
             if (m_journal.Scopes > 0) { m_journal.Record(column: ArenaColumn.CellCapacity, index: row, previous: previous); }
             else { MarkOutOfScope(previous: new ArenaJournalEntry(Column: ArenaColumn.CellCapacity, Index: row, Number: previous, Reference: null)); }
-            m_rowGenerations[row]++;
+            BumpRowGeneration(row: row);
         }
         InstallReservation(next: next);
     }
@@ -115,7 +115,7 @@ public sealed partial class StateArena {
             if (source.Dimensions > 0) {
                 m_vectors.AsSpan(start: source.VectorByteStart, length: count * source.Dimensions).CopyTo(destination: vectors.AsSpan(start: target.VectorByteStart));
             }
-            if (source.CellStart != target.CellStart) { m_rowGenerations[row]++; }
+            if (source.CellStart != target.CellStart) { BumpRowGeneration(row: row); }
         }
         m_journal.RemapLayout(previous: previous, next: next, count: m_restoreJournalLimit >= 0 ? m_restoreJournalLimit : m_journal.Length);
         for (var index = m_windowEntries.Count - 1; index >= 0; index--) {

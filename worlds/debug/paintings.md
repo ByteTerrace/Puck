@@ -15,13 +15,14 @@ leads. Each canvas ripples like an event horizon (see
 | South wall, east court | `painting-galaxy`, brass frame | Opens onto the planetoid field ([galaxy.puck](galaxy.puck), [galaxy.md](galaxy.md)): six small bodies in open space, each with gravity of its own shape, toured by launch pad. The frame on the first one is the way back. |
 | West fin, east face | `painting-globe`, gilt frame | Opens onto the bottle world ([globe.puck](globe.puck)), a closed room whose gravity this world owns. The post two metres before it is its lever ([globe-lever.puck](globe-lever.puck)): each press turns the room's pull a quarter turn, a second later, with whoever is inside. |
 | East wall | `painting-sun`, brass frame | Opens onto Perihelion ([sun.puck](sun.puck), [sun.md](sun.md)): a rock the system's star passes once a day, the same star that lights the valley. The iron frame on its pad is the way back. |
-| East fin and east wall, facing each other | `painting-link-west` and `painting-link-east`, brass frames | Two paintings facing each other 15 m apart across the east court: step into either and step out of the other, facing out of it. |
+| Middle fin east face and stair fin west face, facing each other | `painting-link-west` and `painting-link-east`, brass frames | Two paintings facing each other 12.9 m apart across the east court: step into either and step out of the other, facing out of it. |
 | Floor and ceiling, east court | `painting-fall-floor` and `painting-fall-ceiling`, gilt squares | The endless fall: a body that steps onto the floor glass drops out of the ceiling glass still falling, and falls through the floor again, forever. |
 
 The wing is level 0's south aisle east of the entrance lobby
 ([gallery.md](gallery.md#the-plan)), open to the nave through the arcade, under
-a "PAINTING WING" board where the lobby meets it. Two fins stand out from its
-windowless south wall and make it two courts.
+a "PAINTING WING" board where the lobby meets it. Three fins stand out from its
+windowless south wall and make it two courts, the last screening the south-east
+stair that fills its east end.
 The wing's own downlights and a track of wall washes over each wall painting
 (`wing-down-*` and `wing-wash-*`, gallery/gallery.puck) light it whatever the lobby's
 switch says, and each canvas, which shows a live view, lights it further. Each painting has a plaque; the floor painting's lies on
