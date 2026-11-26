@@ -80,7 +80,7 @@ template sizeField(name, zones, sizes, register = "size", passes = [], passSize 
         name: $"sizeField-{name}"
         kind: Fixed
         capacity: length(sizes)
-        cells: map(sizes, size => { key: size.key, value: $"{size.value}" })
+        cells: map(sizes, size => { key: size.key, value: size.value })
       }
     }
   }

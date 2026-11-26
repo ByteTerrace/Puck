@@ -42,7 +42,7 @@ template auctionState(seats, lots, purse) {
     kind: "Int"
     capacity: seats
     min: 0
-    cells: map(range(1, seats), s => { key: $"{s}", value: purse })
+    cells: map(range(1, seats + 1), s => { key: $"{s}", value: purse })
   }
 
   row {
@@ -50,7 +50,7 @@ template auctionState(seats, lots, purse) {
     kind: "Int"
     capacity: seats
     min: 0
-    cells: map(range(1, seats), s => { key: $"{s}", value: 0 })
+    cells: map(range(1, seats + 1), s => { key: $"{s}", value: 0 })
     visibility {
       readers []
       readersFrom: "auctionAudience"
@@ -62,7 +62,7 @@ template auctionState(seats, lots, purse) {
     name: "auctionAudience"
     kind: "Text"
     capacity: seats
-    cells: map(range(1, seats), s => { key: $"{s}", value: "" })
+    cells: map(range(1, seats + 1), s => { key: $"{s}", value: "" })
   }
 
   // The seats that bid, as a pile over the purses' keys: a pile takes and gives up members as the rules write it.
@@ -77,14 +77,14 @@ template auctionState(seats, lots, purse) {
     name: "auctionWinner"
     kind: "Int"
     capacity: lots
-    cells: map(range(1, lots), lot => { key: $"{lot}", value: 0 })
+    cells: map(range(1, lots + 1), lot => { key: $"{lot}", value: 0 })
   }
 
   row {
     name: "auctionPrice"
     kind: "Int"
     capacity: lots
-    cells: map(range(1, lots), lot => { key: $"{lot}", value: 0 })
+    cells: map(range(1, lots + 1), lot => { key: $"{lot}", value: 0 })
   }
 }
 
@@ -96,7 +96,7 @@ template auctionRules(seats, lots) {
   }
 
   // A seat's bid, collected the tick after it lands in its inbox while a lot is open.
-  for s in range(1, seats) {
+  for s in range(1, seats + 1) {
     rule $"auction-collect-{s}" {
       local offer = $"auctionIn{s}".bid
       local covered = offer <= auctionPurse[$"{s}"]
@@ -115,7 +115,7 @@ template auctionRules(seats, lots) {
     when auction.open == 1 and auction.closeAt > 0 and $tick >= auction.closeAt
     auction.open = 0
     auction.revealed = 1
-    for s in range(1, seats) {
+    for s in range(1, seats + 1) {
       auctionAudience[$"{s}"] = $"seat{s}"
       if auctionBids[$"{s}"] > 0 {
         auctionShown[$"{s}"] = true
@@ -123,7 +123,7 @@ template auctionRules(seats, lots) {
     }
   }
 
-  for s in range(1, seats) {
+  for s in range(1, seats + 1) {
     rule $"auction-lead-{s}" {
       when auction.revealed == 1 and auction.tallied == 0 and auctionBids[$"{s}"] > auction.price
       auction.price = auctionBids[$"{s}"]
@@ -145,7 +145,7 @@ template auctionRules(seats, lots) {
   // After the reveal the bids go back to 0 and hide again, and the next lot opens.
   rule "auction-next" {
     when auction.tallied == 1 and $tick >= auction.nextAt
-    for s in range(1, seats) {
+    for s in range(1, seats + 1) {
       auctionBids[$"{s}"] = 0
       auctionAudience[$"{s}"] = ""
       remove auctionShown[$"{s}"]

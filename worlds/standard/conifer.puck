@@ -33,7 +33,7 @@ function firFiberLane(clock, g, groups = 3, span = 60, steps = 24) = {
   clock: clock
   keys: map(range(0, steps), i => {
     at: i * span / steps
-    value: 0.15 + 0.85 * maximum(0, cosine(6.283185307 * (i / steps - g / groups)))
+    value: 0.15 + 0.85 * maximum(0, cosine(2 * pi * (i / steps - g / groups)))
   })
 }
 // The `render.lanes` rows of a fibre fir's groups, one named lane per group on `clock`.

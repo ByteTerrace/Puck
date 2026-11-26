@@ -103,9 +103,34 @@ public static partial class WorldDocumentEmitter {
             );
         }
 
+        CanonicalizeFixedCells(world: (stateObj["world"] as JsonArray));
         scope.CurrentPointer = oldPointer;
 
         return true;
+    }
+    // A Fixed row's values are decimal text in the document (StateRowJsonConverter.RequireFixed), so a row written as an
+    // object (`{ kind: "Fixed", value: v }`, `cells [{ key: "start", value: start }]`) takes a number, as a `table`
+    // declaration does, written as the decimal text it denotes. Text that does not parse is left for the converter to refuse.
+    private static void CanonicalizeFixedCells(JsonArray? world) {
+        foreach (var row in (world ?? [])) {
+            if ((row is not JsonObject { } rowObject) || (rowObject["kind"] is not JsonValue kind) ||
+                (kind.GetValueKind() != System.Text.Json.JsonValueKind.String) || (kind.GetValue<string>() != nameof(CellKind.Fixed))) {
+                continue;
+            }
+            AsDecimalText(holder: rowObject);
+            foreach (var cell in ((rowObject["cells"] as JsonArray) ?? [])) {
+                if (cell is JsonObject { } cellObject) {
+                    AsDecimalText(holder: cellObject);
+                }
+            }
+        }
+
+        static void AsDecimalText(JsonObject holder) {
+            if ((holder["value"] is JsonValue number) && (number.GetValueKind() == System.Text.Json.JsonValueKind.Number) &&
+                Puck.Maths.FixedQ4816.TryParse(s: number.ToJsonString(), provider: System.Globalization.CultureInfo.InvariantCulture, result: out _)) {
+                holder["value"] = number.ToJsonString();
+            }
+        }
     }
     private static void LowerStateWorldBlock(BlockNode block, JsonObject stateObj, DocumentScope scope, string statePointer) {
         // Authoring is judged per scope: rows a `use` stamped here were authored by that module, so a block written

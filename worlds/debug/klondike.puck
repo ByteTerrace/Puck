@@ -331,7 +331,7 @@ template klondikeDeal(step, pile) {
   }
 }
 
-for (pile, step) in flatMap(range(0, 7), row => range(row + 2, 7 - row)) {
+for (pile, step) in flatMap(range(0, 7), row => range(row + 2, 9)) {
   klondikeDeal(step: step, pile: $"solitaireKlondikePile{pile}")
 }
 
@@ -595,7 +595,7 @@ template klondikeReveal(z, pile) {
   }
 }
 
-for z in range(1, 8) {
+for z in range(1, 9) {
   klondikeReveal(z: z, pile: $"solitaireKlondikePile{z}")
 }
 

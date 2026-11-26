@@ -329,5 +329,5 @@ function vehicleStopRow(name, vehicles, values) = {
   name: name
   kind: "Fixed"
   capacity: length(vehicles)
-  cells: map(range(0, length(vehicles)), i => { key: $"{vehicles[i].key}", value: $"{round(values[i] * 1024) / 1024}" })
+  cells: map(range(0, length(vehicles)), i => { key: $"{vehicles[i].key}", value: (round(values[i] * 1024) / 1024) })
 }

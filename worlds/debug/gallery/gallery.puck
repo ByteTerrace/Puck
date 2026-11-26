@@ -637,7 +637,7 @@ placements {
       localOffset [0, (1.85 - liftRoot), carPanelZ]
     }
     respond: map(
-      range(1, 3),
+      range(1, 4),
       v => { when: state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" }
     )
   }
@@ -649,7 +649,7 @@ placements {
       localOffset [0, (1.85 - liftRoot), carPanelZ]
     }
     respond: map(
-      range(1, 2),
+      range(1, 3),
       v => { when: state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrows-{v}" }
     )
   }
@@ -735,7 +735,7 @@ placements {
       position [(liftX + 1.15), (galleryFloor[level.level] + 1.8), galleryWall]
       yawDegrees: 180
       respond: map(
-        range(1, 3),
+        range(1, 4),
         v => { when: state(state: liftFloor, comparison: Equal, value: v), prototypeId: $"lift-display-{v}" }
       )
     }
@@ -745,7 +745,7 @@ placements {
       position [(liftX + 1.15), (galleryFloor[level.level] + 1.8), galleryWall]
       yawDegrees: 180
       respond: map(
-        range(1, 2),
+        range(1, 3),
         v => { when: state(state: liftArrow, comparison: Equal, value: v), prototypeId: $"lift-arrows-{v}" }
       )
     }
@@ -1102,7 +1102,7 @@ template liftPick(f, k, dir, lo, hi) {
 }
 // Direction up or idle (liftDir 0 to 1): up first, then down. Direction down: down first, then up.
 for f in range(0, 4) {
-  for k in range(f + 1, 3 - f) {
+  for k in range(f + 1, 4) {
     liftPick(f: f, k: k, dir: 1, lo: 0, hi: 1)
   }
 }
@@ -1117,7 +1117,7 @@ for f in range(0, 4) {
   }
 }
 for f in range(0, 4) {
-  for k in range(f + 1, 3 - f) {
+  for k in range(f + 1, 4) {
     liftPick(f: f, k: k, dir: 1, lo: -1, hi: -1)
   }
 }

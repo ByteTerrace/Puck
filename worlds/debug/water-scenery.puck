@@ -10,7 +10,7 @@ import "valley-form"
 import "water-site"
 import "glacier-site"
 
-let compassRadians = 3.141592653589793 / 180
+let compassRadians = pi / 180
 
 // The falls' discharge, on a world lane every surface reads however it is placed: the falls' foam covers its sheets by it.
 render {

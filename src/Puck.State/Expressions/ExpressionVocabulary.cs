@@ -65,8 +65,13 @@ public static class ExpressionVocabulary {
     /// them.</summary>
     public static IReadOnlyDictionary<string, string> Aliases { get; } = new Dictionary<string, string>(comparer: StringComparer.Ordinal) {
         ["abs"] = "absolute",
+        ["acos"] = "arcCosine",
+        ["asin"] = "arcSine",
+        ["atan"] = "arcTangent",
+        ["atan2"] = "arcTangent2",
         ["ceil"] = "ceiling",
         ["cos"] = "cosine",
+        ["hypot"] = "hypotenuse",
         ["pow"] = "power",
         ["sin"] = "sine",
         ["sqrt"] = "squareRoot",

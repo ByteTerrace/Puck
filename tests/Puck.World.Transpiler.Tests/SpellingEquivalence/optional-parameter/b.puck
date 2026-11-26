@@ -1,0 +1,16 @@
+schema: "puck.world.definition.v1"
+documentId: "pair"
+
+state {
+  world [
+    {
+      name: "sizes"
+      kind: "Fixed"
+      capacity: 2
+      cells [
+        { key: "start", value: "0.5" }
+        { key: "end", value: "1" }
+      ]
+    }
+  ]
+}

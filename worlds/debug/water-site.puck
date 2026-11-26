@@ -146,7 +146,7 @@ let riverLegs = [
   { bearing: 167, length: 22 }
   { bearing: 163, length: 22 }
 ]
-let riverRadians = 3.141592653589793 / 180
+let riverRadians = pi / 180
 // The course's vertices [x, z]: where each leg starts, and the last leg's end.
 let riverPoints = map(range(0, length(riverLegs) + 1), i => [
   riverStart[0] +

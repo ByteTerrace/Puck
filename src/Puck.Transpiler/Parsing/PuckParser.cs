@@ -1,6 +1,5 @@
 using Parlot;
 using Parlot.Fluent;
-using Puck.Assets.Documents;
 using Puck.Maths;
 using Puck.State;
 using Puck.Transpiler.Ast;
@@ -906,7 +905,7 @@ public static partial class PuckParser {
         }
 
         // Check if property: key: expr, key = expr or key [ ... ]
-        if (TryParsePropertyTail(col: col, context: context, diagnostics: diagnostics, line: line, name: firstId, startOffset: startOffset) is { } property) {
+        if (TryParsePropertyTail(col: col, context: context, line: line, name: firstId, startOffset: startOffset) is { } property) {
             return property;
         }
 
@@ -974,29 +973,6 @@ public static partial class PuckParser {
         }
 
         throw CreateException(context: context, message: $"Unexpected token sequence after '{firstId}'");
-    }
-    // A container value is written as a block, a scalar takes a colon: `host { }` and `cameras [ ]`, never
-    // `host: { }` or `cameras: [ ]`. The test is syntactic and looks only at the literal that follows, so a name
-    // standing for a container (`origin: bounds`) is untouched — what is refused is the punctuation, not the value.
-    // The statement still parses after the report, so one misspelling yields one diagnostic rather than a cascade.
-    private static void RefuseColonBeforeContainer(ParseContext context, string identifier, char separator, int startOffset, int line, int col, DiagnosticBag? diagnostics) {
-        var cursor = context.Scanner.Cursor;
-
-        if (cursor.Current is not ('{' or '[')) {
-            return;
-        }
-
-        diagnostics?.ReportError(
-            code: PuckDiagnosticCodes.ColonBeforeContainer,
-            message: ColonBeforeContainerMessage(identifier: identifier, opener: cursor.Current, separator: separator),
-            span: new SourceSpan(startOffset, (cursor.Offset - startOffset), line, col)
-        );
-    }
-    // The one wording of PUCK040, shared by a statement's member and an object literal's key.
-    private static string ColonBeforeContainerMessage(string identifier, char opener, char separator) {
-        var shape = ((opener == '{') ? DocumentValueKind.Block : DocumentValueKind.List).Words();
-
-        return $"'{identifier}{separator} {opener}' - {shape} is written without the '{separator}': use '{identifier} {opener}'";
     }
     // `for item in sequence { … }` and `for (item, index) in sequence { … }`.
     // `body` parses one statement of the loop's body where the loop stands somewhere other than a document block,
@@ -1708,22 +1684,15 @@ public static partial class PuckParser {
 
             SkipWhiteSpace(context: context);
             if ((cursor.Current == ':') || (cursor.Current == '=')) {
-                var separator = cursor.Current;
-
                 cursor.Advance();
                 SkipWhiteSpace(context: context);
 
-                // The same one-spelling rule a statement follows: a container is written without the separator.
-                // Object literals already admit `key { }` and `key [ ]`, so this closes the second spelling here too.
-                if (cursor.Current is '{' or '[') {
-                    var (eLine, eCol) = GetLineAndColumn(buffer: context.Scanner.Buffer, offset: cursor.Offset);
-
-                    throw new PuckParseException(ColonBeforeContainerMessage(identifier: propKey, opener: cursor.Current, separator: separator), cursor.Offset, eLine, eCol) {
-                        Code = PuckDiagnosticCodes.ColonBeforeContainer,
-                    };
-                }
-
-                var valExpr = ParseMemberValue(context: context);
+                // `key: { }` and `key: [ ]` read as `key { }` and `key [ ]`: one node, printed without the separator.
+                var valExpr = cursor.Current switch {
+                    '{' => ParseObjectExpression(context: context),
+                    '[' => ParseArrayExpression(context: context),
+                    _ => ParseMemberValue(context: context),
+                };
 
                 properties.Add(item: new PropertyNode(Name: propKey, Value: valExpr, Offset: propStart, Length: (cursor.Offset - propStart), Line: pLine, Column: pCol));
             } else if (cursor.Current == '{') {

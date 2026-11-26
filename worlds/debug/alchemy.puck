@@ -92,7 +92,7 @@ let recipes = [
   [Tool, Wood, House]
 ]
 
-let elementIds = range(1, totalElements)
+let elementIds = range(1, totalElements + 1)
 let alchemyTokenHomeColumn = map(elementIds, e => (e % alchemyColumns))
 let alchemyTokenHomeRow = map(elementIds, e => ((e - (e % alchemyColumns)) / alchemyColumns))
 let alchemyOpening = map(range(0, alchemyCells), i => ((i >= 1) and (i <= starterCount)) ? 1 : 0)
@@ -798,7 +798,7 @@ state {
       kind: "Int"
       domain: cellsOf(topology: elements)
       cells: map(
-        range(1, size - 1),
+        range(1, size),
         e => {
           key: $"{e}"
           value: length(filter(recipes, r => (r[0] == e) + (r[1] == e))) == 0

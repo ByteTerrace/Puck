@@ -197,7 +197,7 @@ template shipFlight(kit = "ship", cruise = 60, boost = 4, taxi = 4, approach = 2
         speed { value: cruise, held { channel: "run", multiplier: boost } }
         stepHeight: 0
         turn { falloff: 1, maxPitch: 1.3, pitchRate: 0, rate: turn }
-        upTurn { field: roll, contact: 6.283185307179586 }
+        upTurn { field: roll, contact: 2 * pi }
       }
     }
   ]

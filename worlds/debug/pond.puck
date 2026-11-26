@@ -32,14 +32,14 @@ let denAt = [-21, 0, -27]
 // The spiders' and hounds' limbs mirror across x. A side is its name in the shape names, the sign its x takes and a shift
 // into the stride: its legs plant on the half of the stride that the opposite side's matching leg swings through.
 let spiderSides = [{ name: "Left", sign: 1, shift: 0 }, { name: "Right", sign: -1, shift: 1 }]
-let strideHalf = 3.141592653589793
+let strideHalf = pi
 let stridePhases = [[0, strideHalf], [strideHalf, 6.28]]
-let strideSway = [0, 3.14159]
+let strideSway = [0, pi]
 let strideLift = [1.5708, 4.71239]
 
 // A spider leg's lift axis (x and z): `degrees` from the x axis with z pointing back, and x negated when `sign` is -1
 // (the two legs behind the first pair's mirror).
-let legRadiansPerDegree = 3.141592653589793 / 180
+let legRadiansPerDegree = pi / 180
 function legLiftAxis(degrees, sign) = [
   sign * cosine(degrees * legRadiansPerDegree),
   0 - sine(degrees * legRadiansPerDegree)
@@ -123,7 +123,7 @@ template spiderLeg(side, sign, shift, i, leg) {
 let wingSides = [{ name: "Left", sign: 1 }, { name: "Right", sign: -1 }]
 let dragonflyWings = [
   { x: 0.21, z: 0.03, length: 0.16, phase: 0 }
-  { x: 0.2, z: -0.03, length: 0.15, phase: 3.14159 }
+  { x: 0.2, z: -0.03, length: 0.15, phase: pi }
 ]
 
 template dragonflyWing(side, sign, n, wing) {
@@ -204,19 +204,19 @@ template pond() {
         name: "hound"
         kind: "Int"
         capacity: 64
-        cells: map(range(houndFirst, houndCount), i => { key: $"{i}", value: 1 })
+        cells: map(range(houndFirst, houndFirst + houndCount), i => { key: $"{i}", value: 1 })
       }
       row {
         name: "houndIdentity"
         kind: "Int"
         capacity: houndCount
-        cells: map(range(houndFirst, houndCount), i => { key: $"{i}", value: i })
+        cells: map(range(houndFirst, houndFirst + houndCount), i => { key: $"{i}", value: i })
       }
       row {
         name: "spider"
         kind: "Int"
         capacity: 64
-        cells: map(range(spiderFirst, spiderCount), i => { key: $"{i}", value: 1 })
+        cells: map(range(spiderFirst, spiderFirst + spiderCount), i => { key: $"{i}", value: 1 })
       }
 
       // The rumour's state: the hound holding the bone (-1 for none), the hound that saw it first, the claim's

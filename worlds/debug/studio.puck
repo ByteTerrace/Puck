@@ -295,7 +295,7 @@ template studioAidPrototypes() {
         material: 2
       }
       // Six risers of 0.17 m and treads of 0.3 m from z -16.5, a landing 1.2 m long and five risers down.
-      for k in range(1, 7) {
+      for k in range(1, 8) {
         shape Box $"stair-up-{k}" {
           id: (9 + k)
           position [-12, ((0.01 + (0.17 * k)) / 2), (16.65 + (0.3 * (k - 1)))]
@@ -309,7 +309,7 @@ template studioAidPrototypes() {
         scale [1.5, 0.515, 0.6]
         material: 3
       }
-      for j in range(1, 6) {
+      for j in range(1, 7) {
         shape Box $"stair-down-{j}" {
           id: (20 + j)
           position [-12, ((0.01 + (0.17 * (6 - j))) / 2), (19.65 + (0.3 * (j - 1)))]

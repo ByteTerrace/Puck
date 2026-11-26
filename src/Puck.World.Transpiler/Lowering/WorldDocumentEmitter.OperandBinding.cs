@@ -17,6 +17,10 @@ public static partial class WorldDocumentEmitter {
 
     private static ExpressionNode CompileTimeOperand(OperandExpressionNode operand, DocumentScope scope) =>
         new OperandBinder(scope: scope).CompileTime(operand: operand);
+    // The value an access or index through a compile-time object or array reads (`look.lit`), or null when the
+    // operand's root is a row, a runtime name or a binding holding a name, all of which address state instead.
+    private static JsonNode? CompileTimeRead(OperandExpressionNode operand, DocumentScope scope) =>
+        new OperandBinder(scope: scope).CompileTimeRead(operand: operand);
     // The operand with its value functions inlined (OperandBinder.Inline) and what its compile-time constants decide
     // folded (OperandBinder.Fold), or itself when neither changes it.
     private static OperandExpressionNode FoldOperand(OperandExpressionNode operand, DocumentScope scope) {
@@ -161,6 +165,14 @@ public static partial class WorldDocumentEmitter {
         }
         internal ExpressionNode CompileTime(OperandExpressionNode operand) => ((operand.Syntax is { } syntax)
             ? ToCompileTime(node: syntax, operand: operand) : RefuseCompileTime(operand: operand));
+        internal JsonNode? CompileTimeRead(OperandExpressionNode operand) {
+            var node = operand.Syntax;
+
+            while (node is Syntax.SourceGroup group) { node = group.Value; }
+            return (((node is Syntax.SourceAccess or Syntax.SourceIndex) && HasBoundRoot(node: node))
+                ? DocumentLowering.LowerValue(ToCompileTime(node: node, operand: operand), scope)
+                : null);
+        }
         // Folds what compile-time constants decide whatever kind the destination reads, so a spelling's document and
         // price never depend on whether the author wrote a constant or an expression of constants: a name bound to a
         // number becomes that number, a sign on a literal becomes the negated literal, and an operator over whole
@@ -382,7 +394,22 @@ public static partial class WorldDocumentEmitter {
                 m_text.Append(value: Syntax.PrintName(name: name));
                 return;
             }
-            if ((form == DocumentValueForm.Key) || IsRuntimeName(name: name.Name) || name.Name.StartsWith(value: '$')) {
+            if (IsRuntimeName(name: name.Name) || name.Name.StartsWith(value: '$')) {
+                m_text.Append(value: name.Name);
+                return;
+            }
+            // A bare word in a key position (`key: slot`, `fromKey: lit`) is that literal key unless a compile-time
+            // binding of the name is in scope (a let, a template parameter, a loop variable): then the key is the
+            // binding's value, as it is inside brackets (WriteIndex).
+            if (form == DocumentValueForm.Key) {
+                if (scope.TryLowerBinding(name.Name, out var boundKey) && (boundKey is JsonValue)) {
+                    if (scope.TryRefuseRead(name: name.Name, span: operand.Span)) {
+                        m_text.Append(value: '0');
+                        return;
+                    }
+                    WriteValue(form: form, value: boundKey, span: operand.Span);
+                    return;
+                }
                 m_text.Append(value: name.Name);
                 return;
             }

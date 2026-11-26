@@ -318,7 +318,7 @@ let accent = { color: "#D9822B", roughness: 0.5, specular: 0.04 }
 template exhibit(label, extra = [], runs = [], subject = galleryPalette[0]) {
   name: label
   schema: "puck.creation.v1"
-  palette: concat([subject], map(range(1, (length(galleryPalette) - 1)), i => galleryPalette[i]), extra)
+  palette: concat([subject], map(range(1, length(galleryPalette)), i => galleryPalette[i]), extra)
   textRuns: runs
 }
 

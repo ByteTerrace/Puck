@@ -78,7 +78,7 @@ template sheddingState(seats, handSize) {
   sheddingPile(name: "sheddingDeck", visibility: { hidden: "Count" }, cards: range(0, sheddingCardCount))
   sheddingPile(name: "sheddingDiscard", visibility: {})
 
-  for s in range(1, seats) {
+  for s in range(1, seats + 1) {
     sheddingPile(name: $"sheddingHeld{s}", visibility: { readers [$"seat{s}"] })
     sheddingPile(name: $"sheddingHand{s}", visibility: { hidden: "Placeholder" })
   }
@@ -123,7 +123,7 @@ template sheddingRules(seats, handSize) {
     remove sheddingDiscard[zone(sheddingDiscard, first)]
   }
 
-  for s in range(1, seats) {
+  for s in range(1, seats + 1) {
     rule $"shedding-gather-hand-{s}" {
       when shedding.phase == 4 and count($"sheddingHand{s}") > 0
       sheddingSealed[zone($"sheddingHand{s}", first)] = true
@@ -155,7 +155,7 @@ template sheddingRules(seats, handSize) {
 
   // The deal: a card a tick, round the seats from seat 1, off the top of the sealed pile into a hand and its owner's
   // private twin.
-  for s in range(1, seats) {
+  for s in range(1, seats + 1) {
     rule $"shedding-deal-{s}" {
       when shedding.phase == 1 and shedding.shuffled == 1 and shedding.dealTurn == s and shedding.dealt < (
           seats * handSize
@@ -179,7 +179,7 @@ template sheddingRules(seats, handSize) {
     shedding.turn = 1
   }
 
-  for s in range(1, seats) {
+  for s in range(1, seats + 1) {
     // A play: a card of the seat's own hand matching the top card's suit or rank goes onto the discard pile. A
     // call-form effect's `expr(...)` key reads the inbox row itself: a local there lowers as a row of that name.
     rule $"shedding-play-{s}" {
@@ -251,7 +251,7 @@ template sheddingRules(seats, handSize) {
     shedding.tallying = 1
   }
 
-  for s in range(1, seats) {
+  for s in range(1, seats + 1) {
     rule $"shedding-fewest-{s}" {
       when shedding.tallying == 1 and count($"sheddingHand{s}") < shedding.fewest
       shedding.fewest = count($"sheddingHand{s}")

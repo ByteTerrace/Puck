@@ -296,7 +296,7 @@ public static class DocumentDimensions {
         }
     }
     // The compile-time scalar functions: a trigonometric function takes an angle or a pure number and gives a pure
-    // number; a rounding keeps its argument's dimension; minimum, maximum and clamp need their arguments to agree; a
+    // number; a rounding keeps its argument's dimension; minimum, maximum, clamp and hypotenuse need their arguments to agree; a
     // square root halves the powers. Every other call is unknown.
     private static InferredDimension Call(CallExpressionNode call, DocumentScope scope) {
         var arguments = call.Arguments;
@@ -318,7 +318,7 @@ public static class DocumentDimensions {
                         _ => InferredDimension.Unknown,
                     };
                 }
-            case "minimum" or "maximum" or "clamp" when (arguments.Count > 0): {
+            case "minimum" or "maximum" or "clamp" or "hypotenuse" when (arguments.Count > 0): {
                     var agreed = Infer(expression: arguments[0].Value, scope: scope);
 
                     for (var index = 1; (index < arguments.Count); index++) {

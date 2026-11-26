@@ -172,7 +172,7 @@ state {
     {
       name: "day"
       kind: "Fixed"
-      value: $"{sharedDayStart / 24}"
+      value: (sharedDayStart / 24)
       advance { perSecondNumerator: 1, perSecondDenominator: sharedDaySeconds }
       follows { destination: "debug" }
     }
@@ -197,7 +197,7 @@ state {
     { name: "sunLight", kind: "Fixed", value: "1", min: "0", max: "1" }
     { name: "sunMass", kind: "Fixed", value: "1", min: "0", max: "1" }
     // The star's own light here, in lux at its distance from the valley, which its rules write with its share.
-    { name: "sunLux", kind: "Fixed", value: $"{sunStar.illuminance}" }
+    { name: "sunLux", kind: "Fixed", value: sunStar.illuminance }
   ]
 }
 

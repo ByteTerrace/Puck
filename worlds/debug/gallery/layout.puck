@@ -235,7 +235,7 @@ let flawProfile = [
 let flawGallery = concat(
   [{ x: flawProfile[0].x, level: flawProfile[0].level }],
   flatMap(
-    range(1, (length(flawProfile) - 2)),
+    range(1, (length(flawProfile) - 1)),
     j => [{ x: flawProfile[j].x, level: flawProfile[(j - 1)].level }, { x: flawProfile[j].x, level: flawProfile[j].level }]
   ),
   [{ x: flawProfile[(length(flawProfile) - 1)].x, level: flawProfile[(length(flawProfile) - 2)].level }]
@@ -250,7 +250,7 @@ let flawRoute = concat(
 // The heights the flaw is cut at, each slab's middle: its lights are cut there so every stretch of light lies in one
 // storey and the irradiance volume shuts it out of the storeys the slabs close off, and each place it passes through a
 // slab (`flawCrossings`, each { point, height, segment }: `height` 0 is level 1's slab) is opened and collared.
-let flawCuts = map(range(1, 3), k => ((galleryStorey * k) - 0.1))
+let flawCuts = map(range(1, 4), k => ((galleryStorey * k) - 0.1))
 let flawCrossings = loopCrossings(flawRoute, flawCuts)
 
 // The display stations: the showcase's twelve stand in its bays (shapes.puck's galleryDisplays), a pair to each bay

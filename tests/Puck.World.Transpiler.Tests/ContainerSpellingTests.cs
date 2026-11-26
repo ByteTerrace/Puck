@@ -80,48 +80,21 @@ public class ContainerSpellingTests {
     public static TheoryData<string> KeptColonNames() => new(values: KeptColons.Keys);
     [MemberData(nameof(KeptColonNames))]
     [Theory]
-    public void ALegalColonIsNotRefused(string name) => Assert.DoesNotContain(
+    public void ALegalColonParsesClean(string name) => Assert.DoesNotContain(
         collection: WorldSources.Parse(body: KeptColons[name]).Diagnostics,
-        filter: diagnostic => (diagnostic.Code == PuckDiagnosticCodes.ColonBeforeContainer)
+        filter: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error)
     );
 
-    // A colon in front of a literal container, at every depth: each refusal names the spelling it refuses.
-    private static readonly Dictionary<string, Refusal> RefusedColons = new(comparer: StringComparer.Ordinal) {
-        ["a document block"] = new(
-            Body: "host: {\n    width: 1280\n}\n",
-            Code: PuckDiagnosticCodes.ColonBeforeContainer,
-            Needle: "host: {"
-        ) { Mentions = "host:" },
-        ["a document array"] = new(
-            Body: "cameras: [\n    { name: \"a\" }\n]\n",
-            Code: PuckDiagnosticCodes.ColonBeforeContainer,
-            Needle: "cameras: ["
-        ) { Mentions = "cameras:" },
-        ["an array inside a block"] = new(
-            Body: "collision {\n    requirements: [\n        \"SmoothUnionContact\"\n    ]\n}\n",
-            Code: PuckDiagnosticCodes.ColonBeforeContainer,
-            Needle: "requirements: ["
-        ) { Mentions = "requirements:" },
-        ["an array inside an object literal"] = new(
-            Body: "screens [\n    { index: 0, origin: [0, 1, 0] }\n]\n",
-            Code: PuckDiagnosticCodes.ColonBeforeContainer,
-            Needle: "origin: ["
-        ) { Mentions = "origin:" },
-        ["an array in a rule body"] = new(
-            Body: "rule \"zoned\" {\n    when score[0] > 0\n    zones: [\"a\"]\n    score[0] += 1\n}\n",
-            Code: PuckDiagnosticCodes.ColonBeforeContainer,
-            Needle: "zones: ["
-        ) { Mentions = "'zones: [' - a list is written without the ':': use 'zones ['" },
-        ["a block in a decision body"] = new(
-            Body: "rule \"chooser\" {\n    decision {\n        periodSeconds: 1s\n        tieBreak: { seed: 0 }\n        option \"o\" {\n            score: 1\n        }\n    }\n}\n",
-            Code: PuckDiagnosticCodes.ColonBeforeContainer,
-            Needle: "tieBreak: {"
-        ) { Mentions = "'tieBreak: {' - a block is written without the ':': use 'tieBreak {'" },
-        ["a block in an option body"] = new(
-            Body: "rule \"chooser\" {\n    decision {\n        periodSeconds: 1s\n        option \"o\" {\n            score: 1\n            neighbors: { range: 10 }\n        }\n    }\n}\n",
-            Code: PuckDiagnosticCodes.ColonBeforeContainer,
-            Needle: "neighbors: {"
-        ) { Mentions = "'neighbors: {' - a block is written without the ':': use 'neighbors {'" },
+    // A colon in front of a literal container, at every depth, reads as the container written without it: both
+    // spellings parse clean and print as the one canonical form.
+    private static readonly Dictionary<string, (string Colon, string Canonical)> ColonSpellings = new(comparer: StringComparer.Ordinal) {
+        ["a document block"] = ("host: {\n    width: 1280\n}\n", "host {\n    width: 1280\n}\n"),
+        ["a document array"] = ("cameras: [\n    { name: \"a\" }\n]\n", "cameras [\n    { name: \"a\" }\n]\n"),
+        ["an array inside a block"] = ("collision {\n    requirements: [\n        \"SmoothUnionContact\"\n    ]\n}\n", "collision {\n    requirements [\n        \"SmoothUnionContact\"\n    ]\n}\n"),
+        ["an array inside an object literal"] = ("screens [\n    { index: 0, origin: [0, 1, 0] }\n]\n", "screens [\n    { index: 0, origin [0, 1, 0] }\n]\n"),
+        ["a block inside an object literal"] = ("screens [\n    { index: 0, look: { tint: 1 } }\n]\n", "screens [\n    { index: 0, look { tint: 1 } }\n]\n"),
+        ["an array in a rule body"] = ("rule \"zoned\" {\n    when score[0] > 0\n    zones: [\"a\"]\n    score[0] += 1\n}\n", "rule \"zoned\" {\n    when score[0] > 0\n    zones [\"a\"]\n    score[0] += 1\n}\n"),
+        ["a block in a decision body"] = ("rule \"chooser\" {\n    decision {\n        periodSeconds: 1s\n        tieBreak: { seed: 0 }\n        option \"o\" {\n            score: 1\n        }\n    }\n}\n", "rule \"chooser\" {\n    decision {\n        periodSeconds: 1s\n        tieBreak { seed: 0 }\n        option \"o\" {\n            score: 1\n        }\n    }\n}\n"),
     };
 
     // A section holding only its rows is the array of them (`kits [ … ]`), so the block holding nothing else is
@@ -135,14 +108,21 @@ public class ContainerSpellingTests {
             Needle: "kits {"
         ) { Mentions = "'kits [ … ]'" }
     );
-    public static TheoryData<string> RefusedColonNames() => new(values: RefusedColons.Keys);
-    [MemberData(nameof(RefusedColonNames))]
+    public static TheoryData<string> ColonSpellingNames() => new(values: ColonSpellings.Keys);
+    [MemberData(nameof(ColonSpellingNames))]
     [Theory]
-    public void AColonBeforeAContainerIsRefusedByName(string name) => WorldSources.AssertRefusedBy(
-        diagnostics: WorldSources.Parse(body: RefusedColons[name].Body).Diagnostics,
-        label: name,
-        refusal: RefusedColons[name]
-    );
+    public void AColonBeforeAContainerReadsAsTheContainer(string name) {
+        var (colon, canonical) = ColonSpellings[name];
+
+        Assert.DoesNotContain(
+            collection: WorldSources.Parse(body: colon).Diagnostics,
+            filter: static diagnostic => (diagnostic.Severity == DiagnosticSeverity.Error)
+        );
+        Assert.Equal(
+            PuckFormat.Format(source: (WorldSources.Header + canonical)),
+            PuckFormat.Format(source: (WorldSources.Header + colon))
+        );
+    }
     [Fact]
     public void TestANestedFieldBlockLowersLikeItsPropertySpelling() {
         var lowered = WorldCompileSession.Shared.Compile(

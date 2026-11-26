@@ -115,18 +115,18 @@ let heartArcSteps = 16
 let heartOutline = concat(
   [[0, -0.55], [0.5, -0.05]],
   map(
-    range(1, heartArcSteps - 1),
+    range(1, heartArcSteps),
     k => [
-      0.25 + heartLobeRadius * cosine(-0.78539816 + 3.14159265 * k / heartArcSteps)
-      0.2 + heartLobeRadius * sine(-0.78539816 + 3.14159265 * k / heartArcSteps)
+      0.25 + heartLobeRadius * cosine(-0.78539816 + pi * k / heartArcSteps)
+      0.2 + heartLobeRadius * sine(-0.78539816 + pi * k / heartArcSteps)
     ]
   ),
   [[0, 0.45]],
   map(
-    range(1, heartArcSteps - 1),
+    range(1, heartArcSteps),
     k => [
-      -0.25 + heartLobeRadius * cosine(0.78539816 + 3.14159265 * k / heartArcSteps)
-      0.2 + heartLobeRadius * sine(0.78539816 + 3.14159265 * k / heartArcSteps)
+      -0.25 + heartLobeRadius * cosine(0.78539816 + pi * k / heartArcSteps)
+      0.2 + heartLobeRadius * sine(0.78539816 + pi * k / heartArcSteps)
     ]
   ),
   [[-0.5, -0.05]]

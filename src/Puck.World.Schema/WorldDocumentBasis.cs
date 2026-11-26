@@ -485,6 +485,19 @@ public static class WorldDocumentBasis {
         }
 
         var positions = new List<(JsonNode? Row, JsonNode? Before)>();
+        // A basis row still carrying a position came from a layer composed before its target's (an imported fragment
+        // leading a row of the document importing it), so it is positioned here with the overlay's own, unless the
+        // overlay drops it. The basis is this merge's to change.
+        var basisPositions = new List<(JsonNode? Row, JsonNode? Before)>();
+
+        foreach (var node in basis) {
+            if ((node is not JsonObject row) || !row.TryGetPropertyValue(BeforeMemberName, out var before)) { continue; }
+            if (before is null) {
+                throw new JsonException($"{path}: '{BeforeMemberName}' needs a surviving target identity.");
+            }
+            basisPositions.Add((RowIdentity(row, key)?.DeepClone(), before.DeepClone()));
+            row.Remove(BeforeMemberName);
+        }
         // Only position markers need a private overlay: ordinary overlays are read, never changed.
         var positioned = overlay.Any(static node => node is JsonObject row && row.ContainsKey(BeforeMemberName))
             ? (JsonArray)WorldDocumentOrigins.Clone(node: overlay, origins: origins)!
@@ -561,6 +574,12 @@ public static class WorldDocumentBasis {
                 path: $"{path}[{index}]"
             );
             merged.Add(value: WorldDocumentOrigins.Clone(node: appended, origins: origins));
+        }
+
+        if (basisPositions.Count > 0) {
+            var surviving = IndexRows(merged, key, out _);
+
+            positions.InsertRange(index: 0, collection: basisPositions.Where(position => ((position.Row is not null) && surviving.ContainsKey(position.Row))));
         }
 
         return (positions.Count == 0) ? merged : PositionRows(merged, positions, key, path.ToString(), origins);

@@ -555,8 +555,10 @@ work and its order are [S9](../plans/state-and-language.md#s9--the-authoring-con
   expectation holds at the end and `eventually` marks one that holds on some
   tick, reporting its witness tick.
 - **No JSON showing through.** Keywords are contextual, sections take arrays
-  directly, and noise fields take defaults. PUCK040 stays (a literal's
-  punctuation marks its shape; a binding keeps its colon).
+  directly, and noise fields take defaults. A colon in front of a literal
+  container reads as the container (`palette: [ ]` is `palette [ ]`), one node
+  the printer writes without the colon, so neither spelling is refused
+  (ergonomic is optimal); a binding keeps its colon.
 - **State sugar is complete**, so no source writes `row { }`; `: Kind` is
   always allowed.
 - **One rule grammar for worlds and cartridges**, each target refusing what its

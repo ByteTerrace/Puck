@@ -73,13 +73,13 @@ template rhythmJudge(music, presses, phrase, seats = 1, windows = rhythmWindows,
         name: "judgeError"
         kind: Fixed
         capacity: seats
-        cells: map(range(1, seats), s => { key: $"{s}", value: "0" })
+        cells: map(range(1, seats + 1), s => { key: $"{s}", value: "0" })
       }
       row {
         name: "judge"
         kind: Int
         capacity: seats * 5
-        cells: flatMap(range(1, seats), s => [
+        cells: flatMap(range(1, seats + 1), s => [
           { key: $"status{s}", value: 0 }
           { key: $"step{s}", value: 0 }
           { key: $"start{s}", value: 0 }
@@ -87,7 +87,7 @@ template rhythmJudge(music, presses, phrase, seats = 1, windows = rhythmWindows,
           { key: $"misses{s}", value: 0 }
         ])
       }
-      for s in range(1, seats) {
+      for s in range(1, seats + 1) {
         row {
           name: $"judgeGrade{s}"
           kind: Int
@@ -106,7 +106,7 @@ template rhythmJudge(music, presses, phrase, seats = 1, windows = rhythmWindows,
     }
   }
 
-  for s in range(1, seats) {
+  for s in range(1, seats + 1) {
     // One sweep over the seat's events in this step, oldest first, so two presses inside one step are each judged in the
     // order they happened, and the second reads what the first wrote. Each local chain below folds the presses' channels
     // into the one value the event at hand carries: whether it is a press, the note it means, and where it fell.

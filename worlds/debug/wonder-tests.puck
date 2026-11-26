@@ -6,7 +6,7 @@
 //
 // Positions are world coordinates with the building at layout.puck's `gallerySite` (9.825, 0, 12.575). The south-west
 // stair's half landings stand 2.25 m over levels 0 and 1, so a body on one is halfway up its flight and takes the
-// geometric mean of full size and Alice's, about the square root of 0.15 (0.387). The south cabinet in bay 3 (screen 22) stands
+// geometric mean of full size and Alice's, about the square root of 0.15 (0.387). The south cabinet in bay 3 (screen 21) stands
 // at (24.5, 4.55, 16.0), facing north; a body 1.2 m before it is within a full body's 3 m reach and far outside a small
 // one's 0.45 m. The scenarios spell the shortcuts by what they run (gallery.go toybox poses at `spawn:toybox`, and
 // gallery.wonder pass on writes `wonderpass`, whose `on` is 2), since a test step takes no authored command.
@@ -108,12 +108,12 @@ test "small, a toybox cabinet's screen is out of her reach" {
   when {
     seat1: body.pose 24.5 4.6 17.2 0 0 0 0
     ticks 10
-    seat1 refused "to engage at its size": body.engage 22
+    seat1 refused "to engage at its size": body.engage 21
     ticks 5
   }
   expect {
     bodyState(body, 0, size) == 0.15
-    engaged(body, 0, 22) == 0
+    engaged(body, 0, 21) == 0
   }
 }
 
@@ -123,11 +123,11 @@ test "with the pass she reaches a toybox cabinet's screen" {
     ticks 2
     seat1: body.pose 24.5 4.6 17.2 0 0 0 0
     ticks 10
-    seat1: body.engage 22
+    seat1: body.engage 21
     ticks 5
   }
   expect {
     bodyState(body, 0, size) == 1
-    engaged(body, 0, 22) == 1
+    engaged(body, 0, 21) == 1
   }
 }
