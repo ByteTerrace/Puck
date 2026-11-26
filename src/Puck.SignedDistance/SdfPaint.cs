@@ -124,7 +124,8 @@ public sealed record SdfPaintShape(SdfShapeType Type, Vector4 Data0, Vector4 Dat
 /// <see cref="NoText"/> for a paint that covers its whole shape. A text paint colours the surface only inside both its
 /// shape and a glyph, the glyphs laid out in the shape's bound box on its local XY plane and projected along local Z;
 /// a slot the host supplies no glyphs for draws nothing. Its shape must be bounded.</param>
-public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Rotation, float Stroke, Vector3 Color, int Slot = SdfPaint.WinningFrame, int Text = SdfPaint.NoText) {
+/// <param name="Repeat">The lattice the paint repeats on, or <see langword="null"/> for a paint drawn once.</param>
+public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Rotation, float Stroke, Vector3 Color, int Slot = SdfPaint.WinningFrame, int Text = SdfPaint.NoText, SdfPaintRepeat? Repeat = null) {
     /// <summary>The <see cref="Slot"/> of a paint in the frame of the slot that owns the hit.</summary>
     public const int WinningFrame = -1;
     /// <summary>The <see cref="Text"/> of a paint that covers its whole shape.</summary>
@@ -156,6 +157,31 @@ public sealed record SdfPaint(SdfPaintShape Shape, Vector3 Origin, Quaternion Ro
         (paint.Color.X >= 0f) && (paint.Color.Y >= 0f) && (paint.Color.Z >= 0f) &&
         (paint.Slot >= WinningFrame) &&
         (paint.Text >= NoText) && (paint.Text < SdfSurfaceTextLayout.MaxTexts) &&
-        ((paint.Text == NoText) || !shape.Bound.IsUnbounded)
+        ((paint.Text == NoText) || !shape.Bound.IsUnbounded) &&
+        ((paint.Repeat is null) || ((paint.Text == NoText) && SdfPaintRepeat.IsValid(repeat: paint.Repeat)))
+    );
+}
+/// <summary>A paint repeated on a lattice of its own frame: tiles, blocks, coffers or any pattern a cell's one shape
+/// draws. The views pass folds the hit into its cell before it evaluates the paint's shape, so the shape is drawn once a
+/// cell about the cell's centre, and each cell's colour moves from the paint's <see cref="SdfPaint.Color"/> toward
+/// <see cref="Tone"/> by a hash of the cell and <see cref="Seed"/>, so cells vary as fired tiles or cut stones do. It
+/// colours the surface alone, never the field. Where a cell grows smaller than a pixel the variation fades toward its
+/// mean.</summary>
+/// <param name="Cell">The lattice's period along each axis of the paint's frame, in the frame's units; zero for an axis
+/// the paint does not repeat along.</param>
+/// <param name="Tone">The linear-RGB albedo the cells' colours vary toward; the paint's own colour for no variation.</param>
+/// <param name="Seed">The seed of the cells' hash.</param>
+public sealed record SdfPaintRepeat(Vector3 Cell, Vector3 Tone, uint Seed = 0) {
+    /// <summary>Returns whether a repetition's values are admissible: every period finite and non-negative with at least
+    /// one positive, and the tone finite and non-negative.</summary>
+    /// <param name="repeat">The repetition.</param>
+    /// <returns><see langword="true"/> when it is admissible.</returns>
+    public static bool IsValid(SdfPaintRepeat? repeat) => (
+        (repeat is not null) &&
+        VectorFunctions.IsFinite(vector: repeat.Cell) &&
+        (repeat.Cell.X >= 0f) && (repeat.Cell.Y >= 0f) && (repeat.Cell.Z >= 0f) &&
+        ((repeat.Cell.X > 0f) || (repeat.Cell.Y > 0f) || (repeat.Cell.Z > 0f)) &&
+        VectorFunctions.IsFinite(vector: repeat.Tone) &&
+        (repeat.Tone.X >= 0f) && (repeat.Tone.Y >= 0f) && (repeat.Tone.Z >= 0f)
     );
 }

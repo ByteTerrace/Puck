@@ -6060,6 +6060,38 @@
                             "additionalProperties": false,
                             "default": null,
                             "title": "PalettePaintTextDocument"
+                          },
+                          "repeat": {
+                            "description": "The lattice the paint repeats on, or null for a paint drawn once; a text paint cannot repeat.",
+                            "type": [
+                              "object",
+                              "null"
+                            ],
+                            "properties": {
+                              "cell": {
+                                "$ref": "#/$defs/DocumentVector3",
+                                "description": "The period along each axis of the paint\u0027s frame, in its units; zero for an axis the paint does not repeat along."
+                              },
+                              "tone": {
+                                "description": "The colour the cells vary toward, #RRGGBB or a state binding; null for cells all in the paint\u0027s colour.",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "default": null
+                              },
+                              "seed": {
+                                "description": "The seed of the cells\u0027 hash.",
+                                "type": "integer",
+                                "default": 0
+                              }
+                            },
+                            "required": [
+                              "cell"
+                            ],
+                            "additionalProperties": false,
+                            "default": null,
+                            "title": "PalettePaintRepeatDocument"
                           }
                         },
                         "required": [

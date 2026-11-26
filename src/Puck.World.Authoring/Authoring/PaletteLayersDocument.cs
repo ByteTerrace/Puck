@@ -263,6 +263,8 @@ public sealed record PalettePaintTextDocument(
 /// out in the primitive's box. A text paint's primitive is bounded (a <c>Box</c> is the plain choice: its
 /// <paramref name="Scale"/> is the box's half-extents, and its z half-extent bounds which side of the part the
 /// lettering reaches) and carries no <paramref name="Stroke"/>.</param>
+/// <param name="Repeat">The lattice the paint repeats on, or null for a paint drawn once; a text paint cannot
+/// repeat.</param>
 public sealed record PalettePaintDocument(
     SdfSolidPrimitive Type,
     [property: DocumentText("a color literal")] string Color,
@@ -279,7 +281,8 @@ public sealed record PalettePaintDocument(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Chamfer = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Exponent = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ShapeCurveDocument? Curve = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PalettePaintTextDocument? Text = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PalettePaintTextDocument? Text = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PalettePaintRepeatDocument? Repeat = null
 ) {
     /// <summary>Resolves the engine paint at a placement scale.</summary>
     /// <param name="resolve">The color resolver.</param>
@@ -306,9 +309,25 @@ public sealed record PalettePaintDocument(
         ),
         Slot: slot,
         Stroke: ((Stroke ?? 0f) * scale),
-        Text: text
+        Text: text,
+        Repeat: ((Repeat is { } repeat) ? new SdfPaintRepeat(Cell: (repeat.Cell.Value * scale), Seed: repeat.Seed, Tone: ((repeat.Tone is { } tone) ? resolve(tone) : resolve(Color))) : null)
     );
 }
+/// <summary>The lattice a paint repeats on (<see cref="PalettePaintDocument.Repeat"/>): its primitive is drawn once a cell
+/// about the cell's centre, and each cell's colour varies between the paint's <c>color</c> and <paramref name="Tone"/> by
+/// a hash of the cell, so a floor reads as tiles with joints between them (a box a joint smaller than the cell over the
+/// slot's joint colour) and a wall as blocks. It colours the surface alone.</summary>
+/// <param name="Cell">The period along each axis of the paint's frame, in its units; zero for an axis the paint does not
+/// repeat along.</param>
+/// <param name="Tone">The colour the cells vary toward, #RRGGBB or a state binding; null for cells all in the paint's
+/// colour.</param>
+/// <param name="Seed">The seed of the cells' hash.</param>
+public sealed record PalettePaintRepeatDocument(
+    DocumentVector3 Cell,
+    [property: DocumentText("a color literal")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Tone = null,
+    uint Seed = 0
+);
 /// <summary>Generic weathering coverage and explicitly authored reveal/deposit surfaces. The pattern's character is
 /// authored here too: <c>octaves</c> (1 or 2) sets how many lattice octaves the mask sums, <c>octaveRatio</c> the
 /// second octave's frequency multiple, <c>octaveGain</c> its weight relative to the first (the sum is normalised, so

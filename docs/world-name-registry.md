@@ -2636,6 +2636,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].field.material.paints[].curve.b` | State | Binding | Binding | `ShapeCurveDocument.B` |
 | `state.world[].field.material.paints[].curve.c` | State | Binding | Binding | `ShapeCurveDocument.C` |
 | `state.world[].field.material.paints[].text.template` | State | Template | Binding | `PalettePaintTextDocument.Template` |
+| `state.world[].field.material.paints[].repeat.cell` | State | Binding | Binding | `PalettePaintRepeatDocument.Cell` |
 | `state.world[].field.paint[][draw].source` | Generator | Names | Read | `WorldLatticeFill.Draw.Source` |
 | `state.world[].witness` | State | Names | Read | `WorldStateRow.Witness` |
 | `state.world[].draw.source` | Generator | Names | Read | `Draw.Source` |
@@ -5945,6 +5946,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `state.world[].field.material.paints[].parent` | `PalettePaintDocument.Parent` | a shape of the creation the paint's palette slot belongs to, local to that creation |
 | `state.world[].field.material.paints[].text.font` | `PalettePaintTextDocument.Font` | a font name |
 | `state.world[].field.material.paints[].text.align` | `PalettePaintTextDocument.Align` | a text alignment |
+| `state.world[].field.material.paints[].repeat.tone` | `PalettePaintRepeatDocument.Tone` | a color literal |
 | `state.world[].field.paint[].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].field.paint[][rect].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |
 | `state.world[].field.paint[][noise].field` | `WorldLatticeFill.Field` | compile-stamped from the carrying row, never authored |

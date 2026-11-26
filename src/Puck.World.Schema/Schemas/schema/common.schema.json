@@ -11359,6 +11359,37 @@
       "additionalProperties": false,
       "title": "PalettePaintTextDocument"
     },
+    "PalettePaintRepeatDocument": {
+      "description": "The lattice a paint repeats on (Repeat): its primitive is drawn once a cell about the cell\u0027s centre, and each cell\u0027s colour varies between the paint\u0027s color and Tone by a hash of the cell, so a floor reads as tiles with joints between them (a box a joint smaller than the cell over the slot\u0027s joint colour) and a wall as blocks. It colours the surface alone.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "cell": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The period along each axis of the paint\u0027s frame, in its units; zero for an axis the paint does not repeat along."
+        },
+        "tone": {
+          "description": "The colour the cells vary toward, #RRGGBB or a state binding; null for cells all in the paint\u0027s colour.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "seed": {
+          "description": "The seed of the cells\u0027 hash.",
+          "type": "integer",
+          "default": 0
+        }
+      },
+      "required": [
+        "cell"
+      ],
+      "additionalProperties": false,
+      "title": "PalettePaintRepeatDocument"
+    },
     "SdfBlendOp": {
       "enum": [
         "Union",
