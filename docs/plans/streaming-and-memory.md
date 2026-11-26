@@ -2893,7 +2893,7 @@ the device's one retirement for released residencies (`GpuDeviceRetirement`,
 on `GpuRetirementQueue`). Direct3D 12 has a mapped destination
 (`IGpuMappedBuffer`, `DirectXGpuMappedBuffer`, created through
 `IGpuBufferFactory.TryCreateMapped` at reserved resources tier 2 or above): one
-reserved buffer of `GpuRegion.MaxByteCount` whose 1 MiB chunks map to tile runs
+reserved buffer of the region's `GpuRegion.MostBytes` whose 1 MiB chunks map to tile runs
 of the heap arena's tile-only heaps (`DirectXHeapArena.PlaceTiles`), each run
 admitted and counted like any heap range. A `GpuRegion` created `mapped` grows
 by mapping chunks and shrinks by unmapping them, with no carry and no
@@ -2906,13 +2906,17 @@ pages. On Vulkan a device with a sparse-capable queue enables both sparse
 buffer features (`VulkanLogicalDeviceFactory.FeatureIndicesOf`), and its
 mapped destination is a sparse buffer (`VulkanGpuMappedBuffer`) whose 1 MiB
 chunks bind page runs of the arena's page blocks
-(`VulkanMemoryArena.PlacePages`) through `VulkanLogicalDevice.BindSparse`; a
-chunk's pages and the buffer itself are released only through the arena's
-sparse retirement (`VulkanMemoryArena.RetireSparse`), behind the device
-timeline's value for the bind that let them go. It is built from the
-specification and the design below and has not run on hardware: its first
-windowed boot is the lead's, and `--withhold-gpu mapped-buffers` runs the
-contiguous path on the same device for the comparison. The 4070 readings
+(`VulkanMemoryArena.PlacePages`) through `VulkanLogicalDevice.QueueSparse`,
+which the queue's door issues before anything it hands over; a chunk's pages and
+the buffer itself are released only through the arena's sparse retirement
+(`VulkanMemoryArena.RetireSparse`), behind the device timeline's value for the
+bind that let them go. Every region is held to the storage view a kernel can
+size (`GpuRegion.MostBytes`, from `IGpuBindings.MaxStorageBufferBytes`): on the
+RTX 4070 NVIDIA's Vulkan driver reports a `maxStorageBufferRange` of 2^32 - 1
+but answers `GetDimensions` with zero past 2 GiB, so the first windowed boot,
+whose region reserved just under 4 GiB, drew nothing; held under 2 GiB it
+draws. `--withhold-gpu mapped-buffers` runs the contiguous path on the same
+device for the comparison. The 4070 readings
 support this direction; the Deck column is driver-source evidence, and the
 2060's is owed from the player build. Absence of
 pageable device-local memory does not disqualify sparse buffers: Puck must
@@ -3278,8 +3282,8 @@ slice and `MeshStands` check carries, so a stale proof restages rather than
 publishes. `GpuMemoryPool.Trim` frees empty blocks under pressure and marks
 live ones for release at their last return, reached through
 `IGpuMemoryOwners.TrimRequested`. Vulkan enables sparse buffers only with a
-binding queue, and `VulkanLogicalDevice.BindSparse` orders a bind between two
-signals of the device timeline. Direct3D 12's reserved destination
+binding queue, and the queue's door issues each bind `VulkanLogicalDevice.QueueSparse`
+queued between two signals of the device timeline. Direct3D 12's reserved destination
 (`DirectXGpuMappedBuffer`) maps and unmaps chunks through the queue door and
 returns a chunk's tiles only after its own fence passes the unmapping; the
 mesh region and the probe scene use it. The laws behind these use modeled
@@ -3287,24 +3291,23 @@ buffers and native-call recording: they prove call ordering, not driver
 execution or physical-page lifetime, which the hardware windows below
 qualify.
 
-**Vulkan's sparse destination is built and unqualified.**
+**Vulkan's sparse destination draws on the RTX 4070 and is otherwise unqualified.**
 `VulkanGpuMappedBuffer` owns the sparse resource behind `IGpuMappedBuffer`.
-Its invariant: a chunk is writable only once its bind is ordered ahead of
+Its invariant: a chunk is writable only once its bind is queued ahead of
 every later submission, and no page returns to its block, and the buffer is
 not destroyed, before the device timeline passes the value of the bind (or of
-a checkpoint taken at disposal) that let it go. The one enforcing place is
+a checkpoint queued at disposal) that let it go. The one enforcing place is
 the arena's sparse retirement (`VulkanMemoryArena.RetireSparse`,
 `VulkanMemoryArena.ReleaseSparse`); where it stops is a bind or checkpoint
 whose call threw, after which the timeline certifies nothing and what the
 call covered is held until the device is torn down. The buffer reserves its
 address range out of the device's one sparse allowance
 (`VulkanLogicalDevice.TryReserveSparseAddress`), is refused where a storage
-view cannot span it (`GpuDeviceCapabilities.MaxStorageBufferBytes`) or where
-the device's sparse page does not divide a chunk, and in each case the region
-keeps a contiguous destination. Still owed on hardware: the first windowed
-Vulkan boot, the 2060's page size and address space, a budget drop that shows
-blocks freed, and ray-query bottom builds reading a sparse mesh region by
-device address.
+view a kernel can size cannot span it (`VulkanLogicalDevice.MaxStorageBufferBytes`)
+or where the device's sparse page does not divide a chunk, and in each case the
+region keeps a contiguous destination. Still owed on hardware: the 2060's page
+size and address space, a budget drop that shows blocks freed, and ray-query
+bottom builds reading a sparse mesh region by device address.
 
 **Still to build, in dependency order.** Page-only residency admission with
 pool-owned slack (M2), the sparse arena placement policy (M5) and physical

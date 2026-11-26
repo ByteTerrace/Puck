@@ -1250,9 +1250,10 @@ laws exercise that boundary.
 - **One region holds every resident mesh, up to what its grant reserves.**
   Before a plan the tables reserve the standing buffer and a replacement
   together in the process account (`SdfResidencyGrant.ReserveGrowth`,
-  `SdfWorldTables.MeshRegionLimitBytes`), never past
-  `SdfMeshRegionStore.MostBytes` (`GpuRegion.MaxByteCount`, just under
-  4 GiB), and the arena places nothing past it (`SdfMeshRegionArena.SetLimit`),
+  `SdfWorldTables.MeshRegionLimitBytes`), never past the region's
+  `GpuRegion.MostBytes` (`GpuRegion.MaxByteCount`, just under 4 GiB, or just
+  under 2 GiB on Vulkan, whose storage views a kernel sizes only that far),
+  and the arena places nothing past it (`SdfMeshRegionArena.SetLimit`),
   so the region, the copy a growth holds until its upload completes and
   everything else the device holds fit together. A growth the account or the
   device refuses leaves the region as it is (`SdfMeshRegionArena.Clip`). It grows to its need plus an eighth, rounded up to a

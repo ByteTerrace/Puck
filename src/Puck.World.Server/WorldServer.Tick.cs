@@ -20,14 +20,16 @@ public sealed partial class WorldServer {
     public WorldTransferEscrow TransferEscrow { get { ThrowIfOutsideWindow(); return m_transferEscrow; } }
 
     /// <inheritdoc cref="WorldTick.AbortTransfer"/>
-    public void AbortTransfer(string sourceAuthority, ulong transferId) =>
+    public void AbortTransfer(string sourceAuthority, ulong transferId, WorldTransferCaller? caller = null) =>
         m_tick.AbortTransfer(
+            caller: caller,
             sourceAuthority: sourceAuthority,
             transferId: transferId
         );
     /// <inheritdoc cref="WorldTick.AcknowledgeTransfer"/>
-    public void AcknowledgeTransfer(string sourceAuthority, ulong transferId) =>
+    public void AcknowledgeTransfer(string sourceAuthority, ulong transferId, WorldTransferCaller? caller = null) =>
         m_tick.AcknowledgeTransfer(
+            caller: caller,
             sourceAuthority: sourceAuthority,
             transferId: transferId
         );
@@ -68,13 +70,16 @@ public sealed partial class WorldServer {
         );
     /// <inheritdoc cref="WorldTick.CommitTransfer"/>
     public Task<(WorldTransferStatus Status, string Reason)> CommitTransferAsync(string sourceAuthority, ulong transferId,
-        IReadOnlyList<WorldTransferCommitMember> members, Action? authorize = null, CancellationToken ct = default) {
+        IReadOnlyList<WorldTransferCommitMember> members, Action? authorize = null, CancellationToken ct = default, WorldTransferCaller? caller = null) {
         var key = new WorldTransferKey(sourceAuthority, transferId);
-        var tickets = ExecuteAuthorityOperation(() => m_transferEscrow.CommitHopQuestion(key));
+        // A caller the door refuses is answered before any companion's home is asked to confirm a hop for it.
+        var tickets = ExecuteAuthorityOperation(() => (m_transferEscrow.Admit(caller: caller, sourceAuthority: sourceAuthority).Refused
+            ? []
+            : m_transferEscrow.CommitHopQuestion(key)));
         // The arrival answers only once its record is durable and the cohort has landed.
         return Flatten(answer: WithConfirmedHopsAsync(key, tickets, WorldHopPhase.Commit, confirmed => DecideCrossingAsync(decide: () => {
             using var prepare = PrepareArrivals();
-            var status = m_tick.CommitTransfer(confirmed: confirmed, members: members, reason: out var reason,
+            var status = m_tick.CommitTransfer(caller: caller, confirmed: confirmed, members: members, reason: out var reason,
                 sourceAuthority: sourceAuthority, transferId: transferId);
             return (status, reason);
         }, ct: ct), authorize, ct));
@@ -84,8 +89,16 @@ public sealed partial class WorldServer {
     private static Task<T> Flatten<T>(Task<Task<T>> answer) => (answer.IsCompletedSuccessfully
         ? answer.Result
         : answer.Unwrap());
+    /// <summary>Gets the closed rewind group's boundary, or <see langword="null"/> for a world outside any. It is
+    /// installed once, before admission, and never changes during an activation.</summary>
+    public WorldTransferBoundary? TransferBoundary => m_transferEscrow.Boundary;
+    /// <inheritdoc cref="WorldTransferEscrow.CustodyRefusal"/>
+    public string? CustodyRefusal() => m_transferEscrow.CustodyRefusal();
+    /// <inheritdoc cref="WorldTransferEscrow.TravelerEnded"/>
+    public bool TravelerEnded(WorldTransferCaller? caller, string sourceAuthority, WorldMobilityIdentity mobility) =>
+        ExecuteAuthorityOperation(operation: () => m_transferEscrow.TravelerEnded(caller: caller, mobility: in mobility, sourceAuthority: sourceAuthority));
     /// <inheritdoc cref="WorldTick.ConstrainTransferAuthorities"/>
-    public void ConstrainTransferAuthorities(Func<string, bool> allowed) => m_tick.ConstrainTransferAuthorities(allowed: allowed);
+    public void ConstrainTransferAuthorities(WorldTransferBoundary boundary) => m_tick.ConstrainTransferAuthorities(boundary: boundary);
     /// <inheritdoc cref="WorldTick.DescribeFields"/>
     public string DescribeFields() => m_tick.DescribeFields();
     /// <inheritdoc cref="WorldTick.DescribeMusicClock"/>
@@ -155,13 +168,19 @@ public sealed partial class WorldServer {
         );
     /// <inheritdoc cref="WorldTick.ReserveTransfer"/>
     public Task<WorldTransferReservationReply> ReserveTransferAsync(WorldTransferReservationRequest request,
-        Action? authorize = null, CancellationToken ct = default) {
+        Action? authorize = null, CancellationToken ct = default, WorldTransferCaller? caller = null) {
         ArgumentNullException.ThrowIfNull(request);
         var key = new WorldTransferKey(request.SourceAuthority, request.TransferId);
-        var tickets = ExecuteAuthorityOperation(() => m_transferEscrow.ReservationHopQuestion(request));
+        // A reservation the door refuses, or a guest's that carries a companion, is refused before any companion's
+        // home is asked to confirm a hop for it.
+        var tickets = ExecuteAuthorityOperation(() => {
+            var admission = m_transferEscrow.Admit(caller: caller, sourceAuthority: request.SourceAuthority);
+
+            return ((admission.Refused || admission.IsGuest) ? [] : m_transferEscrow.ReservationHopQuestion(request));
+        });
         // The acceptance answers only once the lease record is durable.
         return Flatten(answer: WithConfirmedHopsAsync(key, tickets, WorldHopPhase.Reservation,
-            confirmed => DecideCrossingAsync(decide: () => m_tick.ReserveTransfer(confirmed: confirmed, request: request), ct: ct),
+            confirmed => DecideCrossingAsync(decide: () => m_tick.ReserveTransfer(caller: caller, confirmed: confirmed, request: request), ct: ct),
             authorize, ct));
     }
     /// <inheritdoc cref="WorldTick.RetireTransferredMobility"/>
@@ -192,8 +211,9 @@ public sealed partial class WorldServer {
             envelope: envelope
         );
     /// <inheritdoc cref="WorldTick.TransferStatus"/>
-    public WorldTransferStatus TransferStatus(string sourceAuthority, ulong transferId) =>
+    public WorldTransferStatus TransferStatus(string sourceAuthority, ulong transferId, WorldTransferCaller? caller = null) =>
         m_tick.TransferStatus(
+            caller: caller,
             sourceAuthority: sourceAuthority,
             transferId: transferId
         );

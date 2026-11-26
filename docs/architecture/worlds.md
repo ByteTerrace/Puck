@@ -1330,6 +1330,17 @@ source (`TransferKeysPerSource`), so a source that asks after keys it never rese
 its floor rise, fills only its own share. A full ledger or share evicts nothing: it refuses
 reservations, and answers `Uncertain` for a key it cannot tombstone, until a rising floor frees it.
 
+A closed rewind group keeps one more rule, for the players it admits as guests
+([decision](../decisions/worlds-and-federation.md#a-closed-rewind-group-admits-players-as-guests)).
+A world of the group keeps rows for a guest's session only while the session holds a live
+reservation or a landed traveler there, and drops them all when the last one goes
+(`WorldTransferEscrow.ReclaimGuest`). For a session it holds nothing of, a status query or a commit
+answers `Ended` (`WorldTransferStatus.Ended`) and writes nothing, and a reservation is a first entry.
+`Ended` is terminal for everything the session had there: the source takes its travelers back,
+including one whose commit it had heard confirmed, because `Ended` is the destination's own word that
+no traveler of the session remains. This does not weaken the four rules above for the session's
+live keys, and no world outside a closed group ever answers `Ended`.
+
 Every crossing step a peer can see is written ahead to the authority's crossing log
 (`IWorldCrossingLog`) before the step happens:
 

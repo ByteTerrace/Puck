@@ -281,6 +281,8 @@ internal sealed class UploadModelGpu :
 
     /// <summary>Gets or sets the modeled device's constant-buffer view limit.</summary>
     public ulong MaxConstantBufferBytes { get; set; } = GpuDeviceCapabilities.DirectXConstantBufferBytes;
+    /// <summary>Gets or sets the modeled device's storage-buffer view limit.</summary>
+    public ulong MaxStorageBufferBytes { get; set; } = uint.MaxValue;
 
     long IGpuBindings.HeapReleaseRevision => m_inner.Services.Bindings.HeapReleaseRevision;
 

@@ -432,10 +432,14 @@ draws takes that world's demand (`SdfFrameContent.DemandViews`) and its tiers (`
 type the bake's closure reaches (`SdfMesh`, `SdfMeshLibrary`, `SdfMeshStore`, `SdfMeshPathBake`) moves the bake
 identity, and the next boot bakes the world cold.
 A staged region created `mapped` (the mesh region, the probe scene) asks `IGpuBufferFactory.TryCreateMapped` for a
-destination that reserves `GpuRegion.MaxByteCount` and backs 1 MiB chunks on demand (`IGpuMappedBuffer`; Direct3D 12's
+destination that reserves the region's `GpuRegion.MostBytes` and backs 1 MiB chunks on demand (`IGpuMappedBuffer`; Direct3D 12's
 `DirectXGpuMappedBuffer` at reserved resources tier 2, tile runs from `DirectXHeapArena.PlaceTiles`; Vulkan's
 `VulkanGpuMappedBuffer`, a sparse buffer whose chunks bind page runs from `VulkanMemoryArena.PlacePages` through
-`VulkanLogicalDevice.BindSparse`). A device created without `GpuOptionalCapabilities.MappedBuffers` (the capability
+`VulkanLogicalDevice.QueueSparse`). Every region holds at most `GpuRegion.MostBytes`: `MaxByteCount`, or less where the
+device's storage views span less (`IGpuBindings.MaxStorageBufferBytes`), since its destination binds whole as one view and
+the mesh words door bounds its reads by the view's length. Vulkan holds a view to 2^31 - 1 bytes
+(`VulkanLogicalDevice.StorageViewLengthBytes`): NVIDIA's driver reports 2^32 - 1 but answers `GetDimensions` with zero
+past 2 GiB, so a 4 GiB mesh region drew nothing. `VulkanGpuBindings.WriteBuffer` refuses a longer view. A device created without `GpuOptionalCapabilities.MappedBuffers` (the capability
 missing, or `--withhold-gpu mapped-buffers`, which is how the two paths are compared on one machine) answers none and
 keeps a contiguous destination. It grows and shrinks in place, with no carry and no second buffer, and the
 selector leaves no replacement room for it (`SdfResidencyGrant.Mapped`). Its buffer's length is the reserved range, so
@@ -1602,18 +1606,25 @@ paired arithmetic. Carry author-facing parameters through
   buffer kept at a whole region's size costs the process that much working set.
 - Vulkan enables `sparseBinding` and `sparseResidencyBuffer` together only
   with a nonempty sparse queue family, preferring graphics. The device owns
-  a separate binding queue when needed. `VulkanLogicalDevice.BindSparse`
-  checkpoints graphics, binds waiting that value and signaling the next,
-  then submits a graphics wait before returning. Both signals share the
+  a separate binding queue when needed. `VulkanLogicalDevice.QueueSparse`
+  takes a binding (or a checkpoint) from any thread and puts nothing on the
+  queue: the store maps chunks from a residency's pack, which runs beside the
+  frame thread. The queue's door (`GraphicsQueue`, `PresentQueue`, `WaitIdle`
+  and the batch's hand-over) issues every queued operation in order before it
+  hands anything else over (`IssueSparse`): one graphics checkpoint, each bind
+  waiting the value before it, one graphics wait on the last. A checkpoint
+  reads the door before it takes its value (`GpuQueueTimeline.BeforeCheckpoint`),
+  and the door issues nothing inside a checkpoint's signal (`Signaling`), so
+  the timeline's values reach the queue in order. Both signals share the
   device's retirement timeline; a failed bind or join prevents further
   retirement proofs until teardown. `VulkanSubmissionBatchLawTests` covers
-  both queue arrangements and an open batch. `VulkanGpuMappedBuffer` is the
-  one caller: it returns a chunk's pages and destroys the buffer only through
-  the arena's sparse retirement (`VulkanMemoryArena.RetireSparse`), behind the
-  timeline value the door answered, and a bind whose outcome is unknown strands
-  what it covered until the device is torn down. Its unbound chunks are read
-  by no kernel: a mesh word is read only through a record that names a placed
-  mesh.
+  both queue arrangements, an open batch and a binding queued from another
+  thread. `VulkanGpuMappedBuffer` is the one caller: it returns a chunk's pages
+  and destroys the buffer only through the arena's sparse retirement
+  (`VulkanMemoryArena.RetireSparse`), behind the timeline value the issue
+  answered, and a bind whose outcome is unknown strands what it covered until
+  the device is torn down. Its unbound chunks are read by no kernel: a mesh
+  word is read only through a record that names a placed mesh.
 - The mesh region keeps no host copy of its meshes. Its host copy is the draw
   records alone (`GpuRegion.Shadow`). A landing job's words are packed from the
   `SdfMesh` buffers on a worker into a buffer of the landing's own and gathered into
