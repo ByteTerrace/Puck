@@ -350,9 +350,13 @@ public sealed class SdfKernelInterfaces {
     ];
     /// <summary>Gets the shared environment producer's typed interface. The map writes through its UAV; the reduction
     /// reads the same allocation through a read-only descriptor, matching its declared graph input access. The screen
-    /// reduction reads acquired image descriptors and writes its separate cell and whole-image means.</summary>
+    /// reduction reads acquired image descriptors and writes its separate cell and whole-image means; for an emitter face
+    /// it reads the program's materials and paints (the program words, the dynamic transforms a paint riding a slot reads,
+    /// the sampled values the shape dispatch names), the face's surface row, the surface texts' glyphs in the decal table
+    /// and the glyph atlas, and the world's lanes a lane-driven emissive scales by.</summary>
     public static IReadOnlyList<ShaderInterfaceMember> EnvironmentMembers { get; } = [
         ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: ScreenEmissionMask, type: ShaderValueType.Uint4),
+        ShaderInterfaceMember.Value(group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.WorldLanes, type: ShaderValueType.Float4),
         ShaderWorkCounters.RowMember,
         ShaderWorkCounters.DetailRowMember,
         ShaderInterfaceMember.ReadOnlyBuffer(group: ShaderInterfaceGroup.Pass, name: Sky, structure: ShaderInterfaceStructure.From<SdfSkyBlock>()),
@@ -360,6 +364,12 @@ public sealed class SdfKernelInterfaces {
         ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Float4, group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.ScreenMappings),
         ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, length: SdfWorldPackage.ScreenSourceCount, name: SdfWorldPackage.ScreenSources, type: ShaderValueType.Float4),
         ShaderInterfaceMember.Sampler(group: ShaderInterfaceGroup.Pass, length: SdfWorldPackage.SamplerCount, name: SdfWorldPackage.Samplers),
+        ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint4, group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.ProgramWords),
+        ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Float4, group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.DynamicTransforms),
+        ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint, group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.SampledValues),
+        ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Float4, group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.ScreenSurfaces),
+        ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint4, group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.DecalCells),
+        ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: SdfWorldPackage.GlyphAtlas, type: ShaderValueType.Float4),
         ShaderInterfaceMember.ReadOnlyBuffer(element: ShaderValueType.Uint2, group: ShaderInterfaceGroup.Pass, name: SkyEnvironment),
         Written(element: ShaderValueType.Uint2, name: SkyEnvironmentWritten),
         Written(element: ShaderValueType.Float4, name: SkyCoefficientsWritten),

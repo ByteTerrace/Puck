@@ -347,7 +347,7 @@ public static partial class SdfFrameBlock {
         (((frame.Program.Appearance.ResolveShadeReads(frame.ShadePrograms, frame.ShadeDefault) & SdfShadeReads.Clock) != 0) ? SdfFlow.Clock(seconds: frame.Clock.Integrate(modulus: SdfFlow.ClockPeriodSeconds, ratePerSecond: 1d)) : 0f);
     // The world's render lanes (SdfFrame.WorldLanes): the one value a world lane enters the kernels through. Zero for a
     // frame whose program materials and volumes read none, so its views stand while the world's state moves.
-    private static Vector4 WorldLanesOf(SdfFrame frame) {
+    internal static Vector4 WorldLanesOf(SdfFrame frame) {
         if ((frame.Program.Appearance.ResolveShadeReads(frame.ShadePrograms, frame.ShadeDefault) & SdfShadeReads.WorldLanes) != 0) { return frame.WorldLanes; }
         foreach (var volume in frame.Volumes) {
             if (volume.IntensityLane >= SdfLanes.FirstWorld) { return frame.WorldLanes; }

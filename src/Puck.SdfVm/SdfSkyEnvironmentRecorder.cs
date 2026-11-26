@@ -69,8 +69,16 @@ internal sealed class SdfSkyEnvironmentRecorder : IRenderGraphPackageRecorder, I
         SdfWorldInterfaces.EnvironmentParameters.WriteExtent(block: recording.PassBlock, width: SdfSkyEnvironment.Size, height: SdfSkyEnvironment.Size);
         var maskBlock = recording.PassBlock[((int)SdfWorldInterfaces.EnvironmentParameters.BlockOffsetOf(member: SdfKernelInterfaces.ScreenEmissionMask))..];
 
+        // An emitter face is reduced from its material, with no image to bind: its slot joins the mask the images left.
+        if (Screens) { emissionMask |= tables.EmitterScreens; }
         for (var word = 0; (word < 4); word++) {
             BinaryPrimitives.WriteUInt32LittleEndian(destination: maskBlock[(word * sizeof(uint))..], value: BitWords.Word32(mask: emissionMask, word: word));
+        }
+        var lanes = ((m_built.Residency.Frame is { } frame) ? SdfFrameBlock.WorldLanesOf(frame: frame) : System.Numerics.Vector4.Zero);
+        var lanesBlock = recording.PassBlock[((int)SdfWorldInterfaces.EnvironmentParameters.BlockOffsetOf(member: SdfWorldPackage.WorldLanes))..];
+
+        for (var lane = 0; (lane < 4); lane++) {
+            BinaryPrimitives.WriteSingleLittleEndian(destination: lanesBlock[(lane * sizeof(float))..], value: lanes[lane]);
         }
         m_work.Write(passSet: set, recording: recording);
         var pipeline = tables.Pipeline(kernel: Kernel);

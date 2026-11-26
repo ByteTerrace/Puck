@@ -454,6 +454,8 @@ public sealed partial class WorldCreationInstances : IWorldBodyPoses {
         public SdfProgramBuilder PrefixOf(SdfProgramBuilder builder, int shapeIndex) => builder.ResetPoint().TransformDynamic(slot: (rootSlot + motion.ShapeSlots[shapeIndex]));
         public SdfProgramBuilder Relief(SdfProgramBuilder builder, ShapeDocument shape) => Prefix(builder: builder).Translate(offset: shape.Position).Rotate(rotation: shape.Rotation);
         public int MaterialOf(ShapeDocument shape, int paletteSlot) => paletteIds[(paletteSlot % paletteIds.Length)];
+        // A pooled shape rides its slot, so its face has no fixed world pose: it declares none.
+        public void EmitterFace(SdfProgramBuilder builder, ShapeDocument shape, int material) { }
     }
 
     private Registration? FindBody(int bodyIndex) =>

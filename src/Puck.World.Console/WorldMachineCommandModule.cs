@@ -207,7 +207,7 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
             audience: CommandAudience.Anyone,
             bindability: CommandBindability.Unbindable,
             name: "machine.content",
-            description: $"Lists the content a named machine can swap to: {MachineContentForms.Spelling}. Echoes the content mounted now ('no cartridge' for none) and the mountable and refused file counts, one folder segment per authored contentFolders entry (its resolved path, whether it is present on this machine, and its file count; an absent folder is listed, never refused), and one segment per file in those folders naming its folder, whether it is mounted, and, for a file the machine's engine cannot mount, why. A query (always echoes).",
+            description: $"Lists the content a named machine can swap to: {MachineContentForms.Spelling}. Echoes the content mounted now ('no cartridge' for none) and the mountable and refused file counts, one folder segment per authored contentFolders entry (its resolved path, whether it is present on this machine, and its file count; an absent folder is listed, never refused), and one segment per file in those folders naming its folder, whether it is mounted, and, for a file the machine's engine cannot mount, why, or for one it can, its library title number (the number a contentBy cell selects it by). A query (always echoes).",
             forms: MachineContentForms,
             handler: Content
         );
@@ -402,6 +402,11 @@ public sealed class WorldMachineCommandModule(IWorldConsoleAuthority authority) 
                 echo = echo.Field(
                     key: "refused",
                     value: refusal
+                );
+            } else {
+                echo = echo.Field(
+                    key: "title",
+                    value: WorldMachineContentFolder.TitleOf(entries: entries, entry: entry)
                 );
             }
         }

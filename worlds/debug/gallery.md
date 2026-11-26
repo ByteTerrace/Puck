@@ -113,7 +113,9 @@ screen, whose route names both ports (the standard's `deckRoute`); leaving frees
 the port for the next seat. The decks are the toybox's own
 (`toybox-cabinet-south-3` and so on, layout.puck's `toyboxMachines`), so the
 gallery booted alone hosts them, and the debug world runs them beside the
-Wonderland devices. Each can swap among the shipped deck programs and the
+Wonderland devices. A cartridge rented from the rack (below, "The cartridge
+rack") inserted at a station's console changes what its deck runs. Each can
+also swap by hand among the shipped deck programs and the
 owner's local `roms/hgd` folder: `machine.content <deck>`, then
 `machine.swap <deck> <name>`. The machine rows, pictures, pad and routes are the
 standard's [machines.puck](../standard/machines.puck).
@@ -157,12 +159,12 @@ and crossbars and drops its uprights and sill, so only a body small enough to
 pass between two crossbars (about 0.6 m apart) slips through. No rule sets them
 yet; `world.state.cell.set toyboxSlats south 1` opens one by hand.
 
-**The tree's gate.** The lattice panel in bay 6, where the central tree's two
-level-1 branches arrive ([the central tree](#the-central-tree)), stands as two
-side panels and a head over a 1.875 m opening (layout.puck's `treeGateCells`
-and `treeGateHeight`), each branch's tip passing through it onto the floor. A
-body walking in along either branch shrinks as the size field's zone along it
-sizes it ("The size of level 1", below).
+**The tree's sieves.** Each level-1 branch ([the central tree](#the-central-tree))
+dead-ends at a sieve: the lattice bay where it lands is barred 36 to the bay
+(layout.puck's `toyLatticeSieveCells`), so only a body already about a fifth of
+full size slips through. A full-size climber sees the toybox from the branch's
+tip and has to shrink or take the stairs or lift to reach it. Levels 2 and 3
+meet their branches through doorways (architecture.puck's `edgeDoorway`).
 
 The other ways in, checked: the window bays and skylights are solid glass;
 the endless fall's hole in level 1's floor is covered from below by its
@@ -192,6 +194,41 @@ button engages the renter's own device, anywhere (only its holder engages it,
 the engage radius measured from the device), and the device then moves from the
 hip row (`rental-carried-<body>`) to the hands row (`rental-played-<body>`)
 through `rentalShown`; the same press leaves and puts it back on the hip.
+
+**The cartridge rack.** The decks' library is a folder list
+(toybox.puck's `toyboxLibrary`: the shipped `cartridges/deck`, then the
+owner's local `roms/hgd`), and each title of it is a number: the mountable
+files in listing order, folder by folder, by file name within one
+(`WorldMachineContentFolder.TryTitle`), so the shipped programs are titles 1
+and 2 whatever the local folder holds; `machine.content <deck>` prints each
+file's `title=`. A rack on level 1's south gallery (bay 9, against the wall)
+lends the library as cartridges (rentals.puck's `rentalCartridgeSlots`: a
+title, a label and how many copies). Its cartridges go on loan through the
+devices' own `rentalLoan` row (ordinals 49 and up) and the same
+`rentalCanRent` hook; the cartridge a body holds is `rentalCartridgeHeld`, and
+it rides the body's right hip. The context button before a cartridge rents it,
+and before the rack's east end (the tray) returns it; leaving level 1 returns
+it too. Engaging a station's screen from its console (the floor on the
+station's +x side) swaps the held cartridge with the one in its deck: the
+cartridge stands in the console (`toybox-slot-<station>`), `toyboxTitle` takes
+its title, and the deck's machine, whose `contentBy` reads that cell, runs it
+from the next tick. Engaging from the console with empty hands takes it out and
+the deck runs its own program again; engaging from before the screen plays
+without touching the cartridge. A cartridge in a deck is on loan to the
+station (`rentalLoan` reads 1000 plus the station's place). The slots past the
+shipped titles carry numbered labels (`DECK TITLE 3`), since no file name
+enters the document; a slot whose title the folder does not hold lends a
+cartridge whose deck runs its own program. `cartridge-rentals-tests.puck`
+rents, inserts, ejects and returns one.
+
+**Adding your own titles.** Drop a Humble Gaming Deck image (an iNES `.nes`
+file the deck's header check accepts) into `roms/hgd/` at the repository root;
+the folder is git-ignored and may be absent. The next `machine.content
+toybox-television-south-2` lists it with its `title=` (3 for the first local
+file in name order), and the rack's slot of that number lends it. A file the
+deck cannot run is listed with `refused=` and takes no number. Brick and
+advanced-brick titles are not on the rack yet; their devices swap by hand
+(`machine.swap rental-hgb-0 <name>`) from the folders devices.puck lists.
 
 ## The central tree
 
@@ -242,13 +279,7 @@ level 2's through a 1.5 m gap in the balustrade (`treeRailGap`), and level 3's
 step onto its open edge. Each branch's tip lies on the floor's edge, a few
 centimetres proud of it (`treeLandingLift`).
 
-**The hook for level 1's size.** The owner's ruling makes the level-1 branches
-shrink a body as the corner stairs do. `treeShrinkLimbs` names those two
-branches; each one's path runs from `treeBranchFrom` to `treeBranchTo`
-(layout.puck), and level 1's size field
-([gallery/wonder.puck](gallery/wonder.puck)) lays a zone along that path. The branches are walkable now, and real climbing (grab, climb,
-mantle) is a separate engine plan; every surface of the trunk and branches is
-solid for it.
+**Level 1's branches give no size.** The owner's design: a level-1 branch is a dead end at a sieve that only a small body passes, so the branches lure a full-size climber toward the toybox without letting them in.
 
 The tree's colours, bark relief and leaf clumping are look.puck's `lookTree`.
 `gallery.shot hall` stands just east of the roots.
@@ -499,15 +530,12 @@ first match winning:
   (or 2) and level 1 is the transition, so she shrinks or grows with the car,
   and an observer outside sees it through the car's glass. The lift serves
   level 1 like any other level.
-- **The central tree's two level-1 branches** (`treeShrinkLimbs`): a capsule
-  3 m about the straight line from each branch's `treeBranchFrom` to its
-  `treeBranchTo`, full at the trunk and Alice's at the tip, where the branch
-  passes the lattice's gate.
 - **Level 1's floor**: the two aisles and the bridge, never the nave's void.
   Alice's size throughout (`small`, look.puck's `lookWonderSize`, 0.15).
-- **The trunk's column**, last: full size, so a body climbing the trunk's
-  treads past a branch's start, or walking back off a branch, stands at its
-  full size there.
+
+Outside these zones a body keeps the size it last took (the owner's design):
+only the stairs and the lift are the intended routes, so a small body that
+leaves level 1 another way, through a branch's sieve onto the tree, stays small.
 
 **The pass.** A body holding the `wonderPass` body register nonzero takes its
 full size in every zone, so level 1, its stairs and its lift keep its size. A

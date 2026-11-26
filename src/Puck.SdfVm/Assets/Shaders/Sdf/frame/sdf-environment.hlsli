@@ -5,25 +5,7 @@
 
 #ifdef SDF_SCREEN_SOURCES
 #include "sdf-screen-mapping.hlsli"
-// A declared ScreenSlab instance's world-space front-face frame (see Puck.SignedDistance.SdfScreenSurface). Indexed
-// DIRECTLY by screen index
-// (below SDF_MAX_SCREEN_SURFACES, the same slot SetScreenSource/screenSources binds) — not by declaration order — so a hit resolves its
-// surface with no search; an unfilled slot's entry is never read (no material id can address it: the host packs an
-// entry only when SdfProgramBuilder registers that screen index).
-struct ScreenSurfaceData {
-    float4 right;   // xyz = unit world-space U axis, w = half-width
-    float4 up;      // xyz = unit world-space V axis (V=0 at top), w = half-height
-    float4 origin;  // xyz = world-space front-face center, w = the range its light reaches (SdfWorldTables' screen reaches)
-};
-static const uint WorldScreenSurfaceRows = 3u;
-ScreenSurfaceData worldScreenSurface(uint screenIndex) {
-    uint row = (screenIndex * WorldScreenSurfaceRows);
-    ScreenSurfaceData data;
-    data.right = screenSurfaces[row];
-    data.up = screenSurfaces[(row + 1u)];
-    data.origin = screenSurfaces[(row + 2u)];
-    return data;
-}
+#include "sdf-screen-surface.hlsli"
 // The screen source images: screenSources, one sampled image per screen index, each read through the samplers element
 // its row names. A screen with no source bound this frame holds a valid filler view; the shader never samples an unbound
 // screen (screenSourceBound gates it), so the filler's content never reaches the image. Every screen index is bounded

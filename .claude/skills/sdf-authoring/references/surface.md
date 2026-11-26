@@ -29,6 +29,12 @@ name** outside [0, 1], and `emissiveLane` outside [0, 7]. There is no `shininess
 A palette slot has no `bounce` member either; it is refused as unmapped, and
 `fill` is the artistic tint. A light's `bounce` is a separate transport gain.
 
+An emissive surface lights nothing by itself. A box shape with `lightsAs: Face`
+lights what stands before its front face (+Z in the author frame) with the mean
+of its material's painted albedo times `emissive` over that face, lettering
+included, as a screen's face does (the gallery consoles' glass, a cabinet's
+marquee). Only a box carries one, and only on a static placement for now.
+
 Indirect transport uses the signed field gradient toward positive, free space.
 The CPU reference, cache model and GPU march preserve that orientation at grazing
 edges; facing it toward the incoming ray can point into the solid. A reflected

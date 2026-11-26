@@ -300,6 +300,11 @@ let toyboxStations = flatMap(toyboxSides, side => map(toyboxPlan, s => (s with {
   facing: side.facing
 })))
 let toyboxMachines = map(toyboxStations, s => s.machine)
+// The stations' screen indices: the debug world's other screens hold 0 to 17 (devices.puck, range.puck, alchemy.puck,
+// chess.puck, desktop.puck, granaries.puck), so the toybox's start at 20, one to a station in toyboxStations' order.
+let toyboxScreen = 20
+// Where a station stands in the building's frame, on its tile.
+function toyboxAt(s) = [bayX(s.bay), galleryFloor[toyboxLevel], tileZ(s.row)]
 
 // Level 1's handheld rentals (rentals.puck): a pool of one brick and one advanced brick for each seat's body (bodies 0
 // to 11, shapes.puck's four local seats and eight visitors), each run only while its body holds a rented device of that
@@ -319,6 +324,10 @@ let toyLatticeBar = 0.025
 // that holds every body (architecture.puck's `lattice` net): 3.5 cm rope, knot to knot every 30 cm, a climbing net's
 // mesh rather than a fence's.
 let toyLatticeNet = { strand: 0.035, pitch: 0.3 }
+// Where a level-1 branch meets the lattice it dead-ends at a sieve: a bay of bars spaced so that a body small enough
+// (about a fifth of the Moth, Alice's size and smaller) slips between them and a larger one cannot, so the branches
+// tempt a full-size climber toward the toybox and only a shrunken one gets in.
+let toyLatticeSieveCells = 36
 // The loose panels: one panel on each edge that a rule can open, move or swap (gallery.md, "The lattice"), each named
 // `gallery-lattice-loose-<edge>` and following its `toyboxSlats` cell: a south and a north bay, and the bridge's middle
 // tile on the nave's axis.
@@ -328,18 +337,14 @@ let toyLatticeLooseBay = 8
 // centre row, its trunk filling the nine tiles a display's pad does. A spiral of treads climbs its trunk, and two
 // branches reach each of levels 1 to 3, one to each balcony edge in the tree's bay: level 1's through a gate in that
 // bay's lattice panel (shell.puck), level 2's through a gap in its balustrade, level 3's onto its open edge.
-// `treeLandings` is where along x each level's pair meets its edges; level 2's stands on a balustrade length's middle
-// (x 30: shell.puck's 4 m lengths centre there), so the gap leaves a tile of balustrade either side.
+// Each branch lands at its own place along its edge (`x` in each `treeLimbs` row), so the canopy reaches out across the
+// hall instead of every branch meeting the trunk's bay: a symmetric asymmetry, each level's pair a half turn of the
+// other about the tree (one lands west of the trunk on one side, the other as far east on the other), and the levels
+// alternating which side reaches west, so the canopy spirals. Level 2's land on a balustrade length's middle (shell.puck's
+// 4 m lengths centre on 14 + 4i), so each gap leaves a tile of balustrade either side.
 let treeBay = 6
 let treeX = bayX(treeBay)
 let treeZ = naveMid
-let treeLandings = [treeX, treeX, 30, treeX]
-let treeRailGap = 30
-// Level 1's gate: the lattice panel in the tree's bay stands as two side panels and a head over an opening
-// `treeGateCells` of the lattice's pitch wide (1.875 m) and `treeGateHeight` metres tall, so the branch passes through
-// it and nothing passes beside it.
-let treeGateCells = 24
-let treeGateHeight = 2.6
 // The trunk: a cone `base` metres in radius at the floor whose taper would close `apex` metres up, cut off at `top`
 // inside the canopy. Its treads climb from `treeTreadStart` degrees round it (from +x toward +z in the plan, so the first
 // stands just south of east, facing the hall's long axis), one every `treeTreadStep` degrees and `treeTreadRise` metres,
@@ -354,15 +359,27 @@ let treeTreadRise = 0.225
 // branch's walking line ends `treeOverhang` metres onto its balcony, `treeLandingLift` over the floor, so the branch's tip lies
 // on the floor's edge rather than tucking under it, where a foot crossing from the bark to the floor would meet a crease.
 let treeLimbs = [
-  { level: 1, side: "south", tread: 14 }
-  { level: 1, side: "north", tread: 24 }
-  { level: 2, side: "south", tread: 36 }
-  { level: 2, side: "north", tread: 46 }
-  { level: 3, side: "south", tread: 58 }
-  { level: 3, side: "north", tread: 68 }
+  { level: 1, side: "south", tread: 14, x: bayX(4) }
+  { level: 1, side: "north", tread: 24, x: bayX(8) }
+  { level: 2, side: "south", tread: 36, x: bayX(8) }
+  { level: 2, side: "north", tread: 46, x: bayX(4) }
+  { level: 3, side: "south", tread: 58, x: bayX(5) }
+  { level: 3, side: "north", tread: 68, x: bayX(7) }
 ]
+// Where a level's branch lands on one side, and the arcade bay that x stands in.
+function treeLanding(level, side) = filter(treeLimbs, b => ((b.level == level) and (b.side == side)))[0].x
+function bayOf(x) = floor(((x - pierX(0)) / arcadePitch))
+// Every branch lands at a bay's centre, midway between two piers, so it never meets a pier and its doorway (levels 2 and
+// 3) or sieve (level 1) fills the bay. A doorway's clear opening, metres, and the balustrade either side of it.
+let treeDoorWidth = 2
+let treeDoorPost = 0.22
+let treeDoorSide = (((arcadePitch - 1) - (treeDoorWidth + (2 * treeDoorPost))) / 2)
 let treeTreadCount = (treeLimbs[(length(treeLimbs) - 1)].tread + 1)
 let treeOverhang = 0.7
+// Where a branch meets a doorway (levels 2 and 3) its walking line runs on through the opening and this far onto the
+// floor, so the tip rests inside the aisle rather than ending on the threshold.
+let treeDoorOverhang = 1.5
+function treeOverhangOf(b) = ((b.level >= 2) ? treeDoorOverhang : treeOverhang)
 let treeLandingLift = 0.08
 // A tread's angle round the trunk in degrees and its top's height over the hall's floor, and the plan point on its
 // middle line `out` metres from the bark.
@@ -375,7 +392,4 @@ function treeTreadPlan(k, out) = ([treeX, galleryFloor[0], treeZ] + polarPoint(
 ))
 // Where a branch's walking line starts (just inside the bark, over its tread) and ends (on its balcony), in the plan.
 function treeBranchFrom(b) = treeTreadPlan(b.tread, -0.2)
-function treeBranchTo(b) = [treeLandings[b.level], (galleryFloor[b.level] + treeLandingLift), ((b.side == "south") ? (naveSouth - treeOverhang) : (naveNorth + treeOverhang))]
-// The hook for level 1's size: the two branches into the toybox, each a path from treeBranchFrom to treeBranchTo that a
-// size field (standard/size-field.puck) lays along so the branch shrinks a body as the corner stairs do.
-let treeShrinkLimbs = filter(treeLimbs, b => (b.level == toyboxLevel))
+function treeBranchTo(b) = [b.x, (galleryFloor[b.level] + treeLandingLift), ((b.side == "south") ? (naveSouth - treeOverhangOf(b)) : (naveNorth + treeOverhangOf(b)))]

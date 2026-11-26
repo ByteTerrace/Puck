@@ -368,7 +368,7 @@ public sealed class WorldPopulationCommandModule(PlayerRoster roster, WorldServe
         }
         var (visibilityBytes, meshAttachmentBytes, glassBytes) = WorldViewBytes();
         var render = ((renderProbe?.Residency is { } node)
-            ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), {node.LiveProgramMaterials} material(s), {node.LiveDynamicTransforms} dynamic slot(s), {(renderProbe.ProgramBuildsSource?.Invoke() ?? 0)} program build(s), queryStepScale {node.LiveProgramStepScale.ToString(
+            ? $"program {node.LiveProgramWords}/{node.ProgramWordCapacity} word(s), {node.LiveProgramInstances} instance(s), {node.LiveProgramMaterials} material(s), {node.LiveDynamicTransforms} dynamic slot(s), {node.LiveEmitterFaces} emitter face(s), screen slots {node.ScreenSlots.Resident} resident ({node.ScreenSlots.Emitters} emitter(s), {node.ScreenSlots.Degraded} degraded), {(renderProbe.ProgramBuildsSource?.Invoke() ?? 0)} program build(s), queryStepScale {node.LiveProgramStepScale.ToString(
                 format: "G6",
                 provider: CultureInfo.InvariantCulture
             )}{((node.LiveProgramStepScale is > 0f and < 1f)

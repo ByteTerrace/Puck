@@ -297,6 +297,15 @@ public sealed partial class SdfWorldResidency : IDisposable {
     public int LiveProgramInstances { get; private set; }
     public int LiveProgramMaterials => (m_frame?.Program.MaterialCount ?? 0);
     public int LiveDynamicTransforms => (m_frame?.DynamicTransforms.Count ?? 0);
+    /// <summary>Gets the emitter faces the latest captured frame's program declares
+    /// (<see cref="SdfAppearance.EmitterFaces"/>), or 0 before the first capture.</summary>
+    public int LiveEmitterFaces => (m_frame?.Program.Appearance.EmitterFaces.Count ?? 0);
+    /// <summary>Gets the screen slots the tables hold now (<see cref="SdfWorldTables.ResidentScreens"/>), emitter faces
+    /// among them (<see cref="SdfWorldTables.EmitterScreens"/>), and the screens wanted past the slots
+    /// (<see cref="SdfWorldTables.DegradedScreens"/>); zeros while no tables stand.</summary>
+    public (int Resident, int Emitters, int Degraded) ScreenSlots => ((m_tables is { } tables)
+        ? ((int)UInt128.PopCount(value: tables.ResidentScreens), (int)UInt128.PopCount(value: tables.EmitterScreens), tables.DegradedScreens)
+        : (0, 0, 0));
     /// <summary>Gets the bounded volume count in the latest captured frame, before per-ray rejection.</summary>
     public int LiveVolumes { get; private set; }
     /// <summary>Gets the last uploaded program's residual CPU query multiplier, or 0 before the first upload.</summary>
@@ -1542,22 +1551,32 @@ public sealed partial class SdfWorldResidency : IDisposable {
     // flag. A screen is resident while it shows a source (it names an instance some view of the frame reads, whose image
     // each view's pass binds from the images its render graph hands it, ScreenImage) or a glyph grid this frame; past the
     // slots, the nearest to the frame's first camera hold them (SdfWorldTables.SettleScreenSlots), and the rest shade as
-    // screens with no source until a nearer one leaves. A screen that is neither shows nothing and holds no slot.
+    // screens with no source until a nearer one leaves. A screen that is neither shows nothing and holds no slot. Every
+    // emitter face the program declares is wanted too, under an identity past every screen the residency binds
+    // (m_emitterBase), and competes for the slots by nearness as the screens do.
     private void BindScreens(SdfWorldTables tables, SdfFrame frame) {
+        var appearance = frame.Program.Appearance;
+        var emitterBase = appearance.ScreenIdentitySpan;
+
         m_wantedScreens.Clear();
         m_wantedSeen.Clear();
         m_screenDecalFrames.Clear();
         if (m_screenSources is { } sources) {
             foreach (var screen in sources.Screens) {
+                emitterBase = Math.Max(val1: emitterBase, val2: (screen + 1));
                 if (ShowsSource(sources: sources, screen: screen, frame: frame) && m_wantedSeen.Add(item: screen)) { m_wantedScreens.Add(item: screen); }
             }
         }
         // A provider is asked once a frame; a dictionary is walked through its own enumerator, which the interface's would
         // box every frame.
         if (m_frameSource.ScreenDecals is Dictionary<int, Func<SdfScreenDecalFrame?>> decals) {
-            foreach (var (screen, provider) in decals) { NoteDecal(screen: screen, decal: provider()); }
+            foreach (var (screen, provider) in decals) { emitterBase = Math.Max(val1: emitterBase, val2: (screen + 1)); NoteDecal(screen: screen, decal: provider()); }
         } else if (m_frameSource.ScreenDecals is { } screenDecals) {
-            foreach (var (screen, provider) in screenDecals) { NoteDecal(screen: screen, decal: provider()); }
+            foreach (var (screen, provider) in screenDecals) { emitterBase = Math.Max(val1: emitterBase, val2: (screen + 1)); NoteDecal(screen: screen, decal: provider()); }
+        }
+        m_emitterBase = emitterBase;
+        for (var face = 0; (face < appearance.EmitterFaces.Count); face++) {
+            if (m_wantedSeen.Add(item: (emitterBase + face))) { m_wantedScreens.Add(item: (emitterBase + face)); }
         }
         if (m_wantedScreens.Count > SdfWorldTables.MaxScreenSurfaces) { OrderByNearness(frame: frame); }
         foreach (var screen in m_wantedScreens) {
@@ -1565,11 +1584,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
                 Array.Resize(array: ref m_boundScreenSources, newSize: (int)Math.Min(val1: SdfProgramBuilder.MaxScreenIdentities, val2: (2L * (screen + 1))));
             }
         }
-        tables.SettleScreenSlots(wanted: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_wantedScreens));
+        tables.SettleScreenSlots(emitterBase: emitterBase, wanted: System.Runtime.InteropServices.CollectionsMarshal.AsSpan(list: m_wantedScreens));
         if (m_screenSources is not { } bound) {
             return;
         }
-        foreach (var slot in BitWords.Members(mask: tables.ResidentScreens)) {
+        // An emitter face's slot holds the state its claim wrote (SdfWorldTables.WriteDeclaredSurface): no source binds it.
+        foreach (var slot in BitWords.Members(mask: (tables.ResidentScreens & ~tables.EmitterScreens))) {
             var screen = tables.ScreenOfSlot(slot: slot);
 
             tables.SetScreenBound(
@@ -1609,6 +1629,8 @@ public sealed partial class SdfWorldResidency : IDisposable {
         }
         return false;
     }
+    // The identity this frame's first emitter face takes (BindScreens), past every screen the residency binds.
+    private int m_emitterBase = int.MaxValue;
     // Holds a screen's glyph grid for this frame, which makes the screen resident while it has one.
     private void NoteDecal(int screen, SdfScreenDecalFrame? decal) {
         m_screenDecalFrames.Add(item: (screen, decal));
@@ -1624,9 +1646,12 @@ public sealed partial class SdfWorldResidency : IDisposable {
         if (m_wantedOrder.Length < count) { Array.Resize(array: ref m_wantedOrder, newSize: count); }
         for (var index = 0; (index < count); index++) {
             var screen = m_wantedScreens[index];
-            var origin = ((m_screenSurfaceTransforms.TryGetValue(key: screen, value: out var provider) && (provider() is { } transform))
+            var emitter = (screen - m_emitterBase);
+            var origin = (((emitter >= 0) && (emitter < frame.Program.Appearance.EmitterFaces.Count))
+                ? frame.Program.Appearance.EmitterFaces[emitter].Origin
+                : ((m_screenSurfaceTransforms.TryGetValue(key: screen, value: out var provider) && (provider() is { } transform))
                 ? transform.Origin
-                : (frame.Program.Appearance.TryGetScreenSurface(screenIndex: screen, surface: out var surface) ? surface.Origin : new Vector3(value: float.PositiveInfinity)));
+                : (frame.Program.Appearance.TryGetScreenSurface(screenIndex: screen, surface: out var surface) ? surface.Origin : new Vector3(value: float.PositiveInfinity))));
 
             m_wantedOrder[index] = (Vector3.DistanceSquared(value1: eye, value2: origin), screen);
         }

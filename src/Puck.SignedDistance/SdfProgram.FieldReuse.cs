@@ -130,5 +130,5 @@ public sealed partial class SdfProgram {
 
     // Whether an appearance is this program's own in every material and screen surface, so the program packs it already.
     private bool HasAppearance(SdfAppearance appearance) =>
-        (m_appearance is { } own) && own.Materials.SequenceEqual(second: appearance.Materials) && own.ScreenSurfaces.SequenceEqual(second: appearance.ScreenSurfaces);
+        (m_appearance is { } own) && own.Materials.SequenceEqual(second: appearance.Materials) && own.ScreenSurfaces.SequenceEqual(second: appearance.ScreenSurfaces) && own.EmitterFaces.SequenceEqual(second: appearance.EmitterFaces);
 }

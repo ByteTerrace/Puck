@@ -116,7 +116,7 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
         var reaches = new Dictionary<int, RowReach>();
         var cells = new List<CellAccess>();
         var unproven = new SortedSet<int>();
-        var factRows = new List<int>();
+        var factRows = new List<CellAccess>();
         var factReads = new List<FactRead>();
         var unversioned = new List<string>();
 
@@ -196,10 +196,11 @@ public sealed record RuleSchedule(int[] Rows, FactRead[] Facts, RuleVolatility V
                 }
             }
         }
-        // A row a host fact answers from is read for whichever cell the fact resolves.
-        foreach (var ordinal in factRows) {
-            Row(ordinal: ordinal);
-            Reach(ordinal: ordinal, reach: RowReach.Any);
+        // A row a host fact answers from is read for whichever cell the fact resolves: the cell under the binding's
+        // own key when the host says so, any cell otherwise.
+        foreach (var access in factRows) {
+            Row(ordinal: access.RowOrdinal);
+            Reach(ordinal: access.RowOrdinal, reach: (access.Each ? RowReach.Each : RowReach.Any));
         }
 
         var iterationRows = new List<int>(capacity: 1);
