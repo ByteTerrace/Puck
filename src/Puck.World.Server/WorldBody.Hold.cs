@@ -335,6 +335,7 @@ public sealed partial class WorldBody {
     private bool TryTrackHold(in FixedBodyHold hold, in FixedVector3 up, out FixedSurfaceAttachCandidate candidate) => TryFaceBehind(
         candidate: out candidate,
         hold: in hold,
+        normal: in m_holdNormal,
         origin: HoldProbeOrigin,
         up: in up
     );
@@ -494,8 +495,9 @@ public sealed partial class WorldBody {
         if (m_holds.Length == 0) {
             return;
         }
-        if (Mantling) {
-            // The mantle owns the body's translation until it lands, so no row is taken, tracked or spent meanwhile.
+        if (Mantling || Wrapping) {
+            // The move owns the body's translation until it lands, so no row is taken or tracked meanwhile. A mantle
+            // holds no row; a wrap keeps the row it began under, already on the face it arrives at.
             SetFreeAttitude(scratch: ref scratch);
 
             return;
@@ -743,6 +745,10 @@ public sealed partial class WorldBody {
     // Whether a mantle is carrying the body: the exclusive move TryBeginMantle starts, with no row held while it runs.
     private bool Mantling => ((m_holdIndex < 0) && m_timedMove.IsActive && m_timedMove.Motion.Exclusive);
 
+    // Whether an exclusive move is carrying a body a pull still holds: the wrap round a corner TryBeginCornerWrap
+    // starts, whose held face is the one the move arrives on. The row is neither probed nor seated to until it lands.
+    private bool Wrapping => (m_timedMove.IsActive && m_timedMove.Motion.Exclusive && HoldOwnsVerticalChannel);
+
     // The commanded planar direction in world space, before any surface bends it: a world-framed pair is the seat's own
     // world axes carried into the body's up frame, a heading-framed pair is the body's forward and right.
     private FixedVector3 PlanarCommand(FixedQ4816 forward, FixedQ4816 strafe, in FixedQuaternion orientation) {
@@ -835,32 +841,34 @@ public sealed partial class WorldBody {
         );
     }
     // Whether the held face is still there, the same face and inside the row's cone, behind a point. The track probe
-    // asks it of the body's middle, the edge guard of the points the body is about to move over.
-    private bool TryFaceBehind(in FixedBodyHold hold, in FixedVector3 origin, in FixedVector3 up, out FixedSurfaceAttachCandidate candidate) {
+    // asks it of the body's middle, the edge guard of the points the body is about to move over, and a corner wrap of
+    // where its sweeps ended against the face it found. `normal` is the face's unit normal.
+    private bool TryFaceBehind(in FixedBodyHold hold, in FixedVector3 origin, in FixedVector3 normal, in FixedVector3 up, out FixedSurfaceAttachCandidate candidate) {
         candidate = default;
 
         return (
-            (m_holdNormal != FixedVector3.Zero) &&
+            (normal != FixedVector3.Zero) &&
             TryTakeHoldAlong(
                 candidate: out candidate,
-                direction: -m_holdNormal,
+                direction: -normal,
                 hold: in hold,
                 origin: in origin,
                 up: in up
             ) &&
             (FixedVector3.Dot(
                 left: candidate.Normal,
-                right: m_holdNormal
+                right: normal
             ) >= HoldTrackAlignment)
         );
     }
-    // A pull row with a mantle keeps its body on the face. Each direction the command would move it is probed one
-    // body extent ahead: where the face ends above within the mantle's reach, a landing is proven and the mantle
-    // begins; where it ends and nothing is proven, that part of the command is refused for the step, so the body
-    // hangs at the edge instead of walking off it.
+    // A pull row with a mantle keeps its body on the face. Each direction the command or an impulse would move it is
+    // probed one body extent ahead: where the face ends above within the mantle's reach, a landing is proven and the
+    // mantle begins; where it ends at a side and the row's corner wrap finds and proves the face past it, the wrap
+    // begins; where it ends and nothing is proven, that part of the motion is refused for the step, so the body hangs
+    // at the edge instead of walking or leaping off it. A row with a corner wrap and no mantle wraps and guards nothing.
     private void GuardHeldFace(in FixedBodyHold hold, in FixedVector3 gravityUp, ref BodyMotionScratch scratch) {
         if (
-            !hold.Mantle.Exists ||
+            (!hold.Mantle.Exists && !hold.Corner.Exists) ||
             (hold.Kind != BodyHoldKind.Pull) ||
             (HoldTangentForward(normal: in m_holdNormal, up: in gravityUp) == FixedVector3.Zero) ||
             (m_tuning.MoveFrame.SubmitsWorldAxes() && (scratch.FaceInto == FixedVector3.Zero))
@@ -875,9 +883,74 @@ public sealed partial class WorldBody {
             right: in scratch.Right,
             strafe: strafe
         );
-        var guard = FaceEdges.None;
 
-        if (along > FixedQ4816.Zero) {
+        // An impulse along the face (a leap) carries the body as the command does, so the edges are read for where the
+        // two together take it.
+        if (m_overlayRemaining != 0UL) {
+            along = ((along * scratch.MoveSpeed) + FixedVector3.Dot(left: m_overlayVelocity, right: scratch.Facing));
+            across = ((across * scratch.MoveSpeed) + FixedVector3.Dot(left: m_overlayVelocity, right: scratch.Right));
+        }
+
+        var edges = HeldFaceEdges(
+            across: across,
+            along: along,
+            gravityUp: in gravityUp,
+            hold: in hold,
+            lipRaise: out var lipRaise,
+            right: in scratch.Right
+        );
+
+        if (
+            (lipRaise > FixedQ4816.Zero) &&
+            TryBeginMantleOver(hold: in hold, lipRaise: lipRaise, scratch: ref scratch)
+        ) {
+            return;
+        }
+        if (
+            hold.Corner.Exists &&
+            ((edges & (FaceEdges.Left | FaceEdges.Right)) != 0) &&
+            TryBeginCornerWrap(
+                gravityUp: in gravityUp,
+                hold: in hold,
+                scratch: ref scratch,
+                traverse: (((edges & FaceEdges.Right) != 0) ? scratch.Right : -scratch.Right)
+            )
+        ) {
+            return;
+        }
+        if (
+            !hold.Mantle.Exists ||
+            (edges == FaceEdges.None)
+        ) {
+            return;
+        }
+
+        scratch.FaceGuard = edges;
+
+        // What the guard refuses of the command it refuses of an impulse, so a leap ends at the edge its face ends at.
+        if (m_overlayRemaining != 0UL) {
+            var (leapAlong, leapAcross) = GuardFace(
+                command: (FixedVector3.Dot(left: m_overlayVelocity, right: scratch.Facing), FixedVector3.Dot(left: m_overlayVelocity, right: scratch.Right)),
+                guard: edges
+            );
+
+            m_overlayVelocity = ((scratch.Facing * leapAlong) + (scratch.Right * leapAcross));
+
+            if (m_overlayVelocity == FixedVector3.Zero) {
+                CancelImpulse();
+            }
+        }
+    }
+    // The directions, of those a motion (along, across) on the held face takes the body in, in which the face ends
+    // within one body extent. `lipRaise` is the lowest probed height above the feet at which the face has ended above a
+    // body moving up it, within the row's mantle reach, or zero: the raise a mantle clears the edge by. A row with no
+    // mantle is not probed above or below.
+    private FaceEdges HeldFaceEdges(in FixedBodyHold hold, in FixedVector3 gravityUp, in FixedVector3 right, FixedQ4816 along, FixedQ4816 across, out FixedQ4816 lipRaise) {
+        var edges = FaceEdges.None;
+
+        lipRaise = FixedQ4816.Zero;
+
+        if (hold.Mantle.Exists && (along > FixedQ4816.Zero)) {
             var middle = HoldProbeHeight;
             var top = (hold.Mantle.Height * m_scale);
 
@@ -887,56 +960,257 @@ public sealed partial class WorldBody {
                 if (TryFaceBehind(
                     candidate: out _,
                     hold: in hold,
+                    normal: in m_holdNormal,
                     origin: (m_position + (m_up * height)),
                     up: in gravityUp
                 )) {
                     continue;
                 }
-                // The tight raise first: just over the edge. The full reach second, which clears what stands on the
-                // edge (a rail) when the tight one is blocked.
-                if (
-                    TryBeginMantle(hold: in hold, raise: height, scratch: ref scratch) ||
-                    ((height < top) && TryBeginMantle(hold: in hold, raise: top, scratch: ref scratch))
-                ) {
-                    return;
-                }
+
+                lipRaise = height;
+
                 if (sample == 1) {
-                    guard |= FaceEdges.Up;
+                    edges |= FaceEdges.Up;
                 }
 
                 break;
             }
         } else if (
+            hold.Mantle.Exists &&
             (along < FixedQ4816.Zero) &&
             !TryFaceBehind(
             candidate: out _,
             hold: in hold,
+            normal: in m_holdNormal,
             origin: (m_position + (m_up * (HoldStandoff / FixedQ4816.FromInteger(value: 2L)))),
             up: in gravityUp
         )
         ) {
-            guard |= FaceEdges.Down;
+            edges |= FaceEdges.Down;
         }
         if (across != FixedQ4816.Zero) {
             var side = ((across > FixedQ4816.Zero)
-                ? (scratch.Right * HoldStandoff)
-                : -(scratch.Right * HoldStandoff)
+                ? (right * HoldStandoff)
+                : -(right * HoldStandoff)
             );
 
             if (!TryFaceBehind(
                 candidate: out _,
                 hold: in hold,
+                normal: in m_holdNormal,
                 origin: (HoldProbeOrigin + side),
                 up: in gravityUp
             )) {
-                guard |= ((across > FixedQ4816.Zero)
+                edges |= ((across > FixedQ4816.Zero)
                     ? FaceEdges.Right
                     : FaceEdges.Left
                 );
             }
         }
 
-        scratch.FaceGuard = guard;
+        return edges;
+    }
+    // Begins a mantle over an edge HeldFaceEdges found at `lipRaise`: the tight raise first, just over the edge, and the
+    // row's full reach second, which clears what stands on the edge (a rail) when the tight one is blocked.
+    private bool TryBeginMantleOver(in FixedBodyHold hold, FixedQ4816 lipRaise, ref BodyMotionScratch scratch) {
+        var top = (hold.Mantle.Height * m_scale);
+
+        return (
+            TryBeginMantle(hold: in hold, raise: lipRaise, scratch: ref scratch) ||
+            ((lipRaise < top) && TryBeginMantle(hold: in hold, raise: top, scratch: ref scratch))
+        );
+    }
+    // Whether a firing's planar impulse would be stopped whole by the edge of the face a pull holds the body on: the
+    // face ends, within one body extent, every way the impulse would carry it. Such a firing is refused, so nothing it
+    // would have spent is spent. An impulse up a face that ends above with a landing the body's sweep proves begins the
+    // mantle in the firing's place.
+    private bool ImpulseStopsAtFaceEdge(CompiledBodyInstruction[] effects, ref BodyMotionScratch scratch) {
+        if (
+            !TryCurrentHold(hold: out var hold) ||
+            !hold.Mantle.Exists ||
+            (hold.Kind != BodyHoldKind.Pull)
+        ) {
+            return false;
+        }
+
+        for (var index = 0; (index < effects.Length); index++) {
+            if (
+                (effects[index].Operation != BodyMotionOp.PlanarImpulse) ||
+                (effects[index].Target != ActionTarget.Self) ||
+                !TryImpulseOnFace(
+                    direction: out var direction,
+                    instruction: in effects[index],
+                    intent: in scratch.Intent,
+                    orientation: scratch.Orientation
+                )
+            ) {
+                continue;
+            }
+            if (Wrapping) {
+                // The wrap owns the translation, so an impulse fired under it would be spent and never travelled.
+                return true;
+            }
+
+            var gravityUp = HoldGravityUp;
+            var facing = HoldTangentForward(normal: in m_holdNormal, up: in gravityUp);
+            var right = FixedVector3.Cross(left: facing, right: m_holdNormal);
+            var along = FixedVector3.Dot(left: direction, right: facing);
+            var across = FixedVector3.Dot(left: direction, right: right);
+            var edges = HeldFaceEdges(
+                across: across,
+                along: along,
+                gravityUp: in gravityUp,
+                hold: in hold,
+                lipRaise: out var lipRaise,
+                right: in right
+            );
+
+            if (GuardFace(command: (along, across), guard: edges) != (FixedQ4816.Zero, FixedQ4816.Zero)) {
+                continue;
+            }
+            if (lipRaise > FixedQ4816.Zero) {
+                _ = TryBeginMantleOver(hold: in hold, lipRaise: lipRaise, scratch: ref scratch);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+    // Begins a traverse round an outside corner, when the row's own probe finds the face past it and the body's own
+    // sweep proves the way: out along the traverse until the body stands one standoff off the new face, then in along
+    // that face to the row's corner depth. The probe looks back at the corner from beyond it, one corner depth behind the
+    // held face, so the face it finds is the one the body arrives on; it must lie inside the row's cone, face the way
+    // the body is going, and be another face than the held one. The body keeps its row, which takes the new face at
+    // once, and travels as an exclusive timed move through the corner of the proven path, turning to face the new face
+    // where the row's forward is its surface. A wrap carries a body only where both sweeps passed and where the new
+    // face still stands behind where they ended, which is what keeps it out of geometry and on a face at arrival.
+    private bool TryBeginCornerWrap(in FixedBodyHold hold, in FixedVector3 gravityUp, in FixedVector3 traverse, ref BodyMotionScratch scratch) {
+        if (
+            !CanStartTimedMove ||
+            (m_contactField is not { } field) ||
+            (m_collider is null)
+        ) {
+            return false;
+        }
+
+        var standoff = HoldStandoff;
+        var depth = (hold.Corner.Depth * m_scale);
+        var probe = HoldProbeOrigin;
+
+        if (
+            !TryTakeHoldAlong(
+                candidate: out var past,
+                direction: -traverse,
+                hold: in hold,
+                origin: ((probe + (traverse * (standoff + standoff))) - (m_holdNormal * (standoff + depth))),
+                up: in gravityUp
+            ) ||
+            (FixedVector3.Dot(left: past.Normal, right: m_holdNormal) >= HoldTrackAlignment)
+        ) {
+            return false;
+        }
+
+        var turned = FixedVector3.Dot(left: past.Normal, right: traverse);
+
+        if (turned < HoldTrackAlignment) {
+            return false;
+        }
+
+        // Where the body's middle arrives, and how far along the traverse it must go before the rest of the way runs
+        // level with the new face.
+        var offset = ((past.Point + (past.Normal * standoff)) - probe);
+        var outDistance = (FixedVector3.Dot(left: offset, right: past.Normal) / turned);
+
+        if (outDistance <= FixedQ4816.Zero) {
+            return false;
+        }
+
+        var start = m_position;
+        var still = FixedVector3.Zero;
+        var step = new BodyContactStep(
+            entityIndex: scratch.EntityIndex,
+            field: field,
+            memo: ref scratch.SupportMemo,
+            orientation: scratch.Orientation,
+            up: scratch.Up,
+            volumes: ScaledColliderVolumes(),
+            volumesRevision: BroadphaseRadiusComputations
+        );
+        var corner = (start + (traverse * outDistance));
+        var around = corner;
+        var outward = step.Sweep(position: ref around, previousPosition: in start, velocity: ref still);
+
+        if (
+            (outward.Refusal != ContactRefusal.None) ||
+            outward.Unproved
+        ) {
+            return false;
+        }
+
+        var landed = (around + ((start + offset) - corner));
+        var inward = step.Sweep(position: ref landed, previousPosition: in around, velocity: ref still);
+
+        if (
+            (inward.Refusal != ContactRefusal.None) ||
+            inward.Unproved ||
+            (FixedVector3.Dot(left: (landed - start), right: traverse) <= FixedQ4816.Zero) ||
+            !TryFaceBehind(
+                candidate: out var arrived,
+                hold: in hold,
+                normal: past.Normal,
+                origin: (landed + (m_up * HoldProbeHeight)),
+                up: in gravityUp
+            )
+        ) {
+            return false;
+        }
+
+        var travel = (landed - start);
+        var frame = TimedYawFrame(up: scratch.Up, attitudeUp: scratch.AttitudeUp).Conjugate();
+        var startYaw = (frame * scratch.Orientation).Yaw();
+        var turn = FixedQ4816.Zero;
+
+        if (hold.Forward == BodyHoldForward.Surface) {
+            var facing = frame.Rotate(vector: -arrived.Normal);
+            var level = new FixedVector3(
+                X: facing.X,
+                Y: FixedQ4816.Zero,
+                Z: facing.Z
+            );
+
+            if (level != FixedVector3.Zero) {
+                turn = FixedQ4816.WrapAngle(radians: (level.Yaw() - startYaw));
+            }
+        }
+
+        m_timedMove = new(
+            ElapsedTicks: 0UL,
+            Motion: new FixedTimedMove(
+                Arc: ((around - start) - (travel / FixedQ4816.FromInteger(value: 2L))),
+                Curve: BodyMotionCurve.Smoothstep,
+                Displacement: travel,
+                DurationTicks: hold.Corner.DurationTicks,
+                Exclusive: true,
+                Yaw: turn
+            ),
+            StartYaw: startYaw
+        );
+
+        if (HasTimedYaw) {
+            m_rotationAccumulator.Reset();
+        }
+
+        m_holdAnchor = arrived.Point;
+        m_holdNormal = arrived.Normal;
+        m_planarVelocity = FixedVector3.Zero;
+        m_verticalVelocity = FixedQ4816.Zero;
+        m_verticalVelocityAccumulator.Reset();
+        ClearBallisticTangent();
+        CancelImpulse();
+        scratch.FaceGuard = FaceEdges.None;
+
+        return true;
     }
     // Begins a mantle over the edge above the body, when the body's own sweep proves one: raised by `raise`, stepped
     // the mantle's depth into the face, and lowered onto walkable support (FixedStepUp.TryStep, the step a kerb
@@ -1020,6 +1294,7 @@ public sealed partial class WorldBody {
         m_verticalVelocity = FixedQ4816.Zero;
         m_verticalVelocityAccumulator.Reset();
         ClearBallisticTangent();
+        CancelImpulse();
         scratch.FaceGuard = FaceEdges.None;
         scratch.FaceInto = FixedVector3.Zero;
 
@@ -1801,6 +2076,11 @@ public sealed partial class WorldBody {
     /// contact resolution must not fold its resolved velocity back into it.</summary>
     private bool HoldOwnsVerticalChannel => (TryCurrentHold(hold: out var hold) && (hold.Kind == BodyHoldKind.Pull));
 
+    // Whether the current hold owns the body's heading: a row whose forward is the face it holds (BodyHoldForward.Surface)
+    // faces the body into that face for as long as it holds one, so a commanded facing (a look that steers the body) and
+    // a facing snap turn the camera and never the body off its face.
+    private bool HoldOwnsHeading => (TryCurrentHold(hold: out var hold) && (hold.Forward == BodyHoldForward.Surface) && (m_holdNormal != FixedVector3.Zero));
+
     /// <summary>Gets a value indicating whether the current hold is a medium, whose displacement law sets the body's
     /// vertical motion. Ground following must not run under it: the snap pulls a body that leaves a floor by less than
     /// the kit's snap reach back down to it, which pins a swimmer to the bed it is rising from.</summary>
@@ -1817,7 +2097,8 @@ public sealed partial class WorldBody {
         if (
             !TryCurrentHold(hold: out var hold) ||
             (hold.Kind != BodyHoldKind.Pull) ||
-            (m_holdNormal == FixedVector3.Zero)
+            (m_holdNormal == FixedVector3.Zero) ||
+            Wrapping
         ) {
             return;
         }

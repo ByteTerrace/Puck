@@ -45,17 +45,16 @@ The building has no sun of its own: the world that stands it lights it
 and almost all of it is the flaw ([`gallery/flaw.puck`](gallery/flaw.puck)):
 one continuous glowing tube, a neon core in a frosted sleeve whose tint drifts
 along its length, that runs through every floor like a finely made neon
-conduit. Every run is level or plumb, on the building's lines: along each
-gallery it keeps one tile behind the arcade, just under the storey's ceiling,
-and steps down a storey a bay from under the roof to level 0 and back up, each
-step a riser standing plumb behind a pier and passing straight through the slab
-through a brass collar. It crosses the void only under the roof, under the
-arches of bays 3 and 11, and the two galleries mirror each other. Its route is
-an editable list of steps (`flawProfile` in
-[`gallery/layout.puck`](gallery/layout.puck)), which gives the corners
-(`flawRoute`) and the slabs' openings (`flawCrossings`); its look, corner
-radius, collar and light per metre are `lookFlaw`, `lookFlawTint` and
-`lookFlawCollar` in [`gallery/look.puck`](gallery/look.puck).
+conduit. It is one loop: from its source at the tree's foot it runs straight
+down the middle of the nave's floor, climbs into the south gallery and snakes
+across each storey's ceiling bay by bay, rising a storey through a brass collar
+at each end; on level 3 it weaves through the tree's canopy, comes out at that
+level's north branch doorway, runs back along the branch and spirals down the
+tree's walkway, inlaid in its treads, to its source. The route is `flawRoute`
+in [`gallery/layout.puck`](gallery/layout.puck), with the slabs' openings
+(`flawCrossings`); its look, corner radius, collar and light per metre are
+`lookFlaw`, `lookFlawTint` and `lookFlawCollar` in
+[`gallery/look.puck`](gallery/look.puck).
 It lights like a fluorescent tube: a chain of tube lights along the same
 route, cut at each slab so every one lies in one storey, anchored to the
 building's root and standing still, so the irradiance volume traces each: its

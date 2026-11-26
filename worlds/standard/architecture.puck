@@ -40,10 +40,10 @@ function plinthOnFace(across, up, out) = [
 let plinthGlassHalf = [0.74, 0.18]
 let plinthGlassDepth = 0.012
 
-// The console screen's look: a near-black glass the interface glows on at a desktop monitor's brightness, and the
-// interface's colours in the kit's own palette (ochre frame, cream, teal and terracotta controls), the ink lettering
-// takes on a lit control and the two inks of a list, its chosen row lit amber.
-let consoleGlass = { color: "#081315", roughness: 0.12, specular: 0.45, emissive: 260 }
+// The console screen's look: a near-black glass the interface glows on at a bright display's brightness, readable in a
+// daylit hall, and the interface's colours in the kit's own palette (ochre frame, cream, teal and terracotta controls),
+// the ink lettering takes on a lit control and the two inks of a list, its chosen row lit amber.
+let consoleGlass = { color: "#081315", roughness: 0.12, specular: 0.45, emissive: 3000 }
 let consoleLook = {
   frame: "#E0A13A"
   cream: "#EFE3C8"

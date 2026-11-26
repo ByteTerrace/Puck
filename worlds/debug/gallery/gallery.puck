@@ -216,7 +216,9 @@ dynamics [
 
 prototypes {
   shellPrototypes()
-  flawPrototype()
+  for on in (flawEnabled ? [1] : []) {
+    flawPrototype()
+  }
 
   // A floor's light switch, its plate facing +Z in its own frame. A warm indicator is on; a green locator glow
   // (findable in the dark) is off.
@@ -543,7 +545,9 @@ placements {
     position: gallerySite
   }
   shellPlacements()
-  flawPlacement()
+  for on in (flawEnabled ? [1] : []) {
+    flawPlacement()
+  }
 
   for k in range(0, 4) {
     placement $"hall-switch-{k}" {
@@ -807,7 +811,7 @@ render {
           power: glowSpotPower(lookCarLamp.luminance, ((4 * carLampHalf[0]) * carLampHalf[1]))
         )
       ],
-      flawLights(placement(placementId: gallery))
+      (flawEnabled ? flawLights(placement(placementId: gallery)) : [])
     )
   }
 }
@@ -1510,9 +1514,12 @@ for display in galleryDisplays {
     galleryShownAt[key] = gallerySelect[key]
   }
   // The list's rows follow the scroll and the selection: each row's catalog index, its title and group copied from the
-  // catalog by that index, and its ink from the console's inks, the chosen row lit.
+  // catalog by that index, and its ink from the console's inks, the chosen row lit. The scroll and the choice pack into
+  // one view that the gate and the write share, so a firing closes its own gate and the rows are written only when the
+  // view moves.
   rule $"gallery-rows-{key}" {
-    when galleryScroll[key] != galleryRowsAt[key] or gallerySelect[key] != galleryRowsChosen[key]
+    local view = galleryScroll[key] * consoleViewStride + gallerySelect[key]
+    when galleryRowsView[key] != view
     mode: Level
     for row in range(0, consoleRows) {
       galleryRowIndex[$"{key}-{row}"] = galleryScroll[key] + row
@@ -1524,8 +1531,7 @@ for display in galleryDisplays {
         setState(state: galleryRowInk, key: $"{key}-{row}", fromState: galleryInks, fromKey: dim)
       }
     }
-    galleryRowsAt[key] = galleryScroll[key]
-    galleryRowsChosen[key] = gallerySelect[key]
+    galleryRowsView[key] = view
   }
 }
 

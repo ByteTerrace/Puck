@@ -634,6 +634,22 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
         }
 
         var frame = channels.MoveFrame;
+        // A seat whose control frames a held face by the body (seatControl.faceFrame) moves in the body's own heading while
+        // its body holds one: the camera orbits without changing which push climbs, and no travel turns the heading.
+        var onFace = (
+            (definition.Views.SeatControl.FaceFrame == WorldSeatFaceFrame.Body) &&
+            ((body.Facts & BodyFacts.HoldingUnwalkable) != 0)
+        );
+
+        if (onFace) {
+            facesTravel = false;
+
+            if (frame == ChannelFrame.Camera) {
+                frame = ChannelFrame.Heading;
+            }
+        }
+
+        var headingFramed = (seat.FreeLooking || onFace);
         var bodyOrientation = Quaternion.Identity;
         var bodyHeading = 0f;
 
@@ -648,7 +664,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             return intent;
         }
         if (
-            ((frame == ChannelFrame.Heading) || (seat.FreeLooking && stickMoves)) &&
+            ((frame == ChannelFrame.Heading) || (headingFramed && stickMoves)) &&
             !endpoint.TryEntityHeading(
             heading: out bodyHeading,
             index: bodyIndex
@@ -706,7 +722,7 @@ public sealed class WorldClient : IClientSink, ISdfAnchorSource, IWorldStampSour
             ChannelFrame.Heading => bodyHeading,
             _ => 0f,
         });
-        var stickYaw = (seat.FreeLooking
+        var stickYaw = (headingFramed
             ? bodyHeading
             : (facesTravel
                 ? latchedCameraYaw

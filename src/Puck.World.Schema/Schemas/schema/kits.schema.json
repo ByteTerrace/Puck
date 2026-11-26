@@ -528,6 +528,30 @@
                       "description": "How long a body standing on ground must keep driving into a face before OnDrive takes it, so brushing a wall is not a grab. A body in the air takes it at once. Zero, the default, takes it at once on the ground too.",
                       "type": "number",
                       "default": 0
+                    },
+                    "corner": {
+                      "description": "How a body traversing off the side of this row\u0027s face gets round an outside corner onto the face past it. Admitted on a Pull row only.",
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "properties": {
+                        "depth": {
+                          "description": "How far past the corner, along the new face, the body\u0027s middle arrives, world units at unit scale. Positive.",
+                          "type": "number"
+                        },
+                        "seconds": {
+                          "description": "How long the wrap takes. Positive.",
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "depth",
+                        "seconds"
+                      ],
+                      "additionalProperties": false,
+                      "default": null,
+                      "title": "WorldHoldCorner"
                     }
                   },
                   "required": [

@@ -192,6 +192,34 @@ public static class WorldSessionCapture {
 
         return (((IReadOnlyList<WorldScreen>?)captured) ?? screens);
     }
+    /// <summary>Returns one authored <c>state</c> row as <see cref="Capture"/> would write it: every moving cell
+    /// settled at <paramref name="tick"/> and <paramref name="engineTick"/>, its trait and its other members as the
+    /// live document holds them.</summary>
+    /// <param name="definition">The server's live definition.</param>
+    /// <param name="name">The row's name.</param>
+    /// <param name="tick">The server's completed tick.</param>
+    /// <param name="engineTick">The server's completed engine tick.</param>
+    /// <returns>The settled row, or <see langword="null"/> when the document authors no row of that name.</returns>
+    public static WorldStateRow? SettleStateRow(WorldDefinition definition, string name, ulong tick, ulong engineTick) {
+        ArgumentNullException.ThrowIfNull(argument: definition);
+
+        if (definition.StateRaw is not { World: { Count: > 0 } rows }) {
+            return null;
+        }
+
+        for (var index = 0; (index < rows.Count); index++) {
+            if (string.Equals(a: rows[index].Name.ToString(), b: name, comparisonType: StringComparison.Ordinal)) {
+                return SettleRow(
+                    definition: definition,
+                    engineTick: engineTick,
+                    row: rows[index],
+                    tick: tick
+                );
+            }
+        }
+
+        return null;
+    }
     private static WorldStateSection? CaptureState(WorldDefinition definition, ulong tick, ulong engineTick) {
         if (definition.StateRaw is not { World: { Count: > 0 } rows } state) {
             return definition.StateRaw;

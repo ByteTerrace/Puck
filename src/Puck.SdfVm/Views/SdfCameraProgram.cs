@@ -219,6 +219,22 @@ public sealed record SdfCameraProgramSet(IReadOnlyList<SdfCameraProgram> Program
 public readonly record struct SdfCameraLook(float Yaw, float Pitch) {
     /// <summary>An optional live distance for interactive orbit operations; null retains their authored distance.</summary>
     public float? Distance { get; init; }
+    /// <summary>The authored distance of the orbit <see cref="Distance"/> was requested against, or zero for none. An
+    /// interactive orbit authored at another distance keeps its proportion to this one, so a rig that blends or selects
+    /// between a near and a far framing stays near and far at any requested distance; zero gives every interactive
+    /// orbit <see cref="Distance"/> itself.</summary>
+    public float DistanceReference { get; init; }
+
+    /// <summary>Returns the distance an interactive orbit resolves at.</summary>
+    /// <param name="authored">The orbit's own authored distance.</param>
+    /// <returns><paramref name="authored"/> with no live distance; the live distance in the orbit's proportion to
+    /// <see cref="DistanceReference"/> otherwise.</returns>
+    public float OrbitDistance(float authored) => ((Distance is not { } live)
+        ? authored
+        : (((DistanceReference > 0f) && (authored != DistanceReference))
+            ? (live * (authored / DistanceReference))
+            : live
+    ));
 }
 /// <summary>One frame's resolved camera.</summary>
 /// <param name="Eye">The eye position.</param>
@@ -429,7 +445,7 @@ public static class SdfCameraProgramEvaluator {
                     var pivot = (subject.Position + orbit.PivotOffset);
 
                     eye = (pivot + OrbitRig.Offset(
-                        distance: (look.Distance ?? orbit.Distance.Resolve(scalars: scalars)),
+                        distance: look.OrbitDistance(authored: orbit.Distance.Resolve(scalars: scalars)),
                         pitch: pitch,
                         yaw: (orbit.Yaw.Resolve(scalars: scalars) + look.Yaw)
                     ));
