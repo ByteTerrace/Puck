@@ -81,7 +81,28 @@ public sealed partial class SdfFieldEvaluator {
     /// <param name="instructionsWalked">The instructions visited after culling.</param>
     /// <param name="rotationsExpanded">The rotations evaluated through the full interval formula.</param>
     /// <returns>Whether the field can enclose this box.</returns>
-    public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance, out int instructionsWalked, out int rotationsExpanded) {
+    public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, out FixedInterval distance, out int instructionsWalked, out int rotationsExpanded) =>
+        TryDistanceBounds(distance: out distance, instructionsWalked: out instructionsWalked, lower: lower, reading: SdfBoundsReading.Interval, rotationsExpanded: out rotationsExpanded, upper: upper);
+    /// <summary>Encloses every distance <see cref="TryDistance(FixedPosition, out FixedQ4816, out int)"/> answers at a point of the box, in a chosen
+    /// reading: the interval rules alone, or those rules met at every step with the affine reading (SdfFormula's affine
+    /// lowering), which carries the box's three axes as shared symbols so a rotated box stays rotated and a blend reads
+    /// its operands' difference narrow.</summary>
+    /// <param name="lower">The box's least corner.</param>
+    /// <param name="upper">The box's greatest corner, at or above <paramref name="lower"/> on every axis.</param>
+    /// <param name="reading">The reading: <see cref="SdfBoundsReading.Affine"/> answers an interval inside the one
+    /// <see cref="SdfBoundsReading.Interval"/> answers, at more work an instruction.</param>
+    /// <param name="distance">The enclosing interval on success; zero on failure.</param>
+    /// <param name="instructionsWalked">The instructions the walk visited; zero on failure.</param>
+    /// <returns><see langword="false"/> when the program has no shape or a corner leaves the evaluator's frame.</returns>
+    /// <exception cref="ArgumentException"><paramref name="lower"/> exceeds <paramref name="upper"/> on an
+    /// axis.</exception>
+    /// <remarks>Both readings are certified: each step's affine form and its interval each hold every point answer, so
+    /// their meet does. An evaluator that indexes regions (<see cref="IndexesRegions"/>) answers its interval reading
+    /// whichever reading is asked.</remarks>
+    public bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, SdfBoundsReading reading, out FixedInterval distance, out int instructionsWalked) =>
+        TryDistanceBounds(distance: out distance, instructionsWalked: out instructionsWalked, lower: lower, reading: reading, rotationsExpanded: out _, upper: upper);
+
+    private bool TryDistanceBounds(FixedPosition lower, FixedPosition upper, SdfBoundsReading reading, out FixedInterval distance, out int instructionsWalked, out int rotationsExpanded) {
         distance = FixedInterval.FromPoint(value: FixedQ4816.Zero);
         instructionsWalked = 0;
         rotationsExpanded = 0;
@@ -111,7 +132,7 @@ public sealed partial class SdfFieldEvaluator {
 
         // A stream too short to divide a region has nothing an index could drop.
         distance = (((m_regions is null) || (m_instructions.Length <= RegionShortTape))
-            ? BoundsOver(instructionsWalked: out instructionsWalked, rotationsExpanded: out rotationsExpanded, world: world)
+            ? BoundsOver(affine: (reading == SdfBoundsReading.Affine), instructionsWalked: out instructionsWalked, rotationsExpanded: out rotationsExpanded, world: world)
             : BoundsOverRegions(instructionsWalked: out instructionsWalked, rotationsExpanded: out rotationsExpanded, world: world));
 
         return true;
@@ -180,7 +201,7 @@ public sealed partial class SdfFieldEvaluator {
     // The bounds over a box whose every point the frame holds, and the instructions the walk visited. A culling walk
     // skips what the cull tables prove cannot change its interval (SdfFieldEvaluator.Cull.cs); the frame's own walks
     // skip nothing, so a frame rests on every instruction.
-    private FixedInterval BoundsOver(IntervalVector3 world, out int instructionsWalked, out int rotationsExpanded, bool cull = true) {
+    private FixedInterval BoundsOver(IntervalVector3 world, out int instructionsWalked, out int rotationsExpanded, bool cull = true, bool affine = false) {
         var cullBounds = m_cullBounds;
         var reaches = BoxReaches();
         var primer = BoxPrimer.None;
@@ -197,6 +218,7 @@ public sealed partial class SdfFieldEvaluator {
         }
 
         var result = WalkBounds(
+            affine: affine,
             cull: cull,
             end: m_instructions.Length,
             first: 0,
@@ -233,7 +255,14 @@ public sealed partial class SdfFieldEvaluator {
     // the tape's ranges in stream order in place of [first, end). With a record it is a regional walk
     // (SdfFieldEvaluator.Regions.cs): it lists every range of the stream it did not jump over, and it jumps where the
     // point certificates clear at every point of the box, the primer's clearance held strict, in place of the box ones.
-    private FixedInterval WalkBounds(int first, int end, IntervalVector3 world, in BoxQuery query, ReadOnlySpan<FixedQ4816> reaches, ref BoxPrimer primer, bool cull, ref int walked, ref int rotationsExpanded, ReadOnlySpan<int> tape = default, List<(int First, int End)>? record = null, bool nested = false) {
+    //
+    // With affine set, the walk carries the affine reading beside every interval it holds (SdfFormula's affine lowering:
+    // the generated FixedAffineForm overloads of MapPoint, EvaluateShape, EditField and BlendShape): the point as forms
+    // over the box's three axes, the running distance and each open scope's as forms. Every form and its interval hold
+    // the same point values, so each step meets the two (Meet) and both readings walk on from the tighter. A step the
+    // affine reading has no rule for lifts its interval as fresh noise, and the culls and skips stay the interval's, read
+    // from the met interval. The primer's walk and a regional walk read intervals alone.
+    private FixedInterval WalkBounds(int first, int end, IntervalVector3 world, in BoxQuery query, ReadOnlySpan<FixedQ4816> reaches, ref BoxPrimer primer, bool cull, ref int walked, ref int rotationsExpanded, ReadOnlySpan<int> tape = default, List<(int First, int End)>? record = null, bool nested = false, bool affine = false) {
         var visited = 0;
         var expanded = 0;
         var cullBounds = m_cullBounds;
@@ -242,8 +271,13 @@ public sealed partial class SdfFieldEvaluator {
         var local = world;
         var distanceScale = Point(value: FixedQ4816.One);
         var frames = m_rootFrames.Span;
-        var root = new PointFrame<IntervalVector3, FixedInterval>();
+        var root = new PointFrame<BoxPoint, FixedInterval>();
         var result = FixedInterval.FromPoint(value: FarDistance);
+        var affineWorld = (affine ? FixedAffineForm3.FromBox(lower: new FixedVector3(X: world.X.Lower, Y: world.Y.Lower, Z: world.Z.Lower), upper: new FixedVector3(X: world.X.Upper, Y: world.Y.Upper, Z: world.Z.Upper)) : default);
+        var affineLocal = affineWorld;
+        var affineResult = FixedAffineForm.FromPoint(value: FarDistance);
+        var affinePower = new PowerWork();
+        Span<FixedAffineForm> affineScopes = stackalloc FixedAffineForm[(affine ? SdfProgramBuilder.MaxFieldScopeDepth : 0)];
         // A pending LaneErode's effect on the next shape (WalkPoints' laneErodeSkip and laneErodeAmount): skipped, or
         // eroded by an interval of its reach; cleared by ResetPoint.
         var laneErodeSkip = false;
@@ -293,6 +327,7 @@ public sealed partial class SdfFieldEvaluator {
 
                 if (bound == primer.Bound) {
                     result = FixedInterval.Min(first: result, second: primer.Bounds);
+                    if (affine) { affineResult = Meet(form: FixedAffineForms.Min(a: affineResult, b: FixedAffineForm.FromInterval(interval: primer.Bounds)), interval: ref result); }
                     record?.Add(item: (live, index));
                     live = cullBounds[bound].End;
                     index = (cullBounds[bound].End - 1);
@@ -340,7 +375,9 @@ public sealed partial class SdfFieldEvaluator {
                 }
             }
 
-            root.Capture(index: index, point: local, scale: distanceScale);
+            if (root.Captures(index: index)) {
+                root.Capture(index: index, point: new BoxPoint(Affine: affineLocal, Box: local), scale: distanceScale);
+            }
             ref readonly var instruction = ref m_instructions[index];
 
             ++visited;
@@ -348,6 +385,7 @@ public sealed partial class SdfFieldEvaluator {
             switch (instruction.IntervalAction) {
                 case SdfIntervalAction.ResetPoint: {
                         local = world;
+                        affineLocal = affineWorld;
                         distanceScale = Point(value: FixedQ4816.One);
                         laneErodeSkip = false;
                         laneErodeAmount = FixedInterval.FromPoint(value: FixedQ4816.Zero);
@@ -376,7 +414,10 @@ public sealed partial class SdfFieldEvaluator {
                             live = skipped;
                             index = (skipped - 1);
                         } else if (!frames.IsEmpty) {
-                            root.Reset(frame: frames[index], index: ref index, point: ref local, scale: ref distanceScale);
+                            var restored = new BoxPoint(Affine: affineLocal, Box: local);
+
+                            root.Reset(frame: frames[index], index: ref index, point: ref restored, scale: ref distanceScale);
+                            (local, affineLocal) = (restored.Box, restored.Affine);
                         }
 
                         break;
@@ -387,6 +428,7 @@ public sealed partial class SdfFieldEvaluator {
                             Y: (local.Y - FixedInterval.FromPoint(value: instruction.Data0Y)),
                             Z: (local.Z - FixedInterval.FromPoint(value: instruction.Data0Z))
                         );
+                        if (affine) { affineLocal = Meet(box: ref local, point: MapPoint(instruction: in instruction, p: affineLocal)); }
                         break;
                     }
                 case SdfIntervalAction.Rotate: {
@@ -396,6 +438,8 @@ public sealed partial class SdfFieldEvaluator {
                             expanded++;
                             local = RotateBoundsByInverseQuaternion(p: local, rotation: in m_rotationBounds[m_rotationSlots[index]]);
                         }
+                        // The point walk takes the identity, either sign of it, as the point itself.
+                        if (affine && !IsIdentityRotation(instruction: in instruction)) { affineLocal = Meet(box: ref local, point: MapPoint(instruction: in instruction, p: affineLocal)); }
                         break;
                     }
                 case SdfIntervalAction.Scale: {
@@ -412,18 +456,22 @@ public sealed partial class SdfFieldEvaluator {
                             Z: (local.Z / FixedInterval.FromPoint(value: scale.Z))
                         );
                         distanceScale *= Point(value: instruction.Data0W);
+                        if (affine) { affineLocal = Meet(box: ref local, point: MapPoint(instruction: in instruction, p: affineLocal)); }
                         break;
                     }
                 case SdfIntervalAction.Fold: {
                         local = FoldBounds(instruction: in instruction, local: local);
+                        if (affine) { affineLocal = Meet(box: ref local, point: MapPoint(instruction: in instruction, p: affineLocal)); }
                         break;
                     }
                 case SdfIntervalAction.Warp: {
                         local = WarpBounds(distanceScale: ref distanceScale, instruction: in instruction, local: local);
+                        if (affine) { affineLocal = Lift(box: local); }
                         break;
                     }
                 case SdfIntervalAction.RenderWarp: {
                         local = RenderWarpBounds(distanceScale: ref distanceScale, instruction: in instruction, local: local);
+                        if (affine) { affineLocal = Lift(box: local); }
                         break;
                     }
                 case SdfIntervalAction.LaneErode: {
@@ -435,17 +483,22 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfIntervalAction.EditField: {
-                        result = EditFieldBounds(instruction: in instruction, local: local, result: result);
+                        var edited = EditFieldBounds(instruction: in instruction, local: local, result: result);
+
+                        if (affine) { affineResult = Meet(form: EditField(distance: affineResult, instruction: in instruction, p: affineLocal), interval: ref edited); }
+                        result = edited;
                         inert = false;
                         break;
                     }
                 case SdfIntervalAction.RenderEditField: {
                         result = RenderEditFieldBounds(instruction: in instruction, result: result);
+                        if (affine) { affineResult = FixedAffineForm.FromInterval(interval: result); }
                         inert = false;
                         break;
                     }
                 case SdfIntervalAction.WeightedRelief: {
                         result = NoiseDisplaceBounds(instruction: in instruction, local: local, result: result, weight: ((instruction.ReliefMasks is { } masks) ? MaskProductBounds(masks: masks, q: local) : null));
+                        if (affine) { affineResult = FixedAffineForm.FromInterval(interval: result); }
                         inert = false;
                         break;
                     }
@@ -455,6 +508,10 @@ public sealed partial class SdfFieldEvaluator {
                     }
                 case SdfIntervalAction.PushField: {
                         // A scope's accumulator is its own: no chain spans a push or a pop.
+                        if (affine) {
+                            affineScopes[scopeDepth] = affineResult;
+                            affineResult = FixedAffineForm.FromPoint(value: FarDistance);
+                        }
                         scopes[scopeDepth++] = result;
                         result = FixedInterval.FromPoint(value: FarDistance);
                         chain = -1;
@@ -462,7 +519,14 @@ public sealed partial class SdfFieldEvaluator {
                         break;
                     }
                 case SdfIntervalAction.PopField: {
-                        result = PopFieldBounds(candidate: result, instruction: instruction, saved: scopes[--scopeDepth]);
+                        var popped = PopFieldBounds(candidate: result, instruction: instruction, saved: scopes[--scopeDepth]);
+
+                        if (affine) {
+                            var scoped = ((instruction.ScopeScale > 0L) ? ScaleScope(candidate: affineResult, scale: instruction.ScopeScale) : affineResult);
+
+                            affineResult = Meet(form: BlendShape(blend: instruction.Blend, candidate: scoped, current: affineScopes[scopeDepth], operand: PopOperand(instruction: in instruction), smoothRadius: instruction.Data1X), interval: ref popped);
+                        }
+                        result = popped;
                         chain = -1;
                         inert = false;
                         break;
@@ -478,7 +542,20 @@ public sealed partial class SdfFieldEvaluator {
                             break;
                         }
 
-                        var candidate = ScaleCandidateBounds(candidate: ((ShapeBounds(instruction: instruction, p: local) * distanceScale) + erosion), scale: instruction.ScopeScale);
+                        var shape = ShapeBounds(instruction: instruction, p: local);
+                        var affineCandidate = FixedAffineForm.Entire;
+
+                        if (affine) {
+                            var affineShape = Meet(form: EvaluateShape(instruction: in instruction, p: affineLocal, powerWork: ref affinePower), interval: ref shape);
+
+                            // The point walk's (shape · distanceScale) + erosion, then the scope's fraction.
+                            affineCandidate = FixedAffineForms.Add(a: Multiply(form: affineShape, scale: distanceScale), b: FixedAffineForm.FromInterval(interval: erosion));
+                            if (instruction.ScopeScale > 0L) { affineCandidate = ScaleScope(candidate: affineCandidate, scale: instruction.ScopeScale); }
+                        }
+
+                        var candidate = ScaleCandidateBounds(candidate: ((shape * distanceScale) + erosion), scale: instruction.ScopeScale);
+
+                        if (affine) { affineCandidate = Meet(form: affineCandidate, interval: ref candidate); }
 
                         // An inert join, its candidate past the accumulator, leaves every point's accumulator as it was,
                         // so the interval that encloses them stands as it is, tighter than the blend's rule would
@@ -521,7 +598,10 @@ public sealed partial class SdfFieldEvaluator {
                             live = Math.Max(val1: live, val2: chain);
                         }
 
-                        result = BlendBounds(blend: instruction.Blend, candidate: candidate, current: result, smoothRadius: instruction.Data1X);
+                        var blended = BlendBounds(blend: instruction.Blend, candidate: candidate, current: result, smoothRadius: instruction.Data1X);
+
+                        if (affine) { affineResult = Meet(form: BlendShape(blend: instruction.Blend, candidate: affineCandidate, current: affineResult, operand: FixedQ4816.Zero, smoothRadius: instruction.Data1X), interval: ref blended); }
+                        result = blended;
                         break;
                     }
                 case SdfIntervalAction.Unsupported: {
@@ -1368,6 +1448,41 @@ public sealed partial class SdfFieldEvaluator {
             ? FixedInterval.Union(first: value, second: next)
             : next);
 
+    // === The affine reading's meets =====================================================================================
+    // A form and an interval that hold the same point values meet: the interval narrows to the form's range, and a form
+    // the affine reading could not keep (unbounded where the interval is bounded) is the interval as fresh noise. An
+    // unbounded interval stays unbounded, as Intersect keeps it: it is the proof a point step may have wrapped.
+    private static readonly FixedAffineForm3 AffineEntirePoint = new(X: FixedAffineForm.Entire, Y: FixedAffineForm.Entire, Z: FixedAffineForm.Entire);
+
+    private static FixedAffineForm Meet(FixedAffineForm form, ref FixedInterval interval) {
+        if (form.IsUnbounded) {
+            return FixedAffineForm.FromInterval(interval: interval);
+        }
+
+        interval = Intersect(first: interval, second: form.Range);
+        return form;
+    }
+    private static FixedAffineForm3 Meet(FixedAffineForm3 point, ref IntervalVector3 box) {
+        var (x, y, z) = (box.X, box.Y, box.Z);
+        var met = new FixedAffineForm3(X: Meet(form: point.X, interval: ref x), Y: Meet(form: point.Y, interval: ref y), Z: Meet(form: point.Z, interval: ref z));
+
+        box = new IntervalVector3(X: x, Y: y, Z: z);
+        return met;
+    }
+    private static FixedAffineForm3 Lift(IntervalVector3 box) => FixedAffineForm3.FromIntervals(x: box.X, y: box.Y, z: box.Z);
+    // A candidate times the walk's distance scale, as the point walk's carrier product rounds it: a constant multiple
+    // for a point scale, a product with the scale's interval as noise otherwise.
+    private static FixedAffineForm Multiply(FixedAffineForm form, FixedInterval scale) => (scale.IsUnbounded
+        ? FixedAffineForm.Entire
+        : ((scale.Lower == scale.Upper)
+            ? FixedAffineForms.Multiply(a: form, b: scale.Lower)
+            : FixedAffineForms.Multiply(a: form, b: FixedAffineForm.FromInterval(interval: scale))));
+    // A candidate scaled by a scope's 2⁻³² fraction (ScaleScope): the rounded quotient of its product with the scale.
+    private static FixedAffineForm ScaleScope(FixedAffineForm candidate, long scale) =>
+        FixedAffineForms.MultiplyDivide(divisor: FixedQ4816.FromRawBits(value: (1L << ScopeScaleBits)), multiplier: FixedQ4816.FromRawBits(value: scale), value: candidate);
+
+    // The point a box walk carries and its root frame restores: the box's interval and its affine forms together.
+    private readonly record struct BoxPoint(IntervalVector3 Box, FixedAffineForm3 Affine);
     // A box of points: one interval per axis.
     private readonly record struct IntervalVector3(FixedInterval X, FixedInterval Y, FixedInterval Z) {
         public FixedInterval Length => FixedInterval.Magnitude(x: X, y: Y, z: Z);

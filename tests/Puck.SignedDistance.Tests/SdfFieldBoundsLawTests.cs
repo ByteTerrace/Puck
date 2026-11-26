@@ -97,6 +97,47 @@ public sealed class SdfFieldBoundsLawTests {
             }
         }
     }
+    /// <summary>The affine reading is certified as the interval reading is, and never looser: over the same boxes its
+    /// interval holds every point answer and lies inside the interval reading's, since every step meets the two.</summary>
+    /// <param name="name">The case.</param>
+    [MemberData(memberName: nameof(Cases))]
+    [Theory]
+    public void TheAffineReadingHoldsEveryPointAnswerInsideTheIntervalReading(string name) {
+        var evaluator = new SdfFieldEvaluator(program: Programs[name](), reading: SdfFieldReading.Render);
+        var random = new Random(Seed: StableSeed(name: name));
+
+        for (var box = 0; (box < BoxesPerCase); box++) {
+            var center = new Vector3(
+                x: NextSigned(random: random, scale: 3f),
+                y: NextSigned(random: random, scale: 3f),
+                z: NextSigned(random: random, scale: 3f)
+            );
+            var half = (((box % 8) == 0)
+                ? Vector3.Zero
+                : new Vector3(
+                    x: MathF.Pow(x: 2f, y: (NextSigned(random: random, scale: 6f) - 4f)),
+                    y: MathF.Pow(x: 2f, y: (NextSigned(random: random, scale: 6f) - 4f)),
+                    z: MathF.Pow(x: 2f, y: (NextSigned(random: random, scale: 6f) - 4f))
+                ));
+            var lower = FixedPosition.FromLocal(local: Fixed(value: (center - half)));
+            var upper = FixedPosition.FromLocal(local: Fixed(value: (center + half)));
+
+            Assert.True(condition: evaluator.TryDistanceBounds(distance: out var interval, instructionsWalked: out _, lower: lower, reading: SdfBoundsReading.Interval, upper: upper));
+            Assert.True(condition: evaluator.TryDistanceBounds(distance: out var affine, instructionsWalked: out _, lower: lower, reading: SdfBoundsReading.Affine, upper: upper));
+            Assert.True(
+                condition: interval.Contains(other: affine),
+                userMessage: $"{name}: the affine reading {affine} of the box [{lower}, {upper}] leaves the interval reading {interval}"
+            );
+
+            foreach (var point in PointsInside(interior: InteriorPointsPerBox, lower: Fixed(value: (center - half)), random: random, upper: Fixed(value: (center + half)))) {
+                Assert.True(condition: evaluator.TryDistance(distance: out var distance, material: out _, position: FixedPosition.FromLocal(local: point)));
+                Assert.True(
+                    condition: affine.Contains(value: distance),
+                    userMessage: $"{name}: the point answer {distance} at {point} lies outside the affine reading {affine} of the box [{lower}, {upper}] (interval {interval})"
+                );
+            }
+        }
+    }
     [Fact]
     public void EveryInterpretedOpHasAnInclusionRule() {
         var exercised = Programs.Values.SelectMany(selector: build => build().Instructions).Select(selector: instruction => instruction.Op).ToHashSet();

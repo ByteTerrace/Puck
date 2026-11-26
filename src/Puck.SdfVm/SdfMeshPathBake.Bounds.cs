@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Numerics;
+using Puck.Maths;
 using Puck.SignedDistance;
 using Puck.SignedDistance.Queries;
 using BakeGate = Puck.SdfVm.SdfMeshBakeReport.Gate;
@@ -10,8 +11,10 @@ namespace Puck.SdfVm;
 // (Refine) and a final lattice (its slabs). The lattice is cut into blocks of BoundBlock samples a side (the last block
 // of an axis ends on the lattice's last sample, overlapping its neighbour), and the group's own field (SdfMeshAudit.Field,
 // the render reading the audit measures a mesh against) encloses every value its fixed-point evaluator answers over a box
-// of blocks (SdfFieldEvaluator.TryDistanceBounds), splitting the box where the enclosure straddles the band, down to one
-// block. A block whose enclosure lies wholly past the band, outside or inside, is never sampled: the host writes each of
+// of blocks (SdfFieldEvaluator.TryDistanceBounds, in its interval reading and, where that is loose, its affine one),
+// splitting the box where the enclosure straddles the band, down to one block, so the coarse boxes far from the surface
+// settle whole and only the boxes near it refine. A block whose enclosure lies wholly past the band, outside or inside,
+// is never sampled: the host writes each of
 // its samples the enclosure's nearer end, which keeps the sample's sign and holds it at least the band from zero. Every
 // other block is sampled as a block lattice (SdfMeshBakeRequest.Blocks).
 //
@@ -210,7 +213,9 @@ public sealed partial class SdfMeshPathBake {
     private void Bound(Group group, FinalLattice? final, in SdfMeshBakeRequest request, SdfProgram program, long field) {
         var evaluator = CpuField(field: field, group: group, program: program);
         var walks = 0L;
-        var blocks = ((evaluator is null) ? null : Classify(evaluator: evaluator, lattice: (final?.Lattice ?? request), walks: out walks));
+        var affineWalks = 0L;
+        var affineSettled = 0L;
+        var blocks = ((evaluator is null) ? null : Classify(affineSettled: out affineSettled, affineWalks: out affineWalks, evaluator: evaluator, lattice: (final?.Lattice ?? request), walks: out walks));
         var empty = (blocks is { Sampled: 0 });
 
         if (empty) { StoreEmpty(group); }
@@ -221,6 +226,8 @@ public sealed partial class SdfMeshPathBake {
             group.Contouring = false;
             if (!GroupList.Holds(group: group) || !ReferenceEquals(objA: group.Final, objB: final)) { return; }
             m_accounts.BoundWalks += walks;
+            m_accounts.BoundAffineWalks += affineWalks;
+            m_accounts.BoundAffineSettled += affineSettled;
             // A field adopted since the bounds' program was read may have moved the surface: the lattice samples whole.
             var bounded = ((blocks is not null) && (Volatile.Read(location: ref m_field) == field));
 
@@ -250,8 +257,13 @@ public sealed partial class SdfMeshPathBake {
         emptied?.Dispose();
     }
 
-    // The lattice's blocks, each sampled or skipped with its fill.
-    private static LatticeBlocks Classify(SdfFieldEvaluator evaluator, in SdfMeshBakeRequest lattice, out long walks) {
+    // The lattice's blocks, each sampled or skipped with its fill. A box asks the interval reading first, and the affine
+    // reading (SdfBoundsReading.Affine) only where the interval leaves it unsettled and is wider than the box's diagonal:
+    // a field no steeper than a distance varies by at most that diagonal over the box, so a wider interval is the
+    // interval's own looseness (a rotated box's hull, a blend's operands read apart), which the affine reading's shared
+    // symbols take back, and a narrower one straddles the band because the surface is near. Both readings are
+    // certified, so the choice moves only the work, never which blocks may skip.
+    private static LatticeBlocks Classify(SdfFieldEvaluator evaluator, in SdfMeshBakeRequest lattice, out long walks, out long affineWalks, out long affineSettled) {
         var blocks = new LatticeBlocks(dims: lattice.Dims);
         var (origin, cell) = (lattice.Origin, lattice.Cell);
         var band = (BoundBandDiagonals * cell.Length());
@@ -259,23 +271,36 @@ public sealed partial class SdfMeshPathBake {
         var pad = new Vector3(value: ((1.0e-5f * (origin.Length() + (cell.Length() * Math.Max(val1: lattice.Dims.X, val2: Math.Max(val1: lattice.Dims.Y, val2: lattice.Dims.Z))))) + (2f / 65536f)));
         var size = new Vector3(x: blocks.Size.X, y: blocks.Size.Y, z: blocks.Size.Z);
         var count = 0L;
+        var affineCount = 0L;
+        var affineWins = 0L;
+
+        // The nearer end of an enclosure that clears the band, or NaN where it may hold the surface.
+        float FillOf(FixedInterval bounds) {
+            if (bounds.IsUnbounded) { return float.NaN; }
+
+            var lower = ((float)((double)bounds.Lower));
+            var upper = ((float)((double)bounds.Upper));
+
+            return ((lower > band) ? lower : ((upper < -band) ? upper : float.NaN));
+        }
 
         Descend(high: blocks.Count, low: (0, 0, 0), settles: (from, to, last) => {
             // One cell past its blocks' samples on every side, so each lattice cell with a corner in a skipped block lies
             // in that block's box: a zero between two skipped blocks' facing samples is in both boxes.
             var low = ((origin + ((blocks.CornerOf(x: from.X, y: from.Y, z: from.Z) - Vector3.One) * cell)) - pad);
             var high = ((origin + ((blocks.CornerOf(x: (to.X - 1), y: (to.Y - 1), z: (to.Z - 1)) + size) * cell)) + pad);
+            var (lowCorner, highCorner) = (SdfMeshAudit.Fixed(point: low), SdfMeshAudit.Fixed(point: high));
             var fill = float.NaN;
 
             count++;
-            if (evaluator.TryDistanceBounds(lower: SdfMeshAudit.Fixed(point: low), upper: SdfMeshAudit.Fixed(point: high), distance: out var bounds) && !bounds.IsUnbounded) {
-                var lower = ((float)((double)bounds.Lower));
-                var upper = ((float)((double)bounds.Upper));
-
-                if (lower > band) {
-                    fill = lower;
-                } else if (upper < -band) {
-                    fill = upper;
+            if (evaluator.TryDistanceBounds(distance: out var bounds, instructionsWalked: out _, lower: lowCorner, reading: SdfBoundsReading.Interval, upper: highCorner)) {
+                fill = FillOf(bounds: bounds);
+                if (float.IsNaN(f: fill) && (bounds.IsUnbounded || ((((double)bounds.Upper) - ((double)bounds.Lower)) > (high - low).Length()))) {
+                    affineCount++;
+                    if (evaluator.TryDistanceBounds(distance: out var affine, instructionsWalked: out _, lower: lowCorner, reading: SdfBoundsReading.Affine, upper: highCorner)) {
+                        fill = FillOf(bounds: affine);
+                        affineWins += (float.IsNaN(f: fill) ? 0L : 1L);
+                    }
                 }
             }
             if (float.IsNaN(f: fill) && !last) { return false; }
@@ -290,6 +315,8 @@ public sealed partial class SdfMeshPathBake {
             return true;
         });
         walks = count;
+        affineWalks = affineCount;
+        affineSettled = affineWins;
         return blocks;
     }
 
