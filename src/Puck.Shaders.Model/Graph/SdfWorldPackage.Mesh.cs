@@ -116,6 +116,40 @@ public static partial class SdfWorldPackage {
         return (tiles * tiles).CeilingDivide(divisor: 32U);
     }
 
+    /// <summary>The side in texels of one block of a shadow layer's bounds: the surface pass classifies a receiver by
+    /// the bounds of the block its texel lies in before it filters (<see cref="MeshShadowNearBlocks"/>).</summary>
+    public const uint ShadowBlockEdge = 32;
+    /// <summary>The words one layer of one block's bounds takes: the layer's fitted plane over the block (the depth at
+    /// the block's centre and its change per texel along x and y, three floats), the least and greatest depth the
+    /// texels of the block and those within the filter's reach of it stand off that plane (two floats), and a word of
+    /// flags: bit 0 set once the record is reduced, bit 1 where glass extinction lies within that reach.</summary>
+    public const uint ShadowBlockLayerWords = 6;
+    /// <summary>The words one block's bounds take: the depth layer's, then the exit layer's.</summary>
+    public const uint ShadowBlockWords = (2 * ShadowBlockLayerWords);
+
+    /// <summary>Returns the blocks along each side of a square shadow layer.</summary>
+    /// <param name="side">The layer's width in texels.</param>
+    /// <returns>The blocks along a side.</returns>
+    public static uint ShadowBlocksAcross(uint side) => side.CeilingDivide(divisor: ShadowBlockEdge);
+    /// <summary>Returns the bytes a square shadow layer pair's block bounds take.</summary>
+    /// <param name="side">The layers' width in texels.</param>
+    /// <returns>The bytes.</returns>
+    public static ulong ShadowBlockBytes(uint side) {
+        var across = (ulong)ShadowBlocksAcross(side: side);
+
+        return (((across * across) * ShadowBlockWords) * sizeof(uint));
+    }
+
+    /// <summary>The near cascade's block bounds, read by the surface pass: <see cref="ShadowBlockWords"/> words a block of
+    /// <see cref="ShadowBlockEdge"/> texels a side, in row order, which the residency's shadow upload reduces from the
+    /// layers after each drawing into them (<c>SdfWorldShadows</c>, <c>passes/sdf-shadow-blocks.comp.hlsl</c>).</summary>
+    public const string MeshShadowNearBlocks = "meshShadowNearBlocks";
+    /// <summary>The far cascade's block bounds.</summary>
+    public const string MeshShadowFarBlocks = "meshShadowFarBlocks";
+    /// <summary>The second shadow role's cascade's block bounds.</summary>
+    public const string MeshShadowSecondBlocks = "meshShadowSecondBlocks";
+    /// <summary>The distant shadow map's block bounds.</summary>
+    public const string MeshShadowDistantBlocks = "meshShadowDistantBlocks";
     /// <summary>Each cascade's signed optical depth to its first opaque receiver and nearest glass entry.</summary>
     public const string MeshShadowNearOptical = "meshShadowNearOptical";
     /// <summary>The far cascade's optical-depth term.</summary>

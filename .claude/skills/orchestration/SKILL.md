@@ -461,6 +461,16 @@ of such work keep coming back with high findings, each from an invariant kept
 by convention; a design review costs a quarter hour, a failed fix round a
 lane's afternoon.
 
+Design is sized to what the build needs, never a phase in front of it (the
+owner's ruling, after a feature was briefed as a separate design memo for
+review: "Don't waste so much on design. Just have Fable build it straight
+up"). A feature, even a cross-world one, goes to a strong builder who settles
+its questions in a short design section and builds through to working in the
+debug world. A separate written design and review come first only for the
+narrow invariant classes above (a cache and its invalidation, a concurrency
+primitive, a trust boundary), and then as a page the build lane writes for
+itself, not a memo that waits on a round.
+
 Before briefing a step that decides how a pipeline works (what the renderer
 draws and submits, how the tick schedules, a camera or physics model), ask
 whether a research round has covered that design, even when the step arrives

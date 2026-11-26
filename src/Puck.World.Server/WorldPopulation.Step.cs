@@ -686,6 +686,9 @@ public sealed partial class WorldPopulation {
             state = next;
             // A rule's $producer: read is versioned by what it answers, so the slot is one the next derivation compares.
             m_factDirtySlots.Add(index: index);
+            // Whether the producer runs is an input of whether it rests (ProducerRests): the body wakes, which
+            // withdraws the rest its last run found, and its next producer step decides again.
+            m_entries[index].Body?.WakeUp();
         }
         return true;
     }
@@ -696,23 +699,33 @@ public sealed partial class WorldPopulation {
     /// <param name="possessed">The possessed body indices; duplicates are allowed.</param>
     internal void SyncPossession(List<int> possessed) {
         ThrowIfPartitioned();
-        // Recomputed whole from the grant table each tick, so a restored or scope-replayed flag can never outlive the
-        // application that set it.
+        m_possessedNow.Clear();
+        foreach (var index in possessed) {
+            if (((uint)index) < ((uint)Capacity)) { m_possessedNow.Add(index: index); }
+        }
+        // Compared whole against the grant table's list each tick, so a restored or scope-replayed flag can never
+        // outlive the application that set it; only a body whose possession changed passes the stand-down door, so a
+        // body possessed tick after tick is not woken or marked each time.
         for (var index = 0; (index < Capacity); index++) {
-            ref var state = ref m_entries[index].ProducerState.StandDown;
+            var entry = m_entries[index];
+            var held = ((entry.ProducerState.StandDown & BodyProducerStandDown.Possessed) != BodyProducerStandDown.None);
+            var now = m_possessedNow.Contains(index: index);
 
-            if ((state & BodyProducerStandDown.Possessed) != BodyProducerStandDown.None) {
-                state &= ~BodyProducerStandDown.Possessed;
+            if (held == now) { continue; }
+            if (entry.Active) {
+                _ = SetProducerStandDown(index: index, reason: BodyProducerStandDown.Possessed, standDown: now);
+            } else if (held) {
+                entry.ProducerState.StandDown &= ~BodyProducerStandDown.Possessed;
                 m_factDirtySlots.Add(index: index);
             }
         }
-        foreach (var index in possessed) {
-            _ = SetProducerStandDown(index: index, reason: BodyProducerStandDown.Possessed, standDown: true);
-        }
     }
+    // The bodies the tick's possession list names (SyncPossession), by slot.
+    private readonly Puck.Abstractions.Collections.MarkedIndexSet m_possessedNow = new();
     // Run the named producer before motion. Live and Idle name no producer, and a producer that stands down runs as
-    // none does. It writes only this body's own entry, so a partition may stage it.
-    private void StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks, ProducerWork work) {
+    // none does. It writes only this body's own entry, so a partition may stage it. Answers whether a producer ran, so
+    // the producer runs a population counts are runs, never the inert intent staged for a body that names none.
+    private bool StageProducer(Entry entry, WorldBody body, int index, ulong stepTicks, ProducerWork work) {
         // A kit partition's steer fork is measured whole (RunKitPartitions), not body by body.
         using var measure = (work.Partitioned ? default : Puck.Hosting.HostFrameWork.Measure(Puck.Hosting.HostFrameWorkPart.TickProducers));
 
@@ -737,10 +750,15 @@ public sealed partial class WorldPopulation {
                 entry.NavigationState.Clear(status: NavigationStatus.NoTarget);
                 entry.ProducerState.FlockSeeded = false;
             }
+            // A producer that stands down has no run to wait for, and the reason's change wakes the body
+            // (SetProducerStandDown). A source naming a producer the kit does not carry keeps the body awake: nothing
+            // wakes it when a retune brings the producer back.
+            body.NoteProducerRest(rests: (entry.ProducerState.StandDown != BodyProducerStandDown.None));
             body.StageProducerIntent(intent: default);
-            return;
+            return false;
         }
 
+        var before = entry.ProducerState;
         // Selecting a producer starts it: a plain producer switch, or a same-name kit retune onto a different
         // curve row, rejoins the curve rather than resuming a foreign curve's station — see
         // BodyProducerState.ActiveProducerName's remarks.
@@ -815,6 +833,39 @@ public sealed partial class WorldPopulation {
             state: ref entry.ProducerState,
             stepTicks: stepTicks
         );
+        body.NoteProducerRest(rests: ProducerRests(before: in before, body: body, entry: entry, producer: producer, sensors: in sensors));
+        return true;
+    }
+    // PRODUCERS AT REST. A producer's run is a function of its program, its state, its sensors and the body's pose, so a
+    // run that answered the neutral intent and moved none of its state answers the same on every later run while its
+    // sensors and the pose stand. The body may then count toward its idle floor and sleep like any undriven body, and a
+    // town's citizens standing at their anchors cost a tick nothing.
+    //
+    // The invariant: a body asleep under a resting producer would, awake, stage the neutral intent and hold its state.
+    // What enforces it: this is the one place a rest is found, from the run that just finished, and every wake
+    // withdraws it (WorldBody.WakeUp), so it holds only where every input of the next run has a door that wakes the
+    // body. The pose wakes through WorldBody.WakeUp (a teleport, a transfer, a targeted effect) and the contact
+    // field's observation (WorldPopulation.Sleep.cs); the target register through SetDesignation; a stand-down through
+    // SetProducerStandDown; the medium an arrived body's cell reads through the field regions' changed cells; a
+    // rebuild of the kits and domains through RebuildCore, and a contact field install wakes every sleeper. A sensor
+    // that reads another body (a designated or sensed body, a flock) has no such door, and a route still walking,
+    // searching or refused may answer differently once its domain's medium moves somewhere the body does not stand,
+    // so neither rests. Where it stops: a new sensor source rests only once it is named here with its door.
+    private static bool ProducerRests(Entry entry, WorldBody body, CompiledBodyProducer producer, in BodyProducerState before, in BodyProducerSensors sensors) {
+        if (
+            (producer.Flock is not null) || (body.ProducerFault is not null) || (body.StagedProducerIntent != default) ||
+            (sensors.Candidate.Index >= 0) || (sensors.CurrentTarget.Index >= 0) || !entry.ProducerState.ProgressEquals(before: in before)
+        ) {
+            return false;
+        }
+        if (producer.Target is not { } target) {
+            return true;
+        }
+        return target.Source switch {
+            BodyTargetSource.Designated => !entry.Designations[target.RegisterIndex].HasBody,
+            BodyTargetSource.Navigated => (!entry.Designations[target.RegisterIndex].HasBody && (entry.NavigationState.Status is NavigationStatus.Arrived or NavigationStatus.NoTarget)),
+            _ => false,
+        };
     }
 
     /// <summary>Samples what each body that can advance this tick reads of the field regions, before
@@ -886,7 +937,7 @@ public sealed partial class WorldPopulation {
                     continue;
                 }
 
-                StageProducer(
+                _ = StageProducer(
                     body: body,
                     entry: entry,
                     index: slot,
@@ -1075,7 +1126,7 @@ public sealed partial class WorldPopulation {
         if (HasFarCadence()) { ReadOccupied(); }
         // The kit advance split (WorldPopulation.Partitions.cs): the bodies whose step is local advance first, in fixed
         // partitions of slots over the frozen image, and every other body then advances here, serially, in index order.
-        PlanKitStep(contactFieldVersion: contactFieldVersion, stepBodies: stepBodies, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks);
+        PlanKitStep(contactFieldVersion: contactFieldVersion, jobs: jobs, stepBodies: stepBodies, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks);
         RunKitPartitions(contactFieldVersion: contactFieldVersion, jobs: jobs, tick: tick);
         foreach (var index in m_serialKitBodies) {
             AdvanceSerialBody(contactFieldVersion: contactFieldVersion, index: index, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks, tick: tick);
@@ -1092,21 +1143,22 @@ public sealed partial class WorldPopulation {
             !entry.Active ||
             (entry.Kind == PopulationKind.LocalSeat) ||
             (entry.Body is not { } player) ||
-            !TryPlanAutonomy(contactFieldVersion: contactFieldVersion, entry: entry, index: index, player: player, step: out var step, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks)
+            !TryPlanAutonomy(contactFieldVersion: contactFieldVersion, entry: entry, index: index, player: player, step: out var step, stepStartEngineTick: stepStartEngineTick, stepTicks: stepTicks, work: m_serialWork)
         ) {
             return;
         }
 
         if (step.SteeringDue) {
-            StageProducer(
+            var ran = StageProducer(
                 body: player,
                 entry: entry,
                 index: index,
                 stepTicks: step.SteeringTicks,
                 work: m_serialWork
             );
+
             SeedSteering(entry: entry, motionPeriod: step.MotionPeriod, player: player, steeringPeriod: step.SteeringPeriod, work: m_serialWork);
-            BodySteers++;
+            if (ran) { BodySteers++; }
         }
         if (!step.Moves) {
             return;
@@ -1143,8 +1195,9 @@ public sealed partial class WorldPopulation {
 
     // Settles a non-seat body's sleep, field inputs and cadence for the tick, the same for a serial body and a kit
     // partition's: false for a sleeper that nothing wakes. A body whose motion is not due is marked deferred, and one
-    // whose ordinary advance is not admitted restarts its motion cadence and does not move.
-    private bool TryPlanAutonomy(Entry entry, WorldBody player, int index, ulong stepTicks, ulong stepStartEngineTick, ulong contactFieldVersion, out AutonomyStep step) {
+    // whose ordinary advance is not admitted restarts its motion cadence and does not move. It writes the body, its
+    // entry and the caller's work alone, so a partition's plan may call it for its own bodies.
+    private bool TryPlanAutonomy(Entry entry, WorldBody player, int index, ulong stepTicks, ulong stepStartEngineTick, ulong contactFieldVersion, ProducerWork work, out AutonomyStep step) {
         step = default;
         // An asleep body that wakes for nothing this tick costs nothing beyond this check — no staging, no cadence
         // bookkeeping, no Advance. See WorldBody.Sleep.cs.
@@ -1193,7 +1246,7 @@ public sealed partial class WorldPopulation {
                     CadenceComesDue(period: autonomy.SteeringPeriodTicks, remaining: autonomy.SteeringRemainingTicks, stepTicks: stepTicks)
                 ) {
                     // With nobody in the world, every body is far.
-                    isFar = (NearestOccupiedSquared(point: player.FixedPosition, reach: far.Beyond) is null);
+                    isFar = (NearestOccupiedWith(candidates: (work.Partitioned ? work.Occupied : m_occupiedCandidates), point: player.FixedPosition, reach: far.Beyond) is null);
                 }
                 if (isFar) {
                     motionPeriod = farMotion;
@@ -1241,11 +1294,11 @@ public sealed partial class WorldPopulation {
         if (!moves) {
             player.DeferOrdinaryAdvance();
             if (motionPeriod != 0UL) {
-                m_serialWork.Autonomy = m_serialWork.Autonomy with { MotionDeferred = (m_serialWork.Autonomy.MotionDeferred + 1) };
+                work.Autonomy = work.Autonomy with { MotionDeferred = (work.Autonomy.MotionDeferred + 1) };
             }
         } else {
             if (motionPeriod != 0UL) {
-                m_serialWork.Autonomy = m_serialWork.Autonomy with { MotionUpdates = (m_serialWork.Autonomy.MotionUpdates + 1) };
+                work.Autonomy = work.Autonomy with { MotionUpdates = (work.Autonomy.MotionUpdates + 1) };
             }
             if (!player.TryBeginOrdinaryAdvance(stepStartEngineTick: checked(((stepStartEngineTick + stepTicks) - motionTicks)))) {
                 autonomy.MotionElapsedTicks = 0UL;
@@ -1417,19 +1470,23 @@ public sealed partial class WorldPopulation {
         m_outputs.Effects.Clear();
 
         m_durableStateOutputs.Clear();
+        // One pass over the slots: each body's durable writes are taken in slot order, the order the outputs list them
+        // in, and what a slot narrates reads nothing another slot's pass writes.
         for (var index = 0; (index < m_entries.Length); index++) {
-            m_entries[index].Body?.TakeDurableStateOutputs(
+            if (m_entries[index].Body is not { } body) {
+                // A slot whose body left holds no fault to recover from.
+                _ = m_producerFaults.Clear(key: index);
+                continue;
+            }
+            body.TakeDurableStateOutputs(
                 entityIndex: index,
                 outputs: m_durableStateOutputs,
                 tick: tick
             );
-        }
 
-        // A body whose sweep is refused stays put; it is never silent. Each transition, refused or recovered, is
-        // narrated once, after every body has moved this tick, and body.where carries the refusal while it holds.
-        for (var index = 0; (index < m_entries.Length); index++) {
+            // A body whose sweep is refused stays put; it is never silent. Each transition, refused or recovered, is
+            // narrated once, after every body has moved this tick, and body.where carries the refusal while it holds.
             if (
-                (m_entries[index].Body is { } body) &&
                 body.TryTakeSweepTransition(refusal: out var refusal) &&
                 (NarrationHub is { HasNarrationSink: true })
             ) {
@@ -1441,9 +1498,9 @@ public sealed partial class WorldPopulation {
                 );
             }
 
-            m_entries[index].Body?.EndSweepTick();
+            body.EndSweepTick();
 
-            if (m_entries[index].Body?.ProducerFault is { } fault) {
+            if (body.ProducerFault is { } fault) {
                 if (m_producerFaults.Set(key: index, reason: fault) && (NarrationHub is { HasNarrationSink: true })) {
                     NarrationHub.Narrate(
                         channel: "body.producer",
@@ -1452,7 +1509,6 @@ public sealed partial class WorldPopulation {
                 }
             } else if (
                 m_producerFaults.Clear(key: index) &&
-                (m_entries[index].Body is not null) &&
                 (NarrationHub is { HasNarrationSink: true })
             ) {
                 NarrationHub.Narrate(

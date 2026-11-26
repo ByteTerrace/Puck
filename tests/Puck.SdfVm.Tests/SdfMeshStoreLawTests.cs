@@ -287,7 +287,7 @@ public sealed class SdfMeshStoreLawTests {
 
         // Room for two entries and the low-water margin a trim leaves (CacheBound.LowWater): the write keeps itself and the
         // more recent of the two.
-        var store = new SdfMeshStore(capacityBytes: (2 * entry.Length) + (entry.Length / 2), directory: directory);
+        var store = new SdfMeshStore(capacityBytes: (2 * entry.Length) + (entry.Length / 2), directory: directory) { RetainedSets = 0 };
 
         Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: Mesh()));
         // The bound is enforced on the store's writer once the entry stands.
@@ -305,7 +305,7 @@ public sealed class SdfMeshStoreLawTests {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var directory = scratch.PathOf(name: "meshes");
         var entry = File.ReadAllBytes(path: WrittenEntry(directory: scratch.PathOf(name: "sizing")));
-        var store = new SdfMeshStore(capacityBytes: (3 * entry.Length) + (entry.Length / 2), directory: directory);
+        var store = new SdfMeshStore(capacityBytes: (3 * entry.Length) + (entry.Length / 2), directory: directory) { RetainedSets = 0 };
         var now = DateTime.UtcNow;
         var active = store.SetDirectoryOf(identity: 1);
         var idle = store.SetDirectoryOf(identity: 2);
@@ -339,7 +339,7 @@ public sealed class SdfMeshStoreLawTests {
         using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
         var directory = scratch.PathOf(name: "meshes");
         var entry = File.ReadAllBytes(path: WrittenEntry(directory: scratch.PathOf(name: "sizing")));
-        var store = new SdfMeshStore(capacityBytes: (2 * entry.Length) + (entry.Length / 2), directory: directory);
+        var store = new SdfMeshStore(capacityBytes: (2 * entry.Length) + (entry.Length / 2), directory: directory) { RetainedSets = 0 };
         var own = store.SetDirectoryOf(identity: Identity);
         var now = DateTime.UtcNow;
 
@@ -354,6 +354,34 @@ public sealed class SdfMeshStoreLawTests {
         Assert.True(condition: store.Contains(geometry: Geometry, identity: Identity));
         Assert.False(condition: File.Exists(path: Path.Combine(path1: own, path2: "older.mesh")));
         Assert.True(condition: File.Exists(path: Path.Combine(path1: own, path2: "newer.mesh")));
+    }
+    // The sets a machine used last stay whole however far past the byte bound a newer build's bake takes the store: the
+    // bytes decide only among the sets older than the retained ones.
+    [Fact]
+    public void AWritePastTheCapacityKeepsTheMostRecentlyUsedSetsWhole() {
+        using var scratch = new TemporaryDirectory(prefix: "puck-mesh-store-");
+        var directory = scratch.PathOf(name: "meshes");
+        var entry = File.ReadAllBytes(path: WrittenEntry(directory: scratch.PathOf(name: "sizing")));
+        // Room for one entry: every set but the writer's is past the bytes.
+        var store = new SdfMeshStore(capacityBytes: (entry.Length + (entry.Length / 2)), directory: directory) { RetainedSets = 2 };
+        var now = DateTime.UtcNow;
+        var bootedLast = store.SetDirectoryOf(identity: 1);
+        var older = store.SetDirectoryOf(identity: 2);
+
+        foreach (var (set, minutesAgo) in ((ReadOnlySpan<(string, int)>)[(bootedLast, 5), (older, 50)])) {
+            _ = Directory.CreateDirectory(path: set);
+            foreach (var name in ((ReadOnlySpan<string>)["a.mesh", "b.mesh"])) {
+                File.WriteAllBytes(bytes: entry, path: Path.Combine(path1: set, path2: name));
+                File.SetLastWriteTimeUtc(lastWriteTimeUtc: now.AddMinutes(value: -minutesAgo), path: Path.Combine(path1: set, path2: name));
+            }
+        }
+
+        Assert.True(condition: store.Write(geometry: Geometry, identity: Identity, materials: [], mesh: Mesh()));
+        Assert.True(condition: SdfMeshStore.WaitForWrites(timeout: TimeSpan.FromSeconds(seconds: 30)));
+        Assert.True(condition: store.Contains(geometry: Geometry, identity: Identity));
+        Assert.True(condition: File.Exists(path: Path.Combine(path1: bootedLast, path2: "a.mesh")));
+        Assert.True(condition: File.Exists(path: Path.Combine(path1: bootedLast, path2: "b.mesh")));
+        Assert.False(condition: Directory.Exists(path: older));
     }
     [Fact]
     public void ABakesIdentityMovesWithItsKernelsAndNothingElse() {

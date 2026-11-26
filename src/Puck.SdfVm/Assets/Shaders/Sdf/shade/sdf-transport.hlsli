@@ -68,4 +68,14 @@ float sdfTransportSampleDistance(uint2 word) {
 float4 sdfUnpackTransport(uint2 packed) {
     return float4(f16tof32(packed.x & 0xFFFFu), f16tof32(packed.x >> 16u), f16tof32(packed.y & 0xFFFFu), f16tof32(packed.y >> 16u));
 }
+// A render sample's air (SdfWorldPackage.SampleAir): what the atmosphere does along the sample's own ray to its surface,
+// `distance` away, as a transport of full coverage packs it, which views writes from the atmosphere it evaluates for the
+// pixel's transmittance and the resolve scales by the sample's coverage (sdfUnpackTransport) in place of evaluating the
+// atmosphere for each sample it gathers. Zero for a sample with no surface.
+uint2 sdfPackSampleAir(SdfAir air, float distance) {
+    if (distance <= 0.0) {
+        return uint2(0u, 0u);
+    }
+    return sdfPackTransport(float4(air.weights.x, (SDF_TRANSPORT_INVERSE_DISTANCE_SCALE / distance), air.weights.y, air.weights.z));
+}
 #endif

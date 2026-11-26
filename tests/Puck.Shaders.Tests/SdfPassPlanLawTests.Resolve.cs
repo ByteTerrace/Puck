@@ -76,8 +76,9 @@ public sealed partial class SdfPassPlanLawTests {
     // A reduced view owns what the native graph at its render ceiling owns, with the ceiling's color held once as the
     // render-grid color, since views shades it and the resolve reads it inside one frame, and at the output extent
     // instead of the ceiling what the resolve and the composite write: the color a frame slot, and once each the lit
-    // image and the surface transport, eight bytes an output pixel. The sky's three runs stay at the ceiling. At 1920x1080
-    // and half scale that is 70,502,400 bytes more.
+    // image and the surface transport, eight bytes an output pixel; and at the ceiling the samples' air views writes for
+    // the resolve, eight bytes a render pixel. The sky's three runs stay at the ceiling. At 1920x1080 and half scale that
+    // is 74,649,600 bytes more.
     [Fact]
     public void AReducedViewAddsOnlyItsOutputExtentPassesOverTheNativeGraphAtItsCeiling() {
         var render = new ShaderPipelineStorageCounts(Height: 540, Width: 960) { InstanceMaskWords = 1, Instances = 5, Viewports = 1 };
@@ -85,9 +86,10 @@ public sealed partial class SdfPassPlanLawTests {
         const ulong Output = ((1920UL * 1080) * 8);
         const ulong RenderColor = ((960UL * 540) * 8);
         const ulong Transport = ((1920UL * 1080) * 8);
-        const ulong Expected = ((((InFlight * (Output - RenderColor)) + (Output - RenderColor)) + Transport) + RenderColor);
+        const ulong SampleAir = ((960UL * 540) * 8);
+        const ulong Expected = (((((InFlight * (Output - RenderColor)) + (Output - RenderColor)) + Transport) + RenderColor) + SampleAir);
 
-        Assert.Equal(actual: Expected, expected: 70_502_400UL);
+        Assert.Equal(actual: Expected, expected: 74_649_600UL);
         Assert.Equal(
             actual: (Bytes(plan: ResolvedPlan, counts: reduced) - Bytes(plan: Plan, counts: render)),
             expected: Expected

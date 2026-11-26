@@ -104,6 +104,24 @@ public sealed class SdfKernelInterfaces {
     /// softest shadow edge a cascade draws spreads over, which the world's shadows weigh a held layer's lag against
     /// (<c>SdfWorldShadows</c>).</summary>
     public const float MeshShadowFilterTexels = 14f;
+    /// <summary>The texels past a shadow block's own, on every side, that its bounds also hold
+    /// (<see cref="SdfWorldPackage.ShadowBlockEdge"/>): a receiver's blocker search and filter read texels within
+    /// <see cref="MeshShadowFilterTexels"/> of its own, so the bounds of the one block its texel lies in answer for every
+    /// texel it can read.</summary>
+    public const int MeshShadowBlockApron = (((int)MeshShadowFilterTexels) + 1);
+    /// <summary>The bit of the shadow block reduction's pushed index above the first block's column (bits 0 to 7) and
+    /// row (bits 8 to 15) that makes a dispatch rewrite the blocks' glass flags alone, leaving their planes and bounds
+    /// (<c>passes/sdf-shadow-blocks.comp.hlsl</c>).</summary>
+    public const int MeshShadowBlockFlagsOnlyShift = 16;
+    /// <summary>The depth layer the shadow block reduction reads.</summary>
+    public const string ShadowBlocksDepth = "shadowBlocksDepth";
+    /// <summary>The exit layer the shadow block reduction reads.</summary>
+    public const string ShadowBlocksExit = "shadowBlocksExit";
+    /// <summary>The entry's glass extinction, whose tile bitmap the shadow block reduction reads; a buffer too short to
+    /// hold one where the entry draws none.</summary>
+    public const string ShadowBlocksOptical = "shadowBlocksOptical";
+    /// <summary>The block bounds the shadow block reduction writes (<see cref="SdfWorldPackage.MeshShadowNearBlocks"/>).</summary>
+    public const string ShadowBlocksWritten = "shadowBlocksRW";
     /// <summary>The first selection mark word in the raster selection's counts, past every portal sight verdict (one a
     /// screen) and the vertex words: on a marked frame each draw a phase emits a command for ORs its level plus one into
     /// two bits, sixteen draws a word, the lowest draw in the lowest bits.</summary>
@@ -203,6 +221,14 @@ public sealed class SdfKernelInterfaces {
         // a device with ray queries lays these out.
         ProbeTraceRays = new ShaderInterface(name: "sdf-probe-trace-rays", members: [.. ProbeTrace.Members, Structure()], pushesIndex: true);
         ProbeRelightRays = new ShaderInterface(name: "sdf-probe-relight-rays", members: [.. ProbeRelight.Members, Structure()], pushesIndex: true);
+        // The reduction's pushed index is its first block and whether it rewrites the glass flags alone
+        // (MeshShadowBlockFlagsOnlyShift); each group is one block of the dispatch's rectangle of blocks.
+        ShadowBlocks = new ShaderInterface(name: "sdf-shadow-blocks", members: [
+            ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: ShadowBlocksDepth, type: ShaderValueType.Float4),
+            ShaderInterfaceMember.SampledImage(group: ShaderInterfaceGroup.Pass, name: ShadowBlocksExit, type: ShaderValueType.Float4),
+            Read(element: ShaderValueType.Uint, name: ShadowBlocksOptical),
+            Written(element: ShaderValueType.Uint, name: ShadowBlocksWritten),
+        ], pushesIndex: true);
         WorldParameters = ShaderPipelineParameterLayout.ForPackage(
             config: null,
             pushesIndex: true,
@@ -284,6 +310,7 @@ public sealed class SdfKernelInterfaces {
             (IncludePath(shaderInterface: ProbeRelight), ProbeRelight),
             (IncludePath(shaderInterface: ProbeTraceRays), ProbeTraceRays),
             (IncludePath(shaderInterface: ProbeRelightRays), ProbeRelightRays),
+            (IncludePath(shaderInterface: ShadowBlocks), ShadowBlocks),
             (IncludePath(shaderInterface: OpticsParameters.Interface), OpticsParameters.Interface),
             (IncludePath(shaderInterface: World), World),
             (IncludePath(shaderInterface: MeshBake), MeshBake),
@@ -338,6 +365,9 @@ public sealed class SdfKernelInterfaces {
     /// <summary>Gets the ray-query relight's and camera sample's interface: <see cref="ProbeRelight"/>'s members and the
     /// scene's top level (<see cref="ProbeStructure"/>).</summary>
     public ShaderInterface ProbeRelightRays { get; }
+    /// <summary>Gets the shadow block reduction's interface: the layer pair it reads, the entry's glass extinction and
+    /// the block bounds it writes.</summary>
+    public ShaderInterface ShadowBlocks { get; }
     /// <summary>The camera's optical tail: the bloom filters and the display pass, independent of scene and bake tables.</summary>
     public ShaderPipelineParameterLayout OpticsParameters { get; }
     /// <summary>Gets the field's instruction set's stamp, which <see cref="MeshBake"/> carries in place of

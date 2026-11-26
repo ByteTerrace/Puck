@@ -326,6 +326,19 @@ logical payload charges and process working set are different readings and are
 not added together. Allocator commit includes its own metadata and slack;
 managed metadata charged by the library is its material-remapping vectors.
 
+mimalloc gives a freed range back a delay after the free (its `purge_delay`, a
+second), and only when a later free or collection finds the delay passed, so
+the frees that end a burst stay committed until something else frees.
+`MimallocAllocator`'s owner thread runs an unforced `mi_collect` every
+`MimallocAllocator.PurgePeriod` to carry those purges out off the working
+threads, and sets `page_commit_on_demand` so a size class's page (512 KiB or
+4 MiB) commits as its blocks are used rather than whole. Its option indices
+are the 3.3 header's and are set only on that minor version: a new library
+build rereads them (`mi_option_get` by index against the header) before the
+guard moves. Native slack that remains after this is live blocks pinning
+mostly empty pages, which a heap of their own for long-lived stores would
+address, not more collecting.
+
 ## Give each worker its own lines
 
 Threads that write the same cache line serialize on it, whether they share a

@@ -22,6 +22,30 @@ public sealed class VulkanLogicalDevice : IGpuHeldDevice, IDisposable {
     /// <summary>Gets whether this generation enabled sparse buffers and owns their binding queue.</summary>
     public bool SparseBuffersEnabled => SparseQueue.HasValue;
 
+    // The address space this generation's sparse buffers reserve between them, which the device bounds for all of them
+    // together (sparseAddressSpaceSize), never for each.
+    private long m_sparseReservedBytes;
+
+    /// <summary>Reserves address space for one sparse buffer out of what the device gives all of them together
+    /// (<see cref="GpuDeviceCapabilities.SparseAddressSpaceBytes"/>). Thread-safe.</summary>
+    /// <param name="bytes">The buffer's size, in bytes.</param>
+    /// <returns><see langword="true"/> when the device enabled sparse buffers and has the room; the caller gives it back
+    /// through <see cref="ReleaseSparseAddress"/> once the buffer is destroyed.</returns>
+    internal bool TryReserveSparseAddress(ulong bytes) {
+        var most = (Capabilities?.SparseAddressSpaceBytes ?? 0UL);
+
+        if (!SparseBuffersEnabled || (bytes > most)) { return false; }
+        while (true) {
+            var held = Volatile.Read(location: ref m_sparseReservedBytes);
+
+            if ((((ulong)held) + bytes) > most) { return false; }
+            if (Interlocked.CompareExchange(comparand: held, location1: ref m_sparseReservedBytes, value: (held + ((long)bytes))) == held) { return true; }
+        }
+    }
+    /// <summary>Gives back address space <see cref="TryReserveSparseAddress"/> reserved.</summary>
+    /// <param name="bytes">The bytes reserved.</param>
+    internal void ReleaseSparseAddress(ulong bytes) => _ = Interlocked.Add(location1: ref m_sparseReservedBytes, value: -((long)bytes));
+
     /// <summary>Orders buffer mappings after deferred graphics work and before subsequent graphics submissions.
     /// Called on the submission thread, like every graphics queue operation. Physical backing remains owned until
     /// the returned timeline value completes; a failed operation retains backing until device teardown.</summary>

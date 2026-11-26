@@ -260,6 +260,22 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
     public string ResolveReferenceDocument(WorldInstance source, string neighbourKey) {
         ArgumentNullException.ThrowIfNull(argument: source);
 
+        // The path is a function of these three strings alone, and an observed neighbour asks for it on every tick.
+        var key = (source.SourcePath, source.Server.Configuration.DocumentId, neighbourKey);
+
+        if (!m_referencePaths.TryGetValue(key: key, value: out var path)) {
+            path = ReferenceDocumentPath(neighbourKey: neighbourKey, source: source);
+            m_referencePaths.Add(key: key, value: path);
+        }
+
+        return CanonicalDocumentIdentity(documentPath: path);
+    }
+
+    // The document path each reference names before the file system is asked, by its source's path and document id
+    // and the reference's key.
+    private readonly Dictionary<(string? SourcePath, string? DocumentId, string NeighbourKey), string> m_referencePaths = [];
+
+    private static string ReferenceDocumentPath(WorldInstance source, string neighbourKey) {
         // A reference naming the source's own document id is the source itself, wherever its file lies: a world
         // composed into a generated file (a `puck test` scenario) still names itself by its id, as presentation
         // decides a same-world door (WorldPortalStraddle).
@@ -272,7 +288,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             comparisonType: StringComparison.Ordinal
         )
         ) {
-            return CanonicalDocumentIdentity(documentPath: ownPath);
+            return ownPath;
         }
 
         var documentPath = (neighbourKey.StartsWith(
@@ -296,7 +312,7 @@ public sealed partial class WorldInstanceHost : IDisposable, IWorldTransferForwa
             documentPath = besideSource;
         }
 
-        return CanonicalDocumentIdentity(documentPath: documentPath);
+        return documentPath;
     }
 
     // The source's active local seats (0..LocalSeatCount-1), in slot order — a non-resolver `party` transfer's

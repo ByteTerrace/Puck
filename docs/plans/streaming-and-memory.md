@@ -295,7 +295,7 @@ several:
 | A share of device memory | One: a reservation in the account (`MemoryAccount.ReserveDevice`), which the mesh regions and the shader pipelines hold |
 | Demand points | `SdfMeshDemand.Observe` and the lighting's own `SdfMeshIrradiance.CaptureViewCameras`, with different filters |
 | A byte ledger | `MemoryAccount` owners fed by `GpuDeviceMemoryWork`; the mesh library's own weight (`SdfMeshLibrary.ByteBudget`) and the region's named bytes copied into the bake (`SdfMeshPathBake.ObserveResidency`) remain |
-| Retention | The library in bytes, the arena's slack in words (`SdfMeshRegionArena.RetainedSlackWords`), the trace scene in triangles (`SdfMeshIrradianceScene.RetainedTriangles`), the probe cache in window cells; the store's disk bound (`SdfMeshStore.DefaultCapacityBytes`) is a fifth, and stays, because disk is its own resource |
+| Retention | The library in bytes, the arena's slack in words (`SdfMeshRegionArena.RetainedSlackWords`), the trace scene in triangles (`SdfMeshIrradianceScene.RetainedTriangles`), the probe cache in window cells; the store's disk bound is a fifth, and stays, because disk is its own resource: its most recently used sets whole (`SdfMeshStore.RetainedSets`) and a share of its volume for the older ones (`SdfMeshStore.CapacityOf`) |
 | Scheduling residency work | The bake's own pool of dedicated threads (`SdfMeshPathBake.StartWorkers`), the lighting's and the restore's thread-pool work and `JobPool`; the GPU budget is one (`SdfGpuWorkBudget`) |
 
 ### What the RTX 2060 showed
@@ -333,10 +333,12 @@ conditions and its figures belong in the commit that lands this page
   on a bar device.
 
 The CLI's host admission once refused a windowed World on this machine: it
-expected a 64 GB machine's peak. An unmeasured start's expected peak is now
-held to the budget the World's own account derives
-(`HostLoadThresholds.DefaultPeakGb`, `MemoryAccount.DefaultBudgetOf`: three
-quarters of installed memory, 12 GB on 16 GB). The 2060's own quality table
+expected a 64 GB machine's peak. An unmeasured start's expected peak is held
+to what the World's own account lets it reach
+(`HostLoadThresholds.DefaultPeakGb`: `MemoryAccount.DefaultBudgetOf` less
+`MemoryAccount.AuthoringMarginOf`, 10 GB on 16 GB), a start alone is judged
+by its lone need so the machine measures it on its first boot, and peaks are
+learned per world document. The 2060's own quality table
 (`worlds/standard/quality.puck`) now applies at boot and draws at a 0.75
 render scale with the medium irradiance tier, whose volume, hit cache and
 tables are two thirds of the high tier's.
@@ -593,7 +595,7 @@ held, promised and room.
 | The composed-document store | Play | Released after boot where nothing reads it | 6 |
 | Speculative work: bakes, loads and decodes for a predicted demand | As the work it speculates | A share of the workspace class, cancelled when the demand leaves or pressure asks | 3, 10 |
 | Rented arrays the shared pool keeps | Play | `RentedArrays` limits shared buckets by payload size. All element types share one retention limit for larger reference-free arrays. The cache admits each returned array against host room and releases its charge on reuse or trim. | 2, 11 |
-| Native allocator slack | Beyond the owners | Named; collected only by `host.memory collect` (`IAllocatorStatistics.Collect`), and [decision 6](#decision-6-what-a-landed-mesh-keeps-on-the-cpu) collects it when an arrival settles | 2 |
+| Native allocator slack | Beyond the owners | Named. The allocator's owner thread decommits freed ranges whose purge delay has passed every `MimallocAllocator.PurgePeriod`, and pages past a slice commit as their blocks are used; `host.memory collect` and a reclaim force the rest (`IAllocatorStatistics.Collect`) | 2 |
 | The managed heap's other tenants | Beyond the owners | Named by a heap walk; each one past a stated size becomes an owner with a capacity. No hard limit on the heap: it would turn pressure into an exception where everything else turns it into a coarser picture | 2, then per tenant |
 | Runtime code and loader heaps | Beyond the owners | Named; not controllable at run time | 2 |
 | Driver memory and swapchain images | Beyond the owners | Named, as the API's usage less the ledger | 1 |
@@ -2118,7 +2120,7 @@ in the landing commit.
 | [3. One reservation](#step-3-one-reservation) | Admission before allocation; growth that stops at the limit; background work serviced on completion. Built; its windowed readings are owed | 1, 2 |
 | [5. The floor and eviction](#step-5-the-floor-and-eviction) | Floors, the order of what gives way, relocation within the device. The selection counters and the coarsest-rung floor for a group arriving in view are built; the coverage check, floors out of view, eviction by priority, the rungs and relocation remain | 3; 7 before it claims relief |
 | [4. Staged by demand](#step-4-staged-by-demand) | Arrival without a render | 3, built |
-| [7. The backing](#step-7-the-backing) | Memory given back without a replacement. Direct3D 12's mapped regions are built; Vulkan's sparse ownership, page-only credit, placement policy and physical compaction remain | 3, built; qualification readings need a GPU grant |
+| [7. The backing](#step-7-the-backing) | Memory given back without a replacement. The mapped regions are built on both backends, Vulkan's unseen on hardware; page-only credit, placement policy and physical compaction remain | 3, built; qualification readings need a GPU grant |
 | [6. CPU copies](#step-6-cpu-copies) | The library, the documents and the widened restore; the static rows after 9 | 2; 5 and 9 for the static rows |
 | [8. Observed use](#step-8-observed-use) | Speculative detail apart from observed | 5 |
 | [9. Lighting on the same demand](#step-9-lighting-on-the-same-demand) | One demand, a lighting floor, placement on the GPU trace | 3; 5 for the floor it traces |
@@ -2900,9 +2902,16 @@ wherever it lay, and the probe scene grows in place. The page authority has one
 page a chunk. Reservation credit still counts the whole tile heap a new run
 opens (M2's page-only credit is not built), and nothing compacts physical
 pages. On Vulkan a device with a sparse-capable queue enables both sparse
-buffer features (`VulkanLogicalDeviceFactory.FeatureIndicesOf`) and binds
-through `VulkanLogicalDevice.BindSparse`, but no region owns a sparse
-resource yet, so Vulkan mesh regions stay contiguous. The 4070 readings
+buffer features (`VulkanLogicalDeviceFactory.FeatureIndicesOf`), and its
+mapped destination is a sparse buffer (`VulkanGpuMappedBuffer`) whose 1 MiB
+chunks bind page runs of the arena's page blocks
+(`VulkanMemoryArena.PlacePages`) through `VulkanLogicalDevice.BindSparse`; a
+chunk's pages and the buffer itself are released only through the arena's
+sparse retirement (`VulkanMemoryArena.RetireSparse`), behind the device
+timeline's value for the bind that let them go. It is built from the
+specification and the design below and has not run on hardware: its first
+windowed boot is the lead's, and `--withhold-gpu mapped-buffers` runs the
+contiguous path on the same device for the comparison. The 4070 readings
 support this direction; the Deck column is driver-source evidence, and the
 2060's is owed from the player build. Absence of
 pageable device-local memory does not disqualify sparse buffers: Puck must
@@ -3237,10 +3246,10 @@ across worlds; those remain explicit costs of the chosen shader path.
 
 ##### Invariants and their enforcement
 
-The page leases, the device timeline's release proof, the pool's trim and the
-binding door are built (pieces 1 to 3 below); page-only reservation, physical
-compaction and Vulkan's sparse destination are still **proposed**, and no
-row is qualified on hardware yet. The reviewer checks the state machine
+The page leases, the device timeline's release proof, the pool's trim, the
+binding door and both backends' mapped destinations are built; page-only
+reservation and physical compaction are still **proposed**, and no row is
+qualified on hardware yet. The reviewer checks the state machine
 before each remaining piece, and the implementation gets the GPU-lifetime review
 that [the hazards](../development/hazards.md#silent-invariants) requires.
 
@@ -3277,12 +3286,29 @@ buffers and native-call recording: they prove call ordering, not driver
 execution or physical-page lifetime, which the hardware windows below
 qualify.
 
-**Still to build, in dependency order.** Vulkan sparse resource ownership
-behind `IGpuMappedBuffer` through its binding door, page-only residency
-admission with pool-owned slack (M2), the sparse arena placement policy (M5)
-and physical compaction (M6). The initial Vulkan join waits on all commands;
-waiting at the first accessing stage (L3) and its measurement come with the
-native resource. Both backends stay bootable at each piece, and the hardware
+**Vulkan's sparse destination is built and unqualified.**
+`VulkanGpuMappedBuffer` owns the sparse resource behind `IGpuMappedBuffer`.
+Its invariant: a chunk is writable only once its bind is ordered ahead of
+every later submission, and no page returns to its block, and the buffer is
+not destroyed, before the device timeline passes the value of the bind (or of
+a checkpoint taken at disposal) that let it go. The one enforcing place is
+the arena's sparse retirement (`VulkanMemoryArena.RetireSparse`,
+`VulkanMemoryArena.ReleaseSparse`); where it stops is a bind or checkpoint
+whose call threw, after which the timeline certifies nothing and what the
+call covered is held until the device is torn down. The buffer reserves its
+address range out of the device's one sparse allowance
+(`VulkanLogicalDevice.TryReserveSparseAddress`), is refused where a storage
+view cannot span it (`GpuDeviceCapabilities.MaxStorageBufferBytes`) or where
+the device's sparse page does not divide a chunk, and in each case the region
+keeps a contiguous destination. Still owed on hardware: the first windowed
+Vulkan boot, the 2060's page size and address space, a budget drop that shows
+blocks freed, and ray-query bottom builds reading a sparse mesh region by
+device address.
+
+**Still to build, in dependency order.** Page-only residency admission with
+pool-owned slack (M2), the sparse arena placement policy (M5) and physical
+compaction (M6). The Vulkan join waits on all commands; waiting at the first
+accessing stage (L3) and its measurement follow the hardware reading. Both backends stay bootable at each piece, and the hardware
 check below gates any claim that relief from a budget drop works. Two
 integration items sit in [the packet](open-items.md#residency-and-streaming):
 exact coverage for an external region's disjoint writes before sparse

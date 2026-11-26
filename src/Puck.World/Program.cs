@@ -134,7 +134,7 @@ static async Task<int> RunWorldAsync(string[] args, string? script, WorldTestHos
         AllowMultipleArgumentsPerToken = false,
         Arity = ArgumentArity.OneOrMore,
         DefaultValueFactory = static _ => [],
-        Description = "Create the GPU device without an optional capability it reports, so the path that capability's kernel variant replaces runs instead: ray-query (inline ray queries and acceleration structures). Repeat it for several.",
+        Description = "Create the GPU device without an optional capability it reports, so the path that capability replaces runs instead: ray-query (inline ray queries and acceleration structures), mapped-buffers (buffers backed a chunk at a time, in place of contiguous ones that grow and shrink by replacement). Repeat it for several.",
     };
 
     withholdGpuOption.AcceptOnlyFromAmong(values: [.. GpuOptionalCapabilitiesSpelling.All]);

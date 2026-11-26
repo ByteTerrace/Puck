@@ -88,14 +88,15 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     private const ulong MappingBytes = (ChunkTiles * TileBytes);
 
     /// <summary>Returns whether a device creates reserved buffers (<see cref="TryCreate"/>): reserved resources at tier
-    /// 2 or above, since tier 1 leaves an unmapped tile's reads undefined.</summary>
+    /// 2 or above, since tier 1 leaves an unmapped tile's reads undefined, on a device created with
+    /// <see cref="GpuOptionalCapabilities.MappedBuffers"/>, which the host may withhold.</summary>
     /// <param name="context">The device context.</param>
     /// <returns><see langword="true"/> when <see cref="TryCreate"/> creates a buffer on the device.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="context"/> is <see langword="null"/>.</exception>
     public static bool IsSupported(DirectXDeviceContext context) {
         ArgumentNullException.ThrowIfNull(argument: context);
 
-        return ((context.Capabilities?.ReservedResourcesTier ?? 0U) >= 2U);
+        return (((context.Capabilities?.ReservedResourcesTier ?? 0U) >= 2U) && (context.Capabilities?.Has(required: GpuOptionalCapabilities.MappedBuffers) ?? false));
     }
     /// <summary>Returns the bytes one mapping of a reserved buffer on a device covers (<see cref="ChunkBytes"/>), or
     /// zero where the device creates none (<see cref="IsSupported"/>).</summary>
@@ -165,12 +166,11 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     /// <inheritdoc/>
     public void Map(ulong offset, ulong bytes) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        RequireRange(bytes: bytes, offset: offset);
+        GpuMappedChunks.RequireRange(bytes: bytes, offset: offset, sizeBytes: SizeBytes);
         ReturnCompleted();
         if (bytes == 0UL) { return; }
 
-        var first = ((int)(offset / ChunkBytes));
-        var last = ((int)offset.LastUnitOf(bytes: bytes, unit: ChunkBytes));
+        var (first, last) = GpuMappedChunks.Touched(bytes: bytes, chunkBytes: ChunkBytes, offset: offset);
         var arena = m_arena;
         var taken = new List<(int Chunk, DirectXTilePlacement Tiles)>();
 
@@ -206,13 +206,10 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
     /// <inheritdoc/>
     public GpuMappedRelease Unmap(ulong offset, ulong bytes) {
         ObjectDisposedException.ThrowIf(condition: m_disposed, instance: this);
-        RequireRange(bytes: bytes, offset: offset);
+        GpuMappedChunks.RequireRange(bytes: bytes, offset: offset, sizeBytes: SizeBytes);
         ReturnCompleted();
 
-        var end = (offset + bytes);
-        // A chunk lies wholly inside when the range covers it to its end, or to the buffer's end for the last, partial one.
-        var first = ((int)offset.CeilingDivide(divisor: ChunkBytes));
-        var stop = ((end == SizeBytes) ? m_chunks.Length : ((int)(end / ChunkBytes)));
+        var (first, stop) = GpuMappedChunks.Inside(bytes: bytes, chunkBytes: ChunkBytes, chunkCount: m_chunks.Length, offset: offset, sizeBytes: SizeBytes);
         List<(int Chunk, DirectXTilePlacement Tiles)>? revoked = null;
         var released = 0UL;
 
@@ -260,11 +257,6 @@ public sealed unsafe class DirectXGpuMappedBuffer : IGpuMappedBuffer {
 
     // The tiles of a chunk: ChunkTiles, or fewer for the last chunk of a reservation that is not a whole number of them.
     private uint TilesOf(int chunk) => Math.Min(val1: ChunkTiles, val2: (m_tiles - (((uint)chunk) * ChunkTiles)));
-    private void RequireRange(ulong offset, ulong bytes) {
-        if ((offset > SizeBytes) || (bytes > (SizeBytes - offset))) {
-            throw new ArgumentOutOfRangeException(paramName: nameof(bytes), message: $"The range of {bytes} bytes at {offset} passes the buffer's {SizeBytes}.");
-        }
-    }
     // Releases revoked chunks once their readers have finished: queues their unmapping, in order after every submission
     // already made, and the fence signal after it, and returns their tiles once the fence reaches it. A chunk mapped again
     // since its revocation holds new tiles, which the update that mapped them already took its old ones out of, so it

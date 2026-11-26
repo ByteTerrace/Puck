@@ -1147,8 +1147,16 @@ A non-seat body sleeps once its program has produced no motion and it has
 received no intent for `bodies.sleepAfterSeconds` (`WorldBody.Sleep.cs`;
 0, the engine default, never sleeps; the standard authors half a second in
 `worlds/standard/kits.puck`, which the debug world's bodies take). A body
-whose source names a producer never counts idle, since its producer reads the
-world only while it advances. `WorldPopulation.AdvanceSimulated` skips a
+whose source names a producer counts idle only while that producer is at rest:
+its last run answered the neutral intent, moved none of its own state and read
+nothing that can change without waking the body (`WorldPopulation`'s
+`ProducerRests`). A citizen standing at the point its errand names rests; a
+producer that reads another body, follows a curve, flocks, is still routing or
+was refused a route does not, since its answer can change with nothing to wake
+it. Every wake withdraws the rest (`WorldBody.WakeUp`), so a woken body counts
+idle again only after its producer's next run. A producer that stands down
+(`holdProducer`, possession) rests until the reason changes, which wakes the
+body. `WorldPopulation.AdvanceSimulated` skips a
 sleeping body outright—no producer staging, no field-input sampling, no motion
 program, no contact solve—until something wakes it: an adopted intent (tape,
 submitted, or producer), a hard teleport, a transfer, a targeted effect, a

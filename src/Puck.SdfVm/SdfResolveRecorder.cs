@@ -19,6 +19,7 @@ internal sealed class SdfResolveRecorder : SdfViewRecorder, IRenderGraphPackageR
     // The resolve's buffer inputs after the render-grid color in either mode, by the member each binds at, in port order.
     private static readonly string[] Inputs = [
         SdfWorldPackage.VisibilityRecords,
+        SdfWorldPackage.SampleAir,
     ];
     // The temporal fragment's resolve inputs after those, by the member each binds at, in port order. The stationary
     // window is an input the resolve updates in place, bound read-write.

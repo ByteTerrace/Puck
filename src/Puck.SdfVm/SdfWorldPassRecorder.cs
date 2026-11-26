@@ -24,26 +24,34 @@ namespace Puck.SdfVm;
 // residency's staged tables and frame, and writes only the recorder's own state, its own sets and the command buffer.
 internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackageEmitter, IRenderGraphPackageReadback {
     // Views attribute analytic sky lighting by layer; the bins pass counts each bin's tiles (sdf-world-views-bins.comp.hlsl),
-    // a row for every bin a plan gives a width (SdfShadeDispatch.PlanBins).
+    // a row for every bin a plan gives a width (SdfShadeDispatch.PlanBins); the probe lookup counts its rate tiles by
+    // spacing (sdf-views-rate.hlsli) and then what its slots gave up (sdf-world-views-probes.comp.hlsl): in
+    // `lights-rounded` the lights a slot's list had no room for, as steps, and in `groups-without-extras` the groups of
+    // cells the pool had no room for, as steps, with the extra gathers they asked for, as texels.
     public IReadOnlyList<string> WorkDetails(in FrameContext context) => m_part switch {
         SdfWorldPackage.Parts.Views => m_view.Residency.SkyDetails.Labels,
-        SdfWorldPackage.Parts.ViewsProbes => RateDetails,
+        SdfWorldPackage.Parts.ViewsProbes => ProbeDetails,
         SdfWorldPackage.Parts.ViewsBins => BinDetails,
         _ => [],
     };
 
-    private static readonly string[] RateDetails = ["tiles-1x1", "tiles-2x1", "tiles-1x2", "tiles-2x2"];
+    private static readonly string[] ProbeDetails = ["tiles-1x1", "tiles-2x1", "tiles-1x2", "tiles-2x2", "lights-rounded", "groups-without-extras"];
     private static readonly string[] BinDetails = ["no-program", "program"];
     // The world interface's scratch buffer members, each bound to the dummy unless a port binds it.
     private static readonly string[] ScratchMembers = [
         SdfWorldPackage.VisibilityRecords,
         SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.ReactivityWritten,
+        SdfWorldPackage.SampleAirWritten,
         SdfWorldPackage.MeshPyramid,
         SdfWorldPackage.MeshPyramidWritten,
         SdfWorldPackage.MeshShadowNearOptical,
         SdfWorldPackage.MeshShadowFarOptical,
         SdfWorldPackage.MeshShadowSecondOptical,
+        SdfWorldPackage.MeshShadowNearBlocks,
+        SdfWorldPackage.MeshShadowFarBlocks,
+        SdfWorldPackage.MeshShadowSecondBlocks,
+        SdfWorldPackage.MeshShadowDistantBlocks,
         SdfWorldPackage.ViewsFilterRecords,
         SdfWorldPackage.ViewsFilterRecordsWritten,
         SdfWorldPackage.ViewsProbeRecords,
@@ -72,6 +80,13 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
         (SdfMeshShadowCascades.NearEntry, SdfWorldPackage.MeshShadowNearOptical),
         (SdfMeshShadowCascades.FarEntry, SdfWorldPackage.MeshShadowFarOptical),
         (SdfMeshShadowCascades.SecondEntry, SdfWorldPackage.MeshShadowSecondOptical),
+    ];
+    // Each entry's block bounds, of the layers CascadeBindings binds, and the member a compute pass reads them through.
+    private static readonly (int Entry, string Member)[] BlocksBindings = [
+        (SdfMeshShadowCascades.NearEntry, SdfWorldPackage.MeshShadowNearBlocks),
+        (SdfMeshShadowCascades.FarEntry, SdfWorldPackage.MeshShadowFarBlocks),
+        (SdfMeshShadowCascades.SecondEntry, SdfWorldPackage.MeshShadowSecondBlocks),
+        (SdfMeshShadowCascades.DistantEntry, SdfWorldPackage.MeshShadowDistantBlocks),
     ];
     private static readonly uint OutputBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.Output);
     private static readonly uint MeshVisibilityBinding = SdfWorldTables.WorldBinding(member: SdfWorldPackage.MeshVisibility);
@@ -1065,6 +1080,11 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
                 tables.WriteInterfaceBuffer(buffer: optical, layout: layout, member: member, set: set);
             }
         }
+        foreach (var (entry, member) in BlocksBindings) {
+            if (shadows?.BlocksOf(view: view, entry: entry) is { } blocks) {
+                tables.WriteInterfaceBuffer(buffer: blocks, layout: layout, member: member, set: set);
+            }
+        }
 
         m_boundCounters[slot] = null;
         m_history.Forget(slot: slot);
@@ -1110,6 +1130,7 @@ internal sealed class SdfWorldPassRecorder : SdfViewRecorder, IRenderGraphPackag
     private static string? WrittenMemberOf(string version) => version switch {
         SdfWorldPackage.Parts.Visibility => SdfWorldPackage.VisibilityRecordsWritten,
         SdfWorldPackage.Parts.Reactivity => SdfWorldPackage.ReactivityWritten,
+        SdfWorldPackage.Parts.SampleAir => SdfWorldPackage.SampleAirWritten,
         SdfWorldPackage.Parts.MeshPyramid => SdfWorldPackage.MeshPyramidWritten,
         SdfWorldPackage.Parts.Filter => SdfWorldPackage.ViewsFilterRecordsWritten,
         SdfWorldPackage.Parts.Probes => SdfWorldPackage.ViewsProbeRecordsWritten,
