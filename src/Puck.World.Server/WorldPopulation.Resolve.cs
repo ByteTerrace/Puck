@@ -797,7 +797,7 @@ public sealed partial class WorldPopulation {
         // revision rebuilds the client program. PRESENTATION-ONLY, so it touches no body state.
         ResolveLookIndices(definition: definition);
         // The selections index the fresh kit and look tables, so they resolve before anything reads a body's kit.
-        _ = ResolveSelections(definition: definition);
+        ResolveSelections(definition: definition);
 
         // Re-derive the kit/producer-dependent per-entry statics from the fresh tables, but keep the running producer phase
         // (resetPhase: false) so the live crowd's producer stays continuous — no phase jerk on a retune.

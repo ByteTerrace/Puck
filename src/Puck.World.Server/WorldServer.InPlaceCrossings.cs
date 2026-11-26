@@ -76,9 +76,9 @@ public sealed partial class WorldServer {
         if (scale != FixedQ4816.One) {
             // The register is the body's size; the resync brings the body to it before the next step moves it, and the
             // next snapshot delivers it to presentation with the body's other registers.
-            m_population.SyncBodyScale(
+            m_population.SyncCrossingScale(
                 definition: m_document.Definition,
-                holdGrowthByClearance: false
+                index: crossing.Slot
             );
         }
 

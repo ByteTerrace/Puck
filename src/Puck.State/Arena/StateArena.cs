@@ -768,6 +768,7 @@ public sealed partial class StateArena {
 
         for (var row = first; (row < (first + count)); row++) {
             m_rowGenerations[row]++;
+            if (m_laneTouches.Length != 0) { NoteLaneTouch(row: row, column: column, index: index); }
         }
     }
     private void MarkVersion(ArenaColumn column, int index) {

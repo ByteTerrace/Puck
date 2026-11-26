@@ -471,7 +471,8 @@ public sealed class WorldBodyStateEffect : WorldFactEffect, IValueSourcedEffect,
     /// <remarks>Against a world document, a register the firing's commit derives from adds what that commit spends: an
     /// input-selection register (an input mode family's body-state selector, or the kit assignment's selector)
     /// revalidates and resynchronizes the written body's routing owner, one pass over the input families and the kit
-    /// selection each, and a register the population derives a body's scale, kit or look from resyncs every body.</remarks>
+    /// selection each, and a register the population derives a body's scale, kit or look from resyncs the written
+    /// body.</remarks>
     public override RuleWork Cost(IRuleCostContext context) => ((1L + Source.Cost(context: context)) + CommitCost(context: context));
     /// <inheritdoc/>
     public bool Writes(ICompiledFact fact) => (fact is WorldBodyFactOperand { Payload: BodyStateOperand state } && (state.Slot == Slot));
@@ -508,9 +509,13 @@ public sealed class WorldBodyStateEffect : WorldFactEffect, IValueSourcedEffect,
         var cost = (selects ? (2L * (catalog.Selectors.Length + 1L)) : 0L);
 
         if (kit || (definition.Population.Scale == name) || (definition.LookAssignment.Select?.BodyState == name)) {
-            cost += definition.Population.Capacity;
+            // The commit resyncs the written body alone (WorldPopulation.SyncBodyCells): its size, and for each selector
+            // one walk of its cases and of the row table the matching case names.
+            cost += ((1L + SelectCost(rows: definition.Kits.Count, select: definition.Assignment.Select)) + SelectCost(rows: definition.Looks.Count, select: definition.LookAssignment.Select));
         }
         return cost;
+
+        static long SelectCost(WorldRowSelector? select, int rows) => ((select is null) ? 0L : (((long)select.Cases.Count) + rows));
     }
 }
 /// <summary>Writes one fact on the identity a world-addressed body drives under — the body's lane cell and the
