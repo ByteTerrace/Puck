@@ -4753,6 +4753,7 @@ public static partial class WorldModelShape {
             [],
             [
                 M("within", typeof(global::System.Single), typeof(global::Puck.World.WorldMachineAttention), "Within", Read | Write | Required, static value => ((global::Puck.World.WorldMachineAttention)value).Within),
+                M("behind", typeof(global::System.Nullable<global::System.Single>), typeof(global::Puck.World.WorldMachineAttention), "Behind", Read | Write, static value => ((global::Puck.World.WorldMachineAttention)value).Behind),
             ],
             []),
         T(typeof(global::Puck.World.WorldMachineCable), true, JsonTypeInfoKind.Object, null,

@@ -186,9 +186,13 @@ runtime stays allocated, and it resumes from the state it held.
 - `attention { within: <metres> }` advances it only on the ticks someone
   attends it: a participant holds a control application on a screen that shows
   it, or a body a human occupies stands within that distance of one of those
-  screens. The distance is measured in the world's fixed-point coordinates from
-  the screen's place, so a headless authority and a windowed one suspend and
-  resume a machine on the same ticks. A cable link advances while anyone
+  screens. An optional `behind: <metres>` counts only a body before the
+  screen's face or no farther than that behind its plane (the face looks along
+  the screen's `right` crossed with its `up`), so a body on the far side of the
+  wall a screen hangs on does not keep it running. The distances are measured
+  in the world's fixed-point coordinates from the screen's place, so a headless
+  authority and a windowed one suspend and resume a machine on the same ticks.
+  A cable link advances while anyone
   attends any member. The toybox's decks author it
   (`worlds/debug/gallery/toybox.puck`);
   [the decision](../../decisions/worlds-and-federation.md#simulation-follows-attention)

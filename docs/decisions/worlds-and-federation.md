@@ -599,9 +599,12 @@ Which cadence a body keeps is a function of the world's state.
 It applies to hosted machines the same way. A machine that authors an
 `attention` (`WorldMachineAttention`) is advanced only on the ticks it is
 attended: a participant holds a control application on a screen that shows it
-(someone is engaged with it or playing it), or a body a human occupies stands
+(someone is engaged with it or playing it), or a body a human occupies or
+possesses (a free camera, a vehicle) stands
 within the authored distance of one of those screens, measured in fixed point
-from the screen's place. On every other tick it is **suspended**: its clock
+from the screen's place, and, where the author says how far behind a screen's
+face still counts (`behind`), on the side its picture faces. On every other
+tick it is **suspended**: its clock
 stops, it keeps its hardware state, and it resumes from that state on the tick
 it is attended again. The tick decides it in one place, `WorldTick`'s
 `GateMachines`, after the population's advance, so a body that walks into reach
@@ -627,9 +630,12 @@ exchange on every cycle.
 
 Attention is measured to the screens that show the machine, not to what a
 camera shows of them, for the reason option D below is refused: a client's
-view must never reach an authority's state. A distance also resumes a machine
-before a walker is near enough to read its picture, where a view test would
-resume it a network round trip after the camera turned.
+view must never reach an authority's state. Where a body stands, and which
+side of a screen's face it stands on, are the authority's own facts and say
+most of what a view test would: a body behind a wall-mounted screen sees no
+picture. A distance also resumes a machine before a walker is near enough to
+read its picture, where a view test would resume it a network round trip after
+the camera turned.
 
 **Options weighed.**
 

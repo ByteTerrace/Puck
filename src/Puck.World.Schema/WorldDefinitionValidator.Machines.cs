@@ -131,6 +131,9 @@ public static partial class WorldDefinitionValidator {
                 if (!float.IsFinite(f: attention.Within) || (attention.Within <= 0f)) {
                     errors.Add(item: $"{path}.attention.within {attention.Within.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} must be finite and positive.");
                 }
+                if ((attention.Behind is { } behind) && (!float.IsFinite(f: behind) || (behind < 0f))) {
+                    errors.Add(item: $"{path}.attention.behind {behind.ToString(provider: System.Globalization.CultureInfo.InvariantCulture)} must be finite and at least zero.");
+                }
                 // Attention is measured from the screens that show the machine, so one no screen shows could never be
                 // attended and would never run.
                 if (!definition.Screens.Any(predicate: screen => ((screen?.Source is WorldScreenSource.Machine source) && string.Equals(

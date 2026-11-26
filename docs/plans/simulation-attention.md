@@ -39,12 +39,17 @@ stands farther from it than a distance. The tier a body is bound to stands
 until one of its cadences comes due, so a far body reads the distance once a
 refresh. The distance is one query over one image of where humans stand
 (`WorldPopulation.NearestOccupiedSquared` over `ReadOccupied`, through
-`FixedSweepGrid`), which a surface's attention reads too.
+`FixedSweepGrid`), which a surface's attention and a machine's read too. The
+image holds the bodies humans occupy and the bodies a participant possesses (a
+free camera a seat flies, a vehicle it drives), since a human sees through a
+possessed body while its own stands elsewhere.
 
 **A machine nobody attends is suspended.** A hosted machine's `attention`
-(`WorldMachineAttention`) names a distance from the screens that show it. The
-tick advances the machine only while a body a human occupies stands within that
-distance of one of them, or a participant holds a control application on one
+(`WorldMachineAttention`) names a distance from the screens that show it, and
+optionally how far behind a screen's face a body still attends it. The tick
+advances the machine only while a body a human occupies stands within that
+distance of one of them, on the side it faces where `behind` is authored
+(`WorldScreen.FixedFacing`), or a participant holds a control application on one
 (someone is engaged with it or playing it); on every other tick its clock stops
 and it keeps its state. The tick decides it once, in `WorldTick`'s
 `GateMachines` (its `MachineAttended`), from the same occupied image and query
@@ -142,13 +147,9 @@ Each step names the check that shows it worked.
    someone stands. Check: a scenario of two worlds in which a machine beside
    an arrival frame runs while the seat stands by the window onto it in the
    other world, stands suspended while the seat stands far from that window,
-   and reproduces.
-6. **The occupied image holds the bodies a participant drives.** The image
-   holds the bodies humans occupy (`WorldPopulation.NextHumanOccupied`): a
-   seat's or a peer's own body. A body a participant possesses (a vehicle, a
-   citizen) is not in it, so the bodies and machines about a possessed body
-   take the far tier and stand suspended while its driver's own body is far.
-   Check: a possessed body driven up to a machine's screen resumes it.
+   and reproduces. A pair of doors within one world (the linked paintings, the
+   Wonderland door) has the same gap and needs no tape: a body within reach of
+   one door counts as standing at its counterpart, with the reach it has left.
 
 ## Readings owed
 

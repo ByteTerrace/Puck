@@ -64,15 +64,25 @@ public sealed record WorldMachine(
 );
 /// <summary>How far a machine's attention reaches (<see cref="WorldMachine.Attention"/>). A machine is attended on a
 /// tick while a participant holds a control application on a screen that shows it (someone is engaged with it or
-/// playing it), or while a body a human occupies stands within <paramref name="Within"/> of one of those screens.</summary>
-/// <remarks>The distance is measured in the world's own fixed-point coordinates, from each occupied body's position to
-/// the screen's place (its authored origin, or the body holding a screen a placement carries), so the reading is an
+/// playing it), or while a body a human occupies or possesses stands within <paramref name="Within"/> of one of those screens and,
+/// where <paramref name="Behind"/> is authored, on the side its picture faces.</summary>
+/// <remarks>The distances are measured in the world's own fixed-point coordinates, from each occupied body's position
+/// to the screen's place (its authored origin, or the body holding a screen a placement carries), so the reading is an
 /// authority fact: no camera, frustum or presented frame enters it, and a world with no presentation suspends and
 /// resumes its machines on the same ticks as one with a window. A cable link's members are attended together: the
 /// link advances while anyone attends any of them.</remarks>
 /// <param name="Within">The distance in metres, finite and positive.</param>
+/// <param name="Behind">How far behind a screen's face a body still attends it, in metres, finite and at least zero,
+/// or <see langword="null"/> for a machine attended from every side. A screen's face looks along its
+/// <see cref="WorldScreen.Right"/> crossed with its <see cref="WorldScreen.Up"/> (<see cref="WorldScreen.FixedFacing"/>),
+/// and a body stands behind it by the distance from its position to the face's plane, so an allowance of about a
+/// body's height keeps a body beside or just behind the screen attending it. A screen a placement carries is attended
+/// by its holder whichever way it faces. Omitted from the wire when null.</param>
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record WorldMachineAttention(float Within);
+public sealed record WorldMachineAttention(
+    float Within,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] float? Behind = null
+);
 /// <summary>The state cell a machine's <see cref="WorldMachine.ContentBy"/> reads: a declared numeric
 /// <c>state.world</c> row, and the cell inside it when the row is keyed.</summary>
 /// <param name="State">The state row read; any declared numeric row (never <see cref="CellKind.Text"/>).</param>

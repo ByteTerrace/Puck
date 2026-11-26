@@ -19,15 +19,19 @@ namespace Puck.World.Server;
 // Where it stops: an observer in another world (a session looking in through a painting or a portal) attends nothing
 // here, since how near anyone stands to its surface is a fact of the observing world, which this tick does not read.
 public sealed partial class WorldTick {
+    // A screen that shows a machine, and the way its face looks (WorldScreen.FixedFacing).
+    private readonly record struct MachineSite(WorldScreen Screen, FixedVector3 Facing);
+
     // The screens that show each machine, by instance name, as of the screens list they were read from.
-    private readonly Dictionary<string, List<WorldScreen>> m_machineSites = new(comparer: StringComparer.Ordinal);
+    private readonly Dictionary<string, List<MachineSite>> m_machineSites = new(comparer: StringComparer.Ordinal);
     private IReadOnlyList<WorldScreen>? m_machineSiteScreens;
     // The principals engaged on one screen, reused across ticks.
     private readonly List<Principal> m_machineEngagers = [];
 
     // Whether anyone attends a machine this tick: a body a human occupies stands within its attention's reach of a
-    // screen that shows it, or a participant holds a control application on one. The occupied image is read once a
-    // tick, by the first machine that asks, after the population's advance: occupiedRead carries that across a sweep.
+    // screen that shows it, on the side the screen faces where the attention says so, or a participant holds a control
+    // application on one. The occupied image is read once a tick, by the first machine that asks, after the
+    // population's advance: occupiedRead carries that across a sweep.
     private bool MachineAttended(WorldDefinition definition, string machine, WorldMachineAttention attention, ref bool occupiedRead) {
         if (!ReferenceEquals(objA: m_machineSiteScreens, objB: definition.Screens)) {
             IndexMachineSites(screens: definition.Screens);
@@ -42,18 +46,22 @@ public sealed partial class WorldTick {
 
         var reach = FixedQ4816.FromDouble(value: attention.Within);
 
-        foreach (var screen in sites) {
-            if (
-                TryEngageCentre(centre: out var centre, holder: out _, screen: screen) &&
-                (Host.Population.NearestOccupiedSquared(point: in centre, reach: reach) is not null)
+        foreach (var site in sites) {
+            if (!TryEngageCentre(centre: out var centre, holder: out var holder, screen: site.Screen)) {
+                continue;
+            }
+            // A carried screen stands where its holder does, so no side of it is behind.
+            if (((attention.Behind is { } behind) && (holder < 0))
+                ? (Host.Population.NearestOccupiedBeforeSquared(behind: FixedQ4816.FromDouble(value: behind), facing: site.Facing, point: in centre, reach: reach) is not null)
+                : (Host.Population.NearestOccupiedSquared(point: in centre, reach: reach) is not null)
             ) {
                 return true;
             }
         }
-        foreach (var screen in sites) {
+        foreach (var site in sites) {
             Host.GrantTable.CollectApplicationHolders(
                 into: m_machineEngagers,
-                target: GrantSubject.Screen(index: screen.Index)
+                target: GrantSubject.Screen(index: site.Screen.Index)
             );
             if (m_machineEngagers.Count != 0) {
                 m_machineEngagers.Clear();
@@ -72,7 +80,7 @@ public sealed partial class WorldTick {
             if (!m_machineSites.TryGetValue(key: source.Instance, value: out var sites)) {
                 m_machineSites.Add(key: source.Instance, value: (sites = []));
             }
-            sites.Add(item: screen);
+            sites.Add(item: new MachineSite(Facing: screen.FixedFacing(), Screen: screen));
         }
     }
 }
