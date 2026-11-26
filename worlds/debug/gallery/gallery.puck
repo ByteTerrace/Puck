@@ -832,7 +832,7 @@ spawnPoints: concat(
     {
       id: "stairs"
       parent: gallery
-      position [(galleryStair("south-west").well.x1 - 0.9), ((galleryFloor[0] + (galleryStorey / 2)) + 0.05), (galleryStair("south-west").well.z0 + 1)]
+      position [(galleryStair("south-west").well.x1 - 0.9), ((galleryFloor[0] + (galleryStorey / 2)) + 0.05), (galleryStair("south-west").well.z0 + (switchbackLanding / 2))]
       yawDegrees: 90
     }
   ]
