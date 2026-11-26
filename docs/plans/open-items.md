@@ -5134,14 +5134,20 @@ the stages; this packet holds what a stage does not.
 - [low] An observer whose wire falls a full queue behind is no longer detached:
   it is sent nothing while its wire drains, and the next delivery cuts its
   stream to a new generation and sends the whole projection and a primer behind
-  the cut (`WorldFederationProjectionSink.ResumeDeliveryLimit`). Two parts are
-  left. The catch-up rides a delivery, so on a paused authority, which makes
-  none, a drained observer keeps what it held until the world steps; and the
-  receiver's side of a catch-up has been read only as records on the wire.
-  Check: `puck benchmark --route debug --remote local --jitter-ms <n>` at a
-  jitter that fills the queue arrives in every chapter with no
-  `world.observation.backpressure` line, and a paused authority's observer is
-  primed when its wire drains.
+  the cut (`WorldFederationProjectionSink.ResumeDeliveryLimit`). The catch-up
+  rides a delivery, so on a paused authority, which makes none, a drained
+  observer keeps what it held and is caught up by the first tick after the
+  authority resumes
+  (`WorldProjectionBackpressureLawTests.ASlowObserverOfAPausedAuthorityCatchesUpWhenItResumes`).
+  Two parts are left. An observer that fell behind just before a long pause
+  shows the world as it stood some ticks before the pause for as long as the
+  pause lasts; priming it when its wire drains needs the authority to compose
+  a delivery outside a tick. And the receiver's side of a catch-up has been
+  read only as records on the wire. Check:
+  `puck benchmark --route debug --remote local --jitter-ms <n>` at a jitter
+  that fills the queue arrives in every chapter with no
+  `world.observation.backpressure` line, and a paused authority's observer
+  shows the paused tick once its wire drains.
 - [medium] A replica dealt to a recipient who may not read a cell still carries
   the rules that read it (`WorldStateDisclosure.Disclose` withholds the cell and
   the rule is sent whole). The receiver no longer refuses the document, since it
