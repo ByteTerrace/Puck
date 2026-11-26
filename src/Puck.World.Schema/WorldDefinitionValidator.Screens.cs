@@ -803,6 +803,14 @@ public static partial class WorldDefinitionValidator {
             errors: errors
         );
 
+        if (route.Regions is { } regions) {
+            if (route.Input != Puck.Commands.SourceDestination.Simulation) {
+                errors.Add(item: $"{path}.regions are hit-tested by a pointer read, which only a Simulation route answers.");
+            }
+
+            WorldPointerRegion.Validate(errors: errors, path: $"{path}.regions", regions: regions);
+        }
+
         ValidateChannel(
             channel: route.EngageChannel,
             name: $"{path}.engageChannel",

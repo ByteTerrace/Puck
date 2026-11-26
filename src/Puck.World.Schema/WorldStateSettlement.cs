@@ -1,3 +1,5 @@
+using Puck.Maths;
+
 namespace Puck.World;
 
 /// <summary>Settles the rows an installed state section is born with: a clock on every cell whose effective behavior
@@ -95,24 +97,29 @@ public static class WorldStateSettlement {
                 continue;
             }
 
-            var holding = placement.Holding;
+            // A field entry keeps the bit it holds; every state entry is settled from the document's cells.
+            var count = Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries);
+            var words = new ulong[BitWords.WordsFor(members: Math.Max(val1: count, val2: placement.Holding.Span))];
 
-            for (var entry = 0; (entry < Math.Min(val1: responses.Count, val2: WorldResponseCapacity.MaxEntries)); entry++) {
+            placement.Holding.AsWords().CopyTo(destination: words);
+
+            for (var entry = 0; (entry < count); entry++) {
                 if (responses[entry]?.When is not WorldPlacementResponseCondition.StateCondition state) {
                     continue;
                 }
 
-                var bit = (1 << entry);
-
-                holding = (state.Holds(
+                if (state.Holds(
                     definition: definition,
                     engineTick: time.EngineTick,
                     tick: time.Tick
-                )
-                    ? (holding | bit)
-                    : (holding & ~bit)
-                );
+                )) {
+                    BitWords.Add(index: entry, words: words);
+                } else {
+                    BitWords.Remove(index: entry, words: words);
+                }
             }
+
+            var holding = WorldResponseHolding.Of(words: words);
 
             if (holding == placement.Holding) {
                 continue;

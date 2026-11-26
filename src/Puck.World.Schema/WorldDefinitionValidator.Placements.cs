@@ -1871,8 +1871,13 @@ public static partial class WorldDefinitionValidator {
                     placementPath: path,
                     prototypeIds: scope.PrototypeIds
                 );
-            } else if (placement.Holding != 0) {
+            } else if (!placement.Holding.IsEmpty) {
                 errors.Add(item: $"{path}.holding is {placement.Holding} on a row without respond — it records which response entries hold.");
+            }
+
+            // The POINTER facet: a rectangle in the row's frame a seat's pointer ray maps onto (see WorldPointerSurface).
+            if (placement.Pointer is { } pointer) {
+                ValidatePointerSurface(errors: errors, path: $"{path}.pointer", placement: placement, pointer: pointer);
             }
 
             // The deal facet: the row is a template whose children are dealt from a keyed state row (see

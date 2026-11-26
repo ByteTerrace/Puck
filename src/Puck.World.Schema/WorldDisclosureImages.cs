@@ -120,7 +120,7 @@ public sealed partial class WorldDisclosureImages {
             return m_placementOrdinals.GetValueOrDefault(previous.Id, -1);
         }
 
-        public void AdoptHoldings(WorldDefinition next, IReadOnlyList<(int Row, int Holding)> projected) {
+        public void AdoptHoldings(WorldDefinition next, IReadOnlyList<(int Row, WorldResponseHolding Holding)> projected) {
             BeforeAppearance = null;
             Composed = ReferenceEquals(Composed.PlacementsRaw, Source.PlacementsRaw)
                 ? Composed with { PlacementsRaw = next.PlacementsRaw }
@@ -692,7 +692,7 @@ public sealed partial class WorldDisclosureImages {
         return entry;
     }
 
-    private readonly List<(int Row, int Holding)> m_holdingRows = [];
+    private readonly List<(int Row, WorldResponseHolding Holding)> m_holdingRows = [];
 
     private AudienceDefinition DefinitionFor(AudienceKey audience) {
         var view = audience.View;
@@ -727,7 +727,7 @@ public sealed partial class WorldDisclosureImages {
     // derived children, transformed or omitted rows, and newly active bits that read restricted state. Apart from
     // DefinitionFor, which every tick calls, so the test below captures the view only when holdings moved.
     private AudienceDefinition AdoptHoldings(AudienceKey audience, AudienceDefinition entry, WorldDefinition source,
-        ReadOnlySpan<(int Row, int Holding)> changes) {
+        ReadOnlySpan<(int Row, WorldResponseHolding Holding)> changes) {
         var view = audience.View;
         bool Restricted(string name, string? _) => !view.ReadsWhole(name);
         m_holdingRows.Clear();

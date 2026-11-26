@@ -1167,6 +1167,16 @@
                 ],
                 "additionalProperties": false,
                 "title": "WorldScreenPadPointer"
+              },
+              "regions": {
+                "description": "The named rectangles of the face a Simulation screen\u0027s pointer read hit-tests (WorldPointerRegion), or null for none. Only a Simulation route may author them. Omitted from the wire when null.",
+                "type": [
+                  "array",
+                  "null"
+                ],
+                "items": {
+                  "$ref": "#/$defs/WorldPointerRegion"
+                }
               }
             },
             "additionalProperties": false,
@@ -3653,13 +3663,23 @@
             "default": null
           },
           "holding": {
-            "description": "Which of Respond\u0027s entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it, and a booting document\u0027s state entries are settled into it before admission (SettleResponses); the row shows the lowest set bit\u0027s entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry\u0027s bit (Disclosed). Omitted from the wire when 0.",
-            "type": "integer",
-            "default": 0
+            "description": "Which of Respond\u0027s entries held at the last response sweep, in authored order (WorldResponseHolding); empty while none holds, and always empty on a row without Respond. The response sweep writes it, and a booting document\u0027s state entries are settled into it before admission (SettleResponses); the row shows the lowest held entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with an entry at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the holding without that entry (Disclosed). Omitted from the wire when empty.",
+            "default": [],
+            "title": "WorldResponseHolding",
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
           },
           "surface": {
             "$ref": "#/$defs/WorldPlacementSurface",
             "description": "Optional one-time projection of each static occurrence onto explicitly named contact surfaces.",
+            "default": null
+          },
+          "pointer": {
+            "$ref": "#/$defs/WorldPointerSurface",
+            "description": "The placement\u0027s pointer surface (see WorldPointerSurface): a rectangle in the row\u0027s frame that a seat\u0027s pointer ray maps onto, with named regions a rule hit-tests, or null for none. Omitted from the wire when null.",
             "default": null
           }
         },
@@ -12879,6 +12899,52 @@
       ],
       "title": "WorldScreenSource"
     },
+    "WorldPointerRegion": {
+      "description": "One named rectangle of a pointer surface (Regions) or of a Simulation screen\u0027s face (Regions), in the source-normalized coordinates a pointer hit reads: x right and y down, each in [0, 1] across the face. A region with Rows is a list: a row read answers which of its equal rows, counted from the top, the hit lies in.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "id": {
+          "description": "The region\u0027s id, unique on its surface; a rule names the region by it.",
+          "type": "string"
+        },
+        "left": {
+          "description": "The rectangle\u0027s left edge, a fraction of the face\u0027s width.",
+          "type": "number"
+        },
+        "top": {
+          "description": "The rectangle\u0027s top edge, a fraction of the face\u0027s height.",
+          "type": "number"
+        },
+        "right": {
+          "description": "The rectangle\u0027s right edge; greater than Left.",
+          "type": "number"
+        },
+        "bottom": {
+          "description": "The rectangle\u0027s bottom edge; greater than Top.",
+          "type": "number"
+        },
+        "rows": {
+          "description": "The number of equal rows the region divides into from top to bottom, or null for one. Omitted from the wire when null.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "left",
+        "top",
+        "right",
+        "bottom"
+      ],
+      "additionalProperties": false,
+      "title": "WorldPointerRegion"
+    },
     "WorldSolid": {
       "description": "A row\u0027s solidity facet \u2014 it participates in contact resolution using its own declared shape. Presence is the whole switch; null means decoration \u2014 the row is drawn but bodies pass through it.",
       "type": [
@@ -17071,6 +17137,55 @@
       "additionalProperties": false,
       "title": "WorldPlacementSurface"
     },
+    "WorldPointerSurface": {
+      "description": "A pointer surface: a rectangle in a placement\u0027s frame that a seat\u0027s pointer ray maps onto, the way a Simulation screen\u0027s face maps one, so a creation\u0027s face (a console\u0027s glass, a panel of buttons) answers a pointer in fixed point from document data alone. The rectangle rides the row\u0027s resolved frame: its Origin, Right and Up are authored in the placement\u0027s own frame, turned by its yaw, and its lengths scale with its scale, so a surface authored in a creation\u0027s units lies on that creation\u0027s face wherever the row stands. A hit is the source-normalized point the ray meets, x right and y down, each in [0, 1) on the surface, and it is hit-tested against the surface\u0027s named Regions. A rule reads the pointer through pointer(\u003Cseat\u003E|any, \u003Cplacement\u003E, \u003Cfacet\u003E) (PointerPrefix): x, y, on, press and a channel, region and a region\u0027s id, or row and a region\u0027s id. A participant points at a surface while it holds Control over the placement. Presentation draws nothing for a surface; the creation the row shows is what a player sees there.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "origin": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The rectangle\u0027s centre in the placement\u0027s frame, in the frame\u0027s units."
+        },
+        "right": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The unit axis, in the placement\u0027s frame, that x increases along."
+        },
+        "up": {
+          "$ref": "#/$defs/DocumentVector3",
+          "description": "The unit axis, in the placement\u0027s frame, that y decreases along; orthogonal to Right. The surface faces along their cross product."
+        },
+        "halfWidth": {
+          "description": "The rectangle\u0027s half-width along Right, in the frame\u0027s units; positive.",
+          "type": "number"
+        },
+        "halfHeight": {
+          "description": "The rectangle\u0027s half-height along Up, in the frame\u0027s units; positive.",
+          "type": "number"
+        },
+        "regions": {
+          "description": "The named rectangles of the surface a rule hit-tests, or null for none. Omitted from the wire when null.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/WorldPointerRegion"
+          },
+          "default": null
+        }
+      },
+      "required": [
+        "origin",
+        "right",
+        "up",
+        "halfWidth",
+        "halfHeight"
+      ],
+      "additionalProperties": false,
+      "title": "WorldPointerSurface"
+    },
     "WorldSpeakerSourceNone": {
       "description": "No signal is bound \u2014 honest silence (the emitter holds its place; audio.emitters reads the state).",
       "properties": {
@@ -19599,13 +19714,23 @@
           "default": null
         },
         "holding": {
-          "description": "Which of Respond\u0027s entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it, and a booting document\u0027s state entries are settled into it before admission (SettleResponses); the row shows the lowest set bit\u0027s entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry\u0027s bit (Disclosed). Omitted from the wire when 0.",
-          "type": "integer",
-          "default": 0
+          "description": "Which of Respond\u0027s entries held at the last response sweep, in authored order (WorldResponseHolding); empty while none holds, and always empty on a row without Respond. The response sweep writes it, and a booting document\u0027s state entries are settled into it before admission (SettleResponses); the row shows the lowest held entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with an entry at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the holding without that entry (Disclosed). Omitted from the wire when empty.",
+          "default": [],
+          "title": "WorldResponseHolding",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
         },
         "surface": {
           "$ref": "#/$defs/WorldPlacementSurface",
           "description": "Optional one-time projection of each static occurrence onto explicitly named contact surfaces.",
+          "default": null
+        },
+        "pointer": {
+          "$ref": "#/$defs/WorldPointerSurface",
+          "description": "The placement\u0027s pointer surface (see WorldPointerSurface): a rectangle in the row\u0027s frame that a seat\u0027s pointer ray maps onto, with named regions a rule hit-tests, or null for none. Omitted from the wire when null.",
           "default": null
         }
       },

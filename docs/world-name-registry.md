@@ -1308,6 +1308,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.pointer.origin` | State | Binding | Binding | `WorldPointerSurface.Origin` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.pointer.right` | State | Binding | Binding | `WorldPointerSurface.Right` |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.pointer.up` | State | Binding | Binding | `WorldPointerSurface.Up` |
 | `kits.rows[].actions{*}.onPress.effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -1724,6 +1727,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.pointer.origin` | State | Binding | Binding | `WorldPointerSurface.Origin` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.pointer.right` | State | Binding | Binding | `WorldPointerSurface.Right` |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.pointer.up` | State | Binding | Binding | `WorldPointerSurface.Up` |
 | `kits.rows[].actions{*}.onRelease.effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -2140,6 +2146,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.pointer.origin` | State | Binding | Binding | `WorldPointerSurface.Origin` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.pointer.right` | State | Binding | Binding | `WorldPointerSurface.Right` |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.pointer.up` | State | Binding | Binding | `WorldPointerSurface.Up` |
 | `kits.rows[].actions{*}.onFact[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -2321,6 +2330,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `placements.rows[].surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
 | `placements.rows[].surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
+| `placements.rows[].pointer.origin` | State | Binding | Binding | `WorldPointerSurface.Origin` |
+| `placements.rows[].pointer.right` | State | Binding | Binding | `WorldPointerSurface.Right` |
+| `placements.rows[].pointer.up` | State | Binding | Binding | `WorldPointerSurface.Up` |
 | `speakers[].feed.source[machine].instance` | Machine | Names | Read | `WorldSpeakerSource.Machine.Instance` |
 | `speakers[].feed.gain` | State | Binding | Binding | `WorldSpeakerFeed.Gain` |
 | `speakers[].feed.gain.clock` | Clock | Names | Read | `IWorldKeyTrack.Clock` |
@@ -3122,6 +3134,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `rules[].effects[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
 | `rules[].effects[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
+| `rules[].effects[][upsertPlacement].placement.pointer.origin` | State | Binding | Binding | `WorldPointerSurface.Origin` |
+| `rules[].effects[][upsertPlacement].placement.pointer.right` | State | Binding | Binding | `WorldPointerSurface.Right` |
+| `rules[].effects[][upsertPlacement].placement.pointer.up` | State | Binding | Binding | `WorldPointerSurface.Up` |
 | `rules[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `rules[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `rules[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -3556,6 +3571,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.pointer.origin` | State | Binding | Binding | `WorldPointerSurface.Origin` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.pointer.right` | State | Binding | Binding | `WorldPointerSurface.Right` |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.pointer.up` | State | Binding | Binding | `WorldPointerSurface.Up` |
 | `rules[].decision.options[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `rules[].decision.options[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `rules[].decision.options[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -4013,6 +4031,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.pointer.origin` | State | Binding | Binding | `WorldPointerSurface.Origin` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.pointer.right` | State | Binding | Binding | `WorldPointerSurface.Right` |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.pointer.up` | State | Binding | Binding | `WorldPointerSurface.Up` |
 | `rules[].decision.onNoChoice[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `rules[].decision.onNoChoice[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `rules[].decision.onNoChoice[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -4412,6 +4433,9 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.surface.targets` | Placement | Names | Read | `WorldPlacementSurface.Targets` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.surface.fromOffset` | State | Binding | Binding | `WorldPlacementSurface.FromOffset` |
 | `interactions.interactions[].effects[][upsertPlacement].placement.surface.direction` | State | Binding | Binding | `WorldPlacementSurface.Direction` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.pointer.origin` | State | Binding | Binding | `WorldPointerSurface.Origin` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.pointer.right` | State | Binding | Binding | `WorldPointerSurface.Right` |
+| `interactions.interactions[].effects[][upsertPlacement].placement.pointer.up` | State | Binding | Binding | `WorldPointerSurface.Up` |
 | `interactions.interactions[].effects[][removePlacement].id` | Placement | Names | Action | `WorldEffect.RemovePlacement.Id` |
 | `interactions.interactions[].effects[][poseCell].key` | State | Key | Read | `WorldEffect.PoseCell.Key` |
 | `interactions.interactions[].effects[][poseCell].topology` | Topology | Names | Read | `WorldEffect.PoseCell.Topology` |
@@ -4705,6 +4729,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `screens[].route.kit` | `WorldScreenRoute.Kit` | a kit in the composed world |
 | `screens[].route.port` | `WorldScreenRoute.Port` | a selector in the machine provider vocabulary |
 | `screens[].route.display.fill` | `WorldScreenDisplay.Fill` | a color literal |
+| `screens[].route.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
 | `screens[].magazine.entries[][machine].output` | `WorldScreenSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `screens[].magazine.entries[][producer].id` | `WorldScreenSource.Producer.Id` | an image producer id |
 | `screens[].magazine.entries[][session].destination` | `WorldScreenSource.Session.Destination` | a destination name |
@@ -5062,6 +5087,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
+| `kits.rows[].actions{*}.onPress.effects[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `kits.rows[].actions{*}.onPress.effects[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -5353,6 +5379,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
+| `kits.rows[].actions{*}.onRelease.effects[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `kits.rows[].actions{*}.onRelease.effects[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -5644,6 +5671,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
+| `kits.rows[].actions{*}.onFact[].effects[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `kits.rows[].actions{*}.onFact[].effects[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -5812,6 +5840,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `placements.rows[].deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `placements.rows[].spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `placements.rows[].spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
+| `placements.rows[].pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
 | `speakers[].name` | `WorldSpeaker.Name` | a speaker name |
 | `speakers[].feed.source[machine].output` | `WorldSpeakerSource.Machine.Output` | a selector in the machine provider vocabulary |
 | `speakers[].feed.source[tune].tuneId` | `WorldSpeakerSource.Tune.TuneId` | a tune id |
@@ -6226,6 +6255,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `rules[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
+| `rules[].effects[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
 | `rules[].effects[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].effects[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `rules[].effects[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -6534,6 +6564,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.options[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `rules[].decision.options[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
+| `rules[].decision.options[].effects[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
 | `rules[].decision.options[].effects[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].decision.options[].effects[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `rules[].decision.options[].effects[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -6860,6 +6891,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `rules[].decision.onNoChoice[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
+| `rules[].decision.onNoChoice[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
 | `rules[].decision.onNoChoice[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `rules[].decision.onNoChoice[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `rules[].decision.onNoChoice[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |
@@ -7158,6 +7190,7 @@ reference through the field to an imported module's name; see `src/Puck.World.Sc
 | `interactions.interactions[].effects[][upsertPlacement].placement.deal.reflow.costKey` | `WorldPlacementReflow.CostKey` | a literal payer cell key |
 | `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].name` | `WorldPlacementSpatialVolume.Name` | a placement-local spatial volume name |
 | `interactions.interactions[].effects[][upsertPlacement].placement.spatial[].channel` | `WorldPlacementSpatialVolume.Channel` | an author-defined spatial influence channel |
+| `interactions.interactions[].effects[][upsertPlacement].placement.pointer.regions[].id` | `WorldPointerRegion.Id` | a pointer region name |
 | `interactions.interactions[].effects[][poseCell].expression{instructions}[board].index` | `InstructionPayload.Board.Index` | a direction or symmetry element local to its topology |
 | `interactions.interactions[].effects[][poseCell].expression{instructions}[fold].binder` | `InstructionPayload.Fold.Binder` | a lexical fold binding |
 | `interactions.interactions[].effects[][poseCell].expression{instructions}[vector].left[embed].text` | `VectorOperand.Embed.Text` | embedding input text |

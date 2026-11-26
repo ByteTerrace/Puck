@@ -387,6 +387,9 @@ public enum WorldPadElement : byte {
 /// engaged on it frames a window capture (<see cref="WorldScreenPadPointer"/>). Only an engageable screen showing a
 /// window capture may author it. <see langword="null"/> (the default) moves and scrolls nothing from a stick; a pad's
 /// buttons still click and press keys. Omitted from the wire when null.</param>
+/// <param name="Regions">The named rectangles of the face a <c>Simulation</c> screen's pointer read hit-tests
+/// (<see cref="WorldPointerRegion"/>), or <see langword="null"/> for none. Only a <c>Simulation</c> route may author
+/// them. Omitted from the wire when null.</param>
 public readonly record struct WorldScreenRoute(
     bool Engageable,
     float EngageRadius,
@@ -403,7 +406,8 @@ public readonly record struct WorldScreenRoute(
     [property: DocumentText("a selector in the machine provider vocabulary")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Port = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenDisplay? Display = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenPadPointer? PadPointer = null
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] WorldScreenPadPointer? PadPointer = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<WorldPointerRegion>? Regions = null
 ) {
     /// <summary>Gets a screen no player engages (the default for a passive display).</summary>
     public static WorldScreenRoute Passive { get; } = new WorldScreenRoute(

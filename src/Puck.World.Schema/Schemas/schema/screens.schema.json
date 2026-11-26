@@ -170,6 +170,16 @@
             ],
             "additionalProperties": false,
             "title": "WorldScreenPadPointer"
+          },
+          "regions": {
+            "description": "The named rectangles of the face a Simulation screen\u0027s pointer read hit-tests (WorldPointerRegion), or null for none. Only a Simulation route may author them. Omitted from the wire when null.",
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "./common.schema.json#/$defs/WorldPointerRegion"
+            }
           }
         },
         "additionalProperties": false,

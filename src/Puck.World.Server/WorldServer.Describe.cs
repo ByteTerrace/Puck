@@ -291,8 +291,9 @@ public sealed partial class WorldServer {
         )}]";
     }
 
-    // body.channels' pointer read-back: the ray the body integrated this tick and where it maps on every Simulation
-    // screen, through the same source-normalized mapping the $pointer: rule read runs.
+    // body.channels' pointer read-back: the ray the body integrated this tick and where it maps on every pointer surface
+    // (a Simulation screen's face, a placement's pointer surface), through the same source-normalized mapping the
+    // $pointer: rule read runs, with the regions of the surface the hit lies in (a list region's row after '#').
     private string DescribePointer(SourceRay? ray) {
         if (ray is not { } pointer) {
             return "none";
@@ -303,30 +304,46 @@ public sealed partial class WorldServer {
         var hits = new List<string>();
 
         foreach (var screen in Definition.Screens) {
-            if (screen.Route.Input != SourceDestination.Simulation) {
-                continue;
+            if (screen.Route.Input == SourceDestination.Simulation) {
+                hits.Add(item: DescribeSurfaceHit(mapping: WorldScreenMappings.Normalized(screen: screen), name: $"screen:{screen.Index}", ray: pointer, regions: screen.Route.Regions));
             }
-
-            var mapping = WorldScreenMappings.Normalized(screen: screen);
-
-            if (!mapping.TryValidate(refusal: out var refusal)) {
-                hits.Add(item: $"screen:{screen.Index}=unmappable({refusal})");
-
-                continue;
+        }
+        foreach (var placement in Definition.Placements) {
+            if (placement?.Pointer is { } surface) {
+                hits.Add(item: DescribeSurfaceHit(
+                    mapping: surface.MappingIn(frame: WorldDefinitionRows.ResolvedFrame(definition: Definition, placement: placement), placementId: placement.Id),
+                    name: $"placement:{placement.Id}",
+                    ray: pointer,
+                    regions: surface.Regions
+                ));
             }
-
-            var hit = mapping.MapRay(ray: pointer);
-
-            hits.Add(item: (hit.IsOnSource
-                ? $"screen:{screen.Index}=on({hit.Coordinate.X}, {hit.Coordinate.Y})"
-                : $"screen:{screen.Index}={hit.Outcome}"
-            ));
         }
 
         return $"{Vector(value: pointer.Origin)}->{Vector(value: pointer.Direction)}[{string.Join(
             separator: ",",
             values: hits
         )}]";
+    }
+    private static string DescribeSurfaceHit(string name, SourceMapping mapping, IReadOnlyList<WorldPointerRegion>? regions, SourceRay ray) {
+        if (!mapping.TryValidate(refusal: out var refusal)) {
+            return $"{name}=unmappable({refusal})";
+        }
+
+        var hit = mapping.MapRay(ray: ray);
+
+        if (!hit.IsOnSource) {
+            return $"{name}={hit.Outcome}";
+        }
+
+        var inside = new List<string>();
+
+        foreach (var region in (regions ?? [])) {
+            if ((region is not null) && (region.RowOf(point: hit.Coordinate) is var row and >= 0L)) {
+                inside.Add(item: ((region.Rows is > 1) ? $"{region.Id}#{row}" : region.Id));
+            }
+        }
+
+        return $"{name}=on({hit.Coordinate.X}, {hit.Coordinate.Y}){((inside.Count > 0) ? $"{{{string.Join(separator: " ", values: inside)}}}" : string.Empty)}";
     }
     // Shared by DescribeRules/DescribeInteractions: an `all` gate prints ITS PREDICATES, never a List type name — the
     // whole reason a compiled conjunct carries its authored spelling beside its resolved form.

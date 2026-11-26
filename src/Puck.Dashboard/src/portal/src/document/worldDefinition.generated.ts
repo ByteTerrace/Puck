@@ -10710,13 +10710,17 @@ export type WorldPlacement = {
    */
   spatial?: WorldPlacementSpatialVolumeList | null;
   /**
-   * Which of Respond's entries held at the last response sweep, one bit per entry in authored order (bit i for entry i); 0 while none holds, and always 0 on a row without Respond. The response sweep writes it, and a booting document's state entries are settled into it before admission (SettleResponses); the row shows the lowest set bit's entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with a bit at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the mask without that entry's bit (Disclosed). Omitted from the wire when 0.
+   * Which of Respond's entries held at the last response sweep, in authored order (WorldResponseHolding); empty while none holds, and always empty on a row without Respond. The response sweep writes it, and a booting document's state entries are settled into it before admission (SettleResponses); the row shows the lowest held entry, else its own authored PrototypeId (ShownPrototypeId). Refused on a row without Respond and with an entry at or past its entry count. A reader whose disclosure withholds a cell an entry reads is handed the holding without that entry (Disclosed). Omitted from the wire when empty.
    */
-  holding?: number;
+  holding?: WorldResponseHolding;
   /**
    * Optional one-time projection of each static occurrence onto explicitly named contact surfaces.
    */
   surface?: WorldPlacementSurface | null;
+  /**
+   * The placement's pointer surface (see WorldPointerSurface): a rectangle in the row's frame that a seat's pointer ray maps onto, with named regions a rule hit-tests, or null for none. Omitted from the wire when null.
+   */
+  pointer?: WorldPointerSurface | null;
 };
 
 /**
@@ -11270,6 +11274,66 @@ export type WorldPlayerDefaults = {
   pickerNeutralColor?: string | null;
   pickerNeutralBlend?: number;
   seatCameraFeel?: WorldSeatCameraFeel | null;
+};
+
+/**
+ * One named rectangle of a pointer surface (Regions) or of a Simulation screen's face (Regions), in the source-normalized coordinates a pointer hit reads: x right and y down, each in [0, 1] across the face. A region with Rows is a list: a row read answers which of its equal rows, counted from the top, the hit lies in.
+ */
+export type WorldPointerRegion = {
+  /**
+   * The region's id, unique on its surface; a rule names the region by it.
+   */
+  id: string;
+  /**
+   * The rectangle's left edge, a fraction of the face's width.
+   */
+  left: number;
+  /**
+   * The rectangle's top edge, a fraction of the face's height.
+   */
+  top: number;
+  /**
+   * The rectangle's right edge; greater than Left.
+   */
+  right: number;
+  /**
+   * The rectangle's bottom edge; greater than Top.
+   */
+  bottom: number;
+  /**
+   * The number of equal rows the region divides into from top to bottom, or null for one. Omitted from the wire when null.
+   */
+  rows?: number | null;
+};
+
+/**
+ * A pointer surface: a rectangle in a placement's frame that a seat's pointer ray maps onto, the way a Simulation screen's face maps one, so a creation's face (a console's glass, a panel of buttons) answers a pointer in fixed point from document data alone. The rectangle rides the row's resolved frame: its Origin, Right and Up are authored in the placement's own frame, turned by its yaw, and its lengths scale with its scale, so a surface authored in a creation's units lies on that creation's face wherever the row stands. A hit is the source-normalized point the ray meets, x right and y down, each in [0, 1) on the surface, and it is hit-tested against the surface's named Regions. A rule reads the pointer through pointer(<seat>|any, <placement>, <facet>) (PointerPrefix): x, y, on, press and a channel, region and a region's id, or row and a region's id. A participant points at a surface while it holds Control over the placement. Presentation draws nothing for a surface; the creation the row shows is what a player sees there.
+ */
+export type WorldPointerSurface = {
+  /**
+   * The rectangle's centre in the placement's frame, in the frame's units.
+   */
+  origin: DocumentVector3;
+  /**
+   * The unit axis, in the placement's frame, that x increases along.
+   */
+  right: DocumentVector3;
+  /**
+   * The unit axis, in the placement's frame, that y decreases along; orthogonal to Right. The surface faces along their cross product.
+   */
+  up: DocumentVector3;
+  /**
+   * The rectangle's half-width along Right, in the frame's units; positive.
+   */
+  halfWidth: number;
+  /**
+   * The rectangle's half-height along Up, in the frame's units; positive.
+   */
+  halfHeight: number;
+  /**
+   * The named rectangles of the surface a rule hit-tests, or null for none. Omitted from the wire when null.
+   */
+  regions?: (WorldPointerRegion | null)[] | null;
 };
 
 export type WorldPoolBodyBinding = {
@@ -13498,6 +13562,8 @@ export type WorldRenderSkyTwinkle = {
   rate?: BindableScalar;
 };
 
+export type WorldResponseHolding = number[];
+
 export type WorldRigid = {
   /**
    * The body's mass, in the same units gravity.attractors masses use. Must be strictly positive after fixed-point compilation and yield representable room-scale mass/inertia properties — a rigid body with no compiled mass is not a rigid body, it is a decoration.
@@ -14145,6 +14211,10 @@ export type WorldScreenRoute = {
    * How a local pad's sticks drive the pointer over this screen's framed picture while a seat engaged on it frames a window capture (WorldScreenPadPointer). Only an engageable screen showing a window capture may author it. null (the default) moves and scrolls nothing from a stick; a pad's buttons still click and press keys. Omitted from the wire when null.
    */
   padPointer?: WorldScreenPadPointer | null;
+  /**
+   * The named rectangles of the face a Simulation screen's pointer read hit-tests (WorldPointerRegion), or null for none. Only a Simulation route may author them. Omitted from the wire when null.
+   */
+  regions?: (WorldPointerRegion | null)[] | null;
 };
 
 /**

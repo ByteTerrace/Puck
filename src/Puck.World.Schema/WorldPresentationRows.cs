@@ -121,7 +121,7 @@ public sealed record WorldPresentationRows(WorldPresentationCreation[] Creations
             last = ordinal;
         }
         if (Holdings.Length != 0) {
-            var holdings = new (int Row, int Holding)[Holdings.Length];
+            var holdings = new (int Row, WorldResponseHolding Holding)[Holdings.Length];
             for (var index = 0; index < holdings.Length; index++) { holdings[index] = (Holdings[index].Ordinal, Holdings[index].Holding); }
             changed = changed.WithPlacementHoldings(holdings);
         }
@@ -163,4 +163,4 @@ public sealed record WorldPresentationShade(string Name, SdfShadeDefinition? Def
 public sealed record WorldPresentationPlacement(int Ordinal, WorldPlacement Row);
 
 /// <summary>The new <see cref="WorldPlacement.Holding"/> of the placement row at an ordinal, the row otherwise as held.</summary>
-public readonly record struct WorldPresentationHolding(int Ordinal, int Holding);
+public readonly record struct WorldPresentationHolding(int Ordinal, WorldResponseHolding Holding);
