@@ -23,7 +23,8 @@ public sealed partial class SdfMeshRegionStore {
         var held = ((long)m_region.DestinationBytes);
         var holes = (m_region.Mapped ? Math.Max(val1: 0L, val2: ((m_region.ByteCount.CeilingDivide(divisor: m_region.MappedChunkBytes) * m_region.MappedChunkBytes) - held)) : 0L);
 
-        SetArenaLimit(limitBytes: m_grant.ReserveGrowth(capacityBytes: held, mostBytes: ((long)MostBytes), spareBytes: m_region.MappedSpareBytes, unbackedBytes: holes));
+        // The arena places nothing past what the region holds on its device, whose every view a kernel can size.
+        SetArenaLimit(limitBytes: m_grant.ReserveGrowth(capacityBytes: held, mostBytes: m_region.MostBytes, spareBytes: m_region.MappedSpareBytes, unbackedBytes: holes));
     }
     // Hands the arena the grant's two limits: the address range it may place meshes in, and the bytes the region may
     // hold, which is the residencies' share of the elastic budget and can be less than the region holds now.

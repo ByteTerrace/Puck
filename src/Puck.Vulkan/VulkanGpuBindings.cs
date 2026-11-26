@@ -15,6 +15,8 @@ namespace Puck.Vulkan;
 public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, VulkanDescriptorAllocator allocator, GpuObjectNaming naming) : IGpuBindings {
     /// <inheritdoc/>
     public ulong MaxConstantBufferBytes => deviceContext.LogicalDevice.MaxConstantBufferBytes;
+    /// <inheritdoc/>
+    public ulong MaxStorageBufferBytes => deviceContext.LogicalDevice.MaxStorageBufferBytes;
 
     private VulkanDeviceCommands Device => deviceContext.LogicalDevice.Commands;
 
@@ -149,13 +151,21 @@ public sealed class VulkanGpuBindings(IVulkanDeviceContext deviceContext, Vulkan
         );
     /// <inheritdoc/>
     /// <remarks>Whether the buffer is read-only or read-write, and the element stride, describe only a Direct3D 12
-    /// view; every Vulkan buffer write is the same storage-buffer descriptor.</remarks>
+    /// view; every Vulkan buffer write is the same storage-buffer descriptor. A view past
+    /// <see cref="MaxStorageBufferBytes"/> is refused: a kernel would read its length as zero.</remarks>
     public void WriteBuffer(nint descriptorSetHandle, uint binding, nint bufferHandle, ulong bufferSize, GpuBindingKind kind, uint elementStride, uint arrayElement = 0, ulong offsetBytes = 0) {
         if (kind is not (GpuBindingKind.ReadOnlyBuffer or GpuBindingKind.ReadWriteBuffer)) {
             throw new ArgumentOutOfRangeException(
                 actualValue: kind,
                 message: "A buffer write names a read-only or read-write buffer kind.",
                 paramName: nameof(kind)
+            );
+        }
+        if (bufferSize > MaxStorageBufferBytes) {
+            throw new ArgumentOutOfRangeException(
+                actualValue: bufferSize,
+                message: $"A storage view spans at most the {MaxStorageBufferBytes} bytes whose length a kernel reads back on this device.",
+                paramName: nameof(bufferSize)
             );
         }
 

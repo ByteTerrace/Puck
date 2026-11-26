@@ -441,6 +441,7 @@ file sealed class CountingRecorder(IGpuRecorder inner, GpuWorkLedger ledger) : C
 }
 file sealed class CountingBindings(IGpuBindings inner, GpuWorkLedger ledger) : CountingWrapper(ledger: ledger), IGpuBindings {
     public ulong MaxConstantBufferBytes => inner.MaxConstantBufferBytes;
+    public ulong MaxStorageBufferBytes => inner.MaxStorageBufferBytes;
 
     public nint AllocateSet(nint poolHandle, nint descriptorSetLayoutHandle, in GpuObjectName name) =>
         Created(
